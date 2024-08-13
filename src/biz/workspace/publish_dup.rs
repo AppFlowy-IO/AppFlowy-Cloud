@@ -223,7 +223,7 @@ impl PublishCollabDuplicator {
     publish_view_id: &str,
   ) -> Result<Option<View>, AppError> {
     tracing::info!(
-      "deep_copy_txn: new_view_id: {}, publish_view_id: {}",
+      "deep_copy: new_view_id: {}, publish_view_id: {}",
       new_view_id,
       publish_view_id,
     );
@@ -366,7 +366,7 @@ impl PublishCollabDuplicator {
           }
         },
         None => {
-          // Call deep_copy_txn and await the result
+          // Call deep_copy and await the result
           if let Some(mut new_view) =
             Box::pin(self.deep_copy(txn, uuid::Uuid::new_v4().to_string(), page_id_str)).await?
           {
@@ -658,6 +658,7 @@ impl PublishCollabDuplicator {
     Ok((ret_view, old_to_new_view))
   }
 
+  /// ceates a new folder view without parent_view_id set
   fn new_folder_view(
     &self,
     new_view_id: String,

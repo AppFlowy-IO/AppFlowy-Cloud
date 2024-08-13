@@ -370,8 +370,8 @@ impl PublishCollabDuplicator {
         Some(page_id_str) => page_id_str,
         None => continue,
       };
-      match self.duplicated_refs.get_key_value(page_id_str) {
-        Some((_old_view_id, new_view_id)) => {
+      match self.duplicated_refs.get(page_id_str) {
+        Some(new_view_id) => {
           if let Some(vid) = new_view_id {
             *page_id = serde_json::json!(vid);
           } else {

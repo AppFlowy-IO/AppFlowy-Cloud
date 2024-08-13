@@ -1,9 +1,12 @@
 use appflowy_ai_client::dto::{AIModel, CompletionType};
-use client_api_test::TestClient;
+use client_api_test::{local_ai_test_enabled, TestClient};
 use shared_entity::dto::ai_dto::CompleteTextParams;
 
 #[tokio::test]
 async fn improve_writing_test() {
+  if !local_ai_test_enabled() {
+    return;
+  }
   let test_client = TestClient::new_user().await;
   test_client.api_client.set_ai_model(AIModel::GPT4o);
 

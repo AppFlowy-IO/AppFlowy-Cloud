@@ -67,12 +67,7 @@ impl StreamGroup {
     match result {
       Ok(_) => Ok(()),
       Err(redis_error) => {
-        warn!(
-          "error when creating consumer group `{}` `{}`: {:?}",
-          self.stream_key, self.group_name, redis_error
-        );
-
-        return match redis_error.kind() {
+        let result = match redis_error.kind() {
           ErrorKind::ExtensionError => match redis_error.code() {
             None => Err(StreamError::from(redis_error)),
             Some(code) => {
@@ -85,6 +80,11 @@ impl StreamGroup {
           },
           _ => Err(StreamError::from(redis_error)),
         };
+
+        if result.is_err() {
+          error!("error when creating consumer group: {:?}", result);
+        }
+        result
       },
     }
   }

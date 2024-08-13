@@ -43,7 +43,7 @@ pub async fn duplicate_published_collab_to_workspace(
     dest_workspace_id,
     dest_view_id,
   );
-  copier.deep_copy(&publish_view_id).await?;
+  copier.duplicate(&publish_view_id).await?;
   Ok(())
 }
 
@@ -98,13 +98,13 @@ impl PublishCollabDuplicator {
     }
   }
 
-  async fn deep_copy(mut self, publish_view_id: &str) -> Result<(), AppError> {
+  async fn duplicate(mut self, publish_view_id: &str) -> Result<(), AppError> {
     let mut txn = self.pg_pool.begin().await?;
 
     // new view after deep copy
     // this is the root of the document/database duplicated
     let mut root_view = match self
-      .deep_copy_txn(&mut txn, uuid::Uuid::new_v4().to_string(), publish_view_id)
+      .deep_copy(&mut txn, uuid::Uuid::new_v4().to_string(), publish_view_id)
       .await?
     {
       Some(v) => v,
@@ -216,7 +216,7 @@ impl PublishCollabDuplicator {
   /// If None is returned, it means the view is not published.
   /// If Some is returned, a new view is created but without parent_view_id set.
   /// Caller should set the parent_view_id to the parent view.
-  async fn deep_copy_txn(
+  async fn deep_copy(
     &mut self,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
@@ -257,17 +257,14 @@ impl PublishCollabDuplicator {
         )
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
-        let new_doc_view = self
-          .deep_copy_doc_txn(txn, new_view_id, doc, metadata)
-          .await?;
+        let new_doc_view = self.deep_copy_doc(txn, new_view_id, doc, metadata).await?;
         Ok(Some(new_doc_view))
       },
       ViewLayout::Grid | ViewLayout::Board | ViewLayout::Calendar => {
         let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
         let (new_db_view, _) = self
-          .deep_copy_database_txn(
+          .deep_copy_database(
             txn,
-            publish_view_id,
             new_view_id,
             uuid::Uuid::new_v4().to_string(),
             db_payload,
@@ -283,7 +280,7 @@ impl PublishCollabDuplicator {
     }
   }
 
-  async fn deep_copy_doc_txn<'a>(
+  async fn deep_copy_doc<'a>(
     &mut self,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
@@ -371,7 +368,7 @@ impl PublishCollabDuplicator {
         None => {
           // Call deep_copy_txn and await the result
           if let Some(mut new_view) =
-            Box::pin(self.deep_copy_txn(txn, uuid::Uuid::new_v4().to_string(), page_id_str)).await?
+            Box::pin(self.deep_copy(txn, uuid::Uuid::new_v4().to_string(), page_id_str)).await?
           {
             new_view.parent_view_id.clone_from(&ret_view.id);
             self
@@ -451,22 +448,12 @@ impl PublishCollabDuplicator {
       {
         let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
 
-        // take the 2nd last view in ancestor_views
-        // this represents the parent view of the doc view of database
-        let second_last = metadata
-          .ancestor_views
-          .iter()
-          .rev()
-          .nth(1)
-          .ok_or_else(|| AppError::RecordNotFound("ancestor_views not found".to_string()))?;
-
         // create a new view for the database
         let new_db_folder_view_id = uuid::Uuid::new_v4().to_string();
         let new_db_id = uuid::Uuid::new_v4().to_string();
         let (mut new_folder_db_view, old_to_new_view_id) = self
-          .deep_copy_database_txn(
+          .deep_copy_database(
             txn,
-            &second_last.view_id.clone(),
             new_db_folder_view_id.clone(),
             new_db_id.clone(),
             db_payload,
@@ -495,15 +482,16 @@ impl PublishCollabDuplicator {
 
   /// Deep copy a published database to the destination workspace.
   /// Returns the Folder view for main view (`new_view_id`) and map from old to new view_id
-  async fn deep_copy_database_txn<'a>(
+  async fn deep_copy_database<'a>(
     &mut self,
     pg_txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    pub_view_id: &str,
     new_view_id: String,
     new_db_id: String,
     published_db: PublishDatabaseData,
     metadata: PublishViewMetaData,
   ) -> Result<(View, HashMap<String, String>), AppError> {
+    let pub_view_id = metadata.view.view_id.as_str();
+
     // flatten nested view info into a map
     let view_info_by_id = view_info_by_view_id(&metadata);
 

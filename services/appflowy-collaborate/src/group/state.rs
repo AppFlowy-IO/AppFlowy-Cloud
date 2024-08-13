@@ -45,10 +45,8 @@ impl GroupManagementState {
       }
     }
 
-    if !inactive_group_ids.is_empty() {
-      for object_id in &inactive_group_ids {
-        self.remove_group(object_id).await;
-      }
+    for object_id in &inactive_group_ids {
+      self.remove_group(object_id).await;
     }
     inactive_group_ids
   }
@@ -123,7 +121,6 @@ impl GroupManagementState {
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);
     }
-
     self.metrics_calculate.num_of_active_collab.store(
       self.group_by_object_id.len() as i64,
       std::sync::atomic::Ordering::Relaxed,

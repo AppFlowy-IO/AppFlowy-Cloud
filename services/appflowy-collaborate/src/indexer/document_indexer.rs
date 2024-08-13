@@ -1,10 +1,10 @@
+use anyhow::anyhow;
 use async_trait::async_trait;
-use std::sync::Arc;
-
 use collab::core::collab::MutexCollab;
 use collab_document::document::Document;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
+use std::sync::Arc;
 
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
@@ -27,7 +27,15 @@ impl DocumentIndexer {
   fn get_document_contents(
     collab: Arc<MutexCollab>,
   ) -> Result<(String, Vec<AFCollabEmbeddingParams>), DocumentError> {
-    let object_id = collab.try_lock().unwrap().object_id.clone();
+    let object_id = collab
+      .try_lock()
+      .ok_or_else(|| {
+        DocumentError::Internal(anyhow!(
+          "Failed to lock collab when trying to get document content".to_string()
+        ))
+      })?
+      .object_id
+      .clone();
     let document = Document::open(collab)?;
     let document_data = document.get_document_data()?;
     let content = document_data.to_plain_text();

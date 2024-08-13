@@ -27,7 +27,7 @@ use collab_stream::stream_group::StreamGroup;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{debug, error, event, trace};
+use tracing::{error, event, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::Update;
@@ -187,20 +187,35 @@ impl CollabGroup {
   /// subscriber
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.broadcast.modified_at.lock();
+
+    // In debug mode, we set the timeout to 60 seconds
     if cfg!(debug_assertions) {
-      modified_at.elapsed().as_secs() > 60 && self.subscribers.is_empty()
+      trace!(
+        "Group:{} is inactive for {} seconds, subscribers: {}",
+        self.object_id,
+        modified_at.elapsed().as_secs(),
+        self.subscribers.len()
+      );
+      modified_at.elapsed().as_secs() > 120
     } else {
       let elapsed_secs = modified_at.elapsed().as_secs();
-      const MAXIMUM_SECS: u64 = 60 * 60 * 12; // 12 hours
-      if elapsed_secs > MAXIMUM_SECS {
-        debug!(
-          "The group:{} is inactive for {} seconds",
-          self.object_id, elapsed_secs
-        );
-        // If the group is inactive for more than 12 hours, mark it as inactive
-        true
+      if elapsed_secs > self.timeout_secs() {
+        // Mark the group as inactive if it has been inactive for more than 3 hours, even if there are subscribers.
+        // Otherwise, return true only if there are no subscribers.
+        const MAXIMUM_SECS: u64 = 3 * 60 * 60;
+        if elapsed_secs > MAXIMUM_SECS {
+          info!(
+            "Group:{} is inactive for {} seconds, subscribers: {}",
+            self.object_id,
+            modified_at.elapsed().as_secs(),
+            self.subscribers.len()
+          );
+          true
+        } else {
+          self.subscribers.is_empty()
+        }
       } else {
-        elapsed_secs > self.timeout_secs() && self.subscribers.is_empty()
+        false
       }
     }
   }
@@ -225,8 +240,8 @@ impl CollabGroup {
   fn timeout_secs(&self) -> u64 {
     match self.collab_type {
       CollabType::Document => 10 * 60, // 10 minutes
-      CollabType::Database | CollabType::DatabaseRow => 60 * 60, // 1 hour
-      CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 2 * 60 * 60, // 2 hours,
+      CollabType::Database | CollabType::DatabaseRow => 30 * 60, // 30 minutes
+      CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 6 * 60 * 60, // 6 hours,
       CollabType::Unknown => {
         10 * 60 // 10 minutes
       },

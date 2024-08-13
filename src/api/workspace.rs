@@ -1,4 +1,8 @@
-use crate::api::util::{payload_serialization_type_from_header_value, PayloadReader};
+use crate::api::util::PayloadReader;
+use crate::biz::workspace::ops::{
+  create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
+  get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
+};
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
@@ -21,7 +25,7 @@ use access_control::collab::CollabAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
 use appflowy_collaborate::indexer::IndexerProvider;
-use authentication::jwt::UserUuid;
+use authentication::jwt::{OptionalUserUuid, UserUuid};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
@@ -144,6 +148,18 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_published_collab_info_handler))
     )
     .service(
+      web::resource("/published-info/{view_id}/comment")
+        .route(web::get().to(get_published_collab_comment_handler))
+        .route(web::post().to(post_published_collab_comment_handler))
+        .route(web::delete().to(delete_published_collab_comment_handler))
+    )
+    .service(
+      web::resource("/published-info/{view_id}/reaction")
+        .route(web::get().to(get_published_collab_reaction_handler))
+        .route(web::post().to(post_published_collab_reaction_handler))
+        .route(web::delete().to(delete_published_collab_reaction_handler))
+    )
+    .service(
       web::resource("/{workspace_id}/publish-namespace")
         .route(web::put().to(put_publish_namespace_handler))
         .route(web::get().to(get_publish_namespace_handler))
@@ -231,28 +247,20 @@ async fn delete_workspace_handler(
   Ok(AppResponse::Ok().into())
 }
 
-// TODO: also get shared workspaces
+/// Get all user owned and shared workspaces
 #[instrument(skip_all, err)]
 async fn list_workspace_handler(
   uuid: UserUuid,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<AFWorkspaces>> {
-  let rows = workspace::ops::get_all_user_workspaces(&state.pg_pool, &uuid).await?;
-  let workspaces = rows
-    .into_iter()
-    .flat_map(|row| {
-      let result = AFWorkspace::try_from(row);
-      if let Err(err) = &result {
-        event!(
-          tracing::Level::ERROR,
-          "Failed to convert workspace row to AFWorkspace: {:?}",
-          err
-        );
-      }
-      result
-    })
-    .collect::<Vec<_>>();
-  Ok(AppResponse::Ok().with_data(AFWorkspaces(workspaces)).into())
+  query: web::Query<QueryWorkspaceParam>,
+) -> Result<JsonAppResponse<Vec<AFWorkspace>>> {
+  let workspaces = workspace::ops::get_all_user_workspaces(
+    &state.pg_pool,
+    &uuid,
+    query.into_inner().include_member_count.unwrap_or(false),
+  )
+  .await?;
+  Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
 #[instrument(skip(payload, state), err)]
@@ -560,7 +568,6 @@ async fn batch_create_collab_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let mut collab_params_list = vec![];
   let workspace_id = workspace_id.into_inner().to_string();
-  let serialization_type = payload_serialization_type_from_header_value(req.headers())?;
   let compress_type = compress_type_from_header_value(req.headers())?;
   event!(
     tracing::Level::DEBUG,
@@ -593,13 +600,13 @@ async fn batch_create_collab_handler(
 
             let compressed_data = payload_buffer[4..4 + size].to_vec();
             let decompress_data = decompress(compressed_data, buffer_size).await?;
-            let params =
-              CollabParams::from_bytes(&decompress_data, &serialization_type).map_err(|err| {
-                AppError::InvalidRequest(format!(
-                  "Failed to parse CollabParams with brotli decompression data: {}",
-                  err
-                ))
-              })?;
+            let params = CollabParams::from_bytes(&decompress_data, &SerializationType::Protobuf)
+              .map_err(|err| {
+              AppError::InvalidRequest(format!(
+                "Failed to parse CollabParams with brotli decompression data: {}",
+                err
+              ))
+            })?;
             params.validate().map_err(AppError::from)?;
             match params.check_encode_collab().await {
               Ok(_) => collab_params_list.push(params),
@@ -1089,6 +1096,92 @@ async fn get_published_collab_info_handler(
   Ok(Json(AppResponse::Ok().with_data(collab_data)))
 }
 
+async fn get_published_collab_comment_handler(
+  view_id: web::Path<Uuid>,
+  optional_user_uuid: OptionalUserUuid,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<GlobalComments>> {
+  let view_id = view_id.into_inner();
+  let comments =
+    get_comments_on_published_view(&state.pg_pool, &view_id, &optional_user_uuid).await?;
+  let resp = GlobalComments { comments };
+  Ok(Json(AppResponse::Ok().with_data(resp)))
+}
+
+async fn post_published_collab_comment_handler(
+  user_uuid: UserUuid,
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+  data: Json<CreateGlobalCommentParams>,
+) -> Result<JsonAppResponse<()>> {
+  let view_id = view_id.into_inner();
+  create_comment_on_published_view(
+    &state.pg_pool,
+    &view_id,
+    &data.reply_comment_id,
+    &data.content,
+    &user_uuid,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_published_collab_comment_handler(
+  user_uuid: UserUuid,
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+  data: Json<DeleteGlobalCommentParams>,
+) -> Result<JsonAppResponse<()>> {
+  let view_id = view_id.into_inner();
+  remove_comment_on_published_view(&state.pg_pool, &view_id, &data.comment_id, &user_uuid).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_published_collab_reaction_handler(
+  view_id: web::Path<Uuid>,
+  query: web::Query<GetReactionQueryParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Reactions>> {
+  let view_id = view_id.into_inner();
+  let reactions =
+    get_reactions_on_published_view(&state.pg_pool, &view_id, &query.comment_id).await?;
+  let resp = Reactions { reactions };
+  Ok(Json(AppResponse::Ok().with_data(resp)))
+}
+
+async fn post_published_collab_reaction_handler(
+  user_uuid: UserUuid,
+  view_id: web::Path<Uuid>,
+  data: Json<CreateReactionParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Reactions>> {
+  let view_id = view_id.into_inner();
+  create_reaction_on_comment(
+    &state.pg_pool,
+    &data.comment_id,
+    &view_id,
+    &data.reaction_type,
+    &user_uuid,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_published_collab_reaction_handler(
+  user_uuid: UserUuid,
+  data: Json<DeleteReactionParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Reactions>> {
+  remove_reaction_on_comment(
+    &state.pg_pool,
+    &data.comment_id,
+    &data.reaction_type,
+    &user_uuid,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
 async fn post_publish_collabs_handler(
   workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
@@ -1131,7 +1224,9 @@ async fn post_publish_collabs_handler(
   }
 
   if accumulator.is_empty() {
-    return Ok(Json(AppResponse::Ok()));
+    return Err(
+      AppError::InvalidRequest(String::from("did not receive any data to publish")).into(),
+    );
   }
   biz::workspace::ops::publish_collabs(&state.pg_pool, &workspace_id, &user_uuid, &accumulator)
     .await?;

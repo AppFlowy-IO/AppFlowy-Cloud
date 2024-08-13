@@ -58,6 +58,33 @@ impl FromRequest for UserUuid {
   }
 }
 
+// For cases where the handler itself will handle the request differently
+// based on whether the user is authenticated or not
+pub struct OptionalUserUuid(Option<UserUuid>);
+
+impl FromRequest for OptionalUserUuid {
+  type Error = actix_web::Error;
+
+  type Future = std::future::Ready<Result<Self, Self::Error>>;
+
+  fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+    let auth = get_auth_from_request(req);
+    match auth {
+      Ok(auth) => match UserUuid::from_auth(auth) {
+        Ok(uuid) => std::future::ready(Ok(OptionalUserUuid(Some(uuid)))),
+        Err(_) => std::future::ready(Ok(OptionalUserUuid(None))),
+      },
+      Err(_) => std::future::ready(Ok(OptionalUserUuid(None))),
+    }
+  }
+}
+
+impl OptionalUserUuid {
+  pub fn as_uuid(&self) -> Option<uuid::Uuid> {
+    self.0.as_deref().map(|uuid| uuid.to_owned())
+  }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Authorization {
   pub token: String,

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE af_published_view_comment\n      SET is_deleted = true\n      WHERE comment_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6a0e771ffacfdec95ef8c36de769448384fda4350aa630becebd0e5add632f4"
+}

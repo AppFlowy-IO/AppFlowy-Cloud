@@ -3,7 +3,7 @@
 FROM lukemathwalker/cargo-chef:latest-rust-1.77 as chef
 
 WORKDIR /app
-RUN apt update && apt install lld clang -y
+RUN apt update && apt install lld clang protobuf-compiler -y
 
 # FROM chef as planner
 # COPY . .
@@ -30,11 +30,11 @@ RUN cargo build --release --bin admin_frontend
 FROM debian AS runtime
 WORKDIR /app
 RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends libc6 libssl-dev \
-    # Clean up
-    && apt-get autoremove -y \
-    && apt-get clean -y \
-    && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends libc6 libssl-dev \
+  # Clean up
+  && apt-get autoremove -y \
+  && apt-get clean -y \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/admin_frontend /usr/local/bin/admin_frontend
 COPY --from=builder /app/admin_frontend/assets /app/assets

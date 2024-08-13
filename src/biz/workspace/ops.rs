@@ -1,3 +1,4 @@
+use authentication::jwt::OptionalUserUuid;
 use database_entity::dto::{AFWorkspaceSettingsChange, PublishCollabItem};
 use std::collections::HashMap;
 
@@ -15,24 +16,13 @@ use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::collab::upsert_collab_member_with_txn;
 use database::file::s3_client_impl::S3BucketStorage;
-use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
+use database::pg_row::AFWorkspaceMemberRow;
 
 use database::user::select_uid_from_email;
-use database::workspace::{
-  change_workspace_icon, delete_from_workspace, delete_published_collabs, delete_workspace_members,
-  get_invitation_by_id, insert_or_replace_publish_collab_metas, insert_user_workspace,
-  insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
-  select_publish_collab_meta, select_published_collab_blob, select_published_collab_info,
-  select_user_is_collab_publisher_for_all_views, select_user_is_workspace_owner, select_workspace,
-  select_workspace_invitations_for_user, select_workspace_member, select_workspace_member_list,
-  select_workspace_publish_namespace, select_workspace_publish_namespace_exists,
-  select_workspace_settings, select_workspace_total_collab_bytes, update_updated_at_of_workspace,
-  update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
-  upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
-};
+use database::workspace::*;
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
-  AFWorkspaceSettings, WorkspaceUsage,
+  AFWorkspaceSettings, GlobalComment, Reaction, WorkspaceUsage,
 };
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
@@ -44,6 +34,8 @@ use workspace_template::document::get_started::GetStartedDocumentTemplate;
 use crate::biz::user::user_init::initialize_workspace_for_user;
 use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
 use crate::state::GoTrueAdmin;
+
+const MAX_COMMENT_LENGTH: usize = 5000;
 
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
@@ -173,6 +165,88 @@ pub async fn get_published_collab_info(
   select_published_collab_info(pg_pool, view_id).await
 }
 
+pub async fn get_comments_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+  optional_user_uuid: &OptionalUserUuid,
+) -> Result<Vec<GlobalComment>, AppError> {
+  let page_owner_uuid = select_owner_of_published_collab(pg_pool, view_id).await?;
+  let comments = select_comments_for_published_view_ordered_by_recency(
+    pg_pool,
+    view_id,
+    &optional_user_uuid.as_uuid(),
+    &page_owner_uuid,
+  )
+  .await?;
+  Ok(comments)
+}
+
+pub async fn create_comment_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+  reply_comment_id: &Option<Uuid>,
+  content: &str,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  if content.len() > MAX_COMMENT_LENGTH {
+    return Err(AppError::StringLengthLimitReached(
+      "comment content exceed limit".to_string(),
+    ));
+  }
+  insert_comment_to_published_view(pg_pool, view_id, user_uuid, content, reply_comment_id).await?;
+  Ok(())
+}
+
+pub async fn remove_comment_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+  comment_id: &Uuid,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  check_if_user_is_allowed_to_delete_comment(pg_pool, user_uuid, view_id, comment_id).await?;
+  update_comment_deletion_status(pg_pool, comment_id).await?;
+  Ok(())
+}
+
+pub async fn get_reactions_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+  comment_id: &Option<Uuid>,
+) -> Result<Vec<Reaction>, AppError> {
+  let reaction = match comment_id {
+    Some(comment_id) => {
+      select_reactions_for_comment_ordered_by_reaction_type_creation_time(pg_pool, comment_id)
+        .await?
+    },
+    None => {
+      select_reactions_for_published_view_ordered_by_reaction_type_creation_time(pg_pool, view_id)
+        .await?
+    },
+  };
+  Ok(reaction)
+}
+
+pub async fn create_reaction_on_comment(
+  pg_pool: &PgPool,
+  comment_id: &Uuid,
+  view_id: &Uuid,
+  reaction_type: &str,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  insert_reaction_on_comment(pg_pool, comment_id, view_id, user_uuid, reaction_type).await?;
+  Ok(())
+}
+
+pub async fn remove_reaction_on_comment(
+  pg_pool: &PgPool,
+  comment_id: &Uuid,
+  reaction_type: &str,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  delete_reaction_from_comment(pg_pool, comment_id, user_uuid, reaction_type).await?;
+  Ok(())
+}
+
 pub async fn delete_published_workspace_collab(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
@@ -187,8 +261,32 @@ pub async fn delete_published_workspace_collab(
 pub async fn get_all_user_workspaces(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, AppResponseError> {
+  include_member_count: bool,
+) -> Result<Vec<AFWorkspace>, AppResponseError> {
   let workspaces = select_all_user_workspaces(pg_pool, user_uuid).await?;
+  let mut workspaces = workspaces
+    .into_iter()
+    .flat_map(|row| {
+      let result = AFWorkspace::try_from(row);
+      if let Err(err) = &result {
+        tracing::error!("Failed to convert workspace row to AFWorkspace: {:?}", err);
+      }
+      result
+    })
+    .collect::<Vec<_>>();
+  if include_member_count {
+    let ids = workspaces
+      .iter()
+      .map(|row| row.workspace_id)
+      .collect::<Vec<_>>();
+    let member_count_by_workspace_id = select_member_count_for_workspaces(pg_pool, &ids).await?;
+    for workspace in workspaces.iter_mut() {
+      if let Some(member_count) = member_count_by_workspace_id.get(&workspace.workspace_id) {
+        workspace.member_count = Some(*member_count);
+      }
+    }
+  }
+
   Ok(workspaces)
 }
 
@@ -597,6 +695,22 @@ async fn check_workspace_owner_or_publisher(
         "User is not the owner of the workspace or the publisher of the document".to_string(),
       ));
     }
+  }
+  Ok(())
+}
+
+async fn check_if_user_is_allowed_to_delete_comment(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  view_id: &Uuid,
+  comment_id: &Uuid,
+) -> Result<(), AppError> {
+  let is_allowed =
+    select_user_is_allowed_to_delete_comment(pg_pool, user_uuid, view_id, comment_id).await?;
+  if !is_allowed {
+    return Err(AppError::UserUnAuthorized(
+      "User is not allowed to delete this comment".to_string(),
+    ));
   }
   Ok(())
 }

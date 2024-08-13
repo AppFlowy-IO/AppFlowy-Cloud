@@ -1,10 +1,12 @@
-use collab_entity::CollabType;
+use collab_entity::proto::collab::collab_update_event::Update;
+use collab_entity::{proto, CollabType};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 
 use crate::error::{internal, StreamError};
+use prost::Message;
 use redis::streams::StreamId;
 use redis::{FromRedisValue, RedisError, RedisResult, Value};
 use serde::{Deserialize, Serialize};
@@ -304,12 +306,40 @@ pub enum CollabUpdateEvent {
 }
 
 impl CollabUpdateEvent {
-  pub fn encode(&self) -> Result<Vec<u8>, bincode::Error> {
-    bincode::serialize(self)
+  #[allow(dead_code)]
+  fn to_proto(&self) -> proto::collab::CollabUpdateEvent {
+    match self {
+      CollabUpdateEvent::UpdateV1 { encode_update } => proto::collab::CollabUpdateEvent {
+        update: Some(Update::UpdateV1(encode_update.clone())),
+      },
+    }
   }
 
-  pub fn decode(data: &[u8]) -> Result<Self, bincode::Error> {
-    bincode::deserialize(data)
+  fn from_proto(proto: &proto::collab::CollabUpdateEvent) -> Result<Self, StreamError> {
+    match &proto.update {
+      None => Err(StreamError::UnexpectedValue(
+        "update not set for CollabUpdateEvent proto".to_string(),
+      )),
+      Some(update) => match update {
+        Update::UpdateV1(encode_update) => Ok(CollabUpdateEvent::UpdateV1 {
+          encode_update: encode_update.to_vec(),
+        }),
+      },
+    }
+  }
+
+  pub fn encode(&self) -> Vec<u8> {
+    self.to_proto().encode_to_vec()
+  }
+
+  pub fn decode(data: &[u8]) -> Result<Self, StreamError> {
+    match prost::Message::decode(data) {
+      Ok(proto) => CollabUpdateEvent::from_proto(&proto),
+      Err(_) => match bincode::deserialize(data) {
+        Ok(event) => Ok(event),
+        Err(e) => Err(StreamError::BinCodeSerde(e)),
+      },
+    }
   }
 }
 
@@ -317,7 +347,22 @@ impl TryFrom<CollabUpdateEvent> for StreamBinary {
   type Error = StreamError;
 
   fn try_from(value: CollabUpdateEvent) -> Result<Self, Self::Error> {
-    let raw_data = value.encode()?;
+    let raw_data = value.encode();
     Ok(StreamBinary(raw_data))
+  }
+}
+
+#[cfg(test)]
+mod test {
+
+  #[test]
+  fn test_collab_update_event_decoding() {
+    let encoded_update = vec![1, 2, 3, 4, 5];
+    let event = super::CollabUpdateEvent::UpdateV1 {
+      encode_update: encoded_update.clone(),
+    };
+    let encoded = event.encode();
+    let decoded = super::CollabUpdateEvent::decode(&encoded).unwrap();
+    assert_eq!(event, decoded);
   }
 }

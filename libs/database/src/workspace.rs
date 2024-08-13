@@ -1,6 +1,6 @@
 use database_entity::dto::{
-  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
-  PublishCollabItem, PublishInfo,
+  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
+  PublishCollabItem, PublishInfo, Reaction,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -8,10 +8,9 @@ use std::{collections::HashMap, ops::DerefMut};
 use tracing::{event, instrument};
 use uuid::Uuid;
 
-use crate::pg_row::AFWorkspaceMemberPermRow;
 use crate::pg_row::{
-  AFPermissionRow, AFUserProfileRow, AFWorkspaceInvitationMinimal, AFWorkspaceMemberRow,
-  AFWorkspaceRow,
+  AFGlobalCommentRow, AFPermissionRow, AFReactionRow, AFUserProfileRow, AFWebUserType,
+  AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow, AFWorkspaceMemberRow, AFWorkspaceRow,
 };
 use crate::user::select_uid_from_email;
 use app_error::AppError;
@@ -169,6 +168,37 @@ pub async fn select_user_is_collab_publisher_for_all_views(
     Some(c) => Ok(c == view_ids.len() as i64),
     None => Ok(false),
   }
+}
+
+pub async fn select_user_is_allowed_to_delete_comment(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  view_id: &Uuid,
+  comment_id: &Uuid,
+) -> Result<bool, AppError> {
+  let is_publisher_for_view = sqlx::query_scalar!(
+    r#"
+    SELECT EXISTS(
+      SELECT true
+      FROM af_published_collab
+      WHERE view_id = $1
+        AND published_by = (SELECT uid FROM af_user WHERE uuid = $2)
+      UNION ALL
+      SELECT true
+      FROM af_published_view_comment
+      WHERE view_id = $1
+        AND comment_id = $3
+        AND created_by = (SELECT uid FROM af_user WHERE uuid = $2)
+    ) AS "exists";
+    "#,
+    view_id,
+    user_uuid,
+    comment_id,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(is_publisher_for_view.unwrap_or(false))
 }
 
 #[inline]
@@ -643,6 +673,39 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
   Ok(workspaces)
 }
 
+pub async fn select_member_count_for_workspaces<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_ids: &[Uuid],
+) -> Result<HashMap<Uuid, i64>, AppError> {
+  let query_res = sqlx::query!(
+    r#"
+      SELECT workspace_id, COUNT(*) AS member_count
+      FROM af_workspace_member
+      WHERE workspace_id = ANY($1)
+      GROUP BY workspace_id
+    "#,
+    workspace_ids
+  )
+  .fetch_all(executor)
+  .await?;
+
+  let mut ret = HashMap::with_capacity(workspace_ids.len());
+  for row in query_res {
+    let count = match row.member_count {
+      Some(c) => c,
+      None => continue,
+    };
+    ret.insert(row.workspace_id, count);
+  }
+  for workspace_id in workspace_ids.iter() {
+    if !ret.contains_key(workspace_id) {
+      ret.insert(*workspace_id, 0);
+    }
+  }
+
+  Ok(ret)
+}
+
 pub async fn select_permission(
   pool: &PgPool,
   permission_id: &i64,
@@ -1052,4 +1115,232 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
   .await?;
 
   Ok(res)
+}
+
+pub async fn select_owner_of_published_collab<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+) -> Result<Uuid, AppError> {
+  let res = sqlx::query!(
+    r#"
+      SELECT
+      af.uuid
+      FROM af_published_collab apc
+      JOIN af_user af ON af.uid = apc.published_by
+      WHERE view_id = $1
+    "#,
+    view_id,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res.uuid)
+}
+
+pub async fn select_comments_for_published_view_ordered_by_recency<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  view_id: &Uuid,
+  user_uuid: &Option<Uuid>,
+  page_owner_uuid: &Uuid,
+) -> Result<Vec<GlobalComment>, AppError> {
+  let user_uuid = user_uuid.unwrap_or(Uuid::nil());
+  let is_page_owner = user_uuid == *page_owner_uuid;
+  let comment_rows = sqlx::query_as!(
+    AFGlobalCommentRow,
+    r#"
+      SELECT
+        avc.comment_id,
+        avc.created_at,
+        avc.updated_at AS last_updated_at,
+        avc.content,
+        avc.reply_comment_id,
+        avc.is_deleted,
+        (au.uuid, au.name, au.metadata ->> 'icon_url') AS "user: AFWebUserType",
+        (NOT avc.is_deleted AND ($2 OR au.uuid = $3)) AS "can_be_deleted!"
+      FROM af_published_view_comment avc
+      LEFT OUTER JOIN af_user au ON avc.created_by = au.uid
+      WHERE view_id = $1
+      ORDER BY avc.created_at DESC
+    "#,
+    view_id,
+    is_page_owner,
+    user_uuid,
+  )
+  .fetch_all(executor)
+  .await?;
+  let comments = comment_rows.into_iter().map(|row| row.into()).collect();
+  Ok(comments)
+}
+
+pub async fn insert_comment_to_published_view<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+  user_uuid: &Uuid,
+  content: &str,
+  reply_comment_id: &Option<Uuid>,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_published_view_comment (view_id, created_by, content, reply_comment_id)
+      VALUES ($1, (SELECT uid FROM af_user WHERE uuid = $2), $3, $4)
+    "#,
+    view_id,
+    user_uuid,
+    content,
+    reply_comment_id.clone(),
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to insert comment to published view, view_id: {}, user_id: {}, content: {}, rows_affected: {}",
+      view_id, user_uuid, content, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+pub async fn update_comment_deletion_status<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  comment_id: &Uuid,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_published_view_comment
+      SET is_deleted = true
+      WHERE comment_id = $1
+    "#,
+    comment_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to update deletion status for comment, comment_id: {}, rows_affected: {}",
+      comment_id,
+      res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creation_time<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  view_id: &Uuid,
+) -> Result<Vec<Reaction>, AppError> {
+  let reaction_rows = sqlx::query_as!(
+    AFReactionRow,
+    r#"
+      SELECT
+        avr.comment_id,
+        avr.reaction_type,
+        ARRAY_AGG((au.uuid, au.name, au.metadata ->> 'icon_url')) AS "react_users!: Vec<AFWebUserType>"
+      FROM af_published_view_reaction avr
+      INNER JOIN af_user au ON avr.created_by = au.uid
+      WHERE view_id = $1
+      GROUP BY comment_id, reaction_type
+      ORDER BY MIN(avr.created_at)
+    "#,
+    view_id,
+  )
+  .fetch_all(executor)
+  .await?;
+
+  let reactions = reaction_rows.into_iter().map(|x| x.into()).collect();
+  Ok(reactions)
+}
+
+pub async fn select_reactions_for_comment_ordered_by_reaction_type_creation_time<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  comment_id: &Uuid,
+) -> Result<Vec<Reaction>, AppError> {
+  let reaction_rows = sqlx::query_as!(
+    AFReactionRow,
+    r#"
+      SELECT
+        avr.reaction_type,
+        ARRAY_AGG((au.uuid, au.name, au.metadata ->> 'icon_url')) AS "react_users!: Vec<AFWebUserType>",
+        avr.comment_id
+      FROM af_published_view_reaction avr
+      INNER JOIN af_user au ON avr.created_by = au.uid
+      WHERE comment_id = $1
+      GROUP BY comment_id, reaction_type
+      ORDER BY MIN(avr.created_at)
+    "#,
+    comment_id,
+  )
+  .fetch_all(executor)
+  .await?;
+
+  let reactions = reaction_rows.into_iter().map(|x| x.into()).collect();
+  Ok(reactions)
+}
+
+pub async fn insert_reaction_on_comment<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  comment_id: &Uuid,
+  view_id: &Uuid,
+  user_uuid: &Uuid,
+  reaction_type: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_published_view_reaction (comment_id, view_id, created_by, reaction_type)
+      VALUES ($1, $2, (SELECT uid FROM af_user WHERE uuid = $3), $4)
+    "#,
+    comment_id,
+    view_id,
+    user_uuid,
+    reaction_type,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to insert reaction to comment, comment_id: {}, user_id: {}, reaction_type: {}, rows_affected: {}",
+      comment_id, user_uuid, reaction_type, res.rows_affected()
+    );
+  };
+
+  Ok(())
+}
+
+pub async fn delete_reaction_from_comment<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  comment_id: &Uuid,
+  user_uuid: &Uuid,
+  reaction_type: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      DELETE FROM af_published_view_reaction
+      WHERE comment_id = $1 AND created_by = (SELECT uid FROM af_user WHERE uuid = $2) AND reaction_type = $3
+    "#,
+    comment_id,
+    user_uuid,
+    reaction_type,
+  ).execute(executor).await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to delete reaction from published comment, comment_id: {}, user_id: {}, reaction_type: {}, rows_affected: {}",
+      comment_id, user_uuid, reaction_type, res.rows_affected()
+    );
+  };
+
+  Ok(())
 }

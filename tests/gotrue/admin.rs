@@ -152,7 +152,7 @@ async fn admin_generate_link_and_user_sign_in_and_invite() {
     assert!(is_new);
 
     let workspaces = client.get_workspaces().await.unwrap();
-    assert_eq!(workspaces.0.len(), 1);
+    assert_eq!(workspaces.len(), 1);
 
     let friend_email = generate_unique_email();
     client.invite(&friend_email).await.unwrap();

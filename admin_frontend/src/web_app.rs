@@ -308,16 +308,14 @@ async fn user_usage_handler(
         0
       });
 
-  let workspace_limit = get_user_workspace_limit(
-    &session.token.access_token,
-    &state.appflowy_cloud_gateway_url,
-  )
-  .await
-  .map(|limit| limit.workspace_count.to_string())
-  .unwrap_or_else(|err| {
-    tracing::warn!("unable to get user workspace limit: {:?}", err);
-    "N/A".to_owned()
-  });
+  let workspace_limit =
+    get_user_workspace_limit(&session.token.access_token, &state.appflowy_cloud_url)
+      .await
+      .map(|limit| limit.workspace_count.to_string())
+      .unwrap_or_else(|err| {
+        tracing::warn!("unable to get user workspace limit: {:?}", err);
+        "N/A".to_owned()
+      });
 
   render_template(templates::UserUsage {
     workspace_count,
@@ -329,12 +327,8 @@ async fn workspace_usage_handler(
   State(app_state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
-  let workspace_usages = get_user_workspace_usages(
-    &session.token.access_token,
-    &app_state.appflowy_cloud_url,
-    &app_state.appflowy_cloud_gateway_url,
-  )
-  .await?;
+  let workspace_usages =
+    get_user_workspace_usages(&session.token.access_token, &app_state.appflowy_cloud_url).await?;
   render_template(templates::WorkspaceUsageList { workspace_usages })
 }
 

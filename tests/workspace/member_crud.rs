@@ -148,7 +148,7 @@ async fn add_not_exist_workspace_members() {
     .unwrap();
 
   let workspaces = invited_client.get_workspaces().await.unwrap();
-  assert_eq!(workspaces.0.len(), 2);
+  assert_eq!(workspaces.len(), 2);
 }
 
 #[tokio::test]

@@ -624,10 +624,8 @@ pub struct AFWorkspace {
   pub workspace_name: String,
   pub created_at: DateTime<Utc>,
   pub icon: String,
+  pub member_count: Option<i64>,
 }
-
-#[derive(Serialize, Deserialize)]
-pub struct AFWorkspaces(pub Vec<AFWorkspace>);
 
 #[derive(Serialize, Deserialize)]
 pub struct AFWorkspaceSettings {
@@ -736,7 +734,7 @@ pub struct UpdateChatParams {
   #[validate(custom = "validate_not_empty_str")]
   pub name: Option<String>,
 
-  pub rag_ids: Option<Vec<String>>,
+  pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -744,6 +742,109 @@ pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
   pub message_type: ChatMessageType,
+
+  /// metadata is json array object
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
+}
+
+/// [ChatMessageMetadata] is used when creating a new question message.
+/// All the properties of [ChatMessageMetadata] except [ChatMetadataData] will be stored as a
+/// metadata for specific [ChatMessage]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageMetadata {
+  pub data: ChatMetadataData,
+  /// The id for the metadata. It can be a file_id, view_id
+  pub id: String,
+  /// The name for the metadata. For example, @xxx, @xx.txt
+  pub name: String,
+  pub source: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub extract: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMetadataData {
+  /// The textual content of the metadata. This field can contain raw text data from a specific
+  /// document or any other text content that is indexable. This content is typically used for
+  /// search and indexing purposes within the chat context.
+  pub content: String,
+
+  /// The type of content represented by this metadata. This could indicate the format or
+  /// nature of the content (e.g., text, markdown, PDF). The `content_type` helps in
+  /// processing or rendering the content appropriately.
+  pub content_type: ChatMetadataContentType,
+
+  /// The size of the content in bytes.
+  pub size: i64,
+}
+
+impl ChatMetadataData {
+  /// Validates the `ChatMetadataData` instance.
+  ///
+  /// This method checks the validity of the data based on the content type and the presence of content or URL.
+  /// - If `content` is empty, the method checks if `url` is provided. If `url` is also empty, the data is invalid.
+  /// - For `Text` and `Markdown`, it ensures that the content length matches the specified size if content is present.
+  /// - For `Unknown` and `PDF`, it currently returns `false` as these types are either unsupported or
+  ///   require additional validation logic.
+  ///
+  /// Returns `true` if the data is valid according to its content type and the presence of content or URL, otherwise `false`.
+  pub fn validate(&self) -> Result<(), anyhow::Error> {
+    match self.content_type {
+      ChatMetadataContentType::Text | ChatMetadataContentType::Markdown => {
+        if self.content.len() != self.size as usize {
+          return Err(anyhow::anyhow!(
+            "Invalid content size: content size: {}, expected size: {}",
+            self.content.len(),
+            self.size
+          ));
+        }
+      },
+      ChatMetadataContentType::PDF => {
+        if self.content.is_empty() {
+          return Err(anyhow::anyhow!("Invalid content: content is empty"));
+        }
+      },
+      ChatMetadataContentType::Unknown => {
+        return Err(anyhow::anyhow!(
+          "Unsupported content type: {:?}",
+          self.content_type
+        ));
+      },
+    }
+    Ok(())
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChatMetadataContentType {
+  Unknown,
+  Text,
+  Markdown,
+  PDF,
+}
+
+impl Display for ChatMetadataContentType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ChatMetadataContentType::Unknown => write!(f, "unknown"),
+      ChatMetadataContentType::Text => write!(f, "text"),
+      ChatMetadataContentType::Markdown => write!(f, "markdown"),
+      ChatMetadataContentType::PDF => write!(f, "pdf"),
+    }
+  }
+}
+
+impl ChatMetadataData {
+  pub fn new_text(content: String) -> Self {
+    let size = content.len();
+    Self {
+      content,
+      content_type: ChatMetadataContentType::Text,
+      size: size as i64,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -774,6 +875,7 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::System,
+      metadata: None,
     }
   }
 
@@ -781,7 +883,13 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::User,
+      metadata: None,
     }
+  }
+
+  pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
+    self.metadata = Some(metadata);
+    self
   }
 }
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -998,6 +1106,9 @@ pub struct CreateAnswerMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
 
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
+
   pub question_message_id: i64,
 }
 
@@ -1012,6 +1123,70 @@ pub struct PublishCollabMetadata<Metadata> {
 pub struct PublishCollabItem<Meta, Data> {
   pub meta: PublishCollabMetadata<Meta>,
   pub data: Data,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GlobalComments {
+  pub comments: Vec<GlobalComment>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AFWebUser {
+  pub uuid: Uuid,
+  pub name: String,
+  pub avatar_url: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GlobalComment {
+  pub user: Option<AFWebUser>,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+  pub content: String,
+  pub reply_comment_id: Option<Uuid>,
+  pub comment_id: Uuid,
+  pub is_deleted: bool,
+  pub can_be_deleted: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateGlobalCommentParams {
+  pub content: String,
+  pub reply_comment_id: Option<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteGlobalCommentParams {
+  pub comment_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Reactions {
+  pub reactions: Vec<Reaction>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Reaction {
+  pub reaction_type: String,
+  pub react_users: Vec<AFWebUser>,
+  pub comment_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetReactionQueryParams {
+  pub comment_id: Option<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateReactionParams {
+  pub reaction_type: String,
+  pub comment_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteReactionParams {
+  pub reaction_type: String,
+  pub comment_id: Uuid,
 }
 
 /// Indexing status of a document.

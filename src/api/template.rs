@@ -85,7 +85,7 @@ async fn update_template_category_handler(
   let category_id = category_id.into_inner();
   let updated_template_category = update_template_category(
     &state.pg_pool,
-    &category_id,
+    category_id,
     &data.name,
     &data.description,
     &data.icon,
@@ -102,7 +102,7 @@ async fn get_template_category_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<TemplateCategory>> {
   let category_id = category_id.into_inner();
-  let category = get_template_category(&state.pg_pool, &category_id).await?;
+  let category = get_template_category(&state.pg_pool, category_id).await?;
   Ok(Json(AppResponse::Ok().with_data(category)))
 }
 
@@ -111,7 +111,7 @@ async fn delete_template_category_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let category_id = category_id.into_inner();
-  delete_template_category(&state.pg_pool, &category_id).await?;
+  delete_template_category(&state.pg_pool, category_id).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -147,7 +147,7 @@ async fn update_template_creator_handler(
   let creator_id = creator_id.into_inner();
   let updated_creator = update_template_creator(
     &state.pg_pool,
-    &creator_id,
+    creator_id,
     &data.name,
     &data.avatar_url,
     &data.account_links,
@@ -161,7 +161,7 @@ async fn get_template_creator_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<TemplateCreator>> {
   let creator_id = creator_id.into_inner();
-  let template_creator = get_template_creator(&state.pg_pool, &creator_id).await?;
+  let template_creator = get_template_creator(&state.pg_pool, creator_id).await?;
   Ok(Json(AppResponse::Ok().with_data(template_creator)))
 }
 
@@ -170,6 +170,6 @@ async fn delete_template_creator_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<TemplateCreator>> {
   let creator_id = creator_id.into_inner();
-  delete_template_creator(&state.pg_pool, &creator_id).await?;
+  delete_template_creator(&state.pg_pool, creator_id).await?;
   Ok(Json(AppResponse::Ok()))
 }

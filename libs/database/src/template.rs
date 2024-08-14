@@ -46,7 +46,7 @@ pub async fn insert_new_template_category<'a, E: Executor<'a, Database = Postgre
 #[allow(clippy::too_many_arguments)]
 pub async fn update_template_category_by_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  id: &Uuid,
+  id: Uuid,
   name: &str,
   description: &str,
   icon: &str,
@@ -129,7 +129,7 @@ pub async fn select_template_categories<'a, E: Executor<'a, Database = Postgres>
 
 pub async fn select_template_category_by_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  category_id: &Uuid,
+  category_id: Uuid,
 ) -> Result<TemplateCategory, AppError> {
   let category = sqlx::query_as!(
     TemplateCategory,
@@ -154,7 +154,7 @@ pub async fn select_template_category_by_id<'a, E: Executor<'a, Database = Postg
 
 pub async fn delete_template_category_by_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  category_id: &Uuid,
+  category_id: Uuid,
 ) -> Result<(), AppError> {
   let rows_affected = sqlx::query!(
     r#"
@@ -228,7 +228,7 @@ pub async fn insert_template_creator<'a, E: Executor<'a, Database = Postgres>>(
 
 pub async fn update_template_creator_by_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  creator_id: &Uuid,
+  creator_id: Uuid,
   name: &str,
   avatar_url: &str,
   account_links: &[AccountLink],
@@ -282,7 +282,7 @@ pub async fn update_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
 
 pub async fn delete_template_creator_account_links<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  creator_id: &Uuid,
+  creator_id: Uuid,
 ) -> Result<(), AppError> {
   sqlx::query!(
     r#"
@@ -324,7 +324,7 @@ pub async fn select_template_creators_by_name<'a, E: Executor<'a, Database = Pos
 
 pub async fn select_template_creator_by_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  creator_id: &Uuid,
+  creator_id: Uuid,
 ) -> Result<TemplateCreator, AppError> {
   let creator_row = sqlx::query_as!(
     AFTemplateCreatorRow,
@@ -350,7 +350,7 @@ pub async fn select_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
 
 pub async fn delete_template_creator_by_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  creator_id: &Uuid,
+  creator_id: Uuid,
 ) -> Result<(), AppError> {
   let rows_affected = sqlx::query!(
     r#"

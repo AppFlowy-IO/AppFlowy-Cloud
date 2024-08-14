@@ -16,7 +16,6 @@ async fn get_but_not_exists() {
     .get_workspaces()
     .await
     .unwrap()
-    .0
     .first()
     .unwrap()
     .workspace_id

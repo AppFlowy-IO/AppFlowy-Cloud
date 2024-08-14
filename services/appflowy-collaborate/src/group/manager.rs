@@ -76,7 +76,7 @@ where
     })
   }
 
-  pub async fn inactive_groups(&self) -> Vec<String> {
+  pub async fn get_inactive_groups(&self) -> Vec<String> {
     self.state.get_inactive_group_ids().await
   }
 

@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
+use client_api_entity::workspace_dto::QueryWorkspaceParam;
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
 use gotrue::grant::PasswordGrant;
@@ -16,7 +17,7 @@ use reqwest::Method;
 use reqwest::RequestBuilder;
 
 use client_api_entity::{
-  AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaces,
+  AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
   QuerySnapshotParams, SnapshotData,
 };
 use semver::Version;
@@ -124,7 +125,20 @@ impl Client {
     client_id: &str,
   ) -> Self {
     let reqwest_client = reqwest::Client::new();
-    let client_version = Version::parse(client_id).unwrap_or_else(|_| Version::new(0, 5, 0));
+    let client_version = Version::parse(client_id).unwrap_or_else(|_| {
+      warn!("Failed to parse client version, defaulting to 0.6.6");
+      Version::new(0, 6, 6)
+    });
+
+    // The latest version of appflowy frontend application is 0.6.6.
+    // Ensure the client version is at least 0.6.6. Just in case client passes a lower version.
+    let min_version = Version::new(0, 6, 6);
+    let client_version = if client_version < min_version {
+      warn!("Client version is less than 0.6.6, setting it to 0.6.6");
+      min_version
+    } else {
+      client_version
+    };
 
     #[cfg(debug_assertions)]
     {
@@ -280,6 +294,17 @@ impl Client {
   }
 
   /// Returns an OAuth URL by constructing the authorization URL for the specified provider.
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn generate_oauth_url_with_provider(
+    &self,
+    provider: &AuthProvider,
+  ) -> Result<String, AppResponseError> {
+    self
+      .generate_url_with_provider_and_redirect_to(provider, None)
+      .await
+  }
+
+  /// Returns an OAuth URL by constructing the authorization URL for the specified provider and redirecting to the specified URL.
   ///
   /// This asynchronous function communicates with the GoTrue client to retrieve settings and
   /// validate the availability of the specified OAuth provider. If the provider is available,
@@ -290,19 +315,19 @@ impl Client {
   /// For example, the OAuth URL on Google looks like `https://appflowy.io/authorize?provider=google`.
   /// The deep link looks like `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///
-  /// The appflowy-flutter:// is a hardcoded schema in the frontend application
   ///
   /// # Parameters
   /// - `provider`: A reference to an `OAuthProvider` indicating which OAuth provider to use for login.
+  /// - `redirect_to`: An optional `String` containing the URL to redirect to after the user is authenticated.
   ///
   /// # Returns
   /// - `Ok(String)`: A `String` containing the constructed authorization URL if the specified provider is available.
   /// - `Err(AppResponseError)`: An `AppResponseError` indicating either the OAuth provider is invalid or other issues occurred while fetching settings.
   ///
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn generate_oauth_url_with_provider(
+  pub async fn generate_url_with_provider_and_redirect_to(
     &self,
     provider: &AuthProvider,
+    redirect_to: Option<String>,
   ) -> Result<String, AppResponseError> {
     let settings = self.gotrue_client.settings().await?;
     if !settings.external.has_provider(provider) {
@@ -315,7 +340,12 @@ impl Client {
     url
       .query_pairs_mut()
       .append_pair("provider", provider.as_str())
-      .append_pair("redirect_to", DESKTOP_CALLBACK_URL);
+      .append_pair(
+        "redirect_to",
+        redirect_to
+          .unwrap_or_else(|| DESKTOP_CALLBACK_URL.to_string())
+          .as_str(),
+      );
 
     if let AuthProvider::Google = provider {
       url
@@ -598,16 +628,26 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  pub async fn get_workspaces(&self) -> Result<Vec<AFWorkspace>, AppResponseError> {
+    self
+      .get_workspaces_opt(QueryWorkspaceParam::default())
+      .await
+  }
+
   #[instrument(level = "info", skip_all, err)]
-  pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppResponseError> {
+  pub async fn get_workspaces_opt(
+    &self,
+    param: QueryWorkspaceParam,
+  ) -> Result<Vec<AFWorkspace>, AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
+      .query(&param)
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<AFWorkspaces>::from_response(resp)
+    AppResponse::<Vec<AFWorkspace>>::from_response(resp)
       .await?
       .into_data()
   }
@@ -801,6 +841,16 @@ impl Client {
       self.refresh_token(reason).await?;
     }
     Ok(())
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn http_client_without_auth(
+    &self,
+    method: Method,
+    url: &str,
+  ) -> Result<RequestBuilder, AppResponseError> {
+    trace!("start request: {}, method: {}", url, method,);
+    Ok(self.cloud_client.request(method, url))
   }
 
   #[instrument(level = "debug", skip_all, err)]

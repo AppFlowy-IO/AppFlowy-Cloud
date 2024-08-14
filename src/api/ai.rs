@@ -4,15 +4,19 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 use app_error::AppError;
-use appflowy_ai_client::dto::{CompleteTextResponse, TranslateRowParams, TranslateRowResponse};
+use appflowy_ai_client::dto::{
+  CompleteTextResponse, LocalAIConfig, TranslateRowParams, TranslateRowResponse,
+};
 
 use futures_util::{stream, TryStreamExt};
+
+use serde::Deserialize;
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 
-use tracing::{error, instrument};
+use tracing::{error, instrument, trace};
 
 pub fn ai_completion_scope() -> Scope {
   web::scope("/api/ai/{workspace_id}")
@@ -20,6 +24,7 @@ pub fn ai_completion_scope() -> Scope {
     .service(web::resource("/complete/stream").route(web::post().to(stream_complete_text_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
     .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
+    .service(web::resource("/local/config").route(web::get().to(local_ai_config_handler)))
 }
 
 async fn complete_text_handler(
@@ -122,4 +127,34 @@ async fn translate_row_handler(
       )
     },
   }
+}
+
+#[derive(Deserialize, Debug)]
+struct ConfigQuery {
+  platform: String,
+  app_version: Option<String>,
+}
+#[instrument(level = "debug", skip_all, err)]
+async fn local_ai_config_handler(
+  state: web::Data<AppState>,
+  query: web::Query<ConfigQuery>,
+) -> actix_web::Result<Json<AppResponse<LocalAIConfig>>> {
+  let query = query.into_inner();
+  trace!("query ai configuration: {:?}", query);
+  let platform = match query.platform.as_str() {
+    "macos" => "macos",
+    "linux" => "ubuntu",
+    "ubuntu" => "ubuntu",
+    "windows" => "windows",
+    _ => {
+      return Err(AppError::InvalidRequest("Invalid platform".to_string()).into());
+    },
+  };
+
+  let config = state
+    .ai_client
+    .get_local_ai_config(platform, query.app_version)
+    .await
+    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
+  Ok(AppResponse::Ok().with_data(config).into())
 }

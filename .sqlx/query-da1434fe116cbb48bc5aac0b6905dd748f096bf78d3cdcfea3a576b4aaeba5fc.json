@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n         UPDATE af_chat_messages\n         SET content = $2,\n             author = $3,\n             created_at = CURRENT_TIMESTAMP,\n             meta_data = $4\n         WHERE message_id = $1\n      ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Jsonb",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "da1434fe116cbb48bc5aac0b6905dd748f096bf78d3cdcfea3a576b4aaeba5fc"
+}

@@ -1,11 +1,13 @@
-use crate::pg_row::AFUserIdRow;
-use app_error::AppError;
 use futures_util::stream::BoxStream;
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres};
 use tracing::{instrument, warn};
 use uuid::Uuid;
+
+use app_error::AppError;
+
+use crate::pg_row::AFUserIdRow;
 
 /// Updates the user's details in the `af_user` table.
 ///
@@ -37,20 +39,29 @@ pub async fn update_user(
   if let Some(n) = name {
     args_num += 1;
     set_clauses.push(format!("name = ${}", args_num));
-    args.add(n);
+    args.add(n).map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode user name for user {}", user_uuid),
+      err,
+    })?;
   }
 
   if let Some(e) = email {
     args_num += 1;
     set_clauses.push(format!("email = ${}", args_num));
-    args.add(e);
+    args.add(e).map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode email for user {}", user_uuid),
+      err,
+    })?;
   }
 
   if let Some(m) = metadata {
     args_num += 1;
     // Merge existing metadata with new metadata
     set_clauses.push(format!("metadata = metadata || ${}", args_num));
-    args.add(m);
+    args.add(m).map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode metadata for user {}", user_uuid),
+      err,
+    })?;
   }
 
   if set_clauses.is_empty() {
@@ -65,7 +76,12 @@ pub async fn update_user(
     set_clauses.join(", "),
     args_num
   );
-  args.add(user_uuid);
+  args
+    .add(user_uuid)
+    .map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode user uuid {}", user_uuid),
+      err,
+    })?;
 
   sqlx::query_with(&query, args).execute(pool).await?;
   Ok(())
@@ -104,7 +120,6 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
     WITH ins_user AS (
         INSERT INTO af_user (uid, uuid, email, name)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT(email) DO NOTHING
         RETURNING uid
     ),
     owner_role AS (

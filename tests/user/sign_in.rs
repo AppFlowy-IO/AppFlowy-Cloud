@@ -63,7 +63,7 @@ async fn sign_in_success() {
       .is_some());
 
     let workspaces = c.get_workspaces().await.unwrap();
-    assert_eq!(workspaces.0.len(), 1);
+    assert_eq!(workspaces.len(), 1);
     let _ = c.get_profile().await.unwrap();
   }
 
@@ -78,7 +78,7 @@ async fn sign_in_success() {
 
     // workspaces should be the same
     let workspaces = c.get_workspaces().await.unwrap();
-    assert_eq!(workspaces.0.len(), 1);
+    assert_eq!(workspaces.len(), 1);
   }
 }
 

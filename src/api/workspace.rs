@@ -1,4 +1,4 @@
-use crate::api::util::PayloadReader;
+use crate::api::util::{payload_serialization_type_from_header_value, PayloadReader};
 use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
@@ -569,6 +569,7 @@ async fn batch_create_collab_handler(
   let mut collab_params_list = vec![];
   let workspace_id = workspace_id.into_inner().to_string();
   let compress_type = compress_type_from_header_value(req.headers())?;
+  let serialization_type = payload_serialization_type_from_header_value(req.headers())?;
   event!(
     tracing::Level::DEBUG,
     "start decompressing collab params list"
@@ -600,13 +601,13 @@ async fn batch_create_collab_handler(
 
             let compressed_data = payload_buffer[4..4 + size].to_vec();
             let decompress_data = decompress(compressed_data, buffer_size).await?;
-            let params = CollabParams::from_bytes(&decompress_data, &SerializationType::Protobuf)
-              .map_err(|err| {
-              AppError::InvalidRequest(format!(
-                "Failed to parse CollabParams with brotli decompression data: {}",
-                err
-              ))
-            })?;
+            let params =
+              CollabParams::from_bytes(&decompress_data, &serialization_type).map_err(|err| {
+                AppError::InvalidRequest(format!(
+                  "Failed to parse CollabParams with brotli decompression data: {}",
+                  err
+                ))
+              })?;
             params.validate().map_err(AppError::from)?;
             match params.check_encode_collab().await {
               Ok(_) => collab_params_list.push(params),

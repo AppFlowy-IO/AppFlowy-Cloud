@@ -7,7 +7,6 @@ use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
-use std::sync::Arc;
 
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;

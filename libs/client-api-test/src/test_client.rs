@@ -1,4 +1,3 @@
-use crate::{load_env, localhost_client_with_device_id, setup_log};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -42,7 +41,7 @@ use shared_entity::dto::workspace_dto::{
 use shared_entity::response::AppResponseError;
 
 use crate::user::{generate_unique_registered_user, User};
-use crate::{localhost_client_with_device_id, setup_log};
+use crate::{load_env, localhost_client_with_device_id, setup_log};
 
 pub struct TestClient {
   pub user: User,

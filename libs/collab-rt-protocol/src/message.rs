@@ -1,9 +1,8 @@
-use collab::core::awareness::AwarenessUpdate;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
+use collab::core::awareness::AwarenessUpdate;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
 use yrs::updates::decoder::{Decode, Decoder};
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::StateVector;
@@ -45,7 +44,7 @@ impl Encode for Message {
       },
       Message::Awareness(update) => {
         encoder.write_var(MSG_AWARENESS);
-        encoder.write_buf(&update.encode_v1())
+        encoder.write_buf(update.encode_v1())
       },
       Message::Custom(msg) => {
         encoder.write_var(MSG_CUSTOM);

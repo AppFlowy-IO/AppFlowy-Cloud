@@ -11,14 +11,17 @@ use database_entity::dto::AFAccessLevel;
 async fn client_apply_update_find_missing_update_test() {
   let (_client_1, mut client_2, object_id, mut expected_json) = make_clients().await;
   client_2.ws_client.enable_receive_message();
-  client_2
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("content", "hello world");
+  {
+    let mut lock = client_2
+      .collabs
+      .get_mut(&object_id)
+      .unwrap()
+      .collab
+      .write()
+      .await;
+    let collab = (*lock).borrow_mut();
+    collab.insert("content", "hello world");
+  }
 
   expected_json["content"] = Value::String("hello world".to_string());
 
@@ -70,14 +73,17 @@ async fn make_clients() -> (TestClient, TestClient, String, Value) {
   client_2.ws_client.disable_receive_message();
 
   // Client_1 makes the first edit by inserting "task 1".
-  client_1
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("title", "hello world");
+  {
+    let mut lock = client_1
+      .collabs
+      .get_mut(&object_id)
+      .unwrap()
+      .collab
+      .write()
+      .await;
+    let collab = (*lock).borrow_mut();
+    collab.insert("title", "hello world");
+  }
   client_1
     .wait_object_sync_complete(&object_id)
     .await

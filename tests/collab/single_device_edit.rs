@@ -32,13 +32,8 @@ async fn realtime_write_single_collab_test() {
   // Edit the collab
   for i in 0..=5 {
     test_client
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .write()
-      .await
-      .insert(&i.to_string(), i.to_string());
+      .insert_into(&object_id, &i.to_string(), i.to_string())
+      .await;
   }
 
   let expected_json = json!( {
@@ -81,13 +76,8 @@ async fn collab_write_small_chunk_of_data_test() {
   // Edit the collab
   for i in 0..=20 {
     test_client
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .write()
-      .await
-      .insert(&i.to_string(), i.to_string());
+      .insert_into(&object_id, &i.to_string(), i.to_string())
+      .await;
 
     expected_json.insert(i.to_string(), i.to_string());
     sleep(Duration::from_millis(300)).await;
@@ -122,13 +112,8 @@ async fn collab_write_big_chunk_of_data_test() {
     .await;
   let s = generate_random_string(10000);
   test_client
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("big_text", s.clone());
+    .insert_into(&object_id, "big_text", s.clone())
+    .await;
 
   test_client
     .wait_object_sync_complete(&object_id)
@@ -198,13 +183,8 @@ async fn realtime_write_multiple_collab_test() {
       .await;
     for i in 0..=5 {
       test_client
-        .collabs
-        .get_mut(&object_id)
-        .unwrap()
-        .collab
-        .write()
-        .await
-        .insert(&i.to_string(), i.to_string());
+        .insert_into(&object_id, &i.to_string(), i.to_string())
+        .await;
     }
 
     test_client
@@ -248,14 +228,7 @@ async fn second_connect_override_first_connect_test() {
     .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
-  client
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("1", "a");
+  client.insert_into(&object_id, "1", "a").await;
 
   // Sleep one second for the doc observer the update. Otherwise, the
   // sync complete might be called before the update being schedule
@@ -269,14 +242,7 @@ async fn second_connect_override_first_connect_test() {
   new_client
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  new_client
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("2", "b");
+  new_client.insert_into(&object_id, "2", "b").await;
   new_client
     .wait_object_sync_complete(&object_id)
     .await
@@ -325,14 +291,7 @@ async fn same_device_multiple_connect_in_order_test() {
     new_client
       .open_collab(&workspace_id, &object_id, collab_type.clone())
       .await;
-    new_client
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .write()
-      .await
-      .insert(&i.to_string(), i);
+    new_client.insert_into(&object_id, &i.to_string(), i).await;
     sleep(Duration::from_millis(500)).await;
     new_client
       .wait_object_sync_complete(&object_id)
@@ -378,27 +337,19 @@ async fn two_direction_peer_sync_test() {
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
 
-  client_1
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("name", "AppFlowy");
+  client_1.insert_into(&object_id, "name", "AppFlowy").await;
   client_1
     .wait_object_sync_complete(&object_id)
     .await
     .unwrap();
 
   client_2
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("support platform", "macOS, Windows, Linux, iOS, Android");
+    .insert_into(
+      &object_id,
+      "support platform",
+      "macOS, Windows, Linux, iOS, Android",
+    )
+    .await;
   client_2
     .wait_object_sync_complete(&object_id)
     .await
@@ -438,26 +389,16 @@ async fn multiple_collab_edit_test() {
     .await;
 
   client_1
-    .collabs
-    .get_mut(&object_id_1)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("title", "I am client 1");
+    .insert_into(&object_id_1, "title", "I am client 1")
+    .await;
   client_1
     .wait_object_sync_complete(&object_id_1)
     .await
     .unwrap();
 
   client_2
-    .collabs
-    .get_mut(&object_id_2)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("title", "I am client 2");
+    .insert_into(&object_id_2, "title", "I am client 2")
+    .await;
   client_2
     .wait_object_sync_complete(&object_id_2)
     .await
@@ -506,13 +447,8 @@ async fn simulate_multiple_user_edit_collab_test() {
 
       let random_str = generate_random_string(200);
       new_user
-        .collabs
-        .get_mut(&object_id)
-        .unwrap()
-        .collab
-        .write()
-        .await
-        .insert("string", random_str.clone());
+        .insert_into(&object_id, "string", random_str.clone())
+        .await;
       let expected_json = json!({
         "string": random_str
       });
@@ -522,13 +458,14 @@ async fn simulate_multiple_user_edit_collab_test() {
         .await
         .unwrap();
 
-      let json = new_user
+      let json = (*new_user
         .collabs
         .get(&object_id)
         .unwrap()
         .collab
-        .write()
-        .await
+        .read()
+        .await)
+        .borrow()
         .to_json_value();
 
       (expected_json, json)
@@ -659,19 +596,14 @@ async fn simulate_10_offline_user_connect_and_then_sync_document_test() {
   let mut tasks = Vec::new();
   for result in results.into_iter() {
     let task = tokio::spawn(async move {
-      let (mut client, object_id) = result.unwrap();
+      let (client, object_id) = result.unwrap();
       client.reconnect().await;
       client.wait_object_sync_complete(&object_id).await.unwrap();
 
       for i in 0..100 {
         client
-          .collabs
-          .get_mut(&object_id)
-          .unwrap()
-          .collab
-          .write()
-          .await
-          .insert(&i.to_string(), i.to_string());
+          .insert_into(&object_id, &i.to_string(), i.to_string())
+          .await;
         sleep(Duration::from_millis(60)).await;
       }
       client.wait_object_sync_complete(&object_id).await.unwrap();

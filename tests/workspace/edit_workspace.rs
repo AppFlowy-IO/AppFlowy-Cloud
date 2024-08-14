@@ -17,13 +17,8 @@ async fn edit_workspace_without_permission() {
   client_2.open_workspace_collab(&workspace_id).await;
 
   client_1
-    .collabs
-    .get_mut(&workspace_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("name", "AppFlowy");
+    .insert_into(&workspace_id, "name", "AppFlowy")
+    .await;
   client_1
     .wait_object_sync_complete(&workspace_id)
     .await
@@ -54,14 +49,7 @@ async fn init_sync_workspace_with_member_permission() {
     .unwrap();
   guest.open_workspace_collab(&workspace_id).await;
 
-  owner
-    .collabs
-    .get_mut(&workspace_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("name", "AppFlowy");
+  owner.insert_into(&workspace_id, "name", "AppFlowy").await;
   owner
     .wait_object_sync_complete(&workspace_id)
     .await
@@ -98,14 +86,7 @@ async fn edit_workspace_with_guest_permission() {
     .await
     .unwrap();
 
-  owner
-    .collabs
-    .get_mut(&workspace_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("name", "zack");
+  owner.insert_into(&workspace_id, "name", "zack").await;
   owner
     .wait_object_sync_complete(&workspace_id)
     .await
@@ -116,14 +97,7 @@ async fn edit_workspace_with_guest_permission() {
   sleep(Duration::from_secs(3)).await;
 
   // client_2 only has the guest permission, so it can not edit the collab
-  guest
-    .collabs
-    .get_mut(&workspace_id)
-    .unwrap()
-    .collab
-    .write()
-    .await
-    .insert("name", "nathan");
+  guest.insert_into(&workspace_id, "name", "nathan").await;
 
   assert_client_collab_include_value(&mut owner, &workspace_id, json!({"name": "zack"}))
     .await

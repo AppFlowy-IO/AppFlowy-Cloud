@@ -5,6 +5,7 @@ use std::sync::{Arc, Weak};
 
 use arc_swap::ArcSwap;
 use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use tokio::select;
 use tokio::sync::RwLock;
@@ -24,11 +25,13 @@ use crate::collab_sync::{
   start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
 };
 
+pub type CollabRef = Weak<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
+
 /// Use to continuously receive updates from remote.
-pub struct ObserveCollab<Sink, Stream, Collab> {
+pub struct ObserveCollab<Sink, Stream> {
   object_id: String,
   #[allow(dead_code)]
-  weak_collab: Weak<RwLock<Collab>>,
+  weak_collab: CollabRef,
   phantom_sink: PhantomData<Sink>,
   phantom_stream: PhantomData<Stream>,
   // Use sequence number to check if the received updates/broadcasts are continuous.
@@ -36,44 +39,41 @@ pub struct ObserveCollab<Sink, Stream, Collab> {
   seq_num_counter: Arc<SeqNumCounter>,
 }
 
-impl<Sink, Stream, Collab> Drop for ObserveCollab<Sink, Stream, Collab> {
+impl<Sink, Stream> Drop for ObserveCollab<Sink, Stream> {
   fn drop(&mut self) {
     #[cfg(feature = "sync_verbose_log")]
     trace!("Drop SyncStream {}", self.object_id);
   }
 }
 
-impl<E, Sink, Stream, Collab> ObserveCollab<Sink, Stream, Collab>
+impl<E, Sink, Stream> ObserveCollab<Sink, Stream>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
-  Collab: BorrowMut<collab::preclude::Collab> + Send + Sync + 'static,
 {
   pub fn new(
     origin: CollabOrigin,
     object: SyncObject,
     stream: Stream,
-    weak_collab: Weak<RwLock<Collab>>,
+    weak_collab: CollabRef,
     sink: Weak<CollabSink<Sink>>,
   ) -> Self {
     let object_id = object.object_id.clone();
-    let cloned_weak_collab = weak_collab.clone();
+    let cloned_weak_collab = weak_collab.clone() as CollabRef;
     let seq_num_counter = Arc::new(SeqNumCounter::default());
     let cloned_seq_num_counter = seq_num_counter.clone();
     let init_sync_cancel_token = ArcSwap::new(Arc::new(CancellationToken::new()));
     let arc_object = Arc::new(object);
-    af_spawn(
-      ObserveCollab::<Sink, Stream, Collab>::observer_collab_message(
-        origin,
-        arc_object,
-        stream,
-        cloned_weak_collab,
-        sink,
-        cloned_seq_num_counter,
-        init_sync_cancel_token,
-      ),
-    );
+    af_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
+      origin,
+      arc_object,
+      stream,
+      cloned_weak_collab,
+      sink,
+      cloned_seq_num_counter,
+      init_sync_cancel_token,
+    ));
     Self {
       object_id,
       weak_collab,
@@ -88,7 +88,7 @@ where
     origin: CollabOrigin,
     object: Arc<SyncObject>,
     mut stream: Stream,
-    weak_collab: Weak<RwLock<Collab>>,
+    weak_collab: CollabRef,
     weak_sink: Weak<CollabSink<Sink>>,
     seq_num_counter: Arc<SeqNumCounter>,
     cancel_token: ArcSwap<CancellationToken>,
@@ -116,7 +116,7 @@ where
         },
       };
 
-      if let Err(error) = ObserveCollab::<Sink, Stream, Collab>::process_remote_message(
+      if let Err(error) = ObserveCollab::<Sink, Stream>::process_remote_message(
         &object,
         &collab,
         &sink,
@@ -179,7 +179,7 @@ where
   /// Continuously handle messages from the remote doc
   async fn process_remote_message(
     object: &SyncObject,
-    collab: &Arc<RwLock<Collab>>,
+    collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
     sink: &Arc<CollabSink<Sink>>,
     msg: ServerCollabMessage,
     seq_num_counter: &Arc<SeqNumCounter>,
@@ -234,7 +234,7 @@ where
   async fn pull_missing_updates(
     origin: &CollabOrigin,
     object: &SyncObject,
-    collab: &Arc<RwLock<Collab>>,
+    collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
     sink: &Arc<CollabSink<Sink>>,
     state_vector_v1: Option<Vec<u8>>,
     reason: MissUpdateReason,
@@ -252,7 +252,7 @@ where
   async fn process_message_follow_protocol(
     sync_object: &SyncObject,
     msg: &ServerCollabMessage,
-    collab: &Arc<RwLock<Collab>>,
+    collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
     sink: &Arc<CollabSink<Sink>>,
   ) -> Result<(), SyncError> {
     if msg.payload().is_empty() {

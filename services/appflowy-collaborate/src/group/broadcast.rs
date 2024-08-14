@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 
@@ -278,7 +279,7 @@ async fn handle_client_messages<Sink>(
   object_id: &str,
   message_map: MessageByObjectId,
   sink: &mut Sink,
-  collab: Arc<RwLock<Collab>>,
+  collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &CollabMetricsCalculate,
   edit_state: &Arc<EditState>,
 ) where
@@ -336,7 +337,7 @@ async fn handle_client_messages<Sink>(
 async fn handle_one_client_message(
   object_id: &str,
   collab_msg: &ClientCollabMessage,
-  collab: &RwLock<Collab>,
+  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &CollabMetricsCalculate,
   edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
@@ -376,7 +377,8 @@ async fn handle_one_client_message(
   .await
   {
     Ok(ack) => {
-      let mut collab = collab.write().await;
+      let mut lock = collab.write().await;
+      let collab: &mut Collab = (*lock).borrow_mut();
       collab.set_last_sync_at(chrono::Utc::now().timestamp());
       Ok(ack)
     },
@@ -390,7 +392,7 @@ async fn handle_one_message_payload(
   message_origin: CollabOrigin,
   msg_id: MsgId,
   payload: &Bytes,
-  collab: &RwLock<Collab>,
+  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &CollabMetricsCalculate,
   seq_num: u32,
 ) -> Result<CollabAck, RealtimeError> {
@@ -426,7 +428,7 @@ async fn handle_one_message_payload(
 async fn handle_message(
   payload: &Bytes,
   message_origin: &CollabOrigin,
-  collab: &RwLock<Collab>,
+  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &CollabMetricsCalculate,
   object_id: &str,
   msg_id: MsgId,

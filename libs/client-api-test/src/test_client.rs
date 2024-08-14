@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ use collab::core::collab::DataSource;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
-use collab::preclude::Collab;
+use collab::preclude::{Collab, Prelim};
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use mime::Mime;
@@ -43,6 +44,8 @@ use shared_entity::response::AppResponseError;
 use crate::user::{generate_unique_registered_user, User};
 use crate::{load_env, localhost_client_with_device_id, setup_log};
 
+pub type CollabRef = Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
+
 pub struct TestClient {
   pub user: User,
   pub ws_client: WSClient,
@@ -53,7 +56,7 @@ pub struct TestClient {
 pub struct TestCollab {
   #[allow(dead_code)]
   pub origin: CollabOrigin,
-  pub collab: Arc<RwLock<Collab>>,
+  pub collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
 }
 impl TestClient {
   pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
@@ -61,6 +64,12 @@ impl TestClient {
     setup_log();
     let device_id = Uuid::new_v4().to_string();
     Self::new_with_device_id(&device_id, registered_user, start_ws_conn).await
+  }
+
+  pub async fn insert_into<S: Prelim>(&self, object_id: &str, key: &str, value: S) {
+    let mut lock = self.collabs.get(object_id).unwrap().collab.write().await;
+    let collab = (*lock).borrow_mut();
+    collab.insert(key, value);
   }
 
   pub async fn new_with_device_id(
@@ -118,7 +127,8 @@ impl TestClient {
     }
 
     let lock = self.collabs.get(object_id).unwrap().collab.read().await;
-    lock
+    let collab = (*lock).borrow();
+    collab
       .get_awareness()
       .clients()
       .iter()
@@ -132,13 +142,15 @@ impl TestClient {
   pub async fn clean_awareness_state(&self, object_id: &str) {
     let test_collab = self.collabs.get(object_id).unwrap();
     let mut lock = test_collab.collab.write().await;
-    lock.clean_awareness_state();
+    let collab = (*lock).borrow_mut();
+    collab.clean_awareness_state();
   }
 
   pub async fn emit_awareness_state(&self, object_id: &str) {
     let test_collab = self.collabs.get(object_id).unwrap();
     let mut lock = test_collab.collab.write().await;
-    lock.emit_awareness_state();
+    let collab = (*lock).borrow_mut();
+    collab.emit_awareness_state();
   }
 
   pub async fn user_with_new_device(registered_user: User) -> Self {
@@ -328,14 +340,11 @@ impl TestClient {
     object_id: &str,
     secs: u64,
   ) -> Result<(), Error> {
-    let mut sync_state = self
-      .collabs
-      .get(object_id)
-      .unwrap()
-      .collab
-      .read()
-      .await
-      .subscribe_sync_state();
+    let mut sync_state = {
+      let lock = self.collabs.get(object_id).unwrap().collab.read().await;
+      let collab = (*lock).borrow();
+      collab.subscribe_sync_state()
+    };
 
     let duration = Duration::from_secs(secs);
     while let Ok(Some(state)) = timeout(duration, sync_state.next()).await {
@@ -541,7 +550,7 @@ impl TestClient {
       .await
       .unwrap();
 
-    let collab = Arc::new(RwLock::new(collab));
+    let collab = Arc::new(RwLock::new(collab)) as CollabRef;
     #[cfg(feature = "collab-sync")]
     {
       let handler = self
@@ -561,9 +570,15 @@ impl TestClient {
         Some(handler),
         ws_connect_state,
       );
-      collab.read().await.add_plugin(Box::new(sync_plugin));
+      let lock = collab.read().await;
+      let collab = (*lock).borrow();
+      collab.add_plugin(Box::new(sync_plugin));
     }
-    collab.write().await.initialize();
+    {
+      let mut lock = collab.write().await;
+      let collab = (*lock).borrow_mut();
+      collab.initialize();
+    }
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id.to_string(), test_collab);
     self.wait_object_sync_complete(object_id).await.unwrap();
@@ -606,7 +621,7 @@ impl TestClient {
     )
     .unwrap();
     collab.emit_awareness_state();
-    let collab = Arc::new(RwLock::new(collab));
+    let collab = Arc::new(RwLock::new(collab)) as CollabRef;
 
     #[cfg(feature = "collab-sync")]
     {
@@ -628,9 +643,15 @@ impl TestClient {
         ws_connect_state,
       );
 
-      collab.read().await.add_plugin(Box::new(sync_plugin));
+      let lock = collab.read().await;
+      let collab = (*lock).borrow();
+      collab.add_plugin(Box::new(sync_plugin));
     }
-    collab.write().await.initialize();
+    {
+      let mut lock = collab.write().await;
+      let collab = (*lock).borrow_mut();
+      collab.initialize();
+    }
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id.to_string(), test_collab);
   }
@@ -692,14 +713,9 @@ impl TestClient {
   }
 
   pub async fn get_edit_collab_json(&self, object_id: &str) -> Value {
-    self
-      .collabs
-      .get(object_id)
-      .unwrap()
-      .collab
-      .read()
-      .await
-      .to_json_value()
+    let lock = self.collabs.get(object_id).unwrap().collab.read().await;
+    let collab = (*lock).borrow();
+    collab.to_json_value()
   }
 }
 
@@ -834,14 +850,15 @@ pub async fn assert_client_collab_within_secs(
          panic!("timeout");
        },
        json = async {
-        client
+        let lock = client
           .collabs
           .get_mut(&object_id)
           .unwrap()
           .collab
           .read()
-          .await
-          .to_json_value()
+          .await;
+        let collab = (*lock).borrow();
+        collab.to_json_value()
       } => {
         retry_count += 1;
         if retry_count > 60 {
@@ -871,14 +888,15 @@ pub async fn assert_client_collab_include_value(
         return Err(anyhow!("timeout"));
        },
        json = async {
-        client
+        let lock = client
           .collabs
           .get_mut(&object_id)
           .unwrap()
           .collab
           .read()
-          .await
-          .to_json_value()
+          .await;
+        let collab = (*lock).borrow();
+        collab.to_json_value()
       } => {
         retry_count += 1;
         if retry_count > 30 {

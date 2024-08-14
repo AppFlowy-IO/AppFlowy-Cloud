@@ -1,8 +1,10 @@
 use std::borrow::BorrowMut;
+use std::sync::Arc;
 
 use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use tokio::sync::RwLock;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
@@ -192,15 +194,14 @@ pub trait CollabSyncProtocol {
 }
 
 /// Handles incoming messages from the client/server
-pub async fn handle_message_follow_protocol<P, C>(
+pub async fn handle_message_follow_protocol<P>(
   message_origin: &CollabOrigin,
   protocol: &P,
-  collab: &RwLock<C>,
+  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   msg: Message,
 ) -> Result<Option<Vec<u8>>, RTProtocolError>
 where
   P: CollabSyncProtocol,
-  C: BorrowMut<collab::preclude::Collab> + Send + Sync + 'static,
 {
   match msg {
     Message::Sync(msg) => match msg {

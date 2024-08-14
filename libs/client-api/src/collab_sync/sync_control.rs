@@ -1,14 +1,13 @@
-use std::borrow::BorrowMut;
 use std::fmt::Display;
 use std::ops::Deref;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
 
 use collab::core::awareness::Awareness;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::{broadcast, watch, RwLock};
+use tokio::sync::{broadcast, watch};
 use tracing::{instrument, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
@@ -18,7 +17,7 @@ use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage, Updat
 use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol, Message, SyncMessage};
 
 use crate::af_spawn;
-use crate::collab_sync::collab_stream::ObserveCollab;
+use crate::collab_sync::collab_stream::{CollabRef, ObserveCollab};
 use crate::collab_sync::{
   CollabSink, CollabSinkRunner, CollabSyncState, MissUpdateReason, SinkSignal, SyncError,
   SyncObject,
@@ -26,7 +25,7 @@ use crate::collab_sync::{
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
 
-pub struct SyncControl<Sink, Stream, Collab> {
+pub struct SyncControl<Sink, Stream> {
   object: SyncObject,
   pub(crate) origin: CollabOrigin,
   /// The [CollabSink] is used to send the updates to the remote. It will send the current
@@ -36,23 +35,22 @@ pub struct SyncControl<Sink, Stream, Collab> {
   /// The [ObserveCollab] will be spawned in a separate task It continuously receive
   /// the updates from the remote.
   #[allow(dead_code)]
-  observe_collab: ObserveCollab<Sink, Stream, Collab>,
+  observe_collab: ObserveCollab<Sink, Stream>,
   sync_state_tx: broadcast::Sender<CollabSyncState>,
 }
 
-impl<Sink, Stream, Collab> Drop for SyncControl<Sink, Stream, Collab> {
+impl<Sink, Stream> Drop for SyncControl<Sink, Stream> {
   fn drop(&mut self) {
     #[cfg(feature = "sync_verbose_log")]
     trace!("Drop SyncQueue {}", self.object.object_id);
   }
 }
 
-impl<E, Sink, Stream, Collab> SyncControl<Sink, Stream, Collab>
+impl<E, Sink, Stream> SyncControl<Sink, Stream>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
-  Collab: BorrowMut<collab::preclude::Collab> + Send + Sync + 'static,
 {
   #[allow(clippy::too_many_arguments)]
   pub fn new(
@@ -61,7 +59,7 @@ where
     sink: Sink,
     sink_config: SinkConfig,
     stream: Stream,
-    collab: Weak<RwLock<Collab>>,
+    collab: CollabRef,
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);
@@ -269,7 +267,7 @@ where
   Ok(true)
 }
 
-impl<Sink, Stream, Collab> Deref for SyncControl<Sink, Stream, Collab> {
+impl<Sink, Stream> Deref for SyncControl<Sink, Stream> {
   type Target = Arc<CollabSink<Sink>>;
 
   fn deref(&self) -> &Self::Target {

@@ -42,7 +42,7 @@ impl Client {
     bg_color: &str,
     description: &str,
     category_type: TemplateCategoryType,
-    rank: i32,
+    priority: i32,
   ) -> Result<TemplateCategory, AppResponseError> {
     let url = category_resources_url(&self.base_url);
     let resp = self
@@ -53,7 +53,7 @@ impl Client {
         icon: icon.to_string(),
         bg_color: bg_color.to_string(),
         description: description.to_string(),
-        rank,
+        priority,
         category_type,
       })
       .send()
@@ -118,7 +118,7 @@ impl Client {
     bg_color: &str,
     description: &str,
     category_type: TemplateCategoryType,
-    rank: i32,
+    priority: i32,
   ) -> Result<TemplateCategory, AppResponseError> {
     let url = category_resource_url(&self.base_url, category_id);
     let resp = self
@@ -130,7 +130,7 @@ impl Client {
         bg_color: bg_color.to_string(),
         description: description.to_string(),
         category_type,
-        rank,
+        priority,
       })
       .send()
       .await?;

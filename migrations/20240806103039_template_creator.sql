@@ -11,6 +11,5 @@ CREATE TABLE IF NOT EXISTS af_template_creator_account_link (
   link_type         TEXT NOT NULL,
   url               TEXT NOT NULL,
 
-  UNIQUE(creator_id, link_type)
+  PRIMARY KEY (creator_id, link_type)
 );
-CREATE INDEX IF NOT EXISTS idx_creator_id_on_af_template_creator_account_link ON af_template_creator_account_link(creator_id);

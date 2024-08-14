@@ -74,7 +74,7 @@ async fn test_template_category_crud() {
     new_template_category.category_type,
     TemplateCategoryType::Feature
   );
-  assert_eq!(new_template_category.rank, 1);
+  assert_eq!(new_template_category.priority, 1);
   let updated_category_name = Uuid::new_v4().to_string();
   let updated_template_category = authorized_client
     .update_template_category(
@@ -96,7 +96,7 @@ async fn test_template_category_crud() {
     updated_template_category.category_type,
     TemplateCategoryType::UseCase
   );
-  assert_eq!(updated_template_category.rank, 2);
+  assert_eq!(updated_template_category.priority, 2);
 
   let guest_client = localhost_client();
   let template_category = guest_client
@@ -111,7 +111,7 @@ async fn test_template_category_crud() {
     template_category.category_type,
     TemplateCategoryType::UseCase
   );
-  assert_eq!(template_category.rank, 2);
+  assert_eq!(template_category.priority, 2);
 
   let second_category_name = Uuid::new_v4().to_string();
   authorized_client

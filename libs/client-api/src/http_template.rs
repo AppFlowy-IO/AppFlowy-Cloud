@@ -18,7 +18,7 @@ fn category_resources_url(base_url: &str) -> String {
   format!("{}/category", template_api_prefix(base_url))
 }
 
-fn category_resource_url(base_url: &str, category_id: &Uuid) -> String {
+fn category_resource_url(base_url: &str, category_id: Uuid) -> String {
   format!("{}/{}", category_resources_url(base_url), category_id)
 }
 
@@ -26,7 +26,7 @@ fn template_creator_resources_url(base_url: &str) -> String {
   format!("{}/creator", template_api_prefix(base_url))
 }
 
-fn template_creator_resource_url(base_url: &str, creator_id: &Uuid) -> String {
+fn template_creator_resource_url(base_url: &str, creator_id: Uuid) -> String {
   format!(
     "{}/{}",
     template_creator_resources_url(base_url),
@@ -86,7 +86,7 @@ impl Client {
 
   pub async fn get_template_category(
     &self,
-    category_id: &Uuid,
+    category_id: Uuid,
   ) -> Result<TemplateCategory, AppResponseError> {
     let url = category_resource_url(&self.base_url, category_id);
     let resp = self
@@ -99,7 +99,7 @@ impl Client {
       .into_data()
   }
 
-  pub async fn delete_template_category(&self, category_id: &Uuid) -> Result<(), AppResponseError> {
+  pub async fn delete_template_category(&self, category_id: Uuid) -> Result<(), AppResponseError> {
     let url = category_resource_url(&self.base_url, category_id);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
@@ -112,7 +112,7 @@ impl Client {
   #[allow(clippy::too_many_arguments)]
   pub async fn update_template_category(
     &self,
-    category_id: &Uuid,
+    category_id: Uuid,
     name: &str,
     icon: &str,
     bg_color: &str,
@@ -183,7 +183,7 @@ impl Client {
 
   pub async fn get_template_creator(
     &self,
-    creator_id: &Uuid,
+    creator_id: Uuid,
   ) -> Result<TemplateCreator, AppResponseError> {
     let url = template_creator_resource_url(&self.base_url, creator_id);
     let resp = self
@@ -196,7 +196,7 @@ impl Client {
       .into_data()
   }
 
-  pub async fn delete_template_creator(&self, creator_id: &Uuid) -> Result<(), AppResponseError> {
+  pub async fn delete_template_creator(&self, creator_id: Uuid) -> Result<(), AppResponseError> {
     let url = template_creator_resource_url(&self.base_url, creator_id);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
@@ -208,7 +208,7 @@ impl Client {
 
   pub async fn update_template_creator(
     &self,
-    creator_id: &Uuid,
+    creator_id: Uuid,
     name: &str,
     avatar_url: &str,
     account_links: Vec<AccountLink>,

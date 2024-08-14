@@ -78,7 +78,7 @@ async fn test_template_category_crud() {
   let updated_category_name = Uuid::new_v4().to_string();
   let updated_template_category = authorized_client
     .update_template_category(
-      &new_template_category.id,
+      new_template_category.id,
       updated_category_name.as_str(),
       "new_icon",
       "new_bg_color",
@@ -100,7 +100,7 @@ async fn test_template_category_crud() {
 
   let guest_client = localhost_client();
   let template_category = guest_client
-    .get_template_category(&new_template_category.id)
+    .get_template_category(new_template_category.id)
     .await
     .unwrap();
   assert_eq!(template_category.name, updated_category_name);
@@ -154,16 +154,16 @@ async fn test_template_category_crud() {
     .iter()
     .any(|r| r.name == second_category_name));
   let result = guest_client
-    .delete_template_category(&new_template_category.id)
+    .delete_template_category(new_template_category.id)
     .await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
   authorized_client
-    .delete_template_category(&new_template_category.id)
+    .delete_template_category(new_template_category.id)
     .await
     .unwrap();
   let result = guest_client
-    .get_template_category(&new_template_category.id)
+    .get_template_category(new_template_category.id)
     .await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::RecordNotFound);
@@ -197,7 +197,7 @@ async fn test_template_creator_crud() {
   }];
   let updated_creator = authorized_client
     .update_template_creator(
-      &new_creator.id,
+      new_creator.id,
       "new_name",
       "new_avatar_url",
       updated_account_links,
@@ -211,7 +211,7 @@ async fn test_template_creator_crud() {
   assert_eq!(updated_creator.account_links[0].url, "twitter_url");
 
   let creator = guest_client
-    .get_template_creator(&new_creator.id)
+    .get_template_creator(new_creator.id)
     .await
     .unwrap();
   assert_eq!(creator.name, "new_name");
@@ -220,14 +220,14 @@ async fn test_template_creator_crud() {
   assert_eq!(creator.account_links[0].link_type, "twitter");
   assert_eq!(creator.account_links[0].url, "twitter_url");
 
-  let result = guest_client.delete_template_creator(&new_creator.id).await;
+  let result = guest_client.delete_template_creator(new_creator.id).await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
   authorized_client
-    .delete_template_creator(&new_creator.id)
+    .delete_template_creator(new_creator.id)
     .await
     .unwrap();
-  let result = guest_client.get_template_creator(&new_creator.id).await;
+  let result = guest_client.get_template_creator(new_creator.id).await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::RecordNotFound);
 }

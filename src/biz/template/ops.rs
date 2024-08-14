@@ -37,7 +37,7 @@ pub async fn create_new_template_category(
 #[allow(clippy::too_many_arguments)]
 pub async fn update_template_category(
   pg_pool: &PgPool,
-  category_id: &Uuid,
+  category_id: Uuid,
   name: &str,
   description: &str,
   icon: &str,
@@ -70,7 +70,7 @@ pub async fn get_template_categories(
 
 pub async fn get_template_category(
   pg_pool: &PgPool,
-  category_id: &Uuid,
+  category_id: Uuid,
 ) -> Result<TemplateCategory, AppResponseError> {
   let category = select_template_category_by_id(pg_pool, category_id).await?;
   Ok(category)
@@ -78,7 +78,7 @@ pub async fn get_template_category(
 
 pub async fn delete_template_category(
   pg_pool: &PgPool,
-  category_id: &Uuid,
+  category_id: Uuid,
 ) -> Result<(), AppResponseError> {
   delete_template_category_by_id(pg_pool, category_id).await?;
   Ok(())
@@ -97,7 +97,7 @@ pub async fn create_new_template_creator(
 
 pub async fn update_template_creator(
   pg_pool: &PgPool,
-  creator_id: &Uuid,
+  creator_id: Uuid,
   name: &str,
   avatar_url: &str,
   account_links: &[AccountLink],
@@ -128,7 +128,7 @@ pub async fn get_template_creators(
 
 pub async fn get_template_creator(
   pg_pool: &PgPool,
-  creator_id: &Uuid,
+  creator_id: Uuid,
 ) -> Result<TemplateCreator, AppResponseError> {
   let creator = select_template_creator_by_id(pg_pool, creator_id).await?;
   Ok(creator)
@@ -136,7 +136,7 @@ pub async fn get_template_creator(
 
 pub async fn delete_template_creator(
   pg_pool: &PgPool,
-  creator_id: &Uuid,
+  creator_id: Uuid,
 ) -> Result<(), AppResponseError> {
   delete_template_creator_by_id(pg_pool, creator_id).await?;
   Ok(())

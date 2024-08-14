@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS af_template_category (
   description   TEXT NOT NULL,
   bg_color      TEXT NOT NULL,
   category_type INT NOT NULL,
-  rank          INT NOT NULL,
+  priority      INT NOT NULL,
 
   PRIMARY KEY (category_id)
 );

@@ -1,0 +1,148 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      WITH grouped_template_view_template_categories AS (\n        SELECT\n          tvtc.category_id,\n          tvtc.view_id,\n          ARRAY_AGG((\n            tvtc.category_id,\n            tc.name,\n            tc.bg_color,\n            tc.icon\n          )::template_category_minimal_type) AS categories\n        FROM af_template_view_template_category tvtc\n        JOIN af_template_category tc\n        ON tvtc.category_id = tc.category_id\n        GROUP BY tvtc.category_id, tvtc.view_id\n      ),\n      grouped_template_view AS (\n        SELECT\n          gtvtc.category_id,\n          (\n            tv.view_id,\n            tv.name,\n            tv.description,\n            tv.view_url,\n            (\n              tc.creator_id,\n              tc.name,\n              tc.avatar_url\n            )::template_creator_minimal_type,\n            gtvtc.categories,\n            tv.is_new_template,\n            tv.is_featured\n          )::template_minimal_type AS template\n        FROM grouped_template_view_template_categories gtvtc\n        JOIN af_template_view tv\n        ON gtvtc.view_id = tv.view_id\n        JOIN af_template_creator tc\n        ON tv.creator_id = tc.creator_id\n      ),\n      grouped_template_view_template_with_category_id AS (\n        SELECT\n          category_id,\n          ARRAY_AGG(template) AS templates\n        FROM grouped_template_view\n        GROUP BY category_id\n      )\n      SELECT\n        (\n          gtv.category_id,\n          tcg.name,\n          tcg.bg_color,\n          tcg.icon\n        )::template_category_minimal_type AS \"category!: AFTemplateCategoryMinimalRow\",\n        templates AS \"templates!: Vec<AFTemplateMinimalRow>\"\n        FROM grouped_template_view_template_with_category_id gtv\n        JOIN af_template_category tcg\n        ON gtv.category_id = tcg.category_id\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "category!: AFTemplateCategoryMinimalRow",
+        "type_info": {
+          "Custom": {
+            "name": "template_category_minimal_type",
+            "kind": {
+              "Composite": [
+                [
+                  "category_id",
+                  "Uuid"
+                ],
+                [
+                  "name",
+                  "Text"
+                ],
+                [
+                  "icon",
+                  "Text"
+                ],
+                [
+                  "bg_color",
+                  "Text"
+                ]
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "templates!: Vec<AFTemplateMinimalRow>",
+        "type_info": {
+          "Custom": {
+            "name": "template_minimal_type[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "template_minimal_type",
+                  "kind": {
+                    "Composite": [
+                      [
+                        "view_id",
+                        "Uuid"
+                      ],
+                      [
+                        "name",
+                        "Text"
+                      ],
+                      [
+                        "description",
+                        "Text"
+                      ],
+                      [
+                        "view_url",
+                        "Text"
+                      ],
+                      [
+                        "creator",
+                        {
+                          "Custom": {
+                            "name": "template_creator_minimal_type",
+                            "kind": {
+                              "Composite": [
+                                [
+                                  "creator_id",
+                                  "Uuid"
+                                ],
+                                [
+                                  "name",
+                                  "Text"
+                                ],
+                                [
+                                  "avatar_url",
+                                  "Text"
+                                ]
+                              ]
+                            }
+                          }
+                        }
+                      ],
+                      [
+                        "categories",
+                        {
+                          "Custom": {
+                            "name": "template_category_minimal_type[]",
+                            "kind": {
+                              "Array": {
+                                "Custom": {
+                                  "name": "template_category_minimal_type",
+                                  "kind": {
+                                    "Composite": [
+                                      [
+                                        "category_id",
+                                        "Uuid"
+                                      ],
+                                      [
+                                        "name",
+                                        "Text"
+                                      ],
+                                      [
+                                        "icon",
+                                        "Text"
+                                      ],
+                                      [
+                                        "bg_color",
+                                        "Text"
+                                      ]
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      [
+                        "is_new_template",
+                        "Bool"
+                      ],
+                      [
+                        "is_featured",
+                        "Bool"
+                      ]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "f6c4cc0431fda7340c386d1c1e88598a89f142523f9013650b6f9093b29414b3"
+}

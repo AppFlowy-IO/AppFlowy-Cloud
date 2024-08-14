@@ -284,7 +284,7 @@ pub struct AFTemplateCategoryRow {
   pub bg_color: String,
   pub description: String,
   pub category_type: AFTemplateCategoryTypeColumn,
-  pub rank: i32,
+  pub priority: i32,
 }
 
 impl From<AFTemplateCategoryRow> for TemplateCategory {
@@ -296,7 +296,7 @@ impl From<AFTemplateCategoryRow> for TemplateCategory {
       bg_color: value.bg_color,
       description: value.description,
       category_type: value.category_type.into(),
-      rank: value.rank,
+      priority: value.priority,
     }
   }
 }

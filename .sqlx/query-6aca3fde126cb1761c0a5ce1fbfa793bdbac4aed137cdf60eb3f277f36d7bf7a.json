@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n    SELECT\n      category_id AS id,\n      name,\n      description,\n      icon,\n      bg_color,\n      category_type AS \"category_type: AFTemplateCategoryTypeColumn\",\n      rank\n    FROM af_template_category\n    WHERE category_id = $1\n    ",
+  "query": "\n    SELECT\n      category_id AS id,\n      name,\n      description,\n      icon,\n      bg_color,\n      category_type AS \"category_type: AFTemplateCategoryTypeColumn\",\n      priority\n    FROM af_template_category\n    WHERE category_id = $1\n    ",
   "describe": {
     "columns": [
       {
@@ -35,7 +35,7 @@
       },
       {
         "ordinal": 6,
-        "name": "rank",
+        "name": "priority",
         "type_info": "Int4"
       }
     ],
@@ -54,5 +54,5 @@
       false
     ]
   },
-  "hash": "4f8bb1345f524f5a11ae74357265d8e308eebb562117bb3f36c3b25f9e1c5e1b"
+  "hash": "6aca3fde126cb1761c0a5ce1fbfa793bdbac4aed137cdf60eb3f277f36d7bf7a"
 }

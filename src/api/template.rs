@@ -56,7 +56,7 @@ async fn post_template_category_handler(
     &data.icon,
     &data.bg_color,
     data.category_type,
-    data.rank,
+    data.priority,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(new_template_category)))
@@ -91,7 +91,7 @@ async fn update_template_category_handler(
     &data.icon,
     &data.bg_color,
     data.category_type,
-    data.rank,
+    data.priority,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(updated_template_category)))

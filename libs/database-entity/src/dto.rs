@@ -1017,7 +1017,7 @@ pub struct TemplateCategory {
   pub bg_color: String,
   pub description: String,
   pub category_type: TemplateCategoryType,
-  pub rank: i32,
+  pub priority: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1027,7 +1027,7 @@ pub struct CreateTemplateCategoryParams {
   pub bg_color: String,
   pub description: String,
   pub category_type: TemplateCategoryType,
-  pub rank: i32,
+  pub priority: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1043,7 +1043,7 @@ pub struct UpdateTemplateCategoryParams {
   pub bg_color: String,
   pub description: String,
   pub category_type: TemplateCategoryType,
-  pub rank: i32,
+  pub priority: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

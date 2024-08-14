@@ -14,13 +14,13 @@ pub async fn insert_new_template_category<'a, E: Executor<'a, Database = Postgre
   icon: &str,
   bg_color: &str,
   category_type: TemplateCategoryType,
-  rank: i32,
+  priority: i32,
 ) -> Result<TemplateCategory, AppError> {
   let category_type_column: AFTemplateCategoryTypeColumn = category_type.into();
   let new_template_category = sqlx::query_as!(
     TemplateCategory,
     r#"
-    INSERT INTO af_template_category (name, description, icon, bg_color, category_type, rank)
+    INSERT INTO af_template_category (name, description, icon, bg_color, category_type, priority)
     VALUES ($1, $2, $3, $4, $5, $6)
     RETURNING
       category_id AS id,
@@ -29,14 +29,14 @@ pub async fn insert_new_template_category<'a, E: Executor<'a, Database = Postgre
       icon,
       bg_color,
       category_type AS "category_type: AFTemplateCategoryTypeColumn",
-      rank
+      priority
     "#,
     name,
     description,
     icon,
     bg_color,
     category_type_column as AFTemplateCategoryTypeColumn,
-    rank,
+    priority,
   )
   .fetch_one(executor)
   .await?;
@@ -52,7 +52,7 @@ pub async fn update_template_category_by_id<'a, E: Executor<'a, Database = Postg
   icon: &str,
   bg_color: &str,
   category_type: TemplateCategoryType,
-  rank: i32,
+  priority: i32,
 ) -> Result<TemplateCategory, AppError> {
   let category_type_column: AFTemplateCategoryTypeColumn = category_type.into();
   let new_template_category = sqlx::query_as!(
@@ -65,7 +65,7 @@ pub async fn update_template_category_by_id<'a, E: Executor<'a, Database = Postg
       icon = $4,
       bg_color = $5,
       category_type = $6,
-      rank = $7
+      priority = $7
     WHERE category_id = $1
     RETURNING
       category_id AS id,
@@ -74,7 +74,7 @@ pub async fn update_template_category_by_id<'a, E: Executor<'a, Database = Postg
       icon,
       bg_color,
       category_type AS "category_type: AFTemplateCategoryTypeColumn",
-      rank
+      priority
     "#,
     id,
     name,
@@ -82,7 +82,7 @@ pub async fn update_template_category_by_id<'a, E: Executor<'a, Database = Postg
     icon,
     bg_color,
     category_type_column as AFTemplateCategoryTypeColumn,
-    rank,
+    priority,
   )
   .fetch_one(executor)
   .await?;
@@ -103,7 +103,7 @@ pub async fn select_template_categories<'a, E: Executor<'a, Database = Postgres>
       icon,
       bg_color,
       category_type,
-      rank
+      priority
     FROM af_template_category
     WHERE TRUE
     "#,
@@ -118,7 +118,7 @@ pub async fn select_template_categories<'a, E: Executor<'a, Database = Postgres>
     query_builder.push_bind(name_contains);
     query_builder.push(" , '%')");
   };
-  query_builder.push(" ORDER BY rank ASC");
+  query_builder.push(" ORDER BY priority DESC");
   let query = query_builder.build_query_as::<AFTemplateCategoryRow>();
 
   let category_rows: Vec<AFTemplateCategoryRow> = query.fetch_all(executor).await?;
@@ -141,7 +141,7 @@ pub async fn select_template_category_by_id<'a, E: Executor<'a, Database = Postg
       icon,
       bg_color,
       category_type AS "category_type: AFTemplateCategoryTypeColumn",
-      rank
+      priority
     FROM af_template_category
     WHERE category_id = $1
     "#,

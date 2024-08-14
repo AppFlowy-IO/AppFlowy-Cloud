@@ -10,7 +10,7 @@ use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, error, event, trace};
+use tracing::{error, event, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::Update;

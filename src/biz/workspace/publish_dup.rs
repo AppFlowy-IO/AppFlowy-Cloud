@@ -686,12 +686,17 @@ impl PublishCollabDuplicator {
           .duplicated_db_view
           .get(&vis_view_id)
           .ok_or_else(|| AppError::RecordNotFound(format!("view not found: {}", vis_view_id)))?;
+
+        let child_view_info = view_info_by_id.get(&vis_view_id).ok_or_else(|| {
+          AppError::RecordNotFound(format!("metadata not found for view: {}", vis_view_id))
+        })?;
+
         let mut child_folder_view = self.new_folder_view(
           child_view_id.clone(),
           view_info_by_id.get(&vis_view_id).ok_or_else(|| {
             AppError::RecordNotFound(format!("metadata not found for view: {}", vis_view_id))
           })?,
-          main_view_info.layout.clone(),
+          child_view_info.layout.clone(),
         );
         child_folder_view.parent_view_id.clone_from(main_view_id);
         self.views_to_add.push(child_folder_view);
@@ -821,15 +826,15 @@ async fn get_published_data_for_view_id(
 fn view_info_by_view_id(meta: &PublishViewMetaData) -> HashMap<String, PublishViewInfo> {
   let mut acc = HashMap::new();
   acc.insert(meta.view.view_id.clone(), meta.view.clone());
-  view_info_map(&mut acc, &meta.child_views);
+  add_to_view_info(&mut acc, &meta.child_views);
   acc
 }
 
-fn view_info_map(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[PublishViewInfo]) {
+fn add_to_view_info(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[PublishViewInfo]) {
   for view_info in view_infos {
     acc.insert(view_info.view_id.clone(), view_info.clone());
     if let Some(child_views) = &view_info.child_views {
-      view_info_map(acc, child_views);
+      add_to_view_info(acc, child_views);
     }
   }
 }

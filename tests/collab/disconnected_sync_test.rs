@@ -29,7 +29,7 @@ async fn test_sync_collab() {
   // user 1 edits the collab
   {
     let collab_1 = &client_1.collabs[&object_id];
-    let mut lock = collab_1.mutex_collab.lock();
+    let lock = collab_1.mutex_collab.lock();
     let doc = lock.get_doc();
     let mut txn = doc.transact_mut();
     let txt = txn.get_or_insert_text("text");
@@ -44,7 +44,7 @@ async fn test_sync_collab() {
   // user 2 edits the collab
   {
     let collab_2 = &client_2.collabs[&object_id];
-    let mut lock = collab_2.mutex_collab.lock();
+    let lock = collab_2.mutex_collab.lock();
     let doc = lock.get_doc();
     let mut txn = doc.transact_mut();
     let txt = txn.get_or_insert_text("text");
@@ -73,7 +73,7 @@ async fn test_sync_collab() {
 }
 
 fn get_text(collab: &TestCollab) -> String {
-  let mut lock = collab.mutex_collab.lock();
+  let lock = collab.mutex_collab.lock();
   let doc = lock.get_doc();
   let mut txn = doc.transact_mut();
   let txt = txn.get_or_insert_text("text");

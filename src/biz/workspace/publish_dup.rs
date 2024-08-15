@@ -332,68 +332,6 @@ impl PublishCollabDuplicator {
     doc_data: &mut DocumentData,
     ret_view: &mut View,
   ) -> Result<(), AppError> {
-    let page_ids = doc_data
-      .blocks
-      .values_mut()
-      .flat_map(|block| block.data.iter_mut())
-      .filter(|(key, _)| *key == "delta")
-      .flat_map(|(_, value)| value.as_array_mut())
-      .flatten()
-      .flat_map(|delta| delta.get_mut("attributes"))
-      .flat_map(|attributes| attributes.get_mut("mention"))
-      .filter(|mention| {
-        mention.get("type").map_or(false, |type_| {
-          type_.as_str().map_or(false, |type_| type_ == "page")
-        })
-      })
-      .flat_map(|mention| mention.get_mut("page_id"));
-
-    // deep copy all the page_id references
-    for page_id in page_ids {
-      tracing::warn!("page_id: {:?}", page_id);
-
-      let page_id_str = match page_id.as_str() {
-        Some(page_id_str) => page_id_str,
-        None => continue,
-      };
-      match self.duplicated_refs.get(page_id_str) {
-        Some(new_view_id) => {
-          if let Some(vid) = new_view_id {
-            tracing::warn!(
-              "page_id found in duplicated_refs: {},  vid: {} ",
-              page_id_str,
-              vid
-            );
-            *page_id = serde_json::json!(vid);
-          } else {
-            tracing::warn!("view_id not found in duplicated_refs: {}", page_id_str);
-            // ref view_id is not published
-            // TODO: handle this case to
-            // display better in the UI?
-          }
-        },
-        None => {
-          // Call deep_copy and await the result
-          if let Some(mut new_view) =
-            Box::pin(self.deep_copy(txn, uuid::Uuid::new_v4().to_string(), page_id_str)).await?
-          {
-            tracing::warn!("new_view: {:?}", new_view.id);
-            if new_view.parent_view_id.is_empty() {
-              new_view.parent_view_id.clone_from(&ret_view.id);
-            }
-            self
-              .duplicated_refs
-              .insert(page_id_str.to_string(), Some(new_view.id.clone()));
-            self.views_to_add.push(new_view.clone());
-          } else {
-            tracing::warn!("view not found in deep_copy: {}", page_id_str);
-            self.duplicated_refs.insert(page_id_str.to_string(), None);
-          }
-        },
-      }
-    }
-
-    // update text map
     if let Some(text_map) = doc_data.meta.text_map.as_mut() {
       for (_key, value) in text_map.iter_mut() {
         let mut js_val = match serde_json::from_str::<serde_json::Value>(value) {
@@ -407,7 +345,8 @@ impl PublishCollabDuplicator {
           Some(js_array) => js_array,
           None => continue,
         };
-        js_array
+
+        let page_ids = js_array
           .iter_mut()
           .flat_map(|js_val| js_val.get_mut("attributes"))
           .flat_map(|attributes| attributes.get_mut("mention"))
@@ -416,21 +355,62 @@ impl PublishCollabDuplicator {
               type_.as_str().map_or(false, |type_| type_ == "page")
             })
           })
-          .flat_map(|mention| mention.get_mut("page_id"))
-          .for_each(|page_id| {
-            let page_id_str = match page_id.as_str() {
-              Some(page_id_str) => page_id_str,
-              None => return,
-            };
-            if let Some(new_page_id) = self.duplicated_refs.get(page_id_str) {
-              *page_id = serde_json::json!(new_page_id);
-            }
-          });
+          .flat_map(|mention| mention.get_mut("page_id"));
+
+        for page_id in page_ids {
+          let page_id_str = match page_id.as_str() {
+            Some(page_id_str) => page_id_str,
+            None => continue,
+          };
+          if let Some(new_page_id) = self.deep_copy_view(page_id_str, txn, &ret_view.id).await? {
+            *page_id = serde_json::json!(new_page_id);
+          };
+        }
+
         *value = js_val.to_string();
       }
     }
 
     Ok(())
+  }
+
+  /// attempts to deep copy a view using `view_id`. returns a new_view_id of the duplicated view.
+  /// if view is already duplicated, returns duplicated view's view_id (parent_view_id is not set
+  /// from param `parent_view_id`)
+  async fn deep_copy_view(
+    &mut self,
+    view_id: &str,
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    parent_view_id: &String,
+  ) -> Result<Option<String>, AppError> {
+    match self.duplicated_refs.get(view_id) {
+      Some(new_view_id) => {
+        if let Some(vid) = new_view_id {
+          Ok(Some(vid.clone()))
+        } else {
+          Ok(None)
+        }
+      },
+      None => {
+        // Call deep_copy and await the result
+        if let Some(mut new_view) =
+          Box::pin(self.deep_copy(txn, uuid::Uuid::new_v4().to_string(), view_id)).await?
+        {
+          if new_view.parent_view_id.is_empty() {
+            new_view.parent_view_id.clone_from(parent_view_id);
+          }
+          self
+            .duplicated_refs
+            .insert(view_id.to_string(), Some(new_view.id.clone()));
+          self.views_to_add.push(new_view.clone());
+          Ok(Some(new_view.id))
+        } else {
+          tracing::warn!("view not found in deep_copy: {}", view_id);
+          self.duplicated_refs.insert(view_id.to_string(), None);
+          Ok(None)
+        }
+      },
+    }
   }
 
   async fn deep_copy_doc_databases(
@@ -632,8 +612,6 @@ impl PublishCollabDuplicator {
     published_db: PublishDatabaseData,
     metadata: PublishViewMetaData,
   ) -> Result<View, AppError> {
-    tracing::warn!("deep_copy_database_view: new_view_id: {}", new_view_id,);
-
     let pub_view_id = metadata.view.view_id.as_str();
 
     // flatten nested view info into a map
@@ -644,13 +622,11 @@ impl PublishCollabDuplicator {
       .await?;
 
     if db_alr_duplicated {
-      tracing::warn!("database already duplicated: {}", pub_view_id);
       let duplicated_view_id = self
         .duplicated_db_view
         .get(pub_view_id)
         .cloned()
         .ok_or_else(|| AppError::RecordNotFound(format!("view not found: {}", pub_view_id)))?;
-      tracing::warn!("database view id: {}", duplicated_view_id);
 
       // db_view_id found but may not have been created due to visibility
       match self
@@ -658,24 +634,18 @@ impl PublishCollabDuplicator {
         .iter()
         .find(|v| v.id == duplicated_view_id)
       {
-        Some(v) => {
-          tracing::warn!("found view in views_to_add: {}", v.id);
-          return Ok(v.clone());
-        },
+        Some(v) => return Ok(v.clone()),
         None => {
-          tracing::warn!("view not found in views_to_add: {}", duplicated_view_id);
           let main_view_id = self
             .duplicated_db_main_view
             .get(pub_db_id.as_str())
             .ok_or_else(|| {
               AppError::RecordNotFound(format!("main view not found: {}", pub_view_id))
             })?;
-          tracing::warn!("main view id: {}", main_view_id);
 
           let view_info = view_info_by_id.get(main_view_id).ok_or_else(|| {
             AppError::RecordNotFound(format!("metadata not found for view: {}", main_view_id))
           })?;
-          tracing::warn!("view_info: {:?}", view_info);
 
           let mut view =
             self.new_folder_view(duplicated_view_id, view_info, view_info.layout.clone());

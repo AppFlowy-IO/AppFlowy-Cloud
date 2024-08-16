@@ -8,8 +8,7 @@ use uuid::Uuid;
 
 use crate::pg_row::{
   AFTemplateCategoryMinimalRow, AFTemplateCategoryRow, AFTemplateCategoryTypeColumn,
-  AFTemplateCreatorMinimalColumn, AFTemplateCreatorRow, AFTemplateGroupRow, AFTemplateMinimalRow,
-  AFTemplateRow, AccountLinkColumn,
+  AFTemplateCreatorRow, AFTemplateGroupRow, AFTemplateMinimalRow, AFTemplateRow, AccountLinkColumn,
 };
 
 pub async fn insert_new_template_category<'a, E: Executor<'a, Database = Postgres>>(
@@ -454,6 +453,7 @@ pub async fn delete_related_templates<'a, E: Executor<'a, Database = Postgres>>(
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_template_view<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   view_id: Uuid,
@@ -493,6 +493,7 @@ pub async fn insert_template_view<'a, E: Executor<'a, Database = Postgres>>(
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn update_template_view<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   view_id: Uuid,
@@ -565,10 +566,8 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
             )::template_category_minimal_type
           ) AS categories
         FROM af_related_template_view rtv
-        JOIN af_template_view tv
-        ON rtv.view_id = tv.view_id
         JOIN af_template_view_template_category tvc
-        ON tv.view_id = tvc.view_id
+        ON rtv.related_view_id = tvc.view_id
         JOIN af_template_category tcg
         ON tvc.category_id = tcg.category_id
         WHERE rtv.view_id = $1

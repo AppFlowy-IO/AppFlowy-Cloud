@@ -52,6 +52,13 @@ impl Client {
       with_test_clock: None,
     };
 
+    self.create_subscription_v2(&sub_link_req).await
+  }
+
+  pub async fn create_subscription_v2(
+    &self,
+    sub_link_req: &SubscriptionLinkRequest<'_>,
+  ) -> Result<String, AppResponseError> {
     let url = format!(
       "{}/billing/api/v1/subscription-link",
       self.base_billing_url()
@@ -59,7 +66,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .query(&sub_link_req)
+      .query(sub_link_req)
       .send()
       .await?;
 

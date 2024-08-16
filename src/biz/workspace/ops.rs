@@ -74,6 +74,7 @@ pub async fn create_workspace_for_user(
   // add create initial collab for user
   initialize_workspace_for_user(
     user_uid,
+    user_uuid,
     &new_workspace_row,
     &mut txn,
     vec![GetStartedDocumentTemplate],

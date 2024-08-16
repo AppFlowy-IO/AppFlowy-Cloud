@@ -14,12 +14,15 @@ use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 
+use crate::user::{generate_unique_registered_user, User};
+use client_api::entity::id::user_awareness_object_id;
 use collab_entity::CollabType;
 use collab_folder::Folder;
+use collab_user::core::UserAwareness;
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserWorkspaceInfo, AFWorkspace,
-  AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult, CollabParams,
-  CreateCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabParams,
+  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
+  AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
+  CollabParams, CreateCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabParams,
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use mime::Mime;
@@ -39,8 +42,6 @@ use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing::trace;
 use uuid::Uuid;
-
-use crate::user::{generate_unique_registered_user, User};
 
 pub struct TestClient {
   pub user: User,
@@ -185,6 +186,31 @@ impl TestClient {
       vec![],
     )
     .unwrap()
+  }
+
+  pub async fn get_user_awareness(&self) -> UserAwareness {
+    let workspace_id = self.workspace_id().await;
+    let profile = self.get_user_profile().await;
+    let awareness_object_id = user_awareness_object_id(&profile.uuid, &workspace_id).to_string();
+    let data = self
+      .api_client
+      .get_collab(QueryCollabParams::new(
+        &awareness_object_id,
+        CollabType::UserAwareness,
+        &workspace_id,
+      ))
+      .await
+      .unwrap();
+    let collab = Collab::new_with_source(
+      CollabOrigin::Empty,
+      &awareness_object_id,
+      DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
+      vec![],
+      false,
+    )
+    .unwrap();
+
+    UserAwareness::open(Arc::new(MutexCollab::new(collab)), None)
   }
 
   pub async fn try_update_workspace_member(
@@ -404,6 +430,10 @@ impl TestClient {
 
   pub async fn uid(&self) -> i64 {
     self.api_client.get_profile().await.unwrap().uid
+  }
+
+  pub async fn get_user_profile(&self) -> AFUserProfile {
+    self.api_client.get_profile().await.unwrap()
   }
 
   pub async fn get_snapshot(

@@ -579,6 +579,7 @@ dependencies = [
  "collab-rt-entity",
  "collab-rt-protocol",
  "collab-stream",
+ "collab-user",
  "dashmap",
  "database",
  "database-entity",
@@ -1954,6 +1955,7 @@ dependencies = [
  "gotrue-entity",
  "infra",
  "shared-entity",
+ "uuid",
 ]
 
 [[package]]
@@ -1969,6 +1971,7 @@ dependencies = [
  "collab-document",
  "collab-entity",
  "collab-folder",
+ "collab-user",
  "database-entity",
  "dotenvy",
  "futures",
@@ -2178,6 +2181,23 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "collab-user"
+version = "0.2.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=a6fe08ccf3e7ad782083848d6771a870da3e5af9#a6fe08ccf3e7ad782083848d6771a870da3e5af9"
+dependencies = [
+ "anyhow",
+ "collab",
+ "collab-entity",
+ "getrandom 0.2.15",
+ "parking_lot 0.12.3",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
  "tracing",
 ]
 

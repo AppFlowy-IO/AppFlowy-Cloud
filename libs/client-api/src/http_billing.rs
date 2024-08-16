@@ -47,8 +47,8 @@ impl Client {
     let sub_link_req = SubscriptionLinkRequest {
       workspace_subscription_plan,
       recurring_interval,
-      workspace_id,
-      success_url,
+      workspace_id: workspace_id.to_string(),
+      success_url: success_url.to_string(),
       with_test_clock: None,
     };
 
@@ -57,7 +57,7 @@ impl Client {
 
   pub async fn create_subscription_v2(
     &self,
-    sub_link_req: &SubscriptionLinkRequest<'_>,
+    sub_link_req: &SubscriptionLinkRequest,
   ) -> Result<String, AppResponseError> {
     let url = format!(
       "{}/billing/api/v1/subscription-link",

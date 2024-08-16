@@ -150,11 +150,11 @@ pub enum Currency {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SubscriptionLinkRequest<'a> {
+pub struct SubscriptionLinkRequest {
   pub workspace_subscription_plan: SubscriptionPlan,
   pub recurring_interval: RecurringInterval,
-  pub workspace_id: &'a str,
-  pub success_url: &'a str,
+  pub workspace_id: String,
+  pub success_url: String,
   pub with_test_clock: Option<bool>,
 }
 

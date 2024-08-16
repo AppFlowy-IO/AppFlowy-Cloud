@@ -118,7 +118,7 @@ pub async fn select_template_categories<'a, E: Executor<'a, Database = Postgres>
     query_builder.push_bind(name_contains);
     query_builder.push(" , '%')");
   };
-  query_builder.push(" ORDER BY priority DESC");
+  query_builder.push(" ORDER BY priority DESC, created_at ASC");
   let query = query_builder.build_query_as::<AFTemplateCategoryRow>();
 
   let category_rows: Vec<AFTemplateCategoryRow> = query.fetch_all(executor).await?;
@@ -313,6 +313,7 @@ pub async fn select_template_creators_by_name<'a, E: Executor<'a, Database = Pos
     ON tc.creator_id = al.creator_id
     WHERE name LIKE $1
     GROUP BY (tc.creator_id, name, avatar_url)
+    ORDER BY created_at ASC
     "#,
     substr_match
   )

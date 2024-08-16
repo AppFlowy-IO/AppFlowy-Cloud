@@ -140,6 +140,7 @@ pub async fn delete_template_creator(
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_new_template(
   pg_pool: &PgPool,
   view_id: Uuid,
@@ -179,6 +180,7 @@ pub async fn create_new_template(
   Ok(new_template)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn update_template(
   pg_pool: &PgPool,
   view_id: Uuid,
@@ -243,7 +245,7 @@ pub async fn get_template(pg_pool: &PgPool, view_id: Uuid) -> Result<Template, A
   Ok(template)
 }
 
-pub async fn delete_template(pg_pool: &PgPool) -> Result<(), AppResponseError> {
+pub async fn delete_template(_pg_pool: &PgPool) -> Result<(), AppResponseError> {
   todo!()
 }
 

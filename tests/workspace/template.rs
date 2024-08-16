@@ -334,7 +334,7 @@ async fn test_template_crud() {
       .unwrap();
     assert_eq!(template.view_id, *view_id);
     assert!(template.categories.len() == 1);
-    assert!(template.categories[0] == category_id);
+    assert!(template.categories[0].id == category_id);
     assert!(template.creator.id == creator_id);
     assert!(template.creator.account_links.len() == 1);
     assert!(template.creator.account_links[0].url == creator.account_links[0].url);
@@ -360,10 +360,13 @@ async fn test_template_crud() {
       )
       .await
       .unwrap();
-    assert!(template.related_templates.len() == 1);
-    assert!(template.related_templates[0].view_id == published_view_ids[0]);
+    assert_eq!(template.related_templates.len(), 1);
+    assert_eq!(template.related_templates[0].view_id, published_view_ids[0]);
     assert_eq!(template.related_templates[0].categories.len(), 1);
-    assert!(template.related_templates[0].categories[0] == category_1_id);
+    assert_eq!(
+      template.related_templates[0].categories[0].id,
+      category_1_id
+    );
   }
 
   let guest_client = localhost_client();
@@ -375,8 +378,9 @@ async fn test_template_crud() {
       Some(template_name_prefix.clone()),
     )
     .await
-    .unwrap();
-  assert!(templates)
+    .unwrap()
+    .templates;
+  assert_eq!(templates.len(), 2)
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

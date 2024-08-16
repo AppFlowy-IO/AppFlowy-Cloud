@@ -287,4 +287,4 @@ collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 
 [features]
 history = []
-ai-test-enabled = []
+ai-test-enabled = ["client-api-test/ai-test-enabled"]

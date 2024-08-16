@@ -1,4 +1,4 @@
-use crate::{localhost_client_with_device_id, setup_log};
+use crate::{load_env, localhost_client_with_device_id, setup_log};
 use anyhow::{anyhow, Error};
 use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
@@ -56,6 +56,7 @@ pub struct TestCollab {
 }
 impl TestClient {
   pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
+    load_env();
     setup_log();
     let device_id = Uuid::new_v4().to_string();
     Self::new_with_device_id(&device_id, registered_user, start_ws_conn).await

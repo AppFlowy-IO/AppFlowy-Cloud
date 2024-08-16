@@ -157,3 +157,8 @@ pub struct SubscriptionLinkRequest<'a> {
   pub success_url: &'a str,
   pub with_test_clock: Option<bool>,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SubscriptionTrialRequest {
+  pub plan: SubscriptionPlan,
+}

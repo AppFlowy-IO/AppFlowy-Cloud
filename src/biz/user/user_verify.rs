@@ -46,6 +46,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
     // Create a workspace with the GetStarted template
     initialize_workspace_for_user(
       new_uid,
+      &user_uuid,
       &workspace_row,
       &mut txn,
       vec![GetStartedDocumentTemplate],

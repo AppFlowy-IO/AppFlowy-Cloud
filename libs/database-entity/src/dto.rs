@@ -1153,6 +1153,8 @@ pub struct Template {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TemplateMinimal {
   pub view_id: Uuid,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
   pub name: String,
   pub description: String,
   pub view_url: String,

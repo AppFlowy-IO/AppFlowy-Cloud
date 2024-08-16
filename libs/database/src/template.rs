@@ -65,6 +65,7 @@ pub async fn update_template_category_by_id<'a, E: Executor<'a, Database = Postg
     UPDATE af_template_category
     SET
       name = $2,
+      updated_at = NOW(),
       description = $3,
       icon = $4,
       bg_color = $5,
@@ -509,6 +510,7 @@ pub async fn update_template_view<'a, E: Executor<'a, Database = Postgres>>(
     r#"
     UPDATE af_template_view SET
       view_id = $1,
+      updated_at = NOW(),
       name = $2,
       description = $3,
       about = $4,
@@ -579,6 +581,8 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
           ARRAY_AGG(
             (
               rtv.related_view_id,
+              tv.created_at,
+              tv.updated_at,
               tv.name,
               tv.description,
               tv.view_url,
@@ -710,6 +714,8 @@ pub async fn select_templates<'a, E: Executor<'a, Database = Postgres>>(
 
     SELECT
       tv.view_id,
+      tv.created_at,
+      tv.updated_at,
       tv.name,
       tv.description,
       tv.view_url,
@@ -726,6 +732,7 @@ pub async fn select_templates<'a, E: Executor<'a, Database = Postgres>>(
     ON tc.view_id = tv.view_id
     JOIN af_template_creator atc
     ON tv.creator_id = atc.creator_id
+    ORDER BY tv.created_at DESC
     "#,
   );
   let query = query_builder.build_query_as::<AFTemplateMinimalRow>();
@@ -759,6 +766,8 @@ pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
           gtvtc.category_id,
           (
             tv.view_id,
+            tv.created_at,
+            tv.updated_at,
             tv.name,
             tv.description,
             tv.view_url,

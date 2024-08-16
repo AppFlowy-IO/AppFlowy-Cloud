@@ -333,12 +333,15 @@ async fn test_template_crud() {
       .await
       .unwrap();
     assert_eq!(template.view_id, *view_id);
-    assert!(template.categories.len() == 1);
-    assert!(template.categories[0].id == category_id);
-    assert!(template.creator.id == creator_id);
-    assert!(template.creator.account_links.len() == 1);
-    assert!(template.creator.account_links[0].url == creator.account_links[0].url);
-    assert!(template.related_templates.len() == 0)
+    assert_eq!(template.categories.len(), 1);
+    assert_eq!(template.categories[0].id, category_id);
+    assert_eq!(template.creator.id, creator_id);
+    assert_eq!(template.creator.account_links.len(), 1);
+    assert_eq!(
+      template.creator.account_links[0].url,
+      creator.account_links[0].url
+    );
+    assert!(template.related_templates.is_empty())
   }
 
   for (index, view_id) in published_view_ids[2..4].iter().enumerate() {

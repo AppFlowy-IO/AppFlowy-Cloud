@@ -411,6 +411,8 @@ impl From<AFTemplateCreatorMinimalColumn> for TemplateCreatorMinimal {
 #[sqlx(type_name = "template_minimal_type")]
 pub struct AFTemplateMinimalRow {
   pub view_id: Uuid,
+  pub created_at: DateTime<Utc>,
+  pub updated_at: DateTime<Utc>,
   pub name: String,
   pub description: String,
   pub view_url: String,
@@ -424,6 +426,8 @@ impl From<AFTemplateMinimalRow> for TemplateMinimal {
   fn from(value: AFTemplateMinimalRow) -> Self {
     Self {
       view_id: value.view_id,
+      created_at: value.created_at,
+      last_updated_at: value.updated_at,
       name: value.name,
       description: value.description,
       creator: value.creator.into(),

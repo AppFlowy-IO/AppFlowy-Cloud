@@ -69,6 +69,8 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'template_minimal_type') THEN
     CREATE TYPE template_minimal_type AS (
       view_id         UUID,
+      created_at      TIMESTAMP WITH TIME ZONE,
+      updated_at      TIMESTAMP WITH TIME ZONE,
       name            TEXT,
       description     TEXT,
       view_url        TEXT,

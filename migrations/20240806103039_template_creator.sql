@@ -1,5 +1,7 @@
 CREATE TABLE IF NOT EXISTS af_template_creator (
   creator_id        UUID NOT NULL DEFAULT gen_random_uuid(),
+  created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   name              TEXT NOT NULL,
   avatar_url        TEXT NOT NULL,
 

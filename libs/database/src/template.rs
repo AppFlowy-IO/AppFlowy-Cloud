@@ -318,6 +318,7 @@ pub async fn select_template_creators_by_name<'a, E: Executor<'a, Database = Pos
     ON tc.creator_id = al.creator_id
     WHERE name LIKE $1
     GROUP BY (tc.creator_id, name, avatar_url)
+    ORDER BY created_at ASC
     "#,
     substr_match
   )

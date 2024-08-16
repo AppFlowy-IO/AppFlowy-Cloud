@@ -1,7 +1,7 @@
 use crate::Client;
 use client_api_entity::billing_dto::{
-  SetSubscriptionRecurringInterval, SubscriptionCancelRequest, SubscriptionPlanDetail,
-  WorkspaceUsageAndLimit,
+  SetSubscriptionRecurringInterval, SubscriptionCancelRequest, SubscriptionLinkRequest,
+  SubscriptionPlanDetail, WorkspaceUsageAndLimit,
 };
 use reqwest::Method;
 use shared_entity::{
@@ -44,6 +44,14 @@ impl Client {
     workspace_subscription_plan: SubscriptionPlan,
     success_url: &str,
   ) -> Result<String, AppResponseError> {
+    let sub_link_req = SubscriptionLinkRequest {
+      workspace_subscription_plan,
+      recurring_interval,
+      workspace_id,
+      success_url,
+      with_test_clock: None,
+    };
+
     let url = format!(
       "{}/billing/api/v1/subscription-link",
       self.base_billing_url()
@@ -51,15 +59,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .query(&[
-        ("workspace_id", workspace_id),
-        ("recurring_interval", recurring_interval.as_str()),
-        (
-          "workspace_subscription_plan",
-          workspace_subscription_plan.as_ref(),
-        ),
-        ("success_url", success_url),
-      ])
+      .query(&sub_link_req)
       .send()
       .await?;
 

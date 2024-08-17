@@ -245,8 +245,9 @@ pub async fn get_template(pg_pool: &PgPool, view_id: Uuid) -> Result<Template, A
   Ok(template)
 }
 
-pub async fn delete_template(_pg_pool: &PgPool) -> Result<(), AppResponseError> {
-  todo!()
+pub async fn delete_template(pg_pool: &PgPool, template_id: Uuid) -> Result<(), AppResponseError> {
+  delete_template_id(pg_pool, template_id).await?;
+  Ok(())
 }
 
 pub async fn get_template_homepage(pg_pool: &PgPool) -> Result<TemplateHomePage, AppResponseError> {

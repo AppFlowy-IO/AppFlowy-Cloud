@@ -252,8 +252,12 @@ async fn update_template_handler(
   Ok(Json(AppResponse::Ok().with_data(updated_template)))
 }
 
-async fn delete_template_handler(state: Data<AppState>) -> Result<JsonAppResponse<()>> {
-  delete_template(&state.pg_pool).await?;
+async fn delete_template_handler(
+  template_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  let template_id = template_id.into_inner();
+  delete_template(&state.pg_pool, template_id).await?;
   Ok(Json(AppResponse::Ok()))
 }
 

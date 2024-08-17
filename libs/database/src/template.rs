@@ -161,7 +161,7 @@ pub async fn delete_template_category_by_id<'a, E: Executor<'a, Database = Postg
   executor: E,
   category_id: Uuid,
 ) -> Result<(), AppError> {
-  let rows_affected = sqlx::query!(
+  sqlx::query!(
     r#"
     DELETE FROM af_template_category
     WHERE category_id = $1
@@ -169,14 +169,7 @@ pub async fn delete_template_category_by_id<'a, E: Executor<'a, Database = Postg
     category_id,
   )
   .execute(executor)
-  .await?
-  .rows_affected();
-  if rows_affected == 0 {
-    tracing::error!(
-      "No template category with id {} was found to delete",
-      category_id
-    );
-  }
+  .await?;
   Ok(())
 }
 
@@ -358,7 +351,7 @@ pub async fn delete_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
   executor: E,
   creator_id: Uuid,
 ) -> Result<(), AppError> {
-  let rows_affected = sqlx::query!(
+  sqlx::query!(
     r#"
     DELETE FROM af_template_creator
     WHERE creator_id = $1
@@ -366,14 +359,7 @@ pub async fn delete_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
     creator_id,
   )
   .execute(executor)
-  .await?
-  .rows_affected();
-  if rows_affected == 0 {
-    tracing::error!(
-      "No template creator with id {} was found to delete",
-      creator_id
-    );
-  }
+  .await?;
   Ok(())
 }
 
@@ -509,7 +495,6 @@ pub async fn update_template_view<'a, E: Executor<'a, Database = Postgres>>(
   sqlx::query!(
     r#"
     UPDATE af_template_view SET
-      view_id = $1,
       updated_at = NOW(),
       name = $2,
       description = $3,
@@ -518,6 +503,7 @@ pub async fn update_template_view<'a, E: Executor<'a, Database = Postgres>>(
       creator_id = $6,
       is_new_template = $7,
       is_featured = $8
+      WHERE view_id = $1
     "#,
     view_id,
     name,
@@ -753,8 +739,8 @@ pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
           ARRAY_AGG((
             tvtc.category_id,
             tc.name,
-            tc.bg_color,
-            tc.icon
+            tc.icon,
+            tc.bg_color
           )::template_category_minimal_type) AS categories
         FROM af_template_view_template_category tvtc
         JOIN af_template_category tc
@@ -797,8 +783,8 @@ pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
         (
           gtv.category_id,
           tcg.name,
-          tcg.bg_color,
-          tcg.icon
+          tcg.icon,
+          tcg.bg_color
         )::template_category_minimal_type AS "category!: AFTemplateCategoryMinimalRow",
         templates AS "templates!: Vec<AFTemplateMinimalRow>"
         FROM grouped_template_view_template_with_category_id gtv
@@ -814,4 +800,20 @@ pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
       .map(|row| row.into())
       .collect(),
   )
+}
+
+pub async fn delete_template_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  template_id: Uuid,
+) -> Result<(), AppError> {
+  sqlx::query!(
+    r#"
+    DELETE FROM af_template_view
+    WHERE view_id = $1
+    "#,
+    template_id,
+  )
+  .execute(executor)
+  .await?;
+  Ok(())
 }

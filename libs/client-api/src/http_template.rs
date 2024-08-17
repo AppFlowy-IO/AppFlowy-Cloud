@@ -3,6 +3,7 @@ use client_api_entity::{
   GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams, GetTemplatesQueryParams,
   Template, TemplateCategories, TemplateCategory, TemplateCategoryType, TemplateCreator,
   TemplateCreators, Templates, UpdateTemplateCategoryParams, UpdateTemplateCreatorParams,
+  UpdateTemplateParams,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -39,11 +40,7 @@ fn template_resources_url(base_url: &str) -> String {
 }
 
 fn template_resource_url(base_url: &str, template_id: Uuid) -> String {
-  format!(
-    "{}/{}",
-    template_creator_resources_url(base_url),
-    template_id
-  )
+  format!("{}/{}", template_resources_url(base_url), template_id)
 }
 
 impl Client {
@@ -318,11 +315,34 @@ impl Client {
       .into_data()
   }
 
-  pub async fn update_template(&self, template_id: Uuid) -> Result<Template, AppResponseError> {
-    let url = template_resource_url(&self.base_url, template_id);
+  pub async fn update_template(
+    &self,
+    view_id: Uuid,
+    name: &str,
+    description: &str,
+    about: &str,
+    view_url: &str,
+    category_ids: Vec<Uuid>,
+    creator_id: Uuid,
+    is_new_template: bool,
+    is_featured: bool,
+    related_template_ids: Vec<Uuid>,
+  ) -> Result<Template, AppResponseError> {
+    let url = template_resource_url(&self.base_url, view_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
+      .json(&UpdateTemplateParams {
+        name: name.to_string(),
+        description: description.to_string(),
+        about: about.to_string(),
+        view_url: view_url.to_string(),
+        category_ids,
+        creator_id,
+        is_new_template,
+        is_featured,
+        related_view_ids: related_template_ids,
+      })
       .send()
       .await?;
 

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use app_error::ErrorCode;
 use client_api::entity::{
   AccountLink, PublishCollabItem, PublishCollabMetadata, TemplateCategoryType,
@@ -275,9 +277,9 @@ async fn test_template_crud() {
   let category_1_name = format!("{}_1", category_prefix);
   let category_2_name = format!("{}_2", category_prefix);
 
-  let creator = authorized_client
+  let creator_1 = authorized_client
     .create_template_creator(
-      "template_creator",
+      "template_creator 1",
       "avatar_url",
       vec![AccountLink {
         link_type: "reddit".to_string(),
@@ -286,8 +288,18 @@ async fn test_template_crud() {
     )
     .await
     .unwrap();
-  let creator_id = creator.id;
-  let category_1_id = authorized_client
+  let creator_2 = authorized_client
+    .create_template_creator(
+      "template_creator 2",
+      "avatar_url",
+      vec![AccountLink {
+        link_type: "facebook".to_string(),
+        url: "facebook_url".to_string(),
+      }],
+    )
+    .await
+    .unwrap();
+  let category_1 = authorized_client
     .create_template_category(
       category_1_name.as_str(),
       "icon",
@@ -297,9 +309,8 @@ async fn test_template_crud() {
       0,
     )
     .await
-    .unwrap()
-    .id;
-  let category_2_id = authorized_client
+    .unwrap();
+  let category_2 = authorized_client
     .create_template_category(
       category_2_name.as_str(),
       "icon",
@@ -309,14 +320,13 @@ async fn test_template_crud() {
       0,
     )
     .await
-    .unwrap()
-    .id;
+    .unwrap();
 
   let template_name_prefix = Uuid::new_v4().to_string();
   for (index, view_id) in published_view_ids[0..2].iter().enumerate() {
     let is_new_template = index % 2 == 0;
     let is_featured = true;
-    let category_id = category_1_id;
+    let category_id = category_1.id;
     let template = authorized_client
       .create_template(
         *view_id,
@@ -325,7 +335,7 @@ async fn test_template_crud() {
         "about",
         "view_url",
         vec![category_id],
-        creator_id,
+        creator_1.id,
         is_new_template,
         is_featured,
         vec![],
@@ -335,11 +345,12 @@ async fn test_template_crud() {
     assert_eq!(template.view_id, *view_id);
     assert_eq!(template.categories.len(), 1);
     assert_eq!(template.categories[0].id, category_id);
-    assert_eq!(template.creator.id, creator_id);
+    assert_eq!(template.creator.id, creator_1.id);
+    assert_eq!(template.creator.name, creator_1.name);
     assert_eq!(template.creator.account_links.len(), 1);
     assert_eq!(
       template.creator.account_links[0].url,
-      creator.account_links[0].url
+      creator_1.account_links[0].url
     );
     assert!(template.related_templates.is_empty())
   }
@@ -347,16 +358,16 @@ async fn test_template_crud() {
   for (index, view_id) in published_view_ids[2..4].iter().enumerate() {
     let is_new_template = index % 2 == 0;
     let is_featured = false;
-    let category_id = category_2_id;
+    let category_id = category_2.id;
     let template = authorized_client
       .create_template(
         *view_id,
-        format!("template-{}", view_id).as_str(),
+        format!("{}-{}", template_name_prefix, view_id).as_str(),
         "description",
         "about",
         "view_url",
         vec![category_id],
-        creator_id,
+        creator_2.id,
         is_new_template,
         is_featured,
         vec![published_view_ids[0]],
@@ -365,17 +376,18 @@ async fn test_template_crud() {
       .unwrap();
     assert_eq!(template.related_templates.len(), 1);
     assert_eq!(template.related_templates[0].view_id, published_view_ids[0]);
+    assert_eq!(template.related_templates[0].creator.id, creator_1.id);
     assert_eq!(template.related_templates[0].categories.len(), 1);
     assert_eq!(
       template.related_templates[0].categories[0].id,
-      category_1_id
+      category_1.id
     );
   }
 
   let guest_client = localhost_client();
   let templates = guest_client
     .get_templates(
-      Some(category_1_id),
+      Some(category_2.id),
       None,
       None,
       Some(template_name_prefix.clone()),
@@ -383,7 +395,65 @@ async fn test_template_crud() {
     .await
     .unwrap()
     .templates;
-  assert_eq!(templates.len(), 2)
+  let template_ids: HashSet<Uuid> = templates.iter().map(|t| t.view_id).collect();
+  assert_eq!(templates.len(), 2);
+  assert!(template_ids.contains(&published_view_ids[2]));
+  assert!(template_ids.contains(&published_view_ids[3]));
+
+  let featured_templates = guest_client
+    .get_templates(None, Some(true), None, Some(template_name_prefix.clone()))
+    .await
+    .unwrap()
+    .templates;
+  let featured_template_ids: HashSet<Uuid> = featured_templates.iter().map(|t| t.view_id).collect();
+  assert_eq!(featured_templates.len(), 2);
+  assert!(featured_template_ids.contains(&published_view_ids[0]));
+  assert!(featured_template_ids.contains(&published_view_ids[1]));
+
+  let new_templates = guest_client
+    .get_templates(None, None, Some(true), Some(template_name_prefix.clone()))
+    .await
+    .unwrap()
+    .templates;
+  let new_template_ids: HashSet<Uuid> = new_templates.iter().map(|t| t.view_id).collect();
+  assert_eq!(new_templates.len(), 2);
+  assert!(new_template_ids.contains(&published_view_ids[0]));
+  assert!(new_template_ids.contains(&published_view_ids[2]));
+
+  let template = guest_client
+    .get_template(published_view_ids[3])
+    .await
+    .unwrap();
+  assert_eq!(template.view_id, published_view_ids[3]);
+  assert_eq!(template.creator.id, creator_2.id);
+  assert_eq!(template.categories.len(), 1);
+  assert_eq!(template.categories[0].id, category_2.id);
+  assert_eq!(template.related_templates.len(), 1);
+  assert_eq!(template.related_templates[0].view_id, published_view_ids[0]);
+
+  authorized_client
+    .update_template(
+      published_view_ids[3],
+      format!("{}-{}", template_name_prefix, published_view_ids[3]).as_str(),
+      "description",
+      "about",
+      "view_url",
+      vec![category_1.id],
+      creator_2.id,
+      false,
+      true,
+      vec![published_view_ids[0]],
+    )
+    .await
+    .unwrap();
+
+  authorized_client
+    .delete_template(published_view_ids[3])
+    .await
+    .unwrap();
+  let resp = guest_client.get_template(published_view_ids[3]).await;
+  assert!(resp.is_err());
+  assert_eq!(resp.unwrap_err().code, ErrorCode::RecordNotFound);
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

@@ -1091,7 +1091,7 @@ pub struct UpdateTemplateCategoryParams {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TemplateCreators {
-  pub creators: Vec<TemplateCreator>,
+  pub creators: Vec<TemplateCreatorMinimal>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1106,6 +1106,7 @@ pub struct TemplateCreator {
   pub name: String,
   pub avatar_url: String,
   pub account_links: Vec<AccountLink>,
+  pub number_of_templates: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

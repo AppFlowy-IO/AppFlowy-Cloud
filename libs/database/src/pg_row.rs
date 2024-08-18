@@ -370,6 +370,7 @@ pub struct AFTemplateCreatorRow {
   pub name: String,
   pub avatar_url: String,
   pub account_links: Option<Vec<AccountLinkColumn>>,
+  pub number_of_templates: i32,
 }
 
 impl From<AFTemplateCreatorRow> for TemplateCreator {
@@ -385,6 +386,7 @@ impl From<AFTemplateCreatorRow> for TemplateCreator {
       name: value.name,
       avatar_url: value.avatar_url,
       account_links,
+      number_of_templates: value.number_of_templates,
     }
   }
 }

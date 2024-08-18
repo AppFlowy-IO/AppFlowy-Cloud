@@ -42,10 +42,11 @@ BEGIN
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'template_creator_type') THEN
     CREATE TYPE template_creator_type AS (
-        creator_id    UUID,
-        name          TEXT,
-        avatar_url    TEXT,
-        account_links account_link_type[]
+        creator_id          UUID,
+        name                TEXT,
+        avatar_url          TEXT,
+        account_links       account_link_type[],
+        number_of_templates INT
     );
   END IF;
 

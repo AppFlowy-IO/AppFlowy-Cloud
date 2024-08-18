@@ -1,14 +1,15 @@
 use app_error::AppError;
 use database_entity::dto::{
-  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateGroup,
-  TemplateMinimal,
+  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator,
+  TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
 };
 use sqlx::{Executor, Postgres, QueryBuilder};
 use uuid::Uuid;
 
 use crate::pg_row::{
   AFTemplateCategoryMinimalRow, AFTemplateCategoryRow, AFTemplateCategoryTypeColumn,
-  AFTemplateCreatorRow, AFTemplateGroupRow, AFTemplateMinimalRow, AFTemplateRow, AccountLinkColumn,
+  AFTemplateCreatorMinimalColumn, AFTemplateCreatorRow, AFTemplateGroupRow, AFTemplateMinimalRow,
+  AFTemplateRow, AccountLinkColumn,
 };
 
 pub async fn insert_new_template_category<'a, E: Executor<'a, Database = Postgres>>(
@@ -207,7 +208,8 @@ pub async fn insert_template_creator<'a, E: Executor<'a, Database = Postgres>>(
       new_creator.creator_id AS id,
       name,
       avatar_url,
-      ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>"
+      ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
+      0 AS "number_of_templates!"
       FROM new_creator
       LEFT OUTER JOIN account_links
       ON new_creator.creator_id = account_links.creator_id
@@ -255,16 +257,27 @@ pub async fn update_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
           creator_id,
           link_type,
           url
+      ),
+      creator_number_of_templates AS (
+        SELECT
+          creator_id,
+          COUNT(1)::int AS number_of_templates
+        FROM af_template_view
+        WHERE creator_id = $1
+        GROUP BY creator_id
       )
     SELECT
       updated_creator.creator_id AS id,
       name,
       avatar_url,
-      ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>"
+      ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
+      COALESCE(creator_number_of_templates.number_of_templates, 0) AS "number_of_templates!"
       FROM updated_creator
       LEFT OUTER JOIN account_links
       ON updated_creator.creator_id = account_links.creator_id
-      GROUP BY (id, name, avatar_url)
+      LEFT OUTER JOIN creator_number_of_templates
+      ON updated_creator.creator_id = creator_number_of_templates.creator_id
+      GROUP BY (id, name, avatar_url, creator_number_of_templates.number_of_templates)
     "#,
     creator_id,
     name,
@@ -297,20 +310,16 @@ pub async fn delete_template_creator_account_links<'a, E: Executor<'a, Database 
 pub async fn select_template_creators_by_name<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   substr_match: &str,
-) -> Result<Vec<TemplateCreator>, AppError> {
+) -> Result<Vec<TemplateCreatorMinimal>, AppError> {
   let creator_rows = sqlx::query_as!(
-    AFTemplateCreatorRow,
+    AFTemplateCreatorMinimalColumn,
     r#"
     SELECT
-    tc.creator_id AS "id!",
+    tc.creator_id AS "creator_id!",
     name AS "name!",
-    avatar_url AS "avatar_url!",
-    ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>"
+    avatar_url AS "avatar_url!"
     FROM af_template_creator tc
-    LEFT OUTER JOIN af_template_creator_account_link al
-    ON tc.creator_id = al.creator_id
     WHERE name LIKE $1
-    GROUP BY (tc.creator_id, name, avatar_url)
     ORDER BY created_at ASC
     "#,
     substr_match
@@ -328,16 +337,27 @@ pub async fn select_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
   let creator_row = sqlx::query_as!(
     AFTemplateCreatorRow,
     r#"
+    WITH creator_number_of_templates AS (
+      SELECT
+        creator_id,
+        COUNT(1)::int AS number_of_templates
+      FROM af_template_view
+      WHERE creator_id = $1
+      GROUP BY creator_id
+    )
     SELECT
     tc.creator_id AS "id!",
     name AS "name!",
     avatar_url AS "avatar_url!",
-    ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>"
+    ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
+    COALESCE(creator_number_of_templates.number_of_templates, 0) AS "number_of_templates!"
     FROM af_template_creator tc
     LEFT OUTER JOIN af_template_creator_account_link al
     ON tc.creator_id = al.creator_id
+    LEFT OUTER JOIN creator_number_of_templates
+    ON tc.creator_id = creator_number_of_templates.creator_id
     WHERE tc.creator_id = $1
-    GROUP BY (tc.creator_id, name, avatar_url)
+    GROUP BY (tc.creator_id, name, avatar_url, creator_number_of_templates.number_of_templates)
     "#,
     creator_id
   )
@@ -612,6 +632,13 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
         ON vtc.category_id = tc.category_id
         WHERE view_id = $1
         GROUP BY view_id
+      ),
+      creator_number_of_templates AS (
+        SELECT
+          creator_id,
+          COUNT(*) AS number_of_templates
+        FROM af_template_view
+        GROUP BY creator_id
       )
 
       SELECT
@@ -626,7 +653,8 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
           atc.creator_id,
           atc.name,
           atc.avatar_url,
-          al.account_links
+          al.account_links,
+          ct.number_of_templates
         )::template_creator_type AS "creator!: AFTemplateCreatorRow",
         tc.categories AS "categories!: Vec<AFTemplateCategoryRow>",
         COALESCE(rtv.related_templates, '{}') AS "related_templates!: Vec<AFTemplateMinimalRow>",
@@ -641,6 +669,10 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
       ON tv.view_id = rtv.view_id
       JOIN template_view_template_category tc
       ON tv.view_id = tc.view_id
+      LEFT OUTER JOIN creator_number_of_templates ct
+      ON tv.creator_id = ct.creator_id
+      WHERE tv.view_id = $1
+
     "#,
     view_id
   )

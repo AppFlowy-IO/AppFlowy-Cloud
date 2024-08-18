@@ -3,8 +3,8 @@ use std::ops::DerefMut;
 use anyhow::Context;
 use database::template::*;
 use database_entity::dto::{
-  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateHomePage,
-  TemplateMinimal,
+  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator,
+  TemplateCreatorMinimal, TemplateHomePage, TemplateMinimal,
 };
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
@@ -118,7 +118,7 @@ pub async fn update_template_creator(
 pub async fn get_template_creators(
   pg_pool: &PgPool,
   keyword: &Option<String>,
-) -> Result<Vec<TemplateCreator>, AppResponseError> {
+) -> Result<Vec<TemplateCreatorMinimal>, AppResponseError> {
   let substr_match = keyword.as_deref().unwrap_or("%");
   let creators = select_template_creators_by_name(pg_pool, substr_match).await?;
   Ok(creators)

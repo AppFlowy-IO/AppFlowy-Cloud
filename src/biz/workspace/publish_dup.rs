@@ -502,7 +502,7 @@ impl PublishCollabDuplicator {
         self
           .views_to_add
           .insert(new_folder_db_view.id.clone(), new_folder_db_view.clone());
-        &new_folder_db_view.id.into()
+        &new_folder_db_view.id.clone()
       },
     };
     Ok(Some((duplicated_view_id.clone(), parent_view.id.clone())))
@@ -655,7 +655,7 @@ impl PublishCollabDuplicator {
     pub_view_id: &str,
   ) -> Result<View, AppError> {
     // flatten nested view info into a map
-    let view_info_by_id = view_info_by_view_id(&metadata);
+    let view_info_by_id = view_info_by_view_id(metadata);
 
     let (pub_db_id, _dup_db_id, db_alr_duplicated) = self
       .deep_copy_database(pg_txn, &published_db, pub_view_id, new_view_id)

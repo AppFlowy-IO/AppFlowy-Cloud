@@ -60,7 +60,8 @@ pub struct PublishCollabDuplicator {
   /// in case there's existing group, which contains the most updated collab data
   group_manager: AppStateGroupManager,
   /// A list of new views to be added to the folder
-  views_to_add: Vec<View>,
+  /// view_id -> view
+  views_to_add: HashMap<String, View>,
   /// A list of database linked views to be added to workspace database
   workspace_databases: HashMap<String, Vec<String>>,
   /// time of duplication
@@ -89,7 +90,7 @@ impl PublishCollabDuplicator {
     Self {
       ts_now,
       duplicated_refs: HashMap::new(),
-      views_to_add: Vec::new(),
+      views_to_add: HashMap::new(),
       workspace_databases: HashMap::new(),
       duplicated_db_main_view: HashMap::new(),
       duplicated_db_view: HashMap::new(),
@@ -188,7 +189,7 @@ impl PublishCollabDuplicator {
     let encoded_update = folder.get_updates_for_op(|folder| {
       // add all views required to the folder
       folder.insert_view(root_view, None);
-      for view in &self.views_to_add {
+      for view in self.views_to_add.values() {
         folder.insert_view(view.clone(), None);
       }
     });
@@ -266,9 +267,10 @@ impl PublishCollabDuplicator {
         Ok(Some(new_doc_view))
       },
       ViewLayout::Grid | ViewLayout::Board | ViewLayout::Calendar => {
+        let pub_view_id = metadata.view.view_id.clone();
         let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
         let new_db_view = self
-          .deep_copy_database_view(txn, new_view_id, db_payload, metadata)
+          .deep_copy_database_view(txn, new_view_id, db_payload, &metadata, &pub_view_id)
           .await?;
         Ok(Some(new_db_view))
       },
@@ -402,7 +404,9 @@ impl PublishCollabDuplicator {
           self
             .duplicated_refs
             .insert(view_id.to_string(), Some(new_view.id.clone()));
-          self.views_to_add.push(new_view.clone());
+          self
+            .views_to_add
+            .insert(new_view.id.clone(), new_view.clone());
           Ok(Some(new_view.id))
         } else {
           tracing::warn!("view not found in deep_copy: {}", view_id);
@@ -427,44 +431,81 @@ impl PublishCollabDuplicator {
     for (_block_id, block) in db_blocks {
       let block_view_id = block
         .data
-        .get_mut("view_id")
-        .ok_or_else(|| AppError::RecordNotFound("view_id not found in block data".to_string()))?;
-      let view_id_str = block_view_id
+        .get("view_id")
+        .ok_or_else(|| AppError::RecordNotFound("view_id not found in block data".to_string()))?
         .as_str()
         .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
 
-      if let Some(mut new_folder_db_view) =
-        Box::pin(self.deep_copy(txn, uuid::Uuid::new_v4().to_string(), view_id_str)).await?
+      let block_parent_id = block
+        .data
+        .get("parent_id")
+        .ok_or_else(|| AppError::RecordNotFound("view_id not found in block data".to_string()))?
+        .as_str()
+        .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
+
+      if let Some((new_view_id, new_parent_id)) = self
+        .deep_copy_database_inline_doc(txn, block_view_id, block_parent_id, &ret_view.id)
+        .await?
       {
-        new_folder_db_view.parent_view_id.clone_from(&ret_view.id);
-        self.views_to_add.push(new_folder_db_view);
-
-        // update view_id
-        if let Some(id) = self.old_to_new_view_id(view_id_str) {
-          *block_view_id = serde_json::Value::String(id);
-        } else {
-          tracing::warn!("view_id not found in old_to_new_view_id: {}", view_id_str);
-        }
-
-        // update parent_id
-        let block_parent_id = block.data.get_mut("parent_id").ok_or_else(|| {
-          AppError::RecordNotFound("parent_id not found in block data".to_string())
-        })?;
-        let parent_view_id_str = block_parent_id
-          .as_str()
-          .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
-        if let Some(new_id) = self.old_to_new_view_id(parent_view_id_str) {
-          *block_parent_id = serde_json::Value::String(new_id);
-        } else {
-          tracing::warn!(
-            "view_id not found in old_to_new_view_id: {}",
-            parent_view_id_str
-          );
-        }
+        block.data.insert(
+          "view_id".to_string(),
+          serde_json::Value::String(new_view_id),
+        );
+        block.data.insert(
+          "parent_id".to_string(),
+          serde_json::Value::String(new_parent_id),
+        );
       }
     }
 
     Ok(())
+  }
+
+  /// deep copy database for doc
+  /// returns new (view_id, parent_id)
+  async fn deep_copy_database_inline_doc<'a>(
+    &mut self,
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    view_id: &str,
+    parent_id: &str,
+    doc_view_id: &String,
+  ) -> Result<Option<(String, String)>, AppError> {
+    let (metadata, published_blob) =
+      match get_published_data_for_view_id(txn, &view_id.parse()?).await? {
+        Some(published_data) => published_data,
+        None => {
+          tracing::warn!("No published collab data found for view_id: {}", view_id);
+          return Ok(None);
+        },
+      };
+
+    let published_db = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
+    let mut parent_view = self
+      .deep_copy_database_view(txn, view_id.to_string(), published_db, &metadata, parent_id)
+      .await?;
+    if parent_view.parent_view_id.is_empty() {
+      parent_view.parent_view_id.clone_from(doc_view_id);
+      self
+        .views_to_add
+        .insert(parent_view.id.clone(), parent_view.clone());
+    }
+    let duplicated_view_id = match self.duplicated_db_view.get(view_id) {
+      Some(v) => v,
+      None => {
+        let view_info_by_id = view_info_by_view_id(&metadata);
+        let view_info = view_info_by_id.get(view_id).ok_or_else(|| {
+          AppError::RecordNotFound(format!("metadata not found for view: {}", view_id))
+        })?;
+        let mut new_folder_db_view =
+          self.new_folder_view(view_id.to_string(), view_info, view_info.layout.clone());
+        new_folder_db_view.parent_view_id = parent_view.id.clone();
+        self
+          .views_to_add
+          .insert(new_folder_db_view.id.clone(), new_folder_db_view.clone());
+        &new_folder_db_view.id.into()
+      },
+    };
+    Ok(Some((duplicated_view_id.clone(), parent_view.id.clone())))
   }
 
   /// Deep copy a published database (does not create folder views)
@@ -610,10 +651,9 @@ impl PublishCollabDuplicator {
     pg_txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
     published_db: PublishDatabaseData,
-    metadata: PublishViewMetaData,
+    metadata: &PublishViewMetaData,
+    pub_view_id: &str,
   ) -> Result<View, AppError> {
-    let pub_view_id = metadata.view.view_id.as_str();
-
     // flatten nested view info into a map
     let view_info_by_id = view_info_by_view_id(&metadata);
 
@@ -629,11 +669,7 @@ impl PublishCollabDuplicator {
         .ok_or_else(|| AppError::RecordNotFound(format!("view not found: {}", pub_view_id)))?;
 
       // db_view_id found but may not have been created due to visibility
-      match self
-        .views_to_add
-        .iter()
-        .find(|v| v.id == duplicated_view_id)
-      {
+      match self.views_to_add.get(&duplicated_view_id) {
         Some(v) => return Ok(v.clone()),
         None => {
           let main_view_id = self
@@ -699,7 +735,9 @@ impl PublishCollabDuplicator {
           child_view_info.layout.clone(),
         );
         child_folder_view.parent_view_id.clone_from(main_view_id);
-        self.views_to_add.push(child_folder_view);
+        self
+          .views_to_add
+          .insert(child_view_id.clone(), child_folder_view.clone());
       }
 
       main_folder_view

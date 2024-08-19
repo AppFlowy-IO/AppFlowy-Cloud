@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    UPDATE af_template_category\n    SET\n      name = $2,\n      description = $3,\n      icon = $4,\n      bg_color = $5,\n      category_type = $6,\n      priority = $7,\n      updated_at = NOW()\n    WHERE category_id = $1\n    RETURNING\n      category_id AS id,\n      name,\n      description,\n      icon,\n      bg_color,\n      category_type AS \"category_type: AFTemplateCategoryTypeColumn\",\n      priority\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "bg_color",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "category_type: AFTemplateCategoryTypeColumn",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "priority",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9b2a8297fa991418b255fc5cb6ad70d695c4dceed20bdc557bfedfc820511126"
+}

@@ -7,6 +7,7 @@ mod http_collab;
 mod http_history;
 mod http_member;
 mod http_publish;
+mod http_template;
 pub use http::*;
 
 #[cfg(feature = "collab-sync")]

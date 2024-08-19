@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT\n      tc.creator_id AS \"id!\",\n      name AS \"name!\",\n      avatar_url AS \"avatar_url!\",\n      ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS \"account_links: Vec<AccountLinkColumn>\"\n    FROM af_template_creator tc\n    LEFT OUTER JOIN af_template_creator_account_link al\n    ON tc.creator_id = al.creator_id\n    WHERE name LIKE $1\n    GROUP BY (tc.creator_id, name, avatar_url)\n    ORDER BY created_at ASC\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "avatar_url!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "account_links: Vec<AccountLinkColumn>",
+        "type_info": "RecordArray"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "e2e0800097f488070f216ec48be4ee9feb649dcb3ff27a0ec337e3f623c09ad0"
+}

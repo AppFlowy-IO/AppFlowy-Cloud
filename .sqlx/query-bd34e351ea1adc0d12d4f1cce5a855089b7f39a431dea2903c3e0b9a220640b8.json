@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    WITH creator_number_of_templates AS (\n      SELECT\n        creator_id,\n        COUNT(1)::int AS number_of_templates\n      FROM af_template_view\n      WHERE creator_id = $1\n      GROUP BY creator_id\n    )\n    SELECT\n      creator.creator_id AS \"id!\",\n      name AS \"name!\",\n      avatar_url AS \"avatar_url!\",\n      ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS \"account_links: Vec<AccountLinkColumn>\",\n      COALESCE(number_of_templates, 0) AS \"number_of_templates!\"\n    FROM af_template_creator creator\n    LEFT OUTER JOIN af_template_creator_account_link account_link\n    USING (creator_id)\n    LEFT OUTER JOIN creator_number_of_templates\n    USING (creator_id)\n    WHERE creator.creator_id = $1\n    GROUP BY (creator.creator_id, name, avatar_url, number_of_templates)\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "avatar_url!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "account_links: Vec<AccountLinkColumn>",
+        "type_info": "RecordArray"
+      },
+      {
+        "ordinal": 4,
+        "name": "number_of_templates!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "bd34e351ea1adc0d12d4f1cce5a855089b7f39a431dea2903c3e0b9a220640b8"
+}

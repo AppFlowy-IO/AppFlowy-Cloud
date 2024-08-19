@@ -211,7 +211,7 @@ pub async fn insert_template_creator<'a, E: Executor<'a, Database = Postgres>>(
       0 AS "number_of_templates!"
       FROM new_creator
       LEFT OUTER JOIN account_links
-      ON new_creator.creator_id = account_links.creator_id
+      USING (creator_id)
       GROUP BY (id, name, avatar_url)
     "#,
     name,
@@ -270,13 +270,13 @@ pub async fn update_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
       name,
       avatar_url,
       ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
-      COALESCE(creator_number_of_templates.number_of_templates, 0) AS "number_of_templates!"
+      COALESCE(number_of_templates, 0) AS "number_of_templates!"
       FROM updated_creator
       LEFT OUTER JOIN account_links
-      ON updated_creator.creator_id = account_links.creator_id
+      USING (creator_id)
       LEFT OUTER JOIN creator_number_of_templates
-      ON updated_creator.creator_id = creator_number_of_templates.creator_id
-      GROUP BY (id, name, avatar_url, creator_number_of_templates.number_of_templates)
+      USING (creator_id)
+      GROUP BY (id, name, avatar_url, number_of_templates)
     "#,
     creator_id,
     name,
@@ -318,26 +318,26 @@ pub async fn select_template_creators_by_name<'a, E: Executor<'a, Database = Pos
         creator_id,
         COUNT(1)::int AS number_of_templates
       FROM af_template_view
-      WHERE name LIKE $1
+      WHERE name ILIKE $1
       GROUP BY creator_id
     )
 
     SELECT
-      tc.creator_id AS "id!",
+      creator.creator_id AS "id!",
       name AS "name!",
       avatar_url AS "avatar_url!",
-      ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
-      COALESCE(creator_number_of_templates.number_of_templates, 0) AS "number_of_templates!"
-    FROM af_template_creator tc
-    LEFT OUTER JOIN af_template_creator_account_link al
-    ON tc.creator_id = al.creator_id
+      ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
+      COALESCE(number_of_templates, 0) AS "number_of_templates!"
+    FROM af_template_creator creator
+    LEFT OUTER JOIN af_template_creator_account_link account_link
+    USING (creator_id)
     LEFT OUTER JOIN creator_number_of_templates
-    ON tc.creator_id = creator_number_of_templates.creator_id
-    WHERE name LIKE $1
-    GROUP BY (tc.creator_id, name, avatar_url, creator_number_of_templates.number_of_templates)
+    USING (creator_id)
+    WHERE name ILIKE $1
+    GROUP BY (creator.creator_id, name, avatar_url, number_of_templates)
     ORDER BY created_at ASC
     "#,
-    substr_match
+    format!("%{}%", substr_match)
   )
   .fetch_all(executor)
   .await?;
@@ -361,18 +361,18 @@ pub async fn select_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
       GROUP BY creator_id
     )
     SELECT
-      tc.creator_id AS "id!",
+      creator.creator_id AS "id!",
       name AS "name!",
       avatar_url AS "avatar_url!",
-      ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
-      COALESCE(creator_number_of_templates.number_of_templates, 0) AS "number_of_templates!"
-    FROM af_template_creator tc
-    LEFT OUTER JOIN af_template_creator_account_link al
-    ON tc.creator_id = al.creator_id
+      ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
+      COALESCE(number_of_templates, 0) AS "number_of_templates!"
+    FROM af_template_creator creator
+    LEFT OUTER JOIN af_template_creator_account_link account_link
+    USING (creator_id)
     LEFT OUTER JOIN creator_number_of_templates
-    ON tc.creator_id = creator_number_of_templates.creator_id
-    WHERE tc.creator_id = $1
-    GROUP BY (tc.creator_id, name, avatar_url, creator_number_of_templates.number_of_templates)
+    USING (creator_id)
+    WHERE creator.creator_id = $1
+    GROUP BY (creator.creator_id, name, avatar_url, number_of_templates)
     "#,
     creator_id
   )
@@ -561,21 +561,21 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
   let view_row = sqlx::query_as!(
     AFTemplateRow,
     r#"
-      WITH template_view_creator_account_link AS (
+      WITH template_with_creator_account_link AS (
         SELECT
-          view_id,
-          tv.creator_id,
+          template.view_id,
+          template.creator_id,
           COALESCE(
-            ARRAY_AGG((al.link_type, al.url)::account_link_type) FILTER (WHERE link_type IS NOT NULL),
+            ARRAY_AGG((link_type, url)::account_link_type) FILTER (WHERE link_type IS NOT NULL),
             '{}'
           ) AS account_links
-        FROM af_template_view tv
-        JOIN af_template_creator tc
-        ON tv.creator_id = tc.creator_id
-        LEFT OUTER JOIN af_template_creator_account_link al
-        ON tc.creator_id = al.creator_id
+        FROM af_template_view template
+        JOIN af_template_creator creator
+        ON template.creator_id = creator.creator_id
+        LEFT OUTER JOIN af_template_creator_account_link account_link
+        ON creator.creator_id = account_link.creator_id
         WHERE view_id = $1
-        GROUP BY (view_id, tv.creator_id)
+        GROUP BY (view_id, template.creator_id)
       ),
       related_template_view_template_category AS (
         SELECT
@@ -678,7 +678,7 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
       FROM af_template_view tv
       JOIN af_template_creator atc
       ON tv.creator_id = atc.creator_id
-      JOIN template_view_creator_account_link al
+      JOIN template_with_creator_account_link al
       ON tv.view_id = al.view_id
       LEFT OUTER JOIN template_view_related_template rtv
       ON tv.view_id = rtv.view_id

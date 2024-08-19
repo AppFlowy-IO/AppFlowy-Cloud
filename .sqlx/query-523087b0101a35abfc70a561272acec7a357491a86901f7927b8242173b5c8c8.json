@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    WITH\n      new_creator AS (\n        INSERT INTO af_template_creator (name, avatar_url)\n        VALUES ($1, $2)\n        RETURNING creator_id, name, avatar_url\n      ),\n      account_links AS (\n        INSERT INTO af_template_creator_account_link (creator_id, link_type, url)\n        SELECT new_creator.creator_id as creator_id, link_type, url FROM\n        UNNEST($3::text[], $4::text[]) AS t(link_type, url)\n        CROSS JOIN new_creator\n        RETURNING\n          creator_id,\n          link_type,\n          url\n      )\n    SELECT\n      new_creator.creator_id AS id,\n      name,\n      avatar_url,\n      ARRAY_AGG((link_type, url)) FILTER (WHERE link_type IS NOT NULL) AS \"account_links: Vec<AccountLinkColumn>\",\n      0 AS \"number_of_templates!\"\n      FROM new_creator\n      LEFT OUTER JOIN account_links\n      USING (creator_id)\n      GROUP BY (id, name, avatar_url)\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "account_links: Vec<AccountLinkColumn>",
+        "type_info": "RecordArray"
+      },
+      {
+        "ordinal": 4,
+        "name": "number_of_templates!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "523087b0101a35abfc70a561272acec7a357491a86901f7927b8242173b5c8c8"
+}

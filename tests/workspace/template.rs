@@ -191,11 +191,13 @@ async fn test_template_creator_crud() {
     link_type: "reddit".to_string(),
     url: "reddit_url".to_string(),
   }];
+  let creator_name_prefix = Uuid::new_v4().to_string();
+  let creator_name = format!("{}-name", creator_name_prefix);
   let new_creator = authorized_client
-    .create_template_creator("name", "avatar_url", account_links)
+    .create_template_creator(creator_name.as_str(), "avatar_url", account_links)
     .await
     .unwrap();
-  assert_eq!(new_creator.name, "name");
+  assert_eq!(new_creator.name, creator_name);
   assert_eq!(new_creator.avatar_url, "avatar_url");
   assert_eq!(new_creator.account_links.len(), 1);
   assert_eq!(new_creator.account_links[0].link_type, "reddit");
@@ -210,16 +212,17 @@ async fn test_template_creator_crud() {
     link_type: "twitter".to_string(),
     url: "twitter_url".to_string(),
   }];
+  let updated_creator_name = format!("{}-new_name", creator_name_prefix);
   let updated_creator = authorized_client
     .update_template_creator(
       new_creator.id,
-      "new_name",
+      updated_creator_name.as_str(),
       "new_avatar_url",
       updated_account_links,
     )
     .await
     .unwrap();
-  assert_eq!(updated_creator.name, "new_name");
+  assert_eq!(updated_creator.name, updated_creator_name);
   assert_eq!(updated_creator.avatar_url, "new_avatar_url");
   assert_eq!(updated_creator.account_links.len(), 1);
   assert_eq!(updated_creator.account_links[0].link_type, "twitter");
@@ -229,11 +232,18 @@ async fn test_template_creator_crud() {
     .get_template_creator(new_creator.id)
     .await
     .unwrap();
-  assert_eq!(creator.name, "new_name");
+  assert_eq!(creator.name, updated_creator_name);
   assert_eq!(creator.avatar_url, "new_avatar_url");
   assert_eq!(creator.account_links.len(), 1);
   assert_eq!(creator.account_links[0].link_type, "twitter");
   assert_eq!(creator.account_links[0].url, "twitter_url");
+
+  let creators = guest_client
+    .get_template_creators(Some(creator_name_prefix).as_deref())
+    .await
+    .unwrap()
+    .creators;
+  assert_eq!(creators.len(), 1);
 
   let result = guest_client.delete_template_creator(new_creator.id).await;
   assert!(result.is_err());

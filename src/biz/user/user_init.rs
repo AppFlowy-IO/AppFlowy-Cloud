@@ -3,7 +3,7 @@ use std::sync::Arc;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::{ArrayPrelim, Collab, Map};
+use collab::preclude::{ArrayRef, Collab, Map};
 use collab_entity::define::WORKSPACE_DATABASES;
 use collab_entity::CollabType;
 use collab_user::core::UserAwareness;
@@ -134,10 +134,10 @@ async fn create_workspace_database_collab(
   let collab_type = CollabType::WorkspaceDatabase;
   let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
   {
-    let mut txn = collab.transact_mut();
-    collab
+    let mut txn = collab.context.transact_mut();
+    let _ = collab
       .data
-      .insert(&mut txn, WORKSPACE_DATABASES, ArrayPrelim::default());
+      .get_or_init::<_, ArrayRef>(&mut txn, WORKSPACE_DATABASES);
   };
 
   let encode_collab = collab

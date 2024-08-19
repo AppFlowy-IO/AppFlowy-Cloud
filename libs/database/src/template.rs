@@ -571,63 +571,63 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
           ) AS account_links
         FROM af_template_view template
         JOIN af_template_creator creator
-        ON template.creator_id = creator.creator_id
+        USING (creator_id)
         LEFT OUTER JOIN af_template_creator_account_link account_link
-        ON creator.creator_id = account_link.creator_id
+        USING (creator_id)
         WHERE view_id = $1
         GROUP BY (view_id, template.creator_id)
       ),
-      related_template_view_template_category AS (
+      related_template_with_category AS (
         SELECT
-          rtv.related_view_id,
+          template.related_view_id,
           ARRAY_AGG(
             (
-              tcg.category_id,
-              tcg.name,
-              tcg.icon,
-              tcg.bg_color
+              template_category.category_id,
+              template_category.name,
+              template_category.icon,
+              template_category.bg_color
             )::template_category_minimal_type
           ) AS categories
-        FROM af_related_template_view rtv
-        JOIN af_template_view_template_category tvc
-        ON rtv.related_view_id = tvc.view_id
-        JOIN af_template_category tcg
-        ON tvc.category_id = tcg.category_id
-        WHERE rtv.view_id = $1
-        GROUP BY rtv.related_view_id
+        FROM af_related_template_view template
+        JOIN af_template_view_template_category template_template_category
+        ON template.related_view_id = template_template_category.view_id
+        JOIN af_template_category template_category
+        USING (category_id)
+        WHERE template.view_id = $1
+        GROUP BY template.related_view_id
       ),
-      template_view_related_template AS (
+      template_with_related_template AS (
         SELECT
-          rtv.view_id,
+          template.view_id,
           ARRAY_AGG(
             (
-              rtv.related_view_id,
-              tv.created_at,
-              tv.updated_at,
-              tv.name,
-              tv.description,
-              tv.view_url,
+              template.related_view_id,
+              related_template.created_at,
+              related_template.updated_at,
+              related_template.name,
+              related_template.description,
+              related_template.view_url,
               (
-                tc.creator_id,
-                tc.name,
-                tc.avatar_url
+                creator.creator_id,
+                creator.name,
+                creator.avatar_url
               )::template_creator_minimal_type,
-              rtvtc.categories,
-              tv.is_new_template,
-              tv.is_featured
+              related_template_with_category.categories,
+              related_template.is_new_template,
+              related_template.is_featured
             )::template_minimal_type
           ) AS related_templates
-        FROM af_related_template_view rtv
-        JOIN af_template_view tv
-        ON rtv.related_view_id = tv.view_id
-        JOIN af_template_creator tc
-        ON tv.creator_id = tc.creator_id
-        JOIN related_template_view_template_category rtvtc
-        ON rtv.related_view_id = rtvtc.related_view_id
-        WHERE rtv.view_id = $1
-        GROUP BY rtv.view_id
+        FROM af_related_template_view template
+        JOIN af_template_view related_template
+        ON template.related_view_id = related_template.view_id
+        JOIN af_template_creator creator
+        ON related_template.creator_id = creator.creator_id
+        JOIN related_template_with_category
+        ON template.related_view_id = related_template_with_category.related_view_id
+        WHERE template.view_id = $1
+        GROUP BY template.view_id
       ),
-      template_view_template_category AS (
+      template_with_category AS (
         SELECT
           view_id,
           COALESCE(
@@ -657,36 +657,36 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
       )
 
       SELECT
-        tv.view_id,
-        tv.created_at,
-        tv.updated_at,
-        tv.name,
-        tv.description,
-        tv.about,
-        tv.view_url,
+        template.view_id,
+        template.created_at,
+        template.updated_at,
+        template.name,
+        template.description,
+        template.about,
+        template.view_url,
         (
-          atc.creator_id,
-          atc.name,
-          atc.avatar_url,
-          al.account_links,
-          ct.number_of_templates
+          creator.creator_id,
+          creator.name,
+          creator.avatar_url,
+          template_with_creator_account_link.account_links,
+          creator_number_of_templates.number_of_templates
         )::template_creator_type AS "creator!: AFTemplateCreatorRow",
-        tc.categories AS "categories!: Vec<AFTemplateCategoryRow>",
-        COALESCE(rtv.related_templates, '{}') AS "related_templates!: Vec<AFTemplateMinimalRow>",
-        tv.is_new_template,
-        tv.is_featured
-      FROM af_template_view tv
-      JOIN af_template_creator atc
-      ON tv.creator_id = atc.creator_id
-      JOIN template_with_creator_account_link al
-      ON tv.view_id = al.view_id
-      LEFT OUTER JOIN template_view_related_template rtv
-      ON tv.view_id = rtv.view_id
-      JOIN template_view_template_category tc
-      ON tv.view_id = tc.view_id
-      LEFT OUTER JOIN creator_number_of_templates ct
-      ON tv.creator_id = ct.creator_id
-      WHERE tv.view_id = $1
+        template_with_category.categories AS "categories!: Vec<AFTemplateCategoryRow>",
+        COALESCE(template_with_related_template.related_templates, '{}') AS "related_templates!: Vec<AFTemplateMinimalRow>",
+        template.is_new_template,
+        template.is_featured
+      FROM af_template_view template
+      JOIN af_template_creator creator
+      USING (creator_id)
+      JOIN template_with_creator_account_link
+      ON template.view_id = template_with_creator_account_link.view_id
+      LEFT OUTER JOIN template_with_related_template
+      ON template.view_id = template_with_related_template.view_id
+      JOIN template_with_category
+      ON template.view_id = template_with_category.view_id
+      LEFT OUTER JOIN creator_number_of_templates
+      ON template.creator_id = creator_number_of_templates.creator_id
+      WHERE template.view_id = $1
 
     "#,
     view_id
@@ -706,66 +706,66 @@ pub async fn select_templates<'a, E: Executor<'a, Database = Postgres>>(
 ) -> Result<Vec<TemplateMinimal>, AppError> {
   let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
     r#"
-    WITH template_view_template_category AS (
+    WITH template_with_template_category AS (
       SELECT
-        vtc.view_id,
+        template_template_category.view_id,
         ARRAY_AGG((
-          vtc.category_id,
-          tc.name,
-          tc.icon,
-          tc.bg_color
+          template_template_category.category_id,
+          category.name,
+          category.icon,
+          category.bg_color
         )::template_category_minimal_type) AS categories
-      FROM af_template_view_template_category vtc
-      JOIN af_template_category tc
-      ON vtc.category_id = tc.category_id
-      JOIN af_template_view tv
-      ON vtc.view_id = tv.view_id
+      FROM af_template_view_template_category template_template_category
+      JOIN af_template_category category
+      USING (category_id)
+      JOIN af_template_view template
+      USING (view_id)
       WHERE TRUE
     "#,
   );
   if let Some(category_id) = category_id {
-    query_builder.push(" AND vtc.category_id = ");
+    query_builder.push(" AND template_template_category.category_id = ");
     query_builder.push_bind(category_id);
   };
   if let Some(is_featured) = is_featured {
-    query_builder.push(" AND tv.is_featured = ");
+    query_builder.push(" AND template.is_featured = ");
     query_builder.push_bind(is_featured);
   };
   if let Some(is_new_template) = is_new_template {
-    query_builder.push(" AND tv.is_new_template = ");
+    query_builder.push(" AND template.is_new_template = ");
     query_builder.push_bind(is_new_template);
   };
   if let Some(name_contains) = name_contains {
-    query_builder.push(" AND tv.name ILIKE CONCAT('%', ");
+    query_builder.push(" AND template.name ILIKE CONCAT('%', ");
     query_builder.push_bind(name_contains);
     query_builder.push(" , '%')");
   };
   query_builder.push(
     r#"
-      GROUP BY vtc.view_id
+      GROUP BY template_template_category.view_id
     )
 
     SELECT
-      tv.view_id,
-      tv.created_at,
-      tv.updated_at,
-      tv.name,
-      tv.description,
-      tv.view_url,
+      template.view_id,
+      template.created_at,
+      template.updated_at,
+      template.name,
+      template.description,
+      template.view_url,
       (
-        atc.creator_id,
-        atc.name,
-        atc.avatar_url
+        template_creator.creator_id,
+        template_creator.name,
+        template_creator.avatar_url
       )::template_creator_minimal_type AS creator,
       tc.categories AS categories,
-      tv.is_new_template,
-      tv.is_featured
-    FROM template_view_template_category tc
-    JOIN af_template_view tv
-    ON tc.view_id = tv.view_id
-    JOIN af_template_creator atc
-    ON tv.creator_id = atc.creator_id
-    ORDER BY tv.created_at DESC
+      template.is_new_template,
+      template.is_featured
+    FROM template_with_template_category tc
+    JOIN af_template_view template
+    USING (view_id)
+    JOIN af_template_creator template_creator
+    USING (creator_id)
+    ORDER BY template.created_at DESC
     "#,
   );
   let query = query_builder.build_query_as::<AFTemplateMinimalRow>();
@@ -779,64 +779,64 @@ pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
   let template_group_rows = sqlx::query_as!(
     AFTemplateGroupRow,
     r#"
-      WITH grouped_template_view_template_categories AS (
+      WITH template_group_by_category_and_view AS (
         SELECT
-          tvtc.category_id,
-          tvtc.view_id,
+          template_template_category.category_id,
+          template_template_category.view_id,
           ARRAY_AGG((
-            tvtc.category_id,
-            tc.name,
-            tc.icon,
-            tc.bg_color
+            template_template_category.category_id,
+            category.name,
+            category.icon,
+            category.bg_color
           )::template_category_minimal_type) AS categories
-        FROM af_template_view_template_category tvtc
-        JOIN af_template_category tc
-        ON tvtc.category_id = tc.category_id
-        GROUP BY tvtc.category_id, tvtc.view_id
+        FROM af_template_view_template_category template_template_category
+        JOIN af_template_category category
+        USING (category_id)
+        GROUP BY template_template_category.category_id, template_template_category.view_id
       ),
-      grouped_template_view AS (
+      template_group_by_category_and_view_with_creator_and_template_details AS (
         SELECT
-          gtvtc.category_id,
+          template_group_by_category_and_view.category_id,
           (
-            tv.view_id,
-            tv.created_at,
-            tv.updated_at,
-            tv.name,
-            tv.description,
-            tv.view_url,
+            template.view_id,
+            template.created_at,
+            template.updated_at,
+            template.name,
+            template.description,
+            template.view_url,
             (
-              tc.creator_id,
-              tc.name,
-              tc.avatar_url
+              creator.creator_id,
+              creator.name,
+              creator.avatar_url
             )::template_creator_minimal_type,
-            gtvtc.categories,
-            tv.is_new_template,
-            tv.is_featured
+            template_group_by_category_and_view.categories,
+            template.is_new_template,
+            template.is_featured
           )::template_minimal_type AS template
-        FROM grouped_template_view_template_categories gtvtc
-        JOIN af_template_view tv
-        ON gtvtc.view_id = tv.view_id
-        JOIN af_template_creator tc
-        ON tv.creator_id = tc.creator_id
+        FROM template_group_by_category_and_view
+        JOIN af_template_view template
+        USING (view_id)
+        JOIN af_template_creator creator
+        USING (creator_id)
       ),
-      grouped_template_view_template_with_category_id AS (
+      template_group_by_category AS (
         SELECT
           category_id,
           ARRAY_AGG(template) AS templates
-        FROM grouped_template_view
+        FROM template_group_by_category_and_view_with_creator_and_template_details
         GROUP BY category_id
       )
       SELECT
         (
-          gtv.category_id,
-          tcg.name,
-          tcg.icon,
-          tcg.bg_color
+          template_group_by_category.category_id,
+          category.name,
+          category.icon,
+          category.bg_color
         )::template_category_minimal_type AS "category!: AFTemplateCategoryMinimalRow",
         templates AS "templates!: Vec<AFTemplateMinimalRow>"
-        FROM grouped_template_view_template_with_category_id gtv
-        JOIN af_template_category tcg
-        ON gtv.category_id = tcg.category_id
+        FROM template_group_by_category
+        JOIN af_template_category category
+        USING (category_id)
     "#,
   )
   .fetch_all(executor)

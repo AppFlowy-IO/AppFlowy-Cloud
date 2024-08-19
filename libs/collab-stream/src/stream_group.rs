@@ -1,5 +1,6 @@
-use crate::error::StreamError;
-use crate::model::{MessageId, StreamBinary, StreamMessage, StreamMessageByStreamKey};
+use std::sync::Arc;
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
 use redis::aio::ConnectionManager;
 use redis::streams::{
@@ -7,11 +8,11 @@ use redis::streams::{
   StreamReadOptions,
 };
 use redis::{pipe, AsyncCommands, ErrorKind, RedisResult};
-use std::sync::Arc;
-use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-
 use tracing::{error, info, trace, warn};
+
+use crate::error::StreamError;
+use crate::model::{MessageId, StreamBinary, StreamMessage, StreamMessageByStreamKey};
 
 #[derive(Clone)]
 pub struct StreamGroup {
@@ -67,12 +68,7 @@ impl StreamGroup {
     match result {
       Ok(_) => Ok(()),
       Err(redis_error) => {
-        warn!(
-          "error when creating consumer group `{}` `{}`: {:?}",
-          self.stream_key, self.group_name, redis_error
-        );
-
-        return match redis_error.kind() {
+        let result = match redis_error.kind() {
           ErrorKind::ExtensionError => match redis_error.code() {
             None => Err(StreamError::from(redis_error)),
             Some(code) => {
@@ -85,6 +81,11 @@ impl StreamGroup {
           },
           _ => Err(StreamError::from(redis_error)),
         };
+
+        if result.is_err() {
+          error!("error when creating consumer group: {:?}", result);
+        }
+        result
       },
     }
   }
@@ -219,14 +220,14 @@ impl StreamGroup {
   /// Returns the messages that were not consumed yet. Which means each message is delivered to only
   /// one consumer in the group
   ///
-  /// $: This symbol is used with the XREAD command to indicate that you want to start reading only
+  /// `$`: This symbol is used with the XREAD command to indicate that you want to start reading only
   /// new messages that arrive in the stream after the read command has been issued. Essentially,
   /// it tells Redis to ignore all the messages already in the stream and only listen for new ones.
   /// It's particularly useful when you want to start processing messages from the current moment
   /// forward and don't need to process historical messages.
   ///
-  /// >: This symbol is used with the XREADGROUP command in the context of consumer groups. When a
-  /// consumer group reads from a stream using >, it tells Redis to deliver only messages that have
+  /// `>`: This symbol is used with the XREADGROUP command in the context of consumer groups. When a
+  /// consumer group reads from a stream using `>`, it tells Redis to deliver only messages that have
   /// not yet been acknowledged by any consumer in the group. This allows different consumers in the
   /// group to read and process different messages concurrently, without receiving messages that have
   /// already been processed by another consumer. It's a way to distribute the workload of processing

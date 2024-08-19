@@ -1,13 +1,15 @@
-use collab::core::collab::WeakMutexCollab;
-use collab::preclude::CollabPlugin;
-use collab_entity::CollabType;
-use database::collab::CollabStorage;
-use database_entity::dto::InsertSnapshotParams;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
+
+use collab::preclude::{Collab, CollabPlugin};
+use collab_entity::CollabType;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{error, trace};
 use yrs::TransactionMut;
+
+use database::collab::CollabStorage;
+use database_entity::dto::InsertSnapshotParams;
 
 /// [HistoryPlugin] will be moved to history collab server. For now, it's temporarily placed here.
 pub struct HistoryPlugin<S> {
@@ -16,7 +18,7 @@ pub struct HistoryPlugin<S> {
   collab_type: CollabType,
   storage: Arc<S>,
   did_create_snapshot: AtomicBool,
-  weak_collab: WeakMutexCollab,
+  weak_collab: Weak<RwLock<Collab>>,
   edit_count: AtomicU32,
   is_new_collab: bool,
 }
@@ -29,7 +31,7 @@ where
     workspace_id: String,
     object_id: String,
     collab_type: CollabType,
-    weak_collab: WeakMutexCollab,
+    weak_collab: Weak<RwLock<Collab>>,
     storage: Arc<S>,
     is_new_collab: bool,
   ) -> Self {
@@ -43,6 +45,32 @@ where
       edit_count: Default::default(),
       is_new_collab,
     }
+  }
+
+  async fn enqueue_snapshot(
+    weak_collab: Weak<RwLock<Collab>>,
+    storage: Arc<S>,
+    workspace_id: String,
+    object_id: String,
+    collab_type: CollabType,
+  ) -> Result<(), anyhow::Error> {
+    trace!("trying to enqueue snapshot for object_id: {}", object_id);
+    // Attempt to encode collaboration data for snapshot
+    if let Some(collab) = weak_collab.upgrade() {
+      let lock = collab.read().await;
+      let encode_collab =
+        lock.encode_collab_v1(|collab| collab_type.validate_require_data(collab))?;
+      let bytes = encode_collab.encode_to_bytes()?;
+      let params = InsertSnapshotParams {
+        object_id,
+        encoded_collab_v1: bytes,
+        workspace_id,
+        collab_type,
+      };
+      storage.queue_snapshot(params).await?;
+      trace!("successfully enqueued snapshot creation")
+    }
+    Ok(())
   }
 }
 
@@ -74,43 +102,17 @@ where
     tokio::spawn(async move {
       sleep(std::time::Duration::from_secs(2)).await;
       match storage.should_create_snapshot(&object_id).await {
-        Ok(should_do) => {
-          if should_do {
-            trace!("trying to queue snapshot for object_id: {}", object_id);
-          } else {
-            return;
+        Ok(true) => {
+          if let Err(err) =
+            Self::enqueue_snapshot(weak_collab, storage, workspace_id, object_id, collab_type).await
+          {
+            error!("Failed to enqueue snapshot: {:?}", err);
           }
         },
+        Ok(false) => { /* ignore */ },
         Err(err) => {
           trace!("Failed to check if snapshot should be created: {:?}", err);
         },
-      }
-
-      // Attempt to encode collaboration data for snapshot
-      let encode_collab = weak_collab.upgrade().and_then(|collab| {
-        collab.try_lock().and_then(|lock| {
-          lock
-            .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-            .ok()
-        })
-      });
-
-      if let Some(encode_collab) = encode_collab {
-        match encode_collab.encode_to_bytes() {
-          Ok(bytes) => {
-            let params = InsertSnapshotParams {
-              object_id,
-              encoded_collab_v1: bytes,
-              workspace_id,
-              collab_type,
-            };
-            match storage.queue_snapshot(params).await {
-              Ok(_) => trace!("Successfully queued snapshot creation"),
-              Err(err) => error!("Failed to create snapshot: {:?}", err),
-            }
-          },
-          Err(e) => error!("Failed to encode collaboration data: {:?}", e),
-        }
       }
     });
   }

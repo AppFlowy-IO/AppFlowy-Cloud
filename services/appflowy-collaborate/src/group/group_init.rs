@@ -1,42 +1,40 @@
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
+use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
-use std::collections::VecDeque;
+use futures_util::{SinkExt, StreamExt};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{error, event, info, trace};
+use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
+use yrs::Update;
 
-use std::sync::Arc;
-
-use crate::error::RealtimeError;
-use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, Subscription};
-use crate::group::persistence::GroupPersistence;
-use crate::metrics::CollabMetricsCalculate;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
-use database::collab::CollabStorage;
-
-use collab::core::collab::MutexCollab;
-use futures_util::{SinkExt, StreamExt};
-
-use collab::entity::EncodedCollab;
-
-use crate::indexer::Indexer;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::error::StreamError;
 use collab_stream::model::{CollabUpdateEvent, StreamBinary};
 use collab_stream::stream_group::StreamGroup;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
-use std::time::Duration;
-use tokio::sync::mpsc;
-use tracing::{debug, error, event, trace};
-use yrs::updates::decoder::Decode;
-use yrs::updates::encoder::Encode;
-use yrs::Update;
+use database::collab::CollabStorage;
+
+use crate::error::RealtimeError;
+use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, Subscription};
+use crate::group::persistence::GroupPersistence;
+use crate::indexer::Indexer;
+use crate::metrics::CollabMetricsCalculate;
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
   pub workspace_id: String,
   pub object_id: String,
-  collab: MutexCollab,
+  collab: Arc<RwLock<Collab>>,
   collab_type: CollabType,
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
@@ -45,7 +43,7 @@ pub struct CollabGroup {
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
   metrics_calculate: CollabMetricsCalculate,
-  destroy_group_tx: mpsc::Sender<MutexCollab>,
+  destroy_group_tx: mpsc::Sender<Arc<RwLock<Collab>>>,
 }
 
 impl Drop for CollabGroup {
@@ -61,7 +59,7 @@ impl CollabGroup {
     workspace_id: String,
     object_id: String,
     collab_type: CollabType,
-    collab: MutexCollab,
+    collab: Arc<RwLock<Collab>>,
     metrics_calculate: CollabMetricsCalculate,
     storage: Arc<S>,
     is_new_collab: bool,
@@ -79,13 +77,16 @@ impl CollabGroup {
       edit_state_max_secs,
       is_new_collab,
     ));
-    let broadcast = CollabBroadcast::new(
-      &object_id,
-      10,
-      edit_state.clone(),
-      &collab,
-      CollabUpdateStreamingImpl::new(&workspace_id, &object_id, &collab_redis_stream).await?,
-    );
+    let broadcast = {
+      let lock = collab.read().await;
+      CollabBroadcast::new(
+        &object_id,
+        10,
+        edit_state.clone(),
+        &lock,
+        CollabUpdateStreamingImpl::new(&workspace_id, &object_id, &collab_redis_stream).await?,
+      )
+    };
     let (destroy_group_tx, rx) = mpsc::channel(1);
 
     tokio::spawn(
@@ -95,7 +96,7 @@ impl CollabGroup {
         uid,
         storage,
         edit_state.clone(),
-        collab.downgrade(),
+        Arc::downgrade(&collab),
         collab_type.clone(),
         persistence_interval,
         indexer,
@@ -116,10 +117,9 @@ impl CollabGroup {
   }
 
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
-    let encode_collab = self
-      .collab
-      .lock()
-      .try_encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
+    let lock = self.collab.read().await;
+    let encode_collab =
+      lock.encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
     Ok(encode_collab)
   }
 
@@ -157,7 +157,7 @@ impl CollabGroup {
       subscriber_origin,
       sink,
       stream,
-      self.collab.downgrade(),
+      Arc::downgrade(&self.collab),
       self.metrics_calculate.clone(),
     );
 
@@ -187,20 +187,35 @@ impl CollabGroup {
   /// subscriber
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.broadcast.modified_at.lock();
+
+    // In debug mode, we set the timeout to 60 seconds
     if cfg!(debug_assertions) {
-      modified_at.elapsed().as_secs() > 60 && self.subscribers.is_empty()
+      trace!(
+        "Group:{} is inactive for {} seconds, subscribers: {}",
+        self.object_id,
+        modified_at.elapsed().as_secs(),
+        self.subscribers.len()
+      );
+      modified_at.elapsed().as_secs() > 120
     } else {
       let elapsed_secs = modified_at.elapsed().as_secs();
-      const MAXIMUM_SECS: u64 = 60 * 60 * 12; // 12 hours
-      if elapsed_secs > MAXIMUM_SECS {
-        debug!(
-          "The group:{} is inactive for {} seconds",
-          self.object_id, elapsed_secs
-        );
-        // If the group is inactive for more than 12 hours, mark it as inactive
-        true
+      if elapsed_secs > self.timeout_secs() {
+        // Mark the group as inactive if it has been inactive for more than 3 hours, even if there are subscribers.
+        // Otherwise, return true only if there are no subscribers.
+        const MAXIMUM_SECS: u64 = 3 * 60 * 60;
+        if elapsed_secs > MAXIMUM_SECS {
+          info!(
+            "Group:{} is inactive for {} seconds, subscribers: {}",
+            self.object_id,
+            modified_at.elapsed().as_secs(),
+            self.subscribers.len()
+          );
+          true
+        } else {
+          self.subscribers.is_empty()
+        }
       } else {
-        elapsed_secs > self.timeout_secs() && self.subscribers.is_empty()
+        false
       }
     }
   }
@@ -225,8 +240,8 @@ impl CollabGroup {
   fn timeout_secs(&self) -> u64 {
     match self.collab_type {
       CollabType::Document => 10 * 60, // 10 minutes
-      CollabType::Database | CollabType::DatabaseRow => 60 * 60, // 1 hour
-      CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 2 * 60 * 60, // 2 hours,
+      CollabType::Database | CollabType::DatabaseRow => 30 * 60, // 30 minutes
+      CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 6 * 60 * 60, // 6 hours,
       CollabType::Unknown => {
         10 * 60 // 10 minutes
       },

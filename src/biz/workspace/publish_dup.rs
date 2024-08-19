@@ -428,7 +428,7 @@ impl PublishCollabDuplicator {
       .iter_mut()
       .filter(|(_, b)| b.ty == "grid" || b.ty == "board" || b.ty == "calendar");
 
-    for (_block_id, block) in db_blocks {
+    for (block_id, block) in db_blocks {
       let block_view_id = block
         .data
         .get("view_id")
@@ -455,6 +455,8 @@ impl PublishCollabDuplicator {
           "parent_id".to_string(),
           serde_json::Value::String(new_parent_id),
         );
+      } else {
+        tracing::warn!("deep_copy_doc_databases: view not found: {}", block_view_id);
       }
     }
 
@@ -481,7 +483,13 @@ impl PublishCollabDuplicator {
 
     let published_db = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
     let mut parent_view = self
-      .deep_copy_database_view(txn, view_id.to_string(), published_db, &metadata, parent_id)
+      .deep_copy_database_view(
+        txn,
+        uuid::Uuid::new_v4().to_string(),
+        published_db,
+        &metadata,
+        parent_id,
+      )
       .await?;
     if parent_view.parent_view_id.is_empty() {
       parent_view.parent_view_id.clone_from(doc_view_id);
@@ -865,6 +873,7 @@ fn view_info_by_view_id(meta: &PublishViewMetaData) -> HashMap<String, PublishVi
   let mut acc = HashMap::new();
   acc.insert(meta.view.view_id.clone(), meta.view.clone());
   add_to_view_info(&mut acc, &meta.child_views);
+  add_to_view_info(&mut acc, &meta.ancestor_views);
   acc
 }
 

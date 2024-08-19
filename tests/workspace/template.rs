@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use app_error::ErrorCode;
 use client_api::entity::{
-  AccountLink, CreateTemplateCategoryParams, PublishCollabItem, PublishCollabMetadata,
-  TemplateCategoryType, UpdateTemplateCategoryParams,
+  AccountLink, CreateTemplateCategoryParams, CreateTemplateParams, PublishCollabItem,
+  PublishCollabMetadata, TemplateCategoryType, UpdateTemplateCategoryParams, UpdateTemplateParams,
 };
 use client_api_test::*;
 use collab::core::collab::DataSource;
@@ -331,21 +331,19 @@ async fn test_template_crud() {
     let is_new_template = index % 2 == 0;
     let is_featured = true;
     let category_id = category_1.id;
-    let template = authorized_client
-      .create_template(
-        *view_id,
-        format!("{}-{}", template_name_prefix, view_id).as_str(),
-        "description",
-        "about",
-        "view_url",
-        vec![category_id],
-        creator_1.id,
-        is_new_template,
-        is_featured,
-        vec![],
-      )
-      .await
-      .unwrap();
+    let params = CreateTemplateParams {
+      view_id: *view_id,
+      name: format!("{}-{}", template_name_prefix, view_id),
+      description: "description".to_string(),
+      about: "about".to_string(),
+      view_url: "view_url".to_string(),
+      category_ids: vec![category_id],
+      creator_id: creator_1.id,
+      is_new_template,
+      is_featured,
+      related_view_ids: vec![],
+    };
+    let template = authorized_client.create_template(&params).await.unwrap();
     assert_eq!(template.view_id, *view_id);
     assert_eq!(template.categories.len(), 1);
     assert_eq!(template.categories[0].id, category_id);
@@ -363,21 +361,19 @@ async fn test_template_crud() {
     let is_new_template = index % 2 == 0;
     let is_featured = false;
     let category_id = category_2.id;
-    let template = authorized_client
-      .create_template(
-        *view_id,
-        format!("{}-{}", template_name_prefix, view_id).as_str(),
-        "description",
-        "about",
-        "view_url",
-        vec![category_id],
-        creator_2.id,
-        is_new_template,
-        is_featured,
-        vec![published_view_ids[0]],
-      )
-      .await
-      .unwrap();
+    let params = CreateTemplateParams {
+      view_id: *view_id,
+      name: format!("{}-{}", template_name_prefix, view_id),
+      description: "description".to_string(),
+      about: "about".to_string(),
+      view_url: "view_url".to_string(),
+      category_ids: vec![category_id],
+      creator_id: creator_2.id,
+      is_new_template,
+      is_featured,
+      related_view_ids: vec![published_view_ids[0]],
+    };
+    let template = authorized_client.create_template(&params).await.unwrap();
     assert_eq!(template.related_templates.len(), 1);
     assert_eq!(template.related_templates[0].view_id, published_view_ids[0]);
     assert_eq!(template.related_templates[0].creator.id, creator_1.id);
@@ -435,19 +431,19 @@ async fn test_template_crud() {
   assert_eq!(template.related_templates.len(), 1);
   assert_eq!(template.related_templates[0].view_id, published_view_ids[0]);
 
+  let params = UpdateTemplateParams {
+    name: format!("{}-{}", template_name_prefix, published_view_ids[3]),
+    description: "description".to_string(),
+    about: "about".to_string(),
+    view_url: "view_url".to_string(),
+    category_ids: vec![category_1.id],
+    creator_id: creator_2.id,
+    is_new_template: false,
+    is_featured: true,
+    related_view_ids: vec![published_view_ids[0]],
+  };
   authorized_client
-    .update_template(
-      published_view_ids[3],
-      format!("{}-{}", template_name_prefix, published_view_ids[3]).as_str(),
-      "description",
-      "about",
-      "view_url",
-      vec![category_1.id],
-      creator_2.id,
-      false,
-      true,
-      vec![published_view_ids[0]],
-    )
+    .update_template(published_view_ids[3], &params)
     .await
     .unwrap();
 

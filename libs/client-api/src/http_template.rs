@@ -214,36 +214,15 @@ impl Client {
       .into_data()
   }
 
-  #[allow(clippy::too_many_arguments)]
   pub async fn create_template(
     &self,
-    view_id: Uuid,
-    name: &str,
-    description: &str,
-    about: &str,
-    view_url: &str,
-    category_ids: Vec<Uuid>,
-    creator_id: Uuid,
-    is_new_template: bool,
-    is_featured: bool,
-    related_view_ids: Vec<Uuid>,
+    params: &CreateTemplateParams,
   ) -> Result<Template, AppResponseError> {
     let url = template_resources_url(&self.base_url);
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&CreateTemplateParams {
-        view_id,
-        name: name.to_string(),
-        description: description.to_string(),
-        about: about.to_string(),
-        view_url: view_url.to_string(),
-        category_ids,
-        creator_id,
-        is_new_template,
-        is_featured,
-        related_view_ids,
-      })
+      .json(params)
       .send()
       .await?;
 
@@ -293,31 +272,13 @@ impl Client {
   pub async fn update_template(
     &self,
     view_id: Uuid,
-    name: &str,
-    description: &str,
-    about: &str,
-    view_url: &str,
-    category_ids: Vec<Uuid>,
-    creator_id: Uuid,
-    is_new_template: bool,
-    is_featured: bool,
-    related_view_ids: Vec<Uuid>,
+    params: &UpdateTemplateParams,
   ) -> Result<Template, AppResponseError> {
     let url = template_resource_url(&self.base_url, view_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
-      .json(&UpdateTemplateParams {
-        name: name.to_string(),
-        description: description.to_string(),
-        about: about.to_string(),
-        view_url: view_url.to_string(),
-        category_ids,
-        creator_id,
-        is_new_template,
-        is_featured,
-        related_view_ids,
-      })
+      .json(params)
       .send()
       .await?;
 

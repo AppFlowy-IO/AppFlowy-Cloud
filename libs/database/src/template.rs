@@ -1,15 +1,14 @@
 use app_error::AppError;
 use database_entity::dto::{
-  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator,
-  TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
+  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateGroup,
+  TemplateMinimal,
 };
 use sqlx::{Executor, Postgres, QueryBuilder};
 use uuid::Uuid;
 
 use crate::pg_row::{
   AFTemplateCategoryMinimalRow, AFTemplateCategoryRow, AFTemplateCategoryTypeColumn,
-  AFTemplateCreatorMinimalColumn, AFTemplateCreatorRow, AFTemplateGroupRow, AFTemplateMinimalRow,
-  AFTemplateRow, AccountLinkColumn,
+  AFTemplateCreatorRow, AFTemplateGroupRow, AFTemplateMinimalRow, AFTemplateRow, AccountLinkColumn,
 };
 
 pub async fn insert_new_template_category<'a, E: Executor<'a, Database = Postgres>>(

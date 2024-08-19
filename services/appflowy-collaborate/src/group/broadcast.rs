@@ -1,11 +1,22 @@
-use crate::error::RealtimeError;
-use crate::group::group_init::EditState;
-use crate::group::protocol::ServerSyncProtocol;
-use crate::metrics::CollabMetricsCalculate;
+use std::borrow::BorrowMut;
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Weak};
+
 use anyhow::anyhow;
 use bytes::Bytes;
-use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
+use futures_util::{SinkExt, StreamExt};
+use tokio::select;
+use tokio::sync::broadcast::{channel, Sender};
+use tokio::sync::RwLock;
+use tokio::time::Instant;
+use tracing::{error, trace, warn};
+use yrs::encoding::write::Write;
+use yrs::updates::decoder::DecoderV1;
+use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::Subscription as YrsSubscription;
+
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::{AckCode, MsgId};
@@ -14,20 +25,11 @@ use collab_rt_entity::{
 };
 use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
-use futures_util::{SinkExt, StreamExt};
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::select;
 
-use tokio::sync::broadcast::{channel, Sender};
-
-use tokio::time::{sleep, Instant};
-use tracing::{error, trace, warn};
-use yrs::encoding::write::Write;
-use yrs::updates::decoder::DecoderV1;
-use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::Subscription as YrsSubscription;
+use crate::error::RealtimeError;
+use crate::group::group_init::EditState;
+use crate::group::protocol::ServerSyncProtocol;
+use crate::metrics::CollabMetricsCalculate;
 
 pub trait CollabUpdateStreaming: 'static + Send + Sync {
   fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError>;
@@ -69,7 +71,7 @@ impl CollabBroadcast {
     object_id: &str,
     buffer_capacity: usize,
     edit_state: Arc<EditState>,
-    collab: &MutexCollab,
+    collab: &Collab,
     update_streaming: impl CollabUpdateStreaming,
   ) -> Self {
     let update_streaming = Arc::new(update_streaming);
@@ -89,7 +91,7 @@ impl CollabBroadcast {
     this
   }
 
-  fn observe_collab_changes(&mut self, collab: &MutexCollab) {
+  fn observe_collab_changes(&mut self, collab: &Collab) {
     let (doc_sub, awareness_sub) = {
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
@@ -103,8 +105,8 @@ impl CollabBroadcast {
       // an update event. This event is then broadcast to all connected clients. After broadcasting, all
       // connected clients will receive the update and apply it to their local document state.
       let doc_sub = collab
-        .lock()
-        .get_doc()
+        .get_awareness()
+        .doc()
         .observe_update_v1(move |txn, event| {
           let seq_num = edit_state.increment_edit_count() + 1;
           let origin = CollabOrigin::from(txn);
@@ -132,8 +134,8 @@ impl CollabBroadcast {
 
       // Observer the awareness's update and broadcast it to all subscribers.
       let awareness_sub = collab
-        .lock()
-        .observe_awareness(move |awareness, event, _origin| {
+        .get_awareness()
+        .on_update(move |awareness, event, _origin| {
           if let Ok(awareness_update) = awareness.update_with_clients(event.all_changes()) {
             let payload = Message::Awareness(awareness_update).encode_v1();
             let msg = AwarenessSync::new(cloned_oid.clone(), payload, CollabOrigin::Empty);
@@ -183,7 +185,7 @@ impl CollabBroadcast {
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
-    collab: WeakMutexCollab,
+    collab: Weak<RwLock<Collab>>,
     metrics_calculate: CollabMetricsCalculate,
   ) -> Subscription
   where
@@ -277,7 +279,7 @@ async fn handle_client_messages<Sink>(
   object_id: &str,
   message_map: MessageByObjectId,
   sink: &mut Sink,
-  collab: MutexCollab,
+  collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &CollabMetricsCalculate,
   edit_state: &Arc<EditState>,
 ) where
@@ -335,7 +337,7 @@ async fn handle_client_messages<Sink>(
 async fn handle_one_client_message(
   object_id: &str,
   collab_msg: &ClientCollabMessage,
-  collab: &MutexCollab,
+  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &CollabMetricsCalculate,
   edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
@@ -363,42 +365,24 @@ async fn handle_one_client_message(
     message_origin
   );
 
-  // Retry mechanism for lock timeout errors
-  let mut attempt = 0;
-  let max_attempts = 3;
-
-  // calling the handle_one_message_payload in a loop to handle the lock timeout error. It will retry
-  // 3 times before returning an error.
-  loop {
-    match handle_one_message_payload(
-      object_id,
-      message_origin.clone(),
-      msg_id,
-      collab_msg.payload(),
-      collab,
-      metrics_calculate,
-      seq_num,
-    )
-    .await
-    {
-      Ok(ack) => {
-        update_last_sync_at(collab);
-        return Ok(ack);
-      },
-      Err(err) if err.is_lock_timeout() => {
-        attempt += 1;
-        if attempt >= max_attempts {
-          return Err(RealtimeError::Internal(anyhow!(
-            "Lock timeout error after maximum retries"
-          )));
-        }
-        trace!("Lock timeout, retrying... attempt: {}", attempt);
-        sleep(Duration::from_millis(300)).await;
-      },
-      Err(err) => {
-        return Err(err);
-      },
-    }
+  match handle_one_message_payload(
+    object_id,
+    message_origin.clone(),
+    msg_id,
+    collab_msg.payload(),
+    collab,
+    metrics_calculate,
+    seq_num,
+  )
+  .await
+  {
+    Ok(ack) => {
+      let mut lock = collab.write().await;
+      let collab: &mut Collab = (*lock).borrow_mut();
+      collab.set_last_sync_at(chrono::Utc::now().timestamp());
+      Ok(ack)
+    },
+    Err(err) => Err(err),
   }
 }
 
@@ -408,7 +392,7 @@ async fn handle_one_message_payload(
   message_origin: CollabOrigin,
   msg_id: MsgId,
   payload: &Bytes,
-  collab: &MutexCollab,
+  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &CollabMetricsCalculate,
   seq_num: u32,
 ) -> Result<CollabAck, RealtimeError> {
@@ -417,110 +401,100 @@ async fn handle_one_message_payload(
     .acquire_collab_lock_count
     .fetch_add(1, Ordering::Relaxed);
 
-  let cloned_object_id = object_id.to_string();
-  let mutex_collab = collab.clone();
-  let metrics_calculate = metrics_calculate.clone();
-  let cloned_collab_origin = message_origin.clone();
-
   // Spawn a blocking task to handle the message
-  let result = tokio::task::spawn_blocking(move || {
-    let mut collab_lock = match mutex_collab.try_lock_for(Duration::from_millis(300)) {
-      Some(collab) => collab,
-      None => {
-        metrics_calculate
-          .acquire_collab_lock_fail_count
-          .fetch_add(1, Ordering::Relaxed);
-        return Err(RealtimeError::LockTimeout);
-      },
-    };
-    let mut decoder = DecoderV1::from(payload.as_ref());
-    let reader = MessageReader::new(&mut decoder);
-    let mut ack_response = None;
-    for msg in reader {
-      match msg {
-        Ok(msg) => {
-          match handle_message_follow_protocol(
-            &message_origin,
-            &ServerSyncProtocol,
-            &mut collab_lock,
-            msg,
-          ) {
-            Ok(payload) => {
-              metrics_calculate
-                .apply_update_count
-                .fetch_add(1, Ordering::Relaxed);
-              // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
-              // send one ack back to the client.
-              if ack_response.is_none() {
-                ack_response = Some(
-                  CollabAck::new(
-                    message_origin.clone(),
-                    cloned_object_id.to_string(),
-                    msg_id,
-                    seq_num,
-                  )
-                  .with_payload(payload.unwrap_or_default()),
-                );
-              }
-            },
-            Err(err) => {
-              metrics_calculate
-                .apply_update_failed_count
-                .fetch_add(1, Ordering::Relaxed);
-              let code = ack_code_from_error(&err);
-              let payload = match err {
-                RTProtocolError::MissUpdates {
-                  state_vector_v1,
-                  reason: _,
-                } => state_vector_v1.unwrap_or_default(),
-                _ => vec![],
-              };
-
-              ack_response = Some(
-                CollabAck::new(
-                  message_origin.clone(),
-                  cloned_object_id.to_string(),
-                  msg_id,
-                  seq_num,
-                )
-                .with_code(code)
-                .with_payload(payload),
-              );
-
-              break;
-            },
-          }
-        },
-        Err(e) => {
-          error!("{} => parse sync message failed: {:?}", cloned_object_id, e);
-          break;
-        },
-      }
-    }
-    Ok(ack_response)
-  })
+  let result = handle_message(
+    &payload,
+    &message_origin,
+    collab,
+    metrics_calculate,
+    object_id,
+    msg_id,
+    seq_num,
+  )
   .await;
 
   match result {
-    Ok(inner_result) => match inner_result? {
+    Ok(inner_result) => match inner_result {
       Some(response) => Ok(response),
       None => Err(RealtimeError::UnexpectedData("No ack response")),
     },
-    Err(err) => {
-      // Currently, panic only happens when calling handle_message_follow_protocol.
-      if err.is_panic() {
-        Ok(
-          CollabAck::new(cloned_collab_origin, object_id.to_string(), msg_id, seq_num)
-            .with_code(AckCode::CannotApplyUpdate),
-        )
-      } else {
-        Err(RealtimeError::Internal(anyhow!(
-          "fail to handle message:{}",
-          err
-        )))
-      }
-    },
+    Err(err) => Err(RealtimeError::Internal(anyhow!(
+      "fail to handle message:{}",
+      err
+    ))),
   }
+}
+
+async fn handle_message(
+  payload: &Bytes,
+  message_origin: &CollabOrigin,
+  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
+  metrics_calculate: &CollabMetricsCalculate,
+  object_id: &str,
+  msg_id: MsgId,
+  seq_num: u32,
+) -> Result<Option<CollabAck>, RealtimeError> {
+  let mut decoder = DecoderV1::from(payload.as_ref());
+  let reader = MessageReader::new(&mut decoder);
+  let mut ack_response = None;
+  for msg in reader {
+    match msg {
+      Ok(msg) => {
+        match handle_message_follow_protocol(message_origin, &ServerSyncProtocol, collab, msg).await
+        {
+          Ok(payload) => {
+            metrics_calculate
+              .apply_update_count
+              .fetch_add(1, Ordering::Relaxed);
+            // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
+            // send one ack back to the client.
+            if ack_response.is_none() {
+              ack_response = Some(
+                CollabAck::new(
+                  message_origin.clone(),
+                  object_id.to_string(),
+                  msg_id,
+                  seq_num,
+                )
+                .with_payload(payload.unwrap_or_default()),
+              );
+            }
+          },
+          Err(err) => {
+            metrics_calculate
+              .apply_update_failed_count
+              .fetch_add(1, Ordering::Relaxed);
+            let code = ack_code_from_error(&err);
+            let payload = match err {
+              RTProtocolError::MissUpdates {
+                state_vector_v1,
+                reason: _,
+              } => state_vector_v1.unwrap_or_default(),
+              _ => vec![],
+            };
+
+            ack_response = Some(
+              CollabAck::new(
+                message_origin.clone(),
+                object_id.to_string(),
+                msg_id,
+                seq_num,
+              )
+              .with_code(code)
+              .with_payload(payload),
+            );
+
+            break;
+          },
+        }
+      },
+      Err(e) => {
+        error!("{} => parse sync message failed: {:?}", object_id, e);
+        break;
+      },
+    }
+  }
+  Ok(ack_response)
 }
 
 #[inline]
@@ -577,11 +551,4 @@ fn gen_update_message(update: &[u8]) -> Vec<u8> {
   encoder.write_var(MSG_SYNC_UPDATE);
   encoder.write_buf(update);
   encoder.to_vec()
-}
-
-#[inline]
-fn update_last_sync_at(collab: &MutexCollab) {
-  if let Some(collab) = collab.try_lock() {
-    collab.set_last_sync_at(chrono::Utc::now().timestamp());
-  }
 }

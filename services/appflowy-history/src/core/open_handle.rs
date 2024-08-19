@@ -1,25 +1,28 @@
+use std::sync::{Arc, Weak};
+use std::time::Duration;
+
+use collab::core::collab::DataSource;
+use collab::core::origin::CollabOrigin;
+use collab::error::CollabError;
+use collab::preclude::updates::decoder::Decode;
+use collab::preclude::{Collab, Update};
+use collab_entity::CollabType;
+use tokio::sync::RwLock;
+use tokio::time::interval;
+use tracing::{error, trace};
+
+use collab_stream::model::{CollabUpdateEvent, StreamMessage};
+use collab_stream::stream_group::{ReadOption, StreamGroup};
+use tonic_proto::history::HistoryStatePb;
+
 use crate::biz::history::CollabHistory;
 use crate::biz::persistence::HistoryPersistence;
 use crate::error::HistoryError;
 
-use collab::core::collab::{DataSource, MutexCollab, TransactionMutExt};
-use collab::core::origin::CollabOrigin;
-use collab::preclude::updates::decoder::Decode;
-use collab::preclude::{Collab, Update};
-use collab_entity::CollabType;
-use collab_stream::model::{CollabUpdateEvent, StreamMessage};
-use collab_stream::stream_group::{ReadOption, StreamGroup};
-use parking_lot::MutexGuard;
-use std::sync::{Arc, Weak};
-use std::time::Duration;
-use tokio::time::interval;
-use tonic_proto::history::HistoryStatePb;
-use tracing::{error, trace};
-
 const CONSUMER_NAME: &str = "open_collab_handle";
 pub struct OpenCollabHandle {
   pub object_id: String,
-  pub mutex_collab: MutexCollab,
+  pub collab: Arc<RwLock<Collab>>,
   pub collab_type: CollabType,
   pub history: Arc<CollabHistory>,
 
@@ -37,34 +40,23 @@ impl OpenCollabHandle {
     update_stream: Option<StreamGroup>,
     history_persistence: Option<Arc<HistoryPersistence>>,
   ) -> Result<Self, HistoryError> {
-    let mutex_collab = {
-      // Must set skip_gc = true to avoid the garbage collection of the collab.
-      let mut collab = Collab::new_with_source(
-        CollabOrigin::Empty,
-        object_id,
-        DataSource::DocStateV1(doc_state),
-        vec![],
-        true,
-      )?;
-      collab.initialize();
-      MutexCollab::new(collab)
-    };
+    // Must set skip_gc = true to avoid the garbage collection of the collab.
+    let mut collab = Collab::new_with_source(
+      CollabOrigin::Empty,
+      object_id,
+      DataSource::DocStateV1(doc_state),
+      vec![],
+      true,
+    )?;
+    collab.initialize();
+    let collab = Arc::new(RwLock::new(collab));
 
     let object_id = object_id.to_string();
-    let history = Arc::new(CollabHistory::new(
-      &object_id,
-      mutex_collab.clone(),
-      collab_type.clone(),
-    )?);
+    let history =
+      Arc::new(CollabHistory::new(&object_id, collab.clone(), collab_type.clone()).await);
 
     // Spawn a task to receive updates from the update stream.
-    spawn_recv_update(
-      &object_id,
-      &collab_type,
-      mutex_collab.clone(),
-      update_stream,
-    )
-    .await?;
+    spawn_recv_update(&object_id, &collab_type, collab.clone(), update_stream).await?;
 
     // spawn a task periodically to save the history to the persistence.
     if let Some(persistence) = &history_persistence {
@@ -73,7 +65,7 @@ impl OpenCollabHandle {
 
     Ok(Self {
       object_id,
-      mutex_collab,
+      collab,
       collab_type,
       history,
       history_persistence,
@@ -81,10 +73,7 @@ impl OpenCollabHandle {
   }
 
   pub async fn history_state(&self) -> Result<HistoryStatePb, HistoryError> {
-    let lock_guard = self
-      .mutex_collab
-      .try_lock()
-      .ok_or(HistoryError::TryLockFail)?;
+    let lock_guard = self.collab.read().await;
     let encode_collab =
       lock_guard.encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
     Ok(HistoryStatePb {
@@ -100,26 +89,13 @@ impl OpenCollabHandle {
     }
     Ok(())
   }
-
-  /// Apply an update to the collab.
-  /// The update is encoded in the v1 format.
-  pub fn apply_update_v1(&self, update: &[u8]) -> Result<(), HistoryError> {
-    let lock_guard = self.mutex_collab.lock();
-    let mut txn = lock_guard.try_transaction_mut()?;
-    let decode_update =
-      Update::decode_v1(update).map_err(|err| HistoryError::Internal(err.into()))?;
-    txn.apply_update(decode_update);
-    drop(txn);
-    drop(lock_guard);
-    Ok(())
-  }
 }
 
 /// Spawns an asynchronous task to continuously receive and process updates from a given update stream.
 async fn spawn_recv_update(
   object_id: &str,
   collab_type: &CollabType,
-  mutex_collab: MutexCollab,
+  collab: Arc<RwLock<Collab>>,
   update_stream: Option<StreamGroup>,
 ) -> Result<(), HistoryError> {
   let mut update_stream = match update_stream {
@@ -141,7 +117,7 @@ async fn spawn_recv_update(
     if let Err(err) = process_messages(
       &mut update_stream,
       stale_messages,
-      mutex_collab.clone(),
+      collab.clone(),
       &object_id,
       &collab_type,
     )
@@ -161,14 +137,14 @@ async fn spawn_recv_update(
   }
 
   // spawn a task to receive updates from the update stream.
-  let weak_mutex_collab = mutex_collab.downgrade();
+  let weak_collab = Arc::downgrade(&collab);
   tokio::spawn(async move {
     let mut interval = interval(interval_duration);
     loop {
       interval.tick().await;
 
       // Check if the mutex_collab is still alive. If not, break the loop.
-      if let Some(mutex_collab) = weak_mutex_collab.upgrade() {
+      if let Some(collab) = weak_collab.upgrade() {
         if let Ok(messages) = update_stream
           .consumer_messages(CONSUMER_NAME, ReadOption::Undelivered)
           .await
@@ -181,7 +157,7 @@ async fn spawn_recv_update(
           if let Err(e) = process_messages(
             &mut update_stream,
             messages,
-            mutex_collab,
+            collab,
             &object_id,
             &collab_type,
           )
@@ -203,42 +179,25 @@ async fn spawn_recv_update(
 async fn process_messages(
   update_stream: &mut StreamGroup,
   messages: Vec<StreamMessage>,
-  mutex_collab: MutexCollab,
+  collab: Arc<RwLock<Collab>>,
   _object_id: &str,
   _collab_type: &CollabType,
 ) -> Result<(), HistoryError> {
-  let processing_task = tokio::task::spawn_blocking(move || {
-    if let Some(lock_guard) = mutex_collab.try_lock() {
-      apply_updates(&messages, &lock_guard)?;
-    }
-    Ok::<_, HistoryError>(messages)
-  });
-
-  let messages = processing_task
-    .await
-    .map_err(|err| HistoryError::Internal(err.into()))??;
+  let mut lock = collab.write().await;
+  apply_updates(&messages, &mut lock)?;
+  drop(lock);
   update_stream.ack_messages(&messages).await?;
   Ok(())
 }
 
 /// Applies decoded updates from messages to the given locked collaboration object.
-fn apply_updates(
-  messages: &[StreamMessage],
-  lock_guard: &MutexGuard<Collab>,
-) -> Result<(), HistoryError> {
+fn apply_updates(messages: &[StreamMessage], collab: &mut Collab) -> Result<(), HistoryError> {
+  let mut txn = collab.transact_mut();
   for message in messages {
-    match CollabUpdateEvent::decode(&message.data) {
-      Ok(event) => match event {
-        CollabUpdateEvent::UpdateV1 { encode_update } => match Update::decode_v1(&encode_update) {
-          Ok(update) => {
-            let mut txn = lock_guard.try_transaction_mut()?;
-            txn.try_apply_update(update)?;
-          },
-          Err(err) => error!("Failed to decode update: {:?}", err),
-        },
-      },
-      Err(err) => error!("Failed to decode update event: {:?}", err),
-    }
+    let CollabUpdateEvent::UpdateV1 { encode_update } = CollabUpdateEvent::decode(&message.data)?;
+    let update = Update::decode_v1(&encode_update)
+      .map_err(|e| CollabError::YrsEncodeStateError(e.to_string()))?;
+    txn.apply_update(update);
   }
   Ok(())
 }

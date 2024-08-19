@@ -1,8 +1,3 @@
-use crate::api::util::PayloadReader;
-use crate::biz::workspace::ops::{
-  create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
-  get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
-};
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
@@ -36,10 +31,15 @@ use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 
+use crate::api::util::PayloadReader;
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
 use crate::biz::workspace;
+use crate::biz::workspace::ops::{
+  create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
+  get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
+};
 use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
 
@@ -922,7 +922,10 @@ async fn update_collab_handler(
     {
       let encoded = EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)
         .map_err(|e| AppError::Internal(e.into()))?;
-      match indexer.index_encoded(&params.object_id, encoded).await {
+      match indexer
+        .index(&params.object_id, encoded.doc_state.into())
+        .await
+      {
         Ok(embeddings) => params.embeddings = embeddings,
         Err(err) => tracing::warn!(
           "failed to fetch embeddings for document {}: {}",

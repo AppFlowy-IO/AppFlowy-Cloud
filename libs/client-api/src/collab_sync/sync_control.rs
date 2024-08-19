@@ -1,27 +1,27 @@
-use crate::af_spawn;
-use crate::collab_sync::collab_stream::ObserveCollab;
-use crate::collab_sync::{
-  CollabSink, CollabSinkRunner, CollabSyncState, MissUpdateReason, SinkSignal, SyncError,
-  SyncObject,
-};
-
-use collab::core::awareness::Awareness;
-use collab::core::collab::MutexCollab;
-use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
-use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage, UpdateSync};
-use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol, Message, SyncMessage};
-use futures_util::{SinkExt, StreamExt};
 use std::fmt::Display;
 use std::ops::Deref;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, watch};
 
+use collab::core::awareness::Awareness;
+use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
+use futures_util::{SinkExt, StreamExt};
+use tokio::sync::{broadcast, watch};
 use tracing::{instrument, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector};
+
+use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage, UpdateSync};
+use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol, Message, SyncMessage};
+
+use crate::af_spawn;
+use crate::collab_sync::collab_stream::{CollabRef, ObserveCollab};
+use crate::collab_sync::{
+  CollabSink, CollabSinkRunner, CollabSyncState, MissUpdateReason, SinkSignal, SyncError,
+  SyncObject,
+};
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
 
@@ -59,7 +59,7 @@ where
     sink: Sink,
     sink_config: SinkConfig,
     stream: Stream,
-    collab: Weak<MutexCollab>,
+    collab: CollabRef,
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);
@@ -116,7 +116,11 @@ where
   }
 
   /// Returns bool indicating whether the init sync is queued.
-  pub fn init_sync(&self, collab: &Collab, reason: SyncReason) -> Result<bool, SyncError> {
+  pub fn init_sync(
+    &self,
+    collab: &collab::preclude::Collab,
+    reason: SyncReason,
+  ) -> Result<bool, SyncError> {
     start_sync(
       self.origin.clone(),
       &self.object,

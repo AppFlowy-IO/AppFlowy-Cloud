@@ -1,17 +1,18 @@
-use crate::document::parser::JsonToDocumentParser;
-use crate::hierarchy_builder::WorkspaceViewBuilder;
-use crate::{TemplateData, WorkspaceTemplate};
+use std::sync::Arc;
+
 use anyhow::Error;
 use async_trait::async_trait;
-use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::ViewLayout;
-use std::sync::Arc;
 use tokio::sync::RwLock;
+
+use crate::document::parser::JsonToDocumentParser;
+use crate::hierarchy_builder::WorkspaceViewBuilder;
+use crate::{TemplateData, WorkspaceTemplate};
 
 /// This template generates a document containing a 'read me' guide.
 /// It ensures that at least one view is created for the document.
@@ -26,13 +27,8 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
   async fn create(&self, object_id: String) -> anyhow::Result<TemplateData> {
     let data = tokio::task::spawn_blocking(|| {
       let document_data = get_started_document_data().unwrap();
-      let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
-        CollabOrigin::Empty,
-        &object_id,
-        vec![],
-        false,
-      )));
-      let document = Document::create_with_data(collab, document_data)?;
+      let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
+      let document = Document::open_with(collab, Some(document_data))?;
       let data = document.encode_collab()?;
       Ok::<_, anyhow::Error>(TemplateData {
         object_id,
@@ -90,13 +86,8 @@ impl WorkspaceTemplate for DocumentTemplate {
   }
 
   async fn create(&self, object_id: String) -> anyhow::Result<TemplateData> {
-    let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
-      CollabOrigin::Empty,
-      &object_id,
-      vec![],
-      false,
-    )));
-    let document = Document::create_with_data(collab, self.0.clone())?;
+    let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
+    let document = Document::open_with(collab, Some(self.0.clone()))?;
     let data = document.encode_collab()?;
     Ok(TemplateData {
       object_id,

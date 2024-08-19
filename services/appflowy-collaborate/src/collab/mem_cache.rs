@@ -242,6 +242,7 @@ impl CollabMemCache {
   /// A `RedisResult<Option<(i64, Vec<u8>)>>` where:
   /// - `i64` is the timestamp of the data.
   /// - `Vec<u8>` is the binary data.
+  ///
   /// The function returns `Ok(None)` if no data is found for the given `object_id`.
   async fn get_data_with_timestamp(
     &self,

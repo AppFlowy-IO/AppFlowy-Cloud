@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use collab::core::collab::{DataSource, MutexCollab};
+use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{error, instrument, trace};
 
 use access_control::collab::RealtimeAccessControl;
@@ -177,22 +177,15 @@ where
     }
 
     let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
-    let (mutex_collab, encode_collab) = {
-      let (mutex_collab, encode_collab) = match result {
+    let (collab, encode_collab) = {
+      let (collab, encode_collab) = match result {
         Ok(value) => value,
         Err(err) => {
           if err.is_record_not_found() {
             is_new_collab = true;
-            let mutex_collab = MutexCollab::new(Collab::new_with_origin(
-              CollabOrigin::Server,
-              object_id,
-              vec![],
-              false,
-            ));
-            let encode_collab = mutex_collab
-              .lock()
-              .encode_collab_v1(|_| Ok::<_, RealtimeError>(()))?;
-            (mutex_collab, encode_collab)
+            let collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![], false);
+            let encode_collab = collab.encode_collab_v1(|_| Ok::<_, RealtimeError>(()))?;
+            (collab, encode_collab)
           } else {
             return Err(RealtimeError::CreateGroupFailed(
               CreateGroupFailedReason::CannotGetCollabData,
@@ -201,18 +194,23 @@ where
         },
       };
 
+      let collab = Arc::new(RwLock::new(collab));
       let plugins: Vec<Box<dyn CollabPlugin>> = vec![Box::new(HistoryPlugin::new(
         workspace_id.to_string(),
         object_id.to_string(),
         collab_type.clone(),
-        mutex_collab.downgrade(),
+        Arc::downgrade(&collab),
         self.storage.clone(),
         is_new_collab,
       ))];
 
-      mutex_collab.lock().add_plugins(plugins);
-      mutex_collab.lock().initialize();
-      (mutex_collab, encode_collab)
+      {
+        // initialize
+        let mut collab = collab.write().await;
+        collab.add_plugins(plugins);
+        collab.initialize();
+      }
+      (collab, encode_collab)
     };
 
     let cloned_control_event_stream = self.control_event_stream.clone();
@@ -260,7 +258,7 @@ where
         workspace_id.to_string(),
         object_id.to_string(),
         collab_type,
-        mutex_collab,
+        collab,
         self.metrics_calculate.clone(),
         self.storage.clone(),
         is_new_collab,
@@ -283,7 +281,7 @@ async fn load_collab<S>(
   object_id: &str,
   params: QueryCollabParams,
   storage: Arc<S>,
-) -> Result<(MutexCollab, EncodedCollab), AppError>
+) -> Result<(Collab, EncodedCollab), AppError>
 where
   S: CollabStorage,
 {
@@ -296,8 +294,7 @@ where
     DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
     vec![],
     false,
-  )
-  .map(MutexCollab::new);
+  );
   match result {
     Ok(collab) => Ok((collab, encode_collab)),
     Err(err) => load_collab_from_snapshot(object_id, params, storage)
@@ -310,7 +307,7 @@ async fn load_collab_from_snapshot<S>(
   object_id: &str,
   params: QueryCollabParams,
   storage: Arc<S>,
-) -> Option<(MutexCollab, EncodedCollab)>
+) -> Option<(Collab, EncodedCollab)>
 where
   S: CollabStorage,
 {
@@ -329,7 +326,7 @@ where
     false,
   )
   .ok()?;
-  Some((MutexCollab::new(collab), encode_collab))
+  Some((collab, encode_collab))
 }
 
 async fn get_latest_snapshot<S>(

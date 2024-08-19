@@ -1,9 +1,9 @@
-use app_error::AppError;
+use std::sync::Arc;
 
+use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::{Any, Collab};
+use collab::preclude::{ArrayRef, Collab, Map};
 use collab_entity::define::WORKSPACE_DATABASES;
 use collab_entity::CollabType;
 use collab_user::core::UserAwareness;
@@ -11,7 +11,6 @@ use database::collab::CollabStorage;
 use database::pg_row::AFWorkspaceRow;
 use database_entity::dto::CollabParams;
 use sqlx::Transaction;
-use std::sync::Arc;
 use tracing::{debug, error, instrument, trace};
 use uuid::Uuid;
 use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
@@ -98,17 +97,11 @@ async fn create_user_awareness(
 ) -> Result<String, AppError> {
   let object_id = user_awareness_object_id(user_uuid, workspace_id).to_string();
   let collab_type = CollabType::UserAwareness;
-  let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
-    CollabOrigin::Empty,
-    object_id.clone(),
-    vec![],
-    false,
-  )));
+  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id.clone(), vec![], false);
 
   // TODO(nathan): Maybe using hardcode encoded collab
-  let _ = UserAwareness::create(collab.clone(), None);
-  let encode_collab = collab
-    .lock()
+  let user_awareness = UserAwareness::open(collab, None);
+  let encode_collab = user_awareness
     .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
     .map_err(AppError::Internal)?;
   let encoded_collab_v1 = encode_collab
@@ -139,11 +132,13 @@ async fn create_workspace_database_collab(
   txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<(), AppError> {
   let collab_type = CollabType::WorkspaceDatabase;
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
-  let _ = collab.with_origin_transact_mut(|txn| {
-    collab.create_array_with_txn::<Any>(txn, WORKSPACE_DATABASES, vec![]);
-    Ok::<(), AppError>(())
-  });
+  let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+  {
+    let mut txn = collab.context.transact_mut();
+    let _ = collab
+      .data
+      .get_or_init::<_, ArrayRef>(&mut txn, WORKSPACE_DATABASES);
+  };
 
   let encode_collab = collab
     .encode_collab_v1(|collab| collab_type.validate_require_data(collab))

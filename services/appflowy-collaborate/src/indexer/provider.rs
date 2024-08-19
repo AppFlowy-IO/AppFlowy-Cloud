@@ -1,19 +1,16 @@
-use actix::dev::Stream;
-use async_stream::try_stream;
-use async_trait::async_trait;
-use collab::core::collab::{DataSource, MutexCollab};
-use collab::core::origin::CollabOrigin;
-use collab::entity::EncodedCollab;
-use collab::preclude::Collab;
-use collab_entity::CollabType;
-use sqlx::PgPool;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
+
+use actix::dev::Stream;
+use async_stream::try_stream;
+use async_trait::async_trait;
+use collab::entity::EncodedCollab;
+use collab_entity::CollabType;
+use sqlx::PgPool;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use crate::indexer::DocumentIndexer;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use database::collab::select_blob_from_af_collab;
@@ -21,25 +18,15 @@ use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
 use database_entity::dto::{AFCollabEmbeddings, CollabParams};
 
+use crate::indexer::DocumentIndexer;
+
 #[async_trait]
 pub trait Indexer: Send + Sync {
-  async fn index(&self, collab: MutexCollab) -> Result<Option<AFCollabEmbeddings>, AppError>;
-
-  async fn index_encoded(
+  async fn index(
     &self,
     object_id: &str,
-    encoded_collab: EncodedCollab,
-  ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    let collab = Collab::new_with_source(
-      CollabOrigin::Empty,
-      object_id,
-      DataSource::DocStateV1(encoded_collab.doc_state.into()),
-      vec![],
-      false,
-    )
-    .map_err(|e| AppError::Internal(e.into()))?;
-    self.index(MutexCollab::new(collab)).await
-  }
+    doc_state: Vec<u8>,
+  ) -> Result<Option<AFCollabEmbeddings>, AppError>;
 }
 
 /// A structure responsible for resolving different [Indexer] types for different [CollabType]s,
@@ -129,17 +116,10 @@ impl IndexerProvider {
 
   async fn index_collab(&self, unindexed: UnindexedCollab) -> Result<(), AppError> {
     if let Some(indexer) = self.indexer_cache.get(&unindexed.collab_type) {
-      let collab = MutexCollab::new(
-        Collab::new_with_source(
-          CollabOrigin::Empty,
-          &unindexed.object_id,
-          DataSource::DocStateV1(unindexed.collab.doc_state.into()),
-          vec![],
-          false,
-        )
-        .map_err(|err| AppError::Internal(err.into()))?,
-      );
-      if let Some(embeddings) = indexer.index(collab).await? {
+      if let Some(embeddings) = indexer
+        .index(&unindexed.object_id, unindexed.collab.doc_state.into())
+        .await?
+      {
         let mut tx = self.db.begin().await?;
         upsert_collab_embeddings(
           &mut tx,
@@ -160,10 +140,7 @@ impl IndexerProvider {
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
     if let Some(indexer) = self.indexer_for(params.collab_type.clone()) {
       let embeddings = indexer
-        .index_encoded(
-          &params.object_id,
-          EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)?,
-        )
+        .index(&params.object_id, params.encoded_collab_v1.clone())
         .await?;
       Ok(embeddings)
     } else {

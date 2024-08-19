@@ -579,6 +579,7 @@ dependencies = [
  "collab-rt-entity",
  "collab-rt-protocol",
  "collab-stream",
+ "collab-user",
  "dashmap",
  "database",
  "database-entity",
@@ -1954,6 +1955,7 @@ dependencies = [
  "gotrue-entity",
  "infra",
  "shared-entity",
+ "uuid",
 ]
 
 [[package]]
@@ -1969,6 +1971,7 @@ dependencies = [
  "collab-document",
  "collab-entity",
  "collab-folder",
+ "collab-user",
  "database-entity",
  "dotenvy",
  "futures",
@@ -2038,7 +2041,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=46b9594#46b9594a20d93ebe476b5c3b183862882f296c3f"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2ba00c1e430f6157a2b6cbda89992d3b154ea6fb#2ba00c1e430f6157a2b6cbda89992d3b154ea6fb"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2063,7 +2066,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=46b9594#46b9594a20d93ebe476b5c3b183862882f296c3f"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2ba00c1e430f6157a2b6cbda89992d3b154ea6fb#2ba00c1e430f6157a2b6cbda89992d3b154ea6fb"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2083,7 +2086,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=46b9594#46b9594a20d93ebe476b5c3b183862882f296c3f"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2ba00c1e430f6157a2b6cbda89992d3b154ea6fb#2ba00c1e430f6157a2b6cbda89992d3b154ea6fb"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2102,7 +2105,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=46b9594#46b9594a20d93ebe476b5c3b183862882f296c3f"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2ba00c1e430f6157a2b6cbda89992d3b154ea6fb#2ba00c1e430f6157a2b6cbda89992d3b154ea6fb"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2180,6 +2183,22 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "collab-user"
+version = "0.2.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2ba00c1e430f6157a2b6cbda89992d3b154ea6fb#2ba00c1e430f6157a2b6cbda89992d3b154ea6fb"
+dependencies = [
+ "anyhow",
+ "collab",
+ "collab-entity",
+ "getrandom 0.2.15",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
  "tracing",
 ]
 

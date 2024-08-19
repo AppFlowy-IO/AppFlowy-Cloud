@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
+use app_error::AppError;
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{ArrayPrelim, Collab, Map};
 use collab_entity::define::WORKSPACE_DATABASES;
 use collab_entity::CollabType;
-use sqlx::Transaction;
-use tracing::{debug, instrument};
-
-use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use collab_user::core::UserAwareness;
 use database::collab::CollabStorage;
 use database::pg_row::AFWorkspaceRow;
 use database_entity::dto::CollabParams;
+use sqlx::Transaction;
+use tracing::{debug, error, instrument, trace};
+use uuid::Uuid;
 use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 
 /// This function generates templates for a workspace and stores them in the database.
@@ -19,6 +20,7 @@ use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 #[instrument(level = "debug", skip_all, err)]
 pub async fn initialize_workspace_for_user<T>(
   uid: i64,
+  user_uuid: &Uuid,
   row: &AFWorkspaceRow,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   templates: Vec<T>,
@@ -45,6 +47,16 @@ where
       txn,
     )
     .await?;
+
+    match create_user_awareness(&uid, user_uuid, &workspace_id, collab_storage, txn).await {
+      Ok(object_id) => trace!("User awareness created successfully: {}", object_id),
+      Err(err) => {
+        error!(
+          "Failed to create user awareness for workspace: {}, {}",
+          workspace_id, err
+        );
+      },
+    }
   } else {
     return Err(AppError::Internal(anyhow::anyhow!(
       "Workspace database object id is missing"
@@ -76,6 +88,42 @@ where
   Ok(())
 }
 
+async fn create_user_awareness(
+  uid: &i64,
+  user_uuid: &Uuid,
+  workspace_id: &str,
+  storage: &Arc<CollabAccessControlStorage>,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+) -> Result<String, AppError> {
+  let object_id = user_awareness_object_id(user_uuid, workspace_id).to_string();
+  let collab_type = CollabType::UserAwareness;
+  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id.clone(), vec![], false);
+
+  // TODO(nathan): Maybe using hardcode encoded collab
+  let user_awareness = UserAwareness::open(collab, None);
+  let encode_collab = user_awareness
+    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+    .map_err(AppError::Internal)?;
+  let encoded_collab_v1 = encode_collab
+    .encode_to_bytes()
+    .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
+
+  storage
+    .insert_new_collab_with_transaction(
+      workspace_id,
+      uid,
+      CollabParams {
+        object_id: object_id.to_string(),
+        encoded_collab_v1,
+        collab_type,
+        embeddings: None,
+      },
+      txn,
+    )
+    .await?;
+  Ok(object_id)
+}
+
 async fn create_workspace_database_collab(
   workspace_id: &str,
   uid: &i64,
@@ -86,7 +134,7 @@ async fn create_workspace_database_collab(
   let collab_type = CollabType::WorkspaceDatabase;
   let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
   {
-    let mut txn = collab.context.transact_mut();
+    let mut txn = collab.transact_mut();
     collab
       .data
       .insert(&mut txn, WORKSPACE_DATABASES, ArrayPrelim::default());
@@ -115,4 +163,11 @@ async fn create_workspace_database_collab(
     .await?;
 
   Ok(())
+}
+
+pub fn user_awareness_object_id(user_uuid: &Uuid, workspace_id: &str) -> Uuid {
+  Uuid::new_v5(
+    user_uuid,
+    format!("user_awareness:{}", workspace_id).as_bytes(),
+  )
 }

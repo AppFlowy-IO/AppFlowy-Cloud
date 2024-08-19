@@ -65,7 +65,9 @@ impl Indexer for DocumentIndexer {
     let mut params = match Self::get_document_contents(&document) {
       Ok(result) => result,
       Err(err) => {
-        tracing::warn!("failed to get document data: {}", err);
+        if cfg!(debug_assertions) {
+          tracing::warn!("failed to get document:{} error:{}", object_id, err);
+        }
         return Ok(None);
       },
     };

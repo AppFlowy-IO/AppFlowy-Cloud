@@ -304,10 +304,10 @@ pub async fn select_template_creators_by_name<'a, E: Executor<'a, Database = Pos
     AFTemplateCreatorRow,
     r#"
     SELECT
-    tc.creator_id AS "id!",
-    name AS "name!",
-    avatar_url AS "avatar_url!",
-    ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>"
+      tc.creator_id AS "id!",
+      name AS "name!",
+      avatar_url AS "avatar_url!",
+      ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>"
     FROM af_template_creator tc
     LEFT OUTER JOIN af_template_creator_account_link al
     ON tc.creator_id = al.creator_id
@@ -331,10 +331,10 @@ pub async fn select_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
     AFTemplateCreatorRow,
     r#"
     SELECT
-    tc.creator_id AS "id!",
-    name AS "name!",
-    avatar_url AS "avatar_url!",
-    ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>"
+      tc.creator_id AS "id!",
+      name AS "name!",
+      avatar_url AS "avatar_url!",
+      ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>"
     FROM af_template_creator tc
     LEFT OUTER JOIN af_template_creator_account_link al
     ON tc.creator_id = al.creator_id

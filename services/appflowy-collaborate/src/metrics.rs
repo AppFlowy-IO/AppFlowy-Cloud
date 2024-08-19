@@ -12,6 +12,7 @@ pub struct CollabRealtimeMetrics {
   total_success_get_encode_collab_from_redis: Gauge,
   total_attempt_get_encode_collab_from_redis: Gauge,
   opening_collab_count: Gauge,
+  num_of_editing_users: Gauge,
   /// The number of apply update
   apply_update_count: Gauge,
   /// The number of apply update failed
@@ -27,6 +28,7 @@ impl CollabRealtimeMetrics {
       total_success_get_encode_collab_from_redis: Gauge::default(),
       total_attempt_get_encode_collab_from_redis: Gauge::default(),
       opening_collab_count: Gauge::default(),
+      num_of_editing_users: Gauge::default(),
       apply_update_count: Default::default(),
       apply_update_failed_count: Default::default(),
       acquire_collab_lock_count: Default::default(),
@@ -56,6 +58,11 @@ impl CollabRealtimeMetrics {
       "opening_collab_count",
       "number of opening collabs",
       metrics.opening_collab_count.clone(),
+    );
+    realtime_registry.register(
+      "editing_users_count",
+      "number of editing users",
+      metrics.num_of_editing_users.clone(),
     );
     realtime_registry.register(
       "apply_update_count",
@@ -91,6 +98,7 @@ pub(crate) struct CollabMetricsCalculate {
   pub(crate) apply_update_count: Arc<AtomicI64>,
   pub(crate) apply_update_failed_count: Arc<AtomicI64>,
   pub(crate) num_of_active_collab: Arc<AtomicI64>,
+  pub(crate) num_of_editing_users: Arc<AtomicI64>,
 }
 
 pub(crate) fn spawn_metrics<S>(
@@ -112,6 +120,13 @@ pub(crate) fn spawn_metrics<S>(
       metrics.opening_collab_count.set(
         metrics_calculation
           .num_of_active_collab
+          .load(std::sync::atomic::Ordering::Relaxed),
+      );
+
+      // editing users
+      metrics.num_of_editing_users.set(
+        metrics_calculation
+          .num_of_editing_users
           .load(std::sync::atomic::Ordering::Relaxed),
       );
 

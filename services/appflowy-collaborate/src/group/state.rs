@@ -135,16 +135,29 @@ impl GroupManagementState {
       object_id: object_id.to_string(),
     };
 
-    self
-      .editing_by_user
-      .entry(user.clone())
-      .or_default()
-      .insert(editing);
+    let entry = self.editing_by_user.entry(user.clone());
+    match entry {
+      dashmap::mapref::entry::Entry::Occupied(_) => {},
+      dashmap::mapref::entry::Entry::Vacant(_) => {
+        self
+          .metrics_calculate
+          .num_of_editing_users
+          .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+      },
+    }
+
+    entry.or_default().insert(editing);
     Ok(())
   }
 
   pub(crate) async fn remove_user(&self, user: &RealtimeUser) {
     let entry = self.editing_by_user.remove(user);
+    if entry.is_some() {
+      self
+        .metrics_calculate
+        .num_of_editing_users
+        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
     if let Some(editing_objects) = entry.map(|(_, e)| e) {
       for editing in editing_objects {
         match self.group_by_object_id.try_get(&editing.object_id) {

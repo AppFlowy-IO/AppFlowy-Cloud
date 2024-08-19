@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n    SELECT\n    tc.creator_id AS \"id!\",\n    name AS \"name!\",\n    avatar_url AS \"avatar_url!\",\n    ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS \"account_links: Vec<AccountLinkColumn>\"\n    FROM af_template_creator tc\n    LEFT OUTER JOIN af_template_creator_account_link al\n    ON tc.creator_id = al.creator_id\n    WHERE name LIKE $1\n    GROUP BY (tc.creator_id, name, avatar_url)\n    ORDER BY created_at ASC\n    ",
+  "query": "\n    SELECT\n      tc.creator_id AS \"id!\",\n      name AS \"name!\",\n      avatar_url AS \"avatar_url!\",\n      ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS \"account_links: Vec<AccountLinkColumn>\"\n    FROM af_template_creator tc\n    LEFT OUTER JOIN af_template_creator_account_link al\n    ON tc.creator_id = al.creator_id\n    WHERE tc.creator_id = $1\n    GROUP BY (tc.creator_id, name, avatar_url)\n    ",
   "describe": {
     "columns": [
       {
@@ -26,7 +26,7 @@
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -36,5 +36,5 @@
       null
     ]
   },
-  "hash": "5c76d9b602d0e47bc28a499c834182d77a6b993d9d526d57ae713aef2c291731"
+  "hash": "13e511cfa6be2924fe6b141651a49ed3c36d12aa844322b2a30fa4ce01e0b361"
 }

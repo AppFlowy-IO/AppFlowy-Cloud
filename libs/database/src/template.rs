@@ -65,7 +65,8 @@ pub async fn update_template_category_by_id<'a, E: Executor<'a, Database = Postg
       icon = $4,
       bg_color = $5,
       category_type = $6,
-      priority = $7
+      priority = $7,
+      updated_at = NOW()
     WHERE category_id = $1
     RETURNING
       category_id AS id,
@@ -244,7 +245,7 @@ pub async fn update_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
     WITH
       updated_creator AS (
         UPDATE af_template_creator
-          SET name = $2, avatar_url = $3
+          SET name = $2, avatar_url = $3, updated_at = NOW()
           WHERE creator_id = $1
         RETURNING creator_id, name, avatar_url
       ),

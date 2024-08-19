@@ -3,8 +3,8 @@ use std::ops::DerefMut;
 use anyhow::Context;
 use database::template::*;
 use database_entity::dto::{
-  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator,
-  TemplateCreatorMinimal, TemplateHomePage, TemplateMinimal,
+  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateHomePage,
+  TemplateMinimal,
 };
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
@@ -118,7 +118,7 @@ pub async fn update_template_creator(
 pub async fn get_template_creators(
   pg_pool: &PgPool,
   keyword: &Option<String>,
-) -> Result<Vec<TemplateCreatorMinimal>, AppResponseError> {
+) -> Result<Vec<TemplateCreator>, AppResponseError> {
   let substr_match = keyword.as_deref().unwrap_or("%");
   let creators = select_template_creators_by_name(pg_pool, substr_match).await?;
   Ok(creators)
@@ -245,8 +245,8 @@ pub async fn get_template(pg_pool: &PgPool, view_id: Uuid) -> Result<Template, A
   Ok(template)
 }
 
-pub async fn delete_template(pg_pool: &PgPool, template_id: Uuid) -> Result<(), AppResponseError> {
-  delete_template_id(pg_pool, template_id).await?;
+pub async fn delete_template(pg_pool: &PgPool, view_id: Uuid) -> Result<(), AppResponseError> {
+  delete_template_by_view_id(pg_pool, view_id).await?;
   Ok(())
 }
 

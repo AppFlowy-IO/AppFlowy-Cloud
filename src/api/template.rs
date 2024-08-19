@@ -44,7 +44,7 @@ pub fn template_scope() -> Scope {
         .route(web::get().to(list_templates_handler)),
     )
     .service(
-      web::resource("/template/{template_id}")
+      web::resource("/template/{view_id}")
         .route(web::put().to(update_template_handler))
         .route(web::get().to(get_template_handler))
         .route(web::delete().to(delete_template_handler)),
@@ -221,23 +221,23 @@ async fn list_templates_handler(
 }
 
 async fn get_template_handler(
-  template_id: web::Path<Uuid>,
+  view_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<Template>> {
-  let template_id = template_id.into_inner();
-  let template = get_template(&state.pg_pool, template_id).await?;
+  let view_id = view_id.into_inner();
+  let template = get_template(&state.pg_pool, view_id).await?;
   Ok(Json(AppResponse::Ok().with_data(template)))
 }
 
 async fn update_template_handler(
-  template_id: web::Path<Uuid>,
+  view_id: web::Path<Uuid>,
   data: Json<UpdateTemplateParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<Template>> {
-  let template_id = template_id.into_inner();
+  let view_id = view_id.into_inner();
   let updated_template = update_template(
     &state.pg_pool,
-    template_id,
+    view_id,
     &data.name,
     &data.description,
     &data.about,
@@ -253,11 +253,11 @@ async fn update_template_handler(
 }
 
 async fn delete_template_handler(
-  template_id: web::Path<Uuid>,
+  view_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
-  let template_id = template_id.into_inner();
-  delete_template(&state.pg_pool, template_id).await?;
+  let view_id = view_id.into_inner();
+  delete_template(&state.pg_pool, view_id).await?;
   Ok(Json(AppResponse::Ok()))
 }
 

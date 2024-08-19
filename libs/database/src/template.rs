@@ -66,12 +66,12 @@ pub async fn update_template_category_by_id<'a, E: Executor<'a, Database = Postg
     UPDATE af_template_category
     SET
       name = $2,
-      updated_at = NOW(),
       description = $3,
       icon = $4,
       bg_color = $5,
       category_type = $6,
-      priority = $7
+      priority = $7,
+      updated_at = NOW()
     WHERE category_id = $1
     RETURNING
       category_id AS id,
@@ -244,7 +244,7 @@ pub async fn update_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
     WITH
       updated_creator AS (
         UPDATE af_template_creator
-          SET name = $2, avatar_url = $3
+          SET name = $2, avatar_url = $3, updated_at = NOW()
           WHERE creator_id = $1
         RETURNING creator_id, name, avatar_url
       ),
@@ -310,16 +310,32 @@ pub async fn delete_template_creator_account_links<'a, E: Executor<'a, Database 
 pub async fn select_template_creators_by_name<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   substr_match: &str,
-) -> Result<Vec<TemplateCreatorMinimal>, AppError> {
+) -> Result<Vec<TemplateCreator>, AppError> {
   let creator_rows = sqlx::query_as!(
-    AFTemplateCreatorMinimalColumn,
+    AFTemplateCreatorRow,
     r#"
+    WITH creator_number_of_templates AS (
+      SELECT
+        creator_id,
+        COUNT(1)::int AS number_of_templates
+      FROM af_template_view
+      WHERE name LIKE $1
+      GROUP BY creator_id
+    )
+
     SELECT
-    tc.creator_id AS "creator_id!",
-    name AS "name!",
-    avatar_url AS "avatar_url!"
+      tc.creator_id AS "id!",
+      name AS "name!",
+      avatar_url AS "avatar_url!",
+      ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
+      COALESCE(creator_number_of_templates.number_of_templates, 0) AS "number_of_templates!"
     FROM af_template_creator tc
+    LEFT OUTER JOIN af_template_creator_account_link al
+    ON tc.creator_id = al.creator_id
+    LEFT OUTER JOIN creator_number_of_templates
+    ON tc.creator_id = creator_number_of_templates.creator_id
     WHERE name LIKE $1
+    GROUP BY (tc.creator_id, name, avatar_url, creator_number_of_templates.number_of_templates)
     ORDER BY created_at ASC
     "#,
     substr_match
@@ -346,11 +362,11 @@ pub async fn select_template_creator_by_id<'a, E: Executor<'a, Database = Postgr
       GROUP BY creator_id
     )
     SELECT
-    tc.creator_id AS "id!",
-    name AS "name!",
-    avatar_url AS "avatar_url!",
-    ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
-    COALESCE(creator_number_of_templates.number_of_templates, 0) AS "number_of_templates!"
+      tc.creator_id AS "id!",
+      name AS "name!",
+      avatar_url AS "avatar_url!",
+      ARRAY_AGG((al.link_type, al.url)) FILTER (WHERE link_type IS NOT NULL) AS "account_links: Vec<AccountLinkColumn>",
+      COALESCE(creator_number_of_templates.number_of_templates, 0) AS "number_of_templates!"
     FROM af_template_creator tc
     LEFT OUTER JOIN af_template_creator_account_link al
     ON tc.creator_id = al.creator_id
@@ -834,16 +850,16 @@ pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
   )
 }
 
-pub async fn delete_template_id<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn delete_template_by_view_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  template_id: Uuid,
+  view_id: Uuid,
 ) -> Result<(), AppError> {
   sqlx::query!(
     r#"
     DELETE FROM af_template_view
     WHERE view_id = $1
     "#,
-    template_id,
+    view_id,
   )
   .execute(executor)
   .await?;

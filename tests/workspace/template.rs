@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use app_error::ErrorCode;
 use client_api::entity::{
-  AccountLink, PublishCollabItem, PublishCollabMetadata, TemplateCategoryType,
+  AccountLink, CreateTemplateCategoryParams, PublishCollabItem, PublishCollabMetadata,
+  TemplateCategoryType, UpdateTemplateCategoryParams,
 };
 use client_api_test::*;
 use collab::core::collab::DataSource;
@@ -29,10 +30,10 @@ async fn get_user_default_workspace_test() {
   let c = localhost_client();
   c.sign_up(&email, password).await.unwrap();
   let mut test_client = TestClient::new_user().await;
-  let workspace_id = test_client.workspace_id().await;
   let folder = test_client.get_user_folder().await;
 
-  let views = folder.get_views_belong_to(&test_client.workspace_id().await);
+  let workspace_id = test_client.workspace_id().await;
+  let views = folder.get_views_belong_to(&workspace_id);
   assert_eq!(views.len(), 1);
   assert_eq!(views[0].name, "Getting started");
 
@@ -56,7 +57,7 @@ async fn get_document_collab_from_remote(
     },
   };
   let resp = test_client.get_collab(params).await.unwrap();
-  Document::from_doc_state(
+  Document::open_with_options(
     CollabOrigin::Empty,
     DataSource::DocStateV1(resp.encode_collab.doc_state.to_vec()),
     document_id,
@@ -69,43 +70,44 @@ async fn get_document_collab_from_remote(
 async fn test_template_category_crud() {
   let (authorized_client, _) = generate_unique_registered_user_client().await;
   let category_name = Uuid::new_v4().to_string();
+  let params = CreateTemplateCategoryParams {
+    name: category_name.clone(),
+    icon: "icon".to_string(),
+    bg_color: "bg_color".to_string(),
+    description: "description".to_string(),
+    category_type: TemplateCategoryType::Feature,
+    priority: 1,
+  };
   let new_template_category = authorized_client
-    .create_template_category(
-      category_name.as_str(),
-      "icon",
-      "bg_color",
-      "description",
-      TemplateCategoryType::Feature,
-      1,
-    )
+    .create_template_category(&params)
     .await
     .unwrap();
   assert_eq!(new_template_category.name, category_name);
-  assert_eq!(new_template_category.icon, "icon");
-  assert_eq!(new_template_category.bg_color, "bg_color");
-  assert_eq!(new_template_category.description, "description");
+  assert_eq!(new_template_category.icon, params.icon);
+  assert_eq!(new_template_category.bg_color, params.bg_color);
+  assert_eq!(new_template_category.description, params.description);
   assert_eq!(
     new_template_category.category_type,
     TemplateCategoryType::Feature
   );
   assert_eq!(new_template_category.priority, 1);
   let updated_category_name = Uuid::new_v4().to_string();
+  let params = UpdateTemplateCategoryParams {
+    name: updated_category_name.clone(),
+    icon: "new_icon".to_string(),
+    bg_color: "new_bg_color".to_string(),
+    description: "new_description".to_string(),
+    category_type: TemplateCategoryType::UseCase,
+    priority: 2,
+  };
   let updated_template_category = authorized_client
-    .update_template_category(
-      new_template_category.id,
-      updated_category_name.as_str(),
-      "new_icon",
-      "new_bg_color",
-      "new_description",
-      TemplateCategoryType::UseCase,
-      2,
-    )
+    .update_template_category(new_template_category.id, &params)
     .await
     .unwrap();
   assert_eq!(updated_template_category.name, updated_category_name);
-  assert_eq!(updated_template_category.icon, "new_icon");
-  assert_eq!(updated_template_category.bg_color, "new_bg_color");
-  assert_eq!(updated_template_category.description, "new_description");
+  assert_eq!(updated_template_category.icon, params.icon);
+  assert_eq!(updated_template_category.bg_color, params.bg_color);
+  assert_eq!(updated_template_category.description, params.description);
   assert_eq!(
     updated_template_category.category_type,
     TemplateCategoryType::UseCase
@@ -118,9 +120,9 @@ async fn test_template_category_crud() {
     .await
     .unwrap();
   assert_eq!(template_category.name, updated_category_name);
-  assert_eq!(template_category.icon, "new_icon");
-  assert_eq!(template_category.bg_color, "new_bg_color");
-  assert_eq!(template_category.description, "new_description");
+  assert_eq!(template_category.icon, params.icon);
+  assert_eq!(template_category.bg_color, params.bg_color);
+  assert_eq!(template_category.description, params.description);
   assert_eq!(
     template_category.category_type,
     TemplateCategoryType::UseCase
@@ -128,21 +130,20 @@ async fn test_template_category_crud() {
   assert_eq!(template_category.priority, 2);
 
   let second_category_name = Uuid::new_v4().to_string();
+  let params = CreateTemplateCategoryParams {
+    name: second_category_name.clone(),
+    icon: "second_icon".to_string(),
+    bg_color: "second_bg_color".to_string(),
+    description: "second_description".to_string(),
+    category_type: TemplateCategoryType::Feature,
+    priority: 3,
+  };
   authorized_client
-    .create_template_category(
-      second_category_name.as_str(),
-      "second_icon",
-      "second_bg_color",
-      "second_description",
-      TemplateCategoryType::Feature,
-      3,
-    )
+    .create_template_category(&params)
     .await
     .unwrap();
   let guest_client = localhost_client();
-  let result = guest_client
-    .create_template_category("", "", "", "", TemplateCategoryType::Feature, 0)
-    .await;
+  let result = guest_client.create_template_category(&params).await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
 
@@ -299,26 +300,29 @@ async fn test_template_crud() {
     )
     .await
     .unwrap();
+  let params = CreateTemplateCategoryParams {
+    name: category_1_name,
+    icon: "icon".to_string(),
+    bg_color: "bg_color".to_string(),
+    description: "description".to_string(),
+    category_type: TemplateCategoryType::Feature,
+    priority: 0,
+  };
   let category_1 = authorized_client
-    .create_template_category(
-      category_1_name.as_str(),
-      "icon",
-      "bg_color",
-      "description",
-      TemplateCategoryType::Feature,
-      0,
-    )
+    .create_template_category(&params)
     .await
     .unwrap();
+
+  let params = CreateTemplateCategoryParams {
+    name: category_2_name,
+    icon: "icon".to_string(),
+    bg_color: "bg_color".to_string(),
+    description: "description".to_string(),
+    category_type: TemplateCategoryType::Feature,
+    priority: 0,
+  };
   let category_2 = authorized_client
-    .create_template_category(
-      category_2_name.as_str(),
-      "icon",
-      "bg_color",
-      "description",
-      TemplateCategoryType::Feature,
-      0,
-    )
+    .create_template_category(&params)
     .await
     .unwrap();
 
@@ -395,30 +399,30 @@ async fn test_template_crud() {
     .await
     .unwrap()
     .templates;
-  let template_ids: HashSet<Uuid> = templates.iter().map(|t| t.view_id).collect();
+  let view_ids: HashSet<Uuid> = templates.iter().map(|t| t.view_id).collect();
   assert_eq!(templates.len(), 2);
-  assert!(template_ids.contains(&published_view_ids[2]));
-  assert!(template_ids.contains(&published_view_ids[3]));
+  assert!(view_ids.contains(&published_view_ids[2]));
+  assert!(view_ids.contains(&published_view_ids[3]));
 
   let featured_templates = guest_client
     .get_templates(None, Some(true), None, Some(template_name_prefix.clone()))
     .await
     .unwrap()
     .templates;
-  let featured_template_ids: HashSet<Uuid> = featured_templates.iter().map(|t| t.view_id).collect();
+  let featured_view_ids: HashSet<Uuid> = featured_templates.iter().map(|t| t.view_id).collect();
   assert_eq!(featured_templates.len(), 2);
-  assert!(featured_template_ids.contains(&published_view_ids[0]));
-  assert!(featured_template_ids.contains(&published_view_ids[1]));
+  assert!(featured_view_ids.contains(&published_view_ids[0]));
+  assert!(featured_view_ids.contains(&published_view_ids[1]));
 
   let new_templates = guest_client
     .get_templates(None, None, Some(true), Some(template_name_prefix.clone()))
     .await
     .unwrap()
     .templates;
-  let new_template_ids: HashSet<Uuid> = new_templates.iter().map(|t| t.view_id).collect();
+  let new_view_ids: HashSet<Uuid> = new_templates.iter().map(|t| t.view_id).collect();
   assert_eq!(new_templates.len(), 2);
-  assert!(new_template_ids.contains(&published_view_ids[0]));
-  assert!(new_template_ids.contains(&published_view_ids[2]));
+  assert!(new_view_ids.contains(&published_view_ids[0]));
+  assert!(new_view_ids.contains(&published_view_ids[2]));
 
   let template = guest_client
     .get_template(published_view_ids[3])

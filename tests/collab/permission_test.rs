@@ -1,18 +1,20 @@
-use crate::collab::util::generate_random_string;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
 use assert_json_diff::{assert_json_eq, assert_json_include};
+use collab_entity::CollabType;
+use serde_json::json;
+use tokio::time::sleep;
+use uuid::Uuid;
+
 use client_api_test::{
   assert_client_collab_include_value, assert_client_collab_within_secs, assert_server_collab,
   TestClient,
 };
-use collab_entity::CollabType;
 use database_entity::dto::{AFAccessLevel, AFRole};
 
-use serde_json::json;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::sleep;
-use uuid::Uuid;
+use crate::collab::util::generate_random_string;
 
 #[tokio::test]
 async fn recv_updates_without_permission_test() {
@@ -31,13 +33,7 @@ async fn recv_updates_without_permission_test() {
 
   // Edit the collab from client 1 and then the server will broadcast to client 2. But the client 2
   // is not the member of the collab, so the client 2 will not receive the update.
-  client_1
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .mutex_collab
-    .lock()
-    .insert("name", "AppFlowy");
+  client_1.insert_into(&object_id, "name", "AppFlowy").await;
   client_1
     .wait_object_sync_complete(&object_id)
     .await
@@ -76,7 +72,7 @@ async fn recv_updates_without_permission_test() {
 //     .get_mut(&object_id)
 //     .unwrap()
 //     .collab
-//     .lock()
+//     .write().await
 //     .insert("name", "AppFlowy");
 //   client_1
 //     .wait_object_sync_complete(&object_id)
@@ -114,7 +110,7 @@ async fn recv_updates_without_permission_test() {
 //     .get_mut(&object_id)
 //     .unwrap()
 //     .collab
-//     .lock()
+//     .write().await
 //     .insert("name", "AppFlowy");
 //   client_1
 //     .wait_object_sync_complete(&object_id)
@@ -182,13 +178,7 @@ async fn edit_collab_with_readonly_permission_test() {
 
   // client 2 edit the collab and then the server will reject the update which mean the
   // collab in the server will not be updated.
-  client_2
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .mutex_collab
-    .lock()
-    .insert("name", "AppFlowy");
+  client_2.insert_into(&object_id, "name", "AppFlowy").await;
   assert_client_collab_include_value(
     &mut client_2,
     &object_id,
@@ -237,13 +227,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
     .await;
 
   // client 2 edit the collab and then the server will broadcast the update
-  client_2
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .mutex_collab
-    .lock()
-    .insert("name", "AppFlowy");
+  client_2.insert_into(&object_id, "name", "AppFlowy").await;
   client_2
     .wait_object_sync_complete(&object_id)
     .await
@@ -294,13 +278,7 @@ async fn edit_collab_with_full_access_permission_test() {
     .await;
 
   // client 2 edit the collab and then the server will broadcast the update
-  client_2
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .mutex_collab
-    .lock()
-    .insert("name", "AppFlowy");
+  client_2.insert_into(&object_id, "name", "AppFlowy").await;
 
   let expected = json!({
     "name": "AppFlowy"
@@ -350,12 +328,8 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       .open_collab(&workspace_id, &object_id, collab_type.clone())
       .await;
     client_2
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .mutex_collab
-      .lock()
-      .insert("title", "hello world");
+      .insert_into(&object_id, "title", "hello world")
+      .await;
     client_2
       .wait_object_sync_complete(&object_id)
       .await
@@ -374,12 +348,8 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       )
       .await;
     client_2
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .mutex_collab
-      .lock()
-      .insert("subtitle", "Writing Rust, fun");
+      .insert_into(&object_id, "subtitle", "Writing Rust, fun")
+      .await;
   }
 
   assert_client_collab_include_value(
@@ -450,12 +420,8 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
       // generate random string and insert it to the collab
       let random_str = generate_random_string(200);
       new_member
-        .collabs
-        .get_mut(&object_id)
-        .unwrap()
-        .mutex_collab
-        .lock()
-        .insert(&i.to_string(), random_str.clone());
+        .insert_into(&object_id, &i.to_string(), random_str.clone())
+        .await;
       new_member
         .wait_object_sync_complete(&object_id)
         .await
@@ -480,24 +446,24 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   // all the clients should have the same collab object
   assert_json_eq!(
     json!(expected_json),
-    arc_owner
+    (*arc_owner
       .collabs
       .get(&object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .write()
+      .await)
+      .borrow()
       .to_json_value()
   );
 
   for client in clients {
+    let expected = (*client.collabs.get(&object_id).unwrap().collab.read().await)
+      .borrow()
+      .to_json_value();
     assert_json_include!(
       actual: json!(expected_json),
-      expected: client
-        .collabs
-        .get(&object_id)
-        .unwrap()
-        .mutex_collab.lock()
-        .to_json_value()
+      expected: expected
     );
   }
 }
@@ -538,12 +504,8 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
 
       let random_str = generate_random_string(200);
       new_user
-        .collabs
-        .get_mut(&object_id)
-        .unwrap()
-        .mutex_collab
-        .lock()
-        .insert(&i.to_string(), random_str.clone());
+        .insert_into(&object_id, &i.to_string(), random_str.clone())
+        .await;
 
       // wait 3 seconds to let the client try to send the update to the server
       // can't use want_object_sync_complete because the client do not have permission to send the update
@@ -556,25 +518,21 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let results = futures::future::join_all(tasks).await;
   for (index, result) in results.into_iter().enumerate() {
     let (s, client) = result.unwrap();
-    let value = client
-      .collabs
-      .get(&object_id)
-      .unwrap()
-      .mutex_collab
-      .lock()
+    let value = (*client.collabs.get(&object_id).unwrap().collab.read().await)
+      .borrow()
       .to_json_value();
 
     assert_json_eq!(json!({index.to_string(): s}), value,);
   }
   // all the clients should have the same collab object
-  assert_json_eq!(
-    json!({}),
-    arc_owner
-      .collabs
-      .get(&object_id)
-      .unwrap()
-      .mutex_collab
-      .lock()
-      .to_json_value(),
-  );
+  let expected = (*arc_owner
+    .collabs
+    .get(&object_id)
+    .unwrap()
+    .collab
+    .read()
+    .await)
+    .borrow()
+    .to_json_value();
+  assert_json_eq!(json!({}), expected);
 }

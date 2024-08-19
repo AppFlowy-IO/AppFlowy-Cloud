@@ -39,32 +39,20 @@ fn template_resources_url(base_url: &str) -> String {
   format!("{}/template", template_api_prefix(base_url))
 }
 
-fn template_resource_url(base_url: &str, template_id: Uuid) -> String {
-  format!("{}/{}", template_resources_url(base_url), template_id)
+fn template_resource_url(base_url: &str, view_id: Uuid) -> String {
+  format!("{}/{}", template_resources_url(base_url), view_id)
 }
 
 impl Client {
   pub async fn create_template_category(
     &self,
-    name: &str,
-    icon: &str,
-    bg_color: &str,
-    description: &str,
-    category_type: TemplateCategoryType,
-    priority: i32,
+    params: &CreateTemplateCategoryParams,
   ) -> Result<TemplateCategory, AppResponseError> {
     let url = category_resources_url(&self.base_url);
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&CreateTemplateCategoryParams {
-        name: name.to_string(),
-        icon: icon.to_string(),
-        bg_color: bg_color.to_string(),
-        description: description.to_string(),
-        priority,
-        category_type,
-      })
+      .json(params)
       .send()
       .await?;
 
@@ -118,29 +106,16 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[allow(clippy::too_many_arguments)]
   pub async fn update_template_category(
     &self,
     category_id: Uuid,
-    name: &str,
-    icon: &str,
-    bg_color: &str,
-    description: &str,
-    category_type: TemplateCategoryType,
-    priority: i32,
+    params: &UpdateTemplateCategoryParams,
   ) -> Result<TemplateCategory, AppResponseError> {
     let url = category_resource_url(&self.base_url, category_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
-      .json(&UpdateTemplateCategoryParams {
-        name: name.to_string(),
-        icon: icon.to_string(),
-        bg_color: bg_color.to_string(),
-        description: description.to_string(),
-        category_type,
-        priority,
-      })
+      .json(params)
       .send()
       .await?;
 
@@ -251,7 +226,7 @@ impl Client {
     creator_id: Uuid,
     is_new_template: bool,
     is_featured: bool,
-    related_template_ids: Vec<Uuid>,
+    related_view_ids: Vec<Uuid>,
   ) -> Result<Template, AppResponseError> {
     let url = template_resources_url(&self.base_url);
     let resp = self
@@ -267,7 +242,7 @@ impl Client {
         creator_id,
         is_new_template,
         is_featured,
-        related_view_ids: related_template_ids,
+        related_view_ids,
       })
       .send()
       .await?;
@@ -277,8 +252,8 @@ impl Client {
       .into_data()
   }
 
-  pub async fn get_template(&self, template_id: Uuid) -> Result<Template, AppResponseError> {
-    let url = template_resource_url(&self.base_url, template_id);
+  pub async fn get_template(&self, view_id: Uuid) -> Result<Template, AppResponseError> {
+    let url = template_resource_url(&self.base_url, view_id);
     let resp = self
       .http_client_without_auth(Method::GET, &url)
       .await?
@@ -326,7 +301,7 @@ impl Client {
     creator_id: Uuid,
     is_new_template: bool,
     is_featured: bool,
-    related_template_ids: Vec<Uuid>,
+    related_view_ids: Vec<Uuid>,
   ) -> Result<Template, AppResponseError> {
     let url = template_resource_url(&self.base_url, view_id);
     let resp = self
@@ -341,7 +316,7 @@ impl Client {
         creator_id,
         is_new_template,
         is_featured,
-        related_view_ids: related_template_ids,
+        related_view_ids,
       })
       .send()
       .await?;
@@ -351,8 +326,8 @@ impl Client {
       .into_data()
   }
 
-  pub async fn delete_template(&self, template_id: Uuid) -> Result<(), AppResponseError> {
-    let url = template_resource_url(&self.base_url, template_id);
+  pub async fn delete_template(&self, view_id: Uuid) -> Result<(), AppResponseError> {
+    let url = template_resource_url(&self.base_url, view_id);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
       .await?

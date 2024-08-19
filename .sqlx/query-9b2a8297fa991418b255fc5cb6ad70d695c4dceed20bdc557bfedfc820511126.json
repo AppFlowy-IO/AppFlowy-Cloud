@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n    UPDATE af_template_category\n    SET\n      name = $2,\n      updated_at = NOW(),\n      description = $3,\n      icon = $4,\n      bg_color = $5,\n      category_type = $6,\n      priority = $7\n    WHERE category_id = $1\n    RETURNING\n      category_id AS id,\n      name,\n      description,\n      icon,\n      bg_color,\n      category_type AS \"category_type: AFTemplateCategoryTypeColumn\",\n      priority\n    ",
+  "query": "\n    UPDATE af_template_category\n    SET\n      name = $2,\n      description = $3,\n      icon = $4,\n      bg_color = $5,\n      category_type = $6,\n      priority = $7,\n      updated_at = NOW()\n    WHERE category_id = $1\n    RETURNING\n      category_id AS id,\n      name,\n      description,\n      icon,\n      bg_color,\n      category_type AS \"category_type: AFTemplateCategoryTypeColumn\",\n      priority\n    ",
   "describe": {
     "columns": [
       {
@@ -60,5 +60,5 @@
       false
     ]
   },
-  "hash": "f315eac5339290db9968df605234e7fd6b952579986b5d3fe0207534184702c2"
+  "hash": "9b2a8297fa991418b255fc5cb6ad70d695c4dceed20bdc557bfedfc820511126"
 }

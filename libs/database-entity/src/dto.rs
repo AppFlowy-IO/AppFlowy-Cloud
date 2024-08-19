@@ -1032,6 +1032,93 @@ pub enum IndexingStatus {
   Indexed,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateCategories {
+  pub categories: Vec<TemplateCategory>,
+}
+
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Copy, Clone)]
+#[repr(i32)]
+pub enum TemplateCategoryType {
+  UseCase = 0,
+  Feature = 1,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateCategory {
+  pub id: Uuid,
+  pub name: String,
+  pub icon: String,
+  pub bg_color: String,
+  pub description: String,
+  pub category_type: TemplateCategoryType,
+  pub priority: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateTemplateCategoryParams {
+  pub name: String,
+  pub icon: String,
+  pub bg_color: String,
+  pub description: String,
+  pub category_type: TemplateCategoryType,
+  pub priority: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetTemplateCategoriesQueryParams {
+  pub name_contains: Option<String>,
+  pub category_type: Option<TemplateCategoryType>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateTemplateCategoryParams {
+  pub name: String,
+  pub icon: String,
+  pub bg_color: String,
+  pub description: String,
+  pub category_type: TemplateCategoryType,
+  pub priority: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateCreators {
+  pub creators: Vec<TemplateCreator>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AccountLink {
+  pub link_type: String,
+  pub url: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateCreator {
+  pub id: Uuid,
+  pub name: String,
+  pub avatar_url: String,
+  pub account_links: Vec<AccountLink>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateTemplateCreatorParams {
+  pub name: String,
+  pub avatar_url: String,
+  pub account_links: Vec<AccountLink>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateTemplateCreatorParams {
+  pub name: String,
+  pub avatar_url: String,
+  pub account_links: Vec<AccountLink>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetTemplateCreatorsQueryParams {
+  pub name_contains: Option<String>,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CollabParams, CollabParamsV0};

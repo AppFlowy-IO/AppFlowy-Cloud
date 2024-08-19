@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    DELETE FROM af_template_creator\n    WHERE creator_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c335b73ad499b67100e4ce3131a526ddf1745488597c3392ae05e4b398a8715e"
+}

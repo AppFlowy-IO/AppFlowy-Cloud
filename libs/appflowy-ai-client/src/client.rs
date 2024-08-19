@@ -291,8 +291,19 @@ impl AppFlowyAIClient {
       .into_data()
   }
 
-  pub async fn get_local_ai_config(&self, platform: &str) -> Result<LocalAIConfig, AIError> {
-    let url = format!("{}/local_ai/config?platform={platform}", self.url);
+  pub async fn get_local_ai_config(
+    &self,
+    platform: &str,
+    app_version: Option<String>,
+  ) -> Result<LocalAIConfig, AIError> {
+    // Start with the base URL including the platform parameter
+    let mut url = format!("{}/local_ai/config?platform={}", self.url, platform);
+
+    // If app_version is provided, append it as a query parameter
+    if let Some(version) = app_version {
+      url = format!("{}&app_version={}", url, version);
+    }
+
     let resp = self.http_client(Method::GET, &url)?.send().await?;
     AIResponse::<LocalAIConfig>::from_response(resp)
       .await?

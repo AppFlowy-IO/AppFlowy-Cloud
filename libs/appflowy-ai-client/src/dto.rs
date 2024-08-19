@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -271,11 +271,62 @@ pub struct LocalAIConfig {
   pub plugin: AppFlowyOfflineAI,
 }
 
+#[derive(Debug, Clone)]
+pub enum ChatContextLoader {
+  Txt,
+  Markdown,
+}
+
+impl Display for ChatContextLoader {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ChatContextLoader::Txt => write!(f, "text"),
+      ChatContextLoader::Markdown => write!(f, "markdown"),
+    }
+  }
+}
+
+impl FromStr for ChatContextLoader {
+  type Err = anyhow::Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s {
+      "text" => Ok(ChatContextLoader::Txt),
+      "markdown" => Ok(ChatContextLoader::Markdown),
+      _ => Err(anyhow::anyhow!("unknown context loader type")),
+    }
+  }
+}
+impl Serialize for ChatContextLoader {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer,
+  {
+    match self {
+      ChatContextLoader::Txt => serializer.serialize_str("text"),
+      ChatContextLoader::Markdown => serializer.serialize_str("markdown"),
+    }
+  }
+}
+
+impl<'de> Deserialize<'de> for ChatContextLoader {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: Deserializer<'de>,
+  {
+    let s = String::deserialize(deserializer)?;
+    match s.as_str() {
+      "text" => Ok(ChatContextLoader::Txt),
+      "markdown" => Ok(ChatContextLoader::Markdown),
+      _ => Err(serde::de::Error::custom("unknown value")),
+    }
+  }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateTextChatContext {
   pub chat_id: String,
-  /// Only support "txt" and "markdown" for now
-  pub content_type: String,
+  pub context_loader: ChatContextLoader,
   pub content: String,
   pub chunk_size: i32,
   pub chunk_overlap: i32,
@@ -283,10 +334,10 @@ pub struct CreateTextChatContext {
 }
 
 impl CreateTextChatContext {
-  pub fn new(chat_id: String, content_type: String, text: String) -> Self {
+  pub fn new(chat_id: String, context_loader: ChatContextLoader, text: String) -> Self {
     CreateTextChatContext {
       chat_id,
-      content_type,
+      context_loader,
       content: text,
       chunk_size: 2000,
       chunk_overlap: 20,
@@ -305,7 +356,7 @@ impl Display for CreateTextChatContext {
     f.write_fmt(format_args!(
       "Create Chat context: {{ chat_id: {}, content_type: {}, content size: {},  metadata: {:?} }}",
       self.chat_id,
-      self.content_type,
+      self.context_loader,
       self.content.len(),
       self.metadata
     ))

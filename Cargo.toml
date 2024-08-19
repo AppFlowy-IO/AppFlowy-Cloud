@@ -114,6 +114,7 @@ collab = { workspace = true }
 collab-document = { workspace = true }
 collab-entity = { workspace = true }
 collab-folder = { workspace = true }
+collab-user = { workspace = true }
 collab-rt-protocol.workspace = true
 
 #Local crate
@@ -230,7 +231,7 @@ serde_repr = "0.1.18"
 serde = { version = "1.0.195", features = ["derive"] }
 bytes = "1.5.0"
 workspace-template = { path = "libs/workspace-template" }
-uuid = { version = "1.6.1", features = ["v4"] }
+uuid = { version = "1.6.1", features = ["v4", "v5"] }
 anyhow = "1.0.79"
 actix = "0.13.3"
 actix-web = { version = "4.5.1", default-features = false, features = [
@@ -267,6 +268,7 @@ collab = { version = "0.2.0" }
 collab-entity = { version = "0.2.0" }
 collab-folder = { version = "0.2.0" }
 collab-document = { version = "0.2.0" }
+collab-user = { version = "0.2.0" }
 
 [profile.release]
 lto = true
@@ -280,10 +282,11 @@ debug = true
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "46b9594" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "46b9594" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "46b9594" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "46b9594" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2ba00c1e430f6157a2b6cbda89992d3b154ea6fb" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2ba00c1e430f6157a2b6cbda89992d3b154ea6fb" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2ba00c1e430f6157a2b6cbda89992d3b154ea6fb" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2ba00c1e430f6157a2b6cbda89992d3b154ea6fb" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2ba00c1e430f6157a2b6cbda89992d3b154ea6fb" }
 
 [features]
 history = []

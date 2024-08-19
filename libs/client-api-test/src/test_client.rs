@@ -16,6 +16,7 @@ use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, Prelim};
 use collab_entity::CollabType;
 use collab_folder::Folder;
+use collab_user::core::UserAwareness;
 use mime::Mime;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -27,12 +28,13 @@ use uuid::Uuid;
 
 #[cfg(feature = "collab-sync")]
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
+use client_api::entity::id::user_awareness_object_id;
 use client_api::entity::QueryWorkspaceMember;
 use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserWorkspaceInfo, AFWorkspace,
-  AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult, CollabParams,
-  CreateCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabParams,
+  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
+  AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
+  CollabParams, CreateCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabParams,
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use shared_entity::dto::workspace_dto::{
@@ -186,6 +188,31 @@ impl TestClient {
       vec![],
     )
     .unwrap()
+  }
+
+  pub async fn get_user_awareness(&self) -> UserAwareness {
+    let workspace_id = self.workspace_id().await;
+    let profile = self.get_user_profile().await;
+    let awareness_object_id = user_awareness_object_id(&profile.uuid, &workspace_id).to_string();
+    let data = self
+      .api_client
+      .get_collab(QueryCollabParams::new(
+        &awareness_object_id,
+        CollabType::UserAwareness,
+        &workspace_id,
+      ))
+      .await
+      .unwrap();
+    let collab = Collab::new_with_source(
+      CollabOrigin::Empty,
+      &awareness_object_id,
+      DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
+      vec![],
+      false,
+    )
+    .unwrap();
+
+    UserAwareness::open(collab, None)
   }
 
   pub async fn try_update_workspace_member(
@@ -403,6 +430,10 @@ impl TestClient {
 
   pub async fn uid(&self) -> i64 {
     self.api_client.get_profile().await.unwrap().uid
+  }
+
+  pub async fn get_user_profile(&self) -> AFUserProfile {
+    self.api_client.get_profile().await.unwrap()
   }
 
   pub async fn get_snapshot(

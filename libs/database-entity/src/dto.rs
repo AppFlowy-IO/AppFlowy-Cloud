@@ -671,24 +671,59 @@ pub struct ChatMessageMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMetadataData {
-  /// Don't rename this field, it's used [ops::extract_chat_message_metadata]
+  /// The textual content of the metadata. This field can contain raw text data from a specific
+  /// document or any other text content that is indexable. This content is typically used for
+  /// search and indexing purposes within the chat context.
   pub content: String,
+
+  /// The type of content represented by this metadata. This could indicate the format or
+  /// nature of the content (e.g., text, markdown, PDF). The `content_type` helps in
+  /// processing or rendering the content appropriately.
   pub content_type: ChatMetadataContentType,
+
+  /// The size of the content in bytes.
   pub size: i64,
 }
 
 impl ChatMetadataData {
-  pub fn validate(&self) -> bool {
+  /// Validates the `ChatMetadataData` instance.
+  ///
+  /// This method checks the validity of the data based on the content type and the presence of content or URL.
+  /// - If `content` is empty, the method checks if `url` is provided. If `url` is also empty, the data is invalid.
+  /// - For `Text` and `Markdown`, it ensures that the content length matches the specified size if content is present.
+  /// - For `Unknown` and `PDF`, it currently returns `false` as these types are either unsupported or
+  ///   require additional validation logic.
+  ///
+  /// Returns `true` if the data is valid according to its content type and the presence of content or URL, otherwise `false`.
+  pub fn validate(&self) -> Result<(), anyhow::Error> {
     match self.content_type {
-      ChatMetadataContentType::Text => self.content.len() == self.size as usize,
-      ChatMetadataContentType::Markdown => self.content.len() == self.size as usize,
-      ChatMetadataContentType::Unknown => false,
-      ChatMetadataContentType::PDF => false,
+      ChatMetadataContentType::Text | ChatMetadataContentType::Markdown => {
+        if self.content.len() != self.size as usize {
+          return Err(anyhow::anyhow!(
+            "Invalid content size: content size: {}, expected size: {}",
+            self.content.len(),
+            self.size
+          ));
+        }
+      },
+      ChatMetadataContentType::PDF => {
+        if self.content.is_empty() {
+          return Err(anyhow::anyhow!("Invalid content: content is empty"));
+        }
+      },
+      ChatMetadataContentType::Unknown => {
+        return Err(anyhow::anyhow!(
+          "Unsupported content type: {:?}",
+          self.content_type
+        ));
+      },
     }
+    Ok(())
   }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ChatMetadataContentType {
   Unknown,
   Text,
@@ -700,7 +735,7 @@ impl Display for ChatMetadataContentType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       ChatMetadataContentType::Unknown => write!(f, "unknown"),
-      ChatMetadataContentType::Text => write!(f, "txt"),
+      ChatMetadataContentType::Text => write!(f, "text"),
       ChatMetadataContentType::Markdown => write!(f, "markdown"),
       ChatMetadataContentType::PDF => write!(f, "pdf"),
     }

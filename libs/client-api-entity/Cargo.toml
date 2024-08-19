@@ -11,6 +11,7 @@ gotrue-entity = { workspace = true }
 shared-entity = { workspace = true }
 collab-rt-entity = { workspace = true }
 database-entity.workspace = true
+uuid.workspace = true
 
 infra = { workspace = true, optional = true }
 

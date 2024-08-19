@@ -1,3 +1,5 @@
+pub mod id;
+
 pub use collab_entity::*;
 pub use collab_rt_entity::user::*;
 pub use database_entity::dto::*;

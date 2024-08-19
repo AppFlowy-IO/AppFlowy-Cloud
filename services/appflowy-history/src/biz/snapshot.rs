@@ -1,28 +1,26 @@
-use crate::error::HistoryError;
-use collab::core::collab::{MutexCollab, WeakMutexCollab};
-use collab::preclude::updates::encoder::Encode;
-use collab::preclude::{ReadTxn, Snapshot, StateVector};
-use collab_entity::CollabType;
-use parking_lot::RwLock;
 use std::ops::Deref;
 use std::sync::atomic::AtomicU32;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::sleep;
+use std::sync::{Arc, Weak};
+
+use collab::preclude::updates::encoder::Encode;
+use collab::preclude::{Collab, ReadTxn, Snapshot, StateVector};
+use collab_entity::CollabType;
+use tokio::sync::{Mutex, RwLock};
+use tracing::{trace, warn};
+
 use tonic_proto::history::SnapshotMetaPb;
-use tracing::{error, trace, warn};
 
 #[derive(Clone)]
 pub struct SnapshotGenerator {
   object_id: String,
-  mutex_collab: WeakMutexCollab,
+  mutex_collab: Weak<RwLock<Collab>>,
   collab_type: CollabType,
   apply_update_count: Arc<AtomicU32>,
-  pending_snapshots: Arc<RwLock<Vec<CollabSnapshot>>>,
+  pending_snapshots: Arc<Mutex<Vec<CollabSnapshot>>>,
 }
 
 impl SnapshotGenerator {
-  pub fn new(object_id: &str, mutex_collab: WeakMutexCollab, collab_type: CollabType) -> Self {
+  pub fn new(object_id: &str, mutex_collab: Weak<RwLock<Collab>>, collab_type: CollabType) -> Self {
     Self {
       object_id: object_id.to_string(),
       mutex_collab,
@@ -32,8 +30,10 @@ impl SnapshotGenerator {
     }
   }
 
-  pub fn take_pending_snapshots(&self) -> Vec<CollabSnapshot> {
-    std::mem::take(&mut *self.pending_snapshots.write())
+  pub async fn take_pending_snapshots(&self) -> Vec<CollabSnapshot> {
+    //FIXME: this should be either a channel or lockless immutable queue
+    let mut lock = self.pending_snapshots.lock().await;
+    std::mem::take(&mut *lock)
   }
 
   pub fn did_apply_update(&self, _update: &[u8]) {
@@ -59,15 +59,12 @@ impl SnapshotGenerator {
       let mutex_collab = self.mutex_collab.clone();
       let object_id = self.object_id.clone();
       tokio::spawn(async move {
-        if let Some(mutex_collab) = mutex_collab.upgrade() {
-          attempt_gen_snapshot(
-            &mutex_collab,
-            &object_id,
-            pending_snapshots,
-            3,
-            Duration::from_secs(2),
-          )
-          .await;
+        if let Some(collab) = mutex_collab.upgrade() {
+          trace!("[History] attempting to generate snapshot");
+          let snapshot = gen_snapshot(&*collab.read().await, &object_id);
+          trace!("[History] did generate snapshot for {}", snapshot.object_id);
+          pending_snapshots.lock().await.push(snapshot);
+          warn!("Exceeded maximum retry attempts for snapshot generation");
         } else {
           warn!("collab is dropped. cannot generate snapshot")
         }
@@ -95,50 +92,11 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
   }
 }
 
-// Assume gen_snapshot and other relevant functions and types are defined elsewhere.
-// Helper function to perform the snapshot generation with retries.
-async fn attempt_gen_snapshot(
-  collab: &MutexCollab,
-  object_id: &str,
-  pending_snapshots: Arc<RwLock<Vec<CollabSnapshot>>>,
-  max_retries: usize,
-  delay: Duration,
-) {
-  trace!("[History] attempting to generate snapshot");
-  let mut retries = 0;
-  while retries < max_retries {
-    match gen_snapshot(collab, object_id) {
-      Ok(snapshot) => {
-        trace!("[History] did generate snapshot for {}", snapshot.object_id);
-        pending_snapshots.write().push(snapshot);
-        return;
-      },
-      Err(err) => {
-        error!(
-          "Failed to generate snapshot on attempt {}: {:?}",
-          retries + 1,
-          err
-        );
-        retries += 1;
-        sleep(delay * retries as u32).await; // Exponential backoff
-      },
-    }
-  }
-  warn!("Exceeded maximum retry attempts for snapshot generation");
-}
-
 #[inline]
-pub fn gen_snapshot(
-  mutex_collab: &MutexCollab,
-  object_id: &str,
-) -> Result<CollabSnapshot, HistoryError> {
-  let lock_guard = mutex_collab.lock();
-  let txn = lock_guard.try_transaction()?;
-  let snapshot = txn.snapshot();
-  drop(txn);
-
+pub fn gen_snapshot(collab: &Collab, object_id: &str) -> CollabSnapshot {
+  let snapshot = collab.transact().snapshot();
   let timestamp = chrono::Utc::now().timestamp();
-  Ok(CollabSnapshot::new(object_id, snapshot, timestamp))
+  CollabSnapshot::new(object_id, snapshot, timestamp)
 }
 
 /// Represents the state of a collaborative object (Collab) at a specific timestamp.

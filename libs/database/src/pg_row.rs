@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWorkspace, AFWorkspaceInvitationStatus,
-  GlobalComment, Reaction,
+  AccountLink, GlobalComment, Reaction, TemplateCategory, TemplateCategoryType, TemplateCreator,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -218,14 +218,14 @@ pub struct AFChatMessageRow {
 }
 
 #[derive(sqlx::Type, Serialize, Debug)]
-pub struct AFWebUserType {
+pub struct AFWebUserColumn {
   uuid: Uuid,
   name: String,
   avatar_url: Option<String>,
 }
 
-impl From<AFWebUserType> for AFWebUser {
-  fn from(val: AFWebUserType) -> Self {
+impl From<AFWebUserColumn> for AFWebUser {
+  fn from(val: AFWebUserColumn) -> Self {
     AFWebUser {
       uuid: val.uuid,
       name: val.name,
@@ -235,7 +235,7 @@ impl From<AFWebUserType> for AFWebUser {
 }
 
 pub struct AFGlobalCommentRow {
-  pub user: Option<AFWebUserType>,
+  pub user: Option<AFWebUserColumn>,
   pub created_at: DateTime<Utc>,
   pub last_updated_at: DateTime<Utc>,
   pub content: String,
@@ -262,7 +262,7 @@ impl From<AFGlobalCommentRow> for GlobalComment {
 
 pub struct AFReactionRow {
   pub reaction_type: String,
-  pub react_users: Vec<AFWebUserType>,
+  pub react_users: Vec<AFWebUserColumn>,
   pub comment_id: Uuid,
 }
 
@@ -272,6 +272,96 @@ impl From<AFReactionRow> for Reaction {
       reaction_type: val.reaction_type,
       react_users: val.react_users.into_iter().map(|x| x.into()).collect(),
       comment_id: val.comment_id,
+    }
+  }
+}
+
+#[derive(Debug, FromRow, Serialize)]
+pub struct AFTemplateCategoryRow {
+  pub id: Uuid,
+  pub name: String,
+  pub icon: String,
+  pub bg_color: String,
+  pub description: String,
+  pub category_type: AFTemplateCategoryTypeColumn,
+  pub priority: i32,
+}
+
+impl From<AFTemplateCategoryRow> for TemplateCategory {
+  fn from(value: AFTemplateCategoryRow) -> Self {
+    Self {
+      id: value.id,
+      name: value.name,
+      icon: value.icon,
+      bg_color: value.bg_color,
+      description: value.description,
+      category_type: value.category_type.into(),
+      priority: value.priority,
+    }
+  }
+}
+
+#[derive(sqlx::Type, Serialize, Debug)]
+#[repr(i32)]
+pub enum AFTemplateCategoryTypeColumn {
+  UseCase = 0,
+  Feature = 1,
+}
+
+impl From<AFTemplateCategoryTypeColumn> for TemplateCategoryType {
+  fn from(value: AFTemplateCategoryTypeColumn) -> Self {
+    match value {
+      AFTemplateCategoryTypeColumn::UseCase => TemplateCategoryType::UseCase,
+      AFTemplateCategoryTypeColumn::Feature => TemplateCategoryType::Feature,
+    }
+  }
+}
+
+impl From<TemplateCategoryType> for AFTemplateCategoryTypeColumn {
+  fn from(val: TemplateCategoryType) -> Self {
+    match val {
+      TemplateCategoryType::UseCase => AFTemplateCategoryTypeColumn::UseCase,
+      TemplateCategoryType::Feature => AFTemplateCategoryTypeColumn::Feature,
+    }
+  }
+}
+
+#[derive(sqlx::Type, Serialize, Debug)]
+pub struct AccountLinkColumn {
+  pub link_type: String,
+  pub url: String,
+}
+
+impl From<AccountLinkColumn> for AccountLink {
+  fn from(value: AccountLinkColumn) -> Self {
+    Self {
+      link_type: value.link_type,
+      url: value.url,
+    }
+  }
+}
+
+#[derive(Debug, Serialize)]
+pub struct AFTemplateCreatorRow {
+  pub id: Uuid,
+  pub name: String,
+  pub avatar_url: String,
+  pub account_links: Option<Vec<AccountLinkColumn>>,
+}
+
+impl From<AFTemplateCreatorRow> for TemplateCreator {
+  fn from(value: AFTemplateCreatorRow) -> Self {
+    let account_links = value
+      .account_links
+      .unwrap_or_default()
+      .into_iter()
+      .map(|v| v.into())
+      .collect();
+    Self {
+      id: value.id,
+      name: value.name,
+      avatar_url: value.avatar_url,
+      account_links,
     }
   }
 }

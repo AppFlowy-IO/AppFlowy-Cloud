@@ -1,5 +1,7 @@
 use app_error::ErrorCode;
-use client_api::entity::{AccountLink, TemplateCategoryType};
+use client_api::entity::{
+  AccountLink, CreateTemplateCategoryParams, TemplateCategoryType, UpdateTemplateCategoryParams,
+};
 use client_api_test::*;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
@@ -55,43 +57,44 @@ async fn get_document_collab_from_remote(
 async fn test_template_category_crud() {
   let (authorized_client, _) = generate_unique_registered_user_client().await;
   let category_name = Uuid::new_v4().to_string();
+  let params = CreateTemplateCategoryParams {
+    name: category_name.clone(),
+    icon: "icon".to_string(),
+    bg_color: "bg_color".to_string(),
+    description: "description".to_string(),
+    category_type: TemplateCategoryType::Feature,
+    priority: 1,
+  };
   let new_template_category = authorized_client
-    .create_template_category(
-      category_name.as_str(),
-      "icon",
-      "bg_color",
-      "description",
-      TemplateCategoryType::Feature,
-      1,
-    )
+    .create_template_category(&params)
     .await
     .unwrap();
   assert_eq!(new_template_category.name, category_name);
-  assert_eq!(new_template_category.icon, "icon");
-  assert_eq!(new_template_category.bg_color, "bg_color");
-  assert_eq!(new_template_category.description, "description");
+  assert_eq!(new_template_category.icon, params.icon);
+  assert_eq!(new_template_category.bg_color, params.bg_color);
+  assert_eq!(new_template_category.description, params.description);
   assert_eq!(
     new_template_category.category_type,
     TemplateCategoryType::Feature
   );
   assert_eq!(new_template_category.priority, 1);
   let updated_category_name = Uuid::new_v4().to_string();
+  let params = UpdateTemplateCategoryParams {
+    name: updated_category_name.clone(),
+    icon: "new_icon".to_string(),
+    bg_color: "new_bg_color".to_string(),
+    description: "new_description".to_string(),
+    category_type: TemplateCategoryType::UseCase,
+    priority: 2,
+  };
   let updated_template_category = authorized_client
-    .update_template_category(
-      new_template_category.id,
-      updated_category_name.as_str(),
-      "new_icon",
-      "new_bg_color",
-      "new_description",
-      TemplateCategoryType::UseCase,
-      2,
-    )
+    .update_template_category(new_template_category.id, &params)
     .await
     .unwrap();
   assert_eq!(updated_template_category.name, updated_category_name);
-  assert_eq!(updated_template_category.icon, "new_icon");
-  assert_eq!(updated_template_category.bg_color, "new_bg_color");
-  assert_eq!(updated_template_category.description, "new_description");
+  assert_eq!(updated_template_category.icon, params.icon);
+  assert_eq!(updated_template_category.bg_color, params.bg_color);
+  assert_eq!(updated_template_category.description, params.description);
   assert_eq!(
     updated_template_category.category_type,
     TemplateCategoryType::UseCase
@@ -104,9 +107,9 @@ async fn test_template_category_crud() {
     .await
     .unwrap();
   assert_eq!(template_category.name, updated_category_name);
-  assert_eq!(template_category.icon, "new_icon");
-  assert_eq!(template_category.bg_color, "new_bg_color");
-  assert_eq!(template_category.description, "new_description");
+  assert_eq!(template_category.icon, params.icon);
+  assert_eq!(template_category.bg_color, params.bg_color);
+  assert_eq!(template_category.description, params.description);
   assert_eq!(
     template_category.category_type,
     TemplateCategoryType::UseCase
@@ -114,21 +117,20 @@ async fn test_template_category_crud() {
   assert_eq!(template_category.priority, 2);
 
   let second_category_name = Uuid::new_v4().to_string();
+  let params = CreateTemplateCategoryParams {
+    name: second_category_name.clone(),
+    icon: "second_icon".to_string(),
+    bg_color: "second_bg_color".to_string(),
+    description: "second_description".to_string(),
+    category_type: TemplateCategoryType::Feature,
+    priority: 3,
+  };
   authorized_client
-    .create_template_category(
-      second_category_name.as_str(),
-      "second_icon",
-      "second_bg_color",
-      "second_description",
-      TemplateCategoryType::Feature,
-      3,
-    )
+    .create_template_category(&params)
     .await
     .unwrap();
   let guest_client = localhost_client();
-  let result = guest_client
-    .create_template_category("", "", "", "", TemplateCategoryType::Feature, 0)
-    .await;
+  let result = guest_client.create_template_category(&params).await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
 

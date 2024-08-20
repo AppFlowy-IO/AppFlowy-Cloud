@@ -34,6 +34,7 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
         object_id,
         object_type: CollabType::Document,
         object_data: data,
+        database_id: None,
       })
     })
     .await??;
@@ -93,6 +94,7 @@ impl WorkspaceTemplate for DocumentTemplate {
       object_id,
       object_type: CollabType::Document,
       object_data: data,
+      database_id: None,
     })
   }
 

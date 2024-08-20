@@ -1,6 +1,7 @@
 use authentication::jwt::OptionalUserUuid;
 use database_entity::dto::{AFWorkspaceSettingsChange, PublishCollabItem};
 use std::collections::HashMap;
+use workspace_template::database::todos::ToDosDatabaseTemplate;
 
 use database_entity::dto::PublishInfo;
 use std::ops::DerefMut;
@@ -77,7 +78,7 @@ pub async fn create_workspace_for_user(
     user_uuid,
     &new_workspace_row,
     &mut txn,
-    vec![GetStartedDocumentTemplate],
+    vec![ToDosDatabaseTemplate],
     collab_storage,
   )
   .await?;

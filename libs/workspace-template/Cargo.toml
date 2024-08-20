@@ -12,6 +12,7 @@ bytes.workspace = true
 collab = { workspace = true }
 collab-folder = { workspace = true }
 collab-document = { workspace = true }
+collab-database = { workspace = true }
 collab-entity = { workspace = true }
 async-trait = "0.1.77"
 anyhow.workspace = true

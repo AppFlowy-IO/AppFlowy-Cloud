@@ -14,7 +14,9 @@ use tokio::sync::RwLock;
 
 use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 
+pub mod database;
 pub mod document;
+
 mod hierarchy_builder;
 
 #[async_trait]
@@ -34,6 +36,10 @@ pub struct TemplateData {
   pub object_id: String,
   pub object_type: CollabType,
   pub object_data: EncodedCollab,
+
+  // only for the database template
+  // it used to reference the database id from object_id
+  pub database_id: Option<String>,
 }
 
 pub type WorkspaceTemplateHandlers = HashMap<ViewLayout, Arc<dyn WorkspaceTemplate + Send + Sync>>;
@@ -129,6 +135,7 @@ impl WorkspaceTemplateBuilder {
         object_id: workspace_id,
         object_type: CollabType::Folder,
         object_data: data,
+        database_id: None,
       })
     })
     .await??;

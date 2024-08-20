@@ -60,7 +60,7 @@ pub struct PublishCollabDuplicator {
   duplicated_db_view: HashMap<String, String>,
   /// in case there's existing group, which contains the most updated collab data
   group_manager: AppStateGroupManager,
-  /// A list of new views to be added to the folder
+  /// new views to be added to the folder
   /// view_id -> view
   views_to_add: HashMap<String, View>,
   /// A list of database linked views to be added to workspace database
@@ -187,6 +187,8 @@ impl PublishCollabDuplicator {
     let encoded_update = {
       let mut folder_txn = folder.collab.transact_mut();
       folder.body.views.insert(&mut folder_txn, root_view, None);
+
+      // TODO: topological sort
       for view in self.views_to_add.values() {
         folder
           .body
@@ -257,7 +259,7 @@ impl PublishCollabDuplicator {
 
     match metadata.view.layout {
       ViewLayout::Document => {
-        let doc_collab = collab_from_doc_state(published_blob.clone(), "")?;
+        let doc_collab = collab_from_doc_state(published_blob, "")?;
         let doc = Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
         let new_doc_view = self.deep_copy_doc(txn, new_view_id, doc, metadata).await?;
         Ok(Some(new_doc_view))
@@ -398,10 +400,9 @@ impl PublishCollabDuplicator {
           self
             .duplicated_refs
             .insert(view_id.to_string(), Some(new_view.id.clone()));
-          self
-            .views_to_add
-            .insert(new_view.id.clone(), new_view.clone());
-          Ok(Some(new_view.id))
+          let ret_view_id = new_view.id.clone();
+          self.views_to_add.insert(new_view.id.clone(), new_view);
+          Ok(Some(ret_view_id))
         } else {
           tracing::warn!("view not found in deep_copy: {}", view_id);
           self.duplicated_refs.insert(view_id.to_string(), None);
@@ -486,14 +487,15 @@ impl PublishCollabDuplicator {
         parent_id,
       )
       .await?;
+    let parent_view_id = parent_view.id.clone();
     if parent_view.parent_view_id.is_empty() {
       parent_view.parent_view_id.clone_from(doc_view_id);
       self
         .views_to_add
-        .insert(parent_view.id.clone(), parent_view.clone());
+        .insert(parent_view.id.clone(), parent_view);
     }
     let duplicated_view_id = match self.duplicated_db_view.get(view_id) {
-      Some(v) => v,
+      Some(v) => v.clone(),
       None => {
         let view_info_by_id = view_info_by_view_id(&metadata);
         let view_info = view_info_by_id.get(view_id).ok_or_else(|| {
@@ -501,14 +503,15 @@ impl PublishCollabDuplicator {
         })?;
         let mut new_folder_db_view =
           self.new_folder_view(view_id.to_string(), view_info, view_info.layout.clone());
-        new_folder_db_view.parent_view_id = parent_view.id.clone();
+        new_folder_db_view.parent_view_id = parent_view_id.clone();
+        let new_folder_db_view_id = new_folder_db_view.id.clone();
         self
           .views_to_add
-          .insert(new_folder_db_view.id.clone(), new_folder_db_view.clone());
-        &new_folder_db_view.id.clone()
+          .insert(new_folder_db_view.id.clone(), new_folder_db_view);
+        new_folder_db_view_id
       },
     };
-    Ok(Some((duplicated_view_id.clone(), parent_view.id.clone())))
+    Ok(Some((duplicated_view_id, parent_view_id)))
   }
 
   /// Deep copy a published database (does not create folder views)
@@ -618,7 +621,12 @@ impl PublishCollabDuplicator {
 
         // update all views's row's id
         for row_order in db_view.row_orders.iter_mut() {
-          if let Some(new_id) = self.old_to_new_view_id(row_order.id.as_str()) {
+          if let Some(new_id) = self
+            .duplicated_refs
+            .get(row_order.id.as_str())
+            .cloned()
+            .flatten()
+          {
             row_order.id = new_id.into();
           } else {
             // skip if row not found
@@ -694,7 +702,7 @@ impl PublishCollabDuplicator {
 
           let mut view =
             self.new_folder_view(duplicated_view_id, view_info, view_info.layout.clone());
-          view.parent_view_id = main_view_id.clone();
+          view.parent_view_id.clone_from(main_view_id);
           return Ok(view);
         },
       };
@@ -746,7 +754,7 @@ impl PublishCollabDuplicator {
         child_folder_view.parent_view_id.clone_from(main_view_id);
         self
           .views_to_add
-          .insert(child_view_id.clone(), child_folder_view.clone());
+          .insert(child_folder_view.id.clone(), child_folder_view);
       }
 
       main_folder_view
@@ -763,7 +771,7 @@ impl PublishCollabDuplicator {
     layout: ViewLayout,
   ) -> View {
     View {
-      id: new_view_id.clone(),
+      id: new_view_id,
       parent_view_id: "".to_string(), // to be filled by caller
       name: view_info.name.clone(),
       desc: "".to_string(), // unable to get from metadata
@@ -850,10 +858,6 @@ impl PublishCollabDuplicator {
       },
       None => tracing::warn!("group not found for oid: {}", oid),
     }
-  }
-
-  fn old_to_new_view_id(&self, old_view_id: &str) -> Option<String> {
-    self.duplicated_refs.get(old_view_id).cloned().flatten()
   }
 }
 

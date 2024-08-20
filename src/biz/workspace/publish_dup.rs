@@ -20,7 +20,7 @@ use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, Publ
 use sqlx::PgPool;
 use std::{collections::HashMap, sync::Arc};
 use yrs::updates::encoder::Encode;
-use yrs::{GetString, Map, MapRef, TextRef};
+use yrs::{Map, MapRef};
 
 use crate::biz::collab::ops::get_latest_collab_encoded;
 use crate::state::AppStateGroupManager;
@@ -906,8 +906,6 @@ fn get_database_id_from_collab(db_collab: &Collab) -> Result<String, AppError> {
   let db_id = db_map
     .get(&txn, "id")
     .ok_or_else(|| AppError::RecordNotFound("no id found in database".to_string()))?
-    .cast::<TextRef>()
-    .map_err(|err| AppError::RecordNotFound(format!("database id not a text: {:?}", err)))?;
-  let id = db_id.get_string(&txn);
-  Ok(id)
+    .to_string(&txn);
+  Ok(db_id)
 }

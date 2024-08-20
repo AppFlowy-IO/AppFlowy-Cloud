@@ -26,9 +26,9 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
 
   async fn create(&self, object_id: String) -> anyhow::Result<TemplateData> {
     let data = tokio::task::spawn_blocking(|| {
-      let document_data = get_started_document_data().unwrap();
+      let getting_started_data = getting_started_document_data().unwrap();
       let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
-      let document = Document::open_with(collab, Some(document_data))?;
+      let document = Document::open_with(collab, Some(getting_started_data))?;
       let data = document.encode_collab()?;
       Ok::<_, anyhow::Error>(TemplateData {
         object_id,
@@ -50,7 +50,7 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
       .await
       .with_view_builder(|view_builder| async {
         view_builder
-          .with_name("Getting started")
+          .with_name("Getting started QQ")
           .with_icon("⭐️")
           .build()
       })
@@ -115,8 +115,18 @@ impl WorkspaceTemplate for DocumentTemplate {
   }
 }
 
-pub fn get_started_document_data() -> Result<DocumentData, Error> {
-  let json_str = include_str!("../../assets/read_me.json");
+pub fn getting_started_document_data() -> Result<DocumentData, Error> {
+  let json_str = include_str!("../../assets/getting_started.json");
+  JsonToDocumentParser::json_str_to_document(json_str)
+}
+
+pub fn desktop_guide_document_data() -> Result<DocumentData, Error> {
+  let json_str = include_str!("../../assets/desktop_guide.json");
+  JsonToDocumentParser::json_str_to_document(json_str)
+}
+
+pub fn mobile_guide_document_data() -> Result<DocumentData, Error> {
+  let json_str = include_str!("../../assets/mobile_guide.json");
   JsonToDocumentParser::json_str_to_document(json_str)
 }
 

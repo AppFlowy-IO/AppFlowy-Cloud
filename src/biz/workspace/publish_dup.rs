@@ -18,6 +18,7 @@ use database::publish::select_published_data_for_view_id;
 use database_entity::dto::CollabParams;
 use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, PublishViewMetaData};
 use sqlx::PgPool;
+use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 use yrs::updates::encoder::Encode;
 use yrs::{Map, MapRef};
@@ -186,15 +187,41 @@ impl PublishCollabDuplicator {
 
     let encoded_update = {
       let mut folder_txn = folder.collab.transact_mut();
+
+      let mut duplicated_view_ids = HashSet::new();
+      duplicated_view_ids.insert(root_view.id.clone());
       folder.body.views.insert(&mut folder_txn, root_view, None);
 
-      // TODO: topological sort
-      for view in self.views_to_add.values() {
-        folder
-          .body
-          .views
-          .insert(&mut folder_txn, view.clone(), None);
+      // when child views are added, it must have a parent view that is previously added
+      // TODO: if there are too many child views, consider using topological sort
+      loop {
+        if self.views_to_add.is_empty() {
+          break;
+        }
+
+        let mut inserted = vec![];
+        for (view_id, view) in self.views_to_add.iter() {
+          if duplicated_view_ids.contains(&view.parent_view_id) {
+            folder
+              .body
+              .views
+              .insert(&mut folder_txn, view.clone(), None);
+            duplicated_view_ids.insert(view_id.clone());
+            inserted.push(view_id.clone());
+          }
+        }
+        if inserted.is_empty() {
+          tracing::error!(
+            "views not inserted because parent_id does not exists: {:?}",
+            self.views_to_add.keys()
+          );
+          break;
+        }
+        for view_id in inserted {
+          self.views_to_add.remove(&view_id);
+        }
       }
+
       folder_txn.encode_update_v1()
     };
 

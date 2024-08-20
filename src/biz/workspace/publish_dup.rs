@@ -305,16 +305,19 @@ impl PublishCollabDuplicator {
       tracing::error!("failed to deep copy doc databases: {}", err);
     };
 
-    // doc_data into binary data
-    let new_doc_bin = doc
-      .encode_collab()
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-      .encode_to_bytes()?;
-
-    // insert document with modified page_id references
-    self
-      .insert_collab_for_duplicator(&ret_view.id, new_doc_bin, CollabType::Document, txn)
-      .await?;
+    {
+      // write modified doc_data back to storage
+      let empty_collab = collab_from_doc_state(vec![], &new_view_id)?;
+      let new_doc = Document::open_with(empty_collab, Some(doc_data))
+        .map_err(|e| AppError::Unhandled(e.to_string()))?;
+      let new_doc_bin = new_doc
+        .encode_collab()
+        .map_err(|e| AppError::Unhandled(e.to_string()))?
+        .encode_to_bytes()?;
+      self
+        .insert_collab_for_duplicator(&ret_view.id, new_doc_bin, CollabType::Document, txn)
+        .await?;
+    }
 
     Ok(ret_view)
   }

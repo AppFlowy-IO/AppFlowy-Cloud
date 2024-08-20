@@ -459,6 +459,14 @@ pub struct AFTemplateRow {
 
 impl From<AFTemplateRow> for Template {
   fn from(value: AFTemplateRow) -> Self {
+    let mut related_templates: Vec<TemplateMinimal> = value
+      .related_templates
+      .into_iter()
+      .map(|v| v.into())
+      .collect();
+    related_templates.sort_by_key(|t| t.created_at);
+    related_templates.reverse();
+
     Self {
       view_id: value.view_id,
       created_at: value.created_at,
@@ -469,11 +477,7 @@ impl From<AFTemplateRow> for Template {
       view_url: value.view_url,
       creator: value.creator.into(),
       categories: value.categories.into_iter().map(|v| v.into()).collect(),
-      related_templates: value
-        .related_templates
-        .into_iter()
-        .map(|v| v.into())
-        .collect(),
+      related_templates,
       is_new_template: value.is_new_template,
       is_featured: value.is_featured,
     }
@@ -488,9 +492,13 @@ pub struct AFTemplateGroupRow {
 
 impl From<AFTemplateGroupRow> for TemplateGroup {
   fn from(value: AFTemplateGroupRow) -> Self {
+    let mut templates: Vec<TemplateMinimal> =
+      value.templates.into_iter().map(|v| v.into()).collect();
+    templates.sort_by_key(|t| t.created_at);
+    templates.reverse();
     Self {
       category: value.category.into(),
-      templates: value.templates.into_iter().map(|v| v.into()).collect(),
+      templates,
     }
   }
 }

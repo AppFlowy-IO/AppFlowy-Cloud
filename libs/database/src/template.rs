@@ -703,6 +703,7 @@ pub async fn select_templates<'a, E: Executor<'a, Database = Postgres>>(
   is_featured: Option<bool>,
   is_new_template: Option<bool>,
   name_contains: Option<&str>,
+  limit: Option<i64>,
 ) -> Result<Vec<TemplateMinimal>, AppError> {
   let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
     r#"
@@ -768,6 +769,10 @@ pub async fn select_templates<'a, E: Executor<'a, Database = Postgres>>(
     ORDER BY template.created_at DESC
     "#,
   );
+  if let Some(limit) = limit {
+    query_builder.push(" LIMIT ");
+    query_builder.push_bind(limit);
+  };
   let query = query_builder.build_query_as::<AFTemplateMinimalRow>();
   let template_rows: Vec<AFTemplateMinimalRow> = query.fetch_all(executor).await?;
   Ok(template_rows.into_iter().map(|row| row.into()).collect())
@@ -775,24 +780,38 @@ pub async fn select_templates<'a, E: Executor<'a, Database = Postgres>>(
 
 pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
+  per_count: i64,
 ) -> Result<Vec<TemplateGroup>, AppError> {
   let template_group_rows = sqlx::query_as!(
     AFTemplateGroupRow,
     r#"
-      WITH template_group_by_category_and_view AS (
+      WITH recent_template AS (
         SELECT
           template_template_category.category_id,
           template_template_category.view_id,
-          ARRAY_AGG((
-            template_template_category.category_id,
-            category.name,
-            category.icon,
-            category.bg_color
-          )::template_category_minimal_type) AS categories
+          category.name,
+          category.icon,
+          category.bg_color,
+          ROW_NUMBER() OVER (PARTITION BY template_template_category.category_id ORDER BY template.created_at DESC) AS recency
         FROM af_template_view_template_category template_template_category
         JOIN af_template_category category
         USING (category_id)
-        GROUP BY template_template_category.category_id, template_template_category.view_id
+        JOIN af_template_view template
+        USING (view_id)
+      ),
+      template_group_by_category_and_view AS (
+        SELECT
+          category_id,
+          view_id,
+          ARRAY_AGG((
+            category_id,
+            name,
+            icon,
+            bg_color
+          )::template_category_minimal_type) AS categories
+          FROM recent_template
+          WHERE recency <= $1
+          GROUP BY category_id, view_id
       ),
       template_group_by_category_and_view_with_creator_and_template_details AS (
         SELECT
@@ -838,6 +857,7 @@ pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
         JOIN af_template_category category
         USING (category_id)
     "#,
+    per_count,
   )
   .fetch_all(executor)
   .await?;

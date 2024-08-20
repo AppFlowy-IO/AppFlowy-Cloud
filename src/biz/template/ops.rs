@@ -235,6 +235,7 @@ pub async fn get_templates(
     is_featured,
     is_new_template,
     name_contains,
+    None,
   )
   .await?;
   Ok(templates)
@@ -250,10 +251,18 @@ pub async fn delete_template(pg_pool: &PgPool, view_id: Uuid) -> Result<(), AppR
   Ok(())
 }
 
-pub async fn get_template_homepage(pg_pool: &PgPool) -> Result<TemplateHomePage, AppResponseError> {
-  let template_groups = select_template_homepage(pg_pool).await?;
-  let featured_templates = select_templates(pg_pool, None, Some(true), None, None).await?;
-  let new_templates = select_templates(pg_pool, None, None, Some(true), None).await?;
+const DEFAULT_HOMEPAGE_CATEGORY_COUNT: i64 = 10;
+
+pub async fn get_template_homepage(
+  pg_pool: &PgPool,
+  per_count: Option<i64>,
+) -> Result<TemplateHomePage, AppResponseError> {
+  let per_count = per_count.unwrap_or(DEFAULT_HOMEPAGE_CATEGORY_COUNT);
+  let template_groups = select_template_homepage(pg_pool, per_count).await?;
+  let featured_templates =
+    select_templates(pg_pool, None, Some(true), None, None, Some(per_count)).await?;
+  let new_templates =
+    select_templates(pg_pool, None, None, Some(true), None, Some(per_count)).await?;
   let homepage = TemplateHomePage {
     template_groups,
     featured_templates,

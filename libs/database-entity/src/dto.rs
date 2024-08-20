@@ -1218,6 +1218,11 @@ pub struct TemplateHomePage {
   pub template_groups: Vec<TemplateGroup>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateHomePageQueryParams {
+  pub per_count: Option<i64>,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CollabParams, CollabParamsV0};

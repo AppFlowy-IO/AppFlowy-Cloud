@@ -6,8 +6,8 @@ use database_entity::dto::{
   CreateTemplateCategoryParams, CreateTemplateCreatorParams, CreateTemplateParams,
   GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams, GetTemplatesQueryParams,
   Template, TemplateCategories, TemplateCategory, TemplateCreator, TemplateCreators,
-  TemplateHomePage, Templates, UpdateTemplateCategoryParams, UpdateTemplateCreatorParams,
-  UpdateTemplateParams,
+  TemplateHomePage, TemplateHomePageQueryParams, Templates, UpdateTemplateCategoryParams,
+  UpdateTemplateCreatorParams, UpdateTemplateParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use uuid::Uuid;
@@ -262,8 +262,9 @@ async fn delete_template_handler(
 }
 
 async fn get_template_homepage_handler(
+  query: web::Query<TemplateHomePageQueryParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<TemplateHomePage>> {
-  let template_homepage = get_template_homepage(&state.pg_pool).await?;
+  let template_homepage = get_template_homepage(&state.pg_pool, query.per_count).await?;
   Ok(Json(AppResponse::Ok().with_data(template_homepage)))
 }

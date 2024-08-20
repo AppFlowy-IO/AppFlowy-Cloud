@@ -1,0 +1,158 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      WITH recent_template AS (\n        SELECT\n          template_template_category.category_id,\n          template_template_category.view_id,\n          category.name,\n          category.icon,\n          category.bg_color,\n          ROW_NUMBER() OVER (PARTITION BY template_template_category.category_id ORDER BY template.created_at DESC) AS recency\n        FROM af_template_view_template_category template_template_category\n        JOIN af_template_category category\n        USING (category_id)\n        JOIN af_template_view template\n        USING (view_id)\n      ),\n      template_group_by_category_and_view AS (\n        SELECT\n          category_id,\n          view_id,\n          ARRAY_AGG((\n            category_id,\n            name,\n            icon,\n            bg_color\n          )::template_category_minimal_type) AS categories\n          FROM recent_template\n          WHERE recency <= $1\n          GROUP BY category_id, view_id\n      ),\n      template_group_by_category_and_view_with_creator_and_template_details AS (\n        SELECT\n          template_group_by_category_and_view.category_id,\n          (\n            template.view_id,\n            template.created_at,\n            template.updated_at,\n            template.name,\n            template.description,\n            template.view_url,\n            (\n              creator.creator_id,\n              creator.name,\n              creator.avatar_url\n            )::template_creator_minimal_type,\n            template_group_by_category_and_view.categories,\n            template.is_new_template,\n            template.is_featured\n          )::template_minimal_type AS template\n        FROM template_group_by_category_and_view\n        JOIN af_template_view template\n        USING (view_id)\n        JOIN af_template_creator creator\n        USING (creator_id)\n      ),\n      template_group_by_category AS (\n        SELECT\n          category_id,\n          ARRAY_AGG(template) AS templates\n        FROM template_group_by_category_and_view_with_creator_and_template_details\n        GROUP BY category_id\n      )\n      SELECT\n        (\n          template_group_by_category.category_id,\n          category.name,\n          category.icon,\n          category.bg_color\n        )::template_category_minimal_type AS \"category!: AFTemplateCategoryMinimalRow\",\n        templates AS \"templates!: Vec<AFTemplateMinimalRow>\"\n        FROM template_group_by_category\n        JOIN af_template_category category\n        USING (category_id)\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "category!: AFTemplateCategoryMinimalRow",
+        "type_info": {
+          "Custom": {
+            "name": "template_category_minimal_type",
+            "kind": {
+              "Composite": [
+                [
+                  "category_id",
+                  "Uuid"
+                ],
+                [
+                  "name",
+                  "Text"
+                ],
+                [
+                  "icon",
+                  "Text"
+                ],
+                [
+                  "bg_color",
+                  "Text"
+                ]
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "templates!: Vec<AFTemplateMinimalRow>",
+        "type_info": {
+          "Custom": {
+            "name": "template_minimal_type[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "template_minimal_type",
+                  "kind": {
+                    "Composite": [
+                      [
+                        "view_id",
+                        "Uuid"
+                      ],
+                      [
+                        "created_at",
+                        "Timestamptz"
+                      ],
+                      [
+                        "updated_at",
+                        "Timestamptz"
+                      ],
+                      [
+                        "name",
+                        "Text"
+                      ],
+                      [
+                        "description",
+                        "Text"
+                      ],
+                      [
+                        "view_url",
+                        "Text"
+                      ],
+                      [
+                        "creator",
+                        {
+                          "Custom": {
+                            "name": "template_creator_minimal_type",
+                            "kind": {
+                              "Composite": [
+                                [
+                                  "creator_id",
+                                  "Uuid"
+                                ],
+                                [
+                                  "name",
+                                  "Text"
+                                ],
+                                [
+                                  "avatar_url",
+                                  "Text"
+                                ]
+                              ]
+                            }
+                          }
+                        }
+                      ],
+                      [
+                        "categories",
+                        {
+                          "Custom": {
+                            "name": "template_category_minimal_type[]",
+                            "kind": {
+                              "Array": {
+                                "Custom": {
+                                  "name": "template_category_minimal_type",
+                                  "kind": {
+                                    "Composite": [
+                                      [
+                                        "category_id",
+                                        "Uuid"
+                                      ],
+                                      [
+                                        "name",
+                                        "Text"
+                                      ],
+                                      [
+                                        "icon",
+                                        "Text"
+                                      ],
+                                      [
+                                        "bg_color",
+                                        "Text"
+                                      ]
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      [
+                        "is_new_template",
+                        "Bool"
+                      ],
+                      [
+                        "is_featured",
+                        "Bool"
+                      ]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "50052ba4fa38e18bcf7d6ef76f8ffdb0263dfc0eb6aa001a8c30ab881ce3300e"
+}

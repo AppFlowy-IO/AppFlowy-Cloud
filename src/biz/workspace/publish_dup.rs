@@ -712,55 +712,51 @@ impl PublishCollabDuplicator {
 
     // create a new view to be returned to the caller
     // view_id is the main view of the database
-    let ret_view = {
-      // create the main view
-      let main_view_id = self
-        .duplicated_db_main_view
-        .get(pub_db_id.as_str())
-        .ok_or_else(|| AppError::RecordNotFound(format!("main view not found: {}", pub_view_id)))?;
+    // create the main view
+    let main_view_id = self
+      .duplicated_db_main_view
+      .get(pub_db_id.as_str())
+      .ok_or_else(|| AppError::RecordNotFound(format!("main view not found: {}", pub_view_id)))?;
 
-      let main_view_info = view_info_by_id.get(pub_view_id).ok_or_else(|| {
-        AppError::RecordNotFound(format!("metadata not found for view: {}", pub_view_id))
-      })?;
-      let main_folder_view = self.new_folder_view(
-        main_view_id.clone(),
-        main_view_info,
-        main_view_info.layout.clone(),
-      );
+    let main_view_info = view_info_by_id.get(pub_view_id).ok_or_else(|| {
+      AppError::RecordNotFound(format!("metadata not found for view: {}", pub_view_id))
+    })?;
+    let main_folder_view = self.new_folder_view(
+      main_view_id.clone(),
+      main_view_info,
+      main_view_info.layout.clone(),
+    );
 
-      // create other visible view which are child to the main view
-      for vis_view_id in published_db.visible_database_view_ids {
-        if vis_view_id == pub_view_id {
-          // skip main view
-          continue;
-        }
-
-        let child_view_id = self
-          .duplicated_db_view
-          .get(&vis_view_id)
-          .ok_or_else(|| AppError::RecordNotFound(format!("view not found: {}", vis_view_id)))?;
-
-        let child_view_info = view_info_by_id.get(&vis_view_id).ok_or_else(|| {
-          AppError::RecordNotFound(format!("metadata not found for view: {}", vis_view_id))
-        })?;
-
-        let mut child_folder_view = self.new_folder_view(
-          child_view_id.clone(),
-          view_info_by_id.get(&vis_view_id).ok_or_else(|| {
-            AppError::RecordNotFound(format!("metadata not found for view: {}", vis_view_id))
-          })?,
-          child_view_info.layout.clone(),
-        );
-        child_folder_view.parent_view_id.clone_from(main_view_id);
-        self
-          .views_to_add
-          .insert(child_folder_view.id.clone(), child_folder_view);
+    // create other visible view which are child to the main view
+    for vis_view_id in published_db.visible_database_view_ids {
+      if vis_view_id == pub_view_id {
+        // skip main view
+        continue;
       }
 
-      main_folder_view
-    };
+      let child_view_id = self
+        .duplicated_db_view
+        .get(&vis_view_id)
+        .ok_or_else(|| AppError::RecordNotFound(format!("view not found: {}", vis_view_id)))?;
 
-    Ok(ret_view)
+      let child_view_info = view_info_by_id.get(&vis_view_id).ok_or_else(|| {
+        AppError::RecordNotFound(format!("metadata not found for view: {}", vis_view_id))
+      })?;
+
+      let mut child_folder_view = self.new_folder_view(
+        child_view_id.clone(),
+        view_info_by_id.get(&vis_view_id).ok_or_else(|| {
+          AppError::RecordNotFound(format!("metadata not found for view: {}", vis_view_id))
+        })?,
+        child_view_info.layout.clone(),
+      );
+      child_folder_view.parent_view_id.clone_from(main_view_id);
+      self
+        .views_to_add
+        .insert(child_folder_view.id.clone(), child_folder_view);
+    }
+
+    Ok(main_folder_view)
   }
 
   /// ceates a new folder view without parent_view_id set

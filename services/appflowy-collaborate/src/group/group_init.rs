@@ -1,42 +1,40 @@
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
+use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
-use std::collections::VecDeque;
-
-use std::sync::Arc;
-
-use crate::error::RealtimeError;
-use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, Subscription};
-use crate::group::persistence::GroupPersistence;
-use crate::metrics::CollabMetricsCalculate;
-use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::CollabMessage;
-use collab_rt_entity::MessageByObjectId;
-use database::collab::CollabStorage;
-
-use collab::core::collab::MutexCollab;
 use futures_util::{SinkExt, StreamExt};
-
-use collab::entity::EncodedCollab;
-
-use crate::indexer::Indexer;
-use collab_stream::client::CollabRedisStream;
-use collab_stream::error::StreamError;
-use collab_stream::model::{CollabUpdateEvent, StreamBinary};
-use collab_stream::stream_group::StreamGroup;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
-use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{error, event, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::Update;
 
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::CollabMessage;
+use collab_rt_entity::MessageByObjectId;
+use collab_stream::client::CollabRedisStream;
+use collab_stream::error::StreamError;
+use collab_stream::model::{CollabUpdateEvent, StreamBinary};
+use collab_stream::stream_group::StreamGroup;
+use database::collab::CollabStorage;
+
+use crate::error::RealtimeError;
+use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, Subscription};
+use crate::group::persistence::GroupPersistence;
+use crate::indexer::Indexer;
+use crate::metrics::CollabMetricsCalculate;
+
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
   pub workspace_id: String,
   pub object_id: String,
-  collab: MutexCollab,
+  collab: Arc<RwLock<Collab>>,
   collab_type: CollabType,
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
@@ -45,7 +43,7 @@ pub struct CollabGroup {
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
   metrics_calculate: CollabMetricsCalculate,
-  destroy_group_tx: mpsc::Sender<MutexCollab>,
+  destroy_group_tx: mpsc::Sender<Arc<RwLock<Collab>>>,
 }
 
 impl Drop for CollabGroup {
@@ -61,7 +59,7 @@ impl CollabGroup {
     workspace_id: String,
     object_id: String,
     collab_type: CollabType,
-    collab: MutexCollab,
+    collab: Arc<RwLock<Collab>>,
     metrics_calculate: CollabMetricsCalculate,
     storage: Arc<S>,
     is_new_collab: bool,
@@ -79,13 +77,16 @@ impl CollabGroup {
       edit_state_max_secs,
       is_new_collab,
     ));
-    let broadcast = CollabBroadcast::new(
-      &object_id,
-      10,
-      edit_state.clone(),
-      &collab,
-      CollabUpdateStreamingImpl::new(&workspace_id, &object_id, &collab_redis_stream).await?,
-    );
+    let broadcast = {
+      let lock = collab.read().await;
+      CollabBroadcast::new(
+        &object_id,
+        10,
+        edit_state.clone(),
+        &lock,
+        CollabUpdateStreamingImpl::new(&workspace_id, &object_id, &collab_redis_stream).await?,
+      )
+    };
     let (destroy_group_tx, rx) = mpsc::channel(1);
 
     tokio::spawn(
@@ -95,7 +96,7 @@ impl CollabGroup {
         uid,
         storage,
         edit_state.clone(),
-        collab.downgrade(),
+        Arc::downgrade(&collab),
         collab_type.clone(),
         persistence_interval,
         indexer,
@@ -116,10 +117,9 @@ impl CollabGroup {
   }
 
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
-    let encode_collab = self
-      .collab
-      .lock()
-      .try_encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
+    let lock = self.collab.read().await;
+    let encode_collab =
+      lock.encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
     Ok(encode_collab)
   }
 
@@ -157,7 +157,7 @@ impl CollabGroup {
       subscriber_origin,
       sink,
       stream,
-      self.collab.downgrade(),
+      Arc::downgrade(&self.collab),
       self.metrics_calculate.clone(),
     );
 

@@ -155,8 +155,11 @@ impl FolderView {
       private_views.insert(private_section.id);
     }
 
-    let workspace_id = folder.get_workspace_id();
-    let root = match folder.views.get_view(&workspace_id) {
+    let workspace_id = folder.get_workspace_id().unwrap_or_else(|| {
+      tracing::error!("failed to get workspace_id");
+      Uuid::nil().to_string()
+    });
+    let root = match folder.get_view(&workspace_id) {
       Some(root) => root,
       None => {
         tracing::error!("failed to get root view, workspace_id: {}", workspace_id);
@@ -211,7 +214,7 @@ struct FolderViewIntermediate<'a> {
 
 impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
   fn from(fv: FolderViewIntermediate) -> Self {
-    let view = match fv.folder.views.get_view(fv.view_id) {
+    let view = match fv.folder.get_view(fv.view_id) {
       Some(view) => view,
       None => {
         tracing::error!("failed to get view, view_id: {}", fv.view_id);

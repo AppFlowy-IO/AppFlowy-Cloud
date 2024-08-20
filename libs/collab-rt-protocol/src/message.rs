@@ -1,9 +1,8 @@
-use collab::core::awareness::AwarenessUpdate;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
+use collab::core::awareness::AwarenessUpdate;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
 use yrs::updates::decoder::{Decode, Decoder};
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::StateVector;

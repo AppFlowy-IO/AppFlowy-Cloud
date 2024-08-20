@@ -1,11 +1,13 @@
-use client_api_test::*;
+use std::time::Duration;
+
 use collab_entity::CollabType;
-use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 use serde_json::json;
 use sqlx::types::uuid;
-use std::time::Duration;
 use tokio::time::sleep;
 use tracing::trace;
+
+use client_api_test::*;
+use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 
 #[tokio::test]
 async fn sync_collab_content_after_reconnect_test() {
@@ -22,12 +24,8 @@ async fn sync_collab_content_after_reconnect_test() {
   test_client.disconnect().await;
   for i in 0..=5 {
     test_client
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .mutex_collab
-      .lock()
-      .insert(&i.to_string(), i.to_string());
+      .insert_into(&object_id, &i.to_string(), i.to_string())
+      .await;
   }
 
   // it will return RecordNotFound error when trying to get the collab from the server
@@ -82,13 +80,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .await;
 
   // client 1 edit the collab
-  client_1
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .mutex_collab
-    .lock()
-    .insert("name", "workspace1");
+  client_1.insert_into(&object_id, "name", "workspace1").await;
   client_1
     .wait_object_sync_complete(&object_id)
     .await
@@ -118,13 +110,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
   client_2.disconnect().await;
   sleep(Duration::from_millis(2000)).await;
 
-  client_2
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .mutex_collab
-    .lock()
-    .insert("name", "workspace2");
+  client_2.insert_into(&object_id, "name", "workspace2").await;
   client_2.reconnect().await;
   client_2
     .wait_object_sync_complete(&object_id)
@@ -159,26 +145,14 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
     .await;
 
   // client 1 edit the collab with object_id_1
-  device_1
-    .collabs
-    .get_mut(&object_id_1)
-    .unwrap()
-    .mutex_collab
-    .lock()
-    .insert("name", "object 1");
+  device_1.insert_into(&object_id_1, "name", "object 1").await;
   device_1
     .wait_object_sync_complete(&object_id_1)
     .await
     .unwrap();
 
   // client 2 edit the collab with object_id_2
-  device_2
-    .collabs
-    .get_mut(&object_id_2)
-    .unwrap()
-    .mutex_collab
-    .lock()
-    .insert("name", "object 2");
+  device_2.insert_into(&object_id_2, "name", "object 2").await;
   device_2
     .wait_object_sync_complete(&object_id_2)
     .await
@@ -245,20 +219,12 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
   for i in 0..10 {
     if i % 2 == 0 {
       client_1
-        .collabs
-        .get_mut(&object_id)
-        .unwrap()
-        .mutex_collab
-        .lock()
-        .insert(&i.to_string(), format!("Task {}", i));
+        .insert_into(&object_id, &i.to_string(), format!("Task {}", i))
+        .await;
     } else {
       client_2
-        .collabs
-        .get_mut(&object_id)
-        .unwrap()
-        .mutex_collab
-        .lock()
-        .insert(&i.to_string(), format!("Task {}", i));
+        .insert_into(&object_id, &i.to_string(), format!("Task {}", i))
+        .await;
     }
   }
 

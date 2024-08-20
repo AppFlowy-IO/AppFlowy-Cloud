@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    INSERT INTO af_related_template_view (view_id, related_view_id)\n    SELECT $1 AS view_id, related_view_id\n    FROM UNNEST($2::uuid[]) AS t(related_view_id)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b509712055858af398fd12ddd1a8c3da54280cf55f0c53f340bddbf4bf09b3e0"
+}

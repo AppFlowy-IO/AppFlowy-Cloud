@@ -4,7 +4,8 @@ use chrono::{DateTime, Utc};
 
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWorkspace, AFWorkspaceInvitationStatus,
-  AccountLink, GlobalComment, Reaction, TemplateCategory, TemplateCategoryType, TemplateCreator,
+  AccountLink, GlobalComment, Reaction, Template, TemplateCategory, TemplateCategoryMinimal,
+  TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -276,9 +277,9 @@ impl From<AFReactionRow> for Reaction {
   }
 }
 
-#[derive(Debug, FromRow, Serialize)]
+#[derive(Debug, FromRow, Serialize, sqlx::Type)]
 pub struct AFTemplateCategoryRow {
-  pub id: Uuid,
+  pub category_id: Uuid,
   pub name: String,
   pub icon: String,
   pub bg_color: String,
@@ -290,13 +291,33 @@ pub struct AFTemplateCategoryRow {
 impl From<AFTemplateCategoryRow> for TemplateCategory {
   fn from(value: AFTemplateCategoryRow) -> Self {
     Self {
-      id: value.id,
+      id: value.category_id,
       name: value.name,
       icon: value.icon,
       bg_color: value.bg_color,
       description: value.description,
       category_type: value.category_type.into(),
       priority: value.priority,
+    }
+  }
+}
+
+#[derive(Debug, FromRow, Serialize, sqlx::Type)]
+#[sqlx(type_name = "template_category_minimal_type")]
+pub struct AFTemplateCategoryMinimalRow {
+  pub category_id: Uuid,
+  pub name: String,
+  pub icon: String,
+  pub bg_color: String,
+}
+
+impl From<AFTemplateCategoryMinimalRow> for TemplateCategoryMinimal {
+  fn from(value: AFTemplateCategoryMinimalRow) -> Self {
+    Self {
+      id: value.category_id,
+      name: value.name,
+      icon: value.icon,
+      bg_color: value.bg_color,
     }
   }
 }
@@ -327,6 +348,7 @@ impl From<TemplateCategoryType> for AFTemplateCategoryTypeColumn {
 }
 
 #[derive(sqlx::Type, Serialize, Debug)]
+#[sqlx(type_name = "account_link_type")]
 pub struct AccountLinkColumn {
   pub link_type: String,
   pub url: String,
@@ -341,12 +363,14 @@ impl From<AccountLinkColumn> for AccountLink {
   }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, sqlx::Type)]
+#[sqlx(type_name = "template_creator_type")]
 pub struct AFTemplateCreatorRow {
   pub id: Uuid,
   pub name: String,
   pub avatar_url: String,
   pub account_links: Option<Vec<AccountLinkColumn>>,
+  pub number_of_templates: i32,
 }
 
 impl From<AFTemplateCreatorRow> for TemplateCreator {
@@ -362,6 +386,119 @@ impl From<AFTemplateCreatorRow> for TemplateCreator {
       name: value.name,
       avatar_url: value.avatar_url,
       account_links,
+      number_of_templates: value.number_of_templates,
+    }
+  }
+}
+
+#[derive(Debug, Serialize, sqlx::Type)]
+#[sqlx(type_name = "template_creator_minimal_type")]
+pub struct AFTemplateCreatorMinimalColumn {
+  pub creator_id: Uuid,
+  pub name: String,
+  pub avatar_url: String,
+}
+
+impl From<AFTemplateCreatorMinimalColumn> for TemplateCreatorMinimal {
+  fn from(value: AFTemplateCreatorMinimalColumn) -> Self {
+    Self {
+      id: value.creator_id,
+      name: value.name,
+      avatar_url: value.avatar_url,
+    }
+  }
+}
+
+#[derive(Debug, Serialize, FromRow, sqlx::Type)]
+#[sqlx(type_name = "template_minimal_type")]
+pub struct AFTemplateMinimalRow {
+  pub view_id: Uuid,
+  pub created_at: DateTime<Utc>,
+  pub updated_at: DateTime<Utc>,
+  pub name: String,
+  pub description: String,
+  pub view_url: String,
+  pub creator: AFTemplateCreatorMinimalColumn,
+  pub categories: Vec<AFTemplateCategoryMinimalRow>,
+  pub is_new_template: bool,
+  pub is_featured: bool,
+}
+
+impl From<AFTemplateMinimalRow> for TemplateMinimal {
+  fn from(value: AFTemplateMinimalRow) -> Self {
+    Self {
+      view_id: value.view_id,
+      created_at: value.created_at,
+      last_updated_at: value.updated_at,
+      name: value.name,
+      description: value.description,
+      creator: value.creator.into(),
+      categories: value.categories.into_iter().map(|x| x.into()).collect(),
+      view_url: value.view_url,
+      is_new_template: value.is_new_template,
+      is_featured: value.is_featured,
+    }
+  }
+}
+
+#[derive(Debug, Serialize, sqlx::Type)]
+pub struct AFTemplateRow {
+  pub view_id: Uuid,
+  pub created_at: DateTime<Utc>,
+  pub updated_at: DateTime<Utc>,
+  pub name: String,
+  pub description: String,
+  pub about: String,
+  pub view_url: String,
+  pub creator: AFTemplateCreatorRow,
+  pub categories: Vec<AFTemplateCategoryRow>,
+  pub related_templates: Vec<AFTemplateMinimalRow>,
+  pub is_new_template: bool,
+  pub is_featured: bool,
+}
+
+impl From<AFTemplateRow> for Template {
+  fn from(value: AFTemplateRow) -> Self {
+    let mut related_templates: Vec<TemplateMinimal> = value
+      .related_templates
+      .into_iter()
+      .map(|v| v.into())
+      .collect();
+    related_templates.sort_by_key(|t| t.created_at);
+    related_templates.reverse();
+
+    Self {
+      view_id: value.view_id,
+      created_at: value.created_at,
+      last_updated_at: value.updated_at,
+      name: value.name,
+      description: value.description,
+      about: value.about,
+      view_url: value.view_url,
+      creator: value.creator.into(),
+      categories: value.categories.into_iter().map(|v| v.into()).collect(),
+      related_templates,
+      is_new_template: value.is_new_template,
+      is_featured: value.is_featured,
+    }
+  }
+}
+
+#[derive(Debug, Serialize, sqlx::Type)]
+pub struct AFTemplateGroupRow {
+  pub category: AFTemplateCategoryMinimalRow,
+  pub templates: Vec<AFTemplateMinimalRow>,
+}
+
+impl From<AFTemplateGroupRow> for TemplateGroup {
+  fn from(value: AFTemplateGroupRow) -> Self {
+    let mut templates: Vec<TemplateMinimal> =
+      value.templates.into_iter().map(|v| v.into()).collect();
+    templates.sort_by_key(|t| t.created_at);
+    templates.reverse();
+    Self {
+      category: value.category.into(),
+      templates,
     }
   }
 }

@@ -3,21 +3,16 @@ use actix_web::{
   Result, Scope,
 };
 use database_entity::dto::{
-  CreateTemplateCategoryParams, CreateTemplateCreatorParams, GetTemplateCategoriesQueryParams,
-  GetTemplateCreatorsQueryParams, TemplateCategories, TemplateCategory, TemplateCreator,
-  TemplateCreators, UpdateTemplateCategoryParams, UpdateTemplateCreatorParams,
+  CreateTemplateCategoryParams, CreateTemplateCreatorParams, CreateTemplateParams,
+  GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams, GetTemplatesQueryParams,
+  Template, TemplateCategories, TemplateCategory, TemplateCreator, TemplateCreators,
+  TemplateHomePage, TemplateHomePageQueryParams, Templates, UpdateTemplateCategoryParams,
+  UpdateTemplateCreatorParams, UpdateTemplateParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use uuid::Uuid;
 
-use crate::{
-  biz::template::ops::{
-    create_new_template_category, create_new_template_creator, delete_template_category,
-    delete_template_creator, get_template_categories, get_template_category, get_template_creator,
-    get_template_creators, update_template_category, update_template_creator,
-  },
-  state::AppState,
-};
+use crate::{biz::template::ops::*, state::AppState};
 
 pub fn template_scope() -> Scope {
   web::scope("/api/template-center")
@@ -43,6 +38,18 @@ pub fn template_scope() -> Scope {
         .route(web::get().to(get_template_creator_handler))
         .route(web::delete().to(delete_template_creator_handler)),
     )
+    .service(
+      web::resource("/template")
+        .route(web::post().to(post_template_handler))
+        .route(web::get().to(list_templates_handler)),
+    )
+    .service(
+      web::resource("/template/{view_id}")
+        .route(web::put().to(update_template_handler))
+        .route(web::get().to(get_template_handler))
+        .route(web::delete().to(delete_template_handler)),
+    )
+    .service(web::resource("/homepage").route(web::get().to(get_template_homepage_handler)))
 }
 
 async fn post_template_category_handler(
@@ -172,4 +179,92 @@ async fn delete_template_creator_handler(
   let creator_id = creator_id.into_inner();
   delete_template_creator(&state.pg_pool, creator_id).await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn post_template_handler(
+  data: Json<CreateTemplateParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Template>> {
+  let new_template = create_new_template(
+    &state.pg_pool,
+    data.view_id,
+    &data.name,
+    &data.description,
+    &data.about,
+    &data.view_url,
+    data.creator_id,
+    data.is_new_template,
+    data.is_featured,
+    &data.category_ids,
+    &data.related_view_ids,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(new_template)))
+}
+
+async fn list_templates_handler(
+  data: web::Query<GetTemplatesQueryParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Templates>> {
+  let data = data.into_inner();
+  let template_summary_list = get_templates(
+    &state.pg_pool,
+    data.category_id,
+    data.is_featured,
+    data.is_new_template,
+    data.name_contains.as_deref(),
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(Templates {
+    templates: template_summary_list,
+  })))
+}
+
+async fn get_template_handler(
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Template>> {
+  let view_id = view_id.into_inner();
+  let template = get_template(&state.pg_pool, view_id).await?;
+  Ok(Json(AppResponse::Ok().with_data(template)))
+}
+
+async fn update_template_handler(
+  view_id: web::Path<Uuid>,
+  data: Json<UpdateTemplateParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Template>> {
+  let view_id = view_id.into_inner();
+  let updated_template = update_template(
+    &state.pg_pool,
+    view_id,
+    &data.name,
+    &data.description,
+    &data.about,
+    &data.view_url,
+    data.creator_id,
+    data.is_new_template,
+    data.is_featured,
+    &data.category_ids,
+    &data.related_view_ids,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(updated_template)))
+}
+
+async fn delete_template_handler(
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  let view_id = view_id.into_inner();
+  delete_template(&state.pg_pool, view_id).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_template_homepage_handler(
+  query: web::Query<TemplateHomePageQueryParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<TemplateHomePage>> {
+  let template_homepage = get_template_homepage(&state.pg_pool, query.per_count).await?;
+  Ok(Json(AppResponse::Ok().with_data(template_homepage)))
 }

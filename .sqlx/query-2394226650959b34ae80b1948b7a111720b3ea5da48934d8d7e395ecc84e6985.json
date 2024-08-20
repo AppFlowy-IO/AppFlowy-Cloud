@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    UPDATE af_template_view SET\n      updated_at = NOW(),\n      name = $2,\n      description = $3,\n      about = $4,\n      view_url = $5,\n      creator_id = $6,\n      is_new_template = $7,\n      is_featured = $8\n      WHERE view_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2394226650959b34ae80b1948b7a111720b3ea5da48934d8d7e395ecc84e6985"
+}

@@ -1,13 +1,11 @@
 use std::ops::DerefMut;
 
 use anyhow::Context;
-use database::template::{
-  delete_template_category_by_id, delete_template_creator_account_links,
-  delete_template_creator_by_id, insert_new_template_category, insert_template_creator,
-  select_template_categories, select_template_category_by_id, select_template_creator_by_id,
-  select_template_creators_by_name, update_template_category_by_id, update_template_creator_by_id,
+use database::template::*;
+use database_entity::dto::{
+  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateHomePage,
+  TemplateMinimal,
 };
-use database_entity::dto::{AccountLink, TemplateCategory, TemplateCategoryType, TemplateCreator};
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -140,4 +138,135 @@ pub async fn delete_template_creator(
 ) -> Result<(), AppResponseError> {
   delete_template_creator_by_id(pg_pool, creator_id).await?;
   Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_new_template(
+  pg_pool: &PgPool,
+  view_id: Uuid,
+  name: &str,
+  description: &str,
+  about: &str,
+  view_url: &str,
+  creator_id: Uuid,
+  is_new_template: bool,
+  is_featured: bool,
+  category_ids: &[Uuid],
+  related_view_ids: &[Uuid],
+) -> Result<Template, AppResponseError> {
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("Begin transaction to create template creator")?;
+  insert_template_view(
+    txn.deref_mut(),
+    view_id,
+    name,
+    description,
+    about,
+    view_url,
+    creator_id,
+    is_new_template,
+    is_featured,
+  )
+  .await?;
+  insert_template_view_template_category(txn.deref_mut(), view_id, category_ids).await?;
+  insert_related_templates(txn.deref_mut(), view_id, related_view_ids).await?;
+  let new_template = select_template_view_by_id(txn.deref_mut(), view_id).await?;
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to update template creator")?;
+  Ok(new_template)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn update_template(
+  pg_pool: &PgPool,
+  view_id: Uuid,
+  name: &str,
+  description: &str,
+  about: &str,
+  view_url: &str,
+  creator_id: Uuid,
+  is_new_template: bool,
+  is_featured: bool,
+  category_ids: &[Uuid],
+  related_view_ids: &[Uuid],
+) -> Result<Template, AppResponseError> {
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("Begin transaction to update template")?;
+  delete_template_view_template_categories(txn.deref_mut(), view_id).await?;
+  delete_related_templates(txn.deref_mut(), view_id).await?;
+  update_template_view(
+    txn.deref_mut(),
+    view_id,
+    name,
+    description,
+    about,
+    view_url,
+    creator_id,
+    is_new_template,
+    is_featured,
+  )
+  .await?;
+  insert_template_view_template_category(txn.deref_mut(), view_id, category_ids).await?;
+  insert_related_templates(txn.deref_mut(), view_id, related_view_ids).await?;
+  let updated_template = select_template_view_by_id(txn.deref_mut(), view_id).await?;
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to update template")?;
+  Ok(updated_template)
+}
+
+pub async fn get_templates(
+  pg_pool: &PgPool,
+  category_id: Option<Uuid>,
+  is_featured: Option<bool>,
+  is_new_template: Option<bool>,
+  name_contains: Option<&str>,
+) -> Result<Vec<TemplateMinimal>, AppResponseError> {
+  let templates = select_templates(
+    pg_pool,
+    category_id,
+    is_featured,
+    is_new_template,
+    name_contains,
+    None,
+  )
+  .await?;
+  Ok(templates)
+}
+
+pub async fn get_template(pg_pool: &PgPool, view_id: Uuid) -> Result<Template, AppResponseError> {
+  let template = select_template_view_by_id(pg_pool, view_id).await?;
+  Ok(template)
+}
+
+pub async fn delete_template(pg_pool: &PgPool, view_id: Uuid) -> Result<(), AppResponseError> {
+  delete_template_by_view_id(pg_pool, view_id).await?;
+  Ok(())
+}
+
+const DEFAULT_HOMEPAGE_CATEGORY_COUNT: i64 = 10;
+
+pub async fn get_template_homepage(
+  pg_pool: &PgPool,
+  per_count: Option<i64>,
+) -> Result<TemplateHomePage, AppResponseError> {
+  let per_count = per_count.unwrap_or(DEFAULT_HOMEPAGE_CATEGORY_COUNT);
+  let template_groups = select_template_homepage(pg_pool, per_count).await?;
+  let featured_templates =
+    select_templates(pg_pool, None, Some(true), None, None, Some(per_count)).await?;
+  let new_templates =
+    select_templates(pg_pool, None, None, Some(true), None, Some(per_count)).await?;
+  let homepage = TemplateHomePage {
+    template_groups,
+    featured_templates,
+    new_templates,
+  };
+  Ok(homepage)
 }

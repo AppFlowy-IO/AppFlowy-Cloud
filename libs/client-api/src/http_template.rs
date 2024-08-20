@@ -1,8 +1,9 @@
 use client_api_entity::{
-  AccountLink, CreateTemplateCategoryParams, CreateTemplateCreatorParams,
-  GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams, TemplateCategories,
-  TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateCreators,
-  UpdateTemplateCategoryParams, UpdateTemplateCreatorParams,
+  AccountLink, CreateTemplateCategoryParams, CreateTemplateCreatorParams, CreateTemplateParams,
+  GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams, GetTemplatesQueryParams,
+  Template, TemplateCategories, TemplateCategory, TemplateCategoryType, TemplateCreator,
+  TemplateCreators, Templates, UpdateTemplateCategoryParams, UpdateTemplateCreatorParams,
+  UpdateTemplateParams,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -32,6 +33,14 @@ fn template_creator_resource_url(base_url: &str, creator_id: Uuid) -> String {
     template_creator_resources_url(base_url),
     creator_id
   )
+}
+
+fn template_resources_url(base_url: &str) -> String {
+  format!("{}/template", template_api_prefix(base_url))
+}
+
+fn template_resource_url(base_url: &str, view_id: Uuid) -> String {
+  format!("{}/{}", template_resources_url(base_url), view_id)
 }
 
 impl Client {
@@ -203,5 +212,89 @@ impl Client {
     AppResponse::<TemplateCreator>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  pub async fn create_template(
+    &self,
+    params: &CreateTemplateParams,
+  ) -> Result<Template, AppResponseError> {
+    let url = template_resources_url(&self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+
+    AppResponse::<Template>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_template(&self, view_id: Uuid) -> Result<Template, AppResponseError> {
+    let url = template_resource_url(&self.base_url, view_id);
+    let resp = self
+      .http_client_without_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<Template>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_templates(
+    &self,
+    category_id: Option<Uuid>,
+    is_featured: Option<bool>,
+    is_new_template: Option<bool>,
+    name_contains: Option<String>,
+  ) -> Result<Templates, AppResponseError> {
+    let url = template_resources_url(&self.base_url);
+    let resp = self
+      .http_client_without_auth(Method::GET, &url)
+      .await?
+      .query(&GetTemplatesQueryParams {
+        category_id,
+        is_featured,
+        is_new_template,
+        name_contains,
+      })
+      .send()
+      .await?;
+
+    AppResponse::<Templates>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn update_template(
+    &self,
+    view_id: Uuid,
+    params: &UpdateTemplateParams,
+  ) -> Result<Template, AppResponseError> {
+    let url = template_resource_url(&self.base_url, view_id);
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+
+    AppResponse::<Template>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn delete_template(&self, view_id: Uuid) -> Result<(), AppResponseError> {
+    let url = template_resource_url(&self.base_url, view_id);
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }

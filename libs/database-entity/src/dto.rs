@@ -1056,6 +1056,14 @@ pub struct TemplateCategory {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateCategoryMinimal {
+  pub id: Uuid,
+  pub name: String,
+  pub icon: String,
+  pub bg_color: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CreateTemplateCategoryParams {
   pub name: String,
   pub icon: String,
@@ -1098,6 +1106,14 @@ pub struct TemplateCreator {
   pub name: String,
   pub avatar_url: String,
   pub account_links: Vec<AccountLink>,
+  pub number_of_templates: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateCreatorMinimal {
+  pub id: Uuid,
+  pub name: String,
+  pub avatar_url: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1117,6 +1133,94 @@ pub struct UpdateTemplateCreatorParams {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetTemplateCreatorsQueryParams {
   pub name_contains: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Template {
+  pub view_id: Uuid,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+  pub name: String,
+  pub description: String,
+  pub about: String,
+  pub view_url: String,
+  pub categories: Vec<TemplateCategory>,
+  pub creator: TemplateCreator,
+  pub is_new_template: bool,
+  pub is_featured: bool,
+  pub related_templates: Vec<TemplateMinimal>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateMinimal {
+  pub view_id: Uuid,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+  pub name: String,
+  pub description: String,
+  pub view_url: String,
+  pub creator: TemplateCreatorMinimal,
+  pub categories: Vec<TemplateCategoryMinimal>,
+  pub is_new_template: bool,
+  pub is_featured: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Templates {
+  pub templates: Vec<TemplateMinimal>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateTemplateParams {
+  pub view_id: Uuid,
+  pub name: String,
+  pub description: String,
+  pub about: String,
+  pub view_url: String,
+  pub category_ids: Vec<Uuid>,
+  pub creator_id: Uuid,
+  pub is_new_template: bool,
+  pub is_featured: bool,
+  pub related_view_ids: Vec<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateTemplateParams {
+  pub name: String,
+  pub description: String,
+  pub about: String,
+  pub view_url: String,
+  pub category_ids: Vec<Uuid>,
+  pub creator_id: Uuid,
+  pub is_new_template: bool,
+  pub is_featured: bool,
+  pub related_view_ids: Vec<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetTemplatesQueryParams {
+  pub category_id: Option<Uuid>,
+  pub is_featured: Option<bool>,
+  pub is_new_template: Option<bool>,
+  pub name_contains: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateGroup {
+  pub category: TemplateCategoryMinimal,
+  pub templates: Vec<TemplateMinimal>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateHomePage {
+  pub featured_templates: Vec<TemplateMinimal>,
+  pub new_templates: Vec<TemplateMinimal>,
+  pub template_groups: Vec<TemplateGroup>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateHomePageQueryParams {
+  pub per_count: Option<i64>,
 }
 
 #[cfg(test)]

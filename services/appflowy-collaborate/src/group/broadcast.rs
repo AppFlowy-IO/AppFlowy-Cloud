@@ -377,9 +377,9 @@ async fn handle_one_client_message(
   .await
   {
     Ok(ack) => {
-      let mut lock = collab.write().await;
-      let collab: &mut Collab = (*lock).borrow_mut();
-      collab.set_last_sync_at(chrono::Utc::now().timestamp());
+      // let mut lock = collab.write().await;
+      // let collab: &mut Collab = (*lock).borrow_mut();
+      // collab.set_last_sync_at(chrono::Utc::now().timestamp());
       Ok(ack)
     },
     Err(err) => Err(err),

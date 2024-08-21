@@ -2,12 +2,11 @@ use anyhow::Error;
 use collab::preclude::{Collab, Map, MapRef, TransactionMut};
 use collab::util::MapExt;
 use collab_database::database::{timestamp, FIELDS, METAS, VIEWS};
+use collab_database::entity::{CreateDatabaseParams, CreateViewParams};
 use collab_database::fields::{Field, FieldBuilder};
 use collab_database::meta::DATABASE_INLINE_VIEW;
 use collab_database::rows::{RowBuilder, META};
-use collab_database::views::{
-  CreateDatabaseParams, CreateViewParams, FieldOrder, RowOrder, ViewBuilder,
-};
+use collab_database::views::{FieldOrder, RowOrder, ViewBuilder};
 use collab_entity::define::{DATABASE, DATABASE_ID, DATABASE_ROW_DATA};
 use collab_folder::CollabOrigin;
 use std::vec;

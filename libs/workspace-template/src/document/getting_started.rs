@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_database::database::DatabaseData;
-use collab_database::views::CreateDatabaseParams;
+use collab_database::entity::CreateDatabaseParams;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    INSERT INTO af_template_view (\n      view_id,\n      name,\n      description,\n      about,\n      view_url,\n      creator_id,\n      is_new_template,\n      is_featured\n    )\n    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ca2a21db67716e3f12b9f9240c1dba1b7cbe0bec1f59ef132fed53942ebad317"
+}

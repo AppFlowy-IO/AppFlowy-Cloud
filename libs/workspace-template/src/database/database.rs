@@ -1,5 +1,5 @@
 use anyhow::Error;
-use collab::preclude::{Collab, Map, MapRef, ToJson, TransactionMut};
+use collab::preclude::{Collab, Map, MapRef, TransactionMut};
 use collab::util::MapExt;
 use collab_database::database::{timestamp, FIELDS, METAS, VIEWS};
 use collab_database::fields::{Field, FieldBuilder};
@@ -82,12 +82,6 @@ pub fn create_database_collab(
       row_orders.clone(),
     );
   }
-
-  println!(
-    "database_id: {}, collab: {:?}",
-    database_id,
-    collab.data.to_json(&txn)
-  );
 
   drop(txn);
 
@@ -175,12 +169,6 @@ pub fn create_database_row_collabs(
           .set_cells(row.cells);
       })
       .done();
-
-    println!(
-      "row_id: {}, collab: {:?}",
-      row_id,
-      collab.data.to_json(&txn)
-    );
 
     drop(txn);
 

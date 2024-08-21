@@ -51,13 +51,6 @@ where
       .encode_to_bytes()
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
-    println!(
-      "inserting object_id: {}, object_type: {}, encoded_collab_v1: {}",
-      object_id,
-      object_type,
-      encoded_collab_v1.len()
-    );
-
     collab_storage
       .insert_new_collab_with_transaction(
         &workspace_id,

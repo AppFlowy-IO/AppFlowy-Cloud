@@ -88,7 +88,6 @@ pub trait CollabSyncProtocol {
     &self,
     awareness: &Awareness,
     encoder: &mut E,
-    _sync_before: bool,
   ) -> Result<(), RTProtocolError> {
     let (state_vector, awareness_update) = {
       let state_vector = awareness

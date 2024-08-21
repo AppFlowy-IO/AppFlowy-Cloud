@@ -155,10 +155,9 @@ impl Display for SyncReason {
 fn gen_sync_state<P: CollabSyncProtocol>(
   awareness: &Awareness,
   protocol: &P,
-  sync_before: bool,
 ) -> Result<Vec<u8>, SyncError> {
   let mut encoder = EncoderV1::new();
-  protocol.start(awareness, &mut encoder, sync_before)?;
+  protocol.start(awareness, &mut encoder)?;
   Ok(encoder.to_vec())
 }
 
@@ -195,7 +194,6 @@ where
     return Err(SyncError::Internal(err));
   }
 
-  let sync_before = collab.get_last_sync_at() > 0;
   match reason {
     SyncReason::MissUpdates {
       state_vector_v1,
@@ -208,7 +206,7 @@ where
           reason
         );
         let awareness = collab.get_awareness();
-        let payload = gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?;
+        let payload = gen_sync_state(awareness, &ClientSyncProtocol)?;
         sink.queue_init_sync(|msg_id| {
           let init_sync = InitSync::new(
             origin,
@@ -248,7 +246,7 @@ where
         reason
       );
       let awareness = collab.get_awareness();
-      let payload = gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?;
+      let payload = gen_sync_state(awareness, &ClientSyncProtocol)?;
 
       sink.queue_init_sync(|msg_id| {
         let init_sync = InitSync::new(

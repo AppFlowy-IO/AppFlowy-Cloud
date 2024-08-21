@@ -106,19 +106,20 @@ pub async fn insert_or_replace_publish_collabs<'a, E: Executor<'a, Database = Po
   executor: E,
   workspace_id: &Uuid,
   publisher_uuid: &Uuid,
-  publish_item: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
+  publish_items: Vec<PublishCollabItem<serde_json::Value, Vec<u8>>>,
 ) -> Result<(), AppError> {
-  let view_ids: Vec<Uuid> = publish_item.iter().map(|item| item.meta.view_id).collect();
-  let publish_names: Vec<String> = publish_item
-    .iter()
-    .map(|item| item.meta.publish_name.clone())
-    .collect();
-  let metadatas: Vec<serde_json::Value> = publish_item
-    .iter()
-    .map(|item| item.meta.metadata.clone())
-    .collect();
+  let item_count = publish_items.len();
+  let mut view_ids: Vec<Uuid> = Vec::with_capacity(item_count);
+  let mut publish_names: Vec<String> = Vec::with_capacity(item_count);
+  let mut metadatas: Vec<serde_json::Value> = Vec::with_capacity(item_count);
+  let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(item_count);
+  publish_items.into_iter().for_each(|item| {
+    view_ids.push(item.meta.view_id);
+    publish_names.push(item.meta.publish_name);
+    metadatas.push(item.meta.metadata);
+    blobs.push(item.data);
+  });
 
-  let blobs: Vec<Vec<u8>> = publish_item.iter().map(|item| item.data.clone()).collect();
   let res = sqlx::query!(
     r#"
       INSERT INTO af_published_collab (workspace_id, view_id, publish_name, published_by, metadata, blob)
@@ -142,12 +143,12 @@ pub async fn insert_or_replace_publish_collabs<'a, E: Executor<'a, Database = Po
     publisher_uuid,
     &metadatas,
     &blobs,
-    publish_item.len() as i32,
+    item_count as i32,
   )
   .execute(executor)
   .await?;
 
-  if res.rows_affected() != publish_item.len() as u64 {
+  if res.rows_affected() != item_count as u64 {
     tracing::warn!(
       "Failed to insert or replace publish collab meta batch, workspace_id: {}, publisher_uuid: {}, rows_affected: {}",
       workspace_id, publisher_uuid, res.rows_affected()

@@ -4,5 +4,5 @@ mod member_crud;
 mod publish;
 mod template;
 mod workspace_crud;
-mod workspace_settings;
 mod workspace_folder;
+mod workspace_settings;

@@ -19,9 +19,9 @@ pub async fn publish_collabs(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   publisher_uuid: &Uuid,
-  publish_items: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
+  publish_items: Vec<PublishCollabItem<serde_json::Value, Vec<u8>>>,
 ) -> Result<(), AppError> {
-  for publish_item in publish_items {
+  for publish_item in &publish_items {
     check_collab_publish_name(publish_item.meta.publish_name.as_str())?;
   }
   insert_or_replace_publish_collabs(pg_pool, workspace_id, publisher_uuid, publish_items).await?;

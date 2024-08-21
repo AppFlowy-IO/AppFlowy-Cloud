@@ -85,6 +85,7 @@ impl WorkspaceTemplateBuilder {
       self.workspace_id.clone(),
       self.uid,
     )));
+
     let mut templates: Vec<TemplateData> = vec![];
     for handler in self.handlers.values() {
       if let Ok(template) = handler

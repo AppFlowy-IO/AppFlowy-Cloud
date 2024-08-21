@@ -172,8 +172,6 @@ async fn create_workspace_database_collab(
       map_ref.insert(&mut txn, "views", ArrayPrelim::from_iter(vec![object_id]));
       map_ref.insert(&mut txn, "created_at", timestamp());
     }
-
-    println!("inserting database records: {}", collab.data.to_json(&txn));
   };
 
   let encode_collab = collab

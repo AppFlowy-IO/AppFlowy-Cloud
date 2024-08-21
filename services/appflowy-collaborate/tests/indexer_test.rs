@@ -1,5 +1,5 @@
 use appflowy_collaborate::indexer::DocumentDataExt;
-use workspace_template::document::get_started::{
+use workspace_template::document::getting_started::{
   get_initial_document_data, get_started_document_data,
 };
 

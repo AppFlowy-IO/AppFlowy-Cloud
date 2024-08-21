@@ -6,7 +6,7 @@ use collab_entity::CollabType;
 use tokio::time::sleep;
 
 use client_api_test::TestClient;
-use workspace_template::document::get_started::get_started_document_data;
+use workspace_template::document::getting_started::get_started_document_data;
 
 #[ignore]
 #[tokio::test]

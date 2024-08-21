@@ -21,16 +21,15 @@ impl WorkspaceViewBuilder {
     }
   }
 
-  pub async fn with_view_builder<F, O>(&mut self, view_builder: F) -> String
+  pub async fn with_view_builder<F, O>(&mut self, view_builder: F) -> &mut Self
   where
     F: Fn(ViewBuilder) -> O,
     O: Future<Output = ParentChildViews>,
   {
     let builder = ViewBuilder::new(self.uid, self.workspace_id.clone());
     let view = view_builder(builder).await;
-    let view_id = view.parent_view.id.clone();
     self.views.push(view);
-    view_id
+    self
   }
 
   pub fn build(&mut self) -> Vec<ParentChildViews> {
@@ -69,6 +68,11 @@ impl ViewBuilder {
 
   pub fn view_id(&self) -> &str {
     &self.view_id
+  }
+
+  pub fn with_view_id<T: ToString>(mut self, view_id: T) -> Self {
+    self.view_id = view_id.to_string();
+    self
   }
 
   pub fn with_layout(mut self, layout: ViewLayout) -> Self {

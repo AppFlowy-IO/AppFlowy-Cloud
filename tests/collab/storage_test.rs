@@ -22,7 +22,7 @@ use database_entity::dto::{
   CollabParams, CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams,
   QueryCollabResult,
 };
-use workspace_template::document::get_started::GetStartedDocumentTemplate;
+use workspace_template::document::getting_started::GettingStartedTemplate;
 use workspace_template::WorkspaceTemplateBuilder;
 
 use crate::collab::util::{generate_random_bytes, redis_connection_manager, test_encode_collab_v1};
@@ -413,7 +413,7 @@ async fn insert_folder_data_success_test() {
   let uid = test_client.uid().await;
 
   let templates = WorkspaceTemplateBuilder::new(uid, &workspace_id)
-    .with_templates(vec![GetStartedDocumentTemplate])
+    .with_templates(vec![GettingStartedTemplate])
     .build()
     .await
     .unwrap();

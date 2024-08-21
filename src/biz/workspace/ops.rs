@@ -30,7 +30,7 @@ use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
 };
 use shared_entity::response::AppResponseError;
-use workspace_template::document::get_started::GetStartedDocumentTemplate;
+use workspace_template::document::getting_started::GettingStartedTemplate;
 
 use crate::biz::user::user_init::initialize_workspace_for_user;
 use crate::mailer::{Mailer, WorkspaceInviteMailerParam};

@@ -9,7 +9,6 @@ use app_error::AppError;
 use database::user::{create_user, is_user_exist};
 use database::workspace::select_workspace;
 use database_entity::dto::AFRole;
-use workspace_template::database::todos::ToDosDatabaseTemplate;
 use workspace_template::document::getting_started::GettingStartedTemplate;
 
 use crate::biz::user::user_init::initialize_workspace_for_user;

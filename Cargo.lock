@@ -2041,7 +2041,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2cc23e05010a7ed72e5c63c59dfa3db7d789620c#2cc23e05010a7ed72e5c63c59dfa3db7d789620c"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe0fb7e93033b017f594749aade756be8973157b#fe0fb7e93033b017f594749aade756be8973157b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2066,7 +2066,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2cc23e05010a7ed72e5c63c59dfa3db7d789620c#2cc23e05010a7ed72e5c63c59dfa3db7d789620c"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe0fb7e93033b017f594749aade756be8973157b#fe0fb7e93033b017f594749aade756be8973157b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2086,7 +2086,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2cc23e05010a7ed72e5c63c59dfa3db7d789620c#2cc23e05010a7ed72e5c63c59dfa3db7d789620c"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe0fb7e93033b017f594749aade756be8973157b#fe0fb7e93033b017f594749aade756be8973157b"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2105,7 +2105,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2cc23e05010a7ed72e5c63c59dfa3db7d789620c#2cc23e05010a7ed72e5c63c59dfa3db7d789620c"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe0fb7e93033b017f594749aade756be8973157b#fe0fb7e93033b017f594749aade756be8973157b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2189,7 +2189,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2cc23e05010a7ed72e5c63c59dfa3db7d789620c#2cc23e05010a7ed72e5c63c59dfa3db7d789620c"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe0fb7e93033b017f594749aade756be8973157b#fe0fb7e93033b017f594749aade756be8973157b"
 dependencies = [
  "anyhow",
  "collab",

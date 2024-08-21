@@ -24,6 +24,8 @@ use database_entity::dto::{
   UpdateCollabMemberParams,
 };
 
+use super::folder_view::collab_folder_to_folder_view;
+
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
 /// If the collab member does not exist, create a new one
@@ -166,7 +168,7 @@ pub async fn get_user_workspace_structure(
     )));
   }
   let folder = get_latest_collab_folder(group_manager, collab_storage, &uid, &workspace_id).await?;
-  let folder_view = FolderView::from_folder(&folder, depth);
+  let folder_view: FolderView = collab_folder_to_folder_view(&folder, depth);
   Ok(folder_view)
 }
 

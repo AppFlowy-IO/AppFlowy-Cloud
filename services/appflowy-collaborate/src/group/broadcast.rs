@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
+use std::sync::atomic::Ordering;
 
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -13,16 +13,16 @@ use tokio::sync::RwLock;
 use tokio::time::Instant;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
+use yrs::Subscription as YrsSubscription;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::Subscription as YrsSubscription;
 
-use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
+use collab_rt_entity::MessageByObjectId;
+use collab_rt_entity::user::RealtimeUser;
 use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 
@@ -365,7 +365,7 @@ async fn handle_one_client_message(
     message_origin
   );
 
-  match handle_one_message_payload(
+  handle_one_message_payload(
     object_id,
     message_origin.clone(),
     msg_id,
@@ -375,15 +375,6 @@ async fn handle_one_client_message(
     seq_num,
   )
   .await
-  {
-    Ok(ack) => {
-      let mut lock = collab.write().await;
-      let collab: &mut Collab = (*lock).borrow_mut();
-      collab.set_last_sync_at(chrono::Utc::now().timestamp());
-      Ok(ack)
-    },
-    Err(err) => Err(err),
-  }
 }
 
 /// Handle the message sent from the client

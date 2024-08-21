@@ -139,7 +139,7 @@ where
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   Channel: Send + Sync + 'static,
 {
-  fn did_init(&self, _collab: &Collab, _object_id: &str, _last_sync_at: i64) {
+  fn did_init(&self, _collab: &Collab, _object_id: &str) {
     // Most of the time, it should be successful to queue init sync by 1st time.
     let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10);
     let action = InitSyncAction {

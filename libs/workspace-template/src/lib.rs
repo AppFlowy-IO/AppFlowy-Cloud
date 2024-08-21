@@ -23,13 +23,13 @@ mod hierarchy_builder;
 pub trait WorkspaceTemplate {
   fn layout(&self) -> ViewLayout;
 
-  async fn create(&self, object_id: String) -> Result<TemplateData>;
+  async fn create(&self, object_id: String) -> Result<Vec<TemplateData>>;
 
   async fn create_workspace_view(
     &self,
     uid: i64,
     workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
-  ) -> Result<TemplateData>;
+  ) -> Result<Vec<TemplateData>>;
 }
 
 pub struct TemplateData {
@@ -85,13 +85,13 @@ impl WorkspaceTemplateBuilder {
       self.workspace_id.clone(),
       self.uid,
     )));
-    let mut templates = vec![];
+    let mut templates: Vec<TemplateData> = vec![];
     for handler in self.handlers.values() {
       if let Ok(template) = handler
         .create_workspace_view(self.uid, workspace_view_builder.clone())
         .await
       {
-        templates.push(template);
+        templates.extend(template);
       }
     }
 

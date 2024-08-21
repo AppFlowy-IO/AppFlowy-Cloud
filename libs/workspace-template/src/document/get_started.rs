@@ -24,18 +24,18 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
     ViewLayout::Document
   }
 
-  async fn create(&self, object_id: String) -> anyhow::Result<TemplateData> {
+  async fn create(&self, object_id: String) -> anyhow::Result<Vec<TemplateData>> {
     let data = tokio::task::spawn_blocking(|| {
       let getting_started_data = getting_started_document_data().unwrap();
       let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
       let document = Document::open_with(collab, Some(getting_started_data))?;
       let data = document.encode_collab()?;
-      Ok::<_, anyhow::Error>(TemplateData {
+      Ok::<_, anyhow::Error>(vec![TemplateData {
         object_id,
         object_type: CollabType::Document,
         object_data: data,
         database_id: None,
-      })
+      }])
     })
     .await??;
     Ok(data)
@@ -45,7 +45,7 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
     &self,
     _uid: i64,
     workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
-  ) -> anyhow::Result<TemplateData> {
+  ) -> anyhow::Result<Vec<TemplateData>> {
     let view_id = workspace_view_builder
       .write()
       .await
@@ -86,23 +86,23 @@ impl WorkspaceTemplate for DocumentTemplate {
     ViewLayout::Document
   }
 
-  async fn create(&self, object_id: String) -> anyhow::Result<TemplateData> {
+  async fn create(&self, object_id: String) -> anyhow::Result<Vec<TemplateData>> {
     let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
     let document = Document::open_with(collab, Some(self.0.clone()))?;
     let data = document.encode_collab()?;
-    Ok(TemplateData {
+    Ok(vec![TemplateData {
       object_id,
       object_type: CollabType::Document,
       object_data: data,
       database_id: None,
-    })
+    }])
   }
 
   async fn create_workspace_view(
     &self,
     _uid: i64,
     workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
-  ) -> anyhow::Result<TemplateData> {
+  ) -> anyhow::Result<Vec<TemplateData>> {
     let view_id = workspace_view_builder
       .write()
       .await

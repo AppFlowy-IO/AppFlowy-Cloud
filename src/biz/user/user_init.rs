@@ -52,6 +52,13 @@ where
       .encode_to_bytes()
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
+    println!(
+      "inserting object_id: {}, object_type: {}, encoded_collab_v1: {}",
+      object_id,
+      object_type,
+      encoded_collab_v1.len()
+    );
+
     collab_storage
       .insert_new_collab_with_transaction(
         &workspace_id,
@@ -164,9 +171,9 @@ async fn create_workspace_database_collab(
       map_ref.insert(&mut txn, "database_id", database_id);
       map_ref.insert(&mut txn, "views", ArrayPrelim::from_iter(vec![object_id]));
       map_ref.insert(&mut txn, "created_at", timestamp());
-
-      println!("{}", map_ref.to_json(&txn));
     }
+
+    println!("inserting database records: {}", collab.data.to_json(&txn));
   };
 
   let encode_collab = collab

@@ -1,11 +1,7 @@
-use std::sync::Arc;
-use std::vec;
-
 use anyhow::Error;
-use async_trait::async_trait;
 use collab::preclude::{Collab, Map, MapRef, ToJson, TransactionMut};
 use collab::util::MapExt;
-use collab_database::database::{timestamp, DatabaseData, FIELDS, METAS, VIEWS};
+use collab_database::database::{timestamp, FIELDS, METAS, VIEWS};
 use collab_database::fields::{Field, FieldBuilder};
 use collab_database::meta::DATABASE_INLINE_VIEW;
 use collab_database::rows::{RowBuilder, META};
@@ -13,12 +9,8 @@ use collab_database::views::{
   CreateDatabaseParams, CreateViewParams, FieldOrder, RowOrder, ViewBuilder,
 };
 use collab_entity::define::{DATABASE, DATABASE_ID, DATABASE_ROW_DATA};
-use collab_entity::CollabType;
-use collab_folder::{CollabOrigin, ViewLayout};
-use tokio::sync::RwLock;
-
-use crate::hierarchy_builder::WorkspaceViewBuilder;
-use crate::{gen_view_id, TemplateData, WorkspaceTemplate};
+use collab_folder::CollabOrigin;
+use std::vec;
 
 pub fn create_database_collab(
   object_id: String,
@@ -29,7 +21,7 @@ pub fn create_database_collab(
     rows,
     fields,
     inline_view_id,
-    mut views,
+    views,
   } = params;
 
   // the database collab object id is the database id
@@ -149,15 +141,15 @@ pub fn insert_view(
 }
 
 pub fn create_database_row_collabs(
-  object_id: String,
+  _object_id: String,
   params: CreateDatabaseParams,
 ) -> Result<Vec<(String, Collab)>, Error> {
   let CreateDatabaseParams {
-    database_id,
+    database_id: _,
     rows,
-    fields,
-    inline_view_id,
-    mut views,
+    fields: _,
+    inline_view_id: _,
+    views: _,
   } = params;
 
   let mut collabs = vec![];

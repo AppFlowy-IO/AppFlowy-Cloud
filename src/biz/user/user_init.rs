@@ -1,10 +1,9 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::{Array, ArrayPrelim, ArrayRef, Collab, Map, MapPrelim, ToJson};
+use collab::preclude::{Array, ArrayPrelim, ArrayRef, Collab, Map, MapPrelim};
 use collab_entity::define::WORKSPACE_DATABASES;
 use collab_entity::CollabType;
 use collab_folder::timestamp;

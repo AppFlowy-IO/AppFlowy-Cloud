@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::ptr::replace;
+
 use std::sync::Arc;
 
 use anyhow::Error;
@@ -207,12 +207,12 @@ impl WorkspaceTemplate for GettingStartedTemplate {
     builder
       .with_view_builder(|view_builder| async {
         let create_database_params = create_database_params.clone();
-        let linked_views = create_database_params
+        let _linked_views = create_database_params
           .views
           .iter()
           .filter(|view| view.view_id != create_database_params.inline_view_id);
 
-        let mut view_builder = view_builder
+        let view_builder = view_builder
           .with_layout(ViewLayout::Board)
           .with_view_id(todos_view_uuid.clone())
           .with_name("To-Dos")

@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
-use std::sync::{Arc, Weak};
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Weak};
 
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -13,16 +13,16 @@ use tokio::sync::RwLock;
 use tokio::time::Instant;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
-use yrs::Subscription as YrsSubscription;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::Subscription as YrsSubscription;
 
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
-use collab_rt_entity::MessageByObjectId;
-use collab_rt_entity::user::RealtimeUser;
 use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 

@@ -181,7 +181,7 @@ impl TestClient {
     Folder::from_collab_doc_state(
       uid,
       CollabOrigin::Empty,
-      DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
+      data.encode_collab.into(),
       &workspace_id,
       vec![],
     )

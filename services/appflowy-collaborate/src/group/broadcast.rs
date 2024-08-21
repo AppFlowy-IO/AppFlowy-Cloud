@@ -216,7 +216,7 @@ impl CollabBroadcast {
 
                   trace!("[realtime]: send {} => {}", message, cloned_user.user_device());
                   if let Err(err) = sink.send(message).await {
-                    tracing::error!("fail to broadcast message:{}", err);
+                    error!("fail to broadcast message:{}", err);
                   }
                 }
                 Err(e) => {

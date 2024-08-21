@@ -179,7 +179,7 @@ impl PublishCollabDuplicator {
     let mut folder = Folder::from_collab_doc_state(
       self.duplicator_uid,
       CollabOrigin::Server,
-      DataSource::DocStateV1(collab_folder_encoded.doc_state.to_vec()),
+      collab_folder_encoded.into(),
       &self.dest_workspace_id,
       vec![],
     )

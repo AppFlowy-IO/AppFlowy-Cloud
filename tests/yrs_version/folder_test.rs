@@ -1,4 +1,3 @@
-use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab_folder::Folder;
@@ -25,7 +24,7 @@ fn load_yrs_0172_version_folder_using_current_yrs_version() {
   let folder = Folder::from_collab_doc_state(
     322319512080748544,
     CollabOrigin::Empty,
-    DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
+    encode_collab.into(),
     "fake_id", // just use fake id
     vec![],
   )

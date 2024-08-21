@@ -135,6 +135,7 @@ pub struct FolderView {
   pub icon: Option<ViewIcon>,
   pub is_space: bool,
   pub is_private: bool,
+  /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<FolderView>,
 }

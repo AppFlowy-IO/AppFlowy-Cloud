@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::DataSource;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::{CollabOrigin, Folder};
@@ -189,7 +188,7 @@ pub async fn get_latest_collab_folder(
   let folder = Folder::from_collab_doc_state(
     uid,
     CollabOrigin::Server,
-    DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
+    encoded_collab.into(),
     workspace_id,
     vec![],
   )

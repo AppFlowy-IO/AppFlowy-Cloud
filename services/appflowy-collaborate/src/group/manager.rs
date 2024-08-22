@@ -178,7 +178,7 @@ where
 
     let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
     let (collab, encode_collab) = {
-      let (collab, encode_collab) = match result {
+      let (mut collab, encode_collab) = match result {
         Ok(value) => value,
         Err(err) => {
           if err.is_record_not_found() {
@@ -194,12 +194,8 @@ where
         },
       };
 
+      collab.initialize();
       let collab = Arc::new(RwLock::new(collab));
-      {
-        // initialize
-        let mut collab = collab.write().await;
-        collab.initialize();
-      }
       (collab, encode_collab)
     };
 

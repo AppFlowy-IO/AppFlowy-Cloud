@@ -49,6 +49,7 @@ pub struct ViewBuilder {
   child_views: Vec<ParentChildViews>,
   is_favorite: bool,
   icon: Option<ViewIcon>,
+  extra: Option<String>,
 }
 
 impl ViewBuilder {
@@ -63,6 +64,7 @@ impl ViewBuilder {
       child_views: vec![],
       is_favorite: false,
       icon: None,
+      extra: None,
     }
   }
 
@@ -95,6 +97,11 @@ impl ViewBuilder {
       ty: IconType::Emoji,
       value: icon.to_string(),
     });
+    self
+  }
+
+  pub fn with_extra(mut self, extra: &str) -> Self {
+    self.extra = Some(extra.to_string());
     self
   }
 
@@ -132,7 +139,7 @@ impl ViewBuilder {
           .collect(),
       ),
       last_edited_by: Some(self.uid),
-      extra: None,
+      extra: self.extra,
     };
     ParentChildViews {
       parent_view: view,

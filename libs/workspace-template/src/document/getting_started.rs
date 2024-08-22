@@ -6,7 +6,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_database::database::DatabaseData;
+use collab_database::database::{timestamp, DatabaseData};
 use collab_database::entity::CreateDatabaseParams;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
@@ -17,17 +17,19 @@ use tokio::sync::RwLock;
 
 use crate::database::database::{create_database_collab, create_database_row_collabs};
 use crate::document::parser::JsonToDocumentParser;
-use crate::hierarchy_builder::WorkspaceViewBuilder;
+use crate::hierarchy_builder::{ViewBuilder, WorkspaceViewBuilder};
 use crate::{gen_view_id, TemplateData, WorkspaceTemplate};
 
 // Template Folder Structure:
-// |-- Getting started (document)
-// |   |-- Desktop guide (document)
-// |   |-- Mobile guide (document)
-// |-- To-Dos (board)
-// |   |-- Inbox (grid)
-// |-- Ask AI (ai chat)
-//
+// |-- General (space)
+//     |-- Getting started (document)
+//          |-- Desktop guide (document)
+//          |-- Mobile guide (document)
+//     |-- To-Dos (board)
+//          |-- Inbox (grid)
+//     |-- Ask AI (ai chat)
+// |-- Shared (space)
+//     |-- ... (empty)
 // Note: Update the folder structure above if you changed the code below
 pub struct GettingStartedTemplate;
 
@@ -103,27 +105,31 @@ impl GettingStartedTemplate {
     .await??;
     Ok(data)
   }
-}
 
-#[async_trait]
-impl WorkspaceTemplate for GettingStartedTemplate {
-  fn layout(&self) -> ViewLayout {
-    ViewLayout::Document
-  }
-
-  async fn create(&self, _object_id: String) -> anyhow::Result<Vec<TemplateData>> {
-    unreachable!("This function is not supposed to be called.")
-  }
-
-  async fn create_workspace_view(
+  async fn create_document_and_database_data(
     &self,
-    _uid: i64,
-    workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
-  ) -> anyhow::Result<Vec<TemplateData>> {
-    let getting_started_view_uuid = gen_view_id().to_string();
-    let desktop_guide_view_uuid = gen_view_id().to_string();
-    let mobile_guide_view_uuid = gen_view_id().to_string();
-    let todos_view_uuid = gen_view_id().to_string();
+    general_view_uuid: String,
+    shared_view_uuid: String,
+    getting_started_view_uuid: String,
+    desktop_guide_view_uuid: String,
+    mobile_guide_view_uuid: String,
+    todos_view_uuid: String,
+  ) -> anyhow::Result<(
+    TemplateData,
+    TemplateData,
+    TemplateData,
+    TemplateData,
+    TemplateData,
+    Vec<TemplateData>,
+  )> {
+    let default_space_json = include_str!("../../assets/default_space.json");
+    let general_data = self
+      .create_document_from_json(general_view_uuid.clone(), default_space_json)
+      .await?;
+
+    let shared_data = self
+      .create_document_from_json(shared_view_uuid.clone(), default_space_json)
+      .await?;
 
     let getting_started_json = include_str!("../../assets/getting_started.json");
     let mut getting_started_json: Value = serde_json::from_str(getting_started_json).unwrap();
@@ -162,43 +168,135 @@ impl WorkspaceTemplate for GettingStartedTemplate {
       .create_database_from_params(todos_view_uuid.clone(), create_database_params.clone())
       .await?;
 
+    Ok((
+      general_data,
+      shared_data,
+      getting_started_data,
+      desktop_guide_data,
+      mobile_guide_data,
+      todos_data,
+    ))
+  }
+
+  async fn build_getting_started_view(
+    &self,
+    view_builder: ViewBuilder,
+    getting_started_view_uuid: String,
+    desktop_guide_view_uuid: String,
+    mobile_guide_view_uuid: String,
+  ) -> ViewBuilder {
+    // getting started view
+    let mut view_builder = view_builder
+      .with_name("Getting started")
+      .with_icon("⭐️")
+      .with_view_id(getting_started_view_uuid);
+
+    view_builder = view_builder
+      .with_child_view_builder({
+        |child_view_builder| async {
+          // desktop guide view
+          let desktop_guide_view_uuid = desktop_guide_view_uuid.clone();
+          child_view_builder
+            .with_name("Desktop guide")
+            .with_icon("🖥️")
+            .with_view_id(desktop_guide_view_uuid)
+            .build()
+        }
+      })
+      .await;
+
+    view_builder = view_builder
+      .with_child_view_builder({
+        |child_view_builder| async {
+          // mobile guide view
+          let mobile_guide_view_uuid = mobile_guide_view_uuid.clone();
+          child_view_builder
+            .with_name("Mobile guide")
+            .with_icon("📱")
+            .with_view_id(mobile_guide_view_uuid)
+            .build()
+        }
+      })
+      .await;
+
+    view_builder
+  }
+}
+
+#[async_trait]
+impl WorkspaceTemplate for GettingStartedTemplate {
+  fn layout(&self) -> ViewLayout {
+    ViewLayout::Document
+  }
+
+  async fn create(&self, _object_id: String) -> anyhow::Result<Vec<TemplateData>> {
+    unreachable!("This function is not supposed to be called.")
+  }
+
+  async fn create_workspace_view(
+    &self,
+    _uid: i64,
+    workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
+  ) -> anyhow::Result<Vec<TemplateData>> {
+    let general_view_uuid = gen_view_id().to_string();
+    let shared_view_uuid = gen_view_id().to_string();
+    let getting_started_view_uuid = gen_view_id().to_string();
+    let desktop_guide_view_uuid = gen_view_id().to_string();
+    let mobile_guide_view_uuid = gen_view_id().to_string();
+    let todos_view_uuid = gen_view_id().to_string();
+
+    let (
+      general_data,
+      shared_data,
+      getting_started_data,
+      desktop_guide_data,
+      mobile_guide_data,
+      todos_data,
+    ) = self
+      .create_document_and_database_data(
+        general_view_uuid.clone(),
+        shared_view_uuid.clone(),
+        getting_started_view_uuid.clone(),
+        desktop_guide_view_uuid.clone(),
+        mobile_guide_view_uuid.clone(),
+        todos_view_uuid.clone(),
+      )
+      .await?;
+
     let mut builder = workspace_view_builder.write().await;
 
+    // Create general space with 2 built-in views: Getting started, To-Dos
     builder
       .with_view_builder(|view_builder| async {
-        let getting_started_view_uuid = getting_started_view_uuid.clone();
-        let desktop_guide_view_uuid = desktop_guide_view_uuid.clone();
-        let mobile_guide_view_uuid = mobile_guide_view_uuid.clone();
-
-        // getting started view
+        let created_at = timestamp();
         let mut view_builder = view_builder
-          .with_name("Getting started")
-          .with_icon("⭐️")
-          .with_view_id(getting_started_view_uuid);
+          .with_view_id(general_view_uuid.clone())
+          .with_name("General")
+          .with_extra(&format!(
+              "{{\"is_space\":true,\"space_icon\":\"interface_essential/home-3\",\"space_icon_color\":\"0xFFA34AFD\",\"space_permission\":0,\"space_created_at\":{}}}",
+              created_at
+          ));
 
-        view_builder = view_builder
-          .with_child_view_builder(|child_view_builder| async {
-            // desktop guide view
+        view_builder = view_builder.with_child_view_builder(
+          |child_view_builder| async {
+            let getting_started_view_uuid = getting_started_view_uuid.clone();
             let desktop_guide_view_uuid = desktop_guide_view_uuid.clone();
-            child_view_builder
-              .with_name("Desktop guide")
-              .with_icon("🖥️")
-              .with_view_id(desktop_guide_view_uuid)
-              .build()
-          })
-          .await;
-
-        view_builder = view_builder
-          .with_child_view_builder(|child_view_builder| async {
-            // mobile guide view
             let mobile_guide_view_uuid = mobile_guide_view_uuid.clone();
-            child_view_builder
-              .with_name("Mobile guide")
-              .with_icon("📱")
-              .with_view_id(mobile_guide_view_uuid)
-              .build()
-          })
-          .await;
+            let  child_view_builder = self.build_getting_started_view(child_view_builder, getting_started_view_uuid, desktop_guide_view_uuid, mobile_guide_view_uuid).await;
+            child_view_builder.build()
+          }
+        ).await;
+
+        view_builder = view_builder.with_child_view_builder(
+          |child_view_builder| async {
+            let child_view_builder = child_view_builder
+            .with_layout(ViewLayout::Board)
+            .with_view_id(todos_view_uuid.clone())
+            .with_name("To-Dos")
+            .with_icon("✅");
+            child_view_builder.build()
+          }
+        ).await;
 
         view_builder.build()
       })
@@ -206,17 +304,26 @@ impl WorkspaceTemplate for GettingStartedTemplate {
 
     builder
       .with_view_builder(|view_builder| async {
+        let created_at = timestamp();
         let view_builder = view_builder
-          .with_layout(ViewLayout::Board)
-          .with_view_id(todos_view_uuid.clone())
-          .with_name("To-Dos")
-          .with_icon("✅");
+        .with_view_id(shared_view_uuid.clone())
+        .with_name("Shared")
+        .with_extra(&format!(
+            "{{\"is_space\":true,\"space_icon\":\"interface_essential/star-2\",\"space_icon_color\":\"0xFFFFBA00\",\"space_permission\":0,\"space_created_at\":{}}}",
+            created_at
+        ));
 
         view_builder.build()
       })
       .await;
 
-    let mut template_data = vec![getting_started_data, desktop_guide_data, mobile_guide_data];
+    let mut template_data = vec![
+      general_data,
+      shared_data,
+      getting_started_data,
+      desktop_guide_data,
+      mobile_guide_data,
+    ];
     template_data.extend(todos_data);
     Ok(template_data)
   }

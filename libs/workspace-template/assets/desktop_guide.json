@@ -244,11 +244,11 @@
         "images": [
           {
             "type": 1,
-            "url": "https://beta.appflowy.cloud/api/file_storage/c29fafc4-b7c0-4549-8702-71339b0fd9ea/v1/blob/5ac18333%2D9a0e%2D4ec8%2D929b%2Debf69a9bf35d/4163815631153414665.jpg"
+            "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/desktop_guide_1.jpg?raw=true"
           },
           {
             "type": 1,
-            "url": "https://beta.appflowy.cloud/api/file_storage/c29fafc4-b7c0-4549-8702-71339b0fd9ea/v1/blob/5ac18333%2D9a0e%2D4ec8%2D929b%2Debf69a9bf35d/14046146785345901549.jpg"
+            "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/desktop_guide_2.jpg?raw=true"
           }
         ]
       }

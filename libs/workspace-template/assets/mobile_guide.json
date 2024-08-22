@@ -108,7 +108,7 @@
       "type": "image",
       "data": {
         "align": "left",
-        "url": "https://beta.appflowy.cloud/api/file_storage/c29fafc4-b7c0-4549-8702-71339b0fd9ea/v1/blob/413dd288%2Dc621%2D4b71%2Dbbbb%2D381659693dc9/6373112791071542923.png",
+        "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_1.png?raw=true",
         "width": 277.48046875
       }
     },
@@ -144,11 +144,11 @@
         "images": [
           {
             "type": 1,
-            "url": "https://beta.appflowy.cloud/api/file_storage/c29fafc4-b7c0-4549-8702-71339b0fd9ea/v1/blob/413dd288%2Dc621%2D4b71%2Dbbbb%2D381659693dc9/7833309212767979222.png"
+            "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_2.png?raw=true"
           },
           {
             "type": 1,
-            "url": "https://beta.appflowy.cloud/api/file_storage/c29fafc4-b7c0-4549-8702-71339b0fd9ea/v1/blob/413dd288%2Dc621%2D4b71%2Dbbbb%2D381659693dc9/7218704487138770747.png"
+            "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_3.png?raw=true"
           }
         ],
         "layout": 0
@@ -170,7 +170,7 @@
     {
       "type": "image",
       "data": {
-        "url": "https://beta.appflowy.cloud/api/file_storage/c29fafc4-b7c0-4549-8702-71339b0fd9ea/v1/blob/413dd288%2Dc621%2D4b71%2Dbbbb%2D381659693dc9/6301648558841990453.png",
+        "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_4.png?raw=true",
         "align": "left",
         "width": 286.2109375
       }
@@ -195,7 +195,7 @@
       "data": {
         "align": "left",
         "width": 286.33203125,
-        "url": "https://beta.appflowy.cloud/api/file_storage/c29fafc4-b7c0-4549-8702-71339b0fd9ea/v1/blob/413dd288%2Dc621%2D4b71%2Dbbbb%2D381659693dc9/9699887999141836736.png"
+        "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_5.png?raw=true"
       }
     },
     { "type": "paragraph", "data": { "delta": [] } },

@@ -84,22 +84,20 @@
       "data": {
         "delta": [
           {
-            "insert": "$",
-            "attributes": {
-              "mention": {
-                "type": "page",
-                "page_id": "ab48649e-fd09-4864-9751-e6be63675e00"
-              }
-            }
-          },
-          {
-            "insert": "powered by advanced AI models: chat, search, write, and much more ✨"
+            "insert": "Ask AI powered by advanced AI models: chat, search, write, and much more ✨"
           }
         ]
       }
     },
     { "type": "paragraph", "data": { "delta": [] } },
-    { "type": "paragraph", "data": { "delta": [] } },
+    {
+      "type": "image",
+      "data": {
+        "align": "left",
+        "width": 393,
+        "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/getting_started_1.png?raw=true"
+      }
+    },
     { "type": "divider" },
     {
       "type": "paragraph",

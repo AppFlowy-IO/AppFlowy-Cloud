@@ -1,12 +1,11 @@
 use collab::core::awareness::Awareness;
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
+use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::{ReadTxn, StateVector, Transact, Update};
 
 use collab_rt_protocol::CollabSyncProtocol;
 use collab_rt_protocol::{CustomMessage, Message, RTProtocolError, SyncMessage};
-
-use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::{ReadTxn, StateVector, Transact, Update};
 
 #[derive(Clone)]
 pub struct ServerSyncProtocol;
@@ -30,11 +29,8 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     })?;
 
     // Retrieve the latest document state from the client after they return online from offline editing.
-    let server_step1_update = txn.state_vector();
-
     let mut encoder = EncoderV1::new();
     Message::Sync(SyncMessage::SyncStep2(client_step2_update)).encode(&mut encoder);
-    Message::Sync(SyncMessage::SyncStep1(server_step1_update)).encode(&mut encoder);
     Ok(Some(encoder.to_vec()))
   }
 

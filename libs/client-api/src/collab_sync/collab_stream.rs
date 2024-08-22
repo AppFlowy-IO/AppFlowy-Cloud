@@ -2,6 +2,7 @@ use std::borrow::BorrowMut;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use collab::core::origin::CollabOrigin;
@@ -13,6 +14,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, trace, warn};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
+use yrs::updates::encoder::Encode;
+use yrs::ReadTxn;
 
 use client_api_entity::{validate_data_for_folder, CollabType};
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
@@ -58,6 +61,7 @@ where
     stream: Stream,
     weak_collab: CollabRef,
     sink: Weak<CollabSink<Sink>>,
+    periodic_sync_interval: Option<Duration>,
   ) -> Self {
     let object_id = object.object_id.clone();
     let cloned_weak_collab = weak_collab.clone() as CollabRef;
@@ -65,6 +69,17 @@ where
     let cloned_seq_num_counter = seq_num_counter.clone();
     let init_sync_cancel_token = ArcSwap::new(Arc::new(CancellationToken::new()));
     let arc_object = Arc::new(object);
+
+    if let Some(interval) = periodic_sync_interval {
+      tracing::trace!("setting periodic sync step 1 for {}", object_id);
+      af_spawn(ObserveCollab::<Sink, Stream>::periodic_sync_step_1(
+        origin.clone(),
+        sink.clone(),
+        cloned_weak_collab.clone(),
+        interval,
+        object_id.clone(),
+      ));
+    }
     af_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
       origin,
       arc_object,
@@ -80,6 +95,43 @@ where
       phantom_sink: Default::default(),
       phantom_stream: Default::default(),
       seq_num_counter,
+    }
+  }
+
+  /// Periodically run sync step 1 to make sure that there are no missing updates from other clients.
+  async fn periodic_sync_step_1(
+    origin: CollabOrigin,
+    weak_sink: Weak<CollabSink<Sink>>,
+    weak_collab: CollabRef,
+    interval: Duration,
+    object_id: String,
+  ) {
+    loop {
+      tokio::time::sleep(interval).await;
+      let sink = match weak_sink.upgrade() {
+        Some(sink) => sink,
+        None => break,
+      };
+
+      let collab = match weak_collab.upgrade() {
+        Some(collab) => collab,
+        None => break,
+      };
+
+      let sv = {
+        let lock = collab.read().await;
+        let sv = (*lock).borrow().transact().state_vector();
+        sv
+      };
+      let msg = Message::Sync(SyncMessage::SyncStep1(sv)).encode_v1();
+      sink.queue_msg(|msg_id| {
+        ClientCollabMessage::new_update_sync(UpdateSync::new(
+          origin.clone(),
+          object_id.clone(),
+          msg,
+          msg_id,
+        ))
+      });
     }
   }
 

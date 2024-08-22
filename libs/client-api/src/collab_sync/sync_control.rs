@@ -60,6 +60,7 @@ where
     sink_config: SinkConfig,
     stream: Stream,
     collab: CollabRef,
+    periodic_sync: Option<Duration>,
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);
@@ -86,6 +87,7 @@ where
       stream,
       collab.clone(),
       Arc::downgrade(&sink),
+      periodic_sync,
     );
 
     Self {

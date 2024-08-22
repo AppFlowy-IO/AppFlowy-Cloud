@@ -64,6 +64,7 @@ where
     stream: Stream,
     channel: Option<Arc<Channel>>,
     mut ws_connect_state: WSConnectStateReceiver,
+    periodic_sync: Option<Duration>,
   ) -> Self {
     let sync_queue = SyncControl::new(
       object.clone(),
@@ -72,6 +73,7 @@ where
       sink_config,
       stream,
       collab.clone(),
+      periodic_sync,
     );
 
     let mut sync_state_stream = sync_queue.subscribe_sync_state();

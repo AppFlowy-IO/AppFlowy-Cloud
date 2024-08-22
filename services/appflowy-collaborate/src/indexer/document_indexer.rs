@@ -1,11 +1,9 @@
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use async_trait::async_trait;
-use collab::core::collab::DataSource;
-use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_document::document::Document;
-use collab_document::error::DocumentError;
+use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
 
 use app_error::AppError;
@@ -25,12 +23,27 @@ impl DocumentIndexer {
   pub fn new(ai_client: AppFlowyAIClient) -> Arc<Self> {
     Arc::new(Self { ai_client })
   }
+}
 
-  fn get_document_contents(
-    document: &Document,
-  ) -> Result<Vec<AFCollabEmbeddingParams>, DocumentError> {
-    let object_id = document.object_id().to_string();
-    let document_data = document.get_document_data()?;
+#[async_trait]
+impl Indexer for DocumentIndexer {
+  fn embedding_params(&self, collab: &Collab) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+    let object_id = collab.object_id().to_string();
+    let document = DocumentBody::from_collab(collab).ok_or_else(|| {
+      anyhow!(
+        "Failed to get document body from collab `{}`: schema is missing required fields",
+        object_id
+      )
+    })?;
+    let document_data = document
+      .get_document_data(&collab.transact())
+      .map_err(|err| {
+        anyhow!(
+          "Failed to get document data from collab `{}`: {}",
+          object_id,
+          err
+        )
+      })?;
     let content = document_data.to_plain_text();
 
     let plain_text_param = AFCollabEmbeddingParams {
@@ -44,40 +57,15 @@ impl DocumentIndexer {
 
     Ok(vec![plain_text_param])
   }
-}
 
-#[async_trait]
-impl Indexer for DocumentIndexer {
-  async fn index(
+  async fn embeddings(
     &self,
-    object_id: &str,
-    doc_state: Vec<u8>,
+    mut params: Vec<AFCollabEmbeddingParams>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    let cloned_object_id = object_id.to_string();
-    let collab = tokio::spawn(async move {
-      Collab::new_with_source(
-        CollabOrigin::Server,
-        &cloned_object_id,
-        DataSource::DocStateV1(doc_state),
-        vec![],
-        false,
-      )
-      .map_err(|e| AppError::Internal(e.into()))
-    })
-    .await
-    .map_err(|e| AppError::Internal(e.into()))??;
-
-    let document = Document::open(collab).map_err(|e| AppError::Internal(e.into()))?;
-    let mut params = match Self::get_document_contents(&document) {
-      Ok(result) => result,
-      Err(err) => {
-        if cfg!(debug_assertions) {
-          tracing::warn!("failed to get document:{} error:{}", object_id, err);
-        }
-        return Ok(None);
-      },
+    let object_id = match params.first() {
+      None => return Ok(None),
+      Some(first) => first.object_id.clone(),
     };
-
     let contents: Vec<_> = params
       .iter()
       .map(|fragment| fragment.content.clone())

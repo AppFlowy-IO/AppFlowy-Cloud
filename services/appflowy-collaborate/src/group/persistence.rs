@@ -6,7 +6,7 @@ use collab::preclude::Collab;
 use collab_entity::{validate_data_for_folder, CollabType};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::interval;
-use tracing::{info, instrument, trace, warn};
+use tracing::{trace, warn};
 
 use app_error::AppError;
 use database::collab::CollabStorage;

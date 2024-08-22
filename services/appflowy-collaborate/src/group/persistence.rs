@@ -59,6 +59,9 @@ where
   pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<Arc<RwLock<Collab>>>) {
     let mut interval = interval(self.persistence_interval);
     loop {
+      // delay 30 seconds before the first save. We don't want to save immediately after the collab is created
+      tokio::time::sleep(Duration::from_secs(30)).await;
+
       tokio::select! {
         _ = interval.tick() => {
           if self.attempt_save().await.is_err() {
@@ -91,14 +94,13 @@ where
 
   /// return true if the collab has been dropped. Otherwise, return false
   async fn attempt_save(&self) -> Result<(), AppError> {
-    if self.edit_state.is_new() && self.save(true).await.is_ok() {
-      self.edit_state.set_is_new(false);
-      return Ok(());
-    }
+    trace!("collab:{} edit state: {}", self.object_id, self.edit_state);
 
     // Check if conditions for saving to disk are not met
     if self.edit_state.should_save_to_disk() {
-      self.save(false).await?;
+      if let Err(err) = self.save(self.edit_state.is_new()).await {
+        warn!("fail to write: {}:{}", self.object_id, err);
+      }
     }
     Ok(())
   }
@@ -117,10 +119,12 @@ where
       get_encode_collab(&workspace_id, &object_id, &lock, &collab_type)?
     };
     if let Some(indexer) = &self.indexer {
-      let embeddings = indexer
+      if let Ok(embeddings) = indexer
         .index(&object_id, params.encoded_collab_v1.clone())
-        .await?;
-      params.embeddings = embeddings;
+        .await
+      {
+        params.embeddings = embeddings;
+      }
     }
 
     self

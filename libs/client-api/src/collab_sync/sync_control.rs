@@ -8,7 +8,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{broadcast, watch};
-use tracing::{instrument, trace};
+use tracing::{error, instrument, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector};
@@ -189,8 +189,7 @@ where
   }
 
   if let Err(err) = sync_object.collab_type.validate_require_data(collab) {
-    #[cfg(feature = "sync_verbose_log")]
-    trace!("{} error: {}", sync_object.object_id, err);
+    error!("start init sync :{}:{}", sync_object.object_id, err);
     return Err(SyncError::Internal(err));
   }
 

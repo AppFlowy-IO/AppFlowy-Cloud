@@ -27,6 +27,7 @@ impl<S> HistoryPlugin<S>
 where
   S: CollabStorage,
 {
+  #[allow(dead_code)]
   pub fn new(
     workspace_id: String,
     object_id: String,

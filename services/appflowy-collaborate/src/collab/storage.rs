@@ -162,6 +162,11 @@ where
     params: CollabParams,
     priority: WritePriority,
   ) -> Result<(), AppError> {
+    trace!(
+      "Queue insert collab:{}:{}",
+      params.object_id,
+      params.collab_type
+    );
     if let Err(err) = params.check_encode_collab().await {
       return Err(AppError::NoRequiredData(format!(
         "Invalid collab doc state detected for workspace_id: {}, uid: {}, object_id: {} collab_type:{}. Error details: {}",

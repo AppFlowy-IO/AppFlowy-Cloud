@@ -31,6 +31,10 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     // Retrieve the latest document state from the client after they return online from offline editing.
     let mut encoder = EncoderV1::new();
     Message::Sync(SyncMessage::SyncStep2(client_step2_update)).encode(&mut encoder);
+
+    //FIXME: this should never happen as response to sync step 1 from the client, but rather be
+    //  send when a connection is established
+    Message::Sync(SyncMessage::SyncStep1(txn.state_vector())).encode(&mut encoder);
     Ok(Some(encoder.to_vec()))
   }
 

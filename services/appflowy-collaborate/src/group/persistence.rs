@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use collab::preclude::Collab;
-use collab_entity::{CollabType, validate_data_for_folder};
+use collab_entity::{validate_data_for_folder, CollabType};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::interval;
 use tracing::{trace, warn};

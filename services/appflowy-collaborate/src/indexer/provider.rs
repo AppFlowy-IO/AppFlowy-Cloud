@@ -140,7 +140,7 @@ impl IndexerProvider {
 
   async fn index_collab(&self, unindexed: UnindexedCollab) -> Result<(), AppError> {
     if let Some(indexer) = self.indexer_cache.get(&unindexed.collab_type) {
-      let workspace_id = unindexed.workspace_id.clone();
+      let workspace_id = unindexed.workspace_id;
       let embeddings = indexer
         .index(&unindexed.object_id, unindexed.collab)
         .await?;

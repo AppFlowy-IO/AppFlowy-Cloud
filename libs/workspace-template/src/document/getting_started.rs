@@ -198,7 +198,7 @@ impl GettingStartedTemplate {
           let desktop_guide_view_uuid = desktop_guide_view_uuid.clone();
           child_view_builder
             .with_name("Desktop guide")
-            .with_icon("🖥️")
+            .with_icon("📎")
             .with_view_id(desktop_guide_view_uuid)
             .build()
         }
@@ -212,7 +212,6 @@ impl GettingStartedTemplate {
           let mobile_guide_view_uuid = mobile_guide_view_uuid.clone();
           child_view_builder
             .with_name("Mobile guide")
-            .with_icon("📱")
             .with_view_id(mobile_guide_view_uuid)
             .build()
         }
@@ -266,6 +265,8 @@ impl WorkspaceTemplate for GettingStartedTemplate {
     let mut builder = workspace_view_builder.write().await;
 
     // Create general space with 2 built-in views: Getting started, To-Dos
+    //    The Getting started view is a document view, and the To-Dos view is a board view
+    //    The Getting started view contains 2 sub views: Desktop guide, Mobile guide
     builder
       .with_view_builder(|view_builder| async {
         let created_at = timestamp();
@@ -302,6 +303,7 @@ impl WorkspaceTemplate for GettingStartedTemplate {
       })
       .await;
 
+    // Create shared space without any built-in views
     builder
       .with_view_builder(|view_builder| async {
         let created_at = timestamp();

@@ -220,7 +220,10 @@ async fn perform_upload_test(
     parent_dir: parent_dir.clone(),
     file_id,
   };
-  let upload = test_bucket.create_upload(key, req).await.unwrap();
+  let upload = test_bucket
+    .create_upload(&key.object_key(), req)
+    .await
+    .unwrap();
 
   let mut chunk_count = (file_size / chunk_size) + 1;
   let mut size_of_last_chunk = file_size % chunk_size;
@@ -253,7 +256,10 @@ async fn perform_upload_test(
       parent_dir: parent_dir.clone(),
       file_id: upload.file_id.clone(),
     };
-    let resp = test_bucket.upload_part(&key, req).await.unwrap();
+    let resp = test_bucket
+      .upload_part(&key.object_key(), req)
+      .await
+      .unwrap();
 
     completed_parts.push(
       CompletedPart::builder()
@@ -282,7 +288,7 @@ async fn perform_upload_test(
     file_id: upload.file_id.clone(),
   };
   test_bucket
-    .complete_upload(&key, complete_req)
+    .complete_upload(&key.object_key(), complete_req)
     .await
     .unwrap();
 

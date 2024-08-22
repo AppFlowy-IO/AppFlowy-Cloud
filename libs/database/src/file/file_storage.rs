@@ -14,15 +14,21 @@ use uuid::Uuid;
 
 pub trait ResponseBlob {
   fn to_blob(self) -> Vec<u8>;
+  fn content_type(&self) -> Option<String>;
 }
 
 #[async_trait]
 pub trait BucketClient {
   type ResponseData: ResponseBlob;
 
-  async fn pub_blob<P>(&self, id: &P, content: &[u8]) -> Result<(), AppError>
-  where
-    P: BlobKey;
+  async fn put_blob(&self, object_key: &str, content: &[u8]) -> Result<(), AppError>;
+
+  async fn put_blob_as_content_type(
+    &self,
+    object_key: &str,
+    content: &[u8],
+    content_type: &str,
+  ) -> Result<(), AppError>;
 
   async fn delete_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError>;
 
@@ -30,17 +36,17 @@ pub trait BucketClient {
 
   async fn create_upload(
     &self,
-    key: impl BlobKey,
+    object_key: &str,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppError>;
   async fn upload_part(
     &self,
-    key: &impl BlobKey,
+    object_key: &str,
     req: UploadPartData,
   ) -> Result<UploadPartResponse, AppError>;
   async fn complete_upload(
     &self,
-    key: &impl BlobKey,
+    object_key: &str,
     req: CompleteUploadRequest,
   ) -> Result<(usize, String), AppError>;
 
@@ -90,7 +96,7 @@ where
       return Ok(());
     }
 
-    self.client.pub_blob(&key, &file_data).await?;
+    self.client.put_blob(&key.object_key(), &file_data).await?;
 
     insert_blob_metadata(
       &self.pg_pool,
@@ -131,7 +137,7 @@ where
     key: impl BlobKey,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppError> {
-    self.client.create_upload(key, req).await
+    self.client.create_upload(&key.object_key(), req).await
   }
 
   pub async fn upload_part(
@@ -139,7 +145,7 @@ where
     key: impl BlobKey,
     req: UploadPartData,
   ) -> Result<UploadPartResponse, AppError> {
-    self.client.upload_part(&key, req).await
+    self.client.upload_part(&key.object_key(), req).await
   }
 
   pub async fn complete_upload(
@@ -156,7 +162,8 @@ where
       return Ok(());
     }
 
-    let (content_length, content_type) = self.client.complete_upload(&key, req).await?;
+    let (content_length, content_type) =
+      self.client.complete_upload(&key.object_key(), req).await?;
     insert_blob_metadata(
       &self.pg_pool,
       &key.meta_key(),

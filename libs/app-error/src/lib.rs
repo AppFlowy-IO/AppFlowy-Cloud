@@ -133,6 +133,9 @@ pub enum AppError {
 
   #[error("{0}")]
   StringLengthLimitReached(String),
+
+  #[error("{0}")]
+  InvalidContentType(String),
 }
 
 impl AppError {
@@ -196,6 +199,7 @@ impl AppError {
       AppError::PublishNamespaceAlreadyTaken(_) => ErrorCode::PublishNamespaceAlreadyTaken,
       AppError::AIServiceUnavailable(_) => ErrorCode::AIServiceUnavailable,
       AppError::StringLengthLimitReached(_) => ErrorCode::StringLengthLimitReached,
+      AppError::InvalidContentType(_) => ErrorCode::InvalidContentType,
     }
   }
 }
@@ -311,6 +315,7 @@ pub enum ErrorCode {
   StringLengthLimitReached = 1034,
   #[cfg(feature = "sqlx_error")]
   SqlxArgEncodingError = 1035,
+  InvalidContentType = 1036,
 }
 
 impl ErrorCode {

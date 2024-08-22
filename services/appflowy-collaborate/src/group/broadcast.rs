@@ -6,6 +6,14 @@ use anyhow::anyhow;
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::MessageByObjectId;
+use collab_rt_entity::{AckCode, MsgId};
+use collab_rt_entity::{
+  AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
+};
+use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError, SyncMessage};
+use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use futures_util::{SinkExt, StreamExt};
 use tokio::select;
 use tokio::sync::broadcast::{channel, Sender};
@@ -16,15 +24,6 @@ use yrs::encoding::write::Write;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::Subscription as YrsSubscription;
-
-use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::MessageByObjectId;
-use collab_rt_entity::{AckCode, MsgId};
-use collab_rt_entity::{
-  AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
-};
-use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError};
-use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 
 use crate::error::RealtimeError;
 use crate::group::group_init::EditState;
@@ -343,7 +342,6 @@ async fn handle_one_client_message(
 ) -> Result<CollabAck, RealtimeError> {
   let msg_id = collab_msg.msg_id();
   let message_origin = collab_msg.origin().clone();
-  let seq_num = edit_state.edit_count();
 
   // If the payload is empty, we don't need to apply any updates .
   // Currently, only the ping message should has an empty payload.
@@ -355,7 +353,7 @@ async fn handle_one_client_message(
       message_origin,
       object_id.to_string(),
       msg_id,
-      seq_num,
+      edit_state.edit_count(),
     ));
   }
 
@@ -372,7 +370,7 @@ async fn handle_one_client_message(
     collab_msg.payload(),
     collab,
     metrics_calculate,
-    seq_num,
+    edit_state,
   )
   .await
 }
@@ -385,7 +383,7 @@ async fn handle_one_message_payload(
   payload: &Bytes,
   collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &CollabMetricsCalculate,
-  seq_num: u32,
+  edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
   let payload = payload.clone();
   metrics_calculate
@@ -400,7 +398,7 @@ async fn handle_one_message_payload(
     metrics_calculate,
     object_id,
     msg_id,
-    seq_num,
+    edit_state,
   )
   .await;
 
@@ -423,14 +421,17 @@ async fn handle_message(
   metrics_calculate: &CollabMetricsCalculate,
   object_id: &str,
   msg_id: MsgId,
-  seq_num: u32,
+  edit_state: &Arc<EditState>,
 ) -> Result<Option<CollabAck>, RealtimeError> {
   let mut decoder = DecoderV1::from(payload.as_ref());
   let reader = MessageReader::new(&mut decoder);
+  let seq_num = edit_state.edit_count();
   let mut ack_response = None;
+  let mut is_sync_step2 = false;
   for msg in reader {
     match msg {
       Ok(msg) => {
+        is_sync_step2 = matches!(msg, Message::Sync(SyncMessage::SyncStep2(_)));
         match handle_message_follow_protocol(message_origin, &ServerSyncProtocol, collab, msg).await
         {
           Ok(payload) => {
@@ -484,6 +485,10 @@ async fn handle_message(
         break;
       },
     }
+  }
+
+  if is_sync_step2 {
+    edit_state.set_ready_to_save();
   }
   Ok(ack_response)
 }

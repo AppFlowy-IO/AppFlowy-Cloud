@@ -455,6 +455,7 @@ mod tests {
   #[test]
   fn edit_state_test() {
     let edit_state = EditState::new(10, 10, false);
+    edit_state.set_ready_to_save();
     edit_state.increment_edit_count();
 
     for _ in 0..10 {

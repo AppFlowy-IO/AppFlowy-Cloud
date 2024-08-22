@@ -41,7 +41,7 @@ pub fn collab_folder_to_folder_view(folder: &Folder, depth: u32) -> FolderView {
   FolderView {
     view_id: root.id.clone(),
     name: root.name.clone(),
-    icon: root.icon.clone(),
+    icon: root.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
     is_space: false,
     is_private: false,
     extra,
@@ -94,7 +94,7 @@ impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
     Self {
       view_id: view.id.clone(),
       name: view.name.clone(),
-      icon: view.icon.clone(),
+      icon: view.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
       is_space: view_is_space(&view),
       is_private: fv.private_views.contains(&view.id),
       extra,
@@ -135,5 +135,20 @@ fn view_is_space(view: &collab_folder::View) -> bool {
   match value.get("is_space") {
     Some(is_space_str) => is_space_str.as_bool().unwrap_or(false),
     None => false,
+  }
+}
+
+fn to_dto_view_icon(icon: collab_folder::ViewIcon) -> shared_entity::dto::workspace_dto::ViewIcon {
+  shared_entity::dto::workspace_dto::ViewIcon {
+    ty: to_dto_view_icon_type(icon.ty),
+    value: icon.value,
+  }
+}
+
+fn to_dto_view_icon_type(icon: collab_folder::IconType) -> shared_entity::dto::workspace_dto::IconType {
+  match icon {
+    collab_folder::IconType::Emoji => shared_entity::dto::workspace_dto::IconType::Emoji,
+    collab_folder::IconType::Url => shared_entity::dto::workspace_dto::IconType::Url,
+    collab_folder::IconType::Icon => shared_entity::dto::workspace_dto::IconType::Icon,
   }
 }

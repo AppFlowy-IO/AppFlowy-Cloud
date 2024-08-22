@@ -9,7 +9,7 @@ use collab_database::workspace_database::DatabaseMetaList;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewLayout};
+use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View};
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
@@ -17,6 +17,8 @@ use database::collab::{select_workspace_database_oid, CollabStorage};
 use database::publish::select_published_data_for_view_id;
 use database_entity::dto::CollabParams;
 use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, PublishViewMetaData};
+use shared_entity::dto::workspace_dto;
+use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
 use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
@@ -801,8 +803,8 @@ impl PublishCollabDuplicator {
       children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
       created_at: self.ts_now,
       is_favorite: false,
-      layout,
-      icon: view_info.icon.clone(),
+      layout: to_folder_view_layout(layout),
+      icon: view_info.icon.clone().map(to_folder_view_icon),
       created_by: Some(self.duplicator_uid),
       last_edited_time: self.ts_now,
       last_edited_by: Some(self.duplicator_uid),
@@ -938,4 +940,29 @@ fn get_database_id_from_collab(db_collab: &Collab) -> Result<String, AppError> {
     .ok_or_else(|| AppError::RecordNotFound("no id found in database".to_string()))?
     .to_string(&txn);
   Ok(db_id)
+}
+
+fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {
+  collab_folder::ViewIcon {
+    ty: to_folder_view_icon_type(icon.ty),
+    value: icon.value,
+  }
+}
+
+fn to_folder_view_icon_type(icon: workspace_dto::IconType) -> collab_folder::IconType {
+  match icon {
+    workspace_dto::IconType::Emoji => collab_folder::IconType::Emoji,
+    workspace_dto::IconType::Url => collab_folder::IconType::Url,
+    workspace_dto::IconType::Icon => collab_folder::IconType::Icon,
+  }
+}
+
+fn to_folder_view_layout(layout: workspace_dto::ViewLayout) -> collab_folder::ViewLayout {
+  match layout {
+    ViewLayout::Document => collab_folder::ViewLayout::Document,
+    ViewLayout::Grid => collab_folder::ViewLayout::Grid,
+    ViewLayout::Board => collab_folder::ViewLayout::Board,
+    ViewLayout::Calendar => collab_folder::ViewLayout::Calendar,
+    ViewLayout::Chat => collab_folder::ViewLayout::Chat,
+  }
 }

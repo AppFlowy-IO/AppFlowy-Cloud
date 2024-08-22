@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use collab_folder::{ViewIcon, ViewLayout};
 use serde::{Deserialize, Serialize};
 
-/// Copied from AppFlowy-IO/AppFlowy/frontend/rust-lib/flowy-folder-pub/src/entities.rs                                                                     66,1           59%
+use super::workspace_dto::{ViewIcon, ViewLayout};
+
+/// Copied from AppFlowy-IO/AppFlowy/frontend/rust-lib/flowy-folder-pub/src/entities.rs
 /// TODO(zack): make AppFlowy use from this crate instead
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PublishViewMeta {

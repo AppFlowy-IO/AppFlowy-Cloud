@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
-use collab_folder::ViewIcon;
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::ops::Deref;
 use uuid::Uuid;
 
@@ -138,6 +138,30 @@ pub struct FolderView {
   /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<FolderView>,
+}
+
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum IconType {
+  Emoji = 0,
+  Url = 1,
+  Icon = 2,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ViewIcon {
+  pub ty: IconType,
+  pub value: String,
+}
+
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum ViewLayout {
+  Document = 0,
+  Grid = 1,
+  Board = 2,
+  Calendar = 3,
+  Chat = 4,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]

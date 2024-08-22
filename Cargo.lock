@@ -6402,7 +6402,6 @@ dependencies = [
  "bytes",
  "chrono",
  "collab-entity",
- "collab-folder",
  "database-entity",
  "futures",
  "gotrue-entity",

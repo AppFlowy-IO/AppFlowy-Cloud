@@ -368,7 +368,7 @@ async fn handle_one_client_message(
     message_origin
   );
 
-  match handle_one_message_payload(
+  handle_one_message_payload(
     object_id,
     message_origin.clone(),
     msg_id,
@@ -378,15 +378,6 @@ async fn handle_one_client_message(
     seq_num,
   )
   .await
-  {
-    Ok(ack) => {
-      let mut lock = collab.write().await;
-      let collab: &mut Collab = (*lock).borrow_mut();
-      collab.set_last_sync_at(chrono::Utc::now().timestamp());
-      Ok(ack)
-    },
-    Err(err) => Err(err),
-  }
 }
 
 /// Handle the message sent from the client

@@ -1,7 +1,7 @@
 use crate::Client;
 use client_api_entity::billing_dto::{
-  SetSubscriptionRecurringInterval, SubscriptionCancelRequest, SubscriptionPlanDetail,
-  WorkspaceUsageAndLimit,
+  SetSubscriptionRecurringInterval, SubscriptionCancelRequest, SubscriptionLinkRequest,
+  SubscriptionPlanDetail, SubscriptionTrialRequest, WorkspaceUsageAndLimit,
 };
 use reqwest::Method;
 use shared_entity::{
@@ -44,6 +44,21 @@ impl Client {
     workspace_subscription_plan: SubscriptionPlan,
     success_url: &str,
   ) -> Result<String, AppResponseError> {
+    let sub_link_req = SubscriptionLinkRequest {
+      workspace_subscription_plan,
+      recurring_interval,
+      workspace_id: workspace_id.to_string(),
+      success_url: success_url.to_string(),
+      with_test_clock: None,
+    };
+
+    self.create_subscription_v2(&sub_link_req).await
+  }
+
+  pub async fn create_subscription_v2(
+    &self,
+    sub_link_req: &SubscriptionLinkRequest,
+  ) -> Result<String, AppResponseError> {
     let url = format!(
       "{}/billing/api/v1/subscription-link",
       self.base_billing_url()
@@ -51,15 +66,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .query(&[
-        ("workspace_id", workspace_id),
-        ("recurring_interval", recurring_interval.as_str()),
-        (
-          "workspace_subscription_plan",
-          workspace_subscription_plan.as_ref(),
-        ),
-        ("success_url", success_url),
-      ])
+      .query(sub_link_req)
       .send()
       .await?;
 
@@ -214,5 +221,25 @@ impl Client {
     AppResponse::<Vec<SubscriptionPlanDetail>>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  /// request a free trial for plan
+  pub async fn post_subscription_free_trial(
+    &self,
+    workspace_id: &str,
+    plan: SubscriptionPlan,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/billing/api/v1/subscription-trial/{}",
+      self.base_billing_url(),
+      workspace_id
+    );
+    let resp = self
+      .cloud_client
+      .post(&url)
+      .query(&SubscriptionTrialRequest { plan })
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }

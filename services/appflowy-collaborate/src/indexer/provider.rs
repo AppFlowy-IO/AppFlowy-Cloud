@@ -104,7 +104,10 @@ impl IndexerProvider {
           let workspace = collab.workspace_id;
           let oid = collab.object_id.clone();
           if let Err(err) = Self::index_collab(&indexer, collab).await {
-            tracing::warn!("failed to index collab {}/{}: {}", workspace, oid, err);
+            // only logging error in debug mode. Will be enabled in production if needed.
+            if cfg!(debug_assertions) {
+              tracing::warn!("failed to index collab {}/{}: {}", workspace, oid, err);
+            }
           }
         },
         Err(err) => {

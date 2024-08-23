@@ -1,14 +1,17 @@
+use actix_multipart::form::{bytes::Bytes as MPBytes, MultipartForm};
 use actix_web::{
   web::{self, Data, Json},
-  Result, Scope,
+  HttpResponse, Result, Scope,
 };
+use authentication::jwt::UserUuid;
 use database_entity::dto::{
-  CreateTemplateCategoryParams, CreateTemplateCreatorParams, CreateTemplateParams,
-  GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams, GetTemplatesQueryParams,
-  Template, TemplateCategories, TemplateCategory, TemplateCreator, TemplateCreators,
-  TemplateHomePage, TemplateHomePageQueryParams, Templates, UpdateTemplateCategoryParams,
-  UpdateTemplateCreatorParams, UpdateTemplateParams,
+  AvatarImageSource, CreateTemplateCategoryParams, CreateTemplateCreatorParams,
+  CreateTemplateParams, GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams,
+  GetTemplatesQueryParams, Template, TemplateCategories, TemplateCategory, TemplateCreator,
+  TemplateCreators, TemplateHomePage, TemplateHomePageQueryParams, Templates,
+  UpdateTemplateCategoryParams, UpdateTemplateCreatorParams, UpdateTemplateParams,
 };
+use reqwest::StatusCode;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use uuid::Uuid;
 
@@ -50,9 +53,12 @@ pub fn template_scope() -> Scope {
         .route(web::delete().to(delete_template_handler)),
     )
     .service(web::resource("/homepage").route(web::get().to(get_template_homepage_handler)))
+    .service(web::resource("/avatar").route(web::put().to(put_avatar_handler)))
+    .service(web::resource("/avatar/{avatar_id}").route(web::get().to(get_avatar_handler)))
 }
 
 async fn post_template_category_handler(
+  _uuid: UserUuid,
   data: Json<CreateTemplateCategoryParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<TemplateCategory>> {
@@ -85,6 +91,7 @@ async fn list_template_categories_handler(
 }
 
 async fn update_template_category_handler(
+  _uuid: UserUuid,
   category_id: web::Path<Uuid>,
   data: Json<UpdateTemplateCategoryParams>,
   state: Data<AppState>,
@@ -114,6 +121,7 @@ async fn get_template_category_handler(
 }
 
 async fn delete_template_category_handler(
+  _uuid: UserUuid,
   category_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
@@ -123,6 +131,7 @@ async fn delete_template_category_handler(
 }
 
 async fn post_template_creator_handler(
+  _uuid: UserUuid,
   data: Json<CreateTemplateCreatorParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<TemplateCreator>> {
@@ -147,6 +156,7 @@ async fn list_template_creators_handler(
 }
 
 async fn update_template_creator_handler(
+  _uuid: UserUuid,
   creator_id: web::Path<Uuid>,
   data: Json<UpdateTemplateCreatorParams>,
   state: Data<AppState>,
@@ -173,6 +183,7 @@ async fn get_template_creator_handler(
 }
 
 async fn delete_template_creator_handler(
+  _uuid: UserUuid,
   creator_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<TemplateCreator>> {
@@ -182,6 +193,7 @@ async fn delete_template_creator_handler(
 }
 
 async fn post_template_handler(
+  _uuid: UserUuid,
   data: Json<CreateTemplateParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<Template>> {
@@ -230,6 +242,7 @@ async fn get_template_handler(
 }
 
 async fn update_template_handler(
+  _uuid: UserUuid,
   view_id: web::Path<Uuid>,
   data: Json<UpdateTemplateParams>,
   state: Data<AppState>,
@@ -253,6 +266,7 @@ async fn update_template_handler(
 }
 
 async fn delete_template_handler(
+  _uuid: UserUuid,
   view_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
@@ -267,4 +281,35 @@ async fn get_template_homepage_handler(
 ) -> Result<JsonAppResponse<TemplateHomePage>> {
   let template_homepage = get_template_homepage(&state.pg_pool, query.per_count).await?;
   Ok(Json(AppResponse::Ok().with_data(template_homepage)))
+}
+
+#[derive(MultipartForm)]
+#[multipart(duplicate_field = "deny")]
+struct UploadAvatarForm {
+  #[multipart(limit = "150KB")]
+  avatar: MPBytes,
+}
+
+async fn get_avatar_handler(
+  file_id: web::Path<String>,
+  state: Data<AppState>,
+) -> Result<HttpResponse> {
+  let file_id = file_id.into_inner();
+  let avatar = get_avatar(state.bucket_client.clone(), file_id).await?;
+  Ok(
+    HttpResponse::build(StatusCode::OK)
+      .content_type(avatar.content_type)
+      .body(avatar.data),
+  )
+}
+
+async fn put_avatar_handler(
+  _uuid: UserUuid,
+  MultipartForm(form): MultipartForm<UploadAvatarForm>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<AvatarImageSource>> {
+  let file_id = upload_avatar(state.bucket_client.clone(), &form.avatar).await?;
+  Ok(Json(
+    AppResponse::Ok().with_data(AvatarImageSource { file_id }),
+  ))
 }

@@ -15,7 +15,7 @@ use futures_util::StreamExt;
 use chrono::{DateTime, Utc};
 
 use collab_rt_protocol::validate_encode_collab;
-use sqlx::{Acquire, PgPool};
+use sqlx::PgPool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,6 +35,7 @@ pub enum SnapshotCommand {
 }
 
 #[derive(Clone)]
+// #[deprecated(note = "snapshot is implemented in the appflowy-history")]
 pub struct SnapshotControl {
   cache: SnapshotCache,
   command_sender: SnapshotCommandSender,
@@ -180,9 +181,7 @@ impl SnapshotControl {
   }
 
   async fn latest_snapshot_time(&self, oid: &str) -> Result<Option<DateTime<Utc>>, AppError> {
-    let mut pool_conn = self.pg_pool.acquire().await?;
-    let conn = pool_conn.acquire().await?;
-    let time = latest_snapshot_time(oid, conn).await?;
+    let time = latest_snapshot_time(oid, &self.pg_pool).await?;
     Ok(time)
   }
 }

@@ -1,7 +1,12 @@
-use std::ops::DerefMut;
+use std::{ops::DerefMut, path::Path};
 
+use actix_multipart::form::bytes::Bytes as MPBytes;
 use anyhow::Context;
-use database::template::*;
+use app_error::ErrorCode;
+use database::{
+  file::{s3_client_impl::AwsS3BucketClientImpl, BucketClient, ResponseBlob},
+  template::*,
+};
 use database_entity::dto::{
   AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateHomePage,
   TemplateMinimal,
@@ -269,4 +274,72 @@ pub async fn get_template_homepage(
     new_templates,
   };
   Ok(homepage)
+}
+
+fn avatar_object_key(file_id: &str) -> String {
+  format!("template-center/avatar/{}", file_id)
+}
+
+pub struct AvatarContent {
+  pub data: Vec<u8>,
+  pub content_type: String,
+}
+
+pub async fn get_avatar(
+  client: AwsS3BucketClientImpl,
+  file_id: String,
+) -> Result<AvatarContent, AppResponseError> {
+  let object_key = avatar_object_key(&file_id);
+  let resp = client.get_blob(&object_key).await?;
+  let content_type = resp.content_type().ok_or(AppResponseError::new(
+    ErrorCode::InvalidContentType,
+    "Missing content type for avatar".to_string(),
+  ))?;
+  Ok(AvatarContent {
+    data: resp.to_blob(),
+    content_type: content_type.to_string(),
+  })
+}
+
+pub async fn upload_avatar(
+  client: AwsS3BucketClientImpl,
+  avatar: &MPBytes,
+) -> Result<String, AppResponseError> {
+  let content_type = match &avatar.content_type {
+    Some(content_type) if content_type.type_() == mime::IMAGE => Ok(content_type.to_string()),
+    Some(content_type) => Err(AppResponseError::new(
+      ErrorCode::InvalidContentType,
+      format!("Invalid mime type for avatar upload: {}", content_type),
+    )),
+    None => Err(AppResponseError::new(
+      ErrorCode::InvalidContentType,
+      "Missing mime type for avatar upload",
+    )),
+  }?;
+  let file_name = avatar
+    .file_name
+    .as_ref()
+    .ok_or(AppResponseError::new(
+      ErrorCode::InvalidContentType,
+      "Missing file name for avatar upload",
+    ))?
+    .as_str();
+  let extension = Path::new(&file_name)
+    .extension()
+    .ok_or(AppResponseError::new(
+      ErrorCode::InvalidContentType,
+      "Missing file extension for avatar upload",
+    ))?
+    .to_str()
+    .ok_or(AppResponseError::new(
+      ErrorCode::InvalidContentType,
+      "Invalid file extension for avatar upload",
+    ))?;
+  let file_id = format!("{}.{}", Uuid::new_v4(), extension);
+
+  let object_key = avatar_object_key(&file_id);
+  client
+    .put_blob_as_content_type(&object_key, avatar.data.as_ref(), &content_type)
+    .await?;
+  Ok(file_id.to_string())
 }

@@ -211,7 +211,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config.s3.bucket.clone(),
   );
   let bucket_storage = Arc::new(S3BucketStorage::from_bucket_impl(
-    s3_client,
+    s3_client.clone(),
     pg_pool.clone(),
   ));
 
@@ -308,6 +308,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_access_control,
     workspace_access_control,
     bucket_storage,
+    bucket_client: s3_client,
     pg_listeners,
     access_control,
     metrics,

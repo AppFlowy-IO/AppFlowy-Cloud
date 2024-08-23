@@ -1,4 +1,4 @@
-use crate::file::{BlobKey, BucketClient, BucketStorage, ResponseBlob};
+use crate::file::{BucketClient, BucketStorage, ResponseBlob};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
@@ -28,6 +28,7 @@ impl S3BucketStorage {
   }
 }
 
+#[derive(Clone)]
 pub struct AwsS3BucketClientImpl {
   client: Client,
   bucket: String,
@@ -83,15 +84,11 @@ impl AwsS3BucketClientImpl {
 impl BucketClient for AwsS3BucketClientImpl {
   type ResponseData = S3ResponseData;
 
-  async fn pub_blob<P>(&self, id: &P, content: &[u8]) -> Result<(), AppError>
-  where
-    P: BlobKey + Send,
-  {
-    let key = id.object_key();
+  async fn put_blob(&self, object_key: &str, content: &[u8]) -> Result<(), AppError> {
     trace!(
       "Uploading object to S3 bucket:{}, key {}, len: {}",
       self.bucket,
-      key,
+      object_key,
       content.len()
     );
     let body = ByteStream::from(content.to_vec());
@@ -99,8 +96,35 @@ impl BucketClient for AwsS3BucketClientImpl {
       .client
       .put_object()
       .bucket(&self.bucket)
-      .key(key)
+      .key(object_key)
       .body(body)
+      .send()
+      .await
+      .map_err(|err| anyhow!("Failed to upload object to S3: {}", err))?;
+
+    Ok(())
+  }
+
+  async fn put_blob_as_content_type(
+    &self,
+    object_key: &str,
+    content: &[u8],
+    content_type: &str,
+  ) -> Result<(), AppError> {
+    trace!(
+      "Uploading object to S3 bucket:{}, key {}, len: {}",
+      self.bucket,
+      object_key,
+      content.len()
+    );
+    let body = ByteStream::from(content.to_vec());
+    self
+      .client
+      .put_object()
+      .bucket(&self.bucket)
+      .key(object_key)
+      .body(body)
+      .content_type(content_type)
       .send()
       .await
       .map_err(|err| anyhow!("Failed to upload object to S3: {}", err))?;
@@ -133,7 +157,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       Ok(output) => match output.body.collect().await {
         Ok(body) => {
           let data = body.into_bytes().to_vec();
-          Ok(S3ResponseData::new_with_data(data))
+          Ok(S3ResponseData::new_with_data(data, output.content_type))
         },
         Err(err) => Err(AppError::from(anyhow!("Failed to collect body: {}", err))),
       },
@@ -157,10 +181,9 @@ impl BucketClient for AwsS3BucketClientImpl {
   /// https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html
   async fn create_upload(
     &self,
-    key: impl BlobKey,
+    object_key: &str,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppError> {
-    let object_key = key.object_key();
     trace!(
       "Creating upload to S3 bucket:{}, key {}, request: {}",
       self.bucket,
@@ -171,7 +194,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       .client
       .create_multipart_upload()
       .bucket(&self.bucket)
-      .key(&object_key)
+      .key(object_key)
       .content_type(req.content_type)
       .send()
       .await
@@ -188,13 +211,12 @@ impl BucketClient for AwsS3BucketClientImpl {
 
   async fn upload_part(
     &self,
-    key: &impl BlobKey,
+    object_key: &str,
     req: UploadPartData,
   ) -> Result<UploadPartResponse, AppError> {
     if req.body.is_empty() {
       return Err(AppError::InvalidRequest("body is empty".to_string()));
     }
-    let object_key = key.object_key();
     trace!(
       "Uploading part to S3 bucket:{}, key {}, request: {}",
       self.bucket,
@@ -206,7 +228,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       .client
       .upload_part()
       .bucket(&self.bucket)
-      .key(&object_key)
+      .key(object_key)
       .upload_id(&req.upload_id)
       .part_number(req.part_number)
       .body(body)
@@ -226,10 +248,9 @@ impl BucketClient for AwsS3BucketClientImpl {
   /// Return the content length and content type of the uploaded object
   async fn complete_upload(
     &self,
-    key: &impl BlobKey,
+    object_key: &str,
     req: CompleteUploadRequest,
   ) -> Result<(usize, String), AppError> {
-    let object_key = key.object_key();
     trace!(
       "Completing upload to S3 bucket:{}, key {}, request: {}",
       self.bucket,
@@ -251,7 +272,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       .build();
 
     self
-      .complete_upload_and_get_metadata(&object_key, &req.upload_id, completed_multipart_upload)
+      .complete_upload_and_get_metadata(object_key, &req.upload_id, completed_multipart_upload)
       .await
   }
 
@@ -356,6 +377,7 @@ impl BucketClient for AwsS3BucketClientImpl {
 #[derive(Debug)]
 pub struct S3ResponseData {
   data: Vec<u8>,
+  content_type: Option<String>,
 }
 
 impl Deref for S3ResponseData {
@@ -370,14 +392,21 @@ impl ResponseBlob for S3ResponseData {
   fn to_blob(self) -> Vec<u8> {
     self.data
   }
+
+  fn content_type(&self) -> Option<String> {
+    self.content_type.clone()
+  }
 }
 
 impl S3ResponseData {
   pub fn new(_output: DeleteObjectOutput) -> Self {
-    S3ResponseData { data: Vec::new() }
+    S3ResponseData {
+      data: Vec::new(),
+      content_type: None,
+    }
   }
 
-  pub fn new_with_data(data: Vec<u8>) -> Self {
-    S3ResponseData { data }
+  pub fn new_with_data(data: Vec<u8>, content_type: Option<String>) -> Self {
+    S3ResponseData { data, content_type }
   }
 }

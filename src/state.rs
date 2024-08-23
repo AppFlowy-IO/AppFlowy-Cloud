@@ -18,7 +18,7 @@ use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
-use database::file::s3_client_impl::S3BucketStorage;
+use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
@@ -45,6 +45,7 @@ pub struct AppState {
   pub collab_access_control: CollabAccessControlImpl,
   pub workspace_access_control: WorkspaceAccessControlImpl,
   pub bucket_storage: Arc<S3BucketStorage>,
+  pub bucket_client: AwsS3BucketClientImpl,
   pub pg_listeners: Arc<PgListeners>,
   pub access_control: AccessControl,
   pub metrics: AppMetrics,

@@ -19,6 +19,7 @@ actix-service = "2.0.2"
 actix-identity = "0.6.0"
 actix-router = "0.5.2"
 actix-session = { version = "0.8", features = ["redis-rs-tls-session"] }
+actix-multipart = { version = "0.7.2", features = ["derive"] }
 openssl = { version = "0.10.62", features = ["vendored"] }
 
 # serde

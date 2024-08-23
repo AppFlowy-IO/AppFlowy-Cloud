@@ -97,9 +97,17 @@ where
     trace!("collab:{} edit state: {}", self.object_id, self.edit_state);
 
     // Check if conditions for saving to disk are not met
+    let is_new = self.edit_state.is_new();
     if self.edit_state.should_save_to_disk() {
-      if let Err(err) = self.save(self.edit_state.is_new()).await {
-        warn!("fail to write: {}:{}", self.object_id, err);
+      match self.save(is_new).await {
+        Ok(_) => {
+          if is_new {
+            self.edit_state.set_is_new(false);
+          }
+        },
+        Err(err) => {
+          warn!("fail to write: {}:{}", self.object_id, err);
+        },
       }
     }
     Ok(())

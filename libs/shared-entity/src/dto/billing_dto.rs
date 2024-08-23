@@ -150,3 +150,17 @@ pub enum Currency {
   #[default]
   USD,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct SubscriptionLinkRequest {
+  pub workspace_subscription_plan: SubscriptionPlan,
+  pub recurring_interval: RecurringInterval,
+  pub workspace_id: String,
+  pub success_url: String,
+  pub with_test_clock: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SubscriptionTrialRequest {
+  pub plan: SubscriptionPlan,
+}

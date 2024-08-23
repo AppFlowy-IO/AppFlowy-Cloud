@@ -113,6 +113,8 @@ pub struct WorkspaceUsageAndLimit {
   pub storage_bytes: i64,
   pub storage_bytes_limit: i64,
   pub storage_bytes_unlimited: bool,
+  pub single_upload_limit: i64,
+  pub single_upload_unlimited: bool,
   pub ai_responses_count: i64,
   pub ai_responses_count_limit: i64,
 

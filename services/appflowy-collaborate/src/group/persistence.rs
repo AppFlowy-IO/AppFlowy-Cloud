@@ -106,7 +106,12 @@ where
           }
         },
         Err(err) => {
-          warn!("fail to write: {}:{}", self.object_id, err);
+          let log_level = if cfg!(debug_assertions) {
+            tracing::Level::ERROR
+          } else {
+            tracing::Level::WARN
+          };
+          tracing::event!(log_level, "fail to write: {}:{}", self.object_id, err);
         },
       }
     }

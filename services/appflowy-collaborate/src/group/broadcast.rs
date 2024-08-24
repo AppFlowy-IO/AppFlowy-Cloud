@@ -523,7 +523,9 @@ impl Subscription {
     }
     if let Some(stream_stop_tx) = self.stream_stop_tx.take() {
       if let Err(err) = stream_stop_tx.send(()).await {
-        warn!("the stream might be already stop, error: {}", err);
+        if cfg!(debug_assertions) {
+          warn!("the stream might be already stop, error: {}", err);
+        }
       }
     }
   }

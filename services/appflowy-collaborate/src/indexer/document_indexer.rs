@@ -53,14 +53,20 @@ impl Indexer for DocumentIndexer {
     object_id: &str,
     doc_state: Vec<u8>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    let collab = Collab::new_with_source(
-      CollabOrigin::Server,
-      object_id,
-      DataSource::DocStateV1(doc_state),
-      vec![],
-      false,
-    )
-    .map_err(|e| AppError::Internal(e.into()))?;
+    let cloned_object_id = object_id.to_string();
+    let collab = tokio::spawn(async move {
+      Collab::new_with_source(
+        CollabOrigin::Server,
+        &cloned_object_id,
+        DataSource::DocStateV1(doc_state),
+        vec![],
+        false,
+      )
+      .map_err(|e| AppError::Internal(e.into()))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.into()))??;
+
     let document = Document::open(collab).map_err(|e| AppError::Internal(e.into()))?;
     let mut params = match Self::get_document_contents(&document) {
       Ok(result) => result,

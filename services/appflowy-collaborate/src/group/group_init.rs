@@ -200,24 +200,7 @@ impl CollabGroup {
       modified_at.elapsed().as_secs() > 60 * 60
     } else {
       let elapsed_secs = modified_at.elapsed().as_secs();
-      if elapsed_secs > self.timeout_secs() {
-        // Mark the group as inactive if it has been inactive for more than 3 hours, even if there are subscribers.
-        // Otherwise, return true only if there are no subscribers.
-        const MAXIMUM_SECS: u64 = 3 * 60 * 60;
-        if elapsed_secs > MAXIMUM_SECS {
-          info!(
-            "Group:{} is inactive for {} seconds, subscribers: {}",
-            self.object_id,
-            modified_at.elapsed().as_secs(),
-            self.subscribers.len()
-          );
-          true
-        } else {
-          self.subscribers.is_empty()
-        }
-      } else {
-        false
-      }
+      elapsed_secs > self.timeout_secs() && self.subscribers.is_empty()
     }
   }
 

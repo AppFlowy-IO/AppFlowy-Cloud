@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::anyhow;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
-use sqlx::{PgPool, Transaction};
+use sqlx::{Error, PgPool, Transaction};
 use tokio::time::sleep;
 use tracing::{event, instrument, Level};
 use uuid::Uuid;
@@ -100,19 +100,21 @@ impl CollabDiskCache {
           .await?;
         },
         Err(e) => {
-          // Handle non-retryable errors immediately
-          if matches!(e, sqlx::Error::RowNotFound) {
-            let msg = format!("Can't find the row for query: {:?}", query);
-            return Err(AppError::RecordNotFound(msg));
-          }
-
-          // Increment attempts and retry if below MAX_ATTEMPTS and the error is retryable
-          if attempts < MAX_ATTEMPTS - 1 && matches!(e, sqlx::Error::PoolTimedOut) {
-            attempts += 1;
-            sleep(Duration::from_millis(500 * attempts as u64)).await;
-            continue;
-          } else {
-            return Err(e.into());
+          match e {
+            Error::RowNotFound => {
+              let msg = format!("Can't find the row for query: {:?}", query);
+              return Err(AppError::RecordNotFound(msg));
+            },
+            _ => {
+              // Increment attempts and retry if below MAX_ATTEMPTS and the error is retryable
+              if attempts < MAX_ATTEMPTS - 1 && matches!(e, sqlx::Error::PoolTimedOut) {
+                attempts += 1;
+                sleep(Duration::from_millis(500 * attempts as u64)).await;
+                continue;
+              } else {
+                return Err(e.into());
+              }
+            },
           }
         },
       }

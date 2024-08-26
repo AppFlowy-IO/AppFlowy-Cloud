@@ -3,9 +3,9 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use actix::Addr;
-use actix_http::header::{HeaderMap, AUTHORIZATION};
+use actix_http::header::{AUTHORIZATION, HeaderMap};
+use actix_web::{HttpRequest, HttpResponse, Result, Scope, web};
 use actix_web::web::{Data, Json, Payload, PayloadConfig};
-use actix_web::{web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use anyhow::anyhow;
 use bytes::{Bytes, BytesMut};
@@ -18,8 +18,9 @@ use tokio_stream::StreamExt;
 use tracing::{debug, error, event, instrument, trace};
 
 use app_error::AppError;
-use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
+use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::{HttpRealtimeMessage, RealtimeMessage};
+use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::actix_ws::client::RealtimeClient;
@@ -28,10 +29,9 @@ use crate::actix_ws::server::RealtimeServerActor;
 use crate::collab::access_control::RealtimeCollabAccessControlImpl;
 use crate::collab::storage::CollabAccessControlStorage;
 use crate::compression::{
-  decompress, CompressionType, X_COMPRESSION_BUFFER_SIZE, X_COMPRESSION_TYPE,
+  CompressionType, decompress, X_COMPRESSION_BUFFER_SIZE, X_COMPRESSION_TYPE,
 };
 use crate::state::AppState;
-use authentication::jwt::{authorization_from_token, UserUuid};
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(web::resource("/v1").route(web::get().to(establish_ws_connection_v1)))
@@ -75,6 +75,10 @@ pub async fn establish_ws_connection_v1(
       ConnectInfo::parse_from(&query_params)?
     },
   };
+
+  if client_version < state.config.websocket.min_client_version {
+    return Err(AppError::Connect("Client version is too low".to_string()).into());
+  }
 
   start_connect(
     &request,

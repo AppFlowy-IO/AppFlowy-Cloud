@@ -12,7 +12,7 @@ use database::collab::CollabStorage;
 use database::pg_row::AFWorkspaceRow;
 use database_entity::dto::CollabParams;
 use sqlx::Transaction;
-use tracing::{debug, error, instrument, trace};
+use tracing::{error, instrument, trace};
 use uuid::Uuid;
 use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 

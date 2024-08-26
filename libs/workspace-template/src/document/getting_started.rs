@@ -15,7 +15,7 @@ use collab_folder::ViewLayout;
 use serde_json::Value;
 use tokio::sync::RwLock;
 
-use crate::database::database::create_database_collab;
+use crate::database::database_collab::create_database_collab;
 use crate::document::parser::JsonToDocumentParser;
 use crate::hierarchy_builder::{ViewBuilder, WorkspaceViewBuilder};
 use crate::{gen_view_id, TemplateData, WorkspaceTemplate};
@@ -427,8 +427,8 @@ pub fn get_initial_document_data() -> Result<DocumentData, Error> {
 pub fn replace_json_placeholders(value: &mut Value, replacements: &HashMap<String, String>) {
   match value {
     Value::String(s) => {
-      if s.starts_with("<") && s.ends_with(">") {
-        let key = s.trim_start_matches("<").trim_end_matches(">");
+      if s.starts_with('<') && s.ends_with('>') {
+        let key = s.trim_start_matches('<').trim_end_matches('>');
         if let Some(replacement) = replacements.get(key) {
           *s = replacement.to_string();
         }

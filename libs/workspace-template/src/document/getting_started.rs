@@ -15,7 +15,7 @@ use collab_folder::ViewLayout;
 use serde_json::Value;
 use tokio::sync::RwLock;
 
-use crate::database::database::{create_database_collab, create_database_row_collabs};
+use crate::database::database::create_database_collab;
 use crate::document::parser::JsonToDocumentParser;
 use crate::hierarchy_builder::{ViewBuilder, WorkspaceViewBuilder};
 use crate::{gen_view_id, TemplateData, WorkspaceTemplate};
@@ -35,7 +35,7 @@ pub struct GettingStartedTemplate;
 
 impl GettingStartedTemplate {
   /// Create a document template data from the given JSON string
-  async fn create_document_from_json(
+  pub async fn create_document_from_json(
     &self,
     object_id: String,
     json_str: &str,
@@ -64,49 +64,58 @@ impl GettingStartedTemplate {
   /// Create a series of database templates from the given JSON String
   ///
   /// Notes: The output contains DatabaseCollab, DatabaseRowCollab
-  async fn create_database_from_params(
+  pub async fn create_database_from_params(
     &self,
     object_id: String,
     create_database_params: CreateDatabaseParams,
   ) -> anyhow::Result<Vec<TemplateData>> {
+    let object_id = object_id.clone();
     let database_id = create_database_params.database_id.clone();
 
-    let data = tokio::task::spawn_blocking(move || {
-      // 2. create a new database collab  with the create database params
-      let collab = create_database_collab(object_id.clone(), create_database_params.clone())?;
-      let data =
-        collab.encode_collab_v1(|collab| CollabType::Database.validate_require_data(collab))?;
-      let database_template_data = TemplateData {
-        object_id: object_id.clone(),
-        object_type: CollabType::Database,
-        object_data: data,
-        database_id: Some(database_id),
-      };
-
-      // 3. create the new database row collabs
-      let row_collabs = create_database_row_collabs(object_id.clone(), create_database_params)?;
-      let row_template_data = row_collabs.iter().map(|(id, collab)| {
-        let data = collab
-          .encode_collab_v1(|collab| CollabType::DatabaseRow.validate_require_data(collab))
-          .unwrap();
-        TemplateData {
-          object_id: id.clone(),
-          object_type: CollabType::DatabaseRow,
-          object_data: data,
-          database_id: None,
-        }
-      });
-
-      let mut template_data = vec![database_template_data];
-      template_data.extend(row_template_data);
-
-      Ok::<_, anyhow::Error>(template_data)
+    let encoded_database = tokio::task::spawn_blocking({
+      let object_id = object_id.clone();
+      let create_database_params = create_database_params.clone();
+      move || create_database_collab(object_id, create_database_params)
     })
-    .await??;
-    Ok(data)
+    .await?
+    .await?;
+
+    let encoded_database_collab = encoded_database
+      .encoded_database_collab
+      .encoded_collab
+      .clone();
+
+    // 1. create the new database collab
+    let database_template_data = TemplateData {
+      object_id,
+      object_type: CollabType::Database,
+      object_data: encoded_database_collab,
+      database_id: Some(database_id.clone()),
+    };
+
+    // 2. create the new database row collabs
+    let database_row_template_data =
+      encoded_database
+        .encoded_row_collabs
+        .iter()
+        .map(|encoded_row_collab| {
+          let object_id = encoded_row_collab.object_id.clone();
+          let data = encoded_row_collab.encoded_collab.clone();
+          TemplateData {
+            object_id,
+            object_type: CollabType::DatabaseRow,
+            object_data: data,
+            database_id: Some(database_id.clone()),
+          }
+        });
+
+    let mut template_data = vec![database_template_data];
+    template_data.extend(database_row_template_data);
+
+    Ok(template_data)
   }
 
-  async fn create_document_and_database_data(
+  pub async fn create_document_and_database_data(
     &self,
     general_view_uuid: String,
     shared_view_uuid: String,
@@ -163,7 +172,8 @@ impl GettingStartedTemplate {
 
     let todos_json = include_str!("../../assets/to-dos.json");
     let database_data = serde_json::from_str::<DatabaseData>(todos_json)?;
-    let create_database_params = CreateDatabaseParams::from_database_data(database_data);
+    let create_database_params =
+      CreateDatabaseParams::from_database_data(database_data, Some(todos_view_uuid.clone()));
     let todos_data = self
       .create_database_from_params(todos_view_uuid.clone(), create_database_params.clone())
       .await?;
@@ -414,7 +424,7 @@ pub fn get_initial_document_data() -> Result<DocumentData, Error> {
 ///
 /// The placeholders are in the format of "<key>", for example "<name>".
 /// The value of the placeholder will be replaced with the value of the key in the replacements map.
-fn replace_json_placeholders(value: &mut Value, replacements: &HashMap<String, String>) {
+pub fn replace_json_placeholders(value: &mut Value, replacements: &HashMap<String, String>) {
   match value {
     Value::String(s) => {
       if s.starts_with("<") && s.ends_with(">") {

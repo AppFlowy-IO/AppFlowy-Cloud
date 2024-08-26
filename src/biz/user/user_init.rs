@@ -36,7 +36,6 @@ where
     .build()
     .await?;
 
-  debug!("create {} templates for user:{}", templates.len(), uid);
   let mut database_records = vec![];
   for template in templates {
     let view_id = template.object_id.clone();

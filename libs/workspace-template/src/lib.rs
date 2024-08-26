@@ -18,6 +18,8 @@ pub mod database;
 pub mod document;
 
 mod hierarchy_builder;
+#[cfg(test)]
+mod tests;
 
 #[async_trait]
 pub trait WorkspaceTemplate {

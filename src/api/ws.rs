@@ -86,6 +86,10 @@ pub async fn establish_ws_connection_v1(
     },
   };
 
+  if client_version < state.config.websocket.min_client_version {
+    return Err(AppError::Connect("Client version is too low".to_string()).into());
+  }
+
   start_connect(
     &request,
     payload,

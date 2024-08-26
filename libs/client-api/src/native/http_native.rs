@@ -1,9 +1,6 @@
 use crate::http::log_request_id;
 use crate::native::GetCollabAction;
-use crate::ws::{
-  ConnectInfo, ConnectState, ConnectStateNotify, WSClientConnectURLProvider, WSClientHttpSender,
-  WSError,
-};
+use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
 use crate::{spawn_blocking_brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
@@ -28,12 +25,12 @@ use std::future::Future;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
-use std::sync::Weak;
+
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
-use tokio_retry::{Condition, Retry, RetryIf};
-use tracing::{debug, event, info, instrument, trace};
+use tokio_retry::{Condition, RetryIf};
+use tracing::{event, info, instrument, trace};
 
 pub use infra::file_util::ChunkedBytes;
 use shared_entity::dto::ai_dto::CompleteTextParams;
@@ -397,12 +394,8 @@ where
 }
 
 struct RetryGetCollabCondition;
-impl Condition<AppError> for RetryGetCollabCondition {
-  fn should_retry(&mut self, error: &AppError) -> bool {
-    if error.is_record_not_found() {
-      return false;
-    } else {
-      true
-    }
+impl Condition<AppResponseError> for RetryGetCollabCondition {
+  fn should_retry(&mut self, error: &AppResponseError) -> bool {
+    !error.is_record_not_found()
   }
 }

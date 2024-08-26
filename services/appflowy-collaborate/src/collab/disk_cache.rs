@@ -6,7 +6,7 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use sqlx::{Error, PgPool, Transaction};
 use tokio::time::sleep;
-use tracing::{error, event, instrument, Level};
+use tracing::{event, instrument, Level};
 use uuid::Uuid;
 
 use app_error::AppError;

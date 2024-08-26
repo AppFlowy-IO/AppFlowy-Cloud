@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::fmt::Display;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,7 +11,7 @@ use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, RwLock};
-use tracing::{error, event, info, trace};
+use tracing::{error, event, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::Update;
@@ -196,27 +197,10 @@ impl CollabGroup {
         modified_at.elapsed().as_secs(),
         self.subscribers.len()
       );
-      modified_at.elapsed().as_secs() > 120
+      modified_at.elapsed().as_secs() > 60 * 60
     } else {
       let elapsed_secs = modified_at.elapsed().as_secs();
-      if elapsed_secs > self.timeout_secs() {
-        // Mark the group as inactive if it has been inactive for more than 3 hours, even if there are subscribers.
-        // Otherwise, return true only if there are no subscribers.
-        const MAXIMUM_SECS: u64 = 3 * 60 * 60;
-        if elapsed_secs > MAXIMUM_SECS {
-          info!(
-            "Group:{} is inactive for {} seconds, subscribers: {}",
-            self.object_id,
-            modified_at.elapsed().as_secs(),
-            self.subscribers.len()
-          );
-          true
-        } else {
-          self.subscribers.is_empty()
-        }
-      } else {
-        false
-      }
+      elapsed_secs > self.timeout_secs() && self.subscribers.is_empty()
     }
   }
 
@@ -260,7 +244,26 @@ pub(crate) struct EditState {
 
   max_edit_count: u32,
   max_secs: i64,
+  /// Indicate the collab object is just created in the client and not exist in server database.
   is_new: AtomicBool,
+  /// Indicate the collab is ready to save to disk.
+  /// If is_ready_to_save is true, which means the collab contains the requirement data and ready to save to disk.
+  is_ready_to_save: AtomicBool,
+}
+
+impl Display for EditState {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+        f,
+        "EditState {{ edit_counter: {}, prev_edit_count: {},  max_edit_count: {}, max_secs: {}, is_new: {}, is_ready_to_save: {}",
+        self.edit_counter.load(Ordering::SeqCst),
+        self.prev_edit_count.load(Ordering::SeqCst),
+        self.max_edit_count,
+        self.max_secs,
+        self.is_new.load(Ordering::SeqCst),
+        self.is_ready_to_save.load(Ordering::SeqCst),
+        )
+  }
 }
 
 impl EditState {
@@ -272,6 +275,7 @@ impl EditState {
       max_edit_count,
       max_secs,
       is_new: AtomicBool::new(is_new),
+      is_ready_to_save: AtomicBool::new(false),
     }
   }
 
@@ -311,7 +315,19 @@ impl EditState {
     self.is_new.store(is_new, Ordering::SeqCst);
   }
 
+  pub(crate) fn set_ready_to_save(&self) {
+    self.is_ready_to_save.store(true, Ordering::Relaxed);
+  }
+
   pub(crate) fn should_save_to_disk(&self) -> bool {
+    if !self.is_ready_to_save.load(Ordering::Relaxed) {
+      return false;
+    }
+
+    if self.is_new.load(Ordering::Relaxed) {
+      return true;
+    }
+
     let current_edit_count = self.edit_counter.load(Ordering::SeqCst);
     let prev_edit_count = self.prev_edit_count.load(Ordering::SeqCst);
 
@@ -422,6 +438,7 @@ mod tests {
   #[test]
   fn edit_state_test() {
     let edit_state = EditState::new(10, 10, false);
+    edit_state.set_ready_to_save();
     edit_state.increment_edit_count();
 
     for _ in 0..10 {

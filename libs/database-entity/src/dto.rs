@@ -1223,6 +1223,11 @@ pub struct TemplateHomePageQueryParams {
   pub per_count: Option<i64>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AvatarImageSource {
+  pub file_id: String,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CollabParams, CollabParamsV0};

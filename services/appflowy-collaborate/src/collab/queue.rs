@@ -183,6 +183,11 @@ impl StorageQueue {
     pending_write: PendingWrite,
     pending_write_meta: PendingWriteMeta,
   ) -> Result<(), anyhow::Error> {
+    trace!(
+      "queue pending write: {}:{}",
+      pending_write_meta.object_id,
+      pending_write_meta.collab_type
+    );
     const MAX_RETRIES: usize = 3;
     const BASE_DELAY_MS: u64 = 200;
     const BACKOFF_FACTOR: u64 = 2;

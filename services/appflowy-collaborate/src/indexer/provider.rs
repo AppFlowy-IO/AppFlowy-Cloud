@@ -64,7 +64,7 @@ impl IndexerProvider {
 
   fn get_unindexed_collabs(
     &self,
-  ) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab, anyhow::Error>>>> {
+  ) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab, anyhow::Error>> + Send>> {
     let db = self.db.clone();
     Box::pin(try_stream! {
       let collabs = get_collabs_without_embeddings(&db).await?;
@@ -104,7 +104,10 @@ impl IndexerProvider {
           let workspace = collab.workspace_id;
           let oid = collab.object_id.clone();
           if let Err(err) = Self::index_collab(&indexer, collab).await {
-            tracing::warn!("failed to index collab {}/{}: {}", workspace, oid, err);
+            // only logging error in debug mode. Will be enabled in production if needed.
+            if cfg!(debug_assertions) {
+              tracing::warn!("failed to index collab {}/{}: {}", workspace, oid, err);
+            }
           }
         },
         Err(err) => {

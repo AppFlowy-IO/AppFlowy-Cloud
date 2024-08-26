@@ -4,7 +4,7 @@ use std::time::Duration;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::preclude::{Collab, CollabPlugin};
+use collab::preclude::Collab;
 use collab_entity::CollabType;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, instrument, trace};
@@ -22,7 +22,7 @@ use database_entity::dto::QueryCollabParams;
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::group_init::CollabGroup;
-use crate::group::plugin::HistoryPlugin;
+
 use crate::group::state::GroupManagementState;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
@@ -178,7 +178,7 @@ where
 
     let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
     let (collab, encode_collab) = {
-      let (collab, encode_collab) = match result {
+      let (mut collab, encode_collab) = match result {
         Ok(value) => value,
         Err(err) => {
           if err.is_record_not_found() {
@@ -194,22 +194,8 @@ where
         },
       };
 
+      collab.initialize();
       let collab = Arc::new(RwLock::new(collab));
-      let plugins: Vec<Box<dyn CollabPlugin>> = vec![Box::new(HistoryPlugin::new(
-        workspace_id.to_string(),
-        object_id.to_string(),
-        collab_type.clone(),
-        Arc::downgrade(&collab),
-        self.storage.clone(),
-        is_new_collab,
-      ))];
-
-      {
-        // initialize
-        let mut collab = collab.write().await;
-        collab.add_plugins(plugins);
-        collab.initialize();
-      }
       (collab, encode_collab)
     };
 

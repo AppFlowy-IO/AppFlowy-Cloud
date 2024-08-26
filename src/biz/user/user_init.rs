@@ -159,6 +159,7 @@ async fn create_workspace_database_collab(
     for (object_id, database_id) in initial_database_records {
       let map_ref = workspace_databases.push_back(&mut txn, MapPrelim::default());
       // TODO(Lucas): use the const key here.
+      // these values are from the database_meta, which is used to store the reference of the database id and the view id
       map_ref.insert(&mut txn, "database_id", database_id);
       map_ref.insert(&mut txn, "views", ArrayPrelim::from_iter(vec![object_id]));
       map_ref.insert(&mut txn, "created_at", timestamp());

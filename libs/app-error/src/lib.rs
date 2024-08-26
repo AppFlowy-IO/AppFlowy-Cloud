@@ -311,6 +311,8 @@ pub enum ErrorCode {
   StringLengthLimitReached = 1034,
   #[cfg(feature = "sqlx_error")]
   SqlxArgEncodingError = 1035,
+  InvalidContentType = 1036,
+  SingleUploadLimitExceeded = 1037,
 }
 
 impl ErrorCode {

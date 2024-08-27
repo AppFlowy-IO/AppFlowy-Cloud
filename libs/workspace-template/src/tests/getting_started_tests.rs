@@ -74,16 +74,16 @@ mod tests {
       .await;
     let template_data = result.unwrap();
 
-    for i in 0..template_data.len() {
+    for (i, data) in template_data.iter().enumerate() {
       if i == 0 {
-        // the first one is the database
-        assert_eq!(template_data[i].collab_type, CollabType::Database);
+        // The first item is the database
+        assert_eq!(data.collab_type, CollabType::Database);
       } else {
-        // the rest are the database rows
-        assert_eq!(template_data[i].collab_type, CollabType::DatabaseRow);
+        // The rest are database rows
+        assert_eq!(data.collab_type, CollabType::DatabaseRow);
       }
 
-      assert!(!template_data[i].encoded_collab.doc_state.is_empty());
+      assert!(!data.encoded_collab.doc_state.is_empty());
     }
 
     template_data

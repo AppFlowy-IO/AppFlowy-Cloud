@@ -57,7 +57,7 @@ async fn get_user_default_workspace_test() {
   assert!(general_space.icon.is_none());
   assert!(general_space.extra.is_some());
   let extra = general_space.extra.as_ref().unwrap();
-  let general_space_extra = json_str_to_hashmap(&extra).unwrap();
+  let general_space_extra = json_str_to_hashmap(extra).unwrap();
   assert_eq!(
     general_space_extra.get("is_space"),
     Some(&serde_json::json!(true))
@@ -147,7 +147,7 @@ async fn get_user_default_workspace_test() {
   assert!(shared_space.icon.is_none());
   assert!(shared_space.extra.is_some());
   let extra = shared_space.extra.as_ref().unwrap();
-  let shared_space_extra = json_str_to_hashmap(&extra).unwrap();
+  let shared_space_extra = json_str_to_hashmap(extra).unwrap();
   assert_eq!(
     shared_space_extra.get("is_space"),
     Some(&serde_json::json!(true))

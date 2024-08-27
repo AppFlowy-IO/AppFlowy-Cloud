@@ -1,6 +1,6 @@
 FROM golang as base
 WORKDIR /go/src/supabase
-RUN git clone https://github.com/supabase/gotrue.git --depth 1 --branch v2.117.0
+RUN git clone https://github.com/supabase/gotrue.git --depth 1 --branch v2.159.1
 WORKDIR /go/src/supabase/gotrue
 COPY docker/gotrue.patch .
 RUN git apply gotrue.patch

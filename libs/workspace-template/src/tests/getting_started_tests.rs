@@ -1,6 +1,8 @@
 use crate::document::getting_started::*;
 use crate::TemplateData;
+use crate::TemplateObjectId;
 use crate::{hierarchy_builder::WorkspaceViewBuilder, WorkspaceTemplate};
+use collab::preclude::uuid_v4;
 use collab_database::database::DatabaseData;
 use collab_database::entity::CreateDatabaseParams;
 use collab_document::document_data::generate_id;
@@ -12,8 +14,6 @@ use tokio::sync::RwLock;
 
 #[cfg(test)]
 mod tests {
-
-  use crate::TemplateObjectId;
 
   use super::*;
 
@@ -45,7 +45,7 @@ mod tests {
 
   async fn test_document_json(json_str: &str) {
     let template = GettingStartedTemplate;
-    let object_id = generate_id();
+    let object_id = uuid_v4().to_string();
     let result = template
       .create_document_from_json(object_id.clone(), json_str)
       .await;
@@ -65,7 +65,7 @@ mod tests {
 
   async fn test_database_json(json_str: &str) -> Vec<TemplateData> {
     let template = GettingStartedTemplate;
-    let object_id = generate_id();
+    let object_id = uuid_v4().to_string();
     let database_data = serde_json::from_str::<DatabaseData>(json_str).unwrap();
     let create_database_params =
       CreateDatabaseParams::from_database_data(database_data, Some(object_id.clone()));

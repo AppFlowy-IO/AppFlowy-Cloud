@@ -26,8 +26,6 @@ use crate::{gen_view_id, TemplateData, TemplateObjectId, WorkspaceTemplate};
 //          |-- Desktop guide (document)
 //          |-- Mobile guide (document)
 //     |-- To-Dos (board)
-//          |-- Inbox (grid)
-//     |-- Ask AI (ai chat)
 // |-- Shared (space)
 //     |-- ... (empty)
 // Note: Update the folder structure above if you changed the code below

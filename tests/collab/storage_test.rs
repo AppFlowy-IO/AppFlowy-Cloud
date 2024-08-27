@@ -418,7 +418,8 @@ async fn insert_folder_data_success_test() {
     .await
     .unwrap();
 
-  assert_eq!(templates.len(), 2);
+  // 2 spaces + 3 documents + 2 databases + 5rows
+  assert_eq!(templates.len(), 12);
   for (index, template) in templates.into_iter().enumerate() {
     if index == 0 {
       assert_eq!(template.collab_type, CollabType::Document);

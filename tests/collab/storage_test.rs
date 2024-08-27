@@ -22,7 +22,7 @@ use database_entity::dto::{
   CollabParams, CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams,
   QueryCollabResult,
 };
-use workspace_template::document::get_started::GetStartedDocumentTemplate;
+use workspace_template::document::getting_started::GettingStartedTemplate;
 use workspace_template::WorkspaceTemplateBuilder;
 
 use crate::collab::util::{generate_random_bytes, redis_connection_manager, test_encode_collab_v1};
@@ -413,7 +413,7 @@ async fn insert_folder_data_success_test() {
   let uid = test_client.uid().await;
 
   let templates = WorkspaceTemplateBuilder::new(uid, &workspace_id)
-    .with_templates(vec![GetStartedDocumentTemplate])
+    .with_templates(vec![GettingStartedTemplate])
     .build()
     .await
     .unwrap();
@@ -421,18 +421,18 @@ async fn insert_folder_data_success_test() {
   assert_eq!(templates.len(), 2);
   for (index, template) in templates.into_iter().enumerate() {
     if index == 0 {
-      assert_eq!(template.object_type, CollabType::Document);
+      assert_eq!(template.collab_type, CollabType::Document);
     }
     if index == 1 {
-      assert_eq!(template.object_type, CollabType::Folder);
+      assert_eq!(template.collab_type, CollabType::Folder);
     }
 
-    let data = template.object_data.encode_to_bytes().unwrap();
+    let data = template.encoded_collab.encode_to_bytes().unwrap();
     let params = CreateCollabParams {
       workspace_id: workspace_id.clone(),
       object_id: object_id.clone(),
       encoded_collab_v1: data,
-      collab_type: template.object_type,
+      collab_type: template.collab_type,
     };
     test_client.api_client.create_collab(params).await.unwrap();
   }

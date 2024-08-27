@@ -21,16 +21,15 @@ impl WorkspaceViewBuilder {
     }
   }
 
-  pub async fn with_view_builder<F, O>(&mut self, view_builder: F) -> String
+  pub async fn with_view_builder<F, O>(&mut self, view_builder: F) -> &mut Self
   where
     F: Fn(ViewBuilder) -> O,
     O: Future<Output = ParentChildViews>,
   {
     let builder = ViewBuilder::new(self.uid, self.workspace_id.clone());
     let view = view_builder(builder).await;
-    let view_id = view.parent_view.id.clone();
     self.views.push(view);
-    view_id
+    self
   }
 
   pub fn build(&mut self) -> Vec<ParentChildViews> {
@@ -50,6 +49,7 @@ pub struct ViewBuilder {
   child_views: Vec<ParentChildViews>,
   is_favorite: bool,
   icon: Option<ViewIcon>,
+  extra: Option<String>,
 }
 
 impl ViewBuilder {
@@ -64,11 +64,17 @@ impl ViewBuilder {
       child_views: vec![],
       is_favorite: false,
       icon: None,
+      extra: None,
     }
   }
 
   pub fn view_id(&self) -> &str {
     &self.view_id
+  }
+
+  pub fn with_view_id<T: ToString>(mut self, view_id: T) -> Self {
+    self.view_id = view_id.to_string();
+    self
   }
 
   pub fn with_layout(mut self, layout: ViewLayout) -> Self {
@@ -91,6 +97,11 @@ impl ViewBuilder {
       ty: IconType::Emoji,
       value: icon.to_string(),
     });
+    self
+  }
+
+  pub fn with_extra(mut self, extra: &str) -> Self {
+    self.extra = Some(extra.to_string());
     self
   }
 
@@ -128,7 +139,7 @@ impl ViewBuilder {
           .collect(),
       ),
       last_edited_by: Some(self.uid),
-      extra: None,
+      extra: self.extra,
     };
     ParentChildViews {
       parent_view: view,

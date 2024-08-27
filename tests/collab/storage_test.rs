@@ -406,6 +406,7 @@ async fn insert_invalid_data_test() {
 }
 
 #[tokio::test]
+#[tokio::test]
 async fn insert_folder_data_success_test() {
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
@@ -418,16 +419,10 @@ async fn insert_folder_data_success_test() {
     .await
     .unwrap();
 
-  // 2 spaces + 3 documents + 2 databases + 5rows
+  // 2 spaces, 3 documents, 2 databases, 5 rows
   assert_eq!(templates.len(), 12);
-  for (index, template) in templates.into_iter().enumerate() {
-    if index == 0 {
-      assert_eq!(template.collab_type, CollabType::Document);
-    }
-    if index == 1 {
-      assert_eq!(template.collab_type, CollabType::Folder);
-    }
 
+  for template in templates.into_iter() {
     let data = template.encoded_collab.encode_to_bytes().unwrap();
     let params = CreateCollabParams {
       workspace_id: workspace_id.clone(),

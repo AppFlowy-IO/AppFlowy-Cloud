@@ -406,7 +406,6 @@ async fn insert_invalid_data_test() {
 }
 
 #[tokio::test]
-#[tokio::test]
 async fn insert_folder_data_success_test() {
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;

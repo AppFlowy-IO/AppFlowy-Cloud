@@ -40,7 +40,7 @@ pub enum TemplateObjectId {
   Document(String),
   Database {
     object_id: String,
-    // it used to reference the database id from object_id
+    // It's used to reference the database id from the object_id
     database_id: String,
   },
 }

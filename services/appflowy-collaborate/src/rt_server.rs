@@ -1,11 +1,10 @@
+use anyhow::Result;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-
-use anyhow::Result;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
 use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, info, trace};
@@ -254,7 +253,7 @@ where
 }
 
 fn spawn_handle_unindexed_collabs(indexer_provider: Arc<IndexerProvider>) {
-  tokio::task::spawn_local(IndexerProvider::handle_unindexed_collabs(indexer_provider));
+  tokio::spawn(IndexerProvider::handle_unindexed_collabs(indexer_provider));
 }
 
 fn spawn_period_check_inactive_group<S, AC>(

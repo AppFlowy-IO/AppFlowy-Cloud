@@ -64,7 +64,7 @@ impl IndexerProvider {
 
   fn get_unindexed_collabs(
     &self,
-  ) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab, anyhow::Error>>>> {
+  ) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab, anyhow::Error>> + Send>> {
     let db = self.db.clone();
     Box::pin(try_stream! {
       let collabs = get_collabs_without_embeddings(&db).await?;

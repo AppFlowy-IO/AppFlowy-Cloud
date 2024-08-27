@@ -18,6 +18,7 @@ use tokio_stream::StreamExt;
 use tracing::{debug, error, event, instrument, trace};
 
 use app_error::AppError;
+use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::{HttpRealtimeMessage, RealtimeMessage};
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -31,7 +32,6 @@ use crate::compression::{
   decompress, CompressionType, X_COMPRESSION_BUFFER_SIZE, X_COMPRESSION_TYPE,
 };
 use crate::state::AppState;
-use authentication::jwt::{authorization_from_token, UserUuid};
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(web::resource("/v1").route(web::get().to(establish_ws_connection_v1)))
@@ -75,6 +75,10 @@ pub async fn establish_ws_connection_v1(
       ConnectInfo::parse_from(&query_params)?
     },
   };
+
+  if client_version < state.config.websocket.min_client_version {
+    return Err(AppError::Connect("Client version is too low".to_string()).into());
+  }
 
   start_connect(
     &request,

@@ -26,7 +26,7 @@ use crate::state::AppState;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws")
-    .service(establish_ws_connection)
+    //.service(establish_ws_connection)
     .service(web::resource("/v1").route(web::get().to(establish_ws_connection_v1)))
 }
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
@@ -85,6 +85,10 @@ pub async fn establish_ws_connection_v1(
       ConnectInfo::parse_from(&query_params)?
     },
   };
+
+  if client_version < state.config.websocket.min_client_version {
+    return Err(AppError::Connect("Client version is too low".to_string()).into());
+  }
 
   start_connect(
     &request,

@@ -1,10 +1,13 @@
-use anyhow::Context;
-use infra::env_util::get_env_var;
-use secrecy::{ExposeSecret, Secret};
-use serde::Deserialize;
-use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use std::fmt::Display;
 use std::str::FromStr;
+
+use anyhow::Context;
+use secrecy::{ExposeSecret, Secret};
+use semver::Version;
+use serde::Deserialize;
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
+
+use infra::env_util::get_env_var;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -166,6 +169,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     websocket: WebsocketSetting {
       heartbeat_interval: get_env_var("APPFLOWY_WEBSOCKET_HEARTBEAT_INTERVAL", "6").parse()?,
       client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "60").parse()?,
+      min_client_version: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_MIN_VERSION", "0.5.0").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     s3: S3Setting {
@@ -239,4 +243,5 @@ impl FromStr for Environment {
 pub struct WebsocketSetting {
   pub heartbeat_interval: u8,
   pub client_timeout: u8,
+  pub min_client_version: Version,
 }

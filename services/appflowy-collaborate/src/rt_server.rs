@@ -22,11 +22,7 @@ use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
-<<<<<<< HEAD
-=======
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
-use crate::state::RedisConnectionManager;
->>>>>>> main
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]

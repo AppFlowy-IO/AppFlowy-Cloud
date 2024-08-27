@@ -2107,7 +2107,7 @@ dependencies = [
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6f98f054a8306a8791b65bf1825091ab3fe60166#6f98f054a8306a8791b65bf1825091ab3fe60166"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=ec4f92941942f20c84dce142cd2eeafd44ca7362#ec4f92941942f20c84dce142cd2eeafd44ca7362"
 dependencies = [
  "anyhow",
  "async-trait",

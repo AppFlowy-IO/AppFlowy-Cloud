@@ -738,7 +738,7 @@ dependencies = [
  "validator",
  "workspace-access",
  "workspace-template",
- "yrs 0.19.2",
+ "yrs",
 ]
 
 [[package]]
@@ -955,12 +955,6 @@ name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
-
-[[package]]
-name = "atomic_refcell"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41e67cd8309bbd06cd603a9e693a784ac2e5d1e955f11286e355089fcab3047c"
 
 [[package]]
 name = "authentication"
@@ -1993,7 +1987,7 @@ dependencies = [
  "uuid",
  "wasm-bindgen-futures",
  "workspace-template",
- "yrs 0.19.2",
+ "yrs",
 ]
 
 [[package]]
@@ -2111,7 +2105,7 @@ dependencies = [
  "tracing",
  "unicode-segmentation",
  "web-sys",
- "yrs 0.21.0",
+ "yrs",
 ]
 
 [[package]]
@@ -2226,7 +2220,7 @@ dependencies = [
  "serde_repr",
  "thiserror",
  "tokio-tungstenite",
- "yrs 0.19.2",
+ "yrs",
 ]
 
 [[package]]
@@ -2242,7 +2236,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
- "yrs 0.19.2",
+ "yrs",
 ]
 
 [[package]]
@@ -8171,22 +8165,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
 dependencies = [
  "time",
-]
-
-[[package]]
-name = "yrs"
-version = "0.19.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8ca5126331b9a5ef5bb10f3f1c3d01b05f298d348c66f8fb15497d83ee73176"
-dependencies = [
- "arc-swap",
- "atomic_refcell",
- "fastrand",
- "serde",
- "serde_json",
- "smallstr",
- "smallvec",
- "thiserror",
 ]
 
 [[package]]

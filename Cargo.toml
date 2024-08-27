@@ -265,7 +265,7 @@ pgvector = { version = "0.4", features = ["sqlx"] }
 client-api-entity = { path = "libs/client-api-entity" }
 
 # collaboration
-yrs = { version = "0.19.2", features = ["sync"] }
+yrs = { version = "0.21.0", features = ["sync"] }
 collab = { version = "0.2.0" }
 collab-entity = { version = "0.2.0" }
 collab-folder = { version = "0.2.0" }

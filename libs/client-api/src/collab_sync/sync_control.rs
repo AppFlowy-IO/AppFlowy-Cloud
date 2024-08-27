@@ -219,7 +219,7 @@ where
       },
       Some(sv) => {
         trace!(
-          "🔥{} start init sync, reason:{}",
+          "🔥{} start init sync with state vector, reason:{}",
           &sync_object.object_id,
           reason
         );

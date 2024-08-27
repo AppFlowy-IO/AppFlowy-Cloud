@@ -259,7 +259,7 @@ pub enum RTProtocolError {
 
   #[error("Missing Updates")]
   MissUpdates {
-    /// - `state_vector_v1`: Contains the last known state vector from the client. If `None`,
+    /// - `state_vector_v1`: Contains the last known state vector from the Collab. If `None`,
     ///   this indicates that the receiver needs to perform a full initialization synchronization starting from sync step 0.
     ///
     /// The receiver uses this information to determine how to recover from the error,

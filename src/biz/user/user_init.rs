@@ -69,12 +69,12 @@ where
 
     // push the database record
     if object_type == CollabType::Database {
-      match &template_id {
-        TemplateObjectId::Database {
-          object_id: _,
-          database_id,
-        } => database_records.push((view_id, database_id.clone())),
-        _ => (),
+      if let TemplateObjectId::Database {
+        object_id: _,
+        database_id,
+      } = &template_id
+      {
+        database_records.push((view_id, database_id.clone()));
       }
     }
   }

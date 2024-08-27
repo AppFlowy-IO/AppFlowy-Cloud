@@ -421,18 +421,18 @@ async fn insert_folder_data_success_test() {
   assert_eq!(templates.len(), 2);
   for (index, template) in templates.into_iter().enumerate() {
     if index == 0 {
-      assert_eq!(template.object_type, CollabType::Document);
+      assert_eq!(template.collab_type, CollabType::Document);
     }
     if index == 1 {
-      assert_eq!(template.object_type, CollabType::Folder);
+      assert_eq!(template.collab_type, CollabType::Folder);
     }
 
-    let data = template.object_data.encode_to_bytes().unwrap();
+    let data = template.encoded_collab.encode_to_bytes().unwrap();
     let params = CreateCollabParams {
       workspace_id: workspace_id.clone(),
       object_id: object_id.clone(),
       encoded_collab_v1: data,
-      collab_type: template.object_type,
+      collab_type: template.collab_type,
     };
     test_client.api_client.create_collab(params).await.unwrap();
   }

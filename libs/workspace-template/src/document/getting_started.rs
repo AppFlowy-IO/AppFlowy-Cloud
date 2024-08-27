@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 use crate::database::database_collab::create_database_collab;
 use crate::document::parser::JsonToDocumentParser;
 use crate::hierarchy_builder::{ViewBuilder, WorkspaceViewBuilder};
-use crate::{gen_view_id, TemplateData, WorkspaceTemplate};
+use crate::{gen_view_id, TemplateData, TemplateObjectId, WorkspaceTemplate};
 
 // Template Folder Structure:
 // |-- General (space)
@@ -47,13 +47,12 @@ impl GettingStartedTemplate {
     let data = tokio::task::spawn_blocking(move || {
       let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
       let document = Document::open_with(collab, Some(document_data))?;
-      let data = document.encode_collab()?;
+      let encoded_collab = document.encode_collab()?;
 
       Ok::<_, anyhow::Error>(TemplateData {
-        object_id,
-        object_type: CollabType::Document,
-        object_data: data,
-        database_id: None,
+        template_id: TemplateObjectId::Document(object_id),
+        collab_type: CollabType::Document,
+        encoded_collab,
       })
     })
     .await??;
@@ -87,10 +86,12 @@ impl GettingStartedTemplate {
 
     // 1. create the new database collab
     let database_template_data = TemplateData {
-      object_id,
-      object_type: CollabType::Database,
-      object_data: encoded_database_collab,
-      database_id: Some(database_id.clone()),
+      template_id: TemplateObjectId::Database {
+        object_id: object_id.clone(),
+        database_id: database_id.clone(),
+      },
+      collab_type: CollabType::Database,
+      encoded_collab: encoded_database_collab,
     };
 
     // 2. create the new database row collabs
@@ -102,10 +103,12 @@ impl GettingStartedTemplate {
           let object_id = encoded_row_collab.object_id.clone();
           let data = encoded_row_collab.encoded_collab.clone();
           TemplateData {
-            object_id,
-            object_type: CollabType::DatabaseRow,
-            object_data: data,
-            database_id: Some(database_id.clone()),
+            template_id: TemplateObjectId::Database {
+              object_id: object_id.clone(),
+              database_id: database_id.clone(),
+            },
+            collab_type: CollabType::DatabaseRow,
+            encoded_collab: data,
           }
         });
 
@@ -115,7 +118,7 @@ impl GettingStartedTemplate {
     Ok(template_data)
   }
 
-  pub async fn create_document_and_database_data(
+  async fn create_document_and_database_data(
     &self,
     general_view_uuid: String,
     shared_view_uuid: String,
@@ -371,10 +374,9 @@ impl WorkspaceTemplate for DocumentTemplate {
     let document = Document::open_with(collab, Some(self.0.clone()))?;
     let data = document.encode_collab()?;
     Ok(vec![TemplateData {
-      object_id,
-      object_type: CollabType::Document,
-      object_data: data,
-      database_id: None,
+      template_id: TemplateObjectId::Document(object_id),
+      collab_type: CollabType::Document,
+      encoded_collab: data,
     }])
   }
 

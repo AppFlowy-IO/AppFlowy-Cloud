@@ -13,6 +13,8 @@ use tokio::sync::RwLock;
 #[cfg(test)]
 mod tests {
 
+  use crate::TemplateObjectId;
+
   use super::*;
 
   #[tokio::test]
@@ -49,10 +51,16 @@ mod tests {
       .await;
     let template_data = result.unwrap();
 
-    assert_eq!(template_data.object_id, object_id);
-    assert_eq!(template_data.object_type, CollabType::Document);
-    assert!(template_data.database_id.is_none());
-    assert!(!template_data.object_data.doc_state.is_empty());
+    match template_data.template_id {
+      TemplateObjectId::Document(oid) => {
+        assert_eq!(oid, object_id);
+      },
+      _ => {
+        panic!("Template data is not a document");
+      },
+    }
+    assert_eq!(template_data.collab_type, CollabType::Document);
+    assert!(!template_data.encoded_collab.doc_state.is_empty());
   }
 
   async fn test_database_json(json_str: &str) -> Vec<TemplateData> {
@@ -69,13 +77,13 @@ mod tests {
     for i in 0..template_data.len() {
       if i == 0 {
         // the first one is the database
-        assert_eq!(template_data[i].object_type, CollabType::Database);
+        assert_eq!(template_data[i].collab_type, CollabType::Database);
       } else {
         // the rest are the database rows
-        assert_eq!(template_data[i].object_type, CollabType::DatabaseRow);
+        assert_eq!(template_data[i].collab_type, CollabType::DatabaseRow);
       }
 
-      assert!(!template_data[i].object_data.doc_state.is_empty());
+      assert!(!template_data[i].encoded_collab.doc_state.is_empty());
     }
 
     template_data

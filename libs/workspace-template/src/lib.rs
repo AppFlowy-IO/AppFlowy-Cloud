@@ -34,14 +34,21 @@ pub trait WorkspaceTemplate {
   ) -> Result<Vec<TemplateData>>;
 }
 
-pub struct TemplateData {
-  pub object_id: String,
-  pub object_type: CollabType,
-  pub object_data: EncodedCollab,
+#[derive(Clone)]
+pub enum TemplateObjectId {
+  Folder(String),
+  Document(String),
+  Database {
+    object_id: String,
+    // it used to reference the database id from object_id
+    database_id: String,
+  },
+}
 
-  // only for the database template
-  // it used to reference the database id from object_id
-  pub database_id: Option<String>,
+pub struct TemplateData {
+  pub template_id: TemplateObjectId,
+  pub collab_type: CollabType,
+  pub encoded_collab: EncodedCollab,
 }
 
 pub type WorkspaceTemplateHandlers = HashMap<ViewLayout, Arc<dyn WorkspaceTemplate + Send + Sync>>;
@@ -135,10 +142,9 @@ impl WorkspaceTemplateBuilder {
       let folder = Folder::open_with(uid, collab, None, Some(folder_data));
       let data = folder.encode_collab()?;
       Ok::<_, anyhow::Error>(TemplateData {
-        object_id: workspace_id,
-        object_type: CollabType::Folder,
-        object_data: data,
-        database_id: None,
+        template_id: TemplateObjectId::Folder(workspace_id),
+        collab_type: CollabType::Folder,
+        encoded_collab: data,
       })
     })
     .await??;

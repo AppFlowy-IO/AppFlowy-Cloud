@@ -14,7 +14,7 @@ use database_entity::dto::CollabParams;
 use sqlx::Transaction;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
-use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
+use workspace_template::{TemplateObjectId, WorkspaceTemplate, WorkspaceTemplateBuilder};
 
 /// This function generates templates for a workspace and stores them in the database.
 /// Each template is stored as an individual collaborative object.
@@ -38,15 +38,18 @@ where
 
   let mut database_records = vec![];
   for template in templates {
-    let view_id = template.object_id.clone();
-    let object_id = if template.object_type == CollabType::Database {
-      template.database_id.clone().unwrap()
-    } else {
-      template.object_id.clone()
+    let template_id = template.template_id;
+    let (view_id, object_id) = match &template_id {
+      TemplateObjectId::Document(oid) => (oid.to_string(), oid.to_string()),
+      TemplateObjectId::Folder(oid) => (oid.to_string(), oid.to_string()),
+      TemplateObjectId::Database {
+        object_id,
+        database_id,
+      } => (object_id.clone(), database_id.clone()),
     };
-    let object_type = template.object_type.clone();
+    let object_type = template.collab_type.clone();
     let encoded_collab_v1 = template
-      .object_data
+      .encoded_collab
       .encode_to_bytes()
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
@@ -66,8 +69,12 @@ where
 
     // push the database record
     if object_type == CollabType::Database {
-      if let Some(database_id) = template.database_id {
-        database_records.push((view_id, database_id));
+      match &template_id {
+        TemplateObjectId::Database {
+          object_id: _,
+          database_id,
+        } => database_records.push((view_id, database_id.clone())),
+        _ => (),
       }
     }
   }

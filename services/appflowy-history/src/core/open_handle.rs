@@ -197,7 +197,9 @@ fn apply_updates(messages: &[StreamMessage], collab: &mut Collab) -> Result<(), 
     let CollabUpdateEvent::UpdateV1 { encode_update } = CollabUpdateEvent::decode(&message.data)?;
     let update = Update::decode_v1(&encode_update)
       .map_err(|e| CollabError::YrsEncodeStateError(e.to_string()))?;
-    txn.apply_update(update);
+    txn
+      .apply_update(update)
+      .map_err(|err| HistoryError::Internal(err.into()))?;
   }
   Ok(())
 }

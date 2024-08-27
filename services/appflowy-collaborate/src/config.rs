@@ -1,11 +1,10 @@
-use std::fmt::Display;
-use std::str::FromStr;
-
 use anyhow::Context;
 use secrecy::Secret;
 use semver::Version;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
+use std::fmt::Display;
+use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 pub struct Config {

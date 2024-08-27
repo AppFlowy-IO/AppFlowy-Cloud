@@ -85,15 +85,16 @@ impl Display for GoTrueErrorSerde {
 /// Used to deserialize the response from the gotrue server
 #[derive(Serialize, Deserialize, Debug, Error)]
 pub struct GotrueClientError {
-  pub error: String,
+  pub error: Option<String>,
   pub error_description: Option<String>,
+  pub msg: Option<String>,
 }
 
 impl Display for GotrueClientError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "error: {}, description: {:?}",
-      self.error, self.error_description
+      "error: {:?}, error_description: {:?}, msg: {:?}",
+      self.error, self.error_description, self.msg
     ))
   }
 }

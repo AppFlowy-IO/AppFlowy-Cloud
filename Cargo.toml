@@ -116,6 +116,7 @@ collab-document = { workspace = true }
 collab-entity = { workspace = true }
 collab-folder = { workspace = true }
 collab-user = { workspace = true }
+collab-database = { workspace = true }
 collab-rt-protocol.workspace = true
 
 #Local crate
@@ -284,12 +285,12 @@ debug = true
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "eff6de8" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "eff6de8" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "eff6de8" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "eff6de8" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "eff6de8" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "eff6de8" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af8ffdab672e4eccfc426525dcf8daa42cbe7087" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af8ffdab672e4eccfc426525dcf8daa42cbe7087" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af8ffdab672e4eccfc426525dcf8daa42cbe7087" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af8ffdab672e4eccfc426525dcf8daa42cbe7087" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af8ffdab672e4eccfc426525dcf8daa42cbe7087" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af8ffdab672e4eccfc426525dcf8daa42cbe7087" }
 
 [features]
 history = []

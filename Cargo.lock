@@ -612,6 +612,7 @@ dependencies = [
  "client-api",
  "client-api-test",
  "collab",
+ "collab-database",
  "collab-document",
  "collab-entity",
  "collab-folder",
@@ -619,7 +620,7 @@ dependencies = [
  "collab-rt-protocol",
  "collab-stream",
  "collab-user",
- "dashmap",
+ "dashmap 5.5.3",
  "database",
  "database-entity",
  "derive_more",
@@ -704,7 +705,7 @@ dependencies = [
  "collab-rt-entity",
  "collab-rt-protocol",
  "collab-stream",
- "dashmap",
+ "dashmap 5.5.3",
  "database",
  "database-entity",
  "dotenvy",
@@ -737,7 +738,7 @@ dependencies = [
  "validator",
  "workspace-access",
  "workspace-template",
- "yrs",
+ "yrs 0.19.2",
 ]
 
 [[package]]
@@ -752,7 +753,7 @@ dependencies = [
  "collab",
  "collab-entity",
  "collab-stream",
- "dashmap",
+ "dashmap 5.5.3",
  "database",
  "dotenvy",
  "futures",
@@ -894,6 +895,17 @@ checksum = "47e4f2b81832e72834d7518d8487a0396a28cc408186a2e8854c0f98011faf12"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "async-lock"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff6e472cdea888a4bd64f342f09b3f50e1886d32afe8df3d663c01140b811b18"
+dependencies = [
+ "event-listener",
+ "event-listener-strategy",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -1981,7 +1993,7 @@ dependencies = [
  "uuid",
  "wasm-bindgen-futures",
  "workspace-template",
- "yrs",
+ "yrs 0.19.2",
 ]
 
 [[package]]
@@ -2080,7 +2092,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=eff6de8#eff6de80fe942e2ca8ecba4b25d77471d373f3af"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2099,20 +2111,20 @@ dependencies = [
  "tracing",
  "unicode-segmentation",
  "web-sys",
- "yrs",
+ "yrs 0.21.0",
 ]
 
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=eff6de8#eff6de80fe942e2ca8ecba4b25d77471d373f3af"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
  "collab",
  "collab-entity",
- "dashmap",
+ "dashmap 5.5.3",
  "futures",
  "getrandom 0.2.15",
  "js-sys",
@@ -2134,7 +2146,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=eff6de8#eff6de80fe942e2ca8ecba4b25d77471d373f3af"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2154,7 +2166,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=eff6de8#eff6de80fe942e2ca8ecba4b25d77471d373f3af"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2173,14 +2185,14 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=eff6de8#eff6de80fe942e2ca8ecba4b25d77471d373f3af"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "arc-swap",
  "chrono",
  "collab",
  "collab-entity",
- "dashmap",
+ "dashmap 5.5.3",
  "getrandom 0.2.15",
  "serde",
  "serde_json",
@@ -2214,7 +2226,7 @@ dependencies = [
  "serde_repr",
  "thiserror",
  "tokio-tungstenite",
- "yrs",
+ "yrs 0.19.2",
 ]
 
 [[package]]
@@ -2230,7 +2242,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
- "yrs",
+ "yrs 0.19.2",
 ]
 
 [[package]]
@@ -2257,7 +2269,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=eff6de8#eff6de80fe942e2ca8ecba4b25d77471d373f3af"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "collab",
@@ -2698,6 +2710,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
+dependencies = [
+ "cfg-if 1.0.0",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core 0.9.10",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2997,6 +3023,16 @@ checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
 dependencies = [
  "concurrent-queue",
  "parking",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "event-listener-strategy"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
+dependencies = [
+ "event-listener",
  "pin-project-lite",
 ]
 
@@ -3357,7 +3393,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68a7f542ee6b35af73b06abc0dad1c1bae89964e4e253bc4b587b91c9637867b"
 dependencies = [
  "cfg-if 1.0.0",
- "dashmap",
+ "dashmap 5.5.3",
  "futures",
  "futures-timer",
  "no-std-compat",
@@ -4233,7 +4269,7 @@ checksum = "c325dfab65f261f386debee8b0969da215b3fa0037e74c8a1234db7ba986d803"
 dependencies = [
  "crossbeam-channel",
  "crossbeam-utils",
- "dashmap",
+ "dashmap 5.5.3",
  "skeptic",
  "smallvec",
  "tagptr",
@@ -8145,6 +8181,24 @@ checksum = "a8ca5126331b9a5ef5bb10f3f1c3d01b05f298d348c66f8fb15497d83ee73176"
 dependencies = [
  "arc-swap",
  "atomic_refcell",
+ "fastrand",
+ "serde",
+ "serde_json",
+ "smallstr",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "yrs"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8fc56b25e3aaf4b81a73f2a9a68ceae1e02d9005552e24058cfb9f96db73f33"
+dependencies = [
+ "arc-swap",
+ "async-lock",
+ "async-trait",
+ "dashmap 6.0.1",
  "fastrand",
  "serde",
  "serde_json",

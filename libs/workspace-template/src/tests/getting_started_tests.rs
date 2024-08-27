@@ -14,8 +14,8 @@ use tokio::sync::RwLock;
 
 #[cfg(test)]
 mod tests {
-
   use super::*;
+  use collab_database::database::gen_database_view_id;
 
   #[tokio::test]
   async fn create_document_from_desktop_guide_json_test() {
@@ -65,7 +65,7 @@ mod tests {
 
   async fn test_database_json(json_str: &str) -> Vec<TemplateData> {
     let template = GettingStartedTemplate;
-    let object_id = uuid_v4().to_string();
+    let object_id = gen_database_view_id().to_string();
     let database_data = serde_json::from_str::<DatabaseData>(json_str).unwrap();
     let create_database_params =
       CreateDatabaseParams::from_database_data(database_data, Some(object_id.clone()));

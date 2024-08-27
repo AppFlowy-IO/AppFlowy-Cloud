@@ -4,6 +4,7 @@ use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{Array, ArrayPrelim, ArrayRef, Collab, Map, MapPrelim};
+use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::define::WORKSPACE_DATABASES;
 use collab_entity::CollabType;
 use collab_folder::timestamp;
@@ -158,18 +159,10 @@ async fn create_workspace_database_collab(
   let collab_type = CollabType::WorkspaceDatabase;
   let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
   {
+    let workspace_database_body = WorkspaceDatabaseBody::new(&mut collab);
     let mut txn = collab.context.transact_mut();
-    let workspace_databases = collab
-      .data
-      .get_or_init::<_, ArrayRef>(&mut txn, WORKSPACE_DATABASES);
-    // insert the initial database records
     for (object_id, database_id) in initial_database_records {
-      let map_ref = workspace_databases.push_back(&mut txn, MapPrelim::default());
-      // TODO(Lucas): use the const key here.
-      // these values are from the database_meta, which is used to store the reference of the database id and the view id
-      map_ref.insert(&mut txn, "database_id", database_id);
-      map_ref.insert(&mut txn, "views", ArrayPrelim::from_iter(vec![object_id]));
-      map_ref.insert(&mut txn, "created_at", timestamp());
+      workspace_database_body.add_database(&mut txn, &database_id, vec![object_id]);
     }
   };
 

@@ -23,7 +23,7 @@ use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
-use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
+
 use crate::state::RedisConnectionManager;
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
@@ -200,7 +200,7 @@ where
 
               let object_id = entry.key().clone();
               let clone_notify = notify.clone();
-              COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
+              tokio::spawn(runner.run(object_id, clone_notify));
               entry.insert(new_sender.clone());
 
               // wait for the runner to be ready to handle the message.

@@ -600,6 +600,7 @@ impl TestClient {
         stream,
         Some(handler),
         ws_connect_state,
+        Some(Duration::from_secs(10)),
       );
       let lock = collab.read().await;
       let collab = (*lock).borrow();
@@ -672,6 +673,7 @@ impl TestClient {
         stream,
         Some(handler),
         ws_connect_state,
+        Some(Duration::from_secs(10)),
       );
 
       let lock = collab.read().await;

@@ -22,7 +22,7 @@ async fn sign_up_invalid_email() {
   assert_eq!(error.code, ErrorCode::OAuthError);
   assert_eq!(
     error.message,
-    "Invalid request:Unable to validate email address: invalid format"
+    "Unable to validate email address: invalid format"
   );
 }
 

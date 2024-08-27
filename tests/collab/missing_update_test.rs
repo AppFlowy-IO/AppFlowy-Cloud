@@ -9,7 +9,7 @@ use database_entity::dto::AFAccessLevel;
 
 #[tokio::test]
 async fn client_apply_update_find_missing_update_test() {
-  let (mut client_1, mut client_2, object_id, mut expected_json) = make_clients().await;
+  let (_client_1, mut client_2, object_id, mut expected_json) = make_clients().await;
   // "title" => "hello world" is not delivered to client_2 and is considered a missing update
   client_2.ws_client.enable_receive_message();
   {
@@ -23,23 +23,8 @@ async fn client_apply_update_find_missing_update_test() {
     let collab = (*lock).borrow_mut();
     collab.insert("content", "hello world");
   }
-  {
-    // in order to detect missing update, we need to make another edit on client_1 - when this
-    // update is received by client_2 it will figure out that it was also missing
-    // "title" => "hello world"
-    let mut lock = client_1
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .write()
-      .await;
-    let collab = (*lock).borrow_mut();
-    collab.insert("ping", "pong");
-  }
 
   expected_json["content"] = Value::String("hello world".to_string());
-  expected_json["ping"] = Value::String("pong".to_string());
 
   // the collab ping will trigger a init sync with reason InitSyncReason::MissUpdates after a period of time
   assert_client_collab_include_value(&mut client_2, &object_id, expected_json)
@@ -49,24 +34,9 @@ async fn client_apply_update_find_missing_update_test() {
 
 #[tokio::test]
 async fn client_ping_find_missing_update_test() {
-  let (mut client_1, mut client_2, object_id, mut expected_json) = make_clients().await;
+  let (_client_1, mut client_2, object_id, expected_json) = make_clients().await;
   // "title" => "hello world" is not delivered to client_2 and is considered a missing update
   client_2.ws_client.enable_receive_message();
-  {
-    // in order to detect missing update, we need to make another edit on client_1 - when this
-    // update is received by client_2 it will figure out that it was also missing
-    // "title" => "hello world"
-    let mut lock = client_1
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .write()
-      .await;
-    let collab = (*lock).borrow_mut();
-    collab.insert("ping", "pong");
-  }
-  expected_json["ping"] = Value::String("pong".to_string());
 
   // the collab ping will trigger a init sync with reason InitSyncReason::MissUpdates after a period of time
   assert_client_collab_include_value(&mut client_2, &object_id, expected_json)

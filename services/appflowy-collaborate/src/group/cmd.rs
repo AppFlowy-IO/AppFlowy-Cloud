@@ -195,7 +195,7 @@ where
     }
   }
 
-  #[instrument(level = "info", skip_all)]
+  #[instrument(level = "debug", skip_all)]
   async fn create_group(
     &self,
     user: &RealtimeUser,

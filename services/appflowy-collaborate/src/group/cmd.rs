@@ -8,7 +8,7 @@ use tracing::{instrument, trace, warn};
 
 use access_control::collab::RealtimeAccessControl;
 use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, SinkMessage};
+use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, SinkMessage};
 use collab_rt_entity::{CollabAck, RealtimeMessage};
 use database::collab::CollabStorage;
 
@@ -155,7 +155,11 @@ where
         let origin = first_message.origin().clone();
         let msg_id = first_message.msg_id();
         let object_id = first_message.object_id().to_string();
-        let ack = CollabAck::new(origin, object_id, msg_id, 0);
+
+        // when the group with given id is not found and the the first message is not init sync.
+        // Return AckCode::CannotApplyUpdate to the client and then client will send the init sync message.
+        let ack =
+          CollabAck::new(origin, object_id, msg_id, 0).with_code(AckCode::CannotApplyUpdate);
         entry
           .value()
           .send_message(ServerCollabMessage::ClientAck(ack).into())
@@ -191,7 +195,7 @@ where
     }
   }
 
-  #[instrument(level = "info", skip_all)]
+  #[instrument(level = "debug", skip_all)]
   async fn create_group(
     &self,
     user: &RealtimeUser,

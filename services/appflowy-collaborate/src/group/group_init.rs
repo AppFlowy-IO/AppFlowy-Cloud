@@ -11,7 +11,7 @@ use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, RwLock};
-use tracing::{error, event, trace};
+use tracing::{error, event, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::Update;
@@ -201,7 +201,26 @@ impl CollabGroup {
       modified_at.elapsed().as_secs() > 60 * 60
     } else {
       let elapsed_secs = modified_at.elapsed().as_secs();
-      elapsed_secs > self.timeout_secs() && self.subscribers.is_empty()
+      if elapsed_secs > self.timeout_secs() {
+        // Mark the group as inactive if it has been inactive for more than 3 hours, regardless of the number of subscribers.
+        // Otherwise, return `true` only if there are no subscribers remaining in the group.
+        // If a client modifies a group that has already been marked as inactive (removed),
+        // the client will automatically send an initialization sync to reinitialize the group.
+        const MAXIMUM_SECS: u64 = 3 * 60 * 60;
+        if elapsed_secs > MAXIMUM_SECS {
+          info!(
+            "Group:{} is inactive for {} seconds, subscribers: {}",
+            self.object_id,
+            modified_at.elapsed().as_secs(),
+            self.subscribers.len()
+          );
+          true
+        } else {
+          self.subscribers.is_empty()
+        }
+      } else {
+        false
+      }
     }
   }
 

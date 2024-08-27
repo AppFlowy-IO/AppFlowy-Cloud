@@ -1,11 +1,10 @@
+use anyhow::Result;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-
-use anyhow::Result;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
 use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, info, trace};
@@ -18,11 +17,16 @@ use database::collab::CollabStorage;
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::connect_state::ConnectState;
-use crate::error::RealtimeError;
+use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
+<<<<<<< HEAD
+=======
+use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
+use crate::state::RedisConnectionManager;
+>>>>>>> main
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
@@ -179,7 +183,7 @@ where
 
               let object_id = entry.key().clone();
               let clone_notify = notify.clone();
-              tokio::spawn(runner.run(object_id, clone_notify));
+              COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
               entry.insert(new_sender.clone());
 
               // wait for the runner to be ready to handle the message.
@@ -207,7 +211,14 @@ where
           {
             Ok(_) => {
               if let Ok(Err(err)) = rx.await {
-                error!("Handle client collab message fail: {}", err);
+                if !matches!(
+                  err,
+                  RealtimeError::CreateGroupFailed(
+                    CreateGroupFailedReason::CollabWorkspaceIdNotMatch { .. }
+                  )
+                ) {
+                  error!("Handle client collab message fail: {}", err);
+                }
               }
             },
             Err(err) => {
@@ -233,7 +244,7 @@ where
 }
 
 fn spawn_handle_unindexed_collabs(indexer_provider: Arc<IndexerProvider>) {
-  tokio::task::spawn_local(IndexerProvider::handle_unindexed_collabs(indexer_provider));
+  tokio::spawn(IndexerProvider::handle_unindexed_collabs(indexer_provider));
 }
 
 fn spawn_period_check_inactive_group<S, AC>(
@@ -267,9 +278,7 @@ fn spawn_period_check_inactive_group<S, AC>(
 /// multiple threads, we've incorporated a multi-thread feature.
 ///
 /// When appflowy-collaborate is deployed as a standalone service, we can use tokio multi-thread.
-#[cfg(feature = "collab-rt-multi-thread")]
 mod collaboration_runtime {
-  use std::future::Future;
   use std::io;
 
   use lazy_static::lazy_static;
@@ -286,13 +295,5 @@ mod collaboration_runtime {
       .enable_io()
       .enable_time()
       .build()
-  }
-
-  pub(crate) fn spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
-  where
-    T: Future + Send + 'static,
-    T::Output: Send + 'static,
-  {
-    COLLAB_RUNTIME.spawn(future)
   }
 }

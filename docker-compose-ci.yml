@@ -50,10 +50,7 @@ services:
 
   gotrue:
     restart: on-failure
-    build:
-      context: .
-      dockerfile: docker/gotrue.Dockerfile
-    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
+    image: supabase/gotrue:v2.159.1
     environment:
       # There are a lot of options to configure GoTrue. You can reference the example config:
       # https://github.com/supabase/gotrue/blob/master/example.env

@@ -19,10 +19,10 @@ async fn sign_up_invalid_email() {
     .sign_up(invalid_email, password)
     .await
     .unwrap_err();
-  assert_eq!(error.code, ErrorCode::InvalidRequest);
+  assert_eq!(error.code, ErrorCode::OAuthError);
   assert_eq!(
     error.message,
-    "Invalid request:Unable to validate email address: invalid format"
+    "Unable to validate email address: invalid format"
   );
 }
 
@@ -35,7 +35,7 @@ async fn sign_up_invalid_password() {
   assert_eq!(error.code, ErrorCode::InvalidRequest);
   assert_eq!(
     error.message,
-    "Invalid request:Password should be at least 6 characters"
+    "Invalid request:Password should be at least 6 characters."
   );
 }
 

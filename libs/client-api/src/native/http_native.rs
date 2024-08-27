@@ -25,10 +25,11 @@ use std::future::Future;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
+
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
-use tokio_retry::{Retry, RetryIf};
+use tokio_retry::{Condition, RetryIf};
 use tracing::{event, info, instrument, trace};
 
 pub use infra::file_util::ChunkedBytes;
@@ -138,7 +139,7 @@ impl Client {
     // 2 seconds, 4 seconds, 8 seconds
     let retry_strategy = ExponentialBackoff::from_millis(2).factor(1000).take(3);
     let action = GetCollabAction::new(self.clone(), params);
-    Retry::spawn(retry_strategy, action).await
+    RetryIf::spawn(retry_strategy, action, RetryGetCollabCondition).await
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -390,4 +391,11 @@ where
   chunk.extend_from_slice(d);
 
   Ok(Bytes::from(chunk))
+}
+
+struct RetryGetCollabCondition;
+impl Condition<AppResponseError> for RetryGetCollabCondition {
+  fn should_retry(&mut self, error: &AppResponseError) -> bool {
+    !error.is_record_not_found()
+  }
 }

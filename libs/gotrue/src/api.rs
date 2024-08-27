@@ -48,9 +48,7 @@ impl Client {
   pub async fn settings(&self) -> Result<GoTrueSettings, GoTrueError> {
     let url: String = format!("{}/settings", self.base_url);
     let resp = self.client.get(&url).send().await?;
-    let settings: GoTrueSettings = from_response(resp)
-      .await
-      .context(format!("calling {} failed", url))?;
+    let settings: GoTrueSettings = from_response(resp).await?;
     Ok(settings)
   }
 

@@ -132,11 +132,13 @@ impl TestClient {
     let collab = (*lock).borrow();
     collab
       .get_awareness()
-      .clients()
       .iter()
-      .map(|(_a, json)| {
-        let user: UserId = serde_json::from_str(json).unwrap();
-        user.uid
+      .flat_map(|(_a, client)| match &client.data {
+        None => None,
+        Some(json) => {
+          let user: UserId = serde_json::from_str(json).unwrap();
+          Some(user.uid)
+        },
       })
       .collect()
   }

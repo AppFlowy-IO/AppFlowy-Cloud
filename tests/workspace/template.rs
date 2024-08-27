@@ -6,11 +6,6 @@ use client_api::entity::{
   PublishCollabMetadata, TemplateCategoryType, UpdateTemplateCategoryParams, UpdateTemplateParams,
 };
 use client_api_test::*;
-use collab::core::collab::DataSource;
-use collab::core::origin::CollabOrigin;
-use collab_document::document::Document;
-use collab_entity::CollabType;
-use database_entity::dto::{QueryCollab, QueryCollabParams};
 use uuid::Uuid;
 
 async fn get_first_workspace_string(c: &client_api::Client) -> String {

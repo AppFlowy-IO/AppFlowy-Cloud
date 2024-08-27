@@ -264,7 +264,7 @@ pgvector = { version = "0.4", features = ["sqlx"] }
 client-api-entity = { path = "libs/client-api-entity" }
 
 # collaboration
-yrs = { version = "0.19.2", features = ["sync"] }
+yrs = { version = "0.21.0", features = ["sync"] }
 collab = { version = "0.2.0" }
 collab-entity = { version = "0.2.0" }
 collab-folder = { version = "0.2.0" }
@@ -283,11 +283,11 @@ debug = true
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ec4f92941942f20c84dce142cd2eeafd44ca7362" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ec4f92941942f20c84dce142cd2eeafd44ca7362" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ec4f92941942f20c84dce142cd2eeafd44ca7362" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ec4f92941942f20c84dce142cd2eeafd44ca7362" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ec4f92941942f20c84dce142cd2eeafd44ca7362" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cf5c871191e5fbbaa58af5ab7cb037f792e28297" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cf5c871191e5fbbaa58af5ab7cb037f792e28297" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cf5c871191e5fbbaa58af5ab7cb037f792e28297" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cf5c871191e5fbbaa58af5ab7cb037f792e28297" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cf5c871191e5fbbaa58af5ab7cb037f792e28297" }
 
 [features]
 history = []

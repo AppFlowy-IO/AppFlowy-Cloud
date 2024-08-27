@@ -619,7 +619,7 @@ dependencies = [
  "collab-rt-protocol",
  "collab-stream",
  "collab-user",
- "dashmap",
+ "dashmap 5.5.3",
  "database",
  "database-entity",
  "derive_more",
@@ -704,7 +704,7 @@ dependencies = [
  "collab-rt-entity",
  "collab-rt-protocol",
  "collab-stream",
- "dashmap",
+ "dashmap 5.5.3",
  "database",
  "database-entity",
  "dotenvy",
@@ -752,7 +752,7 @@ dependencies = [
  "collab",
  "collab-entity",
  "collab-stream",
- "dashmap",
+ "dashmap 5.5.3",
  "database",
  "dotenvy",
  "futures",
@@ -897,6 +897,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-lock"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff6e472cdea888a4bd64f342f09b3f50e1886d32afe8df3d663c01140b811b18"
+dependencies = [
+ "event-listener",
+ "event-listener-strategy",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "async-stream"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -943,12 +954,6 @@ name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
-
-[[package]]
-name = "atomic_refcell"
-version = "0.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41e67cd8309bbd06cd603a9e693a784ac2e5d1e955f11286e355089fcab3047c"
 
 [[package]]
 name = "authentication"
@@ -2080,7 +2085,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=ec4f92941942f20c84dce142cd2eeafd44ca7362#ec4f92941942f20c84dce142cd2eeafd44ca7362"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2105,7 +2110,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=ec4f92941942f20c84dce142cd2eeafd44ca7362#ec4f92941942f20c84dce142cd2eeafd44ca7362"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2125,7 +2130,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=ec4f92941942f20c84dce142cd2eeafd44ca7362#ec4f92941942f20c84dce142cd2eeafd44ca7362"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2144,14 +2149,14 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=ec4f92941942f20c84dce142cd2eeafd44ca7362#ec4f92941942f20c84dce142cd2eeafd44ca7362"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
 dependencies = [
  "anyhow",
  "arc-swap",
  "chrono",
  "collab",
  "collab-entity",
- "dashmap",
+ "dashmap 5.5.3",
  "getrandom 0.2.15",
  "serde",
  "serde_json",
@@ -2228,7 +2233,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=ec4f92941942f20c84dce142cd2eeafd44ca7362#ec4f92941942f20c84dce142cd2eeafd44ca7362"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
 dependencies = [
  "anyhow",
  "collab",
@@ -2669,6 +2674,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
+dependencies = [
+ "cfg-if 1.0.0",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core 0.9.10",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2968,6 +2987,16 @@ checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
 dependencies = [
  "concurrent-queue",
  "parking",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "event-listener-strategy"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
+dependencies = [
+ "event-listener",
  "pin-project-lite",
 ]
 
@@ -3328,7 +3357,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68a7f542ee6b35af73b06abc0dad1c1bae89964e4e253bc4b587b91c9637867b"
 dependencies = [
  "cfg-if 1.0.0",
- "dashmap",
+ "dashmap 5.5.3",
  "futures",
  "futures-timer",
  "no-std-compat",
@@ -4198,7 +4227,7 @@ checksum = "c325dfab65f261f386debee8b0969da215b3fa0037e74c8a1234db7ba986d803"
 dependencies = [
  "crossbeam-channel",
  "crossbeam-utils",
- "dashmap",
+ "dashmap 5.5.3",
  "skeptic",
  "smallvec",
  "tagptr",
@@ -8084,12 +8113,14 @@ dependencies = [
 
 [[package]]
 name = "yrs"
-version = "0.19.2"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8ca5126331b9a5ef5bb10f3f1c3d01b05f298d348c66f8fb15497d83ee73176"
+checksum = "a8fc56b25e3aaf4b81a73f2a9a68ceae1e02d9005552e24058cfb9f96db73f33"
 dependencies = [
  "arc-swap",
- "atomic_refcell",
+ "async-lock",
+ "async-trait",
+ "dashmap 6.0.1",
  "fastrand",
  "serde",
  "serde_json",

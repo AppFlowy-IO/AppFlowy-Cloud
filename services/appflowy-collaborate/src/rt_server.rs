@@ -23,6 +23,7 @@ use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
+use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 use crate::state::RedisConnectionManager;
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
@@ -199,7 +200,7 @@ where
 
               let object_id = entry.key().clone();
               let clone_notify = notify.clone();
-              tokio::spawn(runner.run(object_id, clone_notify));
+              COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
               entry.insert(new_sender.clone());
 
               // wait for the runner to be ready to handle the message.
@@ -287,9 +288,7 @@ fn spawn_period_check_inactive_group<S, AC>(
 /// multiple threads, we've incorporated a multi-thread feature.
 ///
 /// When appflowy-collaborate is deployed as a standalone service, we can use tokio multi-thread.
-#[cfg(feature = "collab-rt-multi-thread")]
 mod collaboration_runtime {
-  use std::future::Future;
   use std::io;
 
   use lazy_static::lazy_static;
@@ -306,13 +305,5 @@ mod collaboration_runtime {
       .enable_io()
       .enable_time()
       .build()
-  }
-
-  pub(crate) fn spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
-  where
-    T: Future + Send + 'static,
-    T::Output: Send + 'static,
-  {
-    COLLAB_RUNTIME.spawn(future)
   }
 }

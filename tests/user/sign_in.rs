@@ -7,7 +7,7 @@ async fn sign_in_unknown_user() {
   let password = "Hello123!";
   let c = localhost_client();
   let err = c.sign_in_password(&email, password).await.unwrap_err();
-  assert_eq!(err.code, ErrorCode::OAuthError);
+  assert_eq!(err.code, ErrorCode::OAuthError, "{:?}", err);
   assert!(!err.message.is_empty());
 }
 
@@ -24,7 +24,7 @@ async fn sign_in_wrong_password() {
     .sign_in_password(&email, wrong_password)
     .await
     .unwrap_err();
-  assert_eq!(err.code, ErrorCode::OAuthError);
+  assert_eq!(err.code, ErrorCode::OAuthError, "{:?}", err);
   assert!(!err.message.is_empty());
 }
 
@@ -37,7 +37,7 @@ async fn sign_in_unconfirmed_email() {
   c.sign_up(&email, password).await.unwrap();
 
   let err = c.sign_in_password(&email, password).await.unwrap_err();
-  assert_eq!(err.code, ErrorCode::OAuthError);
+  assert_eq!(err.code, ErrorCode::OAuthError, "{:?}", err);
   assert!(!err.message.is_empty());
 }
 
@@ -88,7 +88,7 @@ async fn sign_in_with_invalid_url() {
   let c = localhost_client();
   match c.sign_in_with_url(url_str).await {
     Ok(_) => panic!("should not be ok"),
-    Err(e) => assert_eq!(e.code, ErrorCode::OAuthError),
+    Err(e) => assert_eq!(e.code, ErrorCode::OAuthError, "{:?}", e),
   }
 }
 

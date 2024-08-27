@@ -105,7 +105,7 @@ pub struct GoTrueSettings {
   pub mailer_autoconfirm: bool,
   pub phone_autoconfirm: bool,
   pub sms_provider: String,
-  pub mfa_enabled: bool,
+  pub mfa_enabled: Option<bool>, // later version have this field removed
   pub saml_enabled: bool,
 }
 

@@ -45,10 +45,7 @@ services:
 
   gotrue:
     restart: on-failure
-    build:
-      context: .
-      dockerfile: docker/gotrue.Dockerfile
-    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
+    image: supabase/gotrue:v2.159.1
     depends_on:
       - postgres
     environment:

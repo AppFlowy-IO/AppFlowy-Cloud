@@ -67,8 +67,9 @@ impl CollabSyncProtocol for ServerSyncProtocol {
         // let state_vector_v1 = update.missing.encode_v1();
         // for the moment, we don't need to send missing updates to the client. passing None
         // instead, which will trigger a sync step 0 on client
+        let state_vector_v1 = txn.state_vector().encode_v1();
         Err(RTProtocolError::MissUpdates {
-          state_vector_v1: None,
+          state_vector_v1: Some(state_vector_v1),
           reason: "server miss updates".to_string(),
         })
       },

@@ -124,6 +124,7 @@ where
         sv
       };
       let msg = Message::Sync(SyncMessage::SyncStep1(sv)).encode_v1();
+      trace!("Periodic sync step 1 for {}", object_id);
       sink.queue_msg(|msg_id| {
         ClientCollabMessage::new_update_sync(UpdateSync::new(
           origin.clone(),

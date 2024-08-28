@@ -8,7 +8,7 @@ pub mod compression;
 pub mod config;
 pub mod connect_state;
 pub mod error;
-pub mod group;
+mod group;
 pub mod indexer;
 pub mod metrics;
 mod permission;

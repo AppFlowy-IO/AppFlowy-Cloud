@@ -10,7 +10,6 @@ use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View};
-use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use database::collab::{select_workspace_database_oid, CollabStorage};
@@ -26,13 +25,11 @@ use yrs::updates::encoder::Encode;
 use yrs::{Map, MapRef};
 
 use crate::biz::collab::ops::get_latest_collab_encoded;
-use crate::state::AppStateGroupManager;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
   pg_pool: &PgPool,
   collab_storage: Arc<CollabAccessControlStorage>,
-  group_manager: AppStateGroupManager,
   dest_uid: i64,
   publish_view_id: String,
   dest_workspace_id: String,
@@ -41,7 +38,6 @@ pub async fn duplicate_published_collab_to_workspace(
   let copier = PublishCollabDuplicator::new(
     pg_pool.clone(),
     collab_storage.clone(),
-    group_manager,
     dest_uid,
     dest_workspace_id,
     dest_view_id,
@@ -61,8 +57,6 @@ pub struct PublishCollabDuplicator {
   duplicated_db_main_view: HashMap<String, String>,
   /// published_database_view_id -> new_view_id
   duplicated_db_view: HashMap<String, String>,
-  /// in case there's existing group, which contains the most updated collab data
-  group_manager: AppStateGroupManager,
   /// new views to be added to the folder
   /// view_id -> view
   views_to_add: HashMap<String, View>,
@@ -85,7 +79,6 @@ impl PublishCollabDuplicator {
   pub fn new(
     pg_pool: PgPool,
     collab_storage: Arc<CollabAccessControlStorage>,
-    group_manager: AppStateGroupManager,
     dest_uid: i64,
     dest_workspace_id: String,
     dest_view_id: String,
@@ -101,7 +94,6 @@ impl PublishCollabDuplicator {
 
       pg_pool,
       collab_storage,
-      group_manager,
       duplicator_uid: dest_uid,
       dest_workspace_id,
       dest_view_id,
@@ -134,7 +126,6 @@ impl PublishCollabDuplicator {
         select_workspace_database_oid(&self.pg_pool, &self.dest_workspace_id.parse()?).await?;
       let mut ws_db_collab = {
         let ws_database_ec = get_latest_collab_encoded(
-          self.group_manager.clone(),
           self.collab_storage.clone(),
           &self.duplicator_uid,
           &self.dest_workspace_id,
@@ -153,7 +144,7 @@ impl PublishCollabDuplicator {
         }
         txn_wrapper.encode_update_v1()
       };
-      self.broadcast_update(&ws_db_oid, ws_db_updates).await;
+      self.broadcast_update(&ws_db_oid, ws_db_updates).await?;
       let updated_ws_w_db_collab = ws_db_collab
         .encode_collab_v1(|collab| CollabType::WorkspaceDatabase.validate_require_data(collab))
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
@@ -169,7 +160,6 @@ impl PublishCollabDuplicator {
     }
 
     let collab_folder_encoded = get_latest_collab_encoded(
-      self.group_manager.clone(),
       self.collab_storage.clone(),
       &self.duplicator_uid,
       &self.dest_workspace_id,
@@ -245,7 +235,7 @@ impl PublishCollabDuplicator {
     // broadcast folder changes
     self
       .broadcast_update(&self.dest_workspace_id, encoded_update)
-      .await;
+      .await?;
 
     txn.commit().await?;
     Ok(())
@@ -843,46 +833,25 @@ impl PublishCollabDuplicator {
   }
 
   /// broadcast updates to collab group if exists
-  async fn broadcast_update(&self, oid: &str, encoded_update: Vec<u8>) {
+  async fn broadcast_update(&self, oid: &str, encoded_update: Vec<u8>) -> Result<(), AppError> {
     tracing::info!("broadcasting update to group: {}", oid);
-    match self.group_manager.get_group(oid).await {
-      Some(group) => {
-        let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
-        let (mut message_by_oid_sender, message_by_oid_receiver) =
-          futures::channel::mpsc::channel(1);
-        group
-          .subscribe(
-            &RealtimeUser {
-              uid: self.duplicator_uid,
-              device_id: uuid::Uuid::new_v4().to_string(),
-              connect_at: self.ts_now,
-              session_id: uuid::Uuid::new_v4().to_string(),
-              app_version: "".to_string(),
-            },
-            CollabOrigin::Server,
-            collab_message_sender,
-            message_by_oid_receiver,
-          )
-          .await;
-        let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
-        let message = HashMap::from([(
-          oid.to_string(),
-          vec![ClientCollabMessage::ClientUpdateSync {
-            data: UpdateSync {
-              origin: CollabOrigin::Server,
-              object_id: oid.to_string(),
-              msg_id: self.ts_now as u64,
-              payload: payload.into(),
-            },
-          }],
-        )]);
-        match message_by_oid_sender.try_send(message) {
-          Ok(()) => tracing::info!("sent message to group"),
-          Err(err) => tracing::error!("failed to send message to group: {}", err),
-        }
+
+    let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
+    let msg = ClientCollabMessage::ClientUpdateSync {
+      data: UpdateSync {
+        origin: CollabOrigin::Server,
+        object_id: oid.to_string(),
+        msg_id: self.ts_now as u64,
+        payload: payload.into(),
       },
-      None => tracing::warn!("group not found for oid: {}", oid),
-    }
+    };
+
+    self
+      .collab_storage
+      .broadcast_encode_collab(self.duplicator_uid, oid.to_string(), vec![msg])
+      .await?;
+
+    Ok(())
   }
 }
 

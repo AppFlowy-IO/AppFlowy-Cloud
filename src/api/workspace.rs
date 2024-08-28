@@ -1113,7 +1113,6 @@ async fn post_published_duplicate_handler(
   biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
     &state.pg_pool,
     state.collab_access_control_storage.clone(),
-    state.group_manager.clone(),
     uid,
     params.published_view_id,
     workspace_id.into_inner(),
@@ -1378,7 +1377,6 @@ async fn get_workspace_folder_handler(
   let depth = query.depth.unwrap_or(1);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let folder_view = biz::collab::ops::get_user_workspace_structure(
-    state.group_manager.clone(),
     state.collab_access_control_storage.clone(),
     uid,
     workspace_id.into_inner(),

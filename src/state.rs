@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use appflowy_ai_client::client::AppFlowyAIClient;
-use appflowy_collaborate::group::manager::GroupManager;
 use dashmap::DashMap;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
@@ -12,11 +11,9 @@ use uuid::Uuid;
 use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
-use appflowy_collaborate::collab::access_control::{
-  CollabAccessControlImpl, CollabStorageAccessControlImpl, RealtimeCollabAccessControlImpl,
-};
+use appflowy_collaborate::collab::access_control::CollabAccessControlImpl;
 use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::collab::storage::{CollabAccessControlStorage, CollabStorageImpl};
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
@@ -35,15 +32,6 @@ use crate::config::config::Config;
 use crate::mailer::Mailer;
 
 pub type RedisConnectionManager = redis::aio::ConnectionManager;
-pub type AppStateGroupManager = Arc<
-  GroupManager<
-    CollabStorageImpl<
-      CollabStorageAccessControlImpl<CollabAccessControlImpl, WorkspaceAccessControlImpl>,
-    >,
-    RealtimeCollabAccessControlImpl,
-  >,
->;
-
 #[derive(Clone)]
 pub struct AppState {
   pub pg_pool: PgPool,
@@ -67,7 +55,6 @@ pub struct AppState {
   pub realtime_shared_state: RealtimeSharedState,
   pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
   pub indexer_provider: Arc<IndexerProvider>,
-  pub group_manager: AppStateGroupManager,
 }
 
 impl AppState {

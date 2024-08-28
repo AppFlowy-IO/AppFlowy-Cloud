@@ -1,4 +1,3 @@
-use crate::state::AppStateGroupManager;
 use std::sync::Arc;
 
 use app_error::AppError;
@@ -154,7 +153,6 @@ pub async fn get_collab_member_list(
 }
 
 pub async fn get_user_workspace_structure(
-  group_manager: AppStateGroupManager,
   collab_storage: Arc<CollabAccessControlStorage>,
   uid: i64,
   workspace_id: String,
@@ -167,19 +165,17 @@ pub async fn get_user_workspace_structure(
       depth, depth_limit
     )));
   }
-  let folder = get_latest_collab_folder(group_manager, collab_storage, &uid, &workspace_id).await?;
+  let folder = get_latest_collab_folder(collab_storage, &uid, &workspace_id).await?;
   let folder_view: FolderView = collab_folder_to_folder_view(&folder, depth);
   Ok(folder_view)
 }
 
 pub async fn get_latest_collab_folder(
-  group_manager: AppStateGroupManager,
   collab_storage: Arc<CollabAccessControlStorage>,
   uid: &i64,
   workspace_id: &str,
 ) -> Result<Folder, AppError> {
   let encoded_collab = get_latest_collab_encoded(
-    group_manager,
     collab_storage,
     uid,
     workspace_id,
@@ -199,32 +195,23 @@ pub async fn get_latest_collab_folder(
 }
 
 pub async fn get_latest_collab_encoded(
-  group_manager: AppStateGroupManager,
   collab_storage: Arc<CollabAccessControlStorage>,
   uid: &i64,
   workspace_id: &str,
   oid: &str,
   collab_type: CollabType,
 ) -> Result<EncodedCollab, AppError> {
-  match group_manager.get_group(oid).await {
-    Some(group) => group
-      .encode_collab()
-      .await
-      .map_err(|e| AppError::Unhandled(e.to_string())),
-    None => {
-      collab_storage
-        .get_encode_collab(
-          uid,
-          QueryCollabParams {
-            workspace_id: workspace_id.to_string(),
-            inner: QueryCollab {
-              object_id: oid.to_string(),
-              collab_type,
-            },
-          },
-          false,
-        )
-        .await
-    },
-  }
+  collab_storage
+    .get_encode_collab(
+      uid,
+      QueryCollabParams {
+        workspace_id: workspace_id.to_string(),
+        inner: QueryCollab {
+          object_id: oid.to_string(),
+          collab_type,
+        },
+      },
+      false,
+    )
+    .await
 }

@@ -7,7 +7,6 @@ use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
-use collab_stream::client::CollabRedisStream;
 
 use crate::api::chat::chat_scope;
 use crate::api::history::history_scope;
@@ -37,10 +36,9 @@ use appflowy_collaborate::collab::access_control::{
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
-use appflowy_collaborate::group::manager::GroupManager;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::snapshot::SnapshotControl;
-use appflowy_collaborate::{CollabMetricsCalculate, CollaborationServer};
+use appflowy_collaborate::CollaborationServer;
 
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::operation::create_bucket::CreateBucketError;
@@ -127,12 +125,17 @@ pub async fn run_actix_server(
       state.collab_cache.clone(),
     ));
 
+  // Initialize metrics that which are registered in the registry.
   let realtime_server = CollaborationServer::<_, _>::new(
     storage.clone(),
+    RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
+    state.redis_connection_manager.clone(),
+    Duration::from_secs(config.collab.group_persistence_interval_secs),
+    config.collab.edit_state_max_count,
+    config.collab.edit_state_max_secs,
     state.indexer_provider.clone(),
-    state.group_manager.clone(),
   )
   .await
   .unwrap();
@@ -291,23 +294,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     warn!("Failed to remove all connected users: {:?}", err);
   }
 
-  let rt_access_control = Arc::new(RealtimeCollabAccessControlImpl::new(access_control.clone()));
-  let metrics_calculate = CollabMetricsCalculate::default();
-  let collab_stream = CollabRedisStream::new_with_connection_manager(redis_conn_manager.clone());
-  let group_manager = Arc::new(
-    GroupManager::new(
-      collab_access_control_storage.clone(),
-      rt_access_control.clone(),
-      metrics_calculate,
-      collab_stream,
-      Duration::from_secs(config.collab.group_persistence_interval_secs),
-      config.collab.edit_state_max_count,
-      config.collab.edit_state_max_secs,
-      indexer_provider.clone(),
-    )
-    .await?,
-  );
-
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
@@ -331,7 +317,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     grpc_history_client,
     realtime_shared_state,
     indexer_provider,
-    group_manager,
   })
 }
 

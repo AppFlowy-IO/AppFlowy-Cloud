@@ -7,14 +7,12 @@ use actix_web::dev::Server;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer};
 use anyhow::{Context, Error};
-use collab_stream::client::CollabRedisStream;
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::{info, warn};
 
 use crate::actix_ws::server::RealtimeServerActor;
-use crate::group::manager::GroupManager;
 use access_control::access::AccessControl;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use workspace_access::notification::spawn_listen_on_workspace_member_change;
@@ -34,7 +32,7 @@ use crate::pg_listener::PgListeners;
 use crate::shared_state::RealtimeSharedState;
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
-use crate::{CollabMetricsCalculate, CollaborationServer};
+use crate::CollaborationServer;
 
 pub struct Application {
   actix_server: Server,
@@ -69,32 +67,18 @@ pub async fn run_actix_server(
   rt_cmd_recv: CLCommandReceiver,
 ) -> Result<Server, Error> {
   let storage = state.collab_access_control_storage.clone();
-  let access_control = Arc::new(RealtimeCollabAccessControlImpl::new(
-    state.access_control.clone(),
-  ));
-  let metrics_calculate = CollabMetricsCalculate::default();
-  let collab_stream =
-    CollabRedisStream::new_with_connection_manager(state.redis_connection_manager.clone());
-  let group_manager = Arc::new(
-    GroupManager::new(
-      storage.clone(),
-      access_control.clone(),
-      metrics_calculate,
-      collab_stream,
-      Duration::from_secs(config.collab.group_persistence_interval_secs),
-      config.collab.edit_state_max_count,
-      config.collab.edit_state_max_secs,
-      state.indexer_provider.clone(),
-    )
-    .await?,
-  );
+
   // Initialize metrics that which are registered in the registry.
   let realtime_server = CollaborationServer::<_, _>::new(
     storage.clone(),
+    RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
+    state.redis_connection_manager.clone(),
+    Duration::from_secs(config.collab.group_persistence_interval_secs),
+    config.collab.edit_state_max_count,
+    config.collab.edit_state_max_secs,
     state.indexer_provider.clone(),
-    group_manager,
   )
   .await
   .unwrap();

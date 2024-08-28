@@ -5,6 +5,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
 use sqlx::Transaction;
 use tokio::time::timeout;
@@ -402,5 +404,48 @@ where
     {
       error!("Failed to remove connected user: {}", err);
     }
+  }
+
+  async fn broadcast_encode_collab(
+    &self,
+    uid: i64,
+    object_id: String,
+    collab_messages: Vec<ClientCollabMessage>,
+  ) -> Result<(), AppError> {
+    let (sender, recv) = tokio::sync::oneshot::channel();
+
+    self
+      .rt_cmd_sender
+      .send(CollaborationCommand::SendEncodeCollab {
+        user: RealtimeUser {
+          uid,
+          device_id: "appflowy-cloud".to_string(),
+          connect_at: chrono::Utc::now().timestamp_millis(),
+          session_id: uuid::Uuid::new_v4().to_string(),
+          app_version: "".to_string(),
+        },
+        object_id,
+        collab_messages,
+        ret: sender,
+      })
+      .await
+      .map_err(|err| {
+        AppError::Unhandled(format!(
+          "Failed to send encode collab command to realtime server: {}",
+          err
+        ))
+      })?;
+
+    recv
+      .await
+      .map_err(|err| {
+        AppError::Unhandled(format!(
+          "Failed to receive response from realtime server: {}",
+          err
+        ))
+      })?
+      .map_err(|err| AppError::Unhandled(format!("Failed to broadcast encode collab: {}", err)))?;
+
+    Ok(())
   }
 }

@@ -8,6 +8,7 @@ use database_entity::dto::{
 
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use collab_rt_entity::ClientCollabMessage;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 use std::collections::HashMap;
@@ -118,6 +119,18 @@ pub trait CollabStorage: Send + Sync + 'static {
     is_collab_init: bool,
   ) -> AppResult<EncodedCollab>;
 
+  /// Sends a collab message to all connected clients.
+  /// # Arguments
+  /// * `uid` - The ID of the user.
+  /// * `object_id` - The ID of the collaboration object.
+  /// * `collab_messages` - The list of collab messages to broadcast.
+  async fn broadcast_encode_collab(
+    &self,
+    uid: i64,
+    object_id: String,
+    collab_messages: Vec<ClientCollabMessage>,
+  ) -> Result<(), AppError>;
+
   async fn batch_get_collab(
     &self,
     uid: &i64,
@@ -215,6 +228,18 @@ where
     self
       .as_ref()
       .get_encode_collab(uid, params, is_collab_init)
+      .await
+  }
+
+  async fn broadcast_encode_collab(
+    &self,
+    uid: i64,
+    object_id: String,
+    collab_messages: Vec<ClientCollabMessage>,
+  ) -> Result<(), AppError> {
+    self
+      .as_ref()
+      .broadcast_encode_collab(uid, object_id, collab_messages)
       .await
   }
 

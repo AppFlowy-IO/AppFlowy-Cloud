@@ -122,18 +122,36 @@ where
       None => return Err(AppError::Internal(anyhow!("collab has been dropped"))),
     };
 
-    let mut params = {
+    let params = {
       let lock = collab.read().await;
-      get_encode_collab(&workspace_id, &object_id, &lock, &collab_type)?
-    };
-    if let Some(indexer) = &self.indexer {
-      if let Ok(embeddings) = indexer
-        .index(&object_id, params.encoded_collab_v1.clone())
-        .await
-      {
-        params.embeddings = embeddings;
+      let mut params = get_encode_collab(&workspace_id, &object_id, &lock, &collab_type)?;
+
+      if let Some(indexer) = &self.indexer {
+        match indexer.embedding_params(&lock) {
+          Ok(embedding_params) => {
+            drop(lock); // we no longer need the lock
+            match indexer.embeddings(embedding_params).await {
+              Ok(embeddings) => {
+                params.embeddings = embeddings;
+              },
+              Err(err) => {
+                warn!(
+                  "failed to index embeddings from remote service for document {}/{}: {}",
+                  workspace_id, object_id, err
+                );
+              },
+            }
+          },
+          Err(err) => {
+            warn!(
+              "failed to get embedding params for document {}/{}: {}",
+              workspace_id, object_id, err
+            );
+          },
+        }
       }
-    }
+      params
+    };
 
     self
       .storage

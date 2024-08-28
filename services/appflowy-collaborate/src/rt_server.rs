@@ -22,6 +22,8 @@ use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
+
+use crate::config::get_env_var;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
@@ -35,6 +37,7 @@ pub struct CollaborationServer<S, AC> {
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
   metrics_calculate: CollabMetricsCalculate,
+  enable_custom_runtime: bool,
 }
 
 impl<S, AC> CollaborationServer<S, AC>
@@ -50,8 +53,14 @@ where
     indexer_provider: Arc<IndexerProvider>,
     group_manager: Arc<GroupManager<S, AC>>,
   ) -> Result<Self, RealtimeError> {
-    if cfg!(feature = "collab-rt-multi-thread") {
-      info!("CollaborationServer with multi-thread feature enabled");
+    let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
+      .parse::<bool>()
+      .unwrap_or(false);
+
+    if enable_custom_runtime {
+      info!("CollaborationServer with custom runtime");
+    } else {
+      info!("CollaborationServer with actix-web runtime");
     }
 
     let metrics_calculate = CollabMetricsCalculate::default();
@@ -74,6 +83,7 @@ where
       group_sender_by_object_id,
       metrics,
       metrics_calculate,
+      enable_custom_runtime,
     })
   }
 
@@ -157,6 +167,7 @@ where
     let group_sender_by_object_id = self.group_sender_by_object_id.clone();
     let client_msg_router_by_user = self.connect_state.client_message_routers.clone();
     let group_manager = self.group_manager.clone();
+    let enable_custom_runtime = self.enable_custom_runtime;
 
     Box::pin(async move {
       for (object_id, collab_messages) in message_by_oid {
@@ -179,7 +190,12 @@ where
 
               let object_id = entry.key().clone();
               let clone_notify = notify.clone();
-              COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
+              if enable_custom_runtime {
+                COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
+              } else {
+                tokio::spawn(runner.run(object_id, clone_notify));
+              }
+
               entry.insert(new_sender.clone());
 
               // wait for the runner to be ready to handle the message.

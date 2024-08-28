@@ -930,12 +930,13 @@ async fn update_collab_handler(
       .can_index_workspace(&workspace_id)
       .await?
     {
-      let encoded = EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)
-        .map_err(|e| AppError::Internal(e.into()))?;
-      match indexer
-        .index(&params.object_id, encoded.doc_state.into())
-        .await
-      {
+      let encoded = EncodedCollab::decode_from_bytes(&params.encoded_collab_v1).map_err(|err| {
+        AppError::InvalidRequest(format!(
+          "Failed to decode collab `{}`: {}",
+          params.object_id, err
+        ))
+      })?;
+      match indexer.index(&params.object_id, encoded).await {
         Ok(embeddings) => params.embeddings = embeddings,
         Err(err) => tracing::warn!(
           "failed to fetch embeddings for document {}: {}",

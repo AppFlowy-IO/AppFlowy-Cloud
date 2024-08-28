@@ -191,6 +191,13 @@ where
             let cloned_object = object.clone();
             let collab = collab.clone();
             let sink = sink.clone();
+            let sync_reason = match state_vector_v1 {
+              None => SyncReason::ClientMissUpdates { reason },
+              Some(sv) => SyncReason::ServerMissUpdates {
+                state_vector_v1: sv,
+                reason,
+              },
+            };
             tokio::spawn(async move {
               select! {
                 _ = new_cancel_token.cancelled() => {
@@ -199,7 +206,7 @@ where
                     }
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(3)) => {
-                   Self::pull_missing_updates(&cloned_origin, &cloned_object, &collab, &sink, state_vector_v1, reason)
+                   Self::pull_missing_updates(&cloned_origin, &cloned_object, &collab, &sink, sync_reason)
                    .await;
                 }
               }
@@ -289,14 +296,9 @@ where
     object: &SyncObject,
     collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
     sink: &Arc<CollabSink<Sink>>,
-    state_vector_v1: Option<Vec<u8>>,
-    reason: MissUpdateReason,
+    reason: SyncReason,
   ) {
     let lock = collab.read().await;
-    let reason = SyncReason::MissUpdates {
-      state_vector_v1,
-      reason,
-    };
     if let Err(err) = start_sync(origin.clone(), object, (*lock).borrow(), sink, reason) {
       error!("Error while start sync: {}", err);
     }

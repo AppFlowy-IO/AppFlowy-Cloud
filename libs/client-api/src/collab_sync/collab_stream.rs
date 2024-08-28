@@ -254,6 +254,11 @@ where
       }
 
       if ack_code == AckCode::MissUpdate {
+        // if the ack code is MissUpdate, it means the server has missed some updates. Client need to
+        // use the payload of the current message to calculate missing update. So any existing pending
+        // updates are no long needed.
+        sink.clear();
+
         return Err(SyncError::MissUpdates {
           state_vector_v1: Some(ack.payload.to_vec()),
           reason: MissUpdateReason::ServerMissUpdates,

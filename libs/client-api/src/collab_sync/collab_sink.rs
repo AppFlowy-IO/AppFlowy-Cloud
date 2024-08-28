@@ -172,18 +172,8 @@ where
   }
 
   pub fn clear(&self) {
-    match self.message_queue.try_lock() {
-      None => error!("failed to acquire the lock of the sink"),
-      Some(mut msg_queue) => {
-        msg_queue.clear();
-      },
-    }
-    match self.sending_messages.try_lock() {
-      None => error!("failed to acquire the lock of the flying message"),
-      Some(mut sending_messages) => {
-        sending_messages.clear();
-      },
-    }
+    self.message_queue.lock().clear();
+    self.sending_messages.lock().clear();
   }
 
   pub fn pause(&self) {

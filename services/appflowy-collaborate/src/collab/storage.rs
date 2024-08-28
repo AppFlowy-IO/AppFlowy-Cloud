@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::user::SERVER_DEVICE_ID;
 use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
 use sqlx::Transaction;
@@ -419,7 +420,7 @@ where
       .send(CollaborationCommand::SendEncodeCollab {
         user: RealtimeUser {
           uid,
-          device_id: "appflowy-cloud".to_string(),
+          device_id: SERVER_DEVICE_ID.to_string(),
           connect_at: chrono::Utc::now().timestamp_millis(),
           session_id: uuid::Uuid::new_v4().to_string(),
           app_version: "".to_string(),

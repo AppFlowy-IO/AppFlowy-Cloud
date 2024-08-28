@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_stream::stream;
 use collab::entity::EncodedCollab;
+use collab_rt_entity::user::SERVER_DEVICE_ID;
 use dashmap::DashMap;
 use futures_util::StreamExt;
 use tracing::{instrument, trace, warn};
@@ -72,9 +74,19 @@ where
             collab_messages,
             ret,
           } => {
-            let result = self
-              .handle_client_collab_message(&user, object_id, collab_messages)
-              .await;
+            let result = match user.device_id.as_str() {
+              SERVER_DEVICE_ID => {
+                self
+                  .handle_server_collab_messages(&user, object_id, collab_messages)
+                  .await
+              },
+              _ => {
+                self
+                  .handle_client_collab_message(&user, object_id, collab_messages)
+                  .await
+              },
+            };
+
             if let Err(err) = ret.send(result) {
               warn!("Send handle client collab message result fail: {:?}", err);
             }
@@ -166,6 +178,40 @@ where
           .await;
       }
     }
+    Ok(())
+  }
+
+  /// similar to `handle_client_collab_message`, but the messages are sent from the server instead.
+  #[instrument(level = "trace", skip_all)]
+  async fn handle_server_collab_messages(
+    &self,
+    user: &RealtimeUser,
+    object_id: String,
+    messages: Vec<ClientCollabMessage>,
+  ) -> Result<(), RealtimeError> {
+    if messages.is_empty() {
+      warn!("Unexpected empty collab messages sent from server");
+      return Ok(());
+    }
+
+    if let Some(group) = self.group_manager.get_group(&object_id).await {
+      let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
+      let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
+      group
+        .subscribe(
+          user,
+          collab::core::origin::CollabOrigin::Server,
+          collab_message_sender,
+          message_by_oid_receiver,
+        )
+        .await;
+      let message = HashMap::from([(object_id, messages)]);
+      match message_by_oid_sender.try_send(message) {
+        Ok(()) => tracing::info!("sent message to group"),
+        Err(err) => tracing::error!("failed to send message to group: {}", err),
+      }
+    };
+
     Ok(())
   }
 

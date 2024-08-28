@@ -70,6 +70,8 @@ pub struct RealtimeUser {
   pub app_version: String,
 }
 
+pub const SERVER_DEVICE_ID: &str = "appflowy-cloud";
+
 impl RealtimeUser {
   pub fn new(
     uid: i64,

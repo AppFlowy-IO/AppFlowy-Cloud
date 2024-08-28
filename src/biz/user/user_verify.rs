@@ -9,7 +9,7 @@ use app_error::AppError;
 use database::user::{create_user, is_user_exist};
 use database::workspace::select_workspace;
 use database_entity::dto::AFRole;
-use workspace_template::document::get_started::GetStartedDocumentTemplate;
+use workspace_template::document::getting_started::GettingStartedTemplate;
 
 use crate::biz::user::user_init::initialize_workspace_for_user;
 use crate::state::AppState;
@@ -49,7 +49,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
       &user_uuid,
       &workspace_row,
       &mut txn,
-      vec![GetStartedDocumentTemplate],
+      vec![GettingStartedTemplate],
       &state.collab_access_control_storage,
     )
     .await?;

@@ -1,0 +1,280 @@
+{
+  "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+  "inline_view_id": "a8739c21-ed9e-4e05-ad6c-29c467b4129e",
+  "views": [
+    {
+      "id": "efc0db35-29db-4dc4-b48a-da46282809e5",
+      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "name": "Grid",
+      "layout": 0,
+      "layout_settings": {},
+      "filters": [],
+      "group_settings": [],
+      "sorts": [],
+      "row_orders": [
+        { "id": "ea5da1fc-cb8f-4fd0-bef1-fb5627a9cc71", "height": 60 },
+        { "id": "3e7fdb49-6ed2-4e99-b4dd-b90c8290771f", "height": 60 },
+        { "id": "380ee34e-8be7-43ff-ac37-27a2f705c6e9", "height": 60 },
+        { "id": "fffc8261-d736-4408-acaa-ead7164b5bc0", "height": 60 },
+        { "id": "207f0ae1-61ee-4b3c-9745-dcbb1530a619", "height": 60 }
+      ],
+      "field_orders": [
+        { "id": "phVRgL" },
+        { "id": "SqwRg1" },
+        { "id": "wdX8DG" },
+        { "id": "KinVda" },
+        { "id": "3AE6iK" }
+      ],
+      "field_settings": {
+        "wdX8DG": { "wrap": true, "visibility": 0, "width": 218 },
+        "KinVda": { "visibility": 0 },
+        "3AE6iK": { "visibility": 0 }
+      },
+      "created_at": 0,
+      "modified_at": 1723799193
+    },
+    {
+      "id": "a8739c21-ed9e-4e05-ad6c-29c467b4129e",
+      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "name": "Untitled",
+      "layout": 0,
+      "layout_settings": {
+        "1": { "collapse_hidden_groups": true, "hide_ungrouped_column": true }
+      },
+      "filters": [],
+      "group_settings": [
+        {
+          "groups": [
+            { "id": "SqwRg1", "visible": true },
+            { "visible": true, "id": "CEZD" },
+            { "id": "TznH", "visible": true },
+            { "visible": true, "id": "__n6" }
+          ],
+          "ty": 3,
+          "id": "g:gJ9y65",
+          "content": "",
+          "field_id": "SqwRg1"
+        }
+      ],
+      "sorts": [],
+      "row_orders": [
+        { "id": "ea5da1fc-cb8f-4fd0-bef1-fb5627a9cc71", "height": 60 },
+        { "id": "3e7fdb49-6ed2-4e99-b4dd-b90c8290771f", "height": 60 },
+        { "id": "380ee34e-8be7-43ff-ac37-27a2f705c6e9", "height": 60 },
+        { "id": "fffc8261-d736-4408-acaa-ead7164b5bc0", "height": 60 },
+        { "id": "207f0ae1-61ee-4b3c-9745-dcbb1530a619", "height": 60 }
+      ],
+      "field_orders": [
+        { "id": "phVRgL" },
+        { "id": "SqwRg1" },
+        { "id": "wdX8DG" },
+        { "id": "KinVda" },
+        { "id": "3AE6iK" }
+      ],
+      "field_settings": {
+        "3AE6iK": { "visibility": 2, "width": 150, "wrap": true },
+        "SqwRg1": { "visibility": 1, "width": 150, "wrap": true },
+        "wdX8DG": { "width": 150, "wrap": true, "visibility": 2 },
+        "phVRgL": { "width": 150, "visibility": 0, "wrap": true },
+        "KinVda": { "visibility": 1 }
+      },
+      "created_at": 1723792464,
+      "modified_at": 1723799193
+    }
+  ],
+  "fields": [
+    {
+      "id": "phVRgL",
+      "name": "Description",
+      "field_type": 0,
+      "type_options": { "0": { "data": "" } },
+      "is_primary": true
+    },
+    {
+      "id": "SqwRg1",
+      "name": "Status",
+      "field_type": 3,
+      "type_options": {
+        "3": {
+          "content": "{\"options\":[{\"id\":\"CEZD\",\"name\":\"To Do\",\"color\":\"Purple\"},{\"id\":\"TznH\",\"name\":\"Doing\",\"color\":\"Orange\"},{\"id\":\"__n6\",\"name\":\"✅ Done\",\"color\":\"Yellow\"}],\"disable_color\":false}"
+        }
+      },
+      "is_primary": false
+    },
+    {
+      "id": "wdX8DG",
+      "name": "Multiselect",
+      "field_type": 4,
+      "type_options": {
+        "4": {
+          "content": "{\"options\":[{\"id\":\"4PDn\",\"name\":\"get things done\",\"color\":\"Purple\"},{\"id\":\"Bpyg\",\"name\":\"self-host\",\"color\":\"Blue\"},{\"id\":\"GOQj\",\"name\":\"open source\",\"color\":\"Aqua\"},{\"id\":\"BD-T\",\"name\":\"looks great\",\"color\":\"Green\"},{\"id\":\"6UxM\",\"name\":\"fast\",\"color\":\"Lime\"},{\"id\":\"g2Uq\",\"name\":\"Claude 3\",\"color\":\"Yellow\"},{\"id\":\"Tt-J\",\"name\":\"GPT-4o\",\"color\":\"Orange\"},{\"id\":\"5QDY\",\"name\":\"Q&A\",\"color\":\"LightPink\"},{\"id\":\"XYUx\",\"name\":\"news\",\"color\":\"Pink\"},{\"id\":\"hoZx\",\"name\":\"social\",\"color\":\"Purple\"}],\"disable_color\":false}"
+        },
+        "0": {
+          "data": "",
+          "content": "{\"options\":[],\"disable_color\":false}"
+        }
+      },
+      "is_primary": false
+    },
+    {
+      "id": "KinVda",
+      "name": "Tasks",
+      "field_type": 7,
+      "type_options": { "7": {}, "0": { "data": "" } },
+      "is_primary": false
+    },
+    {
+      "id": "3AE6iK",
+      "name": "Last modified",
+      "field_type": 8,
+      "type_options": {
+        "0": {
+          "time_format": 1,
+          "include_time": true,
+          "field_type": 8,
+          "data": "",
+          "date_format": 3
+        },
+        "8": {
+          "field_type": 8,
+          "date_format": 3,
+          "include_time": true,
+          "time_format": 1
+        }
+      },
+      "is_primary": false
+    }
+  ],
+  "rows": [
+    {
+      "id": "ea5da1fc-cb8f-4fd0-bef1-fb5627a9cc71",
+      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "cells": {
+        "phVRgL": {
+          "field_type": 0,
+          "last_modified": 1723792576,
+          "created_at": 1723792501,
+          "data": "Follow us on Twitter @appflowy"
+        },
+        "SqwRg1": { "field_type": 3, "data": "CEZD" },
+        "wdX8DG": {
+          "field_type": 4,
+          "last_modified": 1723792957,
+          "data": "hoZx,XYUx",
+          "created_at": 1723792951
+        }
+      },
+      "height": 60,
+      "visibility": true,
+      "created_at": 1723792464,
+      "modified_at": 1723792957
+    },
+    {
+      "id": "3e7fdb49-6ed2-4e99-b4dd-b90c8290771f",
+      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "cells": {
+        "phVRgL": {
+          "field_type": 0,
+          "data": "Try out AI Chat 💬",
+          "last_modified": 1723792781,
+          "created_at": 1723792584
+        },
+        "KinVda": {
+          "field_type": 7,
+          "data": "{\"options\":[{\"id\":\"HJlI\",\"name\":\"Create an AI chat \",\"color\":\"Purple\"},{\"id\":\"4Ik2\",\"name\":\"Ask a question about your pages\",\"color\":\"Purple\"}],\"selected_option_ids\":[\"HJlI\"]}",
+          "created_at": 1723793102,
+          "last_modified": 1723793133
+        },
+        "wdX8DG": {
+          "field_type": 4,
+          "created_at": 1723792994,
+          "data": "5QDY,Tt-J,g2Uq",
+          "last_modified": 1723793006
+        },
+        "SqwRg1": { "field_type": 3, "data": "CEZD" },
+        "1li9Eo": {
+          "last_modified": 1723793216,
+          "field_type": 12,
+          "data": "Essayez le Chatbot Intelligence Artificielle 💬,À faire,Q&A,GPT-4o,Claude 3,Créer un chatbot ,Demander une question sur vos pages",
+          "created_at": 1723793216
+        }
+      },
+      "height": 60,
+      "visibility": true,
+      "created_at": 1723792464,
+      "modified_at": 1723793216
+    },
+    {
+      "id": "380ee34e-8be7-43ff-ac37-27a2f705c6e9",
+      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "cells": {
+        "wdX8DG": {
+          "data": "BD-T,6UxM",
+          "created_at": 1723793015,
+          "field_type": 4,
+          "last_modified": 1723793037
+        },
+        "SqwRg1": { "data": "CEZD", "field_type": 3 },
+        "phVRgL": {
+          "field_type": 0,
+          "created_at": 1723792611,
+          "last_modified": 1723792623,
+          "data": "Install AppFlowy Mobile"
+        }
+      },
+      "height": 60,
+      "visibility": true,
+      "created_at": 1723792464,
+      "modified_at": 1723793037
+    },
+    {
+      "id": "fffc8261-d736-4408-acaa-ead7164b5bc0",
+      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "cells": {
+        "phVRgL": {
+          "data": "Love AppFlowy and open source",
+          "last_modified": 1723792862,
+          "field_type": 0,
+          "created_at": 1723792815
+        },
+        "wdX8DG": {
+          "created_at": 1723793051,
+          "field_type": 4,
+          "last_modified": 1723793058,
+          "data": "GOQj,Bpyg"
+        },
+        "SqwRg1": { "data": "TznH", "field_type": 3 }
+      },
+      "height": 60,
+      "visibility": true,
+      "created_at": 1723792698,
+      "modified_at": 1723793058
+    },
+    {
+      "id": "207f0ae1-61ee-4b3c-9745-dcbb1530a619",
+      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "cells": {
+        "wdX8DG": {
+          "field_type": 4,
+          "last_modified": 1723793067,
+          "data": "4PDn",
+          "created_at": 1723793067
+        },
+        "SqwRg1": {
+          "last_modified": 1723792881,
+          "data": "__n6",
+          "created_at": 1723792881,
+          "field_type": 3
+        },
+        "phVRgL": {
+          "field_type": 0,
+          "data": "Create an AppFlowy Cloud account"
+        }
+      },
+      "height": 60,
+      "visibility": true,
+      "created_at": 1723792765,
+      "modified_at": 1723793067
+    }
+  ]
+}

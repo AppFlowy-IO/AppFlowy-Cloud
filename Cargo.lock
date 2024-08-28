@@ -612,6 +612,7 @@ dependencies = [
  "client-api",
  "client-api-test",
  "collab",
+ "collab-database",
  "collab-document",
  "collab-entity",
  "collab-folder",
@@ -2085,7 +2086,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2108,9 +2109,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "collab-database"
+version = "0.2.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "collab",
+ "collab-entity",
+ "dashmap 5.5.3",
+ "futures",
+ "getrandom 0.2.15",
+ "js-sys",
+ "lazy_static",
+ "nanoid",
+ "rayon",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "strum",
+ "strum_macros",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2130,7 +2160,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2149,7 +2179,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2233,7 +2263,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=cf5c871191e5fbbaa58af5ab7cb037f792e28297#cf5c871191e5fbbaa58af5ab7cb037f792e28297"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af8ffdab672e4eccfc426525dcf8daa42cbe7087#af8ffdab672e4eccfc426525dcf8daa42cbe7087"
 dependencies = [
  "anyhow",
  "collab",
@@ -3479,6 +3509,12 @@ checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
 dependencies = [
  "hashbrown 0.14.5",
 ]
+
+[[package]]
+name = "heck"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "heck"
@@ -5054,7 +5090,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
- "heck",
+ "heck 0.5.0",
  "itertools 0.12.1",
  "log",
  "multimap",
@@ -6516,7 +6552,7 @@ checksum = "1a099220ae541c5db479c6424bdf1b200987934033c2584f79a0e1693601e776"
 dependencies = [
  "dotenvy",
  "either",
- "heck",
+ "heck 0.5.0",
  "hex",
  "once_cell",
  "proc-macro2",
@@ -6712,6 +6748,25 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "strum"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
+
+[[package]]
+name = "strum_macros"
+version = "0.25.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0"
+dependencies = [
+ "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.72",
+]
 
 [[package]]
 name = "subtle"
@@ -8036,6 +8091,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "collab",
+ "collab-database",
  "collab-document",
  "collab-entity",
  "collab-folder",

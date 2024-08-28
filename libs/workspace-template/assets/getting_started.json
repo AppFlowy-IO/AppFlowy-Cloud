@@ -1,0 +1,151 @@
+{
+  "type": "page",
+  "children": [
+    {
+      "type": "heading",
+      "data": { "level": 2, "delta": [{ "insert": "Welcome to AppFlowy" }] }
+    },
+    {
+      "type": "heading",
+      "data": {
+        "level": 4,
+        "delta": [
+          {
+            "insert": "$",
+            "attributes": {
+              "mention": {
+                "page_id": "<desktop_guide_id>",
+                "type": "page"
+              },
+              "bold": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "toggle_list",
+      "children": [
+        {
+          "type": "paragraph",
+          "data": {
+            "delta": [
+              { "insert": " " },
+              {
+                "insert": "link",
+                "attributes": { "href": "https://appflowy.io/download" }
+              }
+            ]
+          }
+        }
+      ],
+      "data": {
+        "collapsed": true,
+        "delta": [{ "insert": "Download for macOS, Windows, and Linux" }]
+      }
+    },
+    {
+      "type": "heading",
+      "data": {
+        "level": 4,
+        "delta": [
+          {
+            "insert": "$",
+            "attributes": {
+              "mention": {
+                "type": "page",
+                "page_id": "<mobile_guide_id>"
+              },
+              "bold": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "heading",
+      "data": {
+        "level": 4,
+        "delta": [
+          {
+            "insert": "$",
+            "attributes": {
+              "bold": true,
+              "mention": {
+                "page_id": "<todos_id>",
+                "type": "page"
+              }
+            }
+          },
+          { "insert": "quick start", "attributes": { "code": true } }
+        ]
+      }
+    },
+    { "type": "paragraph", "data": { "delta": [] } },
+    {
+      "type": "callout",
+      "data": {
+        "bgColor": "0x0",
+        "icon": "",
+        "delta": [
+          { "insert": "Ask AI", "attributes": { "bold": true } },
+          {
+            "insert": " powered by advanced AI models: chat, search, write, and much more ✨"
+          }
+        ]
+      }
+    },
+    { "type": "divider" },
+    {
+      "type": "paragraph",
+      "data": {
+        "delta": [
+          {
+            "insert": "❤️Love AppFlowy and open source? Follow our latest product updates:"
+          }
+        ]
+      }
+    },
+    {
+      "type": "todo_list",
+      "data": {
+        "checked": false,
+        "delta": [
+          {
+            "insert": "Twitter",
+            "attributes": { "href": "https://twitter.com/appflowy" }
+          },
+          { "insert": ": @appflowy" }
+        ]
+      }
+    },
+    {
+      "type": "todo_list",
+      "data": {
+        "checked": false,
+        "delta": [
+          {
+            "insert": "Reddit",
+            "attributes": { "href": "https://www.reddit.com/r/AppFlowy/" }
+          },
+          { "insert": ": r/appflowy" }
+        ]
+      }
+    },
+    {
+      "type": "todo_list",
+      "data": {
+        "checked": false,
+        "delta": [
+          {
+            "insert": "Github",
+            "attributes": {
+              "href": "https://github.com/AppFlowy-IO/AppFlowy"
+            }
+          }
+        ]
+      }
+    },
+    { "type": "paragraph", "data": { "delta": [] } }
+  ]
+}

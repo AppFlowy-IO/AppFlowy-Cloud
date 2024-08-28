@@ -3,17 +3,17 @@ use std::sync::Arc;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::{ArrayRef, Collab, Map};
-use collab_entity::define::WORKSPACE_DATABASES;
+use collab::preclude::Collab;
+use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::CollabType;
 use collab_user::core::UserAwareness;
 use database::collab::CollabStorage;
 use database::pg_row::AFWorkspaceRow;
 use database_entity::dto::CollabParams;
 use sqlx::Transaction;
-use tracing::{debug, error, instrument, trace};
+use tracing::{error, instrument, trace};
 use uuid::Uuid;
-use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
+use workspace_template::{TemplateObjectId, WorkspaceTemplate, WorkspaceTemplateBuilder};
 
 /// This function generates templates for a workspace and stores them in the database.
 /// Each template is stored as an individual collaborative object.
@@ -35,6 +35,50 @@ where
     .build()
     .await?;
 
+  let mut database_records = vec![];
+  for template in templates {
+    let template_id = template.template_id;
+    let (view_id, object_id) = match &template_id {
+      TemplateObjectId::Document(oid) => (oid.to_string(), oid.to_string()),
+      TemplateObjectId::Folder(oid) => (oid.to_string(), oid.to_string()),
+      TemplateObjectId::DatabaseRow(oid) => (oid.to_string(), oid.to_string()),
+      TemplateObjectId::Database {
+        object_id,
+        database_id,
+      } => (object_id.clone(), database_id.clone()),
+    };
+    let object_type = template.collab_type.clone();
+    let encoded_collab_v1 = template
+      .encoded_collab
+      .encode_to_bytes()
+      .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
+
+    collab_storage
+      .insert_new_collab_with_transaction(
+        &workspace_id,
+        &uid,
+        CollabParams {
+          object_id: object_id.clone(),
+          encoded_collab_v1,
+          collab_type: object_type.clone(),
+          embeddings: None,
+        },
+        txn,
+      )
+      .await?;
+
+    // push the database record
+    if object_type == CollabType::Database {
+      if let TemplateObjectId::Database {
+        object_id: _,
+        database_id,
+      } = &template_id
+      {
+        database_records.push((view_id, database_id.clone()));
+      }
+    }
+  }
+
   // Create a workspace database object for given user
   // The database_storage_id is auto-generated when the workspace is created. So, it should be available
   if let Some(database_storage_id) = row.database_storage_id.as_ref() {
@@ -45,6 +89,7 @@ where
       &workspace_database_object_id,
       collab_storage,
       txn,
+      database_records,
     )
     .await?;
 
@@ -63,28 +108,6 @@ where
     )));
   }
 
-  debug!("create {} templates for user:{}", templates.len(), uid);
-  for template in templates {
-    let object_id = template.object_id;
-    let encoded_collab_v1 = template
-      .object_data
-      .encode_to_bytes()
-      .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
-
-    collab_storage
-      .insert_new_collab_with_transaction(
-        &workspace_id,
-        &uid,
-        CollabParams {
-          object_id,
-          encoded_collab_v1,
-          collab_type: template.object_type,
-          embeddings: None,
-        },
-        txn,
-      )
-      .await?;
-  }
   Ok(())
 }
 
@@ -130,14 +153,16 @@ async fn create_workspace_database_collab(
   object_id: &str,
   storage: &Arc<CollabAccessControlStorage>,
   txn: &mut Transaction<'_, sqlx::Postgres>,
+  initial_database_records: Vec<(String, String)>,
 ) -> Result<(), AppError> {
   let collab_type = CollabType::WorkspaceDatabase;
   let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
   {
+    let workspace_database_body = WorkspaceDatabaseBody::new(&mut collab);
     let mut txn = collab.context.transact_mut();
-    let _ = collab
-      .data
-      .get_or_init::<_, ArrayRef>(&mut txn, WORKSPACE_DATABASES);
+    for (object_id, database_id) in initial_database_records {
+      workspace_database_body.add_database(&mut txn, &database_id, vec![object_id]);
+    }
   };
 
   let encode_collab = collab

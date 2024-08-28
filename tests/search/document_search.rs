@@ -6,7 +6,7 @@ use collab_entity::CollabType;
 use tokio::time::sleep;
 
 use client_api_test::TestClient;
-use workspace_template::document::get_started::get_started_document_data;
+use workspace_template::document::getting_started::getting_started_document_data;
 
 #[ignore]
 #[tokio::test]
@@ -18,7 +18,7 @@ async fn test_document_indexing_and_search() {
 
   let collab_type = CollabType::Document;
   let encoded_collab = {
-    let document_data = get_started_document_data().unwrap();
+    let document_data = getting_started_document_data().unwrap();
     let collab = Collab::new(
       test_client.uid().await,
       object_id.clone(),

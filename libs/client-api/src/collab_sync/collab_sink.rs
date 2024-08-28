@@ -172,18 +172,8 @@ where
   }
 
   pub fn clear(&self) {
-    match self.message_queue.try_lock() {
-      None => error!("failed to acquire the lock of the sink"),
-      Some(mut msg_queue) => {
-        msg_queue.clear();
-      },
-    }
-    match self.sending_messages.try_lock() {
-      None => error!("failed to acquire the lock of the flying message"),
-      Some(mut sending_messages) => {
-        sending_messages.clear();
-      },
-    }
+    self.message_queue.lock().clear();
+    self.sending_messages.lock().clear();
   }
 
   pub fn pause(&self) {
@@ -216,6 +206,14 @@ where
 
     // if the message id is not in the sending messages, it means the message is invalid.
     if !sending_messages.contains(&income_message_id) {
+      if cfg!(feature = "sync_verbose_log") {
+        trace!(
+          "{}: sending messages:{:?} not contains {}",
+          self.object.object_id,
+          sending_messages,
+          income_message_id
+        );
+      }
       return Ok(false);
     }
 

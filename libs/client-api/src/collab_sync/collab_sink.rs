@@ -216,6 +216,14 @@ where
 
     // if the message id is not in the sending messages, it means the message is invalid.
     if !sending_messages.contains(&income_message_id) {
+      if cfg!(feature = "sync_verbose_log") {
+        trace!(
+          "{}: sending messages:{:?} not contains {}",
+          self.object.object_id,
+          sending_messages,
+          income_message_id
+        );
+      }
       return Ok(false);
     }
 

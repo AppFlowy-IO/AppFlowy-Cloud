@@ -632,6 +632,7 @@ dependencies = [
  "gotrue-entity",
  "governor",
  "handlebars",
+ "hex",
  "image",
  "infra",
  "itertools 0.11.0",

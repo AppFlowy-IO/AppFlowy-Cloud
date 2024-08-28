@@ -209,7 +209,7 @@ impl CollabMemCache {
       // Perform update only if the new timestamp is greater than the existing one
       if current_value
         .as_ref()
-        .map_or(true, |(ts, _)| timestamp > *ts)
+        .map_or(true, |(ts, _)| timestamp >= *ts)
       {
         let mut pipeline = pipe();
         let data = [timestamp.to_be_bytes().as_ref(), data].concat();

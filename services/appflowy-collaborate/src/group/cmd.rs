@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_stream::stream;
+use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab_rt_entity::user::SERVER_DEVICE_ID;
 use dashmap::DashMap;
@@ -200,7 +201,7 @@ where
       group
         .subscribe(
           user,
-          collab::core::origin::CollabOrigin::Server,
+          CollabOrigin::Server,
           collab_message_sender,
           message_by_oid_receiver,
         )

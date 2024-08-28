@@ -1,3 +1,5 @@
+use shared_entity::dto::publish_dto::PublishViewMetaData;
+use shared_entity::dto::workspace_dto::PublishedDuplicate;
 use std::collections::HashMap;
 use std::thread::sleep;
 use std::time::Duration;
@@ -7,6 +9,8 @@ use client_api::entity::{AFRole, GlobalComment, PublishCollabItem, PublishCollab
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use itertools::Itertools;
+
+use crate::workspace::published_data::{self};
 
 #[tokio::test]
 async fn test_set_publish_namespace_set() {
@@ -660,4 +664,208 @@ async fn workspace_member_publish_unpublish() {
 #[derive(serde::Serialize, serde::Deserialize)]
 struct MyCustomMetadata {
   title: String,
+}
+
+#[tokio::test]
+async fn duplicate_to_workspace_references() {
+  let client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.workspace_id().await;
+
+  // doc2 contains a reference to doc1
+  let doc_2_view_id = uuid::Uuid::new_v4();
+  let doc_2_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::DOC_2_META).unwrap();
+  let doc_2_doc_state = hex::decode(published_data::DOC_2_DOC_STATE_HEX).unwrap();
+
+  // doc_1_view_id needs to be fixed because doc_2 references it
+  let doc_1_view_id: uuid::Uuid = "e8c4f99a-50ea-4758-bca0-afa7df5c2434".parse().unwrap();
+  let doc_1_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::DOC_1_META).unwrap();
+  let doc_1_doc_state = hex::decode(published_data::DOC_1_DOC_STATE_HEX).unwrap();
+
+  // doc1 contains @reference database to grid1 (not inline)
+  let grid_1_view_id: uuid::Uuid = "8e062f61-d7ae-4f4b-869c-f44c43149399".parse().unwrap();
+  let grid_1_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::GRID_1_META).unwrap();
+  let grid_1_db_data = hex::decode(published_data::GRID_1_DB_DATA).unwrap();
+
+  client_1
+    .api_client
+    .publish_collabs(
+      &workspace_id,
+      vec![
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: doc_1_view_id,
+            publish_name: doc_1_metadata.view.name.clone(),
+            metadata: doc_1_metadata.clone(),
+          },
+          data: doc_1_doc_state,
+        },
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: doc_2_view_id,
+            publish_name: doc_2_metadata.view.name.clone(),
+            metadata: doc_2_metadata.clone(),
+          },
+          data: doc_2_doc_state,
+        },
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: grid_1_view_id,
+            publish_name: grid_1_metadata.view.name.clone(),
+            metadata: grid_1_metadata.clone(),
+          },
+          data: grid_1_db_data,
+        },
+      ],
+    )
+    .await
+    .unwrap();
+
+  {
+    let client_2 = TestClient::new_user().await;
+    let workspace_id_2 = client_2.workspace_id().await;
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5))
+      .await
+      .unwrap();
+
+    // duplicate doc2 to workspace2
+    // Result fv should be:
+    // .
+    // ├── Getting Started (existing)
+    // └── doc2
+    //     └── doc1
+    //         └── grid1
+    client_2
+      .api_client
+      .duplicate_published_to_workspace(
+        &workspace_id_2,
+        &PublishedDuplicate {
+          published_view_id: doc_2_view_id.to_string(),
+          dest_view_id: fv.view_id, // use the root view
+        },
+      )
+      .await
+      .unwrap();
+
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5))
+      .await
+      .unwrap();
+
+    let doc_2_fv = fv
+      .children
+      .into_iter()
+      .find(|v| v.name == doc_2_metadata.view.name)
+      .unwrap();
+    let doc_1_fv = doc_2_fv
+      .children
+      .into_iter()
+      .find(|v| v.name == doc_1_metadata.view.name)
+      .unwrap();
+    let _grid_1_fv = doc_1_fv
+      .children
+      .into_iter()
+      .find(|v| v.name == grid_1_metadata.view.name)
+      .unwrap();
+  }
+}
+
+#[tokio::test]
+async fn duplicate_to_workspace_doc_inline_database() {
+  let client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.workspace_id().await;
+
+  // doc3 contains inline database to a view in grid1 (view of grid1)
+  let doc_3_view_id = uuid::Uuid::new_v4();
+  let doc_3_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::DOC_3_META).unwrap();
+  let doc_3_doc_state = hex::decode(published_data::DOC_3_DOC_STATE_HEX).unwrap();
+
+  // view of grid1
+  let view_of_grid_1_view_id: uuid::Uuid = "d8589e98-88fc-42e4-888c-b03338bf22bb".parse().unwrap();
+  let view_of_grid_1_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::VIEW_OF_GRID1_META).unwrap();
+  let view_of_grid_1_db_data = hex::decode(published_data::VIEW_OF_GRID_1_DB_DATA).unwrap();
+
+  client_1
+    .api_client
+    .publish_collabs(
+      &workspace_id,
+      vec![
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: doc_3_view_id,
+            publish_name: doc_3_metadata.view.name.clone(),
+            metadata: doc_3_metadata.clone(),
+          },
+          data: doc_3_doc_state,
+        },
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: view_of_grid_1_view_id,
+            publish_name: view_of_grid_1_metadata.view.name.clone().replace(" ", "-"),
+            metadata: view_of_grid_1_metadata.clone(),
+          },
+          data: view_of_grid_1_db_data,
+        },
+      ],
+    )
+    .await
+    .unwrap();
+
+  {
+    let client_2 = TestClient::new_user().await;
+    let workspace_id_2 = client_2.workspace_id().await;
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5))
+      .await
+      .unwrap();
+
+    // duplicate doc3 to workspace2
+    // Result fv should be:
+    // .
+    // ├── Getting Started (existing)
+    // └── doc3
+    //     └── grid1
+    //         └── View of grid1
+    client_2
+      .api_client
+      .duplicate_published_to_workspace(
+        &workspace_id_2,
+        &PublishedDuplicate {
+          published_view_id: doc_3_view_id.to_string(),
+          dest_view_id: fv.view_id, // use the root view
+        },
+      )
+      .await
+      .unwrap();
+
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5))
+      .await
+      .unwrap();
+
+    let doc_3_fv = fv
+      .children
+      .into_iter()
+      .find(|v| v.name == doc_3_metadata.view.name)
+      .unwrap();
+    let grid1_fv = doc_3_fv
+      .children
+      .into_iter()
+      .find(|v| v.name == "grid1")
+      .unwrap();
+    let _view_of_grid1_fv = grid1_fv
+      .children
+      .into_iter()
+      .find(|v| v.name == "View of grid1")
+      .unwrap();
+  }
 }

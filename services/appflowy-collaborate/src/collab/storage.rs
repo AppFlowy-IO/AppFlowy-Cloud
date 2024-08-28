@@ -11,6 +11,7 @@ use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
 use sqlx::Transaction;
 use tokio::time::timeout;
+use tracing::warn;
 use tracing::{error, instrument, trace};
 use validator::Validate;
 
@@ -437,15 +438,18 @@ where
         ))
       })?;
 
-    recv
-      .await
-      .map_err(|err| {
-        AppError::Unhandled(format!(
-          "Failed to receive response from realtime server: {}",
-          err
-        ))
-      })?
-      .map_err(|err| AppError::Unhandled(format!("Failed to broadcast encode collab: {}", err)))?;
+    // Spawn a task to wait for the response from the realtime server
+    tokio::spawn(async move {
+      match recv.await {
+        Ok(res) => {
+          if let Err(err) = res {
+            error!("Failed to broadcast encode collab: {}", err);
+          }
+        },
+        // caller may have dropped the receiver
+        Err(err) => warn!("Failed to receive response from realtime server: {}", err),
+      }
+    });
 
     Ok(())
   }

@@ -381,6 +381,8 @@ impl PublishCollabDuplicator {
           };
           if let Some(new_page_id) = self.deep_copy_view(page_id_str, txn, &ret_view.id).await? {
             *page_id = serde_json::json!(new_page_id);
+          } else {
+            tracing::warn!("deep_copy_doc_pages: view not found: {}", page_id_str);
           };
         }
 

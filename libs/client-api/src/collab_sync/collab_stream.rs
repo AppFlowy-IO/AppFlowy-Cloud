@@ -201,11 +201,9 @@ where
             tokio::spawn(async move {
               select! {
                 _ = new_cancel_token.cancelled() => {
-                    if cfg!(feature = "sync_verbose_log") {
-                      trace!("{} receive cancel signal, cancel pull missing updates", cloned_object.object_id);
-                    }
+                    trace!("{} cancel pull missing updates", cloned_object.object_id);
                 },
-                _ = tokio::time::sleep(tokio::time::Duration::from_secs(3)) => {
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                    Self::pull_missing_updates(&cloned_origin, &cloned_object, &collab, &sink, sync_reason)
                    .await;
                 }

@@ -200,6 +200,7 @@ impl GettingStartedTemplate {
     let mut view_builder = view_builder
       .with_name("Getting started")
       .with_icon("⭐️")
+      .with_extra(r#"{"font_layout":"normal","line_height_layout":"normal","cover":{"type":"gradient","value":"appflowy_them_color_gradient4"},"font":null}"#)
       .with_view_id(getting_started_view_uuid);
 
     view_builder = view_builder

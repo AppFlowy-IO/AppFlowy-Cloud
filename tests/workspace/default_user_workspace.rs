@@ -86,7 +86,7 @@ async fn get_user_default_workspace_test() {
     )
     .await;
     let document_data = getting_started_document.get_document_data().unwrap();
-    assert_eq!(document_data.blocks.len(), 22);
+    assert_eq!(document_data.blocks.len(), 15);
 
     let getting_started_sub_views = folder.get_views_belong_to(&getting_started_view.id);
     assert_eq!(getting_started_sub_views.len(), 2);

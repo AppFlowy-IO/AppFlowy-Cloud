@@ -107,9 +107,9 @@
     {
       "type": "image",
       "data": {
-        "align": "left",
+        "width": 369.44921875,
         "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_1.png?raw=true",
-        "width": 277.48046875
+        "align": "left"
       }
     },
     { "type": "divider" },
@@ -141,6 +141,7 @@
     {
       "type": "multi_image",
       "data": {
+        "layout": 0,
         "images": [
           {
             "type": 1,
@@ -150,8 +151,7 @@
             "type": 1,
             "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_3.png?raw=true"
           }
-        ],
-        "layout": 0
+        ]
       }
     },
     { "type": "paragraph", "data": { "delta": [] } },
@@ -171,8 +171,8 @@
       "type": "image",
       "data": {
         "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_4.png?raw=true",
-        "align": "left",
-        "width": 286.2109375
+        "width": 342,
+        "align": "left"
       }
     },
     { "type": "paragraph", "data": { "delta": [] } },
@@ -194,7 +194,7 @@
       "type": "image",
       "data": {
         "align": "left",
-        "width": 286.33203125,
+        "width": 342,
         "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/mobile_guide_5.png?raw=true"
       }
     },

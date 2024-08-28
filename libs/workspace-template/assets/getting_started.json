@@ -5,18 +5,19 @@
       "type": "heading",
       "data": { "level": 2, "delta": [{ "insert": "Welcome to AppFlowy" }] }
     },
-    { "type": "paragraph", "data": { "delta": [] } },
     {
-      "type": "paragraph",
+      "type": "heading",
       "data": {
+        "level": 4,
         "delta": [
           {
             "insert": "$",
             "attributes": {
               "mention": {
-                "type": "page",
-                "page_id": "<desktop_guide_id>"
-              }
+                "page_id": "<desktop_guide_id>",
+                "type": "page"
+              },
+              "bold": true
             }
           }
         ]
@@ -43,31 +44,33 @@
         "delta": [{ "insert": "Download for macOS, Windows, and Linux" }]
       }
     },
-    { "type": "paragraph", "data": { "delta": [] } },
     {
-      "type": "paragraph",
+      "type": "heading",
       "data": {
+        "level": 4,
         "delta": [
           {
             "insert": "$",
             "attributes": {
               "mention": {
-                "page_id": "<mobile_guide_id>",
-                "type": "page"
-              }
+                "type": "page",
+                "page_id": "<mobile_guide_id>"
+              },
+              "bold": true
             }
           }
         ]
       }
     },
-    { "type": "paragraph", "data": { "delta": [] } },
     {
-      "type": "paragraph",
+      "type": "heading",
       "data": {
+        "level": 4,
         "delta": [
           {
             "insert": "$",
             "attributes": {
+              "bold": true,
               "mention": {
                 "page_id": "<todos_id>",
                 "type": "page"
@@ -80,22 +83,16 @@
     },
     { "type": "paragraph", "data": { "delta": [] } },
     {
-      "type": "paragraph",
+      "type": "callout",
       "data": {
+        "bgColor": "0x0",
+        "icon": "",
         "delta": [
+          { "insert": "Ask AI", "attributes": { "bold": true } },
           {
-            "insert": "Ask AI powered by advanced AI models: chat, search, write, and much more ✨"
+            "insert": " powered by advanced AI models: chat, search, write, and much more ✨"
           }
         ]
-      }
-    },
-    { "type": "paragraph", "data": { "delta": [] } },
-    {
-      "type": "image",
-      "data": {
-        "align": "left",
-        "width": 393,
-        "url": "https://github.com/AppFlowy-IO/AppFlowy/blob/main/doc/readme/getting_started_1.png?raw=true"
       }
     },
     { "type": "divider" },
@@ -109,7 +106,6 @@
         ]
       }
     },
-    { "type": "paragraph", "data": { "delta": [] } },
     {
       "type": "todo_list",
       "data": {
@@ -150,7 +146,6 @@
         ]
       }
     },
-    { "type": "paragraph", "data": { "delta": [] } },
     { "type": "paragraph", "data": { "delta": [] } }
   ]
 }

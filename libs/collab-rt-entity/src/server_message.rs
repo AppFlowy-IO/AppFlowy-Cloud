@@ -245,11 +245,12 @@ impl AckMeta {
 impl Display for CollabAck {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "ack: [uid:{}|oid:{}|msg_id:{:?}|len:{}]",
+      "ack: [uid:{}|oid:{}|msg_id:{:?}|len:{}|code:{}]",
       self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.msg_id,
       self.payload.len(),
+      self.code,
     ))
   }
 }

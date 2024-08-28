@@ -14,26 +14,42 @@ use tokio::sync::RwLock;
 
 use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 
+pub mod database;
 pub mod document;
+
 mod hierarchy_builder;
+#[cfg(test)]
+mod tests;
 
 #[async_trait]
 pub trait WorkspaceTemplate {
   fn layout(&self) -> ViewLayout;
 
-  async fn create(&self, object_id: String) -> Result<TemplateData>;
+  async fn create(&self, object_id: String) -> Result<Vec<TemplateData>>;
 
   async fn create_workspace_view(
     &self,
     uid: i64,
     workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
-  ) -> Result<TemplateData>;
+  ) -> Result<Vec<TemplateData>>;
+}
+
+#[derive(Clone, Debug)]
+pub enum TemplateObjectId {
+  Folder(String),
+  Document(String),
+  DatabaseRow(String),
+  Database {
+    object_id: String,
+    // It's used to reference the database id from the object_id
+    database_id: String,
+  },
 }
 
 pub struct TemplateData {
-  pub object_id: String,
-  pub object_type: CollabType,
-  pub object_data: EncodedCollab,
+  pub template_id: TemplateObjectId,
+  pub collab_type: CollabType,
+  pub encoded_collab: EncodedCollab,
 }
 
 pub type WorkspaceTemplateHandlers = HashMap<ViewLayout, Arc<dyn WorkspaceTemplate + Send + Sync>>;
@@ -79,13 +95,14 @@ impl WorkspaceTemplateBuilder {
       self.workspace_id.clone(),
       self.uid,
     )));
-    let mut templates = vec![];
+
+    let mut templates: Vec<TemplateData> = vec![];
     for handler in self.handlers.values() {
       if let Ok(template) = handler
         .create_workspace_view(self.uid, workspace_view_builder.clone())
         .await
       {
-        templates.push(template);
+        templates.extend(template);
       }
     }
 
@@ -126,9 +143,9 @@ impl WorkspaceTemplateBuilder {
       let folder = Folder::open_with(uid, collab, None, Some(folder_data));
       let data = folder.encode_collab()?;
       Ok::<_, anyhow::Error>(TemplateData {
-        object_id: workspace_id,
-        object_type: CollabType::Folder,
-        object_data: data,
+        template_id: TemplateObjectId::Folder(workspace_id),
+        collab_type: CollabType::Folder,
+        encoded_collab: data,
       })
     })
     .await??;

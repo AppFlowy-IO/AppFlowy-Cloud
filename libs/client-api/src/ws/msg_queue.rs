@@ -83,7 +83,7 @@ async fn handle_tick(
   maximum_payload_size: usize,
   weak_seen_ids: Weak<Mutex<HashSet<SeenId>>>,
 ) -> (usize, usize) {
-  let (did_sent_seen_ids, messages_map) = next_batch_message(10, maximum_payload_size, queue).await;
+  let (did_sent_seen_ids, messages_map) = next_batch_message(20, maximum_payload_size, queue).await;
   if messages_map.is_empty() {
     return (0, 0);
   }
@@ -227,9 +227,9 @@ fn calculate_next_tick_duration(
     Duration::from_secs(1)
   } else {
     match num_init_sync {
-      0..=3 => default_interval,
-      4..=7 => Duration::from_secs(4),
-      _ => Duration::from_secs(6),
+      0..=10 => default_interval,
+      11..=20 => Duration::from_secs(2),
+      _ => Duration::from_secs(4),
     }
   }
 }

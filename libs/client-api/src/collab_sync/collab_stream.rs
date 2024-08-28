@@ -191,15 +191,20 @@ where
             let cloned_object = object.clone();
             let collab = collab.clone();
             let sink = sink.clone();
+            let sync_reason = match state_vector_v1 {
+              None => SyncReason::ClientMissUpdates { reason },
+              Some(sv) => SyncReason::ServerMissUpdates {
+                state_vector_v1: sv,
+                reason,
+              },
+            };
             tokio::spawn(async move {
               select! {
                 _ = new_cancel_token.cancelled() => {
-                    if cfg!(feature = "sync_verbose_log") {
-                      trace!("{} receive cancel signal, cancel pull missing updates", cloned_object.object_id);
-                    }
+                    trace!("{} cancel pull missing updates", cloned_object.object_id);
                 },
-                _ = tokio::time::sleep(tokio::time::Duration::from_secs(3)) => {
-                   Self::pull_missing_updates(&cloned_origin, &cloned_object, &collab, &sink, state_vector_v1, reason)
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
+                   Self::pull_missing_updates(&cloned_origin, &cloned_object, &collab, &sink, sync_reason)
                    .await;
                 }
               }
@@ -249,6 +254,11 @@ where
       }
 
       if ack_code == AckCode::MissUpdate {
+        // if the ack code is MissUpdate, it means the server has missed some updates. Client need to
+        // use the payload of the current message to calculate missing update. So any existing pending
+        // updates are no long needed.
+        sink.clear();
+
         return Err(SyncError::MissUpdates {
           state_vector_v1: Some(ack.payload.to_vec()),
           reason: MissUpdateReason::ServerMissUpdates,
@@ -289,14 +299,9 @@ where
     object: &SyncObject,
     collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
     sink: &Arc<CollabSink<Sink>>,
-    state_vector_v1: Option<Vec<u8>>,
-    reason: MissUpdateReason,
+    reason: SyncReason,
   ) {
     let lock = collab.read().await;
-    let reason = SyncReason::MissUpdates {
-      state_vector_v1,
-      reason,
-    };
     if let Err(err) = start_sync(origin.clone(), object, (*lock).borrow(), sink, reason) {
       error!("Error while start sync: {}", err);
     }

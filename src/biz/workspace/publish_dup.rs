@@ -5,7 +5,7 @@ use collab::preclude::Collab;
 
 use collab::preclude::MapExt;
 use collab_database::views::ViewMap;
-use collab_database::workspace_database::DatabaseMetaList;
+use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
@@ -136,11 +136,11 @@ impl PublishCollabDuplicator {
         collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid)?
       };
 
-      let ws_db_meta_list = DatabaseMetaList::new(&mut ws_db_collab);
+      let ws_db_body = WorkspaceDatabaseBody::new(&mut ws_db_collab);
       let ws_db_updates = {
         let mut txn_wrapper = ws_db_collab.transact_mut();
         for (db_collab_id, linked_views) in &self.workspace_databases {
-          ws_db_meta_list.add_database(&mut txn_wrapper, db_collab_id, linked_views.clone());
+          ws_db_body.add_database(&mut txn_wrapper, db_collab_id, linked_views.clone());
         }
         txn_wrapper.encode_update_v1()
       };

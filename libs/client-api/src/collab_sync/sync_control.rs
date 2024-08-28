@@ -135,8 +135,11 @@ where
 
 pub enum SyncReason {
   CollabInitialize,
-  MissUpdates {
-    state_vector_v1: Option<Vec<u8>>,
+  ServerMissUpdates {
+    state_vector_v1: Vec<u8>,
+    reason: MissUpdateReason,
+  },
+  ClientMissUpdates {
     reason: MissUpdateReason,
   },
   ServerCannotApplyUpdate,
@@ -147,7 +150,8 @@ impl Display for SyncReason {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       SyncReason::CollabInitialize => write!(f, "CollabInitialize"),
-      SyncReason::MissUpdates { reason, .. } => write!(f, "MissUpdates: {}", reason),
+      SyncReason::ServerMissUpdates { reason, .. } => write!(f, "ServerMissUpdates: {}", reason),
+      SyncReason::ClientMissUpdates { reason } => write!(f, "ClientMissUpdates: {}", reason),
       SyncReason::ServerCannotApplyUpdate => write!(f, "ServerCannotApplyUpdate"),
       SyncReason::NetworkResume => write!(f, "NetworkResume"),
     }
@@ -186,46 +190,37 @@ where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
 {
-  if !sink.should_queue_init_sync() {
-    return Ok(false);
-  }
-
   if let Err(err) = sync_object.collab_type.validate_require_data(collab) {
-    error!("start init sync :{}:{}", sync_object.object_id, err);
     return Err(SyncError::Internal(err));
   }
 
   match reason {
-    SyncReason::MissUpdates {
+    SyncReason::ClientMissUpdates { reason } => {
+      if !sink.should_queue_init_sync() {
+        return Ok(false);
+      }
+
+      trace!("🔥{} start sync, reason:{}", &sync_object.object_id, reason);
+      let awareness = collab.get_awareness();
+      let payload = gen_sync_state(awareness, &ClientSyncProtocol)?;
+      sink.queue_init_sync(|msg_id| {
+        let init_sync = InitSync::new(
+          origin,
+          sync_object.object_id.clone(),
+          sync_object.collab_type.clone(),
+          sync_object.workspace_id.clone(),
+          msg_id,
+          payload,
+        );
+        ClientCollabMessage::new_init_sync(init_sync)
+      });
+    },
+    SyncReason::ServerMissUpdates {
       state_vector_v1,
       reason,
-    } => match state_vector_v1.and_then(|sv| StateVector::decode_v1(&sv).ok()) {
-      None => {
-        trace!(
-          "🔥{} start init sync, reason:{}",
-          &sync_object.object_id,
-          reason
-        );
-        let awareness = collab.get_awareness();
-        let payload = gen_sync_state(awareness, &ClientSyncProtocol)?;
-        sink.queue_init_sync(|msg_id| {
-          let init_sync = InitSync::new(
-            origin,
-            sync_object.object_id.clone(),
-            sync_object.collab_type.clone(),
-            sync_object.workspace_id.clone(),
-            msg_id,
-            payload,
-          );
-          ClientCollabMessage::new_init_sync(init_sync)
-        });
-      },
-      Some(sv) => {
-        trace!(
-          "🔥{} start init sync with state vector, reason:{}",
-          &sync_object.object_id,
-          reason
-        );
+    } => match StateVector::decode_v1(&state_vector_v1) {
+      Ok(sv) => {
+        trace!("🔥{} start sync, reason:{}", &sync_object.object_id, reason);
         let update = gen_missing_updates(collab, sv)?;
         sink.queue_msg(|msg_id| {
           let update_sync = UpdateSync::new(
@@ -237,18 +232,18 @@ where
           ClientCollabMessage::new_update_sync(update_sync)
         });
       },
+      Err(err) => error!("fail to decode server state vector: {}", err),
     },
     SyncReason::CollabInitialize
     | SyncReason::ServerCannotApplyUpdate
     | SyncReason::NetworkResume => {
       trace!(
-        "🔥{} start init sync, reason: {}",
+        "🔥{} start sync, reason: {}",
         &sync_object.object_id,
         reason
       );
       let awareness = collab.get_awareness();
       let payload = gen_sync_state(awareness, &ClientSyncProtocol)?;
-
       sink.queue_init_sync(|msg_id| {
         let init_sync = InitSync::new(
           origin,

@@ -101,10 +101,7 @@ impl GettingStartedTemplate {
           let object_id = encoded_row_collab.object_id.clone();
           let data = encoded_row_collab.encoded_collab.clone();
           TemplateData {
-            template_id: TemplateObjectId::Database {
-              object_id: object_id.clone(),
-              database_id: database_id.clone(),
-            },
+            template_id: TemplateObjectId::DatabaseRow(object_id.clone()),
             collab_type: CollabType::DatabaseRow,
             encoded_collab: data,
           }

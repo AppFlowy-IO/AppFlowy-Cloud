@@ -34,10 +34,11 @@ pub trait WorkspaceTemplate {
   ) -> Result<Vec<TemplateData>>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TemplateObjectId {
   Folder(String),
   Document(String),
+  DatabaseRow(String),
   Database {
     object_id: String,
     // It's used to reference the database id from the object_id

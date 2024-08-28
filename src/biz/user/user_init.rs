@@ -41,6 +41,7 @@ where
     let (view_id, object_id) = match &template_id {
       TemplateObjectId::Document(oid) => (oid.to_string(), oid.to_string()),
       TemplateObjectId::Folder(oid) => (oid.to_string(), oid.to_string()),
+      TemplateObjectId::DatabaseRow(oid) => (oid.to_string(), oid.to_string()),
       TemplateObjectId::Database {
         object_id,
         database_id,

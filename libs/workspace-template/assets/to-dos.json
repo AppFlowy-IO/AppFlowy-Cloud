@@ -1,10 +1,58 @@
 {
-  "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
-  "inline_view_id": "a8739c21-ed9e-4e05-ad6c-29c467b4129e",
+  "database_id": "57eb746e-9913-4bd3-a3f2-eb7aa40e21da",
+  "inline_view_id": "010326bb-a6de-42c1-8037-7a0f825e029d",
   "views": [
     {
-      "id": "efc0db35-29db-4dc4-b48a-da46282809e5",
-      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "id": "010326bb-a6de-42c1-8037-7a0f825e029d",
+      "database_id": "57eb746e-9913-4bd3-a3f2-eb7aa40e21da",
+      "name": "Untitled",
+      "layout": 1,
+      "layout_settings": {
+        "1": { "collapse_hidden_groups": true, "hide_ungrouped_column": true }
+      },
+      "filters": [],
+      "group_settings": [
+        {
+          "field_id": "SqwRg1",
+          "id": "g:gJ9y65",
+          "content": "",
+          "ty": 3,
+          "groups": [
+            { "visible": true, "id": "SqwRg1" },
+            { "visible": true, "id": "CEZD" },
+            { "visible": true, "id": "TznH" },
+            { "id": "__n6", "visible": true }
+          ]
+        }
+      ],
+      "sorts": [],
+      "row_orders": [
+        { "id": "0003a3cc-afd1-49ca-a75c-f360dd82ffe3", "height": 60 },
+        { "id": "de94c0c4-6434-46ce-b0f8-7d3c0463e698", "height": 60 },
+        { "id": "7ae3af92-efe0-4abb-b861-30f488d164c0", "height": 60 },
+        { "id": "a8ae4baf-0eed-42c5-a2b7-1683c5a79da6", "height": 60 },
+        { "id": "69ba4b59-d541-4131-a010-7a03f73ff088", "height": 60 }
+      ],
+      "field_orders": [
+        { "id": "phVRgL" },
+        { "id": "SqwRg1" },
+        { "id": "wdX8DG" },
+        { "id": "KinVda" },
+        { "id": "3AE6iK" }
+      ],
+      "field_settings": {
+        "SqwRg1": { "wrap": true, "width": 150, "visibility": 1 },
+        "wdX8DG": { "visibility": 2, "wrap": true, "width": 150 },
+        "phVRgL": { "visibility": 0, "wrap": true, "width": 150 },
+        "KinVda": { "visibility": 1 },
+        "3AE6iK": { "visibility": 2, "width": 150, "wrap": true }
+      },
+      "created_at": 1724830348,
+      "modified_at": 1724830348
+    },
+    {
+      "id": "0efd6c11-d38e-451c-9842-bc2322ad543f",
+      "database_id": "57eb746e-9913-4bd3-a3f2-eb7aa40e21da",
       "name": "Grid",
       "layout": 0,
       "layout_settings": {},
@@ -12,11 +60,11 @@
       "group_settings": [],
       "sorts": [],
       "row_orders": [
-        { "id": "ea5da1fc-cb8f-4fd0-bef1-fb5627a9cc71", "height": 60 },
-        { "id": "3e7fdb49-6ed2-4e99-b4dd-b90c8290771f", "height": 60 },
-        { "id": "380ee34e-8be7-43ff-ac37-27a2f705c6e9", "height": 60 },
-        { "id": "fffc8261-d736-4408-acaa-ead7164b5bc0", "height": 60 },
-        { "id": "207f0ae1-61ee-4b3c-9745-dcbb1530a619", "height": 60 }
+        { "id": "0003a3cc-afd1-49ca-a75c-f360dd82ffe3", "height": 60 },
+        { "id": "de94c0c4-6434-46ce-b0f8-7d3c0463e698", "height": 60 },
+        { "id": "7ae3af92-efe0-4abb-b861-30f488d164c0", "height": 60 },
+        { "id": "a8ae4baf-0eed-42c5-a2b7-1683c5a79da6", "height": 60 },
+        { "id": "69ba4b59-d541-4131-a010-7a03f73ff088", "height": 60 }
       ],
       "field_orders": [
         { "id": "phVRgL" },
@@ -27,59 +75,11 @@
       ],
       "field_settings": {
         "KinVda": { "visibility": 0 },
-        "wdX8DG": { "width": 218, "visibility": 0, "wrap": true },
+        "wdX8DG": { "visibility": 0, "wrap": true, "width": 218 },
         "3AE6iK": { "visibility": 0 }
       },
-      "created_at": 0,
-      "modified_at": 1723799193
-    },
-    {
-      "id": "a8739c21-ed9e-4e05-ad6c-29c467b4129e",
-      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
-      "name": "Untitled",
-      "layout": 1,
-      "layout_settings": {
-        "1": { "collapse_hidden_groups": true, "hide_ungrouped_column": true }
-      },
-      "filters": [],
-      "group_settings": [
-        {
-          "id": "g:gJ9y65",
-          "groups": [
-            { "id": "SqwRg1", "visible": true },
-            { "id": "CEZD", "visible": true },
-            { "visible": true, "id": "TznH" },
-            { "visible": true, "id": "__n6" }
-          ],
-          "ty": 3,
-          "field_id": "SqwRg1",
-          "content": ""
-        }
-      ],
-      "sorts": [],
-      "row_orders": [
-        { "id": "ea5da1fc-cb8f-4fd0-bef1-fb5627a9cc71", "height": 60 },
-        { "id": "3e7fdb49-6ed2-4e99-b4dd-b90c8290771f", "height": 60 },
-        { "id": "380ee34e-8be7-43ff-ac37-27a2f705c6e9", "height": 60 },
-        { "id": "fffc8261-d736-4408-acaa-ead7164b5bc0", "height": 60 },
-        { "id": "207f0ae1-61ee-4b3c-9745-dcbb1530a619", "height": 60 }
-      ],
-      "field_orders": [
-        { "id": "phVRgL" },
-        { "id": "SqwRg1" },
-        { "id": "wdX8DG" },
-        { "id": "KinVda" },
-        { "id": "3AE6iK" }
-      ],
-      "field_settings": {
-        "wdX8DG": { "width": 150, "wrap": true, "visibility": 2 },
-        "SqwRg1": { "visibility": 1, "width": 150, "wrap": true },
-        "KinVda": { "visibility": 1 },
-        "3AE6iK": { "width": 150, "wrap": true, "visibility": 2 },
-        "phVRgL": { "wrap": true, "width": 150, "visibility": 0 }
-      },
-      "created_at": 1723792464,
-      "modified_at": 1723799193
+      "created_at": 1724830348,
+      "modified_at": 1724830348
     }
   ],
   "fields": [
@@ -129,17 +129,17 @@
       "field_type": 8,
       "type_options": {
         "8": {
-          "date_format": 3,
           "time_format": 1,
-          "field_type": 8,
-          "include_time": true
+          "include_time": true,
+          "date_format": 3,
+          "field_type": 8
         },
         "0": {
-          "field_type": 8,
-          "data": "",
-          "time_format": 1,
           "date_format": 3,
-          "include_time": true
+          "include_time": true,
+          "field_type": 8,
+          "time_format": 1,
+          "data": ""
         }
       },
       "is_primary": false
@@ -147,112 +147,112 @@
   ],
   "rows": [
     {
-      "id": "ea5da1fc-cb8f-4fd0-bef1-fb5627a9cc71",
-      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "id": "0003a3cc-afd1-49ca-a75c-f360dd82ffe3",
+      "database_id": "57eb746e-9913-4bd3-a3f2-eb7aa40e21da",
       "cells": {
-        "SqwRg1": { "data": "CEZD", "field_type": 3 },
         "wdX8DG": {
-          "field_type": 4,
-          "data": "hoZx,XYUx",
           "created_at": 1723792951,
-          "last_modified": 1723792957
+          "field_type": 4,
+          "last_modified": 1723792957,
+          "data": "hoZx,XYUx"
         },
+        "SqwRg1": { "field_type": 3, "data": "CEZD" },
         "phVRgL": {
-          "created_at": 1723792501,
-          "field_type": 0,
           "last_modified": 1723792576,
+          "field_type": 0,
+          "created_at": 1723792501,
           "data": "Follow us on Twitter @appflowy"
         }
       },
       "height": 60,
       "visibility": true,
-      "created_at": 1723792464,
-      "modified_at": 1723792957
+      "created_at": 1724830348,
+      "modified_at": 1724830348
     },
     {
-      "id": "3e7fdb49-6ed2-4e99-b4dd-b90c8290771f",
-      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "id": "de94c0c4-6434-46ce-b0f8-7d3c0463e698",
+      "database_id": "57eb746e-9913-4bd3-a3f2-eb7aa40e21da",
       "cells": {
-        "KinVda": {
-          "last_modified": 1723793133,
-          "created_at": 1723793102,
-          "data": "{\"options\":[{\"id\":\"HJlI\",\"name\":\"Create an AI chat \",\"color\":\"Purple\"},{\"id\":\"4Ik2\",\"name\":\"Ask a question about your pages\",\"color\":\"Purple\"}],\"selected_option_ids\":[\"HJlI\"]}",
-          "field_type": 7
-        },
-        "phVRgL": {
-          "data": "Try out AI Chat 💬",
-          "last_modified": 1723792781,
-          "created_at": 1723792584,
-          "field_type": 0
-        },
-        "SqwRg1": { "data": "CEZD", "field_type": 3 },
-        "1li9Eo": {
-          "field_type": 12,
-          "created_at": 1723793216,
-          "last_modified": 1723793216,
-          "data": "Essayez le Chatbot Intelligence Artificielle 💬,À faire,Q&A,GPT-4o,Claude 3,Créer un chatbot ,Demander une question sur vos pages"
-        },
         "wdX8DG": {
-          "last_modified": 1723793006,
-          "created_at": 1723792994,
           "data": "5QDY,Tt-J,g2Uq",
-          "field_type": 4
-        }
-      },
-      "height": 60,
-      "visibility": true,
-      "created_at": 1723792464,
-      "modified_at": 1723793216
-    },
-    {
-      "id": "380ee34e-8be7-43ff-ac37-27a2f705c6e9",
-      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
-      "cells": {
-        "wdX8DG": {
-          "created_at": 1723793015,
+          "last_modified": 1723793006,
           "field_type": 4,
-          "data": "BD-T,6UxM",
-          "last_modified": 1723793037
+          "created_at": 1723792994
+        },
+        "1li9Eo": {
+          "data": "Essayez le Chatbot Intelligence Artificielle 💬,À faire,Q&A,GPT-4o,Claude 3,Créer un chatbot ,Demander une question sur vos pages",
+          "created_at": 1723793216,
+          "field_type": 12,
+          "last_modified": 1723793216
+        },
+        "KinVda": {
+          "data": "{\"options\":[{\"id\":\"HJlI\",\"name\":\"Create an AI chat \",\"color\":\"Purple\"},{\"id\":\"4Ik2\",\"name\":\"Ask a question about your pages\",\"color\":\"Purple\"}],\"selected_option_ids\":[\"HJlI\"]}",
+          "created_at": 1723793102,
+          "field_type": 7,
+          "last_modified": 1723793133
         },
         "phVRgL": {
-          "created_at": 1723792611,
-          "data": "Install AppFlowy Mobile",
+          "created_at": 1723792584,
+          "data": "Try out AI Chat 💬",
           "field_type": 0,
-          "last_modified": 1723792623
+          "last_modified": 1723792781
         },
         "SqwRg1": { "data": "CEZD", "field_type": 3 }
       },
       "height": 60,
       "visibility": true,
-      "created_at": 1723792464,
-      "modified_at": 1723793037
+      "created_at": 1724830348,
+      "modified_at": 1724830348
     },
     {
-      "id": "fffc8261-d736-4408-acaa-ead7164b5bc0",
-      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "id": "7ae3af92-efe0-4abb-b861-30f488d164c0",
+      "database_id": "57eb746e-9913-4bd3-a3f2-eb7aa40e21da",
       "cells": {
-        "SqwRg1": { "field_type": 3, "data": "TznH" },
         "wdX8DG": {
-          "data": "GOQj,Bpyg",
-          "created_at": 1723793051,
-          "last_modified": 1723793058,
-          "field_type": 4
+          "field_type": 4,
+          "created_at": 1723793015,
+          "last_modified": 1723793037,
+          "data": "BD-T,6UxM"
         },
         "phVRgL": {
-          "last_modified": 1723792862,
+          "last_modified": 1723792623,
+          "created_at": 1723792611,
           "field_type": 0,
-          "data": "Love AppFlowy and open source",
-          "created_at": 1723792815
-        }
+          "data": "Install AppFlowy Mobile"
+        },
+        "SqwRg1": { "field_type": 3, "data": "CEZD" }
       },
       "height": 60,
       "visibility": true,
-      "created_at": 1723792698,
-      "modified_at": 1723793058
+      "created_at": 1724830348,
+      "modified_at": 1724830348
     },
     {
-      "id": "207f0ae1-61ee-4b3c-9745-dcbb1530a619",
-      "database_id": "4e1b59a3-0767-43bc-86f2-8078dd6c0c49",
+      "id": "a8ae4baf-0eed-42c5-a2b7-1683c5a79da6",
+      "database_id": "57eb746e-9913-4bd3-a3f2-eb7aa40e21da",
+      "cells": {
+        "phVRgL": {
+          "last_modified": 1723792862,
+          "data": "Love AppFlowy and open source",
+          "field_type": 0,
+          "created_at": 1723792815
+        },
+        "wdX8DG": {
+          "data": "GOQj,Bpyg",
+          "last_modified": 1723793058,
+          "field_type": 4,
+          "created_at": 1723793051
+        },
+        "SqwRg1": { "field_type": 3, "data": "TznH" }
+      },
+      "height": 60,
+      "visibility": true,
+      "created_at": 1724830348,
+      "modified_at": 1724830348
+    },
+    {
+      "id": "69ba4b59-d541-4131-a010-7a03f73ff088",
+      "database_id": "57eb746e-9913-4bd3-a3f2-eb7aa40e21da",
       "cells": {
         "wdX8DG": {
           "data": "4PDn",
@@ -265,16 +265,16 @@
           "data": "Create an AppFlowy Cloud account"
         },
         "SqwRg1": {
+          "created_at": 1723792881,
           "field_type": 3,
           "last_modified": 1723792881,
-          "created_at": 1723792881,
           "data": "__n6"
         }
       },
       "height": 60,
       "visibility": true,
-      "created_at": 1723792765,
-      "modified_at": 1723793067
+      "created_at": 1724830348,
+      "modified_at": 1724830348
     }
   ]
 }

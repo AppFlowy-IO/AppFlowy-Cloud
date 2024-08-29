@@ -15,6 +15,7 @@ futures = "0.3.30"
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
 bincode = "1.3.3"
+bytes.workspace = true
 collab-entity.workspace = true
 serde_json.workspace = true
 chrono = "0.4"

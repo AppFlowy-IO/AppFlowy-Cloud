@@ -64,14 +64,15 @@ impl CollabHistory {
       return Ok(None);
     }
     trace!("[History] prepare to save snapshots to disk");
-    let (doc_state, state_vector) = {
-      let lock = collab.read().await;
+    let (doc_state, state_vector) = tokio::task::spawn_blocking(move || {
+      let lock = collab.blocking_read();
       let txn = lock.transact();
-      // TODO(nathan): reduce the size of doc_state_v2 by encoding the previous [CollabStateSnapshot] doc_state_v2
       let doc_state_v2 = txn.encode_state_as_update_v2(&StateVector::default());
       let state_vector = txn.state_vector();
-      (doc_state_v2, state_vector)
-    };
+      Ok::<_, HistoryError>((doc_state_v2, state_vector))
+    })
+    .await
+    .map_err(|err| HistoryError::Internal(err.into()))??;
 
     let state = CollabSnapshotState::new(
       object_id,

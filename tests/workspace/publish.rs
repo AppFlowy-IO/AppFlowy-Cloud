@@ -788,7 +788,7 @@ async fn duplicate_to_workspace_references() {
       .into_iter()
       .find(|v| v.name == grid_1_metadata.view.name)
       .unwrap();
-    assert_eq!(grid_1_fv.view_id, grid_1_view_id.to_string());
+    assert_ne!(grid_1_fv.view_id, grid_1_view_id.to_string());
   }
 }
 

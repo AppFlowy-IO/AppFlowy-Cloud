@@ -121,12 +121,10 @@ pub trait CollabStorage: Send + Sync + 'static {
 
   /// Sends a collab message to all connected clients.
   /// # Arguments
-  /// * `uid` - The ID of the user.
   /// * `object_id` - The ID of the collaboration object.
   /// * `collab_messages` - The list of collab messages to broadcast.
   async fn broadcast_encode_collab(
     &self,
-    uid: i64,
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,
   ) -> Result<(), AppError>;
@@ -233,13 +231,12 @@ where
 
   async fn broadcast_encode_collab(
     &self,
-    uid: i64,
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .broadcast_encode_collab(uid, object_id, collab_messages)
+      .broadcast_encode_collab(object_id, collab_messages)
       .await
   }
 

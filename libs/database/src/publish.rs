@@ -150,8 +150,8 @@ pub async fn insert_or_replace_publish_collabs<'a, E: Executor<'a, Database = Po
 
   if res.rows_affected() != item_count as u64 {
     tracing::warn!(
-      "Failed to insert or replace publish collab meta batch, workspace_id: {}, publisher_uuid: {}, rows_affected: {}",
-      workspace_id, publisher_uuid, res.rows_affected()
+      "Failed to insert or replace publish collab meta batch, workspace_id: {}, publisher_uuid: {}, rows_affected: {}, item_count: {}",
+      workspace_id, publisher_uuid, res.rows_affected(), item_count
     );
   }
 
@@ -258,11 +258,13 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
     PublishInfo,
     r#"
       SELECT
-        (SELECT publish_namespace FROM af_workspace aw WHERE aw.workspace_id = apc.workspace_id) AS namespace,
-        publish_name,
-        view_id
+        aw.publish_namespace AS namespace,
+        apc.publish_name,
+        apc.view_id
       FROM af_published_collab apc
-      WHERE view_id = $1
+      LEFT JOIN af_workspace aw
+        ON apc.workspace_id = aw.workspace_id
+      WHERE apc.view_id = $1;
     "#,
     view_id,
   )

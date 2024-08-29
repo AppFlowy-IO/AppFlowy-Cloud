@@ -5,8 +5,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
-use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::user::SERVER_DEVICE_ID;
 use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
 use sqlx::Transaction;
@@ -410,7 +408,6 @@ where
 
   async fn broadcast_encode_collab(
     &self,
-    uid: i64,
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,
   ) -> Result<(), AppError> {
@@ -418,14 +415,7 @@ where
 
     self
       .rt_cmd_sender
-      .send(CollaborationCommand::SendEncodeCollab {
-        user: RealtimeUser {
-          uid,
-          device_id: SERVER_DEVICE_ID.to_string(),
-          connect_at: chrono::Utc::now().timestamp_millis(),
-          session_id: uuid::Uuid::new_v4().to_string(),
-          app_version: "".to_string(),
-        },
+      .send(CollaborationCommand::ServerSendCollabMessage {
         object_id,
         collab_messages,
         ret: sender,
@@ -438,18 +428,15 @@ where
         ))
       })?;
 
-    // Spawn a task to wait for the response from the realtime server
-    tokio::spawn(async move {
-      match recv.await {
-        Ok(res) => {
-          if let Err(err) = res {
-            error!("Failed to broadcast encode collab: {}", err);
-          }
-        },
-        // caller may have dropped the receiver
-        Err(err) => warn!("Failed to receive response from realtime server: {}", err),
-      }
-    });
+    match recv.await {
+      Ok(res) =>
+        if let Err(err) = res {
+          error!("Failed to broadcast encode collab: {}", err);
+        }
+      ,
+      // caller may have dropped the receiver
+      Err(err) => warn!("Failed to receive response from realtime server: {}", err),
+    }
 
     Ok(())
   }

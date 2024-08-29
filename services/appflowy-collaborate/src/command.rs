@@ -3,7 +3,7 @@ use crate::{
   group::cmd::{GroupCommand, GroupCommandSender},
 };
 use collab::entity::EncodedCollab;
-use collab_rt_entity::{user::RealtimeUser, ClientCollabMessage};
+use collab_rt_entity::ClientCollabMessage;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tracing::error;
@@ -17,8 +17,7 @@ pub enum CollaborationCommand {
     object_id: String,
     ret: EncodeCollabSender,
   },
-  SendEncodeCollab {
-    user: RealtimeUser,
+  ServerSendCollabMessage {
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,
     ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
@@ -51,16 +50,14 @@ pub(crate) fn spawn_collaboration_command(
             },
           }
         },
-        CollaborationCommand::SendEncodeCollab {
-          user,
+        CollaborationCommand::ServerSendCollabMessage {
           object_id,
           collab_messages,
           ret,
-        } => match group_sender_by_object_id.get(&object_id) {
-          Some(sender) => {
+        } => {
+          if let Some(sender) = group_sender_by_object_id.get(&object_id) {
             if let Err(err) = sender
-              .send(GroupCommand::HandleClientCollabMessage {
-                user,
+              .send(GroupCommand::HandleServerCollabMessage {
                 object_id,
                 collab_messages,
                 ret,
@@ -69,8 +66,7 @@ pub(crate) fn spawn_collaboration_command(
             {
               tracing::error!("Send group command error: {}", err);
             };
-          },
-          None => tracing::info!("No group sender for object_id: {}", object_id),
+          }
         },
       }
     }

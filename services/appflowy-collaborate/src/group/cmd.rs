@@ -4,7 +4,6 @@ use std::sync::Arc;
 use async_stream::stream;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab_rt_entity::user::SERVER_DEVICE_ID;
 use dashmap::DashMap;
 use futures_util::StreamExt;
 use tracing::{instrument, trace, warn};
@@ -22,6 +21,7 @@ use crate::group::manager::GroupManager;
 /// Using [GroupCommand] to interact with the group
 /// - HandleClientCollabMessage: Handle the client message
 /// - EncodeCollab: Encode the collab
+/// - HandleServerCollabMessage: Handle the server message
 pub enum GroupCommand {
   HandleClientCollabMessage {
     user: RealtimeUser,
@@ -32,6 +32,11 @@ pub enum GroupCommand {
   EncodeCollab {
     object_id: String,
     ret: tokio::sync::oneshot::Sender<Option<EncodedCollab>>,
+  },
+  HandleServerCollabMessage {
+    object_id: String,
+    collab_messages: Vec<ClientCollabMessage>,
+    ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
   },
 }
 
@@ -75,19 +80,9 @@ where
             collab_messages,
             ret,
           } => {
-            let result = match user.device_id.as_str() {
-              SERVER_DEVICE_ID => {
-                self
-                  .handle_server_collab_messages(&user, object_id, collab_messages)
-                  .await
-              },
-              _ => {
-                self
-                  .handle_client_collab_message(&user, object_id, collab_messages)
-                  .await
-              },
-            };
-
+            let result = self
+              .handle_client_collab_message(&user, object_id, collab_messages)
+              .await;
             if let Err(err) = ret.send(result) {
               warn!("Send handle client collab message result fail: {:?}", err);
             }
@@ -99,6 +94,18 @@ where
               Some(group) => ret.send(group.encode_collab().await.ok()),
             } {
               warn!("Send encode collab fail");
+            }
+          },
+          GroupCommand::HandleServerCollabMessage {
+            object_id,
+            collab_messages,
+            ret,
+          } => {
+            let res = self
+              .handle_server_collab_messages(object_id, collab_messages)
+              .await;
+            if let Err(err) = ret.send(res) {
+              warn!("Send handle server collab message result fail: {:?}", err);
             }
           },
         }
@@ -186,7 +193,6 @@ where
   #[instrument(level = "trace", skip_all)]
   async fn handle_server_collab_messages(
     &self,
-    user: &RealtimeUser,
     object_id: String,
     messages: Vec<ClientCollabMessage>,
   ) -> Result<(), RealtimeError> {
@@ -195,21 +201,32 @@ where
       return Ok(());
     }
 
+    let server_rt_user = RealtimeUser {
+      uid: 0,
+      device_id: "server".to_string(),
+      connect_at: chrono::Utc::now().timestamp_millis(),
+      session_id: uuid::Uuid::new_v4().to_string(),
+      app_version: "".to_string(),
+    };
+
     if let Some(group) = self.group_manager.get_group(&object_id).await {
       let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
       let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
       group
         .subscribe(
-          user,
+          &server_rt_user,
           CollabOrigin::Server,
           collab_message_sender,
           message_by_oid_receiver,
         )
         .await;
-      let message = HashMap::from([(object_id, messages)]);
-      match message_by_oid_sender.try_send(message) {
-        Ok(()) => tracing::info!("sent message to group"),
-        Err(err) => tracing::error!("failed to send message to group: {}", err),
+      let message = HashMap::from([(object_id.clone(), messages)]);
+      if let Err(err) = message_by_oid_sender.try_send(message) {
+        tracing::error!(
+          "failed to send message to group: {}, object_id: {}",
+          err,
+          object_id
+        );
       }
     };
 

@@ -7,6 +7,7 @@ use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
+use gotrue::grant::{Grant, PasswordGrant};
 
 use crate::api::chat::chat_scope;
 use crate::api::history::history_scope;
@@ -327,6 +328,17 @@ async fn setup_admin_account(
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.expose_secret();
   let gotrue_admin = GoTrueAdmin::new(admin_email.to_owned(), password.to_owned());
+
+  match gotrue_client
+    .token(&Grant::Password(PasswordGrant {
+      email: admin_email.to_owned(),
+      password: password.clone(),
+    }))
+    .await
+  {
+    Ok(_token) => return Ok(gotrue_admin),
+    Err(err) => tracing::warn!("Failed to get token: {:?}", err),
+  };
 
   let res_resp = gotrue_client.sign_up(admin_email, password, None).await;
   match res_resp {

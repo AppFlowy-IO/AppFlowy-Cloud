@@ -2,8 +2,8 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use collab::lock::Mutex;
 use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 use tokio::time::{sleep_until, Instant};
 use tracing::{error, trace};
 

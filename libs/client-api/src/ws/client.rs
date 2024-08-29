@@ -4,7 +4,6 @@ use std::fmt::Display;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use collab::lock::Mutex;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
@@ -12,6 +11,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use semver::Version;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::oneshot;
+use tokio::sync::Mutex;
 use tracing::{error, info, trace, warn};
 
 use client_websocket::{CloseCode, CloseFrame, Message, WebSocketStream};

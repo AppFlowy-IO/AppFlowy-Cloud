@@ -3,7 +3,9 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use collab::preclude::Collab;
+use collab_document::blocks::DocumentData;
 use collab_document::document::DocumentBody;
+use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 
 use app_error::AppError;
@@ -35,27 +37,30 @@ impl Indexer for DocumentIndexer {
         object_id
       )
     })?;
-    let document_data = document
-      .get_document_data(&collab.transact())
-      .map_err(|err| {
-        anyhow!(
-          "Failed to get document data from collab `{}`: {}",
-          object_id,
-          err
-        )
-      })?;
-    let content = document_data.to_plain_text();
 
-    let plain_text_param = AFCollabEmbeddingParams {
-      fragment_id: object_id.clone(),
-      object_id: object_id.clone(),
-      collab_type: CollabType::Document,
-      content_type: EmbeddingContentType::PlainText,
-      content,
-      embedding: None,
-    };
+    let result = document.get_document_data(&collab.transact());
+    match result {
+      Ok(document_data) => {
+        let content = document_data.to_plain_text();
+        let plain_text_param = AFCollabEmbeddingParams {
+          fragment_id: object_id.clone(),
+          object_id: object_id.clone(),
+          collab_type: CollabType::Document,
+          content_type: EmbeddingContentType::PlainText,
+          content,
+          embedding: None,
+        };
 
-    Ok(vec![plain_text_param])
+        Ok(vec![plain_text_param])
+      },
+      Err(err) => {
+        return if matches!(err, DocumentError::NoRequiredData) {
+          Ok(vec![])
+        } else {
+          Err(AppError::Internal(err.into()))
+        }
+      },
+    }
   }
 
   async fn embeddings(

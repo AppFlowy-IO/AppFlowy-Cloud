@@ -1,12 +1,15 @@
-use client_websocket::Message;
-use collab_rt_entity::RealtimeMessage;
-use collab_rt_entity::{ClientCollabMessage, MsgId};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::sync::{mpsc, Mutex};
+
+use collab::lock::Mutex;
+use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 use tracing::{error, trace};
+
+use client_websocket::Message;
+use collab_rt_entity::RealtimeMessage;
+use collab_rt_entity::{ClientCollabMessage, MsgId};
 
 pub type AggregateMessagesSender = mpsc::Sender<Message>;
 pub type AggregateMessagesReceiver = mpsc::Receiver<Message>;

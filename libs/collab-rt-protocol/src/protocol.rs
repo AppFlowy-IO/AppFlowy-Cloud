@@ -65,9 +65,8 @@ impl CollabSyncProtocol for ClientSyncProtocol {
             update.missing.is_empty()
           );
         }
-        let state_vector_v1 = txn.state_vector().encode_v1();
         Err(RTProtocolError::MissUpdates {
-          state_vector_v1: Some(state_vector_v1),
+          state_vector_v1: None,
           reason: "client miss updates".to_string(),
         })
       },

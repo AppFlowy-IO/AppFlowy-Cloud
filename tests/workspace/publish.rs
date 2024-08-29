@@ -808,7 +808,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
         PublishCollabItem {
           meta: PublishCollabMetadata {
             view_id: view_of_grid_1_view_id,
-            publish_name: view_of_grid_1_metadata.view.name.clone().replace(" ", "-"),
+            publish_name: view_of_grid_1_metadata.view.name.replace(' ', "-"),
             metadata: view_of_grid_1_metadata.clone(),
           },
           data: view_of_grid_1_db_data,

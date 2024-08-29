@@ -6,10 +6,10 @@ use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use collab::core::origin::CollabOrigin;
+use collab::lock::RwLock;
 use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use tokio::select;
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, trace, warn};
 use yrs::encoding::read::Cursor;

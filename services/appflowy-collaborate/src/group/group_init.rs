@@ -6,11 +6,12 @@ use std::time::Duration;
 
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
+use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tracing::{error, event, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use collab::lock::RwLock;
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
 use collab::preclude::{Collab, CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab_entity::CollabType;
 use serde_json::Value;
 use sqlx::PgPool;
-use tokio::sync::RwLock;
 use tracing::trace;
 
 use database::history::ops::get_snapshot_meta_list;

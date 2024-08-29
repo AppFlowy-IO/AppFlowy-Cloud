@@ -5,12 +5,12 @@ pub use anyhow::Result;
 use async_trait::async_trait;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
+use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{
   timestamp, Folder, FolderData, RepeatedViewIdentifier, ViewIdentifier, ViewLayout, Workspace,
 };
-use tokio::sync::RwLock;
 
 use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 
@@ -91,7 +91,7 @@ impl WorkspaceTemplateBuilder {
   }
 
   pub async fn build(&self) -> Result<Vec<TemplateData>> {
-    let workspace_view_builder = Arc::new(RwLock::new(WorkspaceViewBuilder::new(
+    let workspace_view_builder = Arc::new(RwLock::from(WorkspaceViewBuilder::new(
       self.workspace_id.clone(),
       self.uid,
     )));

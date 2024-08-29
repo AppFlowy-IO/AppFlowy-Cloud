@@ -4,10 +4,10 @@ use std::time::Duration;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::error::CollabError;
+use collab::lock::RwLock;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
-use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{error, trace};
 

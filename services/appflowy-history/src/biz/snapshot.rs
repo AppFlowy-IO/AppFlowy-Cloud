@@ -2,10 +2,10 @@ use std::ops::Deref;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Weak};
 
+use collab::lock::{Mutex, RwLock};
 use collab::preclude::updates::encoder::Encode;
 use collab::preclude::{Collab, ReadTxn, Snapshot, StateVector};
 use collab_entity::CollabType;
-use tokio::sync::{Mutex, RwLock};
 use tracing::{trace, warn};
 
 use tonic_proto::history::SnapshotMetaPb;

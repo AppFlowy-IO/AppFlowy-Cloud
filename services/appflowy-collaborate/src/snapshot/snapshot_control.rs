@@ -1,28 +1,29 @@
-use crate::metrics::CollabMetrics;
-use crate::snapshot::cache::SnapshotCache;
-use crate::snapshot::queue::PendingQueue;
-use crate::state::RedisConnectionManager;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
 use anyhow::anyhow;
-use app_error::AppError;
 use async_stream::stream;
+use chrono::{DateTime, Utc};
+use collab::lock::{Mutex, RwLock};
+use futures_util::StreamExt;
+use sqlx::PgPool;
+use tokio::time::interval;
+use tracing::{debug, error, trace, warn};
+use validator::Validate;
+
+use app_error::AppError;
+use collab_rt_protocol::validate_encode_collab;
 use database::collab::{
   create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, latest_snapshot_time,
   select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
 };
 use database_entity::dto::{AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData};
-use futures_util::StreamExt;
 
-use chrono::{DateTime, Utc};
-
-use collab_rt_protocol::validate_encode_collab;
-use sqlx::PgPool;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::{Mutex, RwLock};
-use tokio::time::interval;
-use tracing::{debug, error, trace, warn};
-use validator::Validate;
+use crate::metrics::CollabMetrics;
+use crate::snapshot::cache::SnapshotCache;
+use crate::snapshot::queue::PendingQueue;
+use crate::state::RedisConnectionManager;
 
 pub type SnapshotCommandReceiver = tokio::sync::mpsc::Receiver<SnapshotCommand>;
 pub type SnapshotCommandSender = tokio::sync::mpsc::Sender<SnapshotCommand>;
@@ -48,7 +49,7 @@ impl SnapshotControl {
     pg_pool: PgPool,
     collab_metrics: Arc<CollabMetrics>,
   ) -> Self {
-    let redis_client = Arc::new(Mutex::new(redis_client));
+    let redis_client = Arc::new(Mutex::from(redis_client));
     let (command_sender, rx) = tokio::sync::mpsc::channel(2000);
     let cache = SnapshotCache::new(redis_client);
 
@@ -199,7 +200,7 @@ impl SnapshotCommandRunner {
     let queue = PendingQueue::new();
     Self {
       pg_pool,
-      queue: RwLock::new(queue),
+      queue: RwLock::from(queue),
       cache,
       recv: Some(recv),
       success_attempts: Default::default(),

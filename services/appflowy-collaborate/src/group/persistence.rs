@@ -2,9 +2,10 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use anyhow::anyhow;
+use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::{validate_data_for_folder, CollabType};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio::time::interval;
 use tracing::{trace, warn};
 
@@ -123,9 +124,15 @@ where
     };
 
     let params = {
-      let lock = collab.read().await;
-      let mut params = get_encode_collab(&workspace_id, &object_id, &lock, &collab_type)?;
+      let cloned_collab = collab.clone();
+      let (workspace_id, mut params, object_id) = tokio::task::spawn_blocking(move || {
+        let collab = cloned_collab.blocking_read();
+        let params = get_encode_collab(&workspace_id, &object_id, &collab, &collab_type)?;
+        Ok::<_, AppError>((workspace_id, params, object_id))
+      })
+      .await??;
 
+      let lock = collab.read().await;
       if let Some(indexer) = &self.indexer {
         match indexer.embedding_params(&lock) {
           Ok(embedding_params) => {

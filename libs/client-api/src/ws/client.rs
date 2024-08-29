@@ -1,27 +1,29 @@
-use futures_util::{SinkExt, StreamExt};
-use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
-
-use futures_util::stream::{SplitSink, SplitStream};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use semver::Version;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::sync::broadcast::{channel, Receiver, Sender};
 
-use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
-use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
-use crate::ServerFixIntervalPing;
-use crate::{af_spawn, retry_connect};
+use futures_util::stream::{SplitSink, SplitStream};
+use futures_util::{SinkExt, StreamExt};
+use parking_lot::RwLock;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use semver::Version;
+use tokio::sync::broadcast::{channel, Receiver, Sender};
+use tokio::sync::oneshot;
+use tokio::sync::Mutex;
+use tracing::{error, info, trace, warn};
+
 use client_websocket::{CloseCode, CloseFrame, Message, WebSocketStream};
 use collab_rt_entity::user::UserMessage;
 use collab_rt_entity::ClientCollabMessage;
 use collab_rt_entity::ServerCollabMessage;
 use collab_rt_entity::{RealtimeMessage, SystemMessage};
-use tokio::sync::{oneshot, Mutex};
-use tracing::{error, info, trace, warn};
+
+use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
+use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
+use crate::ServerFixIntervalPing;
+use crate::{af_spawn, retry_connect};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -91,7 +93,7 @@ impl WSClient {
     let (ws_msg_sender, _) = channel(config.buffer_capacity);
     let state_notify = Arc::new(parking_lot::Mutex::new(ConnectStateNotify::new()));
     let channels = Arc::new(RwLock::new(HashMap::new()));
-    let ping = Arc::new(Mutex::new(None));
+    let ping = Arc::new(Mutex::from(None));
     let http_sender = Arc::new(http_sender);
     let (user_channel, _) = channel(1);
     let (rt_msg_sender, _) = channel(config.buffer_capacity);
@@ -106,7 +108,7 @@ impl WSClient {
       user_channel: Arc::new(user_channel),
       channels,
       ping,
-      stop_ws_msg_loop_tx: Mutex::new(None),
+      stop_ws_msg_loop_tx: Mutex::from(None),
       aggregate_queue,
 
       #[cfg(debug_assertions)]

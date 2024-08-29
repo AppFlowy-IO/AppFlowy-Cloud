@@ -4,9 +4,9 @@ use std::time::Duration;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
+use collab::lock::{Mutex, RwLock};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use tokio::sync::{Mutex, RwLock};
 use tracing::{error, instrument, trace};
 
 use access_control::collab::RealtimeAccessControl;
@@ -22,7 +22,6 @@ use database_entity::dto::QueryCollabParams;
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::group_init::CollabGroup;
-
 use crate::group::state::GroupManagementState;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
@@ -61,7 +60,7 @@ where
       .collab_control_stream(CONTROL_STREAM_KEY, "collaboration")
       .await
       .map_err(|err| RealtimeError::Internal(err.into()))?;
-    let control_event_stream = Arc::new(Mutex::new(control_event_stream));
+    let control_event_stream = Arc::new(Mutex::from(control_event_stream));
     Ok(Self {
       state: GroupManagementState::new(metrics_calculate.clone()),
       storage,
@@ -195,7 +194,7 @@ where
       };
 
       collab.initialize();
-      let collab = Arc::new(RwLock::new(collab));
+      let collab = Arc::new(RwLock::from(collab));
       (collab, encode_collab)
     };
 

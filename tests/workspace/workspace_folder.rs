@@ -9,6 +9,6 @@ async fn get_workpace_folder() {
 
   let folder_view = c.get_workspace_folder(&workspace_id, None).await.unwrap();
   assert_eq!(folder_view.name, "Workspace");
-  assert_eq!(folder_view.children[0].name, "Getting started");
+  assert_eq!(folder_view.children[0].name, "General");
   assert_eq!(folder_view.children[0].children.len(), 0);
 }

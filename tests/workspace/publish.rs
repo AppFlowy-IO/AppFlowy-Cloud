@@ -1,3 +1,6 @@
+use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
+use collab_entity::CollabType;
+use collab_folder::{CollabOrigin, Folder};
 use shared_entity::dto::publish_dto::PublishViewMetaData;
 use shared_entity::dto::workspace_dto::PublishedDuplicate;
 use std::collections::HashMap;
@@ -5,7 +8,9 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use app_error::ErrorCode;
-use client_api::entity::{AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata};
+use client_api::entity::{
+  AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabParams,
+};
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use itertools::Itertools;
@@ -819,8 +824,14 @@ async fn duplicate_to_workspace_doc_inline_database() {
     .unwrap();
 
   {
-    let client_2 = TestClient::new_user().await;
+    let mut client_2 = TestClient::new_user().await;
     let workspace_id_2 = client_2.workspace_id().await;
+
+    // Open workspace to trigger group creation
+    client_2
+      .open_collab(&workspace_id_2, &workspace_id_2, CollabType::Folder)
+      .await;
+
     let fv = client_2
       .api_client
       .get_workspace_folder(&workspace_id_2, Some(5))
@@ -846,26 +857,66 @@ async fn duplicate_to_workspace_doc_inline_database() {
       .await
       .unwrap();
 
-    let fv = client_2
-      .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
-      .await
+    {
+      let fv = client_2
+        .api_client
+        .get_workspace_folder(&workspace_id_2, Some(5))
+        .await
+        .unwrap();
+      let doc_3_fv = fv
+        .children
+        .into_iter()
+        .find(|v| v.name == doc_3_metadata.view.name)
+        .unwrap();
+      let grid1_fv = doc_3_fv
+        .children
+        .into_iter()
+        .find(|v| v.name == "grid1")
+        .unwrap();
+      let _view_of_grid1_fv = grid1_fv
+        .children
+        .into_iter()
+        .find(|v| v.name == "View of grid1")
+        .unwrap();
+    }
+
+    {
+      let collab_resp = client_2
+        .get_collab(QueryCollabParams {
+          workspace_id: workspace_id_2.clone(),
+          inner: QueryCollab {
+            object_id: workspace_id_2.clone(),
+            collab_type: CollabType::Folder,
+          },
+        })
+        .await
+        .unwrap();
+
+      let folder = Folder::from_collab_doc_state(
+        client_2.uid().await,
+        CollabOrigin::Server,
+        collab_resp.encode_collab.into(),
+        &workspace_id_2,
+        vec![],
+      )
       .unwrap();
 
-    let doc_3_fv = fv
-      .children
-      .into_iter()
-      .find(|v| v.name == doc_3_metadata.view.name)
-      .unwrap();
-    let grid1_fv = doc_3_fv
-      .children
-      .into_iter()
-      .find(|v| v.name == "grid1")
-      .unwrap();
-    let _view_of_grid1_fv = grid1_fv
-      .children
-      .into_iter()
-      .find(|v| v.name == "View of grid1")
-      .unwrap();
+      let folder_view = collab_folder_to_folder_view(&folder, 5);
+      let doc_3_fv = folder_view
+        .children
+        .into_iter()
+        .find(|v| v.name == doc_3_metadata.view.name)
+        .unwrap();
+      let grid1_fv = doc_3_fv
+        .children
+        .into_iter()
+        .find(|v| v.name == "grid1")
+        .unwrap();
+      let _view_of_grid1_fv = grid1_fv
+        .children
+        .into_iter()
+        .find(|v| v.name == "View of grid1")
+        .unwrap();
+    }
   }
 }

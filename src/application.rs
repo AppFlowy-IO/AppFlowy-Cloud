@@ -7,6 +7,7 @@ use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
+use gotrue::grant::{Grant, PasswordGrant};
 
 use crate::api::chat::chat_scope;
 use crate::api::history::history_scope;

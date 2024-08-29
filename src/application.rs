@@ -329,6 +329,17 @@ async fn setup_admin_account(
   let password = gotrue_setting.admin_password.expose_secret();
   let gotrue_admin = GoTrueAdmin::new(admin_email.to_owned(), password.to_owned());
 
+  match gotrue_client
+    .token(&Grant::Password(PasswordGrant {
+      email: admin_email.to_owned(),
+      password: password.clone(),
+    }))
+    .await
+  {
+    Ok(_token) => return Ok(gotrue_admin),
+    Err(err) => tracing::warn!("Failed to get token: {:?}", err),
+  };
+
   let res_resp = gotrue_client.sign_up(admin_email, password, None).await;
   match res_resp {
     Err(err) => {

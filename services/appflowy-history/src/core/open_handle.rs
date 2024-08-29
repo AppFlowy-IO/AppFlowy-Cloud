@@ -183,9 +183,15 @@ async fn process_messages(
   _object_id: &str,
   _collab_type: &CollabType,
 ) -> Result<(), HistoryError> {
-  let mut lock = collab.write().await;
-  apply_updates(&messages, &mut lock)?;
-  drop(lock);
+  let cloned_message = messages.clone();
+  tokio::task::spawn_blocking(move || {
+    let mut lock = collab.blocking_write();
+    apply_updates(&cloned_message, &mut lock)?;
+    drop(lock);
+    Ok::<_, HistoryError>(())
+  })
+  .await
+  .map_err(|e| HistoryError::Internal(e.into()))??;
   update_stream.ack_messages(&messages).await?;
   Ok(())
 }

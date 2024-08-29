@@ -2245,6 +2245,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "bytes",
  "chrono",
  "collab-entity",
  "futures",

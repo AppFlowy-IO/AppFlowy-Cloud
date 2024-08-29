@@ -1,9 +1,9 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 
+use collab::lock::RwLock;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;
-use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{error, trace};
 use yrs::TransactionMut;

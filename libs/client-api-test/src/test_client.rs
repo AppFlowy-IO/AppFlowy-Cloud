@@ -13,6 +13,7 @@ use collab::core::collab::DataSource;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
+use collab::lock::{Mutex, RwLock};
 use collab::preclude::{Collab, Prelim};
 use collab_entity::CollabType;
 use collab_folder::Folder;
@@ -20,7 +21,6 @@ use collab_user::core::UserAwareness;
 use mime::Mime;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing::trace;
@@ -583,7 +583,7 @@ impl TestClient {
       .await
       .unwrap();
 
-    let collab = Arc::new(RwLock::new(collab)) as CollabRef;
+    let collab = Arc::new(RwLock::from(collab)) as CollabRef;
     #[cfg(feature = "collab-sync")]
     {
       let handler = self
@@ -655,7 +655,7 @@ impl TestClient {
     )
     .unwrap();
     collab.emit_awareness_state();
-    let collab = Arc::new(RwLock::new(collab)) as CollabRef;
+    let collab = Arc::new(RwLock::from(collab)) as CollabRef;
 
     #[cfg(feature = "collab-sync")]
     {
@@ -818,7 +818,7 @@ pub async fn assert_server_collab(
   let duration = Duration::from_secs(timeout_secs);
   let collab_type = collab_type.clone();
   let object_id = object_id.to_string();
-  let final_json = Arc::new(Mutex::new(json!({})));
+  let final_json = Arc::new(Mutex::from(json!({})));
 
   // Use tokio::time::timeout to apply a timeout to the entire operation
   let cloned_final_json = final_json.clone();

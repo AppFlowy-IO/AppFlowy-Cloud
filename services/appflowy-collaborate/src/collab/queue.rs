@@ -5,17 +5,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, Context};
+use collab::lock::Mutex;
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tokio::sync::Mutex;
 use tokio::time::{interval, sleep, sleep_until, Instant};
 use tracing::{error, instrument, trace, warn};
 
-use crate::collab::cache::CollabCache;
 use app_error::AppError;
 use database_entity::dto::{AFCollabEmbeddings, CollabParams, QueryCollab, QueryCollabResult};
 
+use crate::collab::cache::CollabCache;
 use crate::collab::queue_redis_ops::{
   get_pending_meta, remove_pending_meta, storage_cache_key, PendingWrite, WritePriority,
   PENDING_WRITE_META_EXPIRE_SECS,
@@ -52,7 +52,7 @@ impl StorageQueue {
     queue_name: &str,
     metrics: Option<Arc<CollabMetrics>>,
   ) -> Self {
-    let next_duration = Arc::new(Mutex::new(Duration::from_secs(1)));
+    let next_duration = Arc::new(Mutex::from(Duration::from_secs(1)));
     let pending_id_counter = Arc::new(AtomicI64::new(0));
     let pending_write_set = Arc::new(RedisSortedSet::new(connection_manager.clone(), queue_name));
 

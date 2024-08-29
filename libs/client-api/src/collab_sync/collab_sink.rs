@@ -1,20 +1,23 @@
-use crate::af_spawn;
-use crate::collab_sync::collab_stream::SeqNumCounter;
-
-use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
-use anyhow::Error;
-use collab::core::origin::{CollabClient, CollabOrigin};
-use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
-use futures_util::SinkExt;
 use std::collections::BinaryHeap;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
-use tokio::sync::{broadcast, watch, Mutex};
+
+use anyhow::Error;
+use collab::core::origin::{CollabClient, CollabOrigin};
+use collab::lock::Mutex;
+use futures_util::SinkExt;
+use tokio::sync::{broadcast, watch};
 use tokio::time::{interval, sleep};
 use tracing::{error, trace, warn};
+
+use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
+
+use crate::af_spawn;
+use crate::collab_sync::collab_stream::SeqNumCounter;
+use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
 
 pub(crate) const SEND_INTERVAL: Duration = Duration::from_secs(8);
 pub const COLLAB_SINK_DELAY_MILLIS: u64 = 500;
@@ -63,7 +66,7 @@ where
     config: SinkConfig,
   ) -> Self {
     let notifier = Arc::new(notifier);
-    let sender = Arc::new(Mutex::new(sink));
+    let sender = Arc::new(Mutex::from(sink));
     let message_queue = Arc::new(parking_lot::Mutex::new(SinkQueue::new()));
     let sending_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
     let state = Arc::new(CollabSinkState::new());
@@ -513,7 +516,7 @@ impl SyncTimestamp {
   fn new() -> Self {
     let now = Instant::now();
     SyncTimestamp {
-      last_sync: Mutex::new(now.checked_sub(Duration::from_secs(60)).unwrap_or(now)),
+      last_sync: Mutex::from(now.checked_sub(Duration::from_secs(60)).unwrap_or(now)),
     }
   }
 

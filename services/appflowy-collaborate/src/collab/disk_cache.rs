@@ -77,7 +77,7 @@ impl CollabDiskCache {
     query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
     event!(
-      Level::INFO,
+      Level::DEBUG,
       "try get {}:{} from disk",
       query.collab_type,
       query.object_id

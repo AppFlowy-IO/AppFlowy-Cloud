@@ -19,7 +19,7 @@ use database::collab::CollabStorage;
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::connect_state::ConnectState;
-use crate::error::RealtimeError;
+use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
@@ -228,7 +228,14 @@ where
           {
             Ok(_) => {
               if let Ok(Err(err)) = rx.await {
-                error!("Handle client collab message fail: {}", err);
+                if !matches!(
+                  err,
+                  RealtimeError::CreateGroupFailed(
+                    CreateGroupFailedReason::CollabWorkspaceIdNotMatch { .. }
+                  )
+                ) {
+                  error!("Handle client collab message fail: {}", err);
+                }
               }
             },
             Err(err) => {

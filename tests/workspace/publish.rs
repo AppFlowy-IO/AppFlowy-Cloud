@@ -1,9 +1,16 @@
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
+use appflowy_cloud::biz::workspace::publish_dup::{
+  collab_from_doc_state, get_database_id_from_collab,
+};
+use collab::util::MapExt;
+use collab_database::views::ViewMap;
+use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
+use shared_entity::dto::publish_dto::PublishDatabaseData;
 use shared_entity::dto::publish_dto::PublishViewMetaData;
 use shared_entity::dto::workspace_dto::PublishedDuplicate;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -767,16 +774,21 @@ async fn duplicate_to_workspace_references() {
       .into_iter()
       .find(|v| v.name == doc_2_metadata.view.name)
       .unwrap();
+    assert_ne!(doc_2_fv.view_id, doc_1_view_id.to_string());
+
     let doc_1_fv = doc_2_fv
       .children
       .into_iter()
       .find(|v| v.name == doc_1_metadata.view.name)
       .unwrap();
-    let _grid_1_fv = doc_1_fv
+    assert_ne!(doc_1_fv.view_id, doc_1_view_id.to_string());
+
+    let grid_1_fv = doc_1_fv
       .children
       .into_iter()
       .find(|v| v.name == grid_1_metadata.view.name)
       .unwrap();
+    assert_eq!(grid_1_fv.view_id, grid_1_view_id.to_string());
   }
 }
 
@@ -796,6 +808,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
   let view_of_grid_1_metadata: PublishViewMetaData =
     serde_json::from_str(published_data::VIEW_OF_GRID1_META).unwrap();
   let view_of_grid_1_db_data = hex::decode(published_data::VIEW_OF_GRID_1_DB_DATA).unwrap();
+  let (pub_db_id, pub_row_ids) = get_database_id_and_row_ids(&view_of_grid_1_db_data);
 
   client_1
     .api_client
@@ -880,43 +893,102 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .unwrap();
     }
 
+    let collab_resp = client_2
+      .get_collab(QueryCollabParams {
+        workspace_id: workspace_id_2.clone(),
+        inner: QueryCollab {
+          object_id: workspace_id_2.clone(),
+          collab_type: CollabType::Folder,
+        },
+      })
+      .await
+      .unwrap();
+
+    let folder = Folder::from_collab_doc_state(
+      client_2.uid().await,
+      CollabOrigin::Server,
+      collab_resp.encode_collab.into(),
+      &workspace_id_2,
+      vec![],
+    )
+    .unwrap();
+
+    let folder_view = collab_folder_to_folder_view(&folder, 5);
+    let doc_3_fv = folder_view
+      .children
+      .into_iter()
+      .find(|v| v.name == doc_3_metadata.view.name)
+      .unwrap();
+    assert_ne!(doc_3_fv.view_id, doc_3_view_id.to_string());
+
+    let grid1_fv = doc_3_fv
+      .children
+      .into_iter()
+      .find(|v| v.name == "grid1")
+      .unwrap();
+    assert_ne!(grid1_fv.view_id, view_of_grid_1_view_id.to_string());
+
+    let view_of_grid1_fv = grid1_fv
+      .children
+      .into_iter()
+      .find(|v| v.name == "View of grid1")
+      .unwrap();
+    println!("{:#?}", view_of_grid1_fv);
+    assert_ne!(view_of_grid1_fv.view_id, view_of_grid_1_view_id.to_string());
+
     {
-      let collab_resp = client_2
+      // check that database_id is different
+      let mut ws_db_collab = client_2
+        .get_workspace_database_collab(&workspace_id_2)
+        .await;
+      let ws_db_body = WorkspaceDatabaseBody::new(&mut ws_db_collab);
+      let txn = ws_db_collab.transact();
+      let dup_grid1_db_id = ws_db_body
+        .get_all_database_meta(&txn)
+        .into_iter()
+        .find(|db_meta| db_meta.linked_views.contains(&view_of_grid1_fv.view_id))
+        .unwrap()
+        .database_id;
+      let db_collab_collab_resp = client_2
         .get_collab(QueryCollabParams {
-          workspace_id: workspace_id_2.clone(),
+          workspace_id: workspace_id_2,
           inner: QueryCollab {
-            object_id: workspace_id_2.clone(),
-            collab_type: CollabType::Folder,
+            object_id: dup_grid1_db_id,
+            collab_type: CollabType::Database,
           },
         })
         .await
         .unwrap();
+      let db_doc_state = db_collab_collab_resp.encode_collab.doc_state;
+      let db_collab = collab_from_doc_state(db_doc_state.to_vec(), "").unwrap();
+      let dup_db_id = get_database_id_from_collab(&db_collab).unwrap();
+      assert_ne!(dup_db_id, pub_db_id);
 
-      let folder = Folder::from_collab_doc_state(
-        client_2.uid().await,
-        CollabOrigin::Server,
-        collab_resp.encode_collab.into(),
-        &workspace_id_2,
-        vec![],
-      )
-      .unwrap();
+      let view_map = {
+        let map_ref = db_collab
+          .data
+          .get_with_path(&txn, ["database", "views"])
+          .unwrap();
+        ViewMap::new(map_ref, tokio::sync::broadcast::channel(1).0)
+      };
 
-      let folder_view = collab_folder_to_folder_view(&folder, 5);
-      let doc_3_fv = folder_view
-        .children
-        .into_iter()
-        .find(|v| v.name == doc_3_metadata.view.name)
-        .unwrap();
-      let grid1_fv = doc_3_fv
-        .children
-        .into_iter()
-        .find(|v| v.name == "grid1")
-        .unwrap();
-      let _view_of_grid1_fv = grid1_fv
-        .children
-        .into_iter()
-        .find(|v| v.name == "View of grid1")
-        .unwrap();
+      for db_view in view_map.get_all_views(&txn) {
+        assert_eq!(db_view.database_id, dup_db_id);
+        for row_order in db_view.row_orders {
+          assert!(
+            !pub_row_ids.contains(row_order.id.as_str()),
+            "published row id is same as duplicated row id"
+          );
+        }
+      }
     }
   }
+}
+
+fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<String>) {
+  let pub_db_data = serde_json::from_slice::<PublishDatabaseData>(published_db_blob).unwrap();
+  let db_collab = collab_from_doc_state(pub_db_data.database_collab, "").unwrap();
+  let pub_db_id = get_database_id_from_collab(&db_collab).unwrap();
+  let row_ids: HashSet<String> = pub_db_data.database_row_collabs.into_keys().collect();
+  (pub_db_id, row_ids)
 }

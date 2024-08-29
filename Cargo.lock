@@ -2015,6 +2015,7 @@ dependencies = [
  "client-api",
  "client-websocket",
  "collab",
+ "collab-database",
  "collab-document",
  "collab-entity",
  "collab-folder",

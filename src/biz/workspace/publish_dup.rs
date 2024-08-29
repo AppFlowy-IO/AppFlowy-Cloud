@@ -4,7 +4,6 @@ use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 
 use collab::preclude::MapExt;
-use collab_database::database::DatabaseBody;
 use collab_database::views::ViewMap;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::blocks::DocumentData;
@@ -622,7 +621,7 @@ impl PublishCollabDuplicator {
       };
 
       // create new database views based on published views
-      let mut db_views = view_map.get_all_views(&txn).into_iter().collect::<Vec<_>>();
+      let mut db_views = view_map.get_all_views(&txn);
 
       for db_view in db_views.iter_mut() {
         let new_view_id = if db_view.id == publish_view_id {
@@ -888,7 +887,7 @@ fn add_to_view_info(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[Pu
   }
 }
 
-fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
+pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
   let collab = Collab::new_with_source(
     CollabOrigin::Server,
     object_id,
@@ -900,9 +899,18 @@ fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, 
   Ok(collab)
 }
 
-fn get_database_id_from_collab(db_collab: &Collab) -> Result<String, AppError> {
-  DatabaseBody::database_id_from_collab(db_collab)
-    .ok_or_else(|| AppError::RecordNotFound("no database found in database collab".to_string()))
+pub fn get_database_id_from_collab(db_collab: &Collab) -> Result<String, AppError> {
+  let txn = db_collab.context.transact();
+  let db_map = db_collab
+    .get_with_txn(&txn, "database")
+    .ok_or_else(|| AppError::RecordNotFound("no database found in database collab".to_string()))?
+    .cast::<MapRef>()
+    .map_err(|err| AppError::RecordNotFound(format!("database not a map: {:?}", err)))?;
+  let db_id = db_map
+    .get(&txn, "id")
+    .ok_or_else(|| AppError::RecordNotFound("no id found in database".to_string()))?
+    .to_string(&txn);
+  Ok(db_id)
 }
 
 fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {

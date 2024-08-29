@@ -190,6 +190,31 @@ impl TestClient {
     .unwrap()
   }
 
+  pub async fn get_workspace_database_collab(&mut self, workspace_id: &str) -> Collab {
+    let db_storage_id = self.open_workspace(workspace_id).await.database_storage_id;
+    let ws_db_doc_state = self
+      .get_collab(QueryCollabParams {
+        workspace_id: workspace_id.to_string(),
+        inner: QueryCollab {
+          object_id: db_storage_id.to_string(),
+          collab_type: CollabType::WorkspaceDatabase,
+        },
+      })
+      .await
+      .unwrap()
+      .encode_collab
+      .doc_state
+      .to_vec();
+    Collab::new_with_source(
+      CollabOrigin::Server,
+      &db_storage_id.to_string(),
+      DataSource::DocStateV1(ws_db_doc_state),
+      vec![],
+      false,
+    )
+    .unwrap()
+  }
+
   pub async fn get_user_awareness(&self) -> UserAwareness {
     let workspace_id = self.workspace_id().await;
     let profile = self.get_user_profile().await;

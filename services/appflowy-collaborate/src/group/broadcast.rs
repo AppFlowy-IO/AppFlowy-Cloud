@@ -1,5 +1,4 @@
 use std::borrow::BorrowMut;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 
 use anyhow::anyhow;
@@ -29,7 +28,7 @@ use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use crate::error::RealtimeError;
 use crate::group::group_init::EditState;
 use crate::group::protocol::ServerSyncProtocol;
-use crate::metrics::CollabMetricsCalculate;
+use crate::metrics::CollabRealtimeMetrics;
 
 pub trait CollabUpdateStreaming: 'static + Send + Sync {
   fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError>;
@@ -186,7 +185,7 @@ impl CollabBroadcast {
     mut sink: Sink,
     mut stream: Stream,
     collab: Weak<RwLock<Collab>>,
-    metrics_calculate: CollabMetricsCalculate,
+    metrics_calculate: CollabRealtimeMetrics,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
@@ -283,7 +282,7 @@ async fn handle_client_messages<Sink>(
   message_map: MessageByObjectId,
   sink: &mut Sink,
   collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
-  metrics_calculate: &CollabMetricsCalculate,
+  metrics_calculate: &CollabRealtimeMetrics,
   edit_state: &Arc<EditState>,
 ) where
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
@@ -341,7 +340,7 @@ async fn handle_one_client_message(
   object_id: &str,
   collab_msg: &ClientCollabMessage,
   collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
-  metrics_calculate: &CollabMetricsCalculate,
+  metrics_calculate: &CollabRealtimeMetrics,
   edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
   let msg_id = collab_msg.msg_id();
@@ -386,13 +385,11 @@ async fn handle_one_message_payload(
   msg_id: MsgId,
   payload: &Bytes,
   collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
-  metrics_calculate: &CollabMetricsCalculate,
+  metrics_calculate: &CollabRealtimeMetrics,
   edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
   let payload = payload.clone();
-  metrics_calculate
-    .acquire_collab_lock_count
-    .fetch_add(1, Ordering::Relaxed);
+  metrics_calculate.acquire_collab_lock_count.inc();
 
   // Spawn a blocking task to handle the message
   let result = handle_message(
@@ -422,7 +419,7 @@ async fn handle_message(
   payload: &Bytes,
   message_origin: &CollabOrigin,
   collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
-  metrics_calculate: &CollabMetricsCalculate,
+  metrics_calculate: &CollabRealtimeMetrics,
   object_id: &str,
   msg_id: MsgId,
   edit_state: &Arc<EditState>,
@@ -439,9 +436,7 @@ async fn handle_message(
         match handle_message_follow_protocol(message_origin, &ServerSyncProtocol, collab, msg).await
         {
           Ok(payload) => {
-            metrics_calculate
-              .apply_update_count
-              .fetch_add(1, Ordering::Relaxed);
+            metrics_calculate.apply_update_count.inc();
             // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
             // send one ack back to the client.
             if ack_response.is_none() {
@@ -457,9 +452,7 @@ async fn handle_message(
             }
           },
           Err(err) => {
-            metrics_calculate
-              .apply_update_failed_count
-              .fetch_add(1, Ordering::Relaxed);
+            metrics_calculate.apply_update_failed_count.inc();
             let code = ack_code_from_error(&err);
             let payload = match err {
               RTProtocolError::MissUpdates {

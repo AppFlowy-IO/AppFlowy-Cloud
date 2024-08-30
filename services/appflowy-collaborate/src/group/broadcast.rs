@@ -185,7 +185,7 @@ impl CollabBroadcast {
     mut sink: Sink,
     mut stream: Stream,
     collab: Weak<RwLock<Collab>>,
-    metrics_calculate: CollabRealtimeMetrics,
+    metrics_calculate: Arc<CollabRealtimeMetrics>,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,

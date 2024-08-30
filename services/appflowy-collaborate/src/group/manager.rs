@@ -30,7 +30,7 @@ pub struct GroupManager<S, AC> {
   state: GroupManagementState,
   storage: Arc<S>,
   access_control: Arc<AC>,
-  metrics_calculate: CollabRealtimeMetrics,
+  metrics_calculate: Arc<CollabRealtimeMetrics>,
   collab_redis_stream: Arc<CollabRedisStream>,
   control_event_stream: Arc<Mutex<StreamGroup>>,
   persistence_interval: Duration,
@@ -48,7 +48,7 @@ where
   pub async fn new(
     storage: Arc<S>,
     access_control: Arc<AC>,
-    metrics_calculate: CollabRealtimeMetrics,
+    metrics_calculate: Arc<CollabRealtimeMetrics>,
     collab_stream: CollabRedisStream,
     persistence_interval: Duration,
     edit_state_max_count: u32,

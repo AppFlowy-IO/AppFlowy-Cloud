@@ -24,6 +24,7 @@ use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
+use crate::metrics::spawn_metrics;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 use crate::state::RedisConnectionManager;
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
@@ -37,7 +38,6 @@ pub struct CollaborationServer<S, AC> {
   storage: Arc<S>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
-  metrics_calculate: CollabRealtimeMetrics,
   enable_custom_runtime: bool,
 }
 
@@ -68,7 +68,6 @@ where
       info!("CollaborationServer with actix-web runtime");
     }
 
-    let metrics_calculate = CollabRealtimeMetrics::default();
     let connect_state = ConnectState::new();
     let access_control = Arc::new(access_control);
     let collab_stream = CollabRedisStream::new_with_connection_manager(redis_connection_manager);
@@ -76,7 +75,7 @@ where
       GroupManager::new(
         storage.clone(),
         access_control.clone(),
-        metrics_calculate.clone(),
+        metrics.clone(),
         collab_stream,
         group_persistence_interval,
         edit_state_max_count,
@@ -92,6 +91,8 @@ where
 
     spawn_collaboration_command(command_recv, &group_sender_by_object_id);
 
+    spawn_metrics(metrics.clone(), storage.clone());
+
     spawn_handle_unindexed_collabs(indexer_provider);
 
     Ok(Self {
@@ -100,7 +101,6 @@ where
       connect_state,
       group_sender_by_object_id,
       metrics,
-      metrics_calculate,
       enable_custom_runtime,
     })
   }
@@ -120,7 +120,7 @@ where
     let new_client_router = ClientMessageRouter::new(conn_sink);
     let group_manager = self.group_manager.clone();
     let connect_state = self.connect_state.clone();
-    let metrics_calculate = self.metrics_calculate.clone();
+    let metrics_calculate = self.metrics.clone();
     let storage = self.storage.clone();
 
     Box::pin(async move {
@@ -152,7 +152,7 @@ where
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let group_manager = self.group_manager.clone();
     let connect_state = self.connect_state.clone();
-    let metrics_calculate = self.metrics_calculate.clone();
+    let metrics_calculate = self.metrics.clone();
     let storage = self.storage.clone();
 
     Box::pin(async move {

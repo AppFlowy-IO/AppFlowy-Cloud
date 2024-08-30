@@ -44,7 +44,7 @@ pub struct CollabGroup {
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
-  metrics_calculate: CollabRealtimeMetrics,
+  metrics_calculate: Arc<CollabRealtimeMetrics>,
   destroy_group_tx: mpsc::Sender<Arc<RwLock<Collab>>>,
 }
 
@@ -62,7 +62,7 @@ impl CollabGroup {
     object_id: String,
     collab_type: CollabType,
     collab: Arc<RwLock<Collab>>,
-    metrics_calculate: CollabRealtimeMetrics,
+    metrics_calculate: Arc<CollabRealtimeMetrics>,
     storage: Arc<S>,
     is_new_collab: bool,
     collab_redis_stream: Arc<CollabRedisStream>,

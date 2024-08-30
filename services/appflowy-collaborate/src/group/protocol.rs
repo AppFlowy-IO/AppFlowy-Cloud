@@ -69,44 +69,44 @@ impl CollabSyncProtocol for ServerSyncProtocol {
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     self.metrics.apply_update_size.observe(update.len() as f64);
     let start = Instant::now();
+    let result = {
+      let update = decode_update(update).await?;
+      let mut lock = collab.write().await;
+      let collab = (*lock).borrow_mut();
 
-    let update = decode_update(update).await?;
-    let mut lock = collab.write().await;
-    let collab = (*lock).borrow_mut();
-
-    let mut txn = collab
-      .get_awareness()
-      .doc()
-      .try_transact_mut_with(origin.clone())
-      .map_err(|err| {
-        RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
+      let mut txn = collab
+        .get_awareness()
+        .doc()
+        .try_transact_mut_with(origin.clone())
+        .map_err(|err| {
+          RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
+        })?;
+      txn.try_apply_update(update).map_err(|err| {
+        RTProtocolError::YrsApplyUpdate(format!(
+          "sync step2 apply update: {}\ndocument state: {:#?}",
+          err,
+          txn.store()
+        ))
       })?;
-    txn.try_apply_update(update).map_err(|err| {
-      RTProtocolError::YrsApplyUpdate(format!(
-        "sync step2 apply update: {}\ndocument state: {:#?}",
-        err,
-        txn.store()
-      ))
-    })?;
 
-    // If server can't apply updates sent by client, which means the server is missing some updates
-    // from the client or the client is missing some updates from the server.
-    // If the client can't apply broadcast from server, which means the client is missing some
-    // updates.
-    let result = match txn.store().pending_update() {
-      Some(_update) => {
-        // let state_vector_v1 = update.missing.encode_v1();
-        // for the moment, we don't need to send missing updates to the client. passing None
-        // instead, which will trigger a sync step 0 on client
-        let state_vector_v1 = txn.state_vector().encode_v1();
-        Err(RTProtocolError::MissUpdates {
-          state_vector_v1: Some(state_vector_v1),
-          reason: "server miss updates".to_string(),
-        })
-      },
-      None => Ok(None),
+      // If server can't apply updates sent by client, which means the server is missing some updates
+      // from the client or the client is missing some updates from the server.
+      // If the client can't apply broadcast from server, which means the client is missing some
+      // updates.
+      match txn.store().pending_update() {
+        Some(_update) => {
+          // let state_vector_v1 = update.missing.encode_v1();
+          // for the moment, we don't need to send missing updates to the client. passing None
+          // instead, which will trigger a sync step 0 on client
+          let state_vector_v1 = txn.state_vector().encode_v1();
+          Err(RTProtocolError::MissUpdates {
+            state_vector_v1: Some(state_vector_v1),
+            reason: "server miss updates".to_string(),
+          })
+        },
+        None => Ok(None),
+      }
     };
-    drop(txn);
 
     let elapsed = start.elapsed();
     self

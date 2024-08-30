@@ -2,9 +2,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
+use dashmap::DashMap;
 use dashmap::mapref::one::RefMut;
 use dashmap::try_result::TryResult;
-use dashmap::DashMap;
 use tokio::time::sleep;
 use tracing::{error, event, info, warn};
 

@@ -12,18 +12,18 @@ use tokio::sync::broadcast::{channel, Sender};
 use tokio::time::Instant;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
+use yrs::Subscription as YrsSubscription;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::Subscription as YrsSubscription;
 
-use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
-use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError, SyncMessage};
-use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
+use collab_rt_entity::MessageByObjectId;
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_protocol::{CollabSyncProtocol, Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
+use collab_rt_protocol::{RTProtocolError, SyncMessage};
 
 use crate::error::RealtimeError;
 use crate::group::group_init::EditState;
@@ -279,7 +279,7 @@ async fn handle_client_messages<Sink>(
   message_map: MessageByObjectId,
   sink: &mut Sink,
   collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
-  metrics_calculate: &CollabRealtimeMetrics,
+  metrics_calculate: &Arc<CollabRealtimeMetrics>,
   edit_state: &Arc<EditState>,
 ) where
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
@@ -337,7 +337,7 @@ async fn handle_one_client_message(
   object_id: &str,
   collab_msg: &ClientCollabMessage,
   collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
-  metrics_calculate: &CollabRealtimeMetrics,
+  metrics_calculate: &Arc<CollabRealtimeMetrics>,
   edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
   let msg_id = collab_msg.msg_id();
@@ -382,7 +382,7 @@ async fn handle_one_message_payload(
   msg_id: MsgId,
   payload: &Bytes,
   collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
-  metrics_calculate: &CollabRealtimeMetrics,
+  metrics_calculate: &Arc<CollabRealtimeMetrics>,
   edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
   let payload = payload.clone();
@@ -416,7 +416,7 @@ async fn handle_message(
   payload: &Bytes,
   message_origin: &CollabOrigin,
   collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
-  metrics_calculate: &CollabRealtimeMetrics,
+  metrics_calculate: &Arc<CollabRealtimeMetrics>,
   object_id: &str,
   msg_id: MsgId,
   edit_state: &Arc<EditState>,
@@ -430,7 +430,9 @@ async fn handle_message(
     match msg {
       Ok(msg) => {
         is_sync_step2 = matches!(msg, Message::Sync(SyncMessage::SyncStep2(_)));
-        match handle_message_follow_protocol(message_origin, &ServerSyncProtocol, collab, msg).await
+        match ServerSyncProtocol::new(metrics_calculate)
+          .handle_message(message_origin, collab, msg)
+          .await
         {
           Ok(payload) => {
             metrics_calculate.apply_update_count.inc();

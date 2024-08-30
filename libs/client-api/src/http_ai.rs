@@ -6,6 +6,7 @@ use shared_entity::dto::ai_dto::{
   SummarizeRowResponse, TranslateRowParams, TranslateRowResponse,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
+use std::time::Duration;
 use tracing::instrument;
 
 impl Client {
@@ -46,6 +47,7 @@ impl Client {
       .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&params)
+      .timeout(Duration::from_secs(30))
       .send()
       .await?;
 
@@ -66,6 +68,7 @@ impl Client {
       .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&params)
+      .timeout(Duration::from_secs(30))
       .send()
       .await?;
     log_request_id(&resp);

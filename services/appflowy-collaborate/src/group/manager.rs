@@ -24,13 +24,13 @@ use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
 use crate::indexer::IndexerProvider;
-use crate::metrics::CollabMetricsCalculate;
+use crate::metrics::CollabRealtimeMetrics;
 
 pub struct GroupManager<S, AC> {
   state: GroupManagementState,
   storage: Arc<S>,
   access_control: Arc<AC>,
-  metrics_calculate: CollabMetricsCalculate,
+  metrics_calculate: CollabRealtimeMetrics,
   collab_redis_stream: Arc<CollabRedisStream>,
   control_event_stream: Arc<Mutex<StreamGroup>>,
   persistence_interval: Duration,
@@ -48,7 +48,7 @@ where
   pub async fn new(
     storage: Arc<S>,
     access_control: Arc<AC>,
-    metrics_calculate: CollabMetricsCalculate,
+    metrics_calculate: CollabRealtimeMetrics,
     collab_stream: CollabRedisStream,
     persistence_interval: Duration,
     edit_state_max_count: u32,

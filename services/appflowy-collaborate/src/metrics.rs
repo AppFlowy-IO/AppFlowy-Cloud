@@ -1,24 +1,19 @@
-use database::collab::CollabStorage;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
-use std::sync::atomic::AtomicI64;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::interval;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CollabRealtimeMetrics {
-  connected_users: Gauge,
-  total_success_get_encode_collab_from_redis: Gauge,
-  total_attempt_get_encode_collab_from_redis: Gauge,
-  opening_collab_count: Gauge,
-  num_of_editing_users: Gauge,
+  pub(crate) connected_users: Gauge,
+  pub(crate) total_success_get_encode_collab_from_redis: Gauge,
+  pub(crate) total_attempt_get_encode_collab_from_redis: Gauge,
+  pub(crate) opening_collab_count: Gauge,
+  pub(crate) num_of_editing_users: Gauge,
   /// The number of apply update
-  apply_update_count: Gauge,
+  pub(crate) apply_update_count: Gauge,
   /// The number of apply update failed
-  apply_update_failed_count: Gauge,
-  acquire_collab_lock_count: Gauge,
-  acquire_collab_lock_fail_count: Gauge,
+  pub(crate) apply_update_failed_count: Gauge,
+  pub(crate) acquire_collab_lock_count: Gauge,
+  pub(crate) acquire_collab_lock_fail_count: Gauge,
 }
 
 impl CollabRealtimeMetrics {
@@ -88,89 +83,6 @@ impl CollabRealtimeMetrics {
 
     metrics
   }
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct CollabMetricsCalculate {
-  pub(crate) connected_users: Arc<AtomicI64>,
-  pub(crate) acquire_collab_lock_count: Arc<AtomicI64>,
-  pub(crate) acquire_collab_lock_fail_count: Arc<AtomicI64>,
-  pub(crate) apply_update_count: Arc<AtomicI64>,
-  pub(crate) apply_update_failed_count: Arc<AtomicI64>,
-  pub(crate) num_of_active_collab: Arc<AtomicI64>,
-  pub(crate) num_of_editing_users: Arc<AtomicI64>,
-}
-
-pub(crate) fn spawn_metrics<S>(
-  metrics: &Arc<CollabRealtimeMetrics>,
-  metrics_calculation: &CollabMetricsCalculate,
-  storage: &Arc<S>,
-) where
-  S: CollabStorage,
-{
-  let metrics = metrics.clone();
-  let metrics_calculation = metrics_calculation.clone();
-  let storage = storage.clone();
-  tokio::task::spawn_local(async move {
-    let mut interval = interval(Duration::from_secs(120));
-    loop {
-      interval.tick().await;
-
-      // active collab
-      metrics.opening_collab_count.set(
-        metrics_calculation
-          .num_of_active_collab
-          .load(std::sync::atomic::Ordering::Relaxed),
-      );
-
-      // editing users
-      metrics.num_of_editing_users.set(
-        metrics_calculation
-          .num_of_editing_users
-          .load(std::sync::atomic::Ordering::Relaxed),
-      );
-
-      // connect user
-      metrics.connected_users.set(
-        metrics_calculation
-          .connected_users
-          .load(std::sync::atomic::Ordering::Relaxed),
-      );
-
-      // lock
-      metrics.acquire_collab_lock_count.set(
-        metrics_calculation
-          .acquire_collab_lock_count
-          .load(std::sync::atomic::Ordering::Relaxed),
-      );
-      metrics.acquire_collab_lock_fail_count.set(
-        metrics_calculation
-          .acquire_collab_lock_fail_count
-          .load(std::sync::atomic::Ordering::Relaxed),
-      );
-
-      // update count
-      metrics.apply_update_count.set(
-        metrics_calculation
-          .apply_update_count
-          .load(std::sync::atomic::Ordering::Relaxed),
-      );
-      metrics.apply_update_failed_count.set(
-        metrics_calculation
-          .apply_update_failed_count
-          .load(std::sync::atomic::Ordering::Relaxed),
-      );
-
-      // cache hit rate
-      let (total, success) = storage.encode_collab_redis_query_state();
-      metrics
-        .total_attempt_get_encode_collab_from_redis
-        .set(total as i64);
-      metrics
-        .total_success_get_encode_collab_from_redis
-        .set(success as i64);
-    }
-  });
 }
 
 #[derive(Clone)]

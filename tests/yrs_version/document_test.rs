@@ -1,9 +1,8 @@
+use crate::yrs_version::util::read_bytes_from_file;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab_document::document::Document;
-
-use crate::yrs_version::util::read_bytes_from_file;
 
 /// Load collaboration data that was encoded using Yjs version 0.17.
 #[test]

@@ -6,6 +6,7 @@ use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
+use tokio::task::spawn_blocking;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -194,6 +195,20 @@ pub trait CollabSyncProtocol {
   }
 }
 
+const LARGE_UPDATE_THRESHOLD: usize = 1024 * 1024; // 1MB
+
+#[inline]
+async fn decode_update(update: Vec<u8>) -> Result<Update, RTProtocolError> {
+  let update = if update.len() > LARGE_UPDATE_THRESHOLD {
+    spawn_blocking(move || Update::decode_v1(&update))
+      .await
+      .map_err(|err| RTProtocolError::Internal(err.into()))?
+  } else {
+    Update::decode_v1(&update)
+  }?;
+  Ok(update)
+}
+
 /// Handles incoming messages from the client/server
 pub async fn handle_message_follow_protocol<P>(
   message_origin: &CollabOrigin,
@@ -214,14 +229,14 @@ where
         Ok(update)
       },
       SyncMessage::SyncStep2(update) => {
-        let update = Update::decode_v1(&update)?;
+        let update = decode_update(update).await?;
         let mut lock = collab.write().await;
         let collab = (*lock).borrow_mut();
         protocol.handle_sync_step2(message_origin, collab.get_mut_awareness(), update)?;
         Ok(None)
       },
       SyncMessage::Update(update) => {
-        let update = Update::decode_v1(&update)?;
+        let update = decode_update(update).await?;
         let mut lock = collab.write().await;
         let collab = (*lock).borrow_mut();
         protocol.handle_update(message_origin, collab.get_mut_awareness(), update)?;

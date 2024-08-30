@@ -1,29 +1,29 @@
-use crate::error::RealtimeError;
-use crate::group::group_init::CollabGroup;
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::time::Duration;
 
-use crate::metrics::CollabMetricsCalculate;
-use collab_rt_entity::user::RealtimeUser;
 use dashmap::mapref::one::RefMut;
 use dashmap::try_result::TryResult;
 use dashmap::DashMap;
-
-use std::collections::HashSet;
-
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, event, warn};
+
+use collab_rt_entity::user::RealtimeUser;
+
+use crate::error::RealtimeError;
+use crate::group::group_init::CollabGroup;
+use crate::metrics::CollabRealtimeMetrics;
 
 #[derive(Default, Clone)]
 pub(crate) struct GroupManagementState {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup>>>,
   /// Keep track of all [Collab] objects that a user is subscribed to.
   editing_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
-  metrics_calculate: CollabMetricsCalculate,
+  metrics_calculate: CollabRealtimeMetrics,
 }
 
 impl GroupManagementState {
-  pub(crate) fn new(metrics_calculate: CollabMetricsCalculate) -> Self {
+  pub(crate) fn new(metrics_calculate: CollabRealtimeMetrics) -> Self {
     Self {
       group_by_object_id: Arc::new(DashMap::new()),
       editing_by_user: Arc::new(DashMap::new()),
@@ -102,10 +102,7 @@ impl GroupManagementState {
 
   pub(crate) async fn insert_group(&self, object_id: &str, group: Arc<CollabGroup>) {
     self.group_by_object_id.insert(object_id.to_string(), group);
-    self
-      .metrics_calculate
-      .num_of_active_collab
-      .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    self.metrics_calculate.opening_collab_count.inc();
   }
 
   pub(crate) async fn contains_group(&self, object_id: &str) -> bool {
@@ -121,10 +118,10 @@ impl GroupManagementState {
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);
     }
-    self.metrics_calculate.num_of_active_collab.store(
-      self.group_by_object_id.len() as i64,
-      std::sync::atomic::Ordering::Relaxed,
-    );
+    self
+      .metrics_calculate
+      .opening_collab_count
+      .set(self.group_by_object_id.len() as i64);
   }
   pub(crate) async fn insert_user(
     &self,
@@ -139,10 +136,7 @@ impl GroupManagementState {
     match entry {
       dashmap::mapref::entry::Entry::Occupied(_) => {},
       dashmap::mapref::entry::Entry::Vacant(_) => {
-        self
-          .metrics_calculate
-          .num_of_editing_users
-          .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.metrics_calculate.num_of_editing_users.inc();
       },
     }
 
@@ -153,10 +147,7 @@ impl GroupManagementState {
   pub(crate) async fn remove_user(&self, user: &RealtimeUser) {
     let entry = self.editing_by_user.remove(user);
     if entry.is_some() {
-      self
-        .metrics_calculate
-        .num_of_editing_users
-        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+      self.metrics_calculate.num_of_editing_users.dec();
     }
     if let Some(editing_objects) = entry.map(|(_, e)| e) {
       for editing in editing_objects {

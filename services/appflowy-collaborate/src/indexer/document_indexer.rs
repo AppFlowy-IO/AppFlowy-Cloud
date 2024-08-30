@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use collab::preclude::Collab;
-use collab_document::blocks::DocumentData;
+
 use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
@@ -54,7 +54,7 @@ impl Indexer for DocumentIndexer {
         Ok(vec![plain_text_param])
       },
       Err(err) => {
-        return if matches!(err, DocumentError::NoRequiredData) {
+        if matches!(err, DocumentError::NoRequiredData) {
           Ok(vec![])
         } else {
           Err(AppError::Internal(err.into()))

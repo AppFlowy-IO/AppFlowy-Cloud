@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{error, event, warn};
+use tracing::{error, event, info, warn};
 
 #[derive(Default, Clone)]
 pub(crate) struct GroupManagementState {
@@ -39,12 +39,13 @@ impl GroupManagementState {
       let (object_id, group) = (entry.key(), entry.value());
       if group.is_inactive().await {
         inactive_group_ids.push(object_id.clone());
-        if inactive_group_ids.len() > 5 {
+        if inactive_group_ids.len() > 10 {
           break;
         }
       }
     }
 
+    info!("Remove inactive group ids: {:?}", inactive_group_ids);
     for object_id in &inactive_group_ids {
       self.remove_group(object_id).await;
     }

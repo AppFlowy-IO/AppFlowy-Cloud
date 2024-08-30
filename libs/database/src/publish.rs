@@ -212,7 +212,7 @@ pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
 
 #[inline]
 pub async fn select_published_data_for_view_id(
-  txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+  pg_pool: &PgPool,
   view_id: &Uuid,
 ) -> Result<Option<(serde_json::Value, Vec<u8>)>, AppError> {
   let res = sqlx::query!(
@@ -223,7 +223,7 @@ pub async fn select_published_data_for_view_id(
     "#,
     view_id,
   )
-  .fetch_optional(txn.as_mut())
+  .fetch_optional(pg_pool)
   .await?;
   Ok(res.map(|res| (res.metadata, res.blob)))
 }

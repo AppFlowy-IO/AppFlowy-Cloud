@@ -19,11 +19,11 @@ pub(crate) struct GroupManagementState {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup>>>,
   /// Keep track of all [Collab] objects that a user is subscribed to.
   editing_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
-  metrics_calculate: CollabRealtimeMetrics,
+  metrics_calculate: Arc<CollabRealtimeMetrics>,
 }
 
 impl GroupManagementState {
-  pub(crate) fn new(metrics_calculate: CollabRealtimeMetrics) -> Self {
+  pub(crate) fn new(metrics_calculate: Arc<CollabRealtimeMetrics>) -> Self {
     Self {
       group_by_object_id: Arc::new(DashMap::new()),
       editing_by_user: Arc::new(DashMap::new()),

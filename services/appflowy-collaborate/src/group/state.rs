@@ -14,7 +14,7 @@ use crate::error::RealtimeError;
 use crate::group::group_init::CollabGroup;
 use crate::metrics::CollabRealtimeMetrics;
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub(crate) struct GroupManagementState {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup>>>,
   /// Keep track of all [Collab] objects that a user is subscribed to.

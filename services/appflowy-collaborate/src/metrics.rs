@@ -28,7 +28,7 @@ pub struct CollabRealtimeMetrics {
 }
 
 impl CollabRealtimeMetrics {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
       connected_users: Gauge::default(),
       total_success_get_encode_collab_from_redis: Gauge::default(),

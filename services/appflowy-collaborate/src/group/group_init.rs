@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::fmt::Display;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use collab::core::origin::CollabOrigin;
@@ -13,13 +13,13 @@ use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tracing::{error, event, info, trace};
-use yrs::Update;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
+use yrs::Update;
 
+use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
-use collab_rt_entity::user::RealtimeUser;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::error::StreamError;
 use collab_stream::model::{CollabUpdateEvent, StreamBinary};

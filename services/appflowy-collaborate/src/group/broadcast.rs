@@ -12,16 +12,16 @@ use tokio::sync::broadcast::{channel, Sender};
 use tokio::time::Instant;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
-use yrs::Subscription as YrsSubscription;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::Subscription as YrsSubscription;
 
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
-use collab_rt_entity::MessageByObjectId;
-use collab_rt_entity::user::RealtimeUser;
 use collab_rt_protocol::{CollabSyncProtocol, Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use collab_rt_protocol::{RTProtocolError, SyncMessage};
 
@@ -430,7 +430,7 @@ async fn handle_message(
     match msg {
       Ok(msg) => {
         is_sync_step2 = matches!(msg, Message::Sync(SyncMessage::SyncStep2(_)));
-        match ServerSyncProtocol::new(metrics_calculate)
+        match ServerSyncProtocol::new(metrics_calculate.clone())
           .handle_message(message_origin, collab, msg)
           .await
         {

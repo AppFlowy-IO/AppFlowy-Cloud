@@ -21,9 +21,9 @@ pub struct CollabRealtimeMetrics {
   pub(crate) apply_update_failed_count: Gauge,
   pub(crate) acquire_collab_lock_count: Gauge,
   pub(crate) acquire_collab_lock_fail_count: Gauge,
-  /// How long it takes to apply update.
+  /// How long it takes to apply update in milliseconds.
   pub(crate) apply_update_time: Histogram,
-  /// How big the update is.
+  /// How big the update is in bytes.
   pub(crate) apply_update_size: Histogram,
 }
 

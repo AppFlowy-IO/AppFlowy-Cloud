@@ -3,22 +3,25 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
-use yrs::{ReadTxn, StateVector, Transact};
+use tokio::time::Instant;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::{ReadTxn, StateVector, Transact};
 
-use collab_rt_protocol::{
-  CollabRef, CustomMessage, decode_update, Message, RTProtocolError, SyncMessage,
-};
 use collab_rt_protocol::CollabSyncProtocol;
+use collab_rt_protocol::{
+  decode_update, CollabRef, CustomMessage, Message, RTProtocolError, SyncMessage,
+};
 
 use crate::CollabRealtimeMetrics;
 
 #[derive(Clone)]
-pub struct ServerSyncProtocol(Arc<CollabRealtimeMetrics>);
+pub struct ServerSyncProtocol {
+  metrics: Arc<CollabRealtimeMetrics>,
+}
 
 impl ServerSyncProtocol {
-  pub fn new(metrics: &Arc<CollabRealtimeMetrics>) -> Self {
-    Self(metrics.clone())
+  pub fn new(metrics: Arc<CollabRealtimeMetrics>) -> Self {
+    Self { metrics }
   }
 }
 
@@ -64,9 +67,13 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     collab: &CollabRef,
     update: Vec<u8>,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+    self.metrics.apply_update_size.observe(update.len() as f64);
+    let start = Instant::now();
+
     let update = decode_update(update).await?;
     let mut lock = collab.write().await;
     let collab = (*lock).borrow_mut();
+
     let mut txn = collab
       .get_awareness()
       .doc()
@@ -86,7 +93,7 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     // from the client or the client is missing some updates from the server.
     // If the client can't apply broadcast from server, which means the client is missing some
     // updates.
-    match txn.store().pending_update() {
+    let result = match txn.store().pending_update() {
       Some(_update) => {
         // let state_vector_v1 = update.missing.encode_v1();
         // for the moment, we don't need to send missing updates to the client. passing None
@@ -98,7 +105,16 @@ impl CollabSyncProtocol for ServerSyncProtocol {
         })
       },
       None => Ok(None),
-    }
+    };
+    drop(txn);
+
+    let elapsed = start.elapsed();
+    self
+      .metrics
+      .apply_update_time
+      .observe(elapsed.as_millis() as f64);
+
+    result
   }
 
   async fn handle_custom_message(

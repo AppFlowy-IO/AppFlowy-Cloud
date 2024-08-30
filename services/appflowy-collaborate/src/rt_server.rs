@@ -4,21 +4,20 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use anyhow::Result;
-use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, info, trace};
 
 use access_control::collab::RealtimeAccessControl;
-use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
+use collab_rt_entity::MessageByObjectId;
 use collab_stream::client::CollabRedisStream;
 use database::collab::CollabStorage;
 
-use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 use crate::client::client_msg_router::ClientMessageRouter;
-use crate::command::{CLCommandReceiver, spawn_collaboration_command};
+use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::config::get_env_var;
 use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
@@ -28,6 +27,7 @@ use crate::indexer::IndexerProvider;
 use crate::metrics::spawn_metrics;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 use crate::state::RedisConnectionManager;
+use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
 pub struct CollaborationServer<S, AC> {

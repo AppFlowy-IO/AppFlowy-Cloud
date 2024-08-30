@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 use std::marker::PhantomData;
-use std::sync::{Arc, Weak};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
@@ -13,11 +13,11 @@ use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, trace, warn};
 use yrs::encoding::read::Cursor;
-use yrs::ReadTxn;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::Encode;
+use yrs::ReadTxn;
 
-use client_api_entity::{CollabType, validate_data_for_folder};
+use client_api_entity::{validate_data_for_folder, CollabType};
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
 use collab_rt_protocol::{
   ClientSyncProtocol, CollabSyncProtocol, Message, MessageReader, SyncMessage,
@@ -25,7 +25,7 @@ use collab_rt_protocol::{
 
 use crate::af_spawn;
 use crate::collab_sync::{
-  CollabSink, MissUpdateReason, start_sync, SyncError, SyncObject, SyncReason,
+  start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
 };
 
 pub type CollabRef = Weak<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;

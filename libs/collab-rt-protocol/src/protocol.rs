@@ -8,9 +8,9 @@ use collab::core::origin::CollabOrigin;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
 use tokio::task::spawn_blocking;
-use yrs::{ReadTxn, StateVector, Transact, Update};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
+use yrs::{ReadTxn, StateVector, Transact, Update};
 
 use crate::message::{CustomMessage, Message, RTProtocolError, SyncMessage, SyncMeta};
 

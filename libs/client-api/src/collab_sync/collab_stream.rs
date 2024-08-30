@@ -20,7 +20,7 @@ use yrs::ReadTxn;
 use client_api_entity::{validate_data_for_folder, CollabType};
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
 use collab_rt_protocol::{
-  handle_message_follow_protocol, ClientSyncProtocol, Message, MessageReader, SyncMessage,
+  ClientSyncProtocol, CollabSyncProtocol, Message, MessageReader, SyncMessage,
 };
 
 use crate::af_spawn;
@@ -344,8 +344,9 @@ where
             .map_err(|err| SyncError::OverrideWithIncorrectData(err.to_string()))?;
         }
 
-        if let Some(return_payload) =
-          handle_message_follow_protocol(&message_origin, &ClientSyncProtocol, &collab, msg).await?
+        if let Some(return_payload) = ClientSyncProtocol
+          .handle_message(&message_origin, &collab, msg)
+          .await?
         {
           let object_id = sync_object.object_id.clone();
           sink.queue_msg(|msg_id| {

@@ -1,5 +1,11 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
+use tokio::time::interval;
+
+use database::collab::CollabStorage;
 
 #[derive(Clone, Default)]
 pub struct CollabRealtimeMetrics {
@@ -83,6 +89,27 @@ impl CollabRealtimeMetrics {
 
     metrics
   }
+}
+
+pub(crate) fn spawn_metrics<S>(metrics: Arc<CollabRealtimeMetrics>, storage: Arc<S>)
+where
+  S: CollabStorage,
+{
+  tokio::task::spawn_local(async move {
+    let mut interval = interval(Duration::from_secs(120));
+    loop {
+      interval.tick().await;
+
+      // cache hit rate
+      let (total, success) = storage.encode_collab_redis_query_state();
+      metrics
+        .total_attempt_get_encode_collab_from_redis
+        .set(total as i64);
+      metrics
+        .total_success_get_encode_collab_from_redis
+        .set(success as i64);
+    }
+  });
 }
 
 #[derive(Clone)]

@@ -195,7 +195,7 @@ pub trait CollabSyncProtocol {
   }
 }
 
-const LARGE_UPDATE_THRESHOLD: usize = 500 * 1024; // 500KB
+const LARGE_UPDATE_THRESHOLD: usize = 1024 * 1024; // 1MB
 
 #[inline]
 async fn decode_update(update: Vec<u8>) -> Result<Update, RTProtocolError> {

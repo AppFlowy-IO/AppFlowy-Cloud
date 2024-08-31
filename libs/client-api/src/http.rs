@@ -738,6 +738,19 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  /// Deletes the user account and all associated data.
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn delete_user(&self) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/user", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
   pub async fn get_snapshot_list(
     &self,
     workspace_id: &str,

@@ -74,3 +74,7 @@ pub async fn update_user(
   let metadata = params.metadata.map(|m| json!(m.into_inner()));
   Ok(database::user::update_user(pg_pool, &user_uuid, params.name, params.email, metadata).await?)
 }
+
+pub async fn delete_user(pg_pool: &PgPool, user_uuid: Uuid) -> Result<(), AppResponseError> {
+  Ok(database::user::delete_user(pg_pool, &user_uuid).await?)
+}

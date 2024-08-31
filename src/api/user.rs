@@ -1,4 +1,4 @@
-use crate::biz::user::user_info::{get_profile, get_user_workspace_info, update_user};
+use crate::biz::user::user_info::{delete_user, get_profile, get_user_workspace_info, update_user};
 use crate::biz::user::user_verify::verify_token;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -16,6 +16,7 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/update").route(web::post().to(update_user_handler)))
     .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
     .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
+    .service(web::resource("").route(web::delete().to(delete_user_handler)))
 }
 
 #[tracing::instrument(skip(state, path), err)]
@@ -59,5 +60,14 @@ async fn update_user_handler(
 ) -> Result<JsonAppResponse<()>> {
   let params = payload.into_inner();
   update_user(&state.pg_pool, auth.uuid()?, params).await?;
+  Ok(AppResponse::Ok().into())
+}
+
+#[tracing::instrument(skip(state), err)]
+async fn delete_user_handler(
+  auth: Authorization,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  delete_user(&state.pg_pool, auth.uuid()?).await?;
   Ok(AppResponse::Ok().into())
 }

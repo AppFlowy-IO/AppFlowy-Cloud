@@ -1,27 +1,8 @@
-use crate::api::metrics::metrics_scope;
+use std::net::TcpListener;
+use std::sync::Arc;
+use std::time::Duration;
 
-use crate::api::file_storage::file_storage_scope;
-use crate::api::template::template_scope;
-use crate::api::user::user_scope;
-use crate::api::workspace::{collab_scope, workspace_scope};
-use crate::api::ws::ws_scope;
-use crate::mailer::Mailer;
-use access_control::access::{enable_access_control, AccessControl};
-use gotrue::grant::{Grant, PasswordGrant};
-
-use crate::api::chat::chat_scope;
-use crate::api::history::history_scope;
-use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
-use crate::biz::pg_listener::PgListeners;
-use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
-use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
-use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
-use crate::middleware::metrics_mw::MetricsMiddleware;
-use crate::middleware::request_id::RequestIdMiddleware;
-use crate::self_signed::create_self_signed_certificate;
-use crate::state::{AppMetrics, AppState, GoTrueAdmin, UserCache};
 use actix::Supervisor;
-
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -29,6 +10,20 @@ use actix_web::cookie::Key;
 use actix_web::middleware::NormalizePath;
 use actix_web::{dev::Server, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
+use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
+use aws_sdk_s3::operation::create_bucket::CreateBucketError;
+use aws_sdk_s3::types::{
+  BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
+};
+use collab::lock::Mutex;
+use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
+use openssl::x509::X509;
+use secrecy::{ExposeSecret, Secret};
+use sqlx::{postgres::PgPoolOptions, PgPool};
+use tokio::sync::RwLock;
+use tracing::{error, info, warn};
+
+use access_control::access::{enable_access_control, AccessControl};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::access_control::{
@@ -37,33 +32,36 @@ use appflowy_collaborate::collab::access_control::{
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
+use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
-
-use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
-use aws_sdk_s3::operation::create_bucket::CreateBucketError;
-use aws_sdk_s3::types::{
-  BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
-};
-use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
-use openssl::x509::X509;
-use secrecy::{ExposeSecret, Secret};
+use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
+use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;
-use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::net::TcpListener;
-
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::{Mutex, RwLock};
 use tonic_proto::history::history_client::HistoryClient;
+use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::ai::ai_completion_scope;
+use crate::api::chat::chat_scope;
+use crate::api::file_storage::file_storage_scope;
+use crate::api::history::history_scope;
+use crate::api::metrics::metrics_scope;
 use crate::api::search::search_scope;
-use appflowy_collaborate::indexer::IndexerProvider;
-use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
-use tracing::{error, info, warn};
-use workspace_access::WorkspaceAccessControlImpl;
+use crate::api::template::template_scope;
+use crate::api::user::user_scope;
+use crate::api::workspace::{collab_scope, workspace_scope};
+use crate::api::ws::ws_scope;
+use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
+use crate::biz::pg_listener::PgListeners;
+use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
+use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
+use crate::mailer::Mailer;
+use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
+use crate::middleware::metrics_mw::MetricsMiddleware;
+use crate::middleware::request_id::RequestIdMiddleware;
+use crate::self_signed::create_self_signed_certificate;
+use crate::state::{AppMetrics, AppState, GoTrueAdmin, UserCache};
 
 pub struct Application {
   port: u16,

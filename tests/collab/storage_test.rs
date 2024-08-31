@@ -4,11 +4,11 @@ use std::time::Duration;
 
 use collab::core::transaction::DocTransactionExtension;
 use collab::entity::EncodedCollab;
+use collab::lock::Mutex;
 use collab::preclude::{Doc, Transact};
 use collab_entity::CollabType;
 use sqlx::types::Uuid;
 use sqlx::PgPool;
-use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 use app_error::ErrorCode;

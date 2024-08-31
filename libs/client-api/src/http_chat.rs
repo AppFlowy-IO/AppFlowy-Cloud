@@ -15,6 +15,7 @@ use shared_entity::dto::ai_dto::{
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use tracing::error;
 
 impl Client {
@@ -111,6 +112,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
+      .timeout(Duration::from_secs(30))
       .send()
       .await?;
     log_request_id(&resp);
@@ -130,6 +132,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
+      .timeout(Duration::from_secs(30))
       .send()
       .await?;
     log_request_id(&resp);

@@ -1,21 +1,24 @@
-use crate::document::getting_started::*;
-use crate::TemplateData;
-use crate::TemplateObjectId;
-use crate::{hierarchy_builder::WorkspaceViewBuilder, WorkspaceTemplate};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use collab::lock::RwLock;
 use collab::preclude::uuid_v4;
 use collab_database::database::DatabaseData;
 use collab_database::entity::CreateDatabaseParams;
 use collab_document::document_data::generate_id;
 use collab_entity::CollabType;
 use serde_json::json;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+
+use crate::document::getting_started::*;
+use crate::TemplateData;
+use crate::TemplateObjectId;
+use crate::{hierarchy_builder::WorkspaceViewBuilder, WorkspaceTemplate};
 
 #[cfg(test)]
 mod tests {
-  use super::*;
   use collab_database::database::gen_database_view_id;
+
+  use super::*;
 
   #[tokio::test]
   async fn create_document_from_desktop_guide_json_test() {

@@ -6,11 +6,12 @@ use std::time::Duration;
 
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
+use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tracing::{error, event, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -29,7 +30,7 @@ use crate::error::RealtimeError;
 use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, Subscription};
 use crate::group::persistence::GroupPersistence;
 use crate::indexer::Indexer;
-use crate::metrics::CollabMetricsCalculate;
+use crate::metrics::CollabRealtimeMetrics;
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
@@ -43,7 +44,7 @@ pub struct CollabGroup {
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
-  metrics_calculate: CollabMetricsCalculate,
+  metrics_calculate: Arc<CollabRealtimeMetrics>,
   destroy_group_tx: mpsc::Sender<Arc<RwLock<Collab>>>,
 }
 
@@ -61,7 +62,7 @@ impl CollabGroup {
     object_id: String,
     collab_type: CollabType,
     collab: Arc<RwLock<Collab>>,
-    metrics_calculate: CollabMetricsCalculate,
+    metrics_calculate: Arc<CollabRealtimeMetrics>,
     storage: Arc<S>,
     is_new_collab: bool,
     collab_redis_stream: Arc<CollabRedisStream>,

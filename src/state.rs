@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
-use appflowy_ai_client::client::AppFlowyAIClient;
+use collab::lock::Mutex;
 use dashmap::DashMap;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::access_control::CollabAccessControlImpl;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
@@ -19,7 +20,6 @@ use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
-
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;

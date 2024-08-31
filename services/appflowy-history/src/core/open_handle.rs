@@ -4,10 +4,10 @@ use std::time::Duration;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::error::CollabError;
+use collab::lock::RwLock;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
-use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{error, trace};
 
@@ -183,9 +183,15 @@ async fn process_messages(
   _object_id: &str,
   _collab_type: &CollabType,
 ) -> Result<(), HistoryError> {
-  let mut lock = collab.write().await;
-  apply_updates(&messages, &mut lock)?;
-  drop(lock);
+  let cloned_message = messages.clone();
+  tokio::task::spawn_blocking(move || {
+    let mut lock = collab.blocking_write();
+    apply_updates(&cloned_message, &mut lock)?;
+    drop(lock);
+    Ok::<_, HistoryError>(())
+  })
+  .await
+  .map_err(|e| HistoryError::Internal(e.into()))??;
   update_stream.ack_messages(&messages).await?;
   Ok(())
 }

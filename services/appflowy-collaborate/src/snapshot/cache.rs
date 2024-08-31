@@ -1,9 +1,12 @@
-use crate::state::RedisConnectionManager;
-use anyhow::anyhow;
-use app_error::AppError;
-use redis::AsyncCommands;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+
+use anyhow::anyhow;
+use collab::lock::Mutex;
+use redis::AsyncCommands;
+
+use app_error::AppError;
+
+use crate::state::RedisConnectionManager;
 
 #[derive(Clone)]
 pub(crate) struct SnapshotCache {

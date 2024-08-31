@@ -2,6 +2,35 @@ use client_api_test::*;
 use gotrue::params::{AdminDeleteUserParams, AdminUserParams};
 
 #[tokio::test]
+async fn user_delete_self() {
+  let (client, user) = generate_unique_registered_user_client().await;
+  let admin_client = admin_user_client().await;
+  {
+    // user found before deletion
+    let search_result = admin_client
+      .admin_list_users(Some(&user.email))
+      .await
+      .unwrap();
+    let _target_user = search_result
+      .into_iter()
+      .find(|u| u.email == user.email)
+      .unwrap();
+  }
+
+  client.delete_user().await.unwrap();
+
+  {
+    // user cannot be found after deletion
+    let search_result = admin_client
+      .admin_list_users(Some(&user.email))
+      .await
+      .unwrap();
+    let target_user = search_result.into_iter().find(|u| u.email == user.email);
+    assert!(target_user.is_none(), "User should be deleted: {:?}", user);
+  }
+}
+
+#[tokio::test]
 async fn admin_delete_create_same_user_hard() {
   let (client, user) = generate_unique_registered_user_client().await;
   let workspaces = client.get_workspaces().await.unwrap();

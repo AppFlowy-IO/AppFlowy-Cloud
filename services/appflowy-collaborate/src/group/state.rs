@@ -6,7 +6,7 @@ use dashmap::mapref::one::RefMut;
 use dashmap::try_result::TryResult;
 use dashmap::DashMap;
 use tokio::time::sleep;
-use tracing::{error, event, info, trace, warn};
+use tracing::{error, event, info, warn};
 
 use collab_rt_entity::user::RealtimeUser;
 

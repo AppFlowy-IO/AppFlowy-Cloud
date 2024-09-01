@@ -1,8 +1,9 @@
-use actix_web::rt::task::JoinHandle;
-use tracing::subscriber::set_global_default;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
-
 use crate::config::config::Environment;
+use actix_web::rt::task::JoinHandle;
+use chrono::Local;
+use tracing::subscriber::set_global_default;
+use tracing_subscriber::fmt::format::Writer;
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
 /// Register a subscriber as global default to process span data.
 ///
@@ -20,6 +21,7 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
     Environment::Local => {
       let subscriber = builder
         .with_ansi(true)
+        .with_timer(CustomTime)
         .with_target(false)
         .with_file(false)
         .pretty()
@@ -36,6 +38,13 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
       // .with(formatting_layer);
       set_global_default(subscriber).unwrap();
     },
+  }
+}
+
+struct CustomTime;
+impl tracing_subscriber::fmt::time::FormatTime for CustomTime {
+  fn format_time(&self, w: &mut Writer<'_>) -> std::fmt::Result {
+    write!(w, "{}", Local::now().format("%Y-%m-%d %H:%M:%S"))
   }
 }
 

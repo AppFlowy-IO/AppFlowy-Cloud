@@ -6,7 +6,6 @@ use crate::dto::{
 };
 use crate::error::AIError;
 
-use bytes::Bytes;
 use futures::{ready, Stream, StreamExt, TryStreamExt};
 use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
@@ -21,7 +20,9 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::pin::Pin;
 
+use bytes::Bytes;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use tracing::{info, trace};
 
 const AI_MODEL_HEADER_KEY: &str = "ai-model";
@@ -235,6 +236,7 @@ impl AppFlowyAIClient {
     let resp = self
       .http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .timeout(Duration::from_secs(30))
       .json(&json)
       .send()
       .await?;
@@ -258,6 +260,7 @@ impl AppFlowyAIClient {
       .http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&json)
+      .timeout(Duration::from_secs(30))
       .send()
       .await?;
     AIResponse::<()>::stream_response(resp).await
@@ -273,6 +276,7 @@ impl AppFlowyAIClient {
     let resp = self
       .http_client(Method::GET, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .timeout(Duration::from_secs(30))
       .send()
       .await?;
     AIResponse::<RepeatedRelatedQuestion>::from_response(resp)

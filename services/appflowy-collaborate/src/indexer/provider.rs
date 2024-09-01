@@ -12,16 +12,17 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use sqlx::PgPool;
 use tokio_stream::StreamExt;
+use tracing::info;
 use uuid::Uuid;
 
+use crate::config::get_env_var;
+use crate::indexer::DocumentIndexer;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use database::collab::select_blob_from_af_collab;
 use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, CollabParams};
-
-use crate::indexer::DocumentIndexer;
 
 #[async_trait]
 pub trait Indexer: Send + Sync {
@@ -60,7 +61,14 @@ pub struct IndexerProvider {
 impl IndexerProvider {
   pub fn new(db: PgPool, ai_client: AppFlowyAIClient) -> Arc<Self> {
     let mut cache: HashMap<CollabType, Arc<dyn Indexer>> = HashMap::new();
-    cache.insert(CollabType::Document, DocumentIndexer::new(ai_client));
+    let enabled = get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+      .parse::<bool>()
+      .unwrap_or(true);
+
+    info!("Indexer is enabled: {}", enabled);
+    if enabled {
+      cache.insert(CollabType::Document, DocumentIndexer::new(ai_client));
+    }
     Arc::new(Self {
       db,
       indexer_cache: cache,

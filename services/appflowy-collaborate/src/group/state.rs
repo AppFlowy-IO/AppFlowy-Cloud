@@ -6,7 +6,7 @@ use dashmap::mapref::one::RefMut;
 use dashmap::try_result::TryResult;
 use dashmap::DashMap;
 use tokio::time::sleep;
-use tracing::{error, event, info, warn};
+use tracing::{error, event, info, trace, warn};
 
 use collab_rt_entity::user::RealtimeUser;
 
@@ -45,7 +45,12 @@ impl GroupManagementState {
       }
     }
 
-    info!("Remove inactive group ids: {:?}", inactive_group_ids);
+    info!(
+      "total groups:{}, inactive group:{:?}, inactive group ids:{:?}",
+      self.group_by_object_id.len() as i64,
+      inactive_group_ids.len(),
+      inactive_group_ids,
+    );
     for object_id in &inactive_group_ids {
       self.remove_group(object_id).await;
     }

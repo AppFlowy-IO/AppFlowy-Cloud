@@ -289,7 +289,6 @@ fn spawn_period_check_inactive_group<S, AC>(
       interval.tick().await;
       if let Some(groups) = weak_groups.upgrade() {
         let inactive_group_ids = groups.get_inactive_groups().await;
-        trace!("Inactive group ids: {:?}", inactive_group_ids);
         for id in inactive_group_ids {
           cloned_group_sender_by_object_id.remove(&id);
         }

@@ -193,12 +193,13 @@ impl CollabGroup {
     // In debug mode, we set the timeout to 60 seconds
     if cfg!(debug_assertions) {
       trace!(
-        "Group:{} is inactive for {} seconds, subscribers: {}",
+        "Group:{}:{} is inactive for {} seconds, subscribers: {}",
         self.object_id,
+        self.collab_type,
         modified_at.elapsed().as_secs(),
         self.subscribers.len()
       );
-      modified_at.elapsed().as_secs() > 60 * 60
+      modified_at.elapsed().as_secs() > 60 * 2
     } else {
       let elapsed_secs = modified_at.elapsed().as_secs();
       if elapsed_secs > self.timeout_secs() {
@@ -209,8 +210,9 @@ impl CollabGroup {
         const MAXIMUM_SECS: u64 = 3 * 60 * 60;
         if elapsed_secs > MAXIMUM_SECS {
           info!(
-            "Group:{} is inactive for {} seconds, subscribers: {}",
+            "Group:{}:{} is inactive for {} seconds, subscribers: {}",
             self.object_id,
+            self.collab_type,
             modified_at.elapsed().as_secs(),
             self.subscribers.len()
           );

@@ -75,13 +75,16 @@ async fn delete_user_handler(
   let user_uuid = auth.uuid()?;
   if is_apple_user(&auth) {
     let query = query.into_inner();
-    revoke_apple_user(
+    if let Err(err) = revoke_apple_user(
       &state.config.apple_oauth.client_id,
       &state.config.apple_oauth.client_secret,
       query.provider_access_token,
       query.provider_refresh_token,
     )
-    .await?;
+    .await
+    {
+      tracing::warn!("revoke apple user failed: {:?}", err);
+    };
   }
 
   let admin_token = state.gotrue_admin.token().await?;

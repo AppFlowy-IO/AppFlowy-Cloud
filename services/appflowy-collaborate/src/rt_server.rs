@@ -282,9 +282,13 @@ fn spawn_period_check_inactive_group<S, AC>(
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
-  let mut interval = interval(Duration::from_secs(60));
+  let mut interval = interval(Duration::from_secs(20));
   let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
-  tokio::task::spawn_local(async move {
+  tokio::spawn(async move {
+    // when appflowy-collaborate start, wait for 60 seconds to start the check. Since no groups will
+    // be inactive in the first 60 seconds.
+    tokio::time::sleep(Duration::from_secs(60)).await;
+
     loop {
       interval.tick().await;
       if let Some(groups) = weak_groups.upgrade() {

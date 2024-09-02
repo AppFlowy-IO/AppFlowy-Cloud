@@ -278,3 +278,18 @@ pub async fn verify_token_cloud(
   let _: SignInTokenResponse = from_json_response(resp).await?;
   Ok(())
 }
+
+pub async fn delete_current_user(
+  access_token: &str,
+  appflowy_cloud_base_url: &str,
+) -> Result<(), Error> {
+  let http_client = reqwest::Client::new();
+  let url = format!("{}/api/user", appflowy_cloud_base_url);
+  let resp = http_client
+    .delete(url)
+    .header("Authorization", format!("Bearer {}", access_token))
+    .send()
+    .await?;
+  check_response(resp).await?;
+  Ok(())
+}

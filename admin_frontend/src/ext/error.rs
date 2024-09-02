@@ -1,12 +1,5 @@
 use axum::response::{IntoResponse, Response};
-use serde::Deserialize;
 use shared_entity::response::AppResponseError;
-
-#[derive(Deserialize, Debug)]
-pub struct AppFlowyCloudError {
-  pub code: String,
-  pub message: String,
-}
 
 #[derive(Debug)]
 pub enum Error {

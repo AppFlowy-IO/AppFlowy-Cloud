@@ -27,13 +27,6 @@ pub struct WorkspaceMember {
   pub role: String,
 }
 
-#[derive(Deserialize)]
-pub struct WorkspaceUsageLimit {
-  pub total_blob_size: i64,
-  pub single_blob_size: i64,
-  pub member_count: i64,
-}
-
 #[derive(Deserialize, Serialize)]
 pub struct WorkspaceBlobUsage {
   pub consumed_capacity: u64,

@@ -5,7 +5,6 @@
       "type": "heading",
       "data": { "level": 3, "delta": [{ "insert": "Adding content" }] }
     },
-    { "type": "paragraph", "data": { "delta": [] } },
     {
       "type": "todo_list",
       "data": {

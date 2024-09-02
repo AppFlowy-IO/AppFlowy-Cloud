@@ -33,7 +33,7 @@ async fn get_document_collab_from_remote(
 //     |-- Getting started (document)
 //          |-- Desktop guide (document)
 //          |-- Mobile guide (document)
-//     |-- To-Dos (board)
+//     |-- To-dos (board)
 // |-- Shared (space)
 //     |-- ... (empty)
 #[tokio::test]
@@ -121,13 +121,13 @@ async fn get_user_default_workspace_test() {
     )
     .await;
     let mobile_guide_document_data = mobile_guide_document.get_document_data().unwrap();
-    assert_eq!(mobile_guide_document_data.blocks.len(), 34);
+    assert_eq!(mobile_guide_document_data.blocks.len(), 33);
   }
 
   // the second view is the to-dos board, and contains 0 sub views
   {
     let to_dos_view = general_space_views[1].clone();
-    assert_eq!(to_dos_view.name, "To-Dos");
+    assert_eq!(to_dos_view.name, "To-dos");
     assert_eq!(to_dos_view.layout, ViewLayout::Board);
     assert_eq!(
       to_dos_view.icon,

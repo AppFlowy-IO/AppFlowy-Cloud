@@ -317,6 +317,7 @@ pub enum ErrorCode {
   SqlxArgEncodingError = 1035,
   InvalidContentType = 1036,
   SingleUploadLimitExceeded = 1037,
+  AppleRevokeTokenError = 1038,
 }
 
 impl ErrorCode {

@@ -54,6 +54,11 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
   ) -> Result<bool, AppError>;
 }
 
+pub enum GetCollabOrigin {
+  User { uid: i64 },
+  Server,
+}
+
 /// Represents a storage mechanism for collaborations.
 ///
 /// This trait provides asynchronous methods for CRUD operations related to collaborations.
@@ -114,9 +119,9 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
   async fn get_encode_collab(
     &self,
-    uid: &i64,
+    origin: GetCollabOrigin,
     params: QueryCollabParams,
-    is_collab_init: bool,
+    from_editing_collab: bool,
   ) -> AppResult<EncodedCollab>;
 
   /// Sends a collab message to all connected clients.
@@ -219,13 +224,13 @@ where
 
   async fn get_encode_collab(
     &self,
-    uid: &i64,
+    origin: GetCollabOrigin,
     params: QueryCollabParams,
-    is_collab_init: bool,
+    from_editing_collab: bool,
   ) -> AppResult<EncodedCollab> {
     self
       .as_ref()
-      .get_encode_collab(uid, params, is_collab_init)
+      .get_encode_collab(origin, params, from_editing_collab)
       .await
   }
 

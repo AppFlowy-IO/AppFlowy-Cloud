@@ -5,7 +5,7 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::{CollabOrigin, Folder};
-use database::collab::CollabStorage;
+use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::QueryCollab;
 use database_entity::dto::QueryCollabParams;
 use sqlx::PgPool;
@@ -203,7 +203,7 @@ pub async fn get_latest_collab_encoded(
 ) -> Result<EncodedCollab, AppError> {
   collab_storage
     .get_encode_collab(
-      uid,
+      GetCollabOrigin::User { uid: *uid },
       QueryCollabParams {
         workspace_id: workspace_id.to_string(),
         inner: QueryCollab {
@@ -211,7 +211,7 @@ pub async fn get_latest_collab_encoded(
           collab_type,
         },
       },
-      false,
+      true,
     )
     .await
 }

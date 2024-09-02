@@ -175,24 +175,27 @@ impl PublishCollabDuplicator {
       };
 
       let ws_db_body = WorkspaceDatabaseBody::new(&mut ws_db_collab);
-      let ws_db_updates = {
-        let mut txn_wrapper = ws_db_collab.transact_mut();
-        for (db_collab_id, linked_views) in &workspace_databases {
-          ws_db_body.add_database(&mut txn_wrapper, db_collab_id, linked_views.clone());
-        }
-        txn_wrapper.encode_update_v1()
-      };
-      let updated_ws_w_db_collab = ws_db_collab
-        .encode_collab_v1(|collab| CollabType::WorkspaceDatabase.validate_require_data(collab))
-        .map_err(|e| AppError::Unhandled(e.to_string()))?;
+
+      let (ws_db_updates, updated_ws_w_db_collab) = tokio::task::spawn_blocking(move || {
+        let ws_db_updates = {
+          let mut txn_wrapper = ws_db_collab.transact_mut();
+          for (db_collab_id, linked_views) in &workspace_databases {
+            ws_db_body.add_database(&mut txn_wrapper, db_collab_id, linked_views.clone());
+          }
+          txn_wrapper.encode_update_v1()
+        };
+        let updated_ws_w_db_collab = collab_to_bin(&ws_db_collab, CollabType::WorkspaceDatabase);
+        (ws_db_updates, updated_ws_w_db_collab)
+      })
+      .await?;
 
       collab_storage
         .insert_new_collab_with_transaction(
           &dest_workspace_id,
           &duplicator_uid,
           CollabParams {
-            object_id: ws_db_collab.object_id().to_string(),
-            encoded_collab_v1: updated_ws_w_db_collab.encode_to_bytes()?,
+            object_id: ws_db_oid.clone(),
+            encoded_collab_v1: updated_ws_w_db_collab?,
             collab_type: CollabType::WorkspaceDatabase,
             embeddings: None,
           },
@@ -211,59 +214,65 @@ impl PublishCollabDuplicator {
     )
     .await?;
 
-    let mut folder = Folder::from_collab_doc_state(
-      duplicator_uid,
-      CollabOrigin::Server,
-      collab_folder_encoded.into(),
-      &dest_workspace_id,
-      vec![],
-    )
-    .map_err(|e| AppError::Unhandled(e.to_string()))?;
+    let cloned_dest_workspace_id = dest_workspace_id.clone();
+    let mut folder = tokio::task::spawn_blocking(move || {
+      Folder::from_collab_doc_state(
+        duplicator_uid,
+        CollabOrigin::Server,
+        collab_folder_encoded.into(),
+        &cloned_dest_workspace_id,
+        vec![],
+      )
+      .map_err(|e| AppError::Unhandled(e.to_string()))
+    })
+    .await??;
 
-    let encoded_update = {
-      let mut folder_txn = folder.collab.transact_mut();
+    let (encoded_update, updated_encoded_collab) = tokio::task::spawn_blocking(move || {
+      let encoded_update = {
+        let mut folder_txn = folder.collab.transact_mut();
 
-      let mut duplicated_view_ids = HashSet::new();
-      duplicated_view_ids.insert(root_view.id.clone());
-      folder.body.views.insert(&mut folder_txn, root_view, None);
+        let mut duplicated_view_ids = HashSet::new();
+        duplicated_view_ids.insert(root_view.id.clone());
+        folder.body.views.insert(&mut folder_txn, root_view, None);
 
-      // when child views are added, it must have a parent view that is previously added
-      // TODO: if there are too many child views, consider using topological sort
-      loop {
-        if views_to_add.is_empty() {
-          break;
-        }
+        // when child views are added, it must have a parent view that is previously added
+        // TODO: if there are too many child views, consider using topological sort
+        loop {
+          if views_to_add.is_empty() {
+            break;
+          }
 
-        let mut inserted = vec![];
-        for (view_id, view) in views_to_add.iter() {
-          if duplicated_view_ids.contains(&view.parent_view_id) {
-            folder
-              .body
-              .views
-              .insert(&mut folder_txn, view.clone(), None);
-            duplicated_view_ids.insert(view_id.clone());
-            inserted.push(view_id.clone());
+          let mut inserted = vec![];
+          for (view_id, view) in views_to_add.iter() {
+            if duplicated_view_ids.contains(&view.parent_view_id) {
+              folder
+                .body
+                .views
+                .insert(&mut folder_txn, view.clone(), None);
+              duplicated_view_ids.insert(view_id.clone());
+              inserted.push(view_id.clone());
+            }
+          }
+          if inserted.is_empty() {
+            tracing::error!(
+              "views not inserted because parent_id does not exists: {:?}",
+              views_to_add.keys()
+            );
+            break;
+          }
+          for view_id in inserted {
+            views_to_add.remove(&view_id);
           }
         }
-        if inserted.is_empty() {
-          tracing::error!(
-            "views not inserted because parent_id does not exists: {:?}",
-            views_to_add.keys()
-          );
-          break;
-        }
-        for view_id in inserted {
-          views_to_add.remove(&view_id);
-        }
-      }
 
-      folder_txn.encode_update_v1()
-    };
+        folder_txn.encode_update_v1()
+      };
 
-    // update folder collab
-    let updated_encoded_collab = folder
-      .encode_collab_v1(|collab| CollabType::Folder.validate_require_data(collab))
-      .map_err(|e| AppError::Unhandled(e.to_string()))?;
+      // update folder collab
+      let updated_encoded_collab = collab_to_bin(&folder.collab, CollabType::Folder);
+      (encoded_update, updated_encoded_collab)
+    })
+    .await?;
 
     collab_storage
       .insert_new_collab_with_transaction(
@@ -271,7 +280,7 @@ impl PublishCollabDuplicator {
         &duplicator_uid,
         CollabParams {
           object_id: dest_workspace_id.clone(),
-          encoded_collab_v1: updated_encoded_collab.encode_to_bytes()?,
+          encoded_collab_v1: updated_encoded_collab?,
           collab_type: CollabType::Folder,
           embeddings: None,
         },
@@ -371,18 +380,23 @@ impl PublishCollabDuplicator {
     {
       // write modified doc_data back to storage
       let empty_collab = collab_from_doc_state(vec![], &new_view_id)?;
-      let new_doc = Document::open_with(empty_collab, Some(doc_data))
-        .map_err(|e| AppError::Unhandled(e.to_string()))?;
-      let new_doc_bin = new_doc
-        .encode_collab()
-        .map_err(|e| AppError::Unhandled(e.to_string()))?
-        .encode_to_bytes()?;
+      let new_doc = tokio::task::spawn_blocking(move || {
+        Document::open_with(empty_collab, Some(doc_data))
+          .map_err(|e| AppError::Unhandled(e.to_string()))
+      })
+      .await??;
+      let new_doc_bin = tokio::task::spawn_blocking(move || {
+        new_doc
+          .encode_collab()
+          .map_err(|e| AppError::Unhandled(e.to_string()))
+          .map(|ec| ec.encode_to_bytes())
+      })
+      .await?;
 
       self
         .collabs_to_insert
-        .insert(ret_view.id.clone(), (CollabType::Document, new_doc_bin));
+        .insert(ret_view.id.clone(), (CollabType::Document, new_doc_bin??));
     }
-
     Ok(ret_view)
   }
 
@@ -615,13 +629,12 @@ impl PublishCollabDuplicator {
       }
 
       // write new row collab to storage
-      let db_row_ec_bytes = db_row_collab
-        .encode_collab_v1(|collab| CollabType::DatabaseRow.validate_require_data(collab))
-        .map_err(|e| AppError::Unhandled(e.to_string()))?
-        .encode_to_bytes()?;
+      let db_row_ec_bytes =
+        tokio::task::spawn_blocking(move || collab_to_bin(&db_row_collab, CollabType::DatabaseRow))
+          .await?;
       self.collabs_to_insert.insert(
         new_row_id.clone(),
-        (CollabType::DatabaseRow, db_row_ec_bytes),
+        (CollabType::DatabaseRow, db_row_ec_bytes?),
       );
       self
         .duplicated_refs
@@ -693,13 +706,12 @@ impl PublishCollabDuplicator {
     }
 
     // write database collab to storage
-    let db_encoded_collab = db_collab
-      .encode_collab_v1(|collab| CollabType::Database.validate_require_data(collab))
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-      .encode_to_bytes()?;
-    self
-      .collabs_to_insert
-      .insert(new_db_id.clone(), (CollabType::Database, db_encoded_collab));
+    let db_encoded_collab =
+      tokio::task::spawn_blocking(move || collab_to_bin(&db_collab, CollabType::Database)).await?;
+    self.collabs_to_insert.insert(
+      new_db_id.clone(),
+      (CollabType::Database, db_encoded_collab?),
+    );
 
     // Add this database as linked view
     self
@@ -936,4 +948,12 @@ fn to_folder_view_layout(layout: workspace_dto::ViewLayout) -> collab_folder::Vi
     ViewLayout::Calendar => collab_folder::ViewLayout::Calendar,
     ViewLayout::Chat => collab_folder::ViewLayout::Chat,
   }
+}
+
+fn collab_to_bin(collab: &Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
+  let bin = collab
+    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+    .map_err(|e| AppError::Unhandled(e.to_string()))?
+    .encode_to_bytes()?;
+  Ok(bin)
 }

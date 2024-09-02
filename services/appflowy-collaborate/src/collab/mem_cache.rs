@@ -3,10 +3,10 @@ use collab::entity::EncodedCollab;
 use redis::{pipe, AsyncCommands};
 use tracing::{error, instrument, trace};
 
+use crate::collab::decode_util::encode_collab_from_bytes;
+use crate::state::RedisConnectionManager;
 use app_error::AppError;
 use database::collab::CollabMetadata;
-
-use crate::state::RedisConnectionManager;
 
 const SEVEN_DAYS: i64 = 604800;
 const ONE_MONTH: u64 = 2592000;
@@ -96,13 +96,7 @@ impl CollabMemCache {
   #[instrument(level = "trace", skip_all)]
   pub async fn get_encode_collab(&self, object_id: &str) -> Option<EncodedCollab> {
     match self.get_encode_collab_data(object_id).await {
-      Some(bytes) => match EncodedCollab::decode_from_bytes(&bytes) {
-        Ok(encoded_collab) => Some(encoded_collab),
-        Err(err) => {
-          error!("Failed to decode collab from redis cache bytes: {:?}", err);
-          None
-        },
-      },
+      Some(bytes) => encode_collab_from_bytes(bytes).await.ok(),
       None => {
         trace!(
           "No encoded collab found in cache for object_id: {}",

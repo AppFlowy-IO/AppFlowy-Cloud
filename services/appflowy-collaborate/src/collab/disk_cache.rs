@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use sqlx::{Error, PgPool, Transaction};
@@ -9,6 +8,7 @@ use tokio::time::sleep;
 use tracing::{event, instrument, Level};
 use uuid::Uuid;
 
+use crate::collab::decode_util::encode_collab_from_bytes;
 use app_error::AppError;
 use database::collab::{
   batch_select_collab_blob, insert_into_af_collab, is_collab_exists, select_blob_from_af_collab,
@@ -92,12 +92,7 @@ impl CollabDiskCache {
 
       match result {
         Ok(data) => {
-          return tokio::task::spawn_blocking(move || {
-            EncodedCollab::decode_from_bytes(&data).map_err(|err| {
-              AppError::Internal(anyhow!("fail to decode data to EncodedCollab: {:?}", err))
-            })
-          })
-          .await?;
+          return encode_collab_from_bytes(data).await;
         },
         Err(e) => {
           match e {

@@ -65,3 +65,9 @@ pub struct SignInPasswordResponse {
 pub struct SignInTokenResponse {
   pub is_new: bool,
 }
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct DeleteUserQuery {
+  pub provider_access_token: Option<String>,
+  pub provider_refresh_token: Option<String>,
+}

@@ -346,7 +346,7 @@ pub async fn invite_workspace_members(
     .begin()
     .await
     .context("Begin transaction to invite workspace members")?;
-  let admin_token = gotrue_admin.token(gotrue_client).await?;
+  let admin_token = gotrue_admin.token().await?;
 
   let inviter_name = database::user::select_name_from_uuid(pg_pool, inviter).await?;
   let workspace_name =

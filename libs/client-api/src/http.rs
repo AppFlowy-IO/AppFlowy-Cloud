@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
+use client_api_entity::auth_dto::DeleteUserQuery;
 use client_api_entity::workspace_dto::QueryWorkspaceParam;
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
@@ -738,15 +739,33 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  /// Deletes the user account and all associated data.
   #[instrument(level = "info", skip_all, err)]
   pub async fn delete_user(&self) -> Result<(), AppResponseError> {
+    let (provider_access_token, provider_refresh_token) = {
+      let token = self.token();
+      let token_read = token.read();
+      let token_resp = token_read
+        .as_ref()
+        .ok_or(AppResponseError::from(AppError::NotLoggedIn(
+          "token is empty".to_string(),
+        )))?;
+      (
+        token_resp.provider_access_token.clone(),
+        token_resp.provider_refresh_token.clone(),
+      )
+    };
+
     let url = format!("{}/api/user", self.base_url);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
       .await?
+      .query(&DeleteUserQuery {
+        provider_access_token,
+        provider_refresh_token,
+      })
       .send()
       .await?;
+
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }

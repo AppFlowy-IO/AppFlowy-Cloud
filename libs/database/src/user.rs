@@ -240,24 +240,3 @@ pub async fn select_name_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<St
   .await?;
   Ok(email)
 }
-
-#[inline]
-pub async fn delete_user(pool: &PgPool, user_uuid: &Uuid) -> Result<(), AppError> {
-  let res = sqlx::query!(
-    r#"
-      DELETE FROM auth.users WHERE id = $1
-    "#,
-    user_uuid
-  )
-  .execute(pool)
-  .await?;
-
-  if res.rows_affected() != 1 {
-    return Err(AppError::RecordNotFound(format!(
-      "User with UUID {} not found",
-      user_uuid
-    )));
-  }
-
-  Ok(())
-}

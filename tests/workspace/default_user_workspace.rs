@@ -75,7 +75,7 @@ async fn get_user_default_workspace_test() {
       getting_started_view.icon,
       Some(ViewIcon {
         ty: IconType::Emoji,
-        value: "⭐️".to_string()
+        value: "🌟".to_string()
       })
     );
 

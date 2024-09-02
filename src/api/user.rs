@@ -4,8 +4,10 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
+use app_error::ErrorCode;
 use authentication::jwt::{Authorization, UserUuid};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
+use secrecy::ExposeSecret;
 use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUserParams};
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -69,5 +71,68 @@ async fn delete_user_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   delete_user(&state.pg_pool, auth.uuid()?).await?;
+
+  if is_apple_user(auth) {
+    if let Err(err) = revoke_apple_token(
+      &state.config.apple_oauth.client_id,
+      state.config.apple_oauth.client_secret.expose_secret(),
+      "TODO: get original apple during oauth",
+    )
+    .await
+    {
+      tracing::warn!("revoke apple token failed: {:?}", err);
+    };
+  }
   Ok(AppResponse::Ok().into())
+}
+
+fn is_apple_user(auth: Authorization) -> bool {
+  if let Some(provider) = auth.claims.app_metadata.get("provider") {
+    if provider == "apple" {
+      return true;
+    }
+  };
+
+  if let Some(providers) = auth.claims.app_metadata.get("providers") {
+    if let Some(providers) = providers.as_array() {
+      for provider in providers {
+        if provider == "apple" {
+          return true;
+        }
+      }
+    }
+  }
+
+  false
+}
+
+/// Based on: https://developer.apple.com/documentation/sign_in_with_apple/revoke_tokens
+async fn revoke_apple_token(
+  apple_client_id: &str,
+  apple_client_secret: &str,
+  apple_user_token: &str,
+) -> Result<(), AppResponseError> {
+  let resp = reqwest::Client::new()
+    .post("https://appleid.apple.com/auth/revoke")
+    .form(&[
+      ("client_id", apple_client_id),
+      ("client_secret", apple_client_secret),
+      ("token", apple_user_token),
+    ])
+    .send()
+    .await?;
+
+  let status = resp.status();
+  if status.is_success() {
+    return Ok(());
+  }
+
+  let payload = resp.text().await?;
+  Err(AppResponseError::new(
+    ErrorCode::AppleRevokeTokenError,
+    format!(
+      "calling apple revoke, code: {}, message: {}",
+      status, payload
+    ),
+  ))
 }

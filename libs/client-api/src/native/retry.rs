@@ -47,18 +47,26 @@ impl Action for RefreshTokenAction {
       if let (Some(token), Some(gotrue_client)) =
         (weak_token.upgrade(), weak_gotrue_client.upgrade())
       {
-        let refresh_token = token
-          .read()
-          .as_ref()
-          .ok_or(GoTrueError::NotLoggedIn(
+        let (refresh_token, provider_access_token, provider_refresh_token) = {
+          let mut token_write = token.write();
+          let gotrue_resp_token = token_write.as_mut().ok_or(GoTrueError::NotLoggedIn(
             "fail to refresh user token".to_owned(),
-          ))?
-          .refresh_token
-          .as_str()
-          .to_owned();
-        let access_token_resp = gotrue_client
+          ))?;
+          let refresh_token = gotrue_resp_token.refresh_token.as_str().to_owned();
+          let provider_access_token = gotrue_resp_token.provider_access_token.take();
+          let provider_refresh_token = gotrue_resp_token.provider_refresh_token.take();
+          (refresh_token, provider_access_token, provider_refresh_token)
+        };
+
+        let mut access_token_resp = gotrue_client
           .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
           .await?;
+
+        // refresh does not preserve provider token and refresh token
+        // so we need to set it manually to preserve this information
+        access_token_resp.provider_access_token = provider_access_token;
+        access_token_resp.provider_refresh_token = provider_refresh_token;
+
         token.write().set(access_token_resp);
       }
       Ok(())

@@ -24,7 +24,7 @@ use authentication::jwt::{OptionalUserUuid, UserUuid};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
-use database::collab::CollabStorage;
+use database::collab::{CollabStorage, GetCollabOrigin};
 use database::user::select_uid_from_email;
 use database_entity::dto::*;
 use shared_entity::dto::workspace_dto::*;
@@ -764,7 +764,7 @@ async fn get_collab_handler(
   let object_id = params.object_id.clone();
   let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(&uid, params, false)
+    .get_encode_collab(GetCollabOrigin::User { uid }, params, true)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -800,7 +800,7 @@ async fn v1_get_collab_handler(
 
   let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(&uid, param, false)
+    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -845,9 +845,9 @@ async fn create_collab_snapshot_handler(
   let encoded_collab_v1 = state
     .collab_access_control_storage
     .get_encode_collab(
-      &uid,
+      GetCollabOrigin::User { uid },
       QueryCollabParams::new(&object_id, collab_type.clone(), &workspace_id),
-      false,
+      true,
     )
     .await?
     .encode_to_bytes()

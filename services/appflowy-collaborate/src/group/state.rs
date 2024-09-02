@@ -28,7 +28,7 @@ impl GroupManagementState {
   pub(crate) fn new(metrics_calculate: Arc<CollabRealtimeMetrics>) -> Self {
     let remove_batch_size = get_env_var("APPFLOWY_COLLABORATE_REMOVE_BATCH_SIZE", "50")
       .parse::<usize>()
-      .unwrap_or_else(|_| 50);
+      .unwrap_or(50);
     Self {
       group_by_object_id: Arc::new(DashMap::new()),
       editing_by_user: Arc::new(DashMap::new()),

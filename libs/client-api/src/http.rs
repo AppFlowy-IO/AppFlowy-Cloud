@@ -273,13 +273,18 @@ impl Client {
       .split('&');
 
     let mut refresh_token: Option<&str> = None;
+    let mut provider_token: Option<String> = None;
+    let mut provider_refresh_token: Option<String> = None;
     for param in key_value_pairs {
       match param.split_once('=') {
         Some(pair) => {
           let (k, v) = pair;
           if k == "refresh_token" {
             refresh_token = Some(v);
-            break;
+          } else if k == "provider_token" {
+            provider_token = Some(v.to_string());
+          } else if k == "provider_refresh_token" {
+            provider_refresh_token = Some(v.to_string());
           }
         },
         None => warn!("param is not in key=value format: {}", param),
@@ -287,12 +292,17 @@ impl Client {
     }
     let refresh_token = refresh_token.ok_or(url_missing_param("refresh_token"))?;
 
-    let new_token = self
+    let mut new_token = self
       .gotrue_client
       .token(&Grant::RefreshToken(RefreshTokenGrant {
         refresh_token: refresh_token.to_owned(),
       }))
       .await?;
+
+    // refresh endpoint does not return provider token
+    // so we need to set it manually to preserve this information
+    new_token.provider_access_token = provider_token;
+    new_token.provider_refresh_token = provider_refresh_token;
 
     let (_user, new) = self.verify_token(&new_token.access_token).await?;
     self.token.write().set(new_token);

@@ -16,7 +16,7 @@ use collab_rt_entity::CollabMessage;
 use collab_stream::client::{CollabRedisStream, CONTROL_STREAM_KEY};
 use collab_stream::model::CollabControlEvent;
 use collab_stream::stream_group::StreamGroup;
-use database::collab::CollabStorage;
+use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::QueryCollabParams;
 
 use crate::client::client_msg_router::ClientMessageRouter;
@@ -271,7 +271,7 @@ where
   S: CollabStorage,
 {
   let encode_collab = storage
-    .get_encode_collab(&uid, params.clone(), true)
+    .get_encode_collab(GetCollabOrigin::User { uid }, params.clone(), false)
     .await?;
   let result = Collab::new_with_source(
     CollabOrigin::Server,

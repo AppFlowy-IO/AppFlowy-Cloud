@@ -491,7 +491,7 @@ async fn simulate_small_data_set_write(pool: PgPool) {
       collab_type: params.collab_type.clone(),
     };
     let encode_collab_from_disk = collab_cache
-      .get_encode_collab_from_disk(&user.uid, query)
+      .get_encode_collab_from_disk(query)
       .await
       .unwrap();
 
@@ -558,7 +558,7 @@ async fn simulate_large_data_set_write(pool: PgPool) {
     collab_type: params.collab_type.clone(),
   };
   let encode_collab_from_disk = collab_cache
-    .get_encode_collab_from_disk(&user.uid, query)
+    .get_encode_collab_from_disk(query)
     .await
     .unwrap();
   assert_eq!(

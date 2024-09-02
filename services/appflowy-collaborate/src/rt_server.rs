@@ -93,7 +93,7 @@ where
 
     spawn_metrics(metrics.clone(), storage.clone());
 
-    spawn_handle_unindexed_collabs(indexer_provider);
+    spawn_handle_unindexed_collabs(indexer_provider, storage.clone());
 
     Ok(Self {
       storage,
@@ -271,8 +271,14 @@ where
   }
 }
 
-fn spawn_handle_unindexed_collabs(indexer_provider: Arc<IndexerProvider>) {
-  tokio::spawn(IndexerProvider::handle_unindexed_collabs(indexer_provider));
+fn spawn_handle_unindexed_collabs(
+  indexer_provider: Arc<IndexerProvider>,
+  storage: Arc<dyn CollabStorage>,
+) {
+  tokio::spawn(IndexerProvider::handle_unindexed_collabs(
+    indexer_provider,
+    storage,
+  ));
 }
 
 fn spawn_period_check_inactive_group<S, AC>(

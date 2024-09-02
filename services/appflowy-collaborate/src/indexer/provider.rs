@@ -19,7 +19,7 @@ use crate::config::get_env_var;
 use crate::indexer::DocumentIndexer;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
-use database::collab::select_blob_from_af_collab;
+use database::collab::{CollabStorage, GetCollabOrigin};
 use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, CollabParams};
@@ -93,20 +93,22 @@ impl IndexerProvider {
 
   fn get_unindexed_collabs(
     &self,
+    storage: Arc<dyn CollabStorage>,
   ) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab, anyhow::Error>> + Send>> {
     let db = self.db.clone();
+
     Box::pin(try_stream! {
       let collabs = get_collabs_without_embeddings(&db).await?;
-
       if !collabs.is_empty() {
         tracing::trace!("found {} unindexed collabs", collabs.len());
       }
       for cid in collabs {
         match &cid.collab_type {
           CollabType::Document => {
-            let collab =
-              select_blob_from_af_collab(&db, &CollabType::Document, &cid.object_id).await?;
-            let collab = EncodedCollab::decode_from_bytes(&collab)?;
+            let collab = storage
+              .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
+              .await?;
+
             yield UnindexedCollab {
               workspace_id: cid.workspace_id,
               object_id: cid.object_id,
@@ -125,8 +127,8 @@ impl IndexerProvider {
     })
   }
 
-  pub async fn handle_unindexed_collabs(indexer: Arc<Self>) {
-    let mut stream = indexer.get_unindexed_collabs();
+  pub async fn handle_unindexed_collabs(indexer: Arc<Self>, storage: Arc<dyn CollabStorage>) {
+    let mut stream = indexer.get_unindexed_collabs(storage);
     while let Some(result) = stream.next().await {
       match result {
         Ok(collab) => {

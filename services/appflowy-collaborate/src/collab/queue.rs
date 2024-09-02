@@ -100,7 +100,6 @@ impl StorageQueue {
     priority: WritePriority,
   ) -> Result<(), AppError> {
     trace!("queuing {} object to pending write queue", params.object_id,);
-    // TODO(nathan): compress the data before storing it in Redis
     self
       .collab_cache
       .insert_encode_collab_data_in_mem(params)

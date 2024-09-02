@@ -67,11 +67,7 @@ impl CollabCache {
     }
   }
 
-  pub async fn get_encode_collab(
-    &self,
-    uid: &i64,
-    query: QueryCollab,
-  ) -> Result<EncodedCollab, AppError> {
+  pub async fn get_encode_collab(&self, query: QueryCollab) -> Result<EncodedCollab, AppError> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
@@ -86,10 +82,7 @@ impl CollabCache {
 
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
     let object_id = query.object_id.clone();
-    let encode_collab = self
-      .disk_cache
-      .get_collab_encoded_from_disk(uid, query)
-      .await?;
+    let encode_collab = self.disk_cache.get_collab_encoded_from_disk(query).await?;
 
     // spawn a task to insert the encoded collab into the memory cache
     let cloned_encode_collab = encode_collab.clone();
@@ -180,13 +173,9 @@ impl CollabCache {
 
   pub async fn get_encode_collab_from_disk(
     &self,
-    uid: &i64,
     query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
-    let encode_collab = self
-      .disk_cache
-      .get_collab_encoded_from_disk(uid, query)
-      .await?;
+    let encode_collab = self.disk_cache.get_collab_encoded_from_disk(query).await?;
     Ok(encode_collab)
   }
 
@@ -219,11 +208,11 @@ impl CollabCache {
   }
 
   pub fn query_state(&self) -> QueryState {
-    let successful_attempts = self.success_attempts.load(Ordering::Relaxed);
+    let success_attempts = self.success_attempts.load(Ordering::Relaxed);
     let total_attempts = self.total_attempts.load(Ordering::Relaxed);
     QueryState {
       total_attempts,
-      success_attempts: successful_attempts,
+      success_attempts,
     }
   }
 
@@ -249,6 +238,7 @@ impl CollabCache {
   }
 }
 
+#[derive(Debug)]
 pub struct QueryState {
   pub total_attempts: u64,
   pub success_attempts: u64,

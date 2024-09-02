@@ -73,7 +73,6 @@ impl CollabDiskCache {
   #[instrument(level = "trace", skip_all)]
   pub async fn get_collab_encoded_from_disk(
     &self,
-    _uid: &i64,
     query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
     event!(

@@ -1,7 +1,5 @@
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
@@ -185,9 +183,34 @@ impl TestClient {
     Folder::from_collab_doc_state(
       uid,
       CollabOrigin::Empty,
-      DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
+      data.encode_collab.into(),
       &workspace_id,
       vec![],
+    )
+    .unwrap()
+  }
+
+  pub async fn get_workspace_database_collab(&mut self, workspace_id: &str) -> Collab {
+    let db_storage_id = self.open_workspace(workspace_id).await.database_storage_id;
+    let ws_db_doc_state = self
+      .get_collab(QueryCollabParams {
+        workspace_id: workspace_id.to_string(),
+        inner: QueryCollab {
+          object_id: db_storage_id.to_string(),
+          collab_type: CollabType::WorkspaceDatabase,
+        },
+      })
+      .await
+      .unwrap()
+      .encode_collab
+      .doc_state
+      .to_vec();
+    Collab::new_with_source(
+      CollabOrigin::Server,
+      &db_storage_id.to_string(),
+      DataSource::DocStateV1(ws_db_doc_state),
+      vec![],
+      false,
     )
     .unwrap()
   }
@@ -968,32 +991,4 @@ pub async fn get_collab_json_from_server(
   )
   .unwrap()
   .to_json_value()
-}
-
-pub struct TestTempFile(PathBuf);
-
-impl TestTempFile {
-  fn cleanup(dir: &PathBuf) {
-    let _ = std::fs::remove_dir_all(dir);
-  }
-}
-
-impl AsRef<Path> for TestTempFile {
-  fn as_ref(&self) -> &Path {
-    &self.0
-  }
-}
-
-impl Deref for TestTempFile {
-  type Target = PathBuf;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-
-impl Drop for TestTempFile {
-  fn drop(&mut self) {
-    Self::cleanup(&self.0)
-  }
 }

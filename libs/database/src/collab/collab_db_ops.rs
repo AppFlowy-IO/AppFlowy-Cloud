@@ -496,11 +496,10 @@ pub fn select_collab_member_access_level(
   sqlx::query_as!(
     AFCollabMemberAccessLevelRow,
     r#"
-      SELECT
-          uid, oid, access_level
+      SELECT uid, oid, access_level
       FROM af_collab_member
       INNER JOIN af_permissions
-          ON af_collab_member.permission_id = af_permissions.id
+        ON af_collab_member.permission_id = af_permissions.id
     "#
   )
   .fetch(pg_pool)
@@ -513,17 +512,17 @@ pub async fn select_collab_members(
 ) -> Result<Vec<AFCollabMember>, AppError> {
   let members = sqlx::query(
     r#"
-      SELECT af_collab_member.uid, 
-             af_collab_member.oid, 
-             af_permissions.id, 
-             af_permissions.name, 
-             af_permissions.access_level, 
-             af_permissions.description
+      SELECT af_collab_member.uid,
+        af_collab_member.oid,
+        af_permissions.id,
+        af_permissions.name,
+        af_permissions.access_level,
+        af_permissions.description
       FROM af_collab_member
       JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
       WHERE af_collab_member.oid = $1
       ORDER BY af_collab_member.created_at ASC
-      "#,
+    "#,
   )
   .bind(oid)
   .try_map(collab_member_try_from_row)
@@ -541,11 +540,11 @@ pub async fn select_collab_member<'a, E: Executor<'a, Database = Postgres>>(
 ) -> Result<AFCollabMember, AppError> {
   let row = sqlx::query(
   r#"
-      SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
-      FROM af_collab_member
-      JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
-      WHERE af_collab_member.uid = $1 AND af_collab_member.oid = $2
-      "#,
+    SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
+    FROM af_collab_member
+    JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
+    WHERE af_collab_member.uid = $1 AND af_collab_member.oid = $2
+  "#,
   )
   .bind(uid)
   .bind(oid)
@@ -580,8 +579,8 @@ pub async fn is_collab_member_exists<'a, E: Executor<'a, Database = Postgres>>(
 ) -> Result<bool, sqlx::Error> {
   let result = sqlx::query_scalar!(
     r#"
-        SELECT EXISTS (SELECT 1 FROM af_collab_member WHERE oid = $1 AND uid = $2 LIMIT 1)
-        "#,
+      SELECT EXISTS (SELECT 1 FROM af_collab_member WHERE oid = $1 AND uid = $2 LIMIT 1)
+    "#,
     &oid,
     &uid,
   )
@@ -616,11 +615,30 @@ pub async fn is_collab_exists<'a, E: Executor<'a, Database = Postgres>>(
 ) -> Result<bool, sqlx::Error> {
   let result = sqlx::query_scalar!(
     r#"
-        SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)
-        "#,
+      SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)
+    "#,
     &oid,
   )
   .fetch_one(executor)
   .await;
   transform_record_not_found_error(result)
+}
+
+pub async fn select_workspace_database_oid<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<String, sqlx::Error> {
+  let partition_key = partition_key_from_collab_type(&CollabType::WorkspaceDatabase);
+  sqlx::query_scalar!(
+    r#"
+      SELECT oid
+      FROM af_collab
+      WHERE workspace_id = $1
+        AND partition_key = $2
+    "#,
+    &workspace_id,
+    &partition_key,
+  )
+  .fetch_one(executor)
+  .await
 }

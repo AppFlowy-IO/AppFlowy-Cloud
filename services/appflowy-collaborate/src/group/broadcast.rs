@@ -218,7 +218,10 @@ impl CollabBroadcast {
                     error!("fail to broadcast message:{}", err);
                   }
                 }
-                Err(_) => break,
+                Err(e) => {
+                  error!("fail to receive message:{}", e);
+                  break;
+                },
               }
             },
           }
@@ -313,7 +316,7 @@ async fn handle_client_messages<Sink>(
         Ok(response) => {
           trace!("[realtime]: sending response: {}", response);
           match sink.send(response.into()).await {
-            Ok(_) => {},
+            Ok(()) => {},
             Err(err) => {
               trace!("[realtime]: send failed: {}", err);
               break;

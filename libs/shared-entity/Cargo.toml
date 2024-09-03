@@ -28,6 +28,7 @@ validator = { version = "0.16", features = ["validator_derive", "derive"], optio
 futures = "0.3.30"
 bytes = "1.6.0"
 log = "0.4.21"
+tracing = { workspace = true }
 
 
 [features]

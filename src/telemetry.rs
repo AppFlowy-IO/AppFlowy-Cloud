@@ -15,7 +15,8 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
     .with_target(true)
     .with_max_level(tracing::Level::TRACE)
     .with_thread_ids(false)
-    .with_file(false);
+    .with_file(true)
+    .with_line_number(true);
 
   match app_env {
     Environment::Local => {

@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::ops::Deref;
 use uuid::Uuid;
 
@@ -121,7 +122,54 @@ pub struct CollabResponse {
   pub object_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublishedDuplicate {
+  pub published_view_id: String,
+  pub dest_view_id: String,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct FolderView {
+  pub view_id: String,
+  pub name: String,
+  pub icon: Option<ViewIcon>,
+  pub is_space: bool,
+  pub is_private: bool,
+  /// contains fields like `is_space`, and font information
+  pub extra: Option<serde_json::Value>,
+  pub children: Vec<FolderView>,
+}
+
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum IconType {
+  Emoji = 0,
+  Url = 1,
+  Icon = 2,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ViewIcon {
+  pub ty: IconType,
+  pub value: String,
+}
+
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum ViewLayout {
+  Document = 0,
+  Grid = 1,
+  Board = 2,
+  Calendar = 3,
+  Chat = 4,
+}
+
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceParam {
   pub include_member_count: Option<bool>,
+}
+
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct QueryWorkspaceFolder {
+  pub depth: Option<u32>,
 }

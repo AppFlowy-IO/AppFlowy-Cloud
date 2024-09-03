@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use collab_folder::Folder;
-use shared_entity::dto::workspace_dto::FolderView;
+use collab_folder::{Folder, ViewLayout as CollabFolderViewLayout};
+use shared_entity::dto::workspace_dto::{FolderView, ViewLayout};
 use uuid::Uuid;
 
 pub fn collab_folder_to_folder_view(folder: &Folder, depth: u32) -> FolderView {
@@ -126,7 +126,7 @@ impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
   }
 }
 
-fn view_is_space(view: &collab_folder::View) -> bool {
+pub fn view_is_space(view: &collab_folder::View) -> bool {
   let extra = match view.extra.as_ref() {
     Some(extra) => extra,
     None => return false,
@@ -144,19 +144,31 @@ fn view_is_space(view: &collab_folder::View) -> bool {
   }
 }
 
-fn to_dto_view_icon(icon: collab_folder::ViewIcon) -> shared_entity::dto::workspace_dto::ViewIcon {
+pub fn to_dto_view_icon(
+  icon: collab_folder::ViewIcon,
+) -> shared_entity::dto::workspace_dto::ViewIcon {
   shared_entity::dto::workspace_dto::ViewIcon {
     ty: to_dto_view_icon_type(icon.ty),
     value: icon.value,
   }
 }
 
-fn to_dto_view_icon_type(
+pub fn to_dto_view_icon_type(
   icon: collab_folder::IconType,
 ) -> shared_entity::dto::workspace_dto::IconType {
   match icon {
     collab_folder::IconType::Emoji => shared_entity::dto::workspace_dto::IconType::Emoji,
     collab_folder::IconType::Url => shared_entity::dto::workspace_dto::IconType::Url,
     collab_folder::IconType::Icon => shared_entity::dto::workspace_dto::IconType::Icon,
+  }
+}
+
+pub fn to_view_layout(collab_folder_view_layout: &CollabFolderViewLayout) -> ViewLayout {
+  match collab_folder_view_layout {
+    CollabFolderViewLayout::Document => ViewLayout::Document,
+    CollabFolderViewLayout::Grid => ViewLayout::Grid,
+    CollabFolderViewLayout::Board => ViewLayout::Board,
+    CollabFolderViewLayout::Calendar => ViewLayout::Calendar,
+    CollabFolderViewLayout::Chat => ViewLayout::Chat,
   }
 }

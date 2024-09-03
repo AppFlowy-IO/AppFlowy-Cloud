@@ -6,14 +6,17 @@ use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::{CollabOrigin, Folder};
 use database::collab::{CollabStorage, GetCollabOrigin};
-use database_entity::dto::QueryCollab;
-use database_entity::dto::QueryCollabParams;
+use database::publish::select_published_view_ids_for_workspace;
+use database::publish::select_workspace_id_for_publish_namespace;
+use database_entity::dto::{QueryCollab, QueryCollabParams};
 use sqlx::PgPool;
 use std::ops::DerefMut;
 
 use anyhow::Context;
-use shared_entity::dto::workspace_dto::FolderView;
+use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
+use std::collections::HashSet;
+
 use tracing::{event, trace};
 use validator::Validate;
 
@@ -24,6 +27,7 @@ use database_entity::dto::{
 };
 
 use super::folder_view::collab_folder_to_folder_view;
+use super::publish_outline::collab_folder_to_published_outline;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -214,4 +218,36 @@ pub async fn get_latest_collab_encoded(
       true,
     )
     .await
+}
+
+pub async fn get_published_view(
+  collab_storage: Arc<CollabAccessControlStorage>,
+  publish_namespace: String,
+  pg_pool: &PgPool,
+) -> Result<PublishedView, AppError> {
+  let workspace_id = select_workspace_id_for_publish_namespace(pg_pool, &publish_namespace).await?;
+  let query_collab_params = QueryCollabParams::new(
+    workspace_id,
+    collab_entity::CollabType::Folder,
+    workspace_id,
+  );
+  let encoded_collab = collab_storage
+    .get_encode_collab(GetCollabOrigin::Server, query_collab_params, true)
+    .await?;
+  let folder = Folder::from_collab_doc_state(
+    0,
+    CollabOrigin::Server,
+    encoded_collab.into(),
+    &workspace_id.to_string(),
+    vec![],
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids: HashSet<String> = publish_view_ids
+    .into_iter()
+    .map(|id| id.to_string())
+    .collect();
+  let published_view: PublishedView =
+    collab_folder_to_published_outline(&folder, &publish_view_ids)?;
+  Ok(published_view)
 }

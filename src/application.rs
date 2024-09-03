@@ -216,7 +216,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   // Gotrue
   info!("Connecting to GoTrue...");
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
-  let gotrue_admin = setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
+  let gotrue_admin = setup_admin_account(gotrue_client.clone(), &pg_pool, &config.gotrue).await?;
 
   // Redis
   info!("Connecting to Redis...");
@@ -320,13 +320,17 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 }
 
 async fn setup_admin_account(
-  gotrue_client: &gotrue::api::Client,
+  gotrue_client: gotrue::api::Client,
   pg_pool: &PgPool,
   gotrue_setting: &GoTrueSetting,
 ) -> Result<GoTrueAdmin, Error> {
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.expose_secret();
-  let gotrue_admin = GoTrueAdmin::new(admin_email.to_owned(), password.to_owned());
+  let gotrue_admin = GoTrueAdmin::new(
+    admin_email.to_owned(),
+    password.to_owned(),
+    gotrue_client.clone(),
+  );
 
   match gotrue_client
     .token(&Grant::Password(PasswordGrant {

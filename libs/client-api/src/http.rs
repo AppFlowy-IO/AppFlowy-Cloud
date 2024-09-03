@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
+use client_api_entity::auth_dto::DeleteUserQuery;
 use client_api_entity::workspace_dto::FolderView;
 use client_api_entity::workspace_dto::QueryWorkspaceFolder;
 use client_api_entity::workspace_dto::QueryWorkspaceParam;
@@ -274,13 +275,18 @@ impl Client {
       .split('&');
 
     let mut refresh_token: Option<&str> = None;
+    let mut provider_token: Option<String> = None;
+    let mut provider_refresh_token: Option<String> = None;
     for param in key_value_pairs {
       match param.split_once('=') {
         Some(pair) => {
           let (k, v) = pair;
           if k == "refresh_token" {
             refresh_token = Some(v);
-            break;
+          } else if k == "provider_token" {
+            provider_token = Some(v.to_string());
+          } else if k == "provider_refresh_token" {
+            provider_refresh_token = Some(v.to_string());
           }
         },
         None => warn!("param is not in key=value format: {}", param),
@@ -288,12 +294,17 @@ impl Client {
     }
     let refresh_token = refresh_token.ok_or(url_missing_param("refresh_token"))?;
 
-    let new_token = self
+    let mut new_token = self
       .gotrue_client
       .token(&Grant::RefreshToken(RefreshTokenGrant {
         refresh_token: refresh_token.to_owned(),
       }))
       .await?;
+
+    // refresh endpoint does not return provider token
+    // so we need to set it manually to preserve this information
+    new_token.provider_access_token = provider_token;
+    new_token.provider_refresh_token = provider_refresh_token;
 
     let (_user, new) = self.verify_token(&new_token.access_token).await?;
     self.token.write().set(new_token);
@@ -767,6 +778,37 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn delete_user(&self) -> Result<(), AppResponseError> {
+    let (provider_access_token, provider_refresh_token) = {
+      let token = self.token();
+      let token_read = token.read();
+      let token_resp = token_read
+        .as_ref()
+        .ok_or(AppResponseError::from(AppError::NotLoggedIn(
+          "token is empty".to_string(),
+        )))?;
+      (
+        token_resp.provider_access_token.clone(),
+        token_resp.provider_refresh_token.clone(),
+      )
+    };
+
+    let url = format!("{}/api/user", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .query(&DeleteUserQuery {
+        provider_access_token,
+        provider_refresh_token,
+      })
+      .send()
+      .await?;
+
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }

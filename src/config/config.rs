@@ -22,6 +22,7 @@ pub struct Config {
   pub grpc_history: GrpcHistorySetting,
   pub collab: CollabSetting,
   pub mailer: MailerSetting,
+  pub apple_oauth: AppleOAuthSetting,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -30,6 +31,12 @@ pub struct MailerSetting {
   pub smtp_port: u16,
   pub smtp_username: String,
   pub smtp_password: Secret<String>,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct AppleOAuthSetting {
+  pub client_id: String,
+  pub client_secret: Secret<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -203,6 +210,10 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       smtp_port: get_env_var("APPFLOWY_MAILER_SMTP_PORT", "465").parse()?,
       smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
       smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
+    },
+    apple_oauth: AppleOAuthSetting {
+      client_id: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_ID", ""),
+      client_secret: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_SECRET", "").into(),
     },
   };
   Ok(config)

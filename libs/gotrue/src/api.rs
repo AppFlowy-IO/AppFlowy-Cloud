@@ -14,7 +14,7 @@ use infra::reqwest::{check_response, from_body, from_response};
 use reqwest::{Method, RequestBuilder};
 use tracing::event;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Client {
   client: reqwest::Client,
   pub base_url: String,

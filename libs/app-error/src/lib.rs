@@ -136,6 +136,9 @@ pub enum AppError {
 
   #[error("{0}")]
   InvalidContentType(String),
+
+  #[error("{0}")]
+  InvalidPublishedOutline(String),
 }
 
 impl AppError {
@@ -200,6 +203,7 @@ impl AppError {
       AppError::AIServiceUnavailable(_) => ErrorCode::AIServiceUnavailable,
       AppError::StringLengthLimitReached(_) => ErrorCode::StringLengthLimitReached,
       AppError::InvalidContentType(_) => ErrorCode::InvalidContentType,
+      AppError::InvalidPublishedOutline(_) => ErrorCode::InvalidPublishedOutline,
     }
   }
 }
@@ -318,6 +322,7 @@ pub enum ErrorCode {
   InvalidContentType = 1036,
   SingleUploadLimitExceeded = 1037,
   AppleRevokeTokenError = 1038,
+  InvalidPublishedOutline = 1039,
 }
 
 impl ErrorCode {

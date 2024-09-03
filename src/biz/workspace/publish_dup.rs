@@ -340,7 +340,9 @@ impl PublishCollabDuplicator {
       ViewLayout::Document => {
         let doc_collab = collab_from_doc_state(published_blob, "")?;
         let doc = Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
-        let new_doc_view = self.deep_copy_doc(new_view_id, doc, metadata).await?;
+        let new_doc_view = self
+          .deep_copy_doc(publish_view_id, new_view_id, doc, metadata)
+          .await?;
         Ok(Some(new_doc_view))
       },
       ViewLayout::Grid | ViewLayout::Board | ViewLayout::Calendar => {
@@ -360,6 +362,7 @@ impl PublishCollabDuplicator {
 
   async fn deep_copy_doc<'a>(
     &mut self,
+    pub_view_id: &str,
     new_view_id: String,
     doc: Document,
     metadata: PublishViewMetaData,
@@ -376,7 +379,7 @@ impl PublishCollabDuplicator {
     }
 
     if let Err(err) = self
-      .deep_copy_doc_databases(&mut doc_data, &mut ret_view)
+      .deep_copy_doc_databases(pub_view_id, &mut doc_data, &mut ret_view)
       .await
     {
       tracing::error!("failed to deep copy doc databases: {}", err);
@@ -493,6 +496,7 @@ impl PublishCollabDuplicator {
 
   async fn deep_copy_doc_databases(
     &mut self,
+    pub_view_id: &str,
     doc_data: &mut DocumentData,
     ret_view: &mut View,
   ) -> Result<(), AppError> {
@@ -517,29 +521,82 @@ impl PublishCollabDuplicator {
         .as_str()
         .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
 
-      if let Some((new_view_id, new_parent_id)) = self
-        .deep_copy_database_inline_doc(block_view_id, block_parent_id, &ret_view.id)
-        .await?
-      {
-        block.data.insert(
-          "view_id".to_string(),
-          serde_json::Value::String(new_view_id),
-        );
-        block.data.insert(
-          "parent_id".to_string(),
-          serde_json::Value::String(new_parent_id),
-        );
+      if pub_view_id == block_parent_id {
+        // inline database in doc
+        if let Some(new_view_id) = self
+          .deep_copy_inline_database_in_doc(block_view_id, &ret_view.id)
+          .await?
+        {
+          block.data.insert(
+            "view_id".to_string(),
+            serde_json::Value::String(new_view_id),
+          );
+          block.data.insert(
+            "parent_id".to_string(),
+            serde_json::Value::String(ret_view.id.clone()),
+          );
+        } else {
+          tracing::warn!("deep_copy_doc_databases: view not found: {}", block_view_id);
+        }
       } else {
-        tracing::warn!("deep_copy_doc_databases: view not found: {}", block_view_id);
+        // reference to database
+        if let Some((new_view_id, new_parent_id)) = self
+          .deep_copy_ref_database_in_doc(block_view_id, block_parent_id, &ret_view.id)
+          .await?
+        {
+          block.data.insert(
+            "view_id".to_string(),
+            serde_json::Value::String(new_view_id),
+          );
+          block.data.insert(
+            "parent_id".to_string(),
+            serde_json::Value::String(new_parent_id),
+          );
+        } else {
+          tracing::warn!("deep_copy_doc_databases: view not found: {}", block_view_id);
+        }
       }
     }
 
     Ok(())
   }
 
-  /// deep copy database for doc
+  /// deep copy inline database for doc
+  /// returns new view_id
+  /// parent_view_id is assumed to be doc itself
+  async fn deep_copy_inline_database_in_doc<'a>(
+    &mut self,
+    view_id: &str,
+    doc_view_id: &String,
+  ) -> Result<Option<String>, AppError> {
+    let (metadata, published_blob) = match self
+      .get_published_data_for_view_id(&view_id.parse()?)
+      .await?
+    {
+      Some(published_data) => published_data,
+      None => {
+        tracing::warn!("No published collab data found for view_id: {}", view_id);
+        return Ok(None);
+      },
+    };
+
+    let published_db = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
+    let mut parent_view = self
+      .deep_copy_database_view(gen_view_id(), published_db, &metadata, view_id)
+      .await?;
+    let parent_view_id = parent_view.id.clone();
+    if parent_view.parent_view_id.is_empty() {
+      parent_view.parent_view_id.clone_from(doc_view_id);
+      self
+        .views_to_add
+        .insert(parent_view.id.clone(), parent_view);
+    }
+    Ok(Some(parent_view_id))
+  }
+
+  /// deep copy referenced database for doc
   /// returns new (view_id, parent_id)
-  async fn deep_copy_database_inline_doc<'a>(
+  async fn deep_copy_ref_database_in_doc<'a>(
     &mut self,
     view_id: &str,
     parent_id: &str,

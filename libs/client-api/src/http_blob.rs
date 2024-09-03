@@ -5,12 +5,13 @@ use app_error::AppError;
 use bytes::Bytes;
 use futures_util::TryStreamExt;
 use mime::Mime;
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{header, Method, StatusCode};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use tracing::instrument;
+use url::Url;
 
 impl Client {
   pub fn get_blob_url(&self, workspace_id: &str, file_id: &str) -> String {
@@ -73,6 +74,29 @@ impl Client {
       "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
       self.base_url
     )
+  }
+
+  /// Returns the workspace_id, parent_dir, and file_id from the given blob url.
+  pub fn parse_blob_url_v1(&self, url: &str) -> Option<(String, String, String)> {
+    let parsed_url = Url::parse(url).ok()?;
+    let segments: Vec<&str> = parsed_url.path_segments()?.collect();
+    // Check if the path has the expected number of segments
+    if segments.len() < 6 {
+      return None;
+    }
+
+    // Extract the workspace_id, parent_dir, and file_id from the segments
+    let workspace_id = segments[2].to_string();
+    let encoded_parent_dir = segments[5].to_string();
+    let file_id = segments[6].to_string();
+
+    // Decode the percent-encoded parent_dir
+    let parent_dir = percent_decode_str(&encoded_parent_dir)
+      .decode_utf8()
+      .ok()?
+      .to_string();
+
+    Some((workspace_id, parent_dir, file_id))
   }
 
   #[instrument(level = "info", skip_all)]

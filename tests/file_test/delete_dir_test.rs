@@ -81,6 +81,12 @@ async fn delete_workspace_sub_folder_resource_test() {
       .unwrap()
       .1;
     let blob_text = String::from_utf8(blob.to_vec()).unwrap();
+
+    let url = c1.get_blob_url_v1(&workspace_id, &parent_dir, &file_id);
+    let (workspace_id_2, parent_dir_2, file_id_2) = c1.parse_blob_url_v1(&url).unwrap();
+    assert_eq!(workspace_id, workspace_id_2);
+    assert_eq!(parent_dir, parent_dir_2);
+    assert_eq!(file_id, file_id_2);
     assert_eq!(blob_text, text);
   }
   c1.delete_workspace(&workspace_id).await.unwrap();

@@ -12,6 +12,7 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View};
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
+use database::collab::GetCollabOrigin;
 use database::collab::{select_workspace_database_oid, CollabStorage};
 use database::publish::select_published_data_for_view_id;
 use database_entity::dto::CollabParams;
@@ -165,7 +166,9 @@ impl PublishCollabDuplicator {
       let mut ws_db_collab = {
         let ws_database_ec = get_latest_collab_encoded(
           collab_storage.clone(),
-          &duplicator_uid,
+          GetCollabOrigin::User {
+            uid: duplicator_uid,
+          },
           &dest_workspace_id,
           &ws_db_oid,
           CollabType::WorkspaceDatabase,
@@ -207,7 +210,9 @@ impl PublishCollabDuplicator {
 
     let collab_folder_encoded = get_latest_collab_encoded(
       collab_storage.clone(),
-      &duplicator_uid,
+      GetCollabOrigin::User {
+        uid: duplicator_uid,
+      },
       &dest_workspace_id,
       &dest_workspace_id,
       CollabType::Folder,

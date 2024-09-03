@@ -1,5 +1,7 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
+use client_api_entity::workspace_dto::FolderView;
+use client_api_entity::workspace_dto::QueryWorkspaceFolder;
 use client_api_entity::workspace_dto::QueryWorkspaceParam;
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
@@ -653,6 +655,37 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<Vec<AFWorkspace>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  /// List out the views in the workspace recursively.
+  /// The depth parameter specifies the depth of the folder view tree to return(default: 1).
+  /// e.g., depth=1 will return only up to `Shared` and `PrivateSpace`
+  /// depth=2 will return up to `mydoc1`, `mydoc2`, `mydoc3`, `mydoc4`
+  ///
+  /// . MyWorkspace
+  /// ├── Shared
+  /// │   ├── mydoc1
+  /// │   └── mydoc2
+  /// └── PrivateSpace
+  ///     ├── mydoc3
+  ///     └── mydoc4
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn get_workspace_folder(
+    &self,
+    workspace_id: &str,
+    depth: Option<u32>,
+  ) -> Result<FolderView, AppResponseError> {
+    let url = format!("{}/api/workspace/{}/folder", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .query(&QueryWorkspaceFolder { depth })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<FolderView>::from_response(resp)
       .await?
       .into_data()
   }

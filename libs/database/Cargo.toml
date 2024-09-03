@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 collab = { workspace = true }
 collab-entity = { workspace = true }
+collab-rt-entity = { workspace = true }
 validator = { version = "0.16", features = ["validator_derive", "derive"] }
 database-entity.workspace = true
 app-error = { workspace = true, features = ["sqlx_error", "validation_error"] }

@@ -632,6 +632,7 @@ dependencies = [
  "gotrue-entity",
  "governor",
  "handlebars",
+ "hex",
  "image",
  "infra",
  "itertools 0.11.0",
@@ -678,6 +679,7 @@ dependencies = [
  "validator",
  "workspace-access",
  "workspace-template",
+ "yrs",
 ]
 
 [[package]]
@@ -2013,6 +2015,7 @@ dependencies = [
  "client-api",
  "client-websocket",
  "collab",
+ "collab-database",
  "collab-document",
  "collab-entity",
  "collab-folder",
@@ -2738,6 +2741,7 @@ dependencies = [
  "chrono",
  "collab",
  "collab-entity",
+ "collab-rt-entity",
  "database-entity",
  "futures-util",
  "pgvector",
@@ -6295,6 +6299,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "thiserror",
+ "tracing",
  "uuid",
  "validator",
 ]

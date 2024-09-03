@@ -296,7 +296,7 @@ pub async fn select_published_view_ids_for_workspace<'a, E: Executor<'a, Databas
   executor: E,
   workspace_id: Uuid,
 ) -> Result<Vec<Uuid>, AppError> {
-  let res = sqlx::query!(
+  let res = sqlx::query_scalar!(
     r#"
       SELECT view_id
       FROM af_published_collab
@@ -307,5 +307,5 @@ pub async fn select_published_view_ids_for_workspace<'a, E: Executor<'a, Databas
   .fetch_all(executor)
   .await?;
 
-  Ok(res.into_iter().map(|r| r.view_id).collect())
+  Ok(res)
 }

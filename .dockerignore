@@ -1,6 +1,7 @@
 .env
 .dockerignore
 spec.yaml
+**/target
 target/
 deploy/
 tests/

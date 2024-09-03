@@ -164,6 +164,12 @@ pub enum ViewLayout {
   Chat = 4,
 }
 
+impl Default for ViewLayout {
+  fn default() -> Self {
+    Self::Document
+  }
+}
+
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceParam {
   pub include_member_count: Option<bool>,
@@ -172,4 +178,15 @@ pub struct QueryWorkspaceParam {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceFolder {
   pub depth: Option<u32>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct PublishedView {
+  pub view_id: String,
+  pub name: String,
+  pub icon: Option<ViewIcon>,
+  pub layout: ViewLayout,
+  /// contains fields like `is_space`, and font information
+  pub extra: Option<serde_json::Value>,
+  pub children: Vec<PublishedView>,
 }

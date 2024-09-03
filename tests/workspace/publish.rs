@@ -5,6 +5,7 @@ use appflowy_cloud::biz::workspace::publish_dup::{
 use collab::util::MapExt;
 use collab_database::views::ViewMap;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use shared_entity::dto::publish_dto::PublishDatabaseData;
@@ -933,7 +934,6 @@ async fn duplicate_to_workspace_doc_inline_database() {
       .into_iter()
       .find(|v| v.name == "View of grid1")
       .unwrap();
-    println!("{:#?}", view_of_grid1_fv);
     assert_ne!(view_of_grid1_fv.view_id, view_of_grid_1_view_id.to_string());
 
     {
@@ -981,6 +981,124 @@ async fn duplicate_to_workspace_doc_inline_database() {
           );
         }
       }
+    }
+  }
+}
+
+#[tokio::test]
+async fn duplicate_to_workspace_db_embedded_in_doc() {
+  let client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.workspace_id().await;
+
+  // embedded doc with db
+  // database is created in the doc, not linked from a separate view
+  let doc_with_embedded_db_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  let doc_with_embedded_db_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::DOC_WITH_EMBEDDED_DB_META).unwrap();
+  let doc_with_embedded_db_blob = hex::decode(published_data::DOC_WITH_EMBEDDED_DB_HEX).unwrap();
+
+  // user will also need to publish the database (even though it is embedded)
+  // uuid must be fixed because it is referenced in the doc
+  let embedded_db_view_id: uuid::Uuid = "bb221175-14da-4a05-a09d-595e42d2350f".parse().unwrap();
+  let embedded_db_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::EMBEDDED_DB_META).unwrap();
+  let embedded_db_blob = hex::decode(published_data::EMBEDDED_DB_HEX).unwrap();
+
+  client_1
+    .api_client
+    .publish_collabs(
+      &workspace_id,
+      vec![
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: doc_with_embedded_db_view_id,
+            publish_name: "doc-with-embedded-db".to_string(),
+            metadata: doc_with_embedded_db_metadata.clone(),
+          },
+          data: doc_with_embedded_db_blob,
+        },
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: embedded_db_view_id,
+            publish_name: "embedded-db".to_string(),
+            metadata: embedded_db_metadata.clone(),
+          },
+          data: embedded_db_blob,
+        },
+      ],
+    )
+    .await
+    .unwrap();
+
+  {
+    let mut client_2 = TestClient::new_user().await;
+    let workspace_id_2 = client_2.workspace_id().await;
+
+    // Open workspace to trigger group creation
+    client_2
+      .open_collab(&workspace_id_2, &workspace_id_2, CollabType::Folder)
+      .await;
+
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5))
+      .await
+      .unwrap();
+
+    // duplicate doc_with_embedded_db to workspace2
+    // Result fv should be:
+    // .
+    // ├── Getting Started (existing)
+    // └── db_with_embedded_db (inside should contain the database)
+    client_2
+      .api_client
+      .duplicate_published_to_workspace(
+        &workspace_id_2,
+        &PublishedDuplicate {
+          published_view_id: doc_with_embedded_db_view_id.to_string(),
+          dest_view_id: fv.view_id, // use the root view
+        },
+      )
+      .await
+      .unwrap();
+
+    {
+      let fv = client_2
+        .api_client
+        .get_workspace_folder(&workspace_id_2, Some(5))
+        .await
+        .unwrap();
+      println!("{:#?}", fv);
+      let doc_with_embedded_db = fv
+        .children
+        .into_iter()
+        .find(|v| v.name == "docwithembeddeddb")
+        .unwrap();
+      let collab_resp = client_2
+        .get_collab(QueryCollabParams {
+          workspace_id: workspace_id_2.clone(),
+          inner: QueryCollab {
+            object_id: doc_with_embedded_db.view_id.clone(),
+            collab_type: CollabType::Folder,
+          },
+        })
+        .await
+        .unwrap();
+
+      let doc_collab =
+        collab_from_doc_state(collab_resp.encode_collab.doc_state.to_vec(), "").unwrap();
+      let doc = Document::open(doc_collab).unwrap();
+      let doc_data = doc.get_document_data().unwrap();
+      let grid = doc_data
+        .blocks
+        .iter()
+        .find(|(_k, b)| b.ty == "grid")
+        .unwrap()
+        .1;
+
+      // because it is embedded, the database parent's id is the view id of the doc
+      let parent_id = grid.data.get("parent_id").unwrap().as_str().unwrap();
+      assert_ne!(parent_id, doc_with_embedded_db.view_id.clone());
     }
   }
 }

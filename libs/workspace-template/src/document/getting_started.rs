@@ -24,7 +24,7 @@ use crate::{gen_view_id, TemplateData, TemplateObjectId, WorkspaceTemplate};
 //     |-- Getting started (document)
 //          |-- Desktop guide (document)
 //          |-- Mobile guide (document)
-//     |-- To-Dos (board)
+//     |-- To-dos (board)
 // |-- Shared (space)
 //     |-- ... (empty)
 // Note: Update the folder structure above if you changed the code below
@@ -195,7 +195,7 @@ impl GettingStartedTemplate {
     // getting started view
     let mut view_builder = view_builder
       .with_name("Getting started")
-      .with_icon("⭐️")
+      .with_icon("🌟")
       .with_extra(r#"{"font_layout":"normal","line_height_layout":"normal","cover":{"type":"gradient","value":"appflowy_them_color_gradient4"},"font":null}"#)
       .with_view_id(getting_started_view_uuid);
 
@@ -272,8 +272,8 @@ impl WorkspaceTemplate for GettingStartedTemplate {
 
     let mut builder = workspace_view_builder.write().await;
 
-    // Create general space with 2 built-in views: Getting started, To-Dos
-    //    The Getting started view is a document view, and the To-Dos view is a board view
+    // Create general space with 2 built-in views: Getting started, To-dos
+    //    The Getting started view is a document view, and the To-dos view is a board view
     //    The Getting started view contains 2 sub views: Desktop guide, Mobile guide
     builder
       .with_view_builder(|view_builder| async {
@@ -301,7 +301,7 @@ impl WorkspaceTemplate for GettingStartedTemplate {
             let child_view_builder = child_view_builder
             .with_layout(ViewLayout::Board)
             .with_view_id(todos_view_uuid.clone())
-            .with_name("To-Dos")
+            .with_name("To-dos")
             .with_icon("✅");
             child_view_builder.build()
           }

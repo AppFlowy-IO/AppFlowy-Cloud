@@ -150,20 +150,23 @@ impl AppMetrics {
 
 #[derive(Debug, Clone)]
 pub struct GoTrueAdmin {
+  pub gotrue_client: gotrue::api::Client,
   pub admin_email: String,
   pub password: Secret<String>,
 }
 
 impl GoTrueAdmin {
-  pub fn new(admin_email: String, password: String) -> Self {
+  pub fn new(admin_email: String, password: String, gotrue_client: gotrue::api::Client) -> Self {
     Self {
       admin_email,
       password: password.into(),
+      gotrue_client,
     }
   }
 
-  pub async fn token(&self, client: &gotrue::api::Client) -> Result<String, AppError> {
-    let token = client
+  pub async fn token(&self) -> Result<String, AppError> {
+    let token = self
+      .gotrue_client
       .token(&Grant::Password(PasswordGrant {
         email: self.admin_email.clone(),
         password: self.password.expose_secret().clone(),

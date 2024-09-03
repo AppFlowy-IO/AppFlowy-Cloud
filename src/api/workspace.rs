@@ -250,10 +250,13 @@ async fn delete_workspace_handler(
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  let bucket_storage = &state.bucket_storage;
-
   // TODO: add permission for workspace deletion
-  workspace::ops::delete_workspace_for_user(&state.pg_pool, &workspace_id, bucket_storage).await?;
+  workspace::ops::delete_workspace_for_user(
+    state.pg_pool.clone(),
+    *workspace_id,
+    state.bucket_storage.clone(),
+  )
+  .await?;
   Ok(AppResponse::Ok().into())
 }
 

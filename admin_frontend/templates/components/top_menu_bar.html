@@ -10,6 +10,13 @@
     >
       {{ user.email|escape }}
     </div>
+    <div
+      hx-delete="/web-api/delete-account"
+      hx-confirm="This will erase all data associated with this account. Are you sure?"
+      class="button red"
+    >
+      Delete Account
+    </div>
   </div>
 
   <div id="top-menu-bar-right">

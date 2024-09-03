@@ -1,6 +1,7 @@
 use crate::error::WebApiError;
 use crate::ext::api::{
-  accept_workspace_invitation, invite_user_to_workspace, leave_workspace, verify_token_cloud,
+  accept_workspace_invitation, delete_current_user, invite_user_to_workspace, leave_workspace,
+  verify_token_cloud,
 };
 use crate::models::{
   WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest,
@@ -39,6 +40,7 @@ pub fn router() -> Router<AppState> {
     .route("/workspace/:workspace_id/leave", post(leave_workspace_handler))
     .route("/invite/:invite_id/accept", post(invite_accept_handler))
     .route("/open_app", post(open_app_handler))
+    .route("/delete-account", delete(delete_account_handler))
 
     // admin
     .route("/admin/user", post(admin_add_user_handler))
@@ -113,6 +115,15 @@ async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError
         session.token.token_type,
   );
   Ok(htmx_redirect(&app_sign_in_url))
+}
+
+/// Delete the user account and all associated data.
+async fn delete_account_handler(
+  state: State<AppState>,
+  session: UserSession,
+) -> Result<HeaderMap, WebApiError<'static>> {
+  delete_current_user(&session.token.access_token, &state.appflowy_cloud_url).await?;
+  Ok(htmx_redirect("/web/login"))
 }
 
 // Invite another user, this will trigger email sending

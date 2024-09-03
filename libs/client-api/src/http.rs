@@ -785,7 +785,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn delete_user(&self) -> Result<(), AppResponseError> {
     let (provider_access_token, provider_refresh_token) = {
-      let token = self.token();
+      let token = &self.token;
       let token_read = token.read();
       let token_resp = token_read
         .as_ref()

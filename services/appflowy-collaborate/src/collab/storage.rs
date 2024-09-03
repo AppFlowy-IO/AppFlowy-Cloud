@@ -5,10 +5,11 @@ use std::time::Duration;
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
 use sqlx::Transaction;
-use tokio::sync::oneshot;
 use tokio::time::timeout;
+use tracing::warn;
 use tracing::{error, instrument, trace};
 use validator::Validate;
 
@@ -123,7 +124,7 @@ where
 
   async fn get_encode_collab_from_editing(&self, object_id: &str) -> Option<EncodedCollab> {
     let object_id = object_id.to_string();
-    let (ret, rx) = oneshot::channel();
+    let (ret, rx) = tokio::sync::oneshot::channel();
     let timeout_duration = Duration::from_secs(5);
 
     // Attempt to send the command to the realtime server
@@ -409,5 +410,40 @@ where
     {
       error!("Failed to remove connected user: {}", err);
     }
+  }
+
+  async fn broadcast_encode_collab(
+    &self,
+    object_id: String,
+    collab_messages: Vec<ClientCollabMessage>,
+  ) -> Result<(), AppError> {
+    let (sender, recv) = tokio::sync::oneshot::channel();
+
+    self
+      .rt_cmd_sender
+      .send(CollaborationCommand::ServerSendCollabMessage {
+        object_id,
+        collab_messages,
+        ret: sender,
+      })
+      .await
+      .map_err(|err| {
+        AppError::Unhandled(format!(
+          "Failed to send encode collab command to realtime server: {}",
+          err
+        ))
+      })?;
+
+    match recv.await {
+      Ok(res) =>
+        if let Err(err) = res {
+          error!("Failed to broadcast encode collab: {}", err);
+        }
+      ,
+      // caller may have dropped the receiver
+      Err(err) => warn!("Failed to receive response from realtime server: {}", err),
+    }
+
+    Ok(())
   }
 }

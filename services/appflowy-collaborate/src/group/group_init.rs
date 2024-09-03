@@ -164,6 +164,7 @@ impl CollabGroup {
     );
 
     if let Some(mut old) = self.subscribers.insert((*user).clone(), sub) {
+      tracing::warn!("{}: remove old subscriber: {}", &self.object_id, user);
       old.stop().await;
     }
 

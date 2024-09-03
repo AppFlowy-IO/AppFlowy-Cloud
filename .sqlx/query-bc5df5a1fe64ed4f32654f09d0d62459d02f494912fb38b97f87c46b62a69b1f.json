@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        aw.publish_namespace AS namespace,\n        apc.publish_name,\n        apc.view_id\n      FROM af_published_collab apc\n      LEFT JOIN af_workspace aw\n        ON apc.workspace_id = aw.workspace_id\n      WHERE apc.view_id = $1;\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "publish_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "view_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bc5df5a1fe64ed4f32654f09d0d62459d02f494912fb38b97f87c46b62a69b1f"
+}

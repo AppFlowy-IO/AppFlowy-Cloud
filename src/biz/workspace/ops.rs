@@ -1,8 +1,9 @@
 use authentication::jwt::OptionalUserUuid;
-use database_entity::dto::{AFWorkspaceSettingsChange, PublishCollabItem};
+use database_entity::dto::AFWorkspaceSettingsChange;
+use database_entity::dto::PublishCollabItem;
+use database_entity::dto::PublishInfo;
 use std::collections::HashMap;
 
-use database_entity::dto::PublishInfo;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
@@ -639,7 +640,7 @@ pub async fn update_workspace_settings(
   Ok(setting)
 }
 
-async fn check_workspace_owner(
+pub async fn check_workspace_owner(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_id: &Uuid,

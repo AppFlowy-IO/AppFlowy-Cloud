@@ -6,14 +6,17 @@ use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::{CollabOrigin, Folder};
 use database::collab::{CollabStorage, GetCollabOrigin};
-use database_entity::dto::QueryCollab;
-use database_entity::dto::QueryCollabParams;
+use database::publish::select_published_view_ids_for_workspace;
+use database::publish::select_workspace_id_for_publish_namespace;
+use database_entity::dto::{QueryCollab, QueryCollabParams};
 use sqlx::PgPool;
 use std::ops::DerefMut;
 
 use anyhow::Context;
-use shared_entity::dto::workspace_dto::FolderView;
+use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
+use std::collections::HashSet;
+
 use tracing::{event, trace};
 use validator::Validate;
 
@@ -24,6 +27,7 @@ use database_entity::dto::{
 };
 
 use super::folder_view::collab_folder_to_folder_view;
+use super::publish_outline::collab_folder_to_published_outline;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -165,26 +169,33 @@ pub async fn get_user_workspace_structure(
       depth, depth_limit
     )));
   }
-  let folder = get_latest_collab_folder(collab_storage, &uid, &workspace_id).await?;
+  let folder =
+    get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, &workspace_id).await?;
   let folder_view: FolderView = collab_folder_to_folder_view(&folder, depth);
   Ok(folder_view)
 }
 
 pub async fn get_latest_collab_folder(
   collab_storage: Arc<CollabAccessControlStorage>,
-  uid: &i64,
+  collab_origin: GetCollabOrigin,
   workspace_id: &str,
 ) -> Result<Folder, AppError> {
+  let folder_uid = if let GetCollabOrigin::User { uid } = collab_origin {
+    uid
+  } else {
+    // Dummy uid to open the collab folder if the request does not originate from user
+    0
+  };
   let encoded_collab = get_latest_collab_encoded(
     collab_storage,
-    uid,
+    collab_origin,
     workspace_id,
     workspace_id,
     CollabType::Folder,
   )
   .await?;
   let folder = Folder::from_collab_doc_state(
-    uid,
+    folder_uid,
     CollabOrigin::Server,
     encoded_collab.into(),
     workspace_id,
@@ -196,14 +207,14 @@ pub async fn get_latest_collab_folder(
 
 pub async fn get_latest_collab_encoded(
   collab_storage: Arc<CollabAccessControlStorage>,
-  uid: &i64,
+  collab_origin: GetCollabOrigin,
   workspace_id: &str,
   oid: &str,
   collab_type: CollabType,
 ) -> Result<EncodedCollab, AppError> {
   collab_storage
     .get_encode_collab(
-      GetCollabOrigin::User { uid: *uid },
+      collab_origin,
       QueryCollabParams {
         workspace_id: workspace_id.to_string(),
         inner: QueryCollab {
@@ -214,4 +225,26 @@ pub async fn get_latest_collab_encoded(
       true,
     )
     .await
+}
+
+pub async fn get_published_view(
+  collab_storage: Arc<CollabAccessControlStorage>,
+  publish_namespace: String,
+  pg_pool: &PgPool,
+) -> Result<PublishedView, AppError> {
+  let workspace_id = select_workspace_id_for_publish_namespace(pg_pool, &publish_namespace).await?;
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::Server,
+    &workspace_id.to_string(),
+  )
+  .await?;
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids: HashSet<String> = publish_view_ids
+    .into_iter()
+    .map(|id| id.to_string())
+    .collect();
+  let published_view: PublishedView =
+    collab_folder_to_published_outline(&folder, &publish_view_ids)?;
+  Ok(published_view)
 }

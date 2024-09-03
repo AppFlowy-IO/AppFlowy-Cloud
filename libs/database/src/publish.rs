@@ -273,3 +273,39 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
 
   Ok(res)
 }
+
+pub async fn select_workspace_id_for_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  publish_namespace: &str,
+) -> Result<Uuid, AppError> {
+  let res = sqlx::query!(
+    r#"
+      SELECT workspace_id
+      FROM af_workspace
+      WHERE publish_namespace = $1
+    "#,
+    publish_namespace,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res.workspace_id)
+}
+
+pub async fn select_published_view_ids_for_workspace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: Uuid,
+) -> Result<Vec<Uuid>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT view_id
+      FROM af_published_collab
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .fetch_all(executor)
+  .await?;
+
+  Ok(res)
+}

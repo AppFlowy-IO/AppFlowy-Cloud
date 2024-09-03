@@ -180,6 +180,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_workspace_folder_handler))
     )
     .service(
+      web::resource("/published-outline/{publish_namespace}")
+        .route(web::get().to(get_workspace_publish_outline_handler))
+    )
+    .service(
       web::resource("/{workspace_id}/collab/{object_id}/member/list")
         .route(web::get().to(get_collab_member_list_handler)),
     )
@@ -1392,6 +1396,19 @@ async fn get_workspace_folder_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(folder_view)))
+}
+
+async fn get_workspace_publish_outline_handler(
+  publish_namespace: web::Path<String>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishedView>>> {
+  let published_view = biz::collab::ops::get_published_view(
+    state.collab_access_control_storage.clone(),
+    publish_namespace.into_inner(),
+    &state.pg_pool,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(published_view)))
 }
 
 #[inline]

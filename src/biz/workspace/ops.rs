@@ -39,9 +39,9 @@ use crate::state::GoTrueAdmin;
 const MAX_COMMENT_LENGTH: usize = 5000;
 
 pub async fn delete_workspace_for_user(
-  pg_pool: &PgPool,
-  workspace_id: &Uuid,
-  bucket_storage: &Arc<S3BucketStorage>,
+  pg_pool: PgPool,
+  workspace_id: Uuid,
+  bucket_storage: Arc<S3BucketStorage>,
 ) -> Result<(), AppResponseError> {
   // remove files from s3
   bucket_storage
@@ -49,7 +49,7 @@ pub async fn delete_workspace_for_user(
     .await?;
 
   // remove from postgres
-  delete_from_workspace(pg_pool, workspace_id).await?;
+  delete_from_workspace(&pg_pool, &workspace_id).await?;
 
   // TODO: There can be a rare case where user uploads while workspace is being deleted.
   // We need some routine job to clean up these orphaned files.

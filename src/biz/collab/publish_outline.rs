@@ -37,6 +37,8 @@ pub fn collab_folder_to_published_outline(
     })
   });
 
+  // Set a reasonable max depth to prevent execessive recursion
+  let max_depth = 10;
   let published_view = PublishedView {
     view_id: root.id.clone(),
     name: root.name.clone(),
@@ -50,7 +52,7 @@ pub fn collab_folder_to_published_outline(
       .children
       .iter()
       .filter(|v| !unviewable.contains(&v.id))
-      .filter_map(|v| to_publish_view(&v.id, folder, &unviewable, publish_view_ids))
+      .filter_map(|v| to_publish_view(&v.id, folder, &unviewable, publish_view_ids, 0, max_depth))
       .collect(),
   };
   Ok(published_view)
@@ -61,7 +63,13 @@ fn to_publish_view(
   folder: &Folder,
   unviewable: &HashSet<String>,
   publish_view_ids: &HashSet<String>,
+  depth: u32,
+  max_depth: u32,
 ) -> Option<PublishedView> {
+  if depth > max_depth {
+    return None;
+  }
+
   let view = match folder.get_view(view_id) {
     Some(view) => view,
     None => {
@@ -78,7 +86,16 @@ fn to_publish_view(
     .children
     .iter()
     .filter(|v| !unviewable.contains(&v.id))
-    .filter_map(|view_id| to_publish_view(&view_id.id, folder, unviewable, publish_view_ids))
+    .filter_map(|view_id| {
+      to_publish_view(
+        &view_id.id,
+        folder,
+        unviewable,
+        publish_view_ids,
+        depth + 1,
+        max_depth,
+      )
+    })
     .collect();
   if view_is_space(&view) || publish_view_ids.contains(view_id) || !pruned_view.is_empty() {
     Some(PublishedView {

@@ -584,8 +584,26 @@ pub async fn select_user_profile<'a, E: Executor<'a, Database = Postgres>>(
   let user_profile = sqlx::query_as!(
     AFUserProfileRow,
     r#"
-      SELECT *
-      FROM public.af_user_profile_view WHERE uuid = $1
+      WITH af_user_row AS (
+        SELECT * FROM af_user WHERE uuid = $1
+      )
+      SELECT
+        af_user_row.uid,
+        af_user_row.uuid,
+        af_user_row.email,
+        af_user_row.password,
+        af_user_row.name,
+        af_user_row.metadata,
+        af_user_row.encryption_sign,
+        af_user_row.deleted_at,
+        af_user_row.updated_at,
+        af_user_row.created_at,
+        (SELECT workspace_id
+         FROM af_workspace_member
+         WHERE uid = af_user_row.uid
+         ORDER BY updated_at DESC
+         LIMIT 1) as latest_workspace_id
+      FROM af_user_row
     "#,
     user_uuid
   )

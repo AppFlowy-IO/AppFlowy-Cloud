@@ -20,6 +20,8 @@ use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, Publ
 use shared_entity::dto::workspace_dto;
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
+use yrs::any;
+use yrs::Out;
 use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 use workspace_template::gen_view_id;
@@ -663,11 +665,48 @@ impl PublishCollabDuplicator {
     if let Some(db_id) = self.duplicated_refs.get(&pub_db_id).cloned().flatten() {
       return Ok((pub_db_id, db_id, true));
     }
-
     let new_db_id = gen_view_id();
     self
       .duplicated_refs
       .insert(pub_db_id.clone(), Some(new_db_id.clone()));
+
+    // handle row relations
+    {
+      // collect all map ref with `database_id` fields
+      let mut txn = db_collab.context.transact_mut();
+      let database_fields: MapRef = db_collab
+        .data
+        .get_with_path(&txn, ["database", "fields"])
+        .unwrap();
+      let mut type_option_values = vec![];
+      for (_, out) in database_fields.iter(&txn) {
+        if let Ok(m1) = out.cast::<MapRef>() {
+          if let Some(type_option) = m1.get(&txn, "type_option") {
+            if let Ok(m2) = type_option.cast::<MapRef>() {
+              for (_, out2) in m2.iter(&txn) {
+                if let Ok(m3) = out2.cast::<MapRef>() {
+                  type_option_values.push(m3);
+                }
+              }
+            }
+          }
+        }
+      }
+      for m in type_option_values {
+        if let Some(db_id) = m.get(&txn, "database_id") {
+          if let Out::Any(a) = db_id {
+            if let any::Any::String(s) = a {
+              if !s.is_empty() {
+                // TODO: duplicate database then update database_id
+                // m.insert(&mut txn, "database_id", "new_db_id");
+              }
+            }
+          }
+        }
+      }
+    }
+
+    let mut dup_row_by_pub_row_id: HashMap<String, String> = HashMap::new();
 
     // duplicate db collab rows
     for (old_id, row_bin_data) in &published_db.database_row_collabs {
@@ -698,9 +737,7 @@ impl PublishCollabDuplicator {
         new_row_id.clone(),
         (CollabType::DatabaseRow, db_row_ec_bytes?),
       );
-      self
-        .duplicated_refs
-        .insert(old_id.clone(), Some(new_row_id));
+      dup_row_by_pub_row_id.insert(old_id.clone(), new_row_id);
     }
 
     // accumulate list of database views (Board, Cal, ...) to be linked to the database
@@ -745,13 +782,8 @@ impl PublishCollabDuplicator {
 
         // update all views's row's id
         for row_order in db_view.row_orders.iter_mut() {
-          if let Some(new_id) = self
-            .duplicated_refs
-            .get(row_order.id.as_str())
-            .cloned()
-            .flatten()
-          {
-            row_order.id = new_id.into();
+          if let Some(new_id) = dup_row_by_pub_row_id.get(row_order.id.as_str()) {
+            row_order.id = new_id.clone().into();
           } else {
             // skip if row not found
             tracing::warn!("row not found: {}", row_order.id);

@@ -201,11 +201,13 @@ impl AppFlowyAIClient {
     chat_id: &str,
     content: &str,
     model: &AIModel,
+    metadata: Option<serde_json::Value>,
   ) -> Result<ChatAnswer, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
       data: MessageData {
         content: content.to_string(),
+        metadata,
       },
     };
     let url = format!("{}/chat/message", self.url);
@@ -224,12 +226,14 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     content: &str,
+    metadata: Option<serde_json::Value>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
       data: MessageData {
         content: content.to_string(),
+        metadata,
       },
     };
     let url = format!("{}/chat/message/stream", self.url);
@@ -247,12 +251,14 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     content: &str,
+    metadata: Option<serde_json::Value>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
       data: MessageData {
         content: content.to_string(),
+        metadata,
       },
     };
     let url = format!("{}/v2/chat/message/stream", self.url);

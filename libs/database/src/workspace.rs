@@ -691,6 +691,25 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
   Ok(workspaces)
 }
 
+/// Returns a list of workspace ids that the user is owner of.
+#[inline]
+pub async fn select_user_owned_workspaces_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  user_uuid: &Uuid,
+) -> Result<Vec<Uuid>, AppError> {
+  let workspace_ids = sqlx::query_scalar!(
+    r#"
+      SELECT workspace_id
+      FROM af_workspace
+      where OWNER_UID = (SELECT uid FROM public.af_user WHERE uuid = $1)
+    "#,
+    user_uuid
+  )
+  .fetch_all(executor)
+  .await?;
+  Ok(workspace_ids)
+}
+
 pub async fn select_member_count_for_workspaces<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_ids: &[Uuid],

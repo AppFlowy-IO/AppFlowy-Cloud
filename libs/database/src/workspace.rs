@@ -701,7 +701,7 @@ pub async fn select_user_owned_workspaces_id<'a, E: Executor<'a, Database = Post
     r#"
       SELECT workspace_id
       FROM af_workspace
-      where OWNER_UID = (SELECT uid FROM public.af_user WHERE uuid = $1)
+      WHERE owner_uid = (SELECT uid FROM public.af_user WHERE uuid = $1)
     "#,
     user_uuid
   )

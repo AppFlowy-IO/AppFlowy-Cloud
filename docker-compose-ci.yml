@@ -1,13 +1,12 @@
 # Essential services for AppFlowy Cloud
 
-version: '3'
 services:
   nginx:
     restart: on-failure
     image: nginx
     ports:
-      - 80:80   # Disable this if you are using TLS
-      - 443:443
+      - ${NGINX_PORT:-80}:80   # Disable this if you are using TLS
+      - ${NGINX_TLS_PORT:-443}:443
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt

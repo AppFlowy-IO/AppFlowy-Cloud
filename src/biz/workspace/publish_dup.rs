@@ -20,12 +20,12 @@ use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, Publ
 use shared_entity::dto::workspace_dto;
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
-use yrs::any;
-use yrs::Out;
 use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 use workspace_template::gen_view_id;
+use yrs::any;
 use yrs::updates::encoder::Encode;
+use yrs::Out;
 use yrs::{Map, MapRef};
 
 use crate::biz::collab::ops::get_latest_collab_encoded;
@@ -696,10 +696,13 @@ impl PublishCollabDuplicator {
         if let Some(db_id) = m.get(&txn, "database_id") {
           if let Out::Any(a) = db_id {
             if let any::Any::String(s) = a {
-              if !s.is_empty() {
-                // TODO: duplicate database then update database_id
-                // m.insert(&mut txn, "database_id", "new_db_id");
-              }
+              if let Some(related_db_view) = published_db.database_relations.get(s.as_ref()) {
+                if let Some(dup_view_id) =
+                  self.deep_copy_view(related_db_view, &new_view_id).await?
+                {
+                  m.insert(&mut txn, "database_id", dup_view_id);
+                };
+              };
             }
           }
         }

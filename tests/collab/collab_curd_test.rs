@@ -85,7 +85,7 @@ async fn batch_insert_collab_success_test() {
   let params_list = (0..5)
     .map(|i| CollabParams {
       object_id: Uuid::new_v4().to_string(),
-      encoded_collab_v1: mock_encoded_collab_v1[i].encode_to_bytes().unwrap(),
+      encoded_collab_v1: mock_encoded_collab_v1[i].encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Unknown,
       embeddings: None,
     })
@@ -181,7 +181,7 @@ async fn create_collab_compatibility_with_json_params_test() {
   let params = OldCreateCollabParams {
     inner: CollabParams {
       object_id: object_id.clone(),
-      encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+      encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Unknown,
       embeddings: None,
     },
@@ -238,7 +238,7 @@ async fn batch_create_collab_compatibility_with_uncompress_params_test() {
     workspace_id: workspace_id.to_string(),
     params_list: vec![CollabParams {
       object_id: object_id.clone(),
-      encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+      encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Unknown,
       embeddings: None,
     }],

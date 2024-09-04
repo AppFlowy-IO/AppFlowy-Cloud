@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE af_workspace\n      SET settings = $1\n      WHERE workspace_id = $2\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1e36d9b3adf957524af88f997f12e5eeeaabda218c3709540e4a4c2df0180047"
+}

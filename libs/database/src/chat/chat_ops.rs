@@ -608,10 +608,10 @@ pub async fn update_chat_message_meta(
 pub async fn select_chat_message_content<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   message_id: i64,
-) -> Result<String, AppError> {
+) -> Result<(String, serde_json::Value), AppError> {
   let row = sqlx::query!(
     r#"
-        SELECT content
+        SELECT content,meta_data
         FROM af_chat_messages
         WHERE message_id = $1
         "#,
@@ -619,5 +619,5 @@ pub async fn select_chat_message_content<'a, E: Executor<'a, Database = Postgres
   )
   .fetch_one(executor)
   .await?;
-  Ok(row.content)
+  Ok((row.content, row.meta_data))
 }

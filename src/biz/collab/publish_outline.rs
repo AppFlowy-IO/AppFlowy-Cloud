@@ -47,6 +47,7 @@ pub fn collab_folder_to_published_outline(
       .as_ref()
       .map(|icon| to_dto_view_icon(icon.clone())),
     layout: to_view_layout(&root.layout),
+    is_published: false,
     extra,
     children: root
       .children
@@ -97,7 +98,8 @@ fn to_publish_view(
       )
     })
     .collect();
-  if view_is_space(&view) || publish_view_ids.contains(view_id) || !pruned_view.is_empty() {
+  let is_published = publish_view_ids.contains(view_id);
+  if view_is_space(&view) || is_published || !pruned_view.is_empty() {
     Some(PublishedView {
       view_id: view.id.clone(),
       name: view.name.clone(),
@@ -105,6 +107,7 @@ fn to_publish_view(
         .icon
         .as_ref()
         .map(|icon| to_dto_view_icon(icon.clone())),
+      is_published,
       layout: to_view_layout(&view.layout),
       extra,
       children: pruned_view,

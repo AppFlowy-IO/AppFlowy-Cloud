@@ -30,7 +30,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Condition, RetryIf};
-use tracing::{event, info, instrument, trace};
+use tracing::{debug, event, info, instrument, trace};
 
 pub use infra::file_util::ChunkedBytes;
 use shared_entity::dto::ai_dto::CompleteTextParams;
@@ -243,13 +243,18 @@ impl Client {
         let _ = tx.send(result.clone());
       }
       self.is_refreshing_token.store(false, Ordering::SeqCst);
+    } else {
+      debug!("refresh token is already in progress");
     }
 
     // Wait for the result of the refresh token request.
     match tokio::time::timeout(Duration::from_secs(60), rx).await {
       Ok(Ok(result)) => result,
       Ok(Err(err)) => Err(AppError::Internal(anyhow!("refresh token error: {}", err)).into()),
-      Err(_) => Err(AppError::RequestTimeout("refresh token timeout".to_string()).into()),
+      Err(_) => {
+        self.is_refreshing_token.store(false, Ordering::SeqCst);
+        Err(AppError::RequestTimeout("refresh token timeout".to_string()).into())
+      },
     }
   }
 

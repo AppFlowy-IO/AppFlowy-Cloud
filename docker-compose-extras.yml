@@ -1,6 +1,5 @@
 # Non-essential additional services
 
-version: '3'
 services:
   tunnel:
     image: cloudflare/cloudflared

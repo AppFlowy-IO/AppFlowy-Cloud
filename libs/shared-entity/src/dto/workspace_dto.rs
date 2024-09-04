@@ -186,6 +186,7 @@ pub struct PublishedView {
   pub name: String,
   pub icon: Option<ViewIcon>,
   pub layout: ViewLayout,
+  pub is_published: bool,
   /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<PublishedView>,

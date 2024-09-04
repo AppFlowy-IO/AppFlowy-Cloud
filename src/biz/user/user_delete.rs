@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::biz::workspace::ops::get_all_user_workspaces;
 use crate::state::GoTrueAdmin;
 use crate::{biz::workspace::ops::delete_workspace_for_user, config::config::AppleOAuthSetting};
 use app_error::ErrorCode;
 use authentication::jwt::Authorization;
 use database::file::s3_client_impl::S3BucketStorage;
+use database::workspace::select_user_owned_workspaces_id;
 use gotrue::params::AdminDeleteUserParams;
 use secrecy::{ExposeSecret, Secret};
 use shared_entity::response::AppResponseError;
@@ -48,14 +48,14 @@ pub async fn delete_user(
     .await
     .map_err(AppResponseError::from)?;
 
-  // spawn tasks to delete all user workspace and object storage
-  let user_workspaces = get_all_user_workspaces(pg_pool, &user_uuid, false).await?;
+  // spawn tasks to delete all workspaces owned by the user
+  let workspace_ids = select_user_owned_workspaces_id(pg_pool, &user_uuid).await?;
   let mut tasks = vec![];
-  for workspace in user_workspaces {
+  for workspace_id in workspace_ids {
     let cloned_pg_pool = pg_pool.clone();
     tasks.push(tokio::spawn(delete_workspace_for_user(
       cloned_pg_pool,
-      workspace.workspace_id,
+      workspace_id,
       bucket_storage.clone(),
     )));
   }

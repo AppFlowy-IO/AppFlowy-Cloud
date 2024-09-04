@@ -258,11 +258,12 @@ async fn answer_stream_handler(
   req: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
   let (_workspace_id, chat_id, question_id) = path.into_inner();
-  let content = chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
+  let (content, metadata) =
+    chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
   let ai_model = ai_model_from_header(&req);
   match state
     .ai_client
-    .stream_question(&chat_id, &content, &ai_model)
+    .stream_question(&chat_id, &content, Some(metadata), &ai_model)
     .await
   {
     Ok(answer_stream) => {
@@ -290,11 +291,12 @@ async fn answer_stream_v2_handler(
   req: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
   let (_workspace_id, chat_id, question_id) = path.into_inner();
-  let content = chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
+  let (content, metadata) =
+    chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
   let ai_model = ai_model_from_header(&req);
   match state
     .ai_client
-    .stream_question_v2(&chat_id, &content, &ai_model)
+    .stream_question_v2(&chat_id, &content, Some(metadata), &ai_model)
     .await
   {
     Ok(answer_stream) => {

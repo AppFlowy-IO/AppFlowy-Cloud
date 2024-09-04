@@ -40,4 +40,10 @@ RUN apt-get update -y \
 COPY --from=builder /app/target/release/appflowy_cloud /usr/local/bin/appflowy_cloud
 ENV APP_ENVIRONMENT production
 ENV RUST_BACKTRACE 1
+
+ARG APPFLOWY_APPLICATION_PORT
+ARG PORT
+ENV PORT=${APPFLOWY_APPLICATION_PORT:-${PORT:-8000}}
+EXPOSE $PORT
+
 CMD ["appflowy_cloud"]

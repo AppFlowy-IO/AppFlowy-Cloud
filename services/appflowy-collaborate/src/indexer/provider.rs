@@ -173,8 +173,16 @@ impl IndexerProvider {
     &self,
     params: &CollabParams,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    if let Some(indexer) = self.indexer_for(params.collab_type.clone()) {
-      let encoded_collab = EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)?;
+    let collab_type = params.collab_type.clone();
+    let data = params.encoded_collab_v1.clone();
+
+    if let Some(indexer) = self.indexer_for(collab_type) {
+      let encoded_collab = tokio::task::spawn_blocking(move || {
+        let encode_collab = EncodedCollab::decode_from_bytes(&data)?;
+        Ok::<_, AppError>(encode_collab)
+      })
+      .await??;
+
       let embeddings = indexer.index(&params.object_id, encoded_collab).await?;
       Ok(embeddings)
     } else {

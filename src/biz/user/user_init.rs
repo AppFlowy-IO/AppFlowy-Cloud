@@ -59,7 +59,7 @@ where
         &uid,
         CollabParams {
           object_id: object_id.clone(),
-          encoded_collab_v1,
+          encoded_collab_v1: encoded_collab_v1.into(),
           collab_type: object_type.clone(),
           embeddings: None,
         },
@@ -137,7 +137,7 @@ async fn create_user_awareness(
       uid,
       CollabParams {
         object_id: object_id.to_string(),
-        encoded_collab_v1,
+        encoded_collab_v1: encoded_collab_v1.into(),
         collab_type,
         embeddings: None,
       },
@@ -179,7 +179,7 @@ async fn create_workspace_database_collab(
       uid,
       CollabParams {
         object_id: object_id.to_string(),
-        encoded_collab_v1,
+        encoded_collab_v1: encoded_collab_v1.into(),
         collab_type,
         embeddings: None,
       },

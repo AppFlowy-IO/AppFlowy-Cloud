@@ -151,7 +151,7 @@ impl PublishCollabDuplicator {
           &duplicator_uid,
           CollabParams {
             object_id: oid.clone(),
-            encoded_collab_v1: encoded_collab,
+            encoded_collab_v1: encoded_collab.into(),
             collab_type,
             embeddings: None,
           },
@@ -198,7 +198,7 @@ impl PublishCollabDuplicator {
           &duplicator_uid,
           CollabParams {
             object_id: ws_db_oid.clone(),
-            encoded_collab_v1: updated_ws_w_db_collab?,
+            encoded_collab_v1: updated_ws_w_db_collab?.into(),
             collab_type: CollabType::WorkspaceDatabase,
             embeddings: None,
           },
@@ -285,7 +285,7 @@ impl PublishCollabDuplicator {
         &duplicator_uid,
         CollabParams {
           object_id: dest_workspace_id.clone(),
-          encoded_collab_v1: updated_encoded_collab?,
+          encoded_collab_v1: updated_encoded_collab?.into(),
           collab_type: CollabType::Folder,
           embeddings: None,
         },

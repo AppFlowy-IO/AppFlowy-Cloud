@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, Context};
+use bytes::Bytes;
 use collab::lock::Mutex;
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
@@ -423,7 +424,7 @@ async fn write_pending_to_disk(
           workspace_id: meta.workspace_id.clone(),
           object_id: meta.object_id.clone(),
           collab_type: meta.collab_type.clone(),
-          encode_collab_v1,
+          encode_collab_v1: encode_collab_v1.into(),
           embeddings: meta.embeddings.clone(),
         })
       } else {
@@ -550,7 +551,7 @@ pub struct PendingWriteData {
   pub workspace_id: String,
   pub object_id: String,
   pub collab_type: CollabType,
-  pub encode_collab_v1: Vec<u8>,
+  pub encode_collab_v1: Bytes,
   pub embeddings: Option<AFCollabEmbeddings>,
 }
 

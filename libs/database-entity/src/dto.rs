@@ -1,5 +1,6 @@
 use crate::util::{validate_not_empty_payload, validate_not_empty_str};
 use appflowy_ai_client::dto::AIModel;
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,7 @@ impl From<(String, CollabParams)> for CreateCollabParams {
     Self {
       workspace_id,
       object_id: collab_params.object_id,
-      encoded_collab_v1: collab_params.encoded_collab_v1,
+      encoded_collab_v1: collab_params.encoded_collab_v1.to_vec(),
       collab_type: collab_params.collab_type,
     }
   }
@@ -43,7 +44,7 @@ impl CreateCollabParams {
     (
       CollabParams {
         object_id: self.object_id,
-        encoded_collab_v1: self.encoded_collab_v1,
+        encoded_collab_v1: Bytes::from(self.encoded_collab_v1),
         collab_type: self.collab_type,
         embeddings: None,
       },
@@ -66,7 +67,7 @@ pub struct CollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   #[validate(custom = "validate_not_empty_payload")]
-  pub encoded_collab_v1: Vec<u8>,
+  pub encoded_collab_v1: Bytes,
   pub collab_type: CollabType,
   #[serde(default)]
   pub embeddings: Option<AFCollabEmbeddings>,
@@ -82,7 +83,7 @@ impl CollabParams {
     Self {
       object_id,
       collab_type,
-      encoded_collab_v1,
+      encoded_collab_v1: Bytes::from(encoded_collab_v1),
       embeddings: None,
     }
   }
@@ -99,7 +100,7 @@ impl CollabParams {
         let old: CollabParamsV0 = bincode::deserialize(bytes)?;
         Ok(Self {
           object_id: old.object_id,
-          encoded_collab_v1: old.encoded_collab_v1,
+          encoded_collab_v1: old.encoded_collab_v1.into(),
           collab_type: old.collab_type,
           embeddings: None,
         })

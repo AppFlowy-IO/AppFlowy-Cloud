@@ -79,7 +79,7 @@ pub async fn insert_into_af_collab(
         SET blob = $3, len = $4, encrypt = $5, owner_uid = $6 WHERE oid = $1 AND partition_key = $2;",
           params.object_id,
           partition_key,
-          params.encoded_collab_v1,
+          params.encoded_collab_v1.as_ref(),
           params.encoded_collab_v1.len() as i32,
           encrypt,
           uid,
@@ -141,7 +141,7 @@ pub async fn insert_into_af_collab(
         "INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)\
           VALUES ($1, $2, $3, $4, $5, $6, $7)",
         params.object_id,
-        params.encoded_collab_v1,
+        params.encoded_collab_v1.as_ref(),
         params.encoded_collab_v1.len() as i32,
         partition_key,
         encrypt,

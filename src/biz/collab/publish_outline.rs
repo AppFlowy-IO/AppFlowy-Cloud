@@ -53,13 +53,24 @@ pub fn collab_folder_to_published_outline(
       .children
       .iter()
       .filter(|v| !unviewable.contains(&v.id))
-      .filter_map(|v| to_publish_view(&v.id, folder, &unviewable, publish_view_ids, 0, max_depth))
+      .filter_map(|v| {
+        to_publish_view(
+          &root.id,
+          &v.id,
+          folder,
+          &unviewable,
+          publish_view_ids,
+          0,
+          max_depth,
+        )
+      })
       .collect(),
   };
   Ok(published_view)
 }
 
 fn to_publish_view(
+  parent_view_id: &str,
   view_id: &str,
   folder: &Folder,
   unviewable: &HashSet<String>,
@@ -77,6 +88,12 @@ fn to_publish_view(
       return None;
     },
   };
+
+  // There is currently a bug, in which the parent_view_id is not always set correctly
+  if view.parent_view_id != parent_view_id {
+    return None;
+  }
+
   let extra = view.extra.as_deref().map(|extra| {
     serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
       tracing::warn!("failed to parse extra field({}): {}", extra, e);
@@ -87,9 +104,10 @@ fn to_publish_view(
     .children
     .iter()
     .filter(|v| !unviewable.contains(&v.id))
-    .filter_map(|view_id| {
+    .filter_map(|child_view_id| {
       to_publish_view(
-        &view_id.id,
+        view_id,
+        &child_view_id.id,
         folder,
         unviewable,
         publish_view_ids,

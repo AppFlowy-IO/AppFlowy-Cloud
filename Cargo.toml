@@ -253,7 +253,7 @@ infra = { path = "libs/infra" }
 tracing = { version = "0.1", features = ["log"] }
 gotrue = { path = "libs/gotrue" }
 redis = "0.25.2"
-sqlx = { version = "0.8.0", default-features = false }
+sqlx = { version = "0.8.1", default-features = false }
 dashmap = "5.5.3"
 futures = "0.3.30"
 async-stream = "0.3.5"

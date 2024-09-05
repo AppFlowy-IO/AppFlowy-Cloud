@@ -466,7 +466,7 @@ async fn simulate_small_data_set_write(pool: PgPool) {
     let params = CollabParams {
       object_id: format!("object_id_{}", i),
       collab_type: CollabType::Unknown,
-      encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
+      encoded_collab_v1: encode_collab.encode_to_bytes().unwrap().into(),
       embeddings: None,
     };
     cloned_storage_queue
@@ -542,7 +542,7 @@ async fn simulate_large_data_set_write(pool: PgPool) {
   let params = CollabParams {
     object_id: uuid::Uuid::new_v4().to_string(),
     collab_type: CollabType::Unknown,
-    encoded_collab_v1: origin_encode_collab.encode_to_bytes().unwrap(),
+    encoded_collab_v1: origin_encode_collab.encode_to_bytes().unwrap().into(),
     embeddings: None,
   };
   storage_queue

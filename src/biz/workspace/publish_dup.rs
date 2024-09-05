@@ -701,18 +701,12 @@ impl PublishCollabDuplicator {
         }
       }
       for m in type_option_values {
-        if let Some(db_id) = m.get(&txn, "database_id") {
-          if let Out::Any(a) = db_id {
-            if let any::Any::String(s) = a {
-              if let Some(related_db_view) = published_db.database_relations.get(s.as_ref()) {
-                if let Some(dup_view_id) =
-                  self.deep_copy_view(related_db_view, &new_view_id).await?
-                {
-                  m.insert(&mut txn, "database_id", dup_view_id);
-                };
-              };
-            }
-          }
+        if let Some(Out::Any(any::Any::String(s))) = m.get(&txn, "database_id") {
+          if let Some(related_db_view) = published_db.database_relations.get(s.as_ref()) {
+            if let Some(dup_view_id) = self.deep_copy_view(related_db_view, &new_view_id).await? {
+              m.insert(&mut txn, "database_id", dup_view_id);
+            };
+          };
         }
       }
     }
@@ -748,18 +742,14 @@ impl PublishCollabDuplicator {
         let mut rel_row_idss = vec![];
         for (_, out) in cells.iter(&txn) {
           if let Ok(m) = out.cast::<MapRef>() {
-            if let Some(field_type) = m.get(&txn, "field_type") {
-              if let Out::Any(a) = field_type {
-                if let any::Any::BigInt(n) = a {
-                  if n == FieldType::Relation as i64 {
-                    let relation_data = m.get(&txn, "data").ok_or_else(|| {
-                      AppError::RecordNotFound("no data found in relation cell".to_string())
-                    })?;
-                    if let Ok(arr) = relation_data.cast::<ArrayRef>() {
-                      rel_row_idss.push(arr)
-                    };
-                  }
-                }
+            if let Some(Out::Any(any::Any::BigInt(n))) = m.get(&txn, "field_type") {
+              if n == FieldType::Relation as i64 {
+                let relation_data = m.get(&txn, "data").ok_or_else(|| {
+                  AppError::RecordNotFound("no data found in relation cell".to_string())
+                })?;
+                if let Ok(arr) = relation_data.cast::<ArrayRef>() {
+                  rel_row_idss.push(arr)
+                };
               }
             }
           }
@@ -769,10 +759,8 @@ impl PublishCollabDuplicator {
 
           let mut pub_row_ids = Vec::with_capacity(num_refs as usize);
           for rel_row_id in rel_row_ids.iter(&txn) {
-            if let Out::Any(a) = rel_row_id {
-              if let any::Any::String(s) = a {
-                pub_row_ids.push(s);
-              }
+            if let Out::Any(any::Any::String(s)) = rel_row_id {
+              pub_row_ids.push(s);
             }
           }
           rel_row_ids.remove_range(&mut txn, 0, num_refs);

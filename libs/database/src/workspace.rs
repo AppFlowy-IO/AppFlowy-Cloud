@@ -907,7 +907,11 @@ pub async fn upsert_workspace_settings(
 ) -> Result<(), AppError> {
   let json = serde_json::to_value(settings)?;
   sqlx::query!(
-    r#"UPDATE af_workspace SET settings = $1 WHERE workspace_id = $2"#,
+    r#"
+      UPDATE af_workspace
+      SET settings = $1
+      WHERE workspace_id = $2
+    "#,
     json,
     workspace_id
   )
@@ -916,12 +920,13 @@ pub async fn upsert_workspace_settings(
 
   if settings.disable_search_indexing {
     sqlx::query!(
-      r#"DELETE FROM af_collab_embeddings e WHERE e.oid in (
-        SELECT c.oid
-        FROM af_collab c
-        WHERE c.partition_key = e.partition_key
-          AND c.oid = e.oid
-          AND c.workspace_id = $1)"#,
+      r#"
+        DELETE FROM af_collab_embeddings e
+        USING af_collab c
+        WHERE e.oid = c.oid
+          AND e.partition_key = c.partition_key
+          AND c.workspace_id = $1
+      "#,
       workspace_id
     )
     .execute(tx.deref_mut())

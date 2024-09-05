@@ -701,14 +701,28 @@ impl PublishCollabDuplicator {
         }
       }
       for m in type_option_values {
-        if let Some(Out::Any(any::Any::String(s))) = m.get(&txn, "database_id") {
-          if let Some(related_db_view) = published_db.database_relations.get(s.as_ref()) {
-            if let Some(dup_view_id) = self.deep_copy_view(related_db_view, &new_view_id).await? {
-              m.insert(&mut txn, "database_id", dup_view_id);
+        if let Some(Out::Any(any::Any::String(pub_db_id))) = m.get(&txn, "database_id") {
+          if let Some(related_db_view) = published_db.database_relations.get(pub_db_id.as_ref()) {
+            if let Some(_dup_view_id) = self.deep_copy_view(related_db_view, &new_view_id).await? {
+              if let Some(dup_db_id) = self
+                .duplicated_refs
+                .get(pub_db_id.as_ref())
+                .cloned()
+                .flatten()
+              {
+                m.insert(&mut txn, "database_id", dup_db_id.as_str());
+              };
             };
           };
         }
       }
+
+      // update database metas iid
+      let metas: MapRef = db_collab
+        .data
+        .get_with_path(&txn, ["database", "metas"])
+        .ok_or_else(|| AppError::RecordNotFound("no metas found in database".to_string()))?;
+      metas.insert(&mut txn, "iid", new_db_id.clone());
     }
 
     // duplicate db collab rows

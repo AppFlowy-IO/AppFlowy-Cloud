@@ -642,7 +642,9 @@ impl PublishCollabDuplicator {
         })?;
         let mut new_folder_db_view =
           self.new_folder_view(view_id.to_string(), view_info, view_info.layout.clone());
-        new_folder_db_view.parent_view_id = parent_view_id.clone();
+        new_folder_db_view
+          .parent_view_id
+          .clone_from(&parent_view_id);
         let new_folder_db_view_id = new_folder_db_view.id.clone();
         self
           .views_to_add
@@ -716,13 +718,6 @@ impl PublishCollabDuplicator {
           };
         }
       }
-
-      // update database metas iid
-      let metas: MapRef = db_collab
-        .data
-        .get_with_path(&txn, ["database", "metas"])
-        .ok_or_else(|| AppError::RecordNotFound("no metas found in database".to_string()))?;
-      metas.insert(&mut txn, "iid", new_db_id.clone());
     }
 
     // duplicate db collab rows
@@ -825,7 +820,7 @@ impl PublishCollabDuplicator {
       let mut db_views = view_map.get_all_views(&txn);
 
       for db_view in db_views.iter_mut() {
-        let new_view_id = if db_view.id == publish_view_id {
+        let new_db_view_id = if db_view.id == publish_view_id {
           self
             .duplicated_db_main_view
             .insert(pub_db_id.clone(), new_view_id.clone());
@@ -835,9 +830,9 @@ impl PublishCollabDuplicator {
         };
         self
           .duplicated_db_view
-          .insert(db_view.id.clone(), new_view_id.clone());
+          .insert(db_view.id.clone(), new_db_view_id.clone());
 
-        db_view.id.clone_from(&new_view_id);
+        db_view.id.clone_from(&new_db_view_id);
         db_view.database_id.clone_from(&new_db_id);
         new_db_view_ids.push(db_view.id.clone());
 
@@ -852,6 +847,13 @@ impl PublishCollabDuplicator {
           }
         }
       }
+
+      // update database metas iid
+      let metas: MapRef = db_collab
+        .data
+        .get_with_path(&txn, ["database", "metas"])
+        .ok_or_else(|| AppError::RecordNotFound("no metas found in database".to_string()))?;
+      metas.insert(&mut txn, "iid", new_view_id);
 
       // insert updated views back to db
       view_map.clear(&mut txn);

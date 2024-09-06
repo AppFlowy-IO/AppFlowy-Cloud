@@ -147,7 +147,7 @@ impl PublishCollabDuplicator {
       pg_pool,
       duplicator_uid,
       dest_workspace_id,
-      dest_view_id: _,
+      dest_view_id,
     } = self;
 
     // insert all collab object accumulated
@@ -247,6 +247,7 @@ impl PublishCollabDuplicator {
 
         let mut duplicated_view_ids = HashSet::new();
         duplicated_view_ids.insert(root_view.id.clone());
+        duplicated_view_ids.insert(dest_view_id);
         folder.body.views.insert(&mut folder_txn, root_view, None);
 
         // when child views are added, it must have a parent view that is previously added
@@ -705,7 +706,10 @@ impl PublishCollabDuplicator {
       for m in type_option_values {
         if let Some(Out::Any(any::Any::String(pub_db_id))) = m.get(&txn, "database_id") {
           if let Some(related_db_view) = published_db.database_relations.get(pub_db_id.as_ref()) {
-            if let Some(_dup_view_id) = self.deep_copy_view(related_db_view, &new_view_id).await? {
+            if let Some(_dup_view_id) = self
+              .deep_copy_view(related_db_view, &self.dest_view_id.to_string())
+              .await?
+            {
               if let Some(dup_db_id) = self
                 .duplicated_refs
                 .get(pub_db_id.as_ref())
@@ -976,7 +980,7 @@ impl PublishCollabDuplicator {
     Ok(main_folder_view)
   }
 
-  /// ceates a new folder view without parent_view_id set
+  /// creates a new folder view without parent_view_id set
   fn new_folder_view(
     &self,
     new_view_id: String,

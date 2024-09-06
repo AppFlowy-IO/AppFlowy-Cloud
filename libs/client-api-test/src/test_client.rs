@@ -13,6 +13,7 @@ use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
 use collab::lock::{Mutex, RwLock};
 use collab::preclude::{Collab, Prelim};
+use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use collab_user::core::UserAwareness;
@@ -190,7 +191,7 @@ impl TestClient {
     .unwrap()
   }
 
-  pub async fn get_workspace_database_collab(&mut self, workspace_id: &str) -> Collab {
+  pub async fn get_workspace_database_collab(&self, workspace_id: &str) -> Collab {
     let db_storage_id = self.open_workspace(workspace_id).await.database_storage_id;
     let ws_db_doc_state = self
       .get_collab(QueryCollabParams {
@@ -209,6 +210,37 @@ impl TestClient {
       CollabOrigin::Server,
       &db_storage_id.to_string(),
       DataSource::DocStateV1(ws_db_doc_state),
+      vec![],
+      false,
+    )
+    .unwrap()
+  }
+
+  pub async fn get_db_collab_from_view(&mut self, workspace_id: &str, view_id: &str) -> Collab {
+    let mut ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
+    let ws_db_body = WorkspaceDatabaseBody::new(&mut ws_db_collab);
+    let txn = ws_db_collab.transact();
+    let db_id = ws_db_body
+      .get_all_database_meta(&txn)
+      .into_iter()
+      .find(|db_meta| db_meta.linked_views.contains(&view_id.to_string()))
+      .unwrap()
+      .database_id;
+    let db_collab_collab_resp = self
+      .get_collab(QueryCollabParams {
+        workspace_id: workspace_id.to_string(),
+        inner: QueryCollab {
+          object_id: db_id.clone(),
+          collab_type: CollabType::Database,
+        },
+      })
+      .await
+      .unwrap();
+    let db_doc_state = db_collab_collab_resp.encode_collab.doc_state;
+    Collab::new_with_source(
+      CollabOrigin::Server,
+      &db_id,
+      DataSource::DocStateV1(db_doc_state.to_vec()),
       vec![],
       false,
     )
@@ -539,7 +571,7 @@ impl TestClient {
   }
 
   pub async fn get_collab(
-    &mut self,
+    &self,
     query: QueryCollabParams,
   ) -> Result<CollabResponse, AppResponseError> {
     self.api_client.get_collab(query).await

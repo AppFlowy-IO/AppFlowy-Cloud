@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn get_collab_response_compatible_test() {
-  let mut test_client = TestClient::new_user().await;
+  let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
   let params = QueryCollabParams {

@@ -4,16 +4,13 @@ use app_error::AppError;
 use collab_folder::Folder;
 use shared_entity::dto::workspace_dto::PublishedView;
 
-use super::folder_view::{to_dto_view_icon, to_view_layout, view_is_space};
+use super::folder_view::{to_dto_view_icon, to_view_layout};
 
 pub fn collab_folder_to_published_outline(
   folder: &Folder,
   publish_view_ids: &HashSet<String>,
 ) -> Result<PublishedView, AppError> {
   let mut unviewable = HashSet::new();
-  for private_section in folder.get_all_private_sections() {
-    unviewable.insert(private_section.id);
-  }
   for trash_view in folder.get_all_trash_sections() {
     unviewable.insert(trash_view.id);
   }
@@ -117,7 +114,7 @@ fn to_publish_view(
     })
     .collect();
   let is_published = publish_view_ids.contains(view_id);
-  if view_is_space(&view) || is_published || !pruned_view.is_empty() {
+  if is_published || !pruned_view.is_empty() {
     Some(PublishedView {
       view_id: view.id.clone(),
       name: view.name.clone(),

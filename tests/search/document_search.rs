@@ -26,7 +26,7 @@ async fn test_document_indexing_and_search() {
       vec![],
       false,
     );
-    let document = Document::open_with(collab, Some(document_data)).unwrap();
+    let document = Document::create_with_data(collab, document_data).unwrap();
     document.encode_collab().unwrap()
   };
   test_client

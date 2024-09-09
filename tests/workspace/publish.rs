@@ -1,13 +1,20 @@
+use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
 use appflowy_cloud::biz::workspace::publish_dup::{
   collab_from_doc_state, get_database_id_from_collab,
 };
+use client_api::entity::{
+  AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabParams,
+};
+use client_api_test::TestClient;
+use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use collab::util::MapExt;
-use collab_database::views::ViewMap;
+use collab_database::views::DatabaseViews;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
+use itertools::Itertools;
 use shared_entity::dto::publish_dto::PublishDatabaseData;
 use shared_entity::dto::publish_dto::PublishViewMetaData;
 use shared_entity::dto::workspace_dto::PublishedDuplicate;
@@ -16,14 +23,6 @@ use std::thread::sleep;
 use std::time::Duration;
 use yrs::types::Map;
 use yrs::MapRef;
-
-use app_error::ErrorCode;
-use client_api::entity::{
-  AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabParams,
-};
-use client_api_test::TestClient;
-use client_api_test::{generate_unique_registered_user_client, localhost_client};
-use itertools::Itertools;
 
 use crate::workspace::published_data::{self};
 
@@ -971,7 +970,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
           .data
           .get_with_path(&txn, ["database", "views"])
           .unwrap();
-        ViewMap::new(map_ref, tokio::sync::broadcast::channel(1).0)
+        DatabaseViews::new(CollabOrigin::Empty, map_ref, None)
       };
 
       for db_view in view_map.get_all_views(&txn) {

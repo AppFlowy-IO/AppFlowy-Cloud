@@ -236,11 +236,10 @@ impl TestClient {
       })
       .await
       .unwrap();
-    let db_doc_state = db_collab_collab_resp.encode_collab.doc_state;
     Collab::new_with_source(
       CollabOrigin::Server,
       &db_id,
-      DataSource::DocStateV1(db_doc_state.to_vec()),
+      db_collab_collab_resp.encode_collab.into(),
       vec![],
       false,
     )

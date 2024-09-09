@@ -797,13 +797,15 @@ impl PublishCollabDuplicator {
           // handle document in database row
           let row_meta: MapRef = db_row_collab
             .data
-            .get_with_path(&txn, ["data", "meta"])
+            .get(&txn, "meta")
             .ok_or_else(|| {
               AppError::RecordNotFound(format!(
                 "no data found in database row collab: {}",
                 pub_row_id
               ))
-            })?;
+            })?
+            .cast()
+            .map_err(|err| AppError::Unhandled(format!("not a map: {:?}", err)))?;
 
           // document_id
           let pub_row_doc_id_key =

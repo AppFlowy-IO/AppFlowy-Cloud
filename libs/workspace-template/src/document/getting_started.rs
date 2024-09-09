@@ -43,7 +43,7 @@ impl GettingStartedTemplate {
     // 2. create a new document with the getting started data
     let data = tokio::task::spawn_blocking(move || {
       let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
-      let document = Document::open_with(collab, Some(document_data))?;
+      let document = Document::create_with_data(collab, document_data)?;
       let encoded_collab = document.encode_collab()?;
 
       Ok::<_, anyhow::Error>(TemplateData {
@@ -366,7 +366,7 @@ impl WorkspaceTemplate for DocumentTemplate {
 
   async fn create(&self, object_id: String) -> anyhow::Result<Vec<TemplateData>> {
     let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
-    let document = Document::open_with(collab, Some(self.0.clone()))?;
+    let document = Document::create_with_data(collab, self.0.clone())?;
     let data = document.encode_collab()?;
     Ok(vec![TemplateData {
       template_id: TemplateObjectId::Document(object_id),

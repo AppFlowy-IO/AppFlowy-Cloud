@@ -123,7 +123,7 @@ async fn create_user_awareness(
   let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id.clone(), vec![], false);
 
   // TODO(nathan): Maybe using hardcode encoded collab
-  let user_awareness = UserAwareness::open(collab, None);
+  let user_awareness = UserAwareness::create(collab, None)?;
   let encode_collab = user_awareness
     .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
     .map_err(AppError::Internal)?;

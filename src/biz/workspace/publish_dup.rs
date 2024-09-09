@@ -808,9 +808,7 @@ impl PublishCollabDuplicator {
             .map_err(|err| AppError::Unhandled(format!("not a map: {:?}", err)))?;
 
           // document_id
-          let pub_row_doc_id_key =
-            meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
-          let pub_row_doc_id = row_meta.get(&txn, &pub_row_doc_id_key);
+          let pub_row_doc_id = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
 
           // is document empty
           let pub_is_doc_empty_key =
@@ -836,12 +834,6 @@ impl PublishCollabDuplicator {
           // if doc exists, duplicate it!
           if let Some(Out::Any(any::Any::Bool(is_doc_empty))) = pub_is_doc_empty {
             if !is_doc_empty {
-              let pub_row_doc_id: String = pub_row_doc_id
-                .ok_or_else(|| {
-                  AppError::RecordNotFound("doc_id not found in row meta".to_string())
-                })?
-                .to_string(&txn);
-
               let row_doc_doc_state = published_db
                 .database_row_document_collabs
                 .get(&pub_row_doc_id)
@@ -862,7 +854,7 @@ impl PublishCollabDuplicator {
               let dup_doc_id = meta_id_from_row_id(&new_row_id.parse()?, RowMetaKey::DocumentId);
               new_doc_view.parent_view_id.clone_from(&dup_doc_id); // orphan folder view
               self.views_to_add.insert(dup_doc_id.clone(), new_doc_view);
-              row_meta.insert(&mut txn, dup_doc_id, any::Any::Bool(true));
+              row_meta.insert(&mut txn, dup_doc_id, any::Any::Bool(false));
             }
           }
 

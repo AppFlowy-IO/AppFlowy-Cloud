@@ -1091,12 +1091,10 @@ async fn get_published_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<serde_json::Value>> {
   let (workspace_namespace, publish_name) = path_param.into_inner();
-  let metadata = biz::workspace::publish::get_published_collab(
-    &state.pg_pool,
-    &workspace_namespace,
-    &publish_name,
-  )
-  .await?;
+  let metadata = state
+    .published_collab_store
+    .get_collab_metadata(&workspace_namespace, &publish_name)
+    .await?;
   Ok(Json(metadata))
 }
 
@@ -1105,12 +1103,10 @@ async fn get_published_collab_blob_handler(
   state: Data<AppState>,
 ) -> Result<Vec<u8>> {
   let (publish_namespace, publish_name) = path_param.into_inner();
-  let collab_data = biz::workspace::publish::get_published_collab_blob(
-    &state.pg_pool,
-    &publish_namespace,
-    &publish_name,
-  )
-  .await?;
+  let collab_data = state
+    .published_collab_store
+    .get_collab_blob_by_publish_namespace(&publish_namespace, &publish_name)
+    .await?;
   Ok(collab_data)
 }
 
@@ -1124,6 +1120,7 @@ async fn post_published_duplicate_handler(
   let params = params.into_inner();
   biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
     &state.pg_pool,
+    state.bucket_client.clone(),
     state.collab_access_control_storage.clone(),
     uid,
     params.published_view_id,
@@ -1139,8 +1136,10 @@ async fn get_published_collab_info_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PublishInfo>>> {
   let view_id = view_id.into_inner();
-  let collab_data =
-    biz::workspace::publish::get_published_collab_info(&state.pg_pool, &view_id).await?;
+  let collab_data = state
+    .published_collab_store
+    .get_collab_publish_info(&view_id)
+    .await?;
   Ok(Json(AppResponse::Ok().with_data(collab_data)))
 }
 
@@ -1276,7 +1275,9 @@ async fn post_publish_collabs_handler(
       AppError::InvalidRequest(String::from("did not receive any data to publish")).into(),
     );
   }
-  biz::workspace::publish::publish_collabs(&state.pg_pool, &workspace_id, &user_uuid, accumulator)
+  state
+    .published_collab_store
+    .publish_collabs(accumulator, &workspace_id, &user_uuid)
     .await?;
   Ok(Json(AppResponse::Ok()))
 }
@@ -1292,13 +1293,10 @@ async fn delete_published_collabs_handler(
   if view_ids.is_empty() {
     return Ok(Json(AppResponse::Ok()));
   }
-  biz::workspace::publish::delete_published_workspace_collab(
-    &state.pg_pool,
-    &workspace_id,
-    &view_ids,
-    &user_uuid,
-  )
-  .await?;
+  state
+    .published_collab_store
+    .delete_collab(&workspace_id, &view_ids, &user_uuid)
+    .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

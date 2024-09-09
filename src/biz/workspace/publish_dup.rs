@@ -378,12 +378,12 @@ impl PublishCollabDuplicator {
   async fn deep_copy_doc<'a>(
     &mut self,
     pub_view_id: &str,
-    new_view_id: String,
+    dup_view_id: String,
     doc: Document,
     metadata: PublishViewMetaData,
   ) -> Result<View, AppError> {
     let mut ret_view =
-      self.new_folder_view(new_view_id.clone(), &metadata.view, ViewLayout::Document);
+      self.new_folder_view(dup_view_id.clone(), &metadata.view, ViewLayout::Document);
 
     let mut doc_data = doc
       .get_document_data()
@@ -402,7 +402,7 @@ impl PublishCollabDuplicator {
 
     {
       // write modified doc_data back to storage
-      let empty_collab = collab_from_doc_state(vec![], &new_view_id)?;
+      let empty_collab = collab_from_doc_state(vec![], &dup_view_id)?;
       let new_doc = tokio::task::spawn_blocking(move || {
         Document::open_with(empty_collab, Some(doc_data))
           .map_err(|e| AppError::Unhandled(e.to_string()))
@@ -732,8 +732,8 @@ impl PublishCollabDuplicator {
     // duplicate db collab rows
     for (pub_row_id, row_bin_data) in &published_db.database_row_collabs {
       // assign a new id for the row
-      let new_row_id = gen_view_id();
-      let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &new_row_id)?;
+      let dup_row_id = gen_view_id();
+      let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
 
       {
         // update database_id and row_id in data
@@ -746,7 +746,7 @@ impl PublishCollabDuplicator {
           })?
           .cast::<MapRef>()
           .map_err(|err| AppError::Unhandled(format!("data not map: {:?}", err)))?;
-        data.insert(&mut txn, "id", new_row_id.clone());
+        data.insert(&mut txn, "id", dup_row_id.clone());
         data.insert(&mut txn, "database_id", new_db_id.clone());
 
         {
@@ -810,9 +810,6 @@ impl PublishCollabDuplicator {
             .cast()
             .map_err(|err| AppError::Unhandled(format!("not a map: {:?}", err)))?;
 
-          // document_id
-          let pub_row_doc_id = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
-
           // is document empty
           let pub_is_doc_empty_key =
             meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
@@ -837,6 +834,10 @@ impl PublishCollabDuplicator {
           // if doc exists, duplicate it!
           if let Some(Out::Any(any::Any::Bool(is_doc_empty))) = pub_is_doc_empty {
             if !is_doc_empty {
+              let pub_row_doc_id =
+                meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
+              let dup_row_doc_id =
+                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
               let row_doc_doc_state = published_db
                 .database_row_document_collabs
                 .get(&pub_row_doc_id)
@@ -848,28 +849,29 @@ impl PublishCollabDuplicator {
               let doc =
                 Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
               let mut new_doc_view = Box::pin(self.deep_copy_doc(
-                publish_view_id,
-                new_view_id.clone(),
+                &pub_row_doc_id,
+                dup_row_doc_id.clone(),
                 doc,
                 PublishViewMetaData::default(),
               ))
               .await?;
-              let dup_doc_id = meta_id_from_row_id(&new_row_id.parse()?, RowMetaKey::DocumentId);
-              new_doc_view.parent_view_id.clone_from(&dup_doc_id); // orphan folder view
-              self.views_to_add.insert(dup_doc_id.clone(), new_doc_view);
-              row_meta.insert(&mut txn, dup_doc_id, any::Any::Bool(false));
+              new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
+              self
+                .views_to_add
+                .insert(dup_row_doc_id.clone(), new_doc_view);
+              row_meta.insert(&mut txn, dup_row_doc_id, any::Any::Bool(false));
             }
           }
 
           // if pub_icon_id exists, duplicate it!
           if let Some(Out::Any(any::Any::String(icon_id))) = pub_icon_id {
-            let dup_icon_id_key = meta_id_from_row_id(&new_row_id.parse()?, RowMetaKey::IconId);
+            let dup_icon_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::IconId);
             row_meta.insert(&mut txn, dup_icon_id_key, icon_id);
           }
 
           // if pub_cover_id exists, duplicate it!
           if let Some(Out::Any(any::Any::String(cover_id))) = pub_cover_id {
-            let dup_cover_id_key = meta_id_from_row_id(&new_row_id.parse()?, RowMetaKey::IconId);
+            let dup_cover_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::IconId);
             row_meta.insert(&mut txn, dup_cover_id_key, cover_id);
           }
 
@@ -887,12 +889,12 @@ impl PublishCollabDuplicator {
         tokio::task::spawn_blocking(move || collab_to_bin(&db_row_collab, CollabType::DatabaseRow))
           .await?;
       self.collabs_to_insert.insert(
-        new_row_id.clone(),
+        dup_row_id.clone(),
         (CollabType::DatabaseRow, db_row_ec_bytes?),
       );
       self
         .duplicated_db_row
-        .insert(pub_row_id.clone(), new_row_id.clone());
+        .insert(pub_row_id.clone(), dup_row_id.clone());
     }
 
     // accumulate list of database views (Board, Cal, ...) to be linked to the database

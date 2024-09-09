@@ -795,7 +795,7 @@ impl PublishCollabDuplicator {
 
         {
           // handle document in database row
-          let row_meta: MapRef = db_collab
+          let row_meta: MapRef = db_row_collab
             .data
             .get_with_path(&txn, ["data", "meta"])
             .ok_or_else(|| {

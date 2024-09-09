@@ -5,7 +5,7 @@ use collab::preclude::Collab;
 
 use collab::preclude::MapExt;
 use collab_database::entity::FieldType;
-use collab_database::views::ViewMap;
+use collab_database::views::DatabaseViews;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
@@ -399,7 +399,7 @@ impl PublishCollabDuplicator {
       // write modified doc_data back to storage
       let empty_collab = collab_from_doc_state(vec![], &new_view_id)?;
       let new_doc = tokio::task::spawn_blocking(move || {
-        Document::open_with(empty_collab, Some(doc_data))
+        Document::create_with_data(empty_collab, doc_data)
           .map_err(|e| AppError::Unhandled(e.to_string()))
       })
       .await??;
@@ -851,7 +851,7 @@ impl PublishCollabDuplicator {
           .data
           .get_with_path(&txn, ["database", "views"])
           .ok_or_else(|| AppError::RecordNotFound("no views found in database".to_string()))?;
-        ViewMap::new(map_ref, tokio::sync::broadcast::channel(1).0)
+        DatabaseViews::new(CollabOrigin::Empty, map_ref, None)
       };
 
       // create new database views based on published views

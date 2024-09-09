@@ -27,7 +27,7 @@ async fn main() {
     .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
     .init();
 
-  let config = Config::from_env();
+  let config = Config::from_env().unwrap();
   info!("config loaded: {:?}", &config);
 
   let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &config.gotrue_url);
@@ -65,7 +65,8 @@ async fn main() {
     .nest_service("/web-api", web_api_router)
     .nest_service("/assets", ServeDir::new("assets"));
 
-  let listener = TcpListener::bind("0.0.0.0:3000")
+  let address = format!("{}:{}", config.host, config.port);
+  let listener = TcpListener::bind(address)
     .await
     .expect("failed to bind to port");
   info!("listening on: {:?}", listener);

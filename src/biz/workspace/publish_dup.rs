@@ -684,6 +684,24 @@ impl PublishCollabDuplicator {
       // handle row relations
       // collect all map ref with `database_id` fields
       // deep copy those database
+      //
+      // db_collab: Object {
+      //     "database": Object {
+      //         "fields": Object {                 `database_fields`
+      //             "MBaTsr": Object {
+      //                 "type_option": Object {    `type_option`
+      //                     "10": Object {
+      //                        "database_id": String("e7a18802-1594-4d44-9542-38c7b471ebc2")
+      //                        // we need to duplicate this database and replace the id
+      //                     }
+      //                     ...
+      //                 },
+      //             },
+      //             ...
+      //         },
+      //     },
+      // }
+      //
       let mut txn = db_collab.context.transact_mut();
       let database_fields: MapRef = db_collab
         .data
@@ -745,6 +763,22 @@ impl PublishCollabDuplicator {
         data.insert(&mut txn, "database_id", new_db_id.clone());
 
         // update relation cells
+        // db_row_collb: Object {
+        //     "data": Object {
+        //         "cells": Object {
+        //             "MBaTsr": Object {
+        //                 "data": Array [
+        //                     String("eefb5700-8cf7-411e-9596-f60b9a51916e"),
+        //                     String("23d5e054-42c8-4754-ad69-527e4ffc1e46"),
+        //                     // above are published row ids of related database
+        //                     // we need to replace them with respective duplicated row ids
+        //                 ],
+        //                 "field_type": Number(10),
+        //                 // use this condition to filter out relation cells
+        //             },
+        //         },
+        //     },
+        // }
         let cells: MapRef = db_row_collab
           .data
           .get_with_path(&txn, ["data", "cells"])

@@ -40,4 +40,10 @@ COPY --from=builder /app/target/release/admin_frontend /usr/local/bin/admin_fron
 COPY --from=builder /app/admin_frontend/assets /app/assets
 ENV RUST_BACKTRACE 1
 ENV RUST_LOG info
+
+ARG ADMIN_FRONTEND_PORT
+ARG PORT
+ENV PORT=${ADMIN_FRONTEND_PORT:-${PORT:-3000}}
+EXPOSE $PORT
+
 CMD ["admin_frontend"]

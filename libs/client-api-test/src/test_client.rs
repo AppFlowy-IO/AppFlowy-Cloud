@@ -269,7 +269,7 @@ impl TestClient {
     )
     .unwrap();
 
-    UserAwareness::open(collab, None)
+    UserAwareness::open(collab, None).unwrap()
   }
 
   pub async fn try_update_workspace_member(

@@ -13,14 +13,14 @@ pub struct PublishViewMeta {
   pub publish_name: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Default, Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
 pub struct PublishViewMetaData {
   pub view: PublishViewInfo,
   pub child_views: Vec<PublishViewInfo>,
   pub ancestor_views: Vec<PublishViewInfo>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Default, Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
 pub struct PublishViewInfo {
   pub view_id: String,
   pub name: String,

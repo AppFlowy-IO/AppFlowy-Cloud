@@ -261,7 +261,10 @@ impl PublishCollabDuplicator {
 
           let mut inserted = vec![];
           for (view_id, view) in views_to_add.iter() {
-            if duplicated_view_ids.contains(&view.parent_view_id) {
+            // allow to insert if parent view is already inserted
+            // or if view is standalone (view_id == parent_view_id)
+            if duplicated_view_ids.contains(&view.parent_view_id) || *view_id == view.parent_view_id
+            {
               folder
                 .body
                 .views

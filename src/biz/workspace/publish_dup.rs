@@ -809,90 +809,89 @@ impl PublishCollabDuplicator {
         }
 
         {
-          // handle document in database row
+          // handle row meta
           let row_meta: MapRef = db_row_collab
             .data
             .get(&txn, "meta")
             .ok_or_else(|| {
               AppError::RecordNotFound(format!(
-                "no data found in database row collab: {}",
+                "no meta found in database row collab: {}",
                 pub_row_id
               ))
             })?
             .cast()
             .map_err(|err| AppError::Unhandled(format!("not a map: {:?}", err)))?;
 
-          // is document empty
-          let pub_is_doc_empty_key =
-            meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
-          let pub_is_doc_empty = row_meta.get(&txn, &pub_is_doc_empty_key);
+          {
+            // handle document in database row
+            let pub_is_doc_empty_key =
+              meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
+            let pub_is_doc_empty = row_meta.get(&txn, &pub_is_doc_empty_key);
+            if let Some(Out::Any(any::Any::Bool(is_doc_empty))) = pub_is_doc_empty {
+              row_meta.remove(&mut txn, &pub_is_doc_empty_key);
+              if !is_doc_empty {
+                let pub_row_doc_id =
+                  meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
+                let dup_row_doc_id =
+                  meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
+                row_meta.insert(&mut txn, dup_row_doc_id, any::Any::Bool(false));
 
-          // icon id
-          let pub_icon_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IconId);
-          let pub_icon_id = row_meta.get(&txn, &pub_icon_id_key);
+                let row_doc_doc_state = published_db
+                  .database_row_document_collabs
+                  .get(&pub_row_doc_id)
+                  .ok_or_else(|| {
+                    AppError::RecordNotFound(format!("doc not found: {}", pub_row_doc_id))
+                  })?;
 
-          // cover id
-          let pub_cover_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
-          let pub_cover_id = row_meta.get(&txn, &pub_cover_id_key);
-
-          // TODO: attachment_count
-          // // attachment_count
-          // let pub_attach_count_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
-          // let pub_attachment_count = row_meta.get(&txn, &pub_attach_count_key);
-
-          // clear the meta
-          row_meta.clear(&mut txn);
-
-          // if doc exists, duplicate it!
-          if let Some(Out::Any(any::Any::Bool(is_doc_empty))) = pub_is_doc_empty {
-            if !is_doc_empty {
-              let pub_row_doc_id =
-                meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
-              let dup_row_doc_id =
-                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
-              let row_doc_doc_state = published_db
-                .database_row_document_collabs
-                .get(&pub_row_doc_id)
-                .ok_or_else(|| {
-                  AppError::RecordNotFound(format!("doc not found: {}", pub_row_doc_id))
-                })?;
-
-              let doc_collab = collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
-              let doc =
-                Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
-              let mut new_doc_view = Box::pin(self.deep_copy_doc(
-                &pub_row_doc_id,
-                dup_row_doc_id.clone(),
-                doc,
-                PublishViewMetaData::default(),
-              ))
-              .await?;
-              new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
-              self
-                .views_to_add
-                .insert(dup_row_doc_id.clone(), new_doc_view);
-              row_meta.insert(&mut txn, dup_row_doc_id, any::Any::Bool(false));
+                let doc_collab =
+                  collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
+                let doc =
+                  Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
+                let mut new_doc_view = Box::pin(self.deep_copy_doc(
+                  &pub_row_doc_id,
+                  dup_row_doc_id.clone(),
+                  doc,
+                  PublishViewMetaData::default(),
+                ))
+                .await?;
+                new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
+                self
+                  .views_to_add
+                  .insert(dup_row_doc_id.clone(), new_doc_view);
+                row_meta.insert(&mut txn, dup_row_doc_id, any::Any::Bool(false));
+              }
             }
           }
-
-          // if pub_icon_id exists, duplicate it!
-          if let Some(Out::Any(any::Any::String(icon_id))) = pub_icon_id {
-            let dup_icon_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::IconId);
-            row_meta.insert(&mut txn, dup_icon_id_key, icon_id);
+          {
+            // handle icon id
+            let pub_icon_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IconId);
+            let pub_icon_id = row_meta.get(&txn, &pub_icon_id_key);
+            if let Some(Out::Any(any::Any::String(icon_id))) = pub_icon_id {
+              row_meta.remove(&mut txn, &pub_icon_id_key);
+              let dup_icon_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::IconId);
+              row_meta.insert(&mut txn, dup_icon_id_key, icon_id);
+            }
           }
-
-          // if pub_cover_id exists, duplicate it!
-          if let Some(Out::Any(any::Any::String(cover_id))) = pub_cover_id {
-            let dup_cover_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::IconId);
-            row_meta.insert(&mut txn, dup_cover_id_key, cover_id);
+          {
+            // handle cover id
+            let pub_cover_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
+            let pub_cover_id = row_meta.get(&txn, &pub_cover_id_key);
+            if let Some(Out::Any(any::Any::String(cover_id))) = pub_cover_id {
+              let dup_cover_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::CoverId);
+              row_meta.insert(&mut txn, dup_cover_id_key, cover_id);
+            }
           }
-
-          // TODO: add attachment_count
-          // // if attachment_count exists, duplicate it!
-          // if let Some(Out::Any(any::Any::BigInt(attachment_count))) = pub_attachment_count {
-          //   let dup_ac_key = meta_id_from_row_id(&new_row_id.parse()?, RowMetaKey::AttachmentCount);
-          //   row_meta.insert(&mut txn, dup_ac_key, attachment_count);
-          // }
+          {
+            // handle attachment_count
+            let pub_attach_count_key =
+              meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
+            let pub_attachment_count = row_meta.get(&txn, &pub_attach_count_key);
+            if let Some(Out::Any(any::Any::BigInt(attachment_count))) = pub_attachment_count {
+              let dup_ac_key =
+                meta_id_from_row_id(&new_row_id.parse()?, RowMetaKey::AttachmentCount);
+              row_meta.insert(&mut txn, dup_ac_key, attachment_count);
+            }
+          }
         }
       }
 

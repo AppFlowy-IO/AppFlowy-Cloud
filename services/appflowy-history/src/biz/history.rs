@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use collab::lock::RwLock;
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
 use collab::preclude::{Collab, CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};

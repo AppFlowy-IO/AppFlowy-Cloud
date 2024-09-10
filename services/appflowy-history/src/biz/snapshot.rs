@@ -96,8 +96,17 @@ impl SnapshotGenerator {
       threshold,
     );
 
-    let threshold_count =
-      *self.current_update_count.load_full() - *self.prev_edit_count.load_full();
+    let current = self.current_update_count.load_full();
+    let prev = self.prev_edit_count.load_full();
+    if current < prev {
+      warn!(
+        "object:{} current edit count:{} is less than prev edit count:{}",
+        self.object_id, current, prev
+      );
+      return;
+    }
+
+    let threshold_count = *current - *prev;
     if threshold_count + 1 >= threshold {
       self.prev_edit_count.store(Arc::new(txn_edit_count as u32));
       let pending_snapshots = self.pending_snapshots.clone();

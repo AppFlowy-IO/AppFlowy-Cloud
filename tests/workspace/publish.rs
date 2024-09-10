@@ -1,14 +1,14 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
-use appflowy_cloud::biz::workspace::publish_dup::{
-  collab_from_doc_state, get_database_id_from_collab,
-};
+use appflowy_cloud::biz::workspace::publish_dup::collab_from_doc_state;
 use client_api::entity::{
   AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabParams,
 };
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use collab::util::MapExt;
+use collab_database::database::DatabaseBody;
+use collab_database::entity::FieldType;
 use collab_database::views::DatabaseViews;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::document::Document;
@@ -960,7 +960,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .unwrap();
       let db_doc_state = db_collab_collab_resp.encode_collab.doc_state;
       let db_collab = collab_from_doc_state(db_doc_state.to_vec(), "").unwrap();
-      let dup_db_id = get_database_id_from_collab(&db_collab).unwrap();
+      let dup_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
       assert_ne!(dup_db_id, pub_db_id);
 
       let view_map = {
@@ -1067,7 +1067,6 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
         .get_workspace_folder(&workspace_id_2, Some(5))
         .await
         .unwrap();
-      println!("{:#?}", fv);
       let doc_with_embedded_db = fv
         .children
         .into_iter()
@@ -1102,10 +1101,129 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
   }
 }
 
+#[tokio::test]
+async fn duplicate_to_workspace_db_with_relation() {
+  let client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.workspace_id().await;
+
+  // database with relation column to another database
+  let db_with_rel_col_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  let db_with_rel_col_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::DB_WITH_REL_COL_META).unwrap();
+  let db_with_rel_col_blob = hex::decode(published_data::DB_WITH_REL_COL_HEX).unwrap();
+
+  // related database
+  // uuid must be fixed because it is related to the db_with_rel_col
+  let related_db_view_id: uuid::Uuid = "5fc669fa-8867-4f6d-98f1-ce387597eabd".parse().unwrap();
+  let related_db_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::RELATED_DB_META).unwrap();
+  let related_db_blob = hex::decode(published_data::RELATED_DB_HEX).unwrap();
+
+  client_1
+    .api_client
+    .publish_collabs(
+      &workspace_id,
+      vec![
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: db_with_rel_col_view_id,
+            publish_name: "db-with-rel-col".to_string(),
+            metadata: db_with_rel_col_metadata.clone(),
+          },
+          data: db_with_rel_col_blob,
+        },
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: related_db_view_id,
+            publish_name: "related-db".to_string(),
+            metadata: related_db_metadata.clone(),
+          },
+          data: related_db_blob,
+        },
+      ],
+    )
+    .await
+    .unwrap();
+
+  {
+    let mut client_2 = TestClient::new_user().await;
+    let workspace_id_2 = client_2.workspace_id().await;
+
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5))
+      .await
+      .unwrap();
+
+    // duplicate db_with_rel_col to workspace2
+    // Result fv should be:
+    // .
+    // ├── Getting Started (existing)
+    // ├── db_with_rel_col
+    // └── related-db
+    // related-db cannot be child of db_with_rel_col because they dont share the same field
+    // and are 2 different databases, so we just put them in the root (dest_id)
+    client_2
+      .api_client
+      .duplicate_published_to_workspace(
+        &workspace_id_2,
+        &PublishedDuplicate {
+          published_view_id: db_with_rel_col_view_id.to_string(),
+          dest_view_id: fv.view_id, // use the root view
+        },
+      )
+      .await
+      .unwrap();
+
+    {
+      let fv = client_2
+        .api_client
+        .get_workspace_folder(&workspace_id_2, Some(5))
+        .await
+        .unwrap();
+      let db_with_rel_col = fv
+        .children
+        .iter()
+        .find(|v| v.name == "grid3") // db_with_rel_col
+        .unwrap();
+      let related_db = fv
+        .children
+        .iter()
+        .find(|v| v.name == "grid2") // related-db
+        .unwrap();
+      let db_with_rel_col_collab = client_2
+        .get_db_collab_from_view(&workspace_id_2, &db_with_rel_col.view_id)
+        .await;
+      let related_db_collab = client_2
+        .get_db_collab_from_view(&workspace_id_2, &related_db.view_id)
+        .await;
+
+      let related_db_id: String = related_db_collab
+        .data
+        .get_with_path(&related_db_collab.transact(), ["database", "id"])
+        .unwrap();
+
+      let rel_col_db_body = DatabaseBody::from_collab(&db_with_rel_col_collab).unwrap();
+      let txn = db_with_rel_col_collab.transact();
+      let all_fields = rel_col_db_body.fields.get_all_fields(&txn);
+      all_fields
+        .iter()
+        .map(|f| &f.type_options)
+        .flat_map(|t| t.iter())
+        .filter(|(k, _v)| **k == FieldType::Relation.type_id())
+        .map(|(_k, v)| v)
+        .flat_map(|v| v.iter())
+        .for_each(|(_k, db_id)| {
+          assert_eq!(db_id.to_string(), related_db_id);
+        });
+    }
+  }
+}
+
 fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<String>) {
   let pub_db_data = serde_json::from_slice::<PublishDatabaseData>(published_db_blob).unwrap();
   let db_collab = collab_from_doc_state(pub_db_data.database_collab, "").unwrap();
-  let pub_db_id = get_database_id_from_collab(&db_collab).unwrap();
+  let pub_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
   let row_ids: HashSet<String> = pub_db_data.database_row_collabs.into_keys().collect();
   (pub_db_id, row_ids)
 }

@@ -687,12 +687,16 @@ impl Client {
     &self,
     workspace_id: &str,
     depth: Option<u32>,
+    root_view_id: Option<String>,
   ) -> Result<FolderView, AppResponseError> {
     let url = format!("{}/api/workspace/{}/folder", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .query(&QueryWorkspaceFolder { depth })
+      .query(&QueryWorkspaceFolder {
+        depth,
+        root_view_id,
+      })
       .send()
       .await?;
     log_request_id(&resp);

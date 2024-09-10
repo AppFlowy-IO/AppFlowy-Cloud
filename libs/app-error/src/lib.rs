@@ -139,6 +139,9 @@ pub enum AppError {
 
   #[error("{0}")]
   InvalidPublishedOutline(String),
+
+  #[error("{0}")]
+  InvalidFolderView(String),
 }
 
 impl AppError {
@@ -204,6 +207,7 @@ impl AppError {
       AppError::StringLengthLimitReached(_) => ErrorCode::StringLengthLimitReached,
       AppError::InvalidContentType(_) => ErrorCode::InvalidContentType,
       AppError::InvalidPublishedOutline(_) => ErrorCode::InvalidPublishedOutline,
+      AppError::InvalidFolderView(_) => ErrorCode::InvalidFolderView,
     }
   }
 }
@@ -323,6 +327,7 @@ pub enum ErrorCode {
   SingleUploadLimitExceeded = 1037,
   AppleRevokeTokenError = 1038,
   InvalidPublishedOutline = 1039,
+  InvalidFolderView = 1040,
 }
 
 impl ErrorCode {

@@ -9,7 +9,7 @@ use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
 use tokio::time::interval;
-use tracing::{error, trace};
+use tracing::error;
 
 use collab_stream::model::{CollabUpdateEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
@@ -85,7 +85,9 @@ impl OpenCollabHandle {
 
   pub async fn generate_history(&self) -> Result<(), HistoryError> {
     if let Some(history_persistence) = &self.history_persistence {
-      save_history(self.history.clone(), history_persistence.clone()).await;
+      // Generate at least one snapshot if the history is empty.
+      self.history.generate_snapshot_if_empty().await;
+      save_history_if_snapshot_exists(self.history.clone(), history_persistence.clone()).await;
     }
     Ok(())
   }
@@ -153,7 +155,8 @@ async fn spawn_recv_update(
             continue;
           }
 
-          trace!("[History] received {} update messages", messages.len());
+          #[cfg(feature = "verbose_log")]
+          tracing::trace!("[History] received {} update messages", messages.len());
           if let Err(e) = process_messages(
             &mut update_stream,
             messages,
@@ -180,29 +183,35 @@ async fn process_messages(
   update_stream: &mut StreamGroup,
   messages: Vec<StreamMessage>,
   collab: Arc<RwLock<Collab>>,
-  _object_id: &str,
+  object_id: &str,
   _collab_type: &CollabType,
 ) -> Result<(), HistoryError> {
-  let cloned_message = messages.clone();
-  tokio::task::spawn_blocking(move || {
-    let mut lock = collab.blocking_write();
-    apply_updates(&cloned_message, &mut lock)?;
-    drop(lock);
-    Ok::<_, HistoryError>(())
-  })
-  .await
-  .map_err(|e| HistoryError::Internal(e.into()))??;
+  let mut write_guard = collab.write().await;
+  apply_updates(object_id, &messages, &mut write_guard)?;
+  drop(write_guard);
   update_stream.ack_messages(&messages).await?;
   Ok(())
 }
 
 /// Applies decoded updates from messages to the given locked collaboration object.
-fn apply_updates(messages: &[StreamMessage], collab: &mut Collab) -> Result<(), HistoryError> {
+#[inline]
+fn apply_updates(
+  _object_id: &str,
+  messages: &[StreamMessage],
+  collab: &mut Collab,
+) -> Result<(), HistoryError> {
   let mut txn = collab.transact_mut();
   for message in messages {
     let CollabUpdateEvent::UpdateV1 { encode_update } = CollabUpdateEvent::decode(&message.data)?;
     let update = Update::decode_v1(&encode_update)
       .map_err(|e| CollabError::YrsEncodeStateError(e.to_string()))?;
+
+    #[cfg(feature = "verbose_log")]
+    tracing::trace!(
+      "[History]: object_id:{} apply update: {:#?}",
+      _object_id,
+      update
+    );
     txn
       .apply_update(update)
       .map_err(|err| HistoryError::Internal(err.into()))?;
@@ -216,16 +225,21 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
       // In debug mode, save the history every 10 seconds.
       interval(Duration::from_secs(10))
     } else {
-      interval(Duration::from_secs(60 * 60))
+      // In release mode, save the history every 10 minutes.
+      interval(Duration::from_secs(10 * 60))
     };
+    interval.tick().await;
 
     loop {
       interval.tick().await;
       if let (Some(history), Some(history_persistence)) =
         (history.upgrade(), history_persistence.upgrade())
       {
-        save_history(history, history_persistence).await;
+        history.generate_snapshot_if_empty().await;
+        save_history_if_snapshot_exists(history, history_persistence).await;
       } else {
+        #[cfg(feature = "verbose_log")]
+        tracing::trace!("[History]: exit periodically save history task.");
         break;
       }
     }
@@ -233,7 +247,10 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
 }
 
 #[inline]
-async fn save_history(history: Arc<CollabHistory>, history_persistence: Arc<HistoryPersistence>) {
+async fn save_history_if_snapshot_exists(
+  history: Arc<CollabHistory>,
+  history_persistence: Arc<HistoryPersistence>,
+) {
   match history.gen_snapshot_context().await {
     Ok(Some(ctx)) => {
       if let Err(err) = history_persistence
@@ -244,6 +261,6 @@ async fn save_history(history: Arc<CollabHistory>, history_persistence: Arc<Hist
       }
     },
     Ok(None) => {},
-    Err(err) => error!("Failed to generate snapshot context: {:?}", err),
+    Err(err) => error!("{:?}", err),
   }
 }

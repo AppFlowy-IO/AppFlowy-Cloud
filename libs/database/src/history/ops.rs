@@ -1,4 +1,5 @@
 use crate::collab::partition_key_from_collab_type;
+
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, PgPool, Postgres};
@@ -235,6 +236,7 @@ pub async fn get_latest_snapshot(
     Some(state) => state,
     None => return Ok(None),
   };
+  transaction.commit().await?;
 
   let history_state = HistoryStatePb {
     object_id: snapshot_state.oid,
@@ -249,7 +251,6 @@ pub async fn get_latest_snapshot(
 
   Ok(Some(snapshot_info))
 }
-
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AFSnapshotMetaPbRow {
   pub oid: String,

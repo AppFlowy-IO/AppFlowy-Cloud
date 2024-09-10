@@ -1,21 +1,20 @@
-use std::sync::Arc;
-
+use anyhow::anyhow;
 use collab::lock::RwLock;
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
 use collab::preclude::{Collab, CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab_entity::CollabType;
 use serde_json::Value;
 use sqlx::PgPool;
-use tracing::trace;
+use std::sync::Arc;
 
 use database::history::ops::get_snapshot_meta_list;
 use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
 
-use crate::biz::snapshot::{gen_snapshot, CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
+use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
 use crate::error::HistoryError;
 
 pub struct CollabHistory {
-  object_id: String,
+  pub(crate) object_id: String,
   collab: Arc<RwLock<Collab>>,
   collab_type: CollabType,
   snapshot_generator: SnapshotGenerator,
@@ -25,10 +24,10 @@ impl CollabHistory {
   pub async fn new(object_id: &str, collab: Arc<RwLock<Collab>>, collab_type: CollabType) -> Self {
     let snapshot_generator =
       SnapshotGenerator::new(object_id, Arc::downgrade(&collab), collab_type.clone());
-
     collab.read().await.add_plugin(Box::new(CountUpdatePlugin {
       snapshot_generator: snapshot_generator.clone(),
     }));
+    collab.write().await.initialize();
 
     Self {
       object_id: object_id.to_string(),
@@ -38,22 +37,16 @@ impl CollabHistory {
     }
   }
 
-  #[cfg(debug_assertions)]
-  /// Generate a snapshot of the current state of the collab
-  /// Only for testing purposes. We use [SnapshotGenerator] to generate snapshot
-  pub async fn gen_snapshot(&self, _uid: i64) -> CollabSnapshot {
-    let lock = self.collab.read().await;
-    gen_snapshot(&lock, &self.object_id)
+  pub async fn generate_snapshot_if_empty(&self) {
+    if !self.snapshot_generator.has_snapshot().await {
+      self.snapshot_generator.generate().await;
+    }
   }
 
   pub async fn gen_snapshot_context(&self) -> Result<Option<SnapshotContext>, HistoryError> {
     let collab = self.collab.clone();
-    let snapshot_generator = self.snapshot_generator.clone();
-    let object_id = self.object_id.clone();
-    let collab_type = self.collab_type.clone();
-
     let timestamp = chrono::Utc::now().timestamp();
-    let snapshots: Vec<CollabSnapshot> = snapshot_generator.take_pending_snapshots().await
+    let snapshots: Vec<CollabSnapshot> = self.snapshot_generator.consume_pending_snapshots().await
           .into_iter()
           // Remove the snapshots which created_at is bigger than the current timestamp
           .filter(|snapshot| snapshot.created_at <= timestamp)
@@ -63,17 +56,31 @@ impl CollabHistory {
     if snapshots.is_empty() {
       return Ok(None);
     }
-    trace!("[History] prepare to save snapshots to disk");
+    let collab_type = self.collab_type.clone();
+    let object_id = self.object_id.clone();
     let (doc_state, state_vector) = tokio::task::spawn_blocking(move || {
       let lock = collab.blocking_read();
-      let txn = lock.transact();
-      let doc_state_v2 = txn.encode_state_as_update_v2(&StateVector::default());
-      let state_vector = txn.state_vector();
-      Ok::<_, HistoryError>((doc_state_v2, state_vector))
+      let result = collab_type.validate_require_data(&lock);
+      match result {
+        Ok(_) => {
+          let txn = lock.transact();
+          let doc_state_v2 = txn.encode_state_as_update_v2(&StateVector::default());
+          let state_vector = txn.state_vector();
+          Ok::<_, HistoryError>((doc_state_v2, state_vector))
+        },
+        Err(err) => Err::<_, HistoryError>(HistoryError::Internal(anyhow!(
+          "Failed to validate {}:{} required data: {}",
+          object_id,
+          collab_type,
+          err
+        ))),
+      }
     })
     .await
     .map_err(|err| HistoryError::Internal(err.into()))??;
 
+    let collab_type = self.collab_type.clone();
+    let object_id = self.object_id.clone();
     let state = CollabSnapshotState::new(
       object_id,
       doc_state,
@@ -119,8 +126,8 @@ struct CountUpdatePlugin {
   snapshot_generator: SnapshotGenerator,
 }
 impl CollabPlugin for CountUpdatePlugin {
-  fn receive_update(&self, _object_id: &str, _txn: &TransactionMut, update: &[u8]) {
-    self.snapshot_generator.did_apply_update(update);
+  fn receive_update(&self, _object_id: &str, txn: &TransactionMut, _update: &[u8]) {
+    self.snapshot_generator.did_apply_update(txn);
   }
 }
 

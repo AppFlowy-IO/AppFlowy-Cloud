@@ -22,6 +22,9 @@ pub enum HistoryError {
   #[error(transparent)]
   RedisStreamError(#[from] collab_stream::error::StreamError),
 
+  #[error("Invalid collab:{0}")]
+  InvalidCollab(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }

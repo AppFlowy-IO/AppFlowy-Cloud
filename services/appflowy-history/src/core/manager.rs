@@ -8,6 +8,9 @@ use collab_stream::stream_group::ReadOption;
 use dashmap::mapref::entry::Entry;
 
 use crate::config::StreamSetting;
+use collab::core::collab::DataSource;
+use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use dashmap::DashMap;
 use database::history::ops::get_latest_snapshot;
 use sqlx::PgPool;
@@ -55,11 +58,72 @@ impl OpenCollabManager {
     req: SnapshotRequestPb,
     pg_pool: &PgPool,
   ) -> Result<SingleSnapshotInfoPb, HistoryError> {
+    match self.find_available_latest_snapshot(&req, pg_pool).await {
+      Ok(pb) => Ok(pb),
+      Err(err) => {
+        // if matches!(err, HistoryError::InvalidCollab(_)) {
+        //   // 1. delete snapshot state and related snapshot meta
+        //   // 2. try to find next available snapshot
+        //   return self.get_latest_snapshot(req, pg_pool).await;
+        // }
+        Err(err)
+      },
+    }
+  }
+
+  async fn find_available_latest_snapshot(
+    &self,
+    req: &SnapshotRequestPb,
+    pg_pool: &PgPool,
+  ) -> Result<SingleSnapshotInfoPb, HistoryError> {
     let collab_type = CollabType::from(req.collab_type);
     match get_latest_snapshot(&req.object_id, &collab_type, pg_pool).await {
-      Ok(Some(pb)) => Ok(pb),
-      _ => Err(HistoryError::RecordNotFound(req.object_id)),
+      Ok(Some(pb)) => {
+        if let Some(history) = pb.history_state.clone() {
+          trace!("[History] validate history state: {}", req.object_id);
+          self
+            .validate_collab(
+              req.object_id.clone(),
+              collab_type,
+              history.doc_state.clone(),
+              history.doc_state_version,
+            )
+            .await?;
+        }
+        Ok(pb)
+      },
+      _ => Err(HistoryError::RecordNotFound(req.object_id.clone())),
     }
+  }
+
+  async fn validate_collab(
+    &self,
+    object_id: String,
+    collab_type: CollabType,
+    doc_state: Vec<u8>,
+    doc_state_version: i32,
+  ) -> Result<(), HistoryError> {
+    tokio::task::spawn_blocking(move || {
+      let database_source = match doc_state_version {
+        1 => DataSource::DocStateV1(doc_state),
+        2 => DataSource::DocStateV2(doc_state),
+        _ => DataSource::DocStateV1(doc_state),
+      };
+      let collab = Collab::new_with_source(
+        CollabOrigin::Empty,
+        &object_id,
+        database_source,
+        vec![],
+        false,
+      )?;
+
+      collab_type
+        .validate_require_data(&collab)
+        .map_err(|err| HistoryError::InvalidCollab(format!("{}", err)))?;
+      Ok::<_, HistoryError>(())
+    })
+    .await
+    .map_err(|err| HistoryError::Internal(err.into()))?
   }
 }
 

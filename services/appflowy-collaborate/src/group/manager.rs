@@ -62,7 +62,7 @@ where
       .map_err(|err| RealtimeError::Internal(err.into()))?;
     let control_event_stream = Arc::new(Mutex::from(control_event_stream));
     Ok(Self {
-      state: GroupManagementState::new(metrics_calculate.clone()),
+      state: GroupManagementState::new(metrics_calculate.clone(), control_event_stream.clone()),
       storage,
       access_control,
       metrics_calculate,
@@ -98,19 +98,6 @@ where
   #[instrument(skip(self))]
   async fn remove_group(&self, object_id: &str) {
     self.state.remove_group(object_id).await;
-
-    let close_event = CollabControlEvent::Close {
-      object_id: object_id.to_string(),
-    };
-    if let Err(err) = self
-      .control_event_stream
-      .lock()
-      .await
-      .insert_message(close_event)
-      .await
-    {
-      error!("Failed to insert close event to control stream: {}", err);
-    }
   }
 
   pub async fn subscribe_group(

@@ -748,6 +748,7 @@ name = "appflowy-history"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "assert-json-diff",
  "axum 0.7.5",
  "bincode",

@@ -42,8 +42,12 @@ tonic-proto.workspace = true
 futures = "0.3.30"
 log = "0.4.20"
 prost = "0.12.3"
+arc-swap = "1.7.1"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
 rand = "0.8.5"
 serial_test = "3.0.0"
+
+[features]
+verbose_log = []

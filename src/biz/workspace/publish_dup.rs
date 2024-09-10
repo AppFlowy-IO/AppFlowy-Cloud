@@ -849,11 +849,7 @@ impl PublishCollabDuplicator {
       }
 
       // update database metas iid
-      let metas: MapRef = db_collab
-        .data
-        .get_with_path(&txn, ["database", "metas"])
-        .ok_or_else(|| AppError::RecordNotFound("no metas found in database".to_string()))?;
-      metas.insert(&mut txn, "iid", new_view_id);
+      db_body.metas.insert(&mut txn, "iid", new_view_id);
 
       // insert updated views back to db
       db_body.views.clear(&mut txn);

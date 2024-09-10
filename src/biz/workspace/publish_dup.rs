@@ -26,8 +26,8 @@ use sqlx::PgPool;
 use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 use workspace_template::gen_view_id;
-use yrs::any;
 use yrs::updates::encoder::Encode;
+use yrs::Any;
 use yrs::Array;
 use yrs::ArrayRef;
 use yrs::Out;
@@ -694,7 +694,7 @@ impl PublishCollabDuplicator {
         for (key, type_option_value) in field.type_options.iter_mut() {
           if *key == FieldType::Relation.type_id() {
             if let Some(pub_db_id) = type_option_value.get_mut("database_id") {
-              if let any::Any::String(pub_db_id_str) = pub_db_id {
+              if let Any::String(pub_db_id_str) = pub_db_id {
                 if let Some(related_db_view) =
                   published_db.database_relations.get(pub_db_id_str.as_ref())
                 {
@@ -708,7 +708,7 @@ impl PublishCollabDuplicator {
                       .cloned()
                       .flatten()
                     {
-                      *pub_db_id = any::Any::String(dup_db_id.into());
+                      *pub_db_id = Any::String(dup_db_id.into());
                       db_body.fields.update_field(&mut txn, &field.id, |f| {
                         f.set_type_option(
                           FieldType::Relation.into(),
@@ -773,7 +773,7 @@ impl PublishCollabDuplicator {
           let mut rel_row_idss = vec![];
           for (_, out) in cells.iter(&txn) {
             if let Ok(m) = out.cast::<MapRef>() {
-              if let Some(Out::Any(any::Any::BigInt(n))) = m.get(&txn, "field_type") {
+              if let Some(Out::Any(Any::BigInt(n))) = m.get(&txn, "field_type") {
                 if n == FieldType::Relation as i64 {
                   let relation_data = m.get(&txn, "data").ok_or_else(|| {
                     AppError::RecordNotFound("no data found in relation cell".to_string())
@@ -790,7 +790,7 @@ impl PublishCollabDuplicator {
 
             let mut pub_row_ids = Vec::with_capacity(num_refs as usize);
             for rel_row_id in rel_row_ids.iter(&txn) {
-              if let Out::Any(any::Any::String(s)) = rel_row_id {
+              if let Out::Any(Any::String(s)) = rel_row_id {
                 pub_row_ids.push(s);
               }
             }
@@ -827,14 +827,15 @@ impl PublishCollabDuplicator {
             let pub_is_doc_empty_key =
               meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
             let pub_is_doc_empty = row_meta.get(&txn, &pub_is_doc_empty_key);
-            if let Some(Out::Any(any::Any::Bool(is_doc_empty))) = pub_is_doc_empty {
+            if let Some(Out::Any(Any::Bool(is_doc_empty))) = pub_is_doc_empty {
               row_meta.remove(&mut txn, &pub_is_doc_empty_key);
+              let dup_row_doc_id =
+                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
+              row_meta.insert(&mut txn, dup_row_doc_id.clone(), Any::Bool(is_doc_empty));
+
               if !is_doc_empty {
                 let pub_row_doc_id =
                   meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
-                let dup_row_doc_id =
-                  meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
-                row_meta.insert(&mut txn, dup_row_doc_id, any::Any::Bool(false));
 
                 let row_doc_doc_state = published_db
                   .database_row_document_collabs
@@ -858,7 +859,6 @@ impl PublishCollabDuplicator {
                 self
                   .views_to_add
                   .insert(dup_row_doc_id.clone(), new_doc_view);
-                row_meta.insert(&mut txn, dup_row_doc_id, any::Any::Bool(false));
               }
             }
           }
@@ -866,7 +866,7 @@ impl PublishCollabDuplicator {
             // handle icon id
             let pub_icon_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IconId);
             let pub_icon_id = row_meta.get(&txn, &pub_icon_id_key);
-            if let Some(Out::Any(any::Any::String(icon_id))) = pub_icon_id {
+            if let Some(Out::Any(Any::String(icon_id))) = pub_icon_id {
               row_meta.remove(&mut txn, &pub_icon_id_key);
               let dup_icon_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::IconId);
               row_meta.insert(&mut txn, dup_icon_id_key, icon_id);
@@ -876,7 +876,8 @@ impl PublishCollabDuplicator {
             // handle cover id
             let pub_cover_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
             let pub_cover_id = row_meta.get(&txn, &pub_cover_id_key);
-            if let Some(Out::Any(any::Any::String(cover_id))) = pub_cover_id {
+            if let Some(Out::Any(Any::String(cover_id))) = pub_cover_id {
+              row_meta.remove(&mut txn, &pub_cover_id_key);
               let dup_cover_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::CoverId);
               row_meta.insert(&mut txn, dup_cover_id_key, cover_id);
             }
@@ -885,11 +886,12 @@ impl PublishCollabDuplicator {
             // handle attachment_count
             let pub_attach_count_key =
               meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
-            let pub_attachment_count = row_meta.get(&txn, &pub_attach_count_key);
-            if let Some(Out::Any(any::Any::BigInt(attachment_count))) = pub_attachment_count {
-              let dup_ac_key =
-                meta_id_from_row_id(&new_row_id.parse()?, RowMetaKey::AttachmentCount);
-              row_meta.insert(&mut txn, dup_ac_key, attachment_count);
+            let pub_attach_count = row_meta.get(&txn, &pub_attach_count_key);
+            if let Some(Out::Any(Any::BigInt(attachment_count))) = pub_attach_count {
+              row_meta.remove(&mut txn, &pub_attach_count_key);
+              let dup_attach_count_key =
+                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::AttachmentCount);
+              row_meta.insert(&mut txn, dup_attach_count_key, attachment_count);
             }
           }
         }

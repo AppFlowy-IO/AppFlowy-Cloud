@@ -1,12 +1,13 @@
-use std::ops::Deref;
-use std::sync::atomic::AtomicU32;
-use std::sync::{Arc, Weak};
-
+use arc_swap::ArcSwap;
 use collab::lock::{Mutex, RwLock};
 use collab::preclude::updates::encoder::Encode;
 use collab::preclude::{Collab, ReadTxn, Snapshot, StateVector};
 use collab_entity::CollabType;
-use tracing::{trace, warn};
+
+use std::ops::Deref;
+
+use std::sync::{Arc, Weak};
+use tracing::warn;
 
 use tonic_proto::history::SnapshotMetaPb;
 
@@ -15,7 +16,8 @@ pub struct SnapshotGenerator {
   object_id: String,
   mutex_collab: Weak<RwLock<Collab>>,
   collab_type: CollabType,
-  apply_update_count: Arc<AtomicU32>,
+  current_update_count: Arc<ArcSwap<u32>>,
+  prev_edit_count: Arc<ArcSwap<u32>>,
   pending_snapshots: Arc<Mutex<Vec<CollabSnapshot>>>,
 }
 
@@ -25,7 +27,8 @@ impl SnapshotGenerator {
       object_id: object_id.to_string(),
       mutex_collab,
       collab_type,
-      apply_update_count: Default::default(),
+      current_update_count: Default::default(),
+      prev_edit_count: Default::default(),
       pending_snapshots: Default::default(),
     }
   }
@@ -36,34 +39,61 @@ impl SnapshotGenerator {
     std::mem::take(&mut *lock)
   }
 
-  pub fn did_apply_update(&self, _update: &[u8]) {
-    let prev_apply_update_count = self
-      .apply_update_count
-      .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+  pub fn did_apply_update<T: ReadTxn>(&self, txn: &T) {
+    let snapshot = txn.snapshot();
+    let mut insert_count = 0;
+    for (_, &clock) in snapshot.state_map.iter() {
+      insert_count += clock as u64;
+    }
+
+    let mut delete_count = 0;
+    for (_, range) in snapshot.delete_set.iter() {
+      for f in range.iter() {
+        let deleted_segments = f.len() as u64;
+        delete_count += deleted_segments;
+      }
+    }
+
+    let txn_edit_count = insert_count + delete_count;
+    #[cfg(feature = "verbose_log")]
+    trace!(
+      "[History] object:{} edit count: {}",
+      self.object_id,
+      txn_edit_count
+    );
+
+    self
+      .current_update_count
+      .store(Arc::new(txn_edit_count as u32));
 
     // keep it simple for now. we just compare the update count to determine if we need to generate a snapshot.
     // in the future, we can use a more sophisticated algorithm to determine when to generate a snapshot.
     let threshold = gen_snapshot_threshold(&self.collab_type);
-    // trace!(
-    //   "[History] did_apply_update: object_id={}, current={}, threshold={}",
-    //   self.object_id,
-    //   prev_apply_update_count,
-    //   threshold,
-    // );
-    if prev_apply_update_count + 1 >= threshold {
-      self
-        .apply_update_count
-        .store(0, std::sync::atomic::Ordering::SeqCst);
+    #[cfg(feature = "verbose_log")]
+    trace!(
+      "[History] object_id:{}, update count:{}, threshold={}",
+      self.object_id,
+      txn_edit_count,
+      threshold,
+    );
 
+    let threshold_count =
+      *self.current_update_count.load_full() - *self.prev_edit_count.load_full();
+    if threshold_count + 1 >= threshold {
+      self.prev_edit_count.store(Arc::new(txn_edit_count as u32));
       let pending_snapshots = self.pending_snapshots.clone();
       let mutex_collab = self.mutex_collab.clone();
       let object_id = self.object_id.clone();
       tokio::spawn(async move {
         if let Some(collab) = mutex_collab.upgrade() {
+          #[cfg(feature = "verbose_log")]
           trace!("[History] attempting to generate snapshot");
           let snapshot = gen_snapshot(&*collab.read().await, &object_id);
+
+          #[cfg(feature = "verbose_log")]
           trace!("[History] did generate snapshot for {}", snapshot.object_id);
           pending_snapshots.lock().await.push(snapshot);
+
           warn!("Exceeded maximum retry attempts for snapshot generation");
         } else {
           warn!("collab is dropped. cannot generate snapshot")

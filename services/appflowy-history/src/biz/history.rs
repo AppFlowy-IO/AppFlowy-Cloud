@@ -25,10 +25,10 @@ impl CollabHistory {
   pub async fn new(object_id: &str, collab: Arc<RwLock<Collab>>, collab_type: CollabType) -> Self {
     let snapshot_generator =
       SnapshotGenerator::new(object_id, Arc::downgrade(&collab), collab_type.clone());
-
     collab.read().await.add_plugin(Box::new(CountUpdatePlugin {
       snapshot_generator: snapshot_generator.clone(),
     }));
+    collab.write().await.initialize();
 
     Self {
       object_id: object_id.to_string(),
@@ -131,8 +131,8 @@ struct CountUpdatePlugin {
   snapshot_generator: SnapshotGenerator,
 }
 impl CollabPlugin for CountUpdatePlugin {
-  fn receive_update(&self, _object_id: &str, _txn: &TransactionMut, update: &[u8]) {
-    self.snapshot_generator.did_apply_update(update);
+  fn receive_update(&self, _object_id: &str, txn: &TransactionMut, _update: &[u8]) {
+    self.snapshot_generator.did_apply_update(txn);
   }
 }
 

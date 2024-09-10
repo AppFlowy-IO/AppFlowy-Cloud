@@ -25,6 +25,8 @@ async fn main() -> Result<()> {
   let mut appflowy_history_cmd = Command::new("cargo")
     .args([
       "run",
+      "--features",
+      "verbose_log",
       "--manifest-path",
       "./services/appflowy-history/Cargo.toml",
     ])

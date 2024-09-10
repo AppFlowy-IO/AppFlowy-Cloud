@@ -9,7 +9,7 @@ use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
 use tokio::time::interval;
-use tracing::{error, trace};
+use tracing::error;
 
 use collab_stream::model::{CollabUpdateEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
@@ -153,6 +153,7 @@ async fn spawn_recv_update(
             continue;
           }
 
+          #[cfg(feature = "verbose_log")]
           trace!("[History] received {} update messages", messages.len());
           if let Err(e) = process_messages(
             &mut update_stream,
@@ -180,29 +181,35 @@ async fn process_messages(
   update_stream: &mut StreamGroup,
   messages: Vec<StreamMessage>,
   collab: Arc<RwLock<Collab>>,
-  _object_id: &str,
+  object_id: &str,
   _collab_type: &CollabType,
 ) -> Result<(), HistoryError> {
-  let cloned_message = messages.clone();
-  tokio::task::spawn_blocking(move || {
-    let mut lock = collab.blocking_write();
-    apply_updates(&cloned_message, &mut lock)?;
-    drop(lock);
-    Ok::<_, HistoryError>(())
-  })
-  .await
-  .map_err(|e| HistoryError::Internal(e.into()))??;
+  let mut write_guard = collab.write().await;
+  apply_updates(object_id, &messages, &mut write_guard)?;
+  drop(write_guard);
   update_stream.ack_messages(&messages).await?;
   Ok(())
 }
 
 /// Applies decoded updates from messages to the given locked collaboration object.
-fn apply_updates(messages: &[StreamMessage], collab: &mut Collab) -> Result<(), HistoryError> {
+#[inline]
+fn apply_updates(
+  _object_id: &str,
+  messages: &[StreamMessage],
+  collab: &mut Collab,
+) -> Result<(), HistoryError> {
   let mut txn = collab.transact_mut();
   for message in messages {
     let CollabUpdateEvent::UpdateV1 { encode_update } = CollabUpdateEvent::decode(&message.data)?;
     let update = Update::decode_v1(&encode_update)
       .map_err(|e| CollabError::YrsEncodeStateError(e.to_string()))?;
+
+    #[cfg(feature = "verbose_log")]
+    trace!(
+      "[History]: object_id:{} apply update: {:#?}",
+      object_id,
+      update
+    );
     txn
       .apply_update(update)
       .map_err(|err| HistoryError::Internal(err.into()))?;

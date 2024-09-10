@@ -4,7 +4,8 @@ use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 
 use collab::preclude::MapExt;
-use collab_database::views::DatabaseViews;
+use collab_database::database::DatabaseBody;
+use collab_database::entity::FieldType;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
@@ -23,7 +24,11 @@ use sqlx::PgPool;
 use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 use workspace_template::gen_view_id;
+use yrs::any;
 use yrs::updates::encoder::Encode;
+use yrs::Array;
+use yrs::ArrayRef;
+use yrs::Out;
 use yrs::{Map, MapRef};
 
 use crate::biz::collab::ops::get_latest_collab_encoded;
@@ -66,6 +71,8 @@ pub struct PublishCollabDuplicator {
   duplicated_db_main_view: HashMap<String, String>,
   /// published_database_view_id -> new_view_id
   duplicated_db_view: HashMap<String, String>,
+  /// published_database_row_id -> new_row_id
+  duplicated_db_row: HashMap<String, String>,
   /// new views to be added to the folder
   /// view_id -> view
   views_to_add: HashMap<String, View>,
@@ -103,6 +110,7 @@ impl PublishCollabDuplicator {
       collabs_to_insert: HashMap::new(),
       duplicated_db_main_view: HashMap::new(),
       duplicated_db_view: HashMap::new(),
+      duplicated_db_row: HashMap::new(),
 
       pg_pool,
       collab_storage,
@@ -131,6 +139,7 @@ impl PublishCollabDuplicator {
       duplicated_refs: _,
       duplicated_db_main_view: _,
       duplicated_db_view: _,
+      duplicated_db_row: _,
       mut views_to_add,
       workspace_databases,
       collabs_to_insert,
@@ -138,7 +147,7 @@ impl PublishCollabDuplicator {
       pg_pool,
       duplicator_uid,
       dest_workspace_id,
-      dest_view_id: _,
+      dest_view_id,
     } = self;
 
     // insert all collab object accumulated
@@ -237,6 +246,7 @@ impl PublishCollabDuplicator {
 
         let mut duplicated_view_ids = HashSet::new();
         duplicated_view_ids.insert(root_view.id.clone());
+        duplicated_view_ids.insert(dest_view_id);
         folder.body.views.insert(&mut folder_txn, root_view, None);
 
         // when child views are added, it must have a parent view that is previously added
@@ -632,7 +642,9 @@ impl PublishCollabDuplicator {
         })?;
         let mut new_folder_db_view =
           self.new_folder_view(view_id.to_string(), view_info, view_info.layout.clone());
-        new_folder_db_view.parent_view_id = parent_view_id.clone();
+        new_folder_db_view
+          .parent_view_id
+          .clone_from(&parent_view_id);
         let new_folder_db_view_id = new_folder_db_view.id.clone();
         self
           .views_to_add
@@ -656,17 +668,57 @@ impl PublishCollabDuplicator {
   ) -> Result<(String, String, bool), AppError> {
     // collab of database
     let mut db_collab = collab_from_doc_state(published_db.database_collab.clone(), "")?;
-    let pub_db_id = get_database_id_from_collab(&db_collab)?;
+    let db_body = DatabaseBody::from_collab(&db_collab)
+      .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
+    let pub_db_id = db_body.get_database_id(&db_collab.context.transact());
 
     // check if the database is already duplicated
     if let Some(db_id) = self.duplicated_refs.get(&pub_db_id).cloned().flatten() {
       return Ok((pub_db_id, db_id, true));
     }
-
     let new_db_id = gen_view_id();
     self
       .duplicated_refs
       .insert(pub_db_id.clone(), Some(new_db_id.clone()));
+
+    {
+      // handle row relations
+      let mut txn = db_collab.context.transact_mut();
+      let all_fields = db_body.fields.get_all_fields(&txn);
+      for mut field in all_fields {
+        for (key, type_option_value) in field.type_options.iter_mut() {
+          if *key == FieldType::Relation.type_id() {
+            if let Some(pub_db_id) = type_option_value.get_mut("database_id") {
+              if let any::Any::String(pub_db_id_str) = pub_db_id {
+                if let Some(related_db_view) =
+                  published_db.database_relations.get(pub_db_id_str.as_ref())
+                {
+                  if let Some(_dup_view_id) = self
+                    .deep_copy_view(related_db_view, &self.dest_view_id.to_string())
+                    .await?
+                  {
+                    if let Some(dup_db_id) = self
+                      .duplicated_refs
+                      .get(pub_db_id_str.as_ref())
+                      .cloned()
+                      .flatten()
+                    {
+                      *pub_db_id = any::Any::String(dup_db_id.into());
+                      db_body.fields.update_field(&mut txn, &field.id, |f| {
+                        f.set_type_option(
+                          FieldType::Relation.into(),
+                          Some(type_option_value.clone()),
+                        );
+                      });
+                    };
+                  };
+                };
+              }
+            };
+          }
+        }
+      }
+    }
 
     // duplicate db collab rows
     for (old_id, row_bin_data) in &published_db.database_row_collabs {
@@ -687,6 +739,64 @@ impl PublishCollabDuplicator {
           .map_err(|err| AppError::Unhandled(format!("data not map: {:?}", err)))?;
         data.insert(&mut txn, "id", new_row_id.clone());
         data.insert(&mut txn, "database_id", new_db_id.clone());
+
+        // update relation cells
+        // db_row_collb: Object {
+        //     "data": Object {
+        //         "cells": Object {
+        //             "MBaTsr": Object {
+        //                 "data": Array [
+        //                     String("eefb5700-8cf7-411e-9596-f60b9a51916e"),
+        //                     String("23d5e054-42c8-4754-ad69-527e4ffc1e46"),
+        //                     // above are published row ids of related database
+        //                     // we need to replace them with respective duplicated row ids
+        //                 ],
+        //                 "field_type": Number(10),
+        //                 // use this condition to filter out relation cells
+        //             },
+        //         },
+        //     },
+        // }
+        let cells: MapRef = db_row_collab
+          .data
+          .get_with_path(&txn, ["data", "cells"])
+          .ok_or_else(|| {
+            AppError::RecordNotFound("no cells found in database row collab".to_string())
+          })?;
+
+        let mut rel_row_idss = vec![];
+        for (_, out) in cells.iter(&txn) {
+          if let Ok(m) = out.cast::<MapRef>() {
+            if let Some(Out::Any(any::Any::BigInt(n))) = m.get(&txn, "field_type") {
+              if n == FieldType::Relation as i64 {
+                let relation_data = m.get(&txn, "data").ok_or_else(|| {
+                  AppError::RecordNotFound("no data found in relation cell".to_string())
+                })?;
+                if let Ok(arr) = relation_data.cast::<ArrayRef>() {
+                  rel_row_idss.push(arr)
+                };
+              }
+            }
+          }
+        }
+        for rel_row_ids in rel_row_idss {
+          let num_refs = rel_row_ids.len(&txn);
+
+          let mut pub_row_ids = Vec::with_capacity(num_refs as usize);
+          for rel_row_id in rel_row_ids.iter(&txn) {
+            if let Out::Any(any::Any::String(s)) = rel_row_id {
+              pub_row_ids.push(s);
+            }
+          }
+          rel_row_ids.remove_range(&mut txn, 0, num_refs);
+          for pub_row_id in pub_row_ids {
+            let dup_row_id = self
+              .duplicated_db_row
+              .get(pub_row_id.as_ref())
+              .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", pub_row_id)))?;
+            let _ = rel_row_ids.push_back(&mut txn, dup_row_id.as_str());
+          }
+        }
       }
 
       // write new row collab to storage
@@ -698,35 +808,19 @@ impl PublishCollabDuplicator {
         (CollabType::DatabaseRow, db_row_ec_bytes?),
       );
       self
-        .duplicated_refs
-        .insert(old_id.clone(), Some(new_row_id));
+        .duplicated_db_row
+        .insert(old_id.clone(), new_row_id.clone());
     }
 
     // accumulate list of database views (Board, Cal, ...) to be linked to the database
     let mut new_db_view_ids: Vec<String> = vec![];
     {
       let mut txn = db_collab.context.transact_mut();
-      let container = db_collab
-        .data
-        .get(&txn, "database")
-        .ok_or_else(|| AppError::RecordNotFound("no database found in collab".to_string()))?
-        .cast::<MapRef>()
-        .map_err(|err| AppError::Unhandled(format!("not a map: {:?}", err)))?;
-      container.insert(&mut txn, "id", new_db_id.clone());
+      db_body.root.insert(&mut txn, "id", new_db_id.clone());
 
-      let view_map = {
-        let map_ref = db_collab
-          .data
-          .get_with_path(&txn, ["database", "views"])
-          .ok_or_else(|| AppError::RecordNotFound("no views found in database".to_string()))?;
-        DatabaseViews::new(CollabOrigin::Empty, map_ref, None)
-      };
-
-      // create new database views based on published views
-      let mut db_views = view_map.get_all_views(&txn);
-
+      let mut db_views = db_body.views.get_all_views(&txn);
       for db_view in db_views.iter_mut() {
-        let new_view_id = if db_view.id == publish_view_id {
+        let new_db_view_id = if db_view.id == publish_view_id {
           self
             .duplicated_db_main_view
             .insert(pub_db_id.clone(), new_view_id.clone());
@@ -736,21 +830,16 @@ impl PublishCollabDuplicator {
         };
         self
           .duplicated_db_view
-          .insert(db_view.id.clone(), new_view_id.clone());
+          .insert(db_view.id.clone(), new_db_view_id.clone());
 
-        db_view.id.clone_from(&new_view_id);
+        db_view.id.clone_from(&new_db_view_id);
         db_view.database_id.clone_from(&new_db_id);
         new_db_view_ids.push(db_view.id.clone());
 
         // update all views's row's id
         for row_order in db_view.row_orders.iter_mut() {
-          if let Some(new_id) = self
-            .duplicated_refs
-            .get(row_order.id.as_str())
-            .cloned()
-            .flatten()
-          {
-            row_order.id = new_id.into();
+          if let Some(new_id) = self.duplicated_db_row.get(row_order.id.as_str()) {
+            row_order.id = new_id.clone().into();
           } else {
             // skip if row not found
             tracing::warn!("row not found: {}", row_order.id);
@@ -759,10 +848,13 @@ impl PublishCollabDuplicator {
         }
       }
 
+      // update database metas iid
+      db_body.metas.insert(&mut txn, "iid", new_view_id);
+
       // insert updated views back to db
-      view_map.clear(&mut txn);
+      db_body.views.clear(&mut txn);
       for view in db_views {
-        view_map.insert_view(&mut txn, view);
+        db_body.views.insert_view(&mut txn, view);
       }
     }
 
@@ -880,7 +972,7 @@ impl PublishCollabDuplicator {
     Ok(main_folder_view)
   }
 
-  /// ceates a new folder view without parent_view_id set
+  /// creates a new folder view without parent_view_id set
   fn new_folder_view(
     &self,
     new_view_id: String,
@@ -970,20 +1062,6 @@ pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Coll
   )
   .map_err(|e| AppError::Unhandled(e.to_string()))?;
   Ok(collab)
-}
-
-pub fn get_database_id_from_collab(db_collab: &Collab) -> Result<String, AppError> {
-  let txn = db_collab.context.transact();
-  let db_map = db_collab
-    .get_with_txn(&txn, "database")
-    .ok_or_else(|| AppError::RecordNotFound("no database found in database collab".to_string()))?
-    .cast::<MapRef>()
-    .map_err(|err| AppError::RecordNotFound(format!("database not a map: {:?}", err)))?;
-  let db_id = db_map
-    .get(&txn, "id")
-    .ok_or_else(|| AppError::RecordNotFound("no id found in database".to_string()))?
-    .to_string(&txn);
-  Ok(db_id)
 }
 
 fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {

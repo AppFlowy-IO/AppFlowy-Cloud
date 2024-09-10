@@ -740,7 +740,7 @@ async fn duplicate_to_workspace_references() {
     let workspace_id_2 = client_2.workspace_id().await;
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -765,7 +765,7 @@ async fn duplicate_to_workspace_references() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -847,7 +847,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -873,7 +873,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
     {
       let fv = client_2
         .api_client
-        .get_workspace_folder(&workspace_id_2, Some(5))
+        .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
       let doc_3_fv = fv
@@ -913,7 +913,8 @@ async fn duplicate_to_workspace_doc_inline_database() {
     )
     .unwrap();
 
-    let folder_view = collab_folder_to_folder_view(&folder, 5);
+    let folder_view =
+      collab_folder_to_folder_view(&workspace_id_2, &folder, 5, &HashSet::default()).unwrap();
     let doc_3_fv = folder_view
       .children
       .into_iter()
@@ -1040,7 +1041,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -1064,7 +1065,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
     {
       let fv = client_2
         .api_client
-        .get_workspace_folder(&workspace_id_2, Some(5))
+        .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
       let doc_with_embedded_db = fv
@@ -1151,7 +1152,7 @@ async fn duplicate_to_workspace_db_with_relation() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -1178,7 +1179,7 @@ async fn duplicate_to_workspace_db_with_relation() {
     {
       let fv = client_2
         .api_client
-        .get_workspace_folder(&workspace_id_2, Some(5))
+        .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
       let db_with_rel_col = fv

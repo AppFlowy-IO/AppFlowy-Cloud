@@ -1,10 +1,17 @@
 use std::collections::HashSet;
 
+use app_error::AppError;
+use chrono::DateTime;
 use collab_folder::{Folder, ViewLayout as CollabFolderViewLayout};
 use shared_entity::dto::workspace_dto::{FolderView, ViewLayout};
-use uuid::Uuid;
 
-pub fn collab_folder_to_folder_view(folder: &Folder, depth: u32) -> FolderView {
+/// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
+pub fn collab_folder_to_folder_view(
+  root_view_id: &str,
+  folder: &Folder,
+  max_depth: u32,
+  pubished_view_ids: &HashSet<String>,
+) -> Result<FolderView, AppError> {
   let mut unviewable = HashSet::new();
   for private_section in folder.get_all_private_sections() {
     unviewable.insert(private_section.id);
@@ -13,117 +20,99 @@ pub fn collab_folder_to_folder_view(folder: &Folder, depth: u32) -> FolderView {
     unviewable.insert(trash_view.id);
   }
 
-  let mut private_views = HashSet::new();
+  let mut private_view_ids = HashSet::new();
   for private_section in folder.get_my_private_sections() {
     unviewable.remove(&private_section.id);
-    private_views.insert(private_section.id);
+    private_view_ids.insert(private_section.id);
   }
 
-  let workspace_id = folder.get_workspace_id().unwrap_or_else(|| {
-    tracing::error!("failed to get workspace_id");
-    Uuid::nil().to_string()
-  });
-  let root = match folder.get_view(&workspace_id) {
-    Some(root) => root,
+  to_folder_view(
+    "",
+    root_view_id,
+    folder,
+    &unviewable,
+    &private_view_ids,
+    pubished_view_ids,
+    false,
+    0,
+    max_depth,
+  )
+  .ok_or(AppError::InvalidFolderView(format!(
+    "There is no valid folder view belonging to the root view id: {}",
+    root_view_id
+  )))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn to_folder_view(
+  parent_view_id: &str,
+  view_id: &str,
+  folder: &Folder,
+  unviewable: &HashSet<String>,
+  private_view_ids: &HashSet<String>,
+  published_view_ids: &HashSet<String>,
+  parent_is_private: bool,
+  depth: u32,
+  max_depth: u32,
+) -> Option<FolderView> {
+  if depth > max_depth || unviewable.contains(view_id) {
+    return None;
+  }
+
+  let view = match folder.get_view(view_id) {
+    Some(view) => view,
     None => {
-      tracing::error!("failed to get root view, workspace_id: {}", workspace_id);
-      return FolderView::default();
+      return None;
     },
   };
 
-  let extra = root.extra.as_deref().map(|extra| {
+  // There is currently a bug, in which the parent_view_id is not always set correctly
+  if !(parent_view_id.is_empty() || view.parent_view_id == parent_view_id) {
+    return None;
+  }
+
+  let is_private =
+    parent_is_private || (view_is_space(&view) && private_view_ids.contains(view_id));
+  let extra = view.extra.as_deref().map(|extra| {
     serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
-      tracing::error!("failed to parse extra field({}): {}", extra, e);
+      tracing::warn!("failed to parse extra field({}): {}", extra, e);
       serde_json::Value::Null
     })
   });
-
-  FolderView {
-    view_id: root.id.clone(),
-    name: root.name.clone(),
-    icon: root
+  let children: Vec<FolderView> = view
+    .children
+    .iter()
+    .filter_map(|child_view_id| {
+      to_folder_view(
+        view_id,
+        &child_view_id.id,
+        folder,
+        unviewable,
+        private_view_ids,
+        published_view_ids,
+        is_private,
+        depth + 1,
+        max_depth,
+      )
+    })
+    .collect();
+  Some(FolderView {
+    view_id: view_id.to_string(),
+    name: view.name.clone(),
+    icon: view
       .icon
       .as_ref()
       .map(|icon| to_dto_view_icon(icon.clone())),
-    is_space: false,
-    is_private: false,
+    is_space: view_is_space(&view),
+    is_private,
+    is_published: published_view_ids.contains(view_id),
+    layout: to_view_layout(&view.layout),
+    created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or(DateTime::default()),
+    last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0)
+      .unwrap_or(DateTime::default()),
     extra,
-    children: if depth == 0 {
-      vec![]
-    } else {
-      root
-        .children
-        .iter()
-        .filter(|v| !unviewable.contains(&v.id))
-        .map(|v| {
-          let intermediate = FolderViewIntermediate {
-            folder,
-            view_id: &v.id,
-            unviewable: &unviewable,
-            private_views: &private_views,
-            depth,
-          };
-          FolderView::from(intermediate)
-        })
-        .collect()
-    },
-  }
-}
-
-struct FolderViewIntermediate<'a> {
-  folder: &'a Folder,
-  view_id: &'a str,
-  unviewable: &'a HashSet<String>,
-  private_views: &'a HashSet<String>,
-  depth: u32,
-}
-
-impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
-  fn from(fv: FolderViewIntermediate) -> Self {
-    let view = match fv.folder.get_view(fv.view_id) {
-      Some(view) => view,
-      None => {
-        tracing::error!("failed to get view, view_id: {}", fv.view_id);
-        return Self::default();
-      },
-    };
-    let extra = view.extra.as_deref().map(|extra| {
-      serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
-        tracing::error!("failed to parse extra field({}): {}", extra, e);
-        serde_json::Value::Null
-      })
-    });
-
-    Self {
-      view_id: view.id.clone(),
-      name: view.name.clone(),
-      icon: view
-        .icon
-        .as_ref()
-        .map(|icon| to_dto_view_icon(icon.clone())),
-      is_space: view_is_space(&view),
-      is_private: fv.private_views.contains(&view.id),
-      extra,
-      children: if fv.depth == 1 {
-        vec![]
-      } else {
-        view
-          .children
-          .iter()
-          .filter(|v| !fv.unviewable.contains(&v.id))
-          .map(|v| {
-            FolderView::from(FolderViewIntermediate {
-              folder: fv.folder,
-              view_id: &v.id,
-              unviewable: fv.unviewable,
-              private_views: fv.private_views,
-              depth: fv.depth - 1,
-            })
-          })
-          .collect()
-      },
-    }
-  }
+    children,
+  })
 }
 
 pub fn view_is_space(view: &collab_folder::View) -> bool {

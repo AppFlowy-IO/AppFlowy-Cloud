@@ -218,7 +218,7 @@ impl TestClient {
 
   pub async fn get_db_collab_from_view(&mut self, workspace_id: &str, view_id: &str) -> Collab {
     let mut ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
-    let ws_db_body = WorkspaceDatabaseBody::new(&mut ws_db_collab);
+    let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
     let txn = ws_db_collab.transact();
     let db_id = ws_db_body
       .get_all_database_meta(&txn)
@@ -236,11 +236,10 @@ impl TestClient {
       })
       .await
       .unwrap();
-    let db_doc_state = db_collab_collab_resp.encode_collab.doc_state;
     Collab::new_with_source(
       CollabOrigin::Server,
       &db_id,
-      DataSource::DocStateV1(db_doc_state.to_vec()),
+      db_collab_collab_resp.encode_collab.into(),
       vec![],
       false,
     )

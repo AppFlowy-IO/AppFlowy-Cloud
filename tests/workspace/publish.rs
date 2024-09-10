@@ -1,14 +1,14 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
-use appflowy_cloud::biz::workspace::publish_dup::{
-  collab_from_doc_state, get_database_id_from_collab,
-};
+use appflowy_cloud::biz::workspace::publish_dup::collab_from_doc_state;
 use client_api::entity::{
   AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabParams,
 };
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use collab::util::MapExt;
+use collab_database::database::DatabaseBody;
+use collab_database::entity::FieldType;
 use collab_database::views::DatabaseViews;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::document::Document;
@@ -21,8 +21,6 @@ use shared_entity::dto::workspace_dto::PublishedDuplicate;
 use std::collections::{HashMap, HashSet};
 use std::thread::sleep;
 use std::time::Duration;
-use yrs::types::Map;
-use yrs::MapRef;
 
 use crate::workspace::published_data::{self};
 
@@ -962,7 +960,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .unwrap();
       let db_doc_state = db_collab_collab_resp.encode_collab.doc_state;
       let db_collab = collab_from_doc_state(db_doc_state.to_vec(), "").unwrap();
-      let dup_db_id = get_database_id_from_collab(&db_collab).unwrap();
+      let dup_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
       assert_ne!(dup_db_id, pub_db_id);
 
       let view_map = {
@@ -1200,31 +1198,24 @@ async fn duplicate_to_workspace_db_with_relation() {
         .get_db_collab_from_view(&workspace_id_2, &related_db.view_id)
         .await;
 
-      let fields: MapRef = db_with_rel_col_collab
+      let related_db_id: String = related_db_collab
         .data
-        .get_with_path(&db_with_rel_col_collab.transact(), ["database", "fields"])
+        .get_with_path(&related_db_collab.transact(), ["database", "id"])
         .unwrap();
-      for (_k, v) in fields.iter(&db_with_rel_col_collab.transact()) {
-        for related_col_db_id in v
-          .cast::<MapRef>()
-          .unwrap()
-          .get(&db_with_rel_col_collab.transact(), "type_option")
-          .unwrap()
-          .cast::<MapRef>()
-          .unwrap()
-          .iter(&db_with_rel_col_collab.transact())
-          .map(|(_k, v)| v.cast::<MapRef>().unwrap())
-          .flat_map(|v| v.get(&db_with_rel_col_collab.transact(), "database_id"))
-          .map(|v| v.to_string(&db_with_rel_col_collab.transact()))
-          .filter(|v| !v.is_empty())
-        {
-          let related_db_id: String = related_db_collab
-            .data
-            .get_with_path(&related_db_collab.transact(), ["database", "id"])
-            .unwrap();
-          assert_eq!(related_db_id, related_col_db_id);
-        }
-      }
+
+      let rel_col_db_body = DatabaseBody::from_collab(&db_with_rel_col_collab).unwrap();
+      let txn = db_with_rel_col_collab.transact();
+      let all_fields = rel_col_db_body.fields.get_all_fields(&txn);
+      all_fields
+        .iter()
+        .map(|f| &f.type_options)
+        .flat_map(|t| t.iter())
+        .filter(|(k, _v)| **k == FieldType::Relation.type_id())
+        .map(|(_k, v)| v)
+        .flat_map(|v| v.iter())
+        .for_each(|(_k, db_id)| {
+          assert_eq!(db_id.to_string(), related_db_id);
+        });
     }
   }
 }
@@ -1232,7 +1223,7 @@ async fn duplicate_to_workspace_db_with_relation() {
 fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<String>) {
   let pub_db_data = serde_json::from_slice::<PublishDatabaseData>(published_db_blob).unwrap();
   let db_collab = collab_from_doc_state(pub_db_data.database_collab, "").unwrap();
-  let pub_db_id = get_database_id_from_collab(&db_collab).unwrap();
+  let pub_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
   let row_ids: HashSet<String> = pub_db_data.database_row_collabs.into_keys().collect();
   (pub_db_id, row_ids)
 }

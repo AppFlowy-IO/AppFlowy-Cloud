@@ -103,7 +103,7 @@ async fn snapshot_before_apply_update_test() {
   }
 }
 
-fn json_from_snapshot(
+pub fn json_from_snapshot(
   history: &CollabHistory,
   snapshot: &CollabSnapshot,
   object_id: &str,

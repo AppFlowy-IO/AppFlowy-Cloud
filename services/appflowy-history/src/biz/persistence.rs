@@ -4,7 +4,7 @@ use collab_entity::CollabType;
 use database::history::ops::insert_history;
 use sqlx::PgPool;
 use tonic_proto::history::SnapshotMetaPb;
-use tracing::trace;
+use tracing::info;
 use uuid::Uuid;
 
 pub struct HistoryPersistence {
@@ -25,12 +25,14 @@ impl HistoryPersistence {
     snapshots: Vec<CollabSnapshot>,
     collab_type: CollabType,
   ) -> Result<(), HistoryError> {
-    trace!(
-      "[History] write {}:{}: {} snapshots and history to disk",
+    info!(
+      "[History]: write {}:{}: {} snapshots, doc state len:{}",
       state.object_id,
       collab_type,
       snapshots.len(),
+      state.doc_state.len(),
     );
+
     let snapshots = snapshots
       .into_iter()
       .map(SnapshotMetaPb::from)

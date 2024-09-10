@@ -56,7 +56,7 @@ impl SnapshotGenerator {
 
     let txn_edit_count = insert_count + delete_count;
     #[cfg(feature = "verbose_log")]
-    trace!(
+    tracing::trace!(
       "[History] object:{} edit count: {}",
       self.object_id,
       txn_edit_count
@@ -70,7 +70,7 @@ impl SnapshotGenerator {
     // in the future, we can use a more sophisticated algorithm to determine when to generate a snapshot.
     let threshold = gen_snapshot_threshold(&self.collab_type);
     #[cfg(feature = "verbose_log")]
-    trace!(
+    tracing::trace!(
       "[History] object_id:{}, update count:{}, threshold={}",
       self.object_id,
       txn_edit_count,
@@ -87,11 +87,11 @@ impl SnapshotGenerator {
       tokio::spawn(async move {
         if let Some(collab) = mutex_collab.upgrade() {
           #[cfg(feature = "verbose_log")]
-          trace!("[History] attempting to generate snapshot");
+          tracing::trace!("[History] attempting to generate snapshot");
           let snapshot = gen_snapshot(&*collab.read().await, &object_id);
 
           #[cfg(feature = "verbose_log")]
-          trace!("[History] did generate snapshot for {}", snapshot.object_id);
+          tracing::trace!("[History] did generate snapshot for {}", snapshot.object_id);
           pending_snapshots.lock().await.push(snapshot);
 
           warn!("Exceeded maximum retry attempts for snapshot generation");
@@ -106,11 +106,11 @@ impl SnapshotGenerator {
 #[inline]
 fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
   match collab_type {
-    CollabType::Document => 100,
-    CollabType::Database => 20,
-    CollabType::WorkspaceDatabase => 20,
-    CollabType::Folder => 20,
-    CollabType::DatabaseRow => 10,
+    CollabType::Document => 500,
+    CollabType::Database => 50,
+    CollabType::WorkspaceDatabase => 50,
+    CollabType::Folder => 50,
+    CollabType::DatabaseRow => 50,
     CollabType::UserAwareness => 50,
     CollabType::Unknown => {
       if cfg!(debug_assertions) {

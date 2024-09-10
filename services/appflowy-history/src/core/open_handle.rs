@@ -154,7 +154,7 @@ async fn spawn_recv_update(
           }
 
           #[cfg(feature = "verbose_log")]
-          trace!("[History] received {} update messages", messages.len());
+          tracing::trace!("[History] received {} update messages", messages.len());
           if let Err(e) = process_messages(
             &mut update_stream,
             messages,
@@ -205,9 +205,9 @@ fn apply_updates(
       .map_err(|e| CollabError::YrsEncodeStateError(e.to_string()))?;
 
     #[cfg(feature = "verbose_log")]
-    trace!(
+    tracing::trace!(
       "[History]: object_id:{} apply update: {:#?}",
-      object_id,
+      _object_id,
       update
     );
     txn

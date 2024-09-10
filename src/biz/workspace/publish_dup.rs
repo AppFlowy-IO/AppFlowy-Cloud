@@ -1064,20 +1064,6 @@ pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Coll
   Ok(collab)
 }
 
-pub fn get_database_id_from_collab(db_collab: &Collab) -> Result<String, AppError> {
-  let txn = db_collab.context.transact();
-  let db_map = db_collab
-    .get_with_txn(&txn, "database")
-    .ok_or_else(|| AppError::RecordNotFound("no database found in database collab".to_string()))?
-    .cast::<MapRef>()
-    .map_err(|err| AppError::RecordNotFound(format!("database not a map: {:?}", err)))?;
-  let db_id = db_map
-    .get(&txn, "id")
-    .ok_or_else(|| AppError::RecordNotFound("no id found in database".to_string()))?
-    .to_string(&txn);
-  Ok(db_id)
-}
-
 fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {
   collab_folder::ViewIcon {
     ty: to_folder_view_icon_type(icon.ty),

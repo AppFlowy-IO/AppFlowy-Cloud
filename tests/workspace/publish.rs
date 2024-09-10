@@ -1,8 +1,6 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
-use appflowy_cloud::biz::workspace::publish_dup::{
-  collab_from_doc_state, get_database_id_from_collab,
-};
+use appflowy_cloud::biz::workspace::publish_dup::collab_from_doc_state;
 use client_api::entity::{
   AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabParams,
 };
@@ -962,7 +960,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .unwrap();
       let db_doc_state = db_collab_collab_resp.encode_collab.doc_state;
       let db_collab = collab_from_doc_state(db_doc_state.to_vec(), "").unwrap();
-      let dup_db_id = get_database_id_from_collab(&db_collab).unwrap();
+      let dup_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
       assert_ne!(dup_db_id, pub_db_id);
 
       let view_map = {
@@ -1225,7 +1223,7 @@ async fn duplicate_to_workspace_db_with_relation() {
 fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<String>) {
   let pub_db_data = serde_json::from_slice::<PublishDatabaseData>(published_db_blob).unwrap();
   let db_collab = collab_from_doc_state(pub_db_data.database_collab, "").unwrap();
-  let pub_db_id = get_database_id_from_collab(&db_collab).unwrap();
+  let pub_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
   let row_ids: HashSet<String> = pub_db_data.database_row_collabs.into_keys().collect();
   (pub_db_id, row_ids)
 }

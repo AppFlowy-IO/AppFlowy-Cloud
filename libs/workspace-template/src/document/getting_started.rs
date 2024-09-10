@@ -65,13 +65,10 @@ impl GettingStartedTemplate {
     object_id: String,
     create_database_params: CreateDatabaseParams,
   ) -> anyhow::Result<Vec<TemplateData>> {
-    let object_id = object_id.clone();
     let database_id = create_database_params.database_id.clone();
-
     let encoded_database = tokio::task::spawn_blocking({
-      let object_id = object_id.clone();
       let create_database_params = create_database_params.clone();
-      move || create_database_collab(object_id, create_database_params)
+      move || create_database_collab(create_database_params)
     })
     .await?
     .await?;
@@ -84,7 +81,7 @@ impl GettingStartedTemplate {
     // 1. create the new database collab
     let database_template_data = TemplateData {
       template_id: TemplateObjectId::Database {
-        object_id: object_id.clone(),
+        object_id,
         database_id: database_id.clone(),
       },
       collab_type: CollabType::Database,
@@ -95,15 +92,11 @@ impl GettingStartedTemplate {
     let database_row_template_data =
       encoded_database
         .encoded_row_collabs
-        .iter()
-        .map(|encoded_row_collab| {
-          let object_id = encoded_row_collab.object_id.clone();
-          let data = encoded_row_collab.encoded_collab.clone();
-          TemplateData {
-            template_id: TemplateObjectId::DatabaseRow(object_id.clone()),
-            collab_type: CollabType::DatabaseRow,
-            encoded_collab: data,
-          }
+        .into_iter()
+        .map(|encoded_row_collab| TemplateData {
+          template_id: TemplateObjectId::DatabaseRow(encoded_row_collab.object_id),
+          collab_type: CollabType::DatabaseRow,
+          encoded_collab: encoded_row_collab.encoded_collab,
         });
 
     let mut template_data = vec![database_template_data];

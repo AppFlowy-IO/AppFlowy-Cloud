@@ -158,7 +158,7 @@ async fn create_workspace_database_collab(
   let collab_type = CollabType::WorkspaceDatabase;
   let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
   {
-    let workspace_database_body = WorkspaceDatabaseBody::new(&mut collab);
+    let workspace_database_body = WorkspaceDatabaseBody::create(&mut collab);
     let mut txn = collab.context.transact_mut();
     for (object_id, database_id) in initial_database_records {
       workspace_database_body.add_database(&mut txn, &database_id, vec![object_id]);

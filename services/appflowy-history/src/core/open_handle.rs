@@ -85,6 +85,8 @@ impl OpenCollabHandle {
 
   pub async fn generate_history(&self) -> Result<(), HistoryError> {
     if let Some(history_persistence) = &self.history_persistence {
+      // Generate at least one snapshot if the history is empty.
+      self.history.generate_snapshot_if_empty().await;
       save_history(self.history.clone(), history_persistence.clone()).await;
     }
     Ok(())
@@ -225,14 +227,19 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
     } else {
       interval(Duration::from_secs(60 * 60))
     };
+    interval.tick().await;
 
     loop {
       interval.tick().await;
       if let (Some(history), Some(history_persistence)) =
         (history.upgrade(), history_persistence.upgrade())
       {
+        // after every interval, generate a snapshot if the history is empty.
+        history.generate_snapshot_if_empty().await;
         save_history(history, history_persistence).await;
       } else {
+        #[cfg(feature = "verbose_log")]
+        tracing::trace!("[History]: exit periodically save history task.");
         break;
       }
     }

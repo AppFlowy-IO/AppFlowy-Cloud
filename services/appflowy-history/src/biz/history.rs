@@ -6,16 +6,15 @@ use collab_entity::CollabType;
 use serde_json::Value;
 use sqlx::PgPool;
 use std::sync::Arc;
-use tracing::trace;
 
 use database::history::ops::get_snapshot_meta_list;
 use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
 
-use crate::biz::snapshot::{gen_snapshot, CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
+use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
 use crate::error::HistoryError;
 
 pub struct CollabHistory {
-  object_id: String,
+  pub(crate) object_id: String,
   collab: Arc<RwLock<Collab>>,
   collab_type: CollabType,
   snapshot_generator: SnapshotGenerator,
@@ -38,19 +37,16 @@ impl CollabHistory {
     }
   }
 
-  #[cfg(debug_assertions)]
-  /// Generate a snapshot of the current state of the collab
-  /// Only for testing purposes. We use [SnapshotGenerator] to generate snapshot
-  pub async fn gen_snapshot(&self, _uid: i64) -> CollabSnapshot {
-    let lock = self.collab.read().await;
-    gen_snapshot(&lock, &self.object_id)
+  pub async fn generate_snapshot_if_empty(&self) {
+    if !self.snapshot_generator.has_snapshot().await {
+      self.snapshot_generator.generate().await;
+    }
   }
 
   pub async fn gen_snapshot_context(&self) -> Result<Option<SnapshotContext>, HistoryError> {
     let collab = self.collab.clone();
-    let snapshot_generator = self.snapshot_generator.clone();
     let timestamp = chrono::Utc::now().timestamp();
-    let snapshots: Vec<CollabSnapshot> = snapshot_generator.consume_pending_snapshots().await
+    let snapshots: Vec<CollabSnapshot> = self.snapshot_generator.consume_pending_snapshots().await
           .into_iter()
           // Remove the snapshots which created_at is bigger than the current timestamp
           .filter(|snapshot| snapshot.created_at <= timestamp)
@@ -60,7 +56,6 @@ impl CollabHistory {
     if snapshots.is_empty() {
       return Ok(None);
     }
-    trace!("[History] prepare to save snapshots to disk");
     let collab_type = self.collab_type.clone();
     let object_id = self.object_id.clone();
     let (doc_state, state_vector) = tokio::task::spawn_blocking(move || {

@@ -39,22 +39,32 @@ impl SnapshotGenerator {
     std::mem::take(&mut *lock)
   }
 
-  pub fn did_apply_update<T: ReadTxn>(&self, txn: &T) {
-    let snapshot = txn.snapshot();
-    let mut insert_count = 0;
-    for (_, &clock) in snapshot.state_map.iter() {
-      insert_count += clock as u64;
-    }
+  pub async fn has_snapshot(&self) -> bool {
+    !self.pending_snapshots.lock().await.is_empty()
+  }
 
-    let mut delete_count = 0;
-    for (_, range) in snapshot.delete_set.iter() {
-      for f in range.iter() {
-        let deleted_segments = f.len() as u64;
-        delete_count += deleted_segments;
+  /// Generate a snapshot if the current edit count is not zero.
+  pub async fn generate(&self) {
+    if let Some(collab) = self.mutex_collab.upgrade() {
+      let is_change = self.current_update_count.load_full() == self.prev_edit_count.load_full();
+      if !is_change {
+        #[cfg(feature = "verbose_log")]
+        tracing::trace!(
+          "[History]: object:{} edit count is zero. skip generating snapshot",
+          self.object_id
+        );
+        return;
       }
-    }
 
-    let txn_edit_count = insert_count + delete_count;
+      let snapshot = gen_snapshot(&*collab.read().await, &self.object_id);
+      self.pending_snapshots.lock().await.push(snapshot);
+    } else {
+      warn!("collab is dropped. cannot generate snapshot")
+    }
+  }
+
+  pub fn did_apply_update<T: ReadTxn>(&self, txn: &T) {
+    let txn_edit_count = calculate_edit_count(txn);
     #[cfg(feature = "verbose_log")]
     tracing::trace!(
       "[History] object:{} edit count: {}",
@@ -86,15 +96,8 @@ impl SnapshotGenerator {
       let object_id = self.object_id.clone();
       tokio::spawn(async move {
         if let Some(collab) = mutex_collab.upgrade() {
-          #[cfg(feature = "verbose_log")]
-          tracing::trace!("[History] attempting to generate snapshot");
           let snapshot = gen_snapshot(&*collab.read().await, &object_id);
-
-          #[cfg(feature = "verbose_log")]
-          tracing::trace!("[History] did generate snapshot for {}", snapshot.object_id);
           pending_snapshots.lock().await.push(snapshot);
-
-          warn!("Exceeded maximum retry attempts for snapshot generation");
         } else {
           warn!("collab is dropped. cannot generate snapshot")
         }
@@ -124,6 +127,9 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
 
 #[inline]
 pub fn gen_snapshot(collab: &Collab, object_id: &str) -> CollabSnapshot {
+  #[cfg(feature = "verbose_log")]
+  tracing::trace!("[History] generate snapshot for {}", object_id);
+
   let snapshot = collab.transact().snapshot();
   let timestamp = chrono::Utc::now().timestamp();
   CollabSnapshot::new(object_id, snapshot, timestamp)
@@ -211,4 +217,23 @@ impl From<CollabSnapshot> for SnapshotMetaPb {
       created_at: snapshot.created_at,
     }
   }
+}
+
+#[inline]
+fn calculate_edit_count<T: ReadTxn>(txn: &T) -> u64 {
+  let snapshot = txn.snapshot();
+  let mut insert_count = 0;
+  for (_, &clock) in snapshot.state_map.iter() {
+    insert_count += clock as u64;
+  }
+
+  let mut delete_count = 0;
+  for (_, range) in snapshot.delete_set.iter() {
+    for f in range.iter() {
+      let deleted_segments = f.len() as u64;
+      delete_count += deleted_segments;
+    }
+  }
+
+  insert_count + delete_count
 }

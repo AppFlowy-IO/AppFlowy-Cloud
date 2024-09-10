@@ -9,6 +9,8 @@ use client_api::entity::{
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use collab::util::MapExt;
+use collab_database::database::DatabaseBody;
+use collab_database::entity::FieldType;
 use collab_database::views::DatabaseViews;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::document::Document;
@@ -21,8 +23,6 @@ use shared_entity::dto::workspace_dto::PublishedDuplicate;
 use std::collections::{HashMap, HashSet};
 use std::thread::sleep;
 use std::time::Duration;
-use yrs::types::Map;
-use yrs::MapRef;
 
 use crate::workspace::published_data::{self};
 
@@ -1200,31 +1200,24 @@ async fn duplicate_to_workspace_db_with_relation() {
         .get_db_collab_from_view(&workspace_id_2, &related_db.view_id)
         .await;
 
-      let fields: MapRef = db_with_rel_col_collab
+      let related_db_id: String = related_db_collab
         .data
-        .get_with_path(&db_with_rel_col_collab.transact(), ["database", "fields"])
+        .get_with_path(&related_db_collab.transact(), ["database", "id"])
         .unwrap();
-      for (_k, v) in fields.iter(&db_with_rel_col_collab.transact()) {
-        for related_col_db_id in v
-          .cast::<MapRef>()
-          .unwrap()
-          .get(&db_with_rel_col_collab.transact(), "type_option")
-          .unwrap()
-          .cast::<MapRef>()
-          .unwrap()
-          .iter(&db_with_rel_col_collab.transact())
-          .map(|(_k, v)| v.cast::<MapRef>().unwrap())
-          .flat_map(|v| v.get(&db_with_rel_col_collab.transact(), "database_id"))
-          .map(|v| v.to_string(&db_with_rel_col_collab.transact()))
-          .filter(|v| !v.is_empty())
-        {
-          let related_db_id: String = related_db_collab
-            .data
-            .get_with_path(&related_db_collab.transact(), ["database", "id"])
-            .unwrap();
-          assert_eq!(related_db_id, related_col_db_id);
-        }
-      }
+
+      let rel_col_db_body = DatabaseBody::from_collab(&db_with_rel_col_collab).unwrap();
+      let txn = db_with_rel_col_collab.transact();
+      let all_fields = rel_col_db_body.fields.get_all_fields(&txn);
+      all_fields
+        .iter()
+        .map(|f| &f.type_options)
+        .flat_map(|t| t.iter())
+        .filter(|(k, _v)| **k == FieldType::Relation.type_id())
+        .map(|(_k, v)| v)
+        .flat_map(|v| v.iter())
+        .for_each(|(_k, db_id)| {
+          assert_eq!(db_id.to_string(), related_db_id);
+        });
     }
   }
 }

@@ -942,7 +942,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
       let mut ws_db_collab = client_2
         .get_workspace_database_collab(&workspace_id_2)
         .await;
-      let ws_db_body = WorkspaceDatabaseBody::new(&mut ws_db_collab);
+      let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
       let txn = ws_db_collab.transact();
       let dup_grid1_db_id = ws_db_body
         .get_all_database_meta(&txn)

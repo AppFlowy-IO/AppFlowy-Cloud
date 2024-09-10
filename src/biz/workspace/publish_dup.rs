@@ -188,8 +188,7 @@ impl PublishCollabDuplicator {
         collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid)?
       };
 
-      let ws_db_body = WorkspaceDatabaseBody::new(&mut ws_db_collab);
-
+      let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
       let (ws_db_updates, updated_ws_w_db_collab) = tokio::task::spawn_blocking(move || {
         let ws_db_updates = {
           let mut txn_wrapper = ws_db_collab.transact_mut();

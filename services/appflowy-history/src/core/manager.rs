@@ -197,7 +197,7 @@ async fn handle_control_event(
       Entry::Occupied(_) => {},
       Entry::Vacant(entry) => {
         trace!(
-          "[History] open collab: {}, collab_type:{}",
+          "[History]: open collab:{}, collab_type:{}",
           object_id,
           collab_type
         );
@@ -222,15 +222,8 @@ async fn handle_control_event(
       },
     },
     CollabControlEvent::Close { object_id } => {
-      trace!("[History] close collab:{}", object_id);
-      if let Some((_, handle)) = handles.remove(&object_id) {
-        if let Err(err) = handle.generate_history().await {
-          error!(
-            "Failed to generate history when receiving close event: {:?}",
-            err
-          );
-        }
-      }
+      trace!("[History]: close collab:{}", object_id);
+      handles.remove(&object_id);
     },
   }
 }

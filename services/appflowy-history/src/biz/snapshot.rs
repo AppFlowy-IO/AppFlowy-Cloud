@@ -46,18 +46,27 @@ impl SnapshotGenerator {
   /// Generate a snapshot if the current edit count is not zero.
   pub async fn generate(&self) {
     if let Some(collab) = self.mutex_collab.upgrade() {
-      let is_change = self.current_update_count.load_full() == self.prev_edit_count.load_full();
-      if !is_change {
+      let is_change = self.current_update_count.load_full() != self.prev_edit_count.load_full();
+      if is_change {
+        self
+          .prev_edit_count
+          .store(self.current_update_count.load_full());
+
+        #[cfg(feature = "verbose_log")]
+        tracing::trace!("[History]: object:{} generating snapshot", self.object_id);
+        let snapshot = gen_snapshot(
+          &*collab.read().await,
+          &self.object_id,
+          "generate snapshot by periodic tick",
+        );
+        self.pending_snapshots.lock().await.push(snapshot);
+      } else {
         #[cfg(feature = "verbose_log")]
         tracing::trace!(
-          "[History]: object:{} edit count is zero. skip generating snapshot",
+          "[History]: object:{} no change, skip generating snapshot",
           self.object_id
         );
-        return;
       }
-
-      let snapshot = gen_snapshot(&*collab.read().await, &self.object_id);
-      self.pending_snapshots.lock().await.push(snapshot);
     } else {
       warn!("collab is dropped. cannot generate snapshot")
     }
@@ -96,7 +105,11 @@ impl SnapshotGenerator {
       let object_id = self.object_id.clone();
       tokio::spawn(async move {
         if let Some(collab) = mutex_collab.upgrade() {
-          let snapshot = gen_snapshot(&*collab.read().await, &object_id);
+          let snapshot = gen_snapshot(
+            &*collab.read().await,
+            &object_id,
+            &format!("Current edit:{}, threshold:{}", threshold_count, threshold),
+          );
           pending_snapshots.lock().await.push(snapshot);
         } else {
           warn!("collab is dropped. cannot generate snapshot")
@@ -126,9 +139,12 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
 }
 
 #[inline]
-pub fn gen_snapshot(collab: &Collab, object_id: &str) -> CollabSnapshot {
-  #[cfg(feature = "verbose_log")]
-  tracing::trace!("[History] generate snapshot for {}", object_id);
+pub fn gen_snapshot(collab: &Collab, object_id: &str, reason: &str) -> CollabSnapshot {
+  tracing::trace!(
+    "[History]: generate {} snapshot, reason: {}",
+    object_id,
+    reason
+  );
 
   let snapshot = collab.transact().snapshot();
   let timestamp = chrono::Utc::now().timestamp();

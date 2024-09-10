@@ -87,7 +87,7 @@ impl OpenCollabHandle {
     if let Some(history_persistence) = &self.history_persistence {
       // Generate at least one snapshot if the history is empty.
       self.history.generate_snapshot_if_empty().await;
-      save_history(self.history.clone(), history_persistence.clone()).await;
+      save_history_if_snapshot_exists(self.history.clone(), history_persistence.clone()).await;
     }
     Ok(())
   }
@@ -225,7 +225,8 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
       // In debug mode, save the history every 10 seconds.
       interval(Duration::from_secs(10))
     } else {
-      interval(Duration::from_secs(60 * 60))
+      // In release mode, save the history every 10 minutes.
+      interval(Duration::from_secs(10 * 60))
     };
     interval.tick().await;
 
@@ -234,9 +235,8 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
       if let (Some(history), Some(history_persistence)) =
         (history.upgrade(), history_persistence.upgrade())
       {
-        // after every interval, generate a snapshot if the history is empty.
         history.generate_snapshot_if_empty().await;
-        save_history(history, history_persistence).await;
+        save_history_if_snapshot_exists(history, history_persistence).await;
       } else {
         #[cfg(feature = "verbose_log")]
         tracing::trace!("[History]: exit periodically save history task.");
@@ -247,7 +247,10 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
 }
 
 #[inline]
-async fn save_history(history: Arc<CollabHistory>, history_persistence: Arc<HistoryPersistence>) {
+async fn save_history_if_snapshot_exists(
+  history: Arc<CollabHistory>,
+  history_persistence: Arc<HistoryPersistence>,
+) {
   match history.gen_snapshot_context().await {
     Ok(Some(ctx)) => {
       if let Err(err) = history_persistence

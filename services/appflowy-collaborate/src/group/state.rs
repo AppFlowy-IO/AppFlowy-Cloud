@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{error, event, info, trace, warn};
+use tracing::{error, event, trace, warn};
 
 use crate::config::get_env_var;
 use crate::error::RealtimeError;
@@ -57,13 +57,9 @@ impl GroupManagementState {
         }
       }
     }
-    info!(
-      "total groups:{}, inactive group:{}",
-      self.group_by_object_id.len() as i64,
-      inactive_group_ids.len(),
-    );
-
-    trace!("inactive group ids:{:?}", inactive_group_ids);
+    if !inactive_group_ids.is_empty() {
+      trace!("inactive group ids:{:?}", inactive_group_ids);
+    }
     for object_id in &inactive_group_ids {
       self.remove_group(object_id).await;
     }

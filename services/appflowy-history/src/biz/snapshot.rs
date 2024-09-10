@@ -30,7 +30,7 @@ impl SnapshotGenerator {
     }
   }
 
-  pub async fn take_pending_snapshots(&self) -> Vec<CollabSnapshot> {
+  pub async fn consume_pending_snapshots(&self) -> Vec<CollabSnapshot> {
     //FIXME: this should be either a channel or lockless immutable queue
     let mut lock = self.pending_snapshots.lock().await;
     std::mem::take(&mut *lock)

@@ -244,6 +244,6 @@ async fn save_history(history: Arc<CollabHistory>, history_persistence: Arc<Hist
       }
     },
     Ok(None) => {},
-    Err(err) => error!("Failed to generate snapshot context: {:?}", err),
+    Err(err) => error!("{:?}", err),
   }
 }

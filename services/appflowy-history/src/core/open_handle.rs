@@ -212,7 +212,7 @@ fn apply_updates(
 fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<HistoryPersistence>) {
   tokio::spawn(async move {
     let mut interval = if cfg!(debug_assertions) {
-      interval(Duration::from_secs(30))
+      interval(Duration::from_secs(10))
     } else {
       interval(Duration::from_secs(5 * 60))
     };
@@ -223,12 +223,20 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
       interval.tick().await; // Wait for the next interval tick
       if let (Some(history), Some(persistence)) = (history.upgrade(), history_persistence.upgrade())
       {
-        let min_snapshot_required = if tick_count % 12 == 0 {
+        let min_snapshot_required = if tick_count % 10 == 0 {
           history.generate_snapshot_if_empty().await;
           None // No limit on snapshots every 3 ticks
         } else {
           Some(3)
         };
+
+        #[cfg(feature = "verbose_log")]
+        tracing::trace!(
+          "[History]: {} periodic save history task. tick count: {}, min_snapshot_required:{:?}",
+          &history.object_id,
+          tick_count,
+          min_snapshot_required
+        );
 
         // Generate history and attempt to insert it into persistence
         match history.gen_history(min_snapshot_required).await {
@@ -248,7 +256,7 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
       } else {
         // Exit loop if history or persistence has been dropped
         #[cfg(feature = "verbose_log")]
-        tracing::trace!("[History]: exiting periodic save history task.");
+        tracing::trace!("[History]: exiting periodic save history task");
         break;
       }
     }

@@ -200,7 +200,7 @@ impl CollabGroup {
         modified_at.elapsed().as_secs(),
         self.subscribers.len()
       );
-      modified_at.elapsed().as_secs() > 60 * 2
+      modified_at.elapsed().as_secs() > 60 * 3
     } else {
       let elapsed_secs = modified_at.elapsed().as_secs();
       if elapsed_secs > self.timeout_secs() {

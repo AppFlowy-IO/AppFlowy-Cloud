@@ -69,6 +69,13 @@ impl CollabHistory {
     if let Some(min_snapshot_required) = min_snapshot_required {
       let num_snapshot = self.snapshot_generator.num_pending_snapshots().await;
       if num_snapshot < min_snapshot_required {
+        #[cfg(feature = "verbose_log")]
+        tracing::trace!(
+          "[History]: {} current snapshot:{}, minimum required:{}",
+          self.object_id,
+          num_snapshot,
+          min_snapshot_required
+        );
         return Ok(None);
       }
     }
@@ -83,6 +90,8 @@ impl CollabHistory {
 
     // If there are no snapshots, we don't need to generate a new snapshot
     if snapshots.is_empty() {
+      #[cfg(feature = "verbose_log")]
+      tracing::trace!("[History]: {} has no snapshots", self.object_id,);
       return Ok(None);
     }
     let collab_type = self.collab_type.clone();

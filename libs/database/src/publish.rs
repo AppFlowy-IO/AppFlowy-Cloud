@@ -1,5 +1,5 @@
 use app_error::AppError;
-use database_entity::dto::{PublishCollabItem, PublishInfo};
+use database_entity::dto::{PublishCollabItem, PublishCollabKey, PublishInfo};
 use sqlx::{Executor, PgPool, Postgres};
 use uuid::Uuid;
 
@@ -211,6 +211,24 @@ pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
 }
 
 #[inline]
+pub async fn select_published_metadata_for_view_id(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+) -> Result<Option<(Uuid, serde_json::Value)>, AppError> {
+  let res = sqlx::query!(
+    r#"
+      SELECT workspace_id, metadata
+      FROM af_published_collab
+      WHERE view_id = $1
+    "#,
+    view_id,
+  )
+  .fetch_optional(pg_pool)
+  .await?;
+  Ok(res.map(|res| (res.workspace_id, res.metadata)))
+}
+
+#[inline]
 pub async fn select_published_data_for_view_id(
   pg_pool: &PgPool,
   view_id: &Uuid,
@@ -226,6 +244,28 @@ pub async fn select_published_data_for_view_id(
   .fetch_optional(pg_pool)
   .await?;
   Ok(res.map(|res| (res.metadata, res.blob)))
+}
+
+#[inline]
+pub async fn select_published_collab_workspace_view_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  publish_namespace: &str,
+  publish_name: &str,
+) -> Result<PublishCollabKey, AppError> {
+  let key = sqlx::query_as!(
+    PublishCollabKey,
+    r#"
+      SELECT workspace_id, view_id
+      FROM af_published_collab
+      WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+      AND publish_name = $2
+    "#,
+    publish_namespace,
+    publish_name,
+  )
+  .fetch_one(executor)
+  .await?;
+  Ok(key)
 }
 
 #[inline]

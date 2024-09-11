@@ -142,7 +142,38 @@ impl BucketClient for AwsS3BucketClientImpl {
       .await
       .map_err(|err| anyhow!("Failed to delete object to S3: {}", err))?;
 
-    Ok(S3ResponseData::new(output))
+    Ok(S3ResponseData::from(output))
+  }
+
+  async fn delete_blobs(&self, object_keys: Vec<String>) -> Result<Self::ResponseData, AppError> {
+    let mut delete_object_ids: Vec<aws_sdk_s3::types::ObjectIdentifier> = vec![];
+    for obj in object_keys {
+      let obj_id = aws_sdk_s3::types::ObjectIdentifier::builder()
+        .key(obj)
+        .build()
+        .map_err(|err| {
+          AppError::Internal(anyhow!("Failed to create object identifier: {}", err))
+        })?;
+      delete_object_ids.push(obj_id);
+    }
+
+    let output = self
+      .client
+      .delete_objects()
+      .bucket(&self.bucket)
+      .delete(
+        Delete::builder()
+          .set_objects(Some(delete_object_ids))
+          .build()
+          .map_err(|err| {
+            AppError::Internal(anyhow!("Failed to create delete object request: {}", err))
+          })?,
+      )
+      .send()
+      .await
+      .map_err(|err| anyhow!("Failed to delete objects from S3: {}", err))?;
+
+    Ok(S3ResponseData::from(output))
   }
 
   async fn get_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError> {
@@ -398,14 +429,25 @@ impl ResponseBlob for S3ResponseData {
   }
 }
 
-impl S3ResponseData {
-  pub fn new(_output: DeleteObjectOutput) -> Self {
+impl From<DeleteObjectOutput> for S3ResponseData {
+  fn from(_: DeleteObjectOutput) -> Self {
     S3ResponseData {
       data: Vec::new(),
       content_type: None,
     }
   }
+}
 
+impl From<DeleteObjectsOutput> for S3ResponseData {
+  fn from(_: DeleteObjectsOutput) -> Self {
+    S3ResponseData {
+      data: Vec::new(),
+      content_type: None,
+    }
+  }
+}
+
+impl S3ResponseData {
   pub fn new_with_data(data: Vec<u8>, content_type: Option<String>) -> Self {
     S3ResponseData { data, content_type }
   }

@@ -947,7 +947,8 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .database_id;
       let db_collab = client_2
         .get_collab_to_collab(workspace_id_2, dup_grid1_db_id, CollabType::Database)
-        .await;
+        .await
+        .unwrap();
       let dup_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
       assert_ne!(dup_db_id, pub_db_id);
 
@@ -1066,7 +1067,8 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
           doc_with_embedded_db.view_id.clone(),
           CollabType::Folder,
         )
-        .await;
+        .await
+        .unwrap();
       let doc = Document::open(doc_collab).unwrap();
       let doc_data = doc.get_document_data().unwrap();
       let grid = doc_data
@@ -1282,16 +1284,18 @@ async fn duplicate_to_workspace_db_row_with_doc() {
           first_row_id.to_string(),
           CollabType::DatabaseRow,
         )
-        .await;
-
+        .await
+        .unwrap();
       let row_detail = RowDetail::from_collab(&mut row_collab).unwrap();
+      assert_eq!(row_detail.meta.is_document_empty, false);
       let doc_id = row_detail.document_id;
       let _doc_collab = client_2
         .get_collab_to_collab(workspace_id_2.clone(), doc_id.clone(), CollabType::Document)
         .await;
       let folder_collab = client_2
         .get_collab_to_collab(workspace_id_2.clone(), workspace_id_2, CollabType::Folder)
-        .await;
+        .await
+        .unwrap();
       let folder = Folder::open(UserId::from(client_2.uid().await), folder_collab, None).unwrap();
       let doc_view = folder.get_view(&doc_id).unwrap();
       assert_eq!(doc_view.id, doc_view.parent_view_id);

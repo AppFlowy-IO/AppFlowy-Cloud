@@ -129,6 +129,43 @@ impl CollabPlugin for CountUpdatePlugin {
   fn receive_update(&self, _object_id: &str, txn: &TransactionMut, _update: &[u8]) {
     self.snapshot_generator.did_apply_update(txn);
   }
+
+  fn init(
+    &self,
+    _object_id: &str,
+    _origin: &collab::core::origin::CollabOrigin,
+    _doc: &collab::preclude::Doc,
+  ) {
+  }
+
+  fn did_init(&self, _collab: &Collab, _object_id: &str) {}
+
+  fn receive_local_update(
+    &self,
+    _origin: &collab::core::origin::CollabOrigin,
+    _object_id: &str,
+    _update: &[u8],
+  ) {
+  }
+
+  fn receive_local_state(
+    &self,
+    _origin: &collab::core::origin::CollabOrigin,
+    _object_id: &str,
+    _event: &collab::core::awareness::Event,
+    _update: &collab::preclude::sync::AwarenessUpdate,
+  ) {
+  }
+
+  fn after_transaction(&self, _object_id: &str, _txn: &mut TransactionMut) {}
+
+  fn start_init_sync(&self) {}
+
+  fn destroy(&self) {}
+
+  fn plugin_type(&self) -> collab::core::collab_plugin::CollabPluginType {
+    todo!()
+  }
 }
 
 pub async fn get_snapshots(

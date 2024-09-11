@@ -585,11 +585,10 @@ impl TestClient {
     workspace_id: String,
     object_id: String,
     collab_type: CollabType,
-  ) -> Collab {
+  ) -> Result<Collab, AppResponseError> {
     let resp = self
       .get_collab(workspace_id, object_id.clone(), collab_type)
-      .await
-      .unwrap();
+      .await?;
     let collab = Collab::new_with_source(
       CollabOrigin::Server,
       &object_id,
@@ -598,7 +597,7 @@ impl TestClient {
       false,
     )
     .unwrap();
-    collab
+    Ok(collab)
   }
 
   pub async fn batch_get_collab(

@@ -117,4 +117,35 @@ where
       }
     });
   }
+
+  fn init(&self, _object_id: &str, _origin: &collab_folder::CollabOrigin, _doc: &yrs::Doc) {}
+
+  fn did_init(&self, _collab: &Collab, _object_id: &str) {}
+
+  fn receive_local_update(
+    &self,
+    _origin: &collab_folder::CollabOrigin,
+    _object_id: &str,
+    _update: &[u8],
+  ) {
+  }
+
+  fn receive_local_state(
+    &self,
+    _origin: &collab_folder::CollabOrigin,
+    _object_id: &str,
+    _event: &yrs::sync::awareness::Event,
+    _update: &yrs::sync::AwarenessUpdate,
+  ) {
+  }
+
+  fn after_transaction(&self, _object_id: &str, _txn: &mut TransactionMut) {}
+
+  fn start_init_sync(&self) {}
+
+  fn destroy(&self) {}
+
+  fn plugin_type(&self) -> collab::core::collab_plugin::CollabPluginType {
+    todo!()
+  }
 }

@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use collab::core::awareness::{AwarenessUpdate, Event};
+use collab::core::collab_plugin::CollabPluginType;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{Collab, CollabPlugin};
@@ -210,6 +211,16 @@ where
     self
       .is_destroyed
       .store(true, std::sync::atomic::Ordering::SeqCst);
+  }
+
+  fn init(&self, _object_id: &str, _origin: &CollabOrigin, _doc: &yrs::Doc) {}
+
+  fn receive_update(&self, _object_id: &str, _txn: &yrs::TransactionMut, _update: &[u8]) {}
+
+  fn after_transaction(&self, _object_id: &str, _txn: &mut yrs::TransactionMut) {}
+
+  fn plugin_type(&self) -> CollabPluginType {
+    CollabPluginType::CloudStorage
   }
 }
 

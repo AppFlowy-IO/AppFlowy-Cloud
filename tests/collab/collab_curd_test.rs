@@ -4,8 +4,7 @@ use collab::entity::EncodedCollab;
 use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  BatchCreateCollabParams, CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams,
-  QueryCollabResult,
+  CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
 
 use reqwest::Method;

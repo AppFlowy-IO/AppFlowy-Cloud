@@ -1,13 +1,13 @@
 use anyhow::anyhow;
+use collab::core::collab_plugin::CollabPluginType;
 use collab::lock::RwLock;
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
 use collab::preclude::{Collab, CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab_entity::CollabType;
+use database::history::ops::get_snapshot_meta_list;
 use serde_json::Value;
 use sqlx::PgPool;
 use std::sync::Arc;
-
-use database::history::ops::get_snapshot_meta_list;
 use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
 
 use crate::biz::snapshot::{
@@ -166,6 +166,10 @@ struct CountUpdatePlugin {
 impl CollabPlugin for CountUpdatePlugin {
   fn receive_update(&self, _object_id: &str, txn: &TransactionMut, _update: &[u8]) {
     self.snapshot_generator.did_apply_update(txn);
+  }
+
+  fn plugin_type(&self) -> CollabPluginType {
+    CollabPluginType::Other("CountUpdatePlugin".to_string())
   }
 }
 

@@ -6,6 +6,8 @@ use collab::preclude::Collab;
 use collab::preclude::MapExt;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
+use collab_database::rows::meta_id_from_row_id;
+use collab_database::rows::RowMetaKey;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
@@ -24,8 +26,8 @@ use sqlx::PgPool;
 use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 use workspace_template::gen_view_id;
-use yrs::any;
 use yrs::updates::encoder::Encode;
+use yrs::Any;
 use yrs::Array;
 use yrs::ArrayRef;
 use yrs::Out;
@@ -258,7 +260,10 @@ impl PublishCollabDuplicator {
 
           let mut inserted = vec![];
           for (view_id, view) in views_to_add.iter() {
-            if duplicated_view_ids.contains(&view.parent_view_id) {
+            // allow to insert if parent view is already inserted
+            // or if view is standalone (view_id == parent_view_id)
+            if duplicated_view_ids.contains(&view.parent_view_id) || *view_id == view.parent_view_id
+            {
               folder
                 .body
                 .views
@@ -372,12 +377,12 @@ impl PublishCollabDuplicator {
   async fn deep_copy_doc<'a>(
     &mut self,
     pub_view_id: &str,
-    new_view_id: String,
+    dup_view_id: String,
     doc: Document,
     metadata: PublishViewMetaData,
   ) -> Result<View, AppError> {
     let mut ret_view =
-      self.new_folder_view(new_view_id.clone(), &metadata.view, ViewLayout::Document);
+      self.new_folder_view(dup_view_id.clone(), &metadata.view, ViewLayout::Document);
 
     let mut doc_data = doc
       .get_document_data()
@@ -396,7 +401,7 @@ impl PublishCollabDuplicator {
 
     {
       // write modified doc_data back to storage
-      let empty_collab = collab_from_doc_state(vec![], &new_view_id)?;
+      let empty_collab = collab_from_doc_state(vec![], &dup_view_id)?;
       let new_doc = tokio::task::spawn_blocking(move || {
         Document::create_with_data(empty_collab, doc_data)
           .map_err(|e| AppError::Unhandled(e.to_string()))
@@ -689,7 +694,7 @@ impl PublishCollabDuplicator {
         for (key, type_option_value) in field.type_options.iter_mut() {
           if *key == FieldType::Relation.type_id() {
             if let Some(pub_db_id) = type_option_value.get_mut("database_id") {
-              if let any::Any::String(pub_db_id_str) = pub_db_id {
+              if let Any::String(pub_db_id_str) = pub_db_id {
                 if let Some(related_db_view) =
                   published_db.database_relations.get(pub_db_id_str.as_ref())
                 {
@@ -703,7 +708,7 @@ impl PublishCollabDuplicator {
                       .cloned()
                       .flatten()
                     {
-                      *pub_db_id = any::Any::String(dup_db_id.into());
+                      *pub_db_id = Any::String(dup_db_id.into());
                       db_body.fields.update_field(&mut txn, &field.id, |f| {
                         f.set_type_option(
                           FieldType::Relation.into(),
@@ -721,10 +726,10 @@ impl PublishCollabDuplicator {
     }
 
     // duplicate db collab rows
-    for (old_id, row_bin_data) in &published_db.database_row_collabs {
+    for (pub_row_id, row_bin_data) in &published_db.database_row_collabs {
       // assign a new id for the row
-      let new_row_id = gen_view_id();
-      let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &new_row_id)?;
+      let dup_row_id = gen_view_id();
+      let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
 
       {
         // update database_id and row_id in data
@@ -737,64 +742,157 @@ impl PublishCollabDuplicator {
           })?
           .cast::<MapRef>()
           .map_err(|err| AppError::Unhandled(format!("data not map: {:?}", err)))?;
-        data.insert(&mut txn, "id", new_row_id.clone());
+        data.insert(&mut txn, "id", dup_row_id.clone());
         data.insert(&mut txn, "database_id", new_db_id.clone());
 
-        // update relation cells
-        // db_row_collb: Object {
-        //     "data": Object {
-        //         "cells": Object {
-        //             "MBaTsr": Object {
-        //                 "data": Array [
-        //                     String("eefb5700-8cf7-411e-9596-f60b9a51916e"),
-        //                     String("23d5e054-42c8-4754-ad69-527e4ffc1e46"),
-        //                     // above are published row ids of related database
-        //                     // we need to replace them with respective duplicated row ids
-        //                 ],
-        //                 "field_type": Number(10),
-        //                 // use this condition to filter out relation cells
-        //             },
-        //         },
-        //     },
-        // }
-        let cells: MapRef = db_row_collab
-          .data
-          .get_with_path(&txn, ["data", "cells"])
-          .ok_or_else(|| {
-            AppError::RecordNotFound("no cells found in database row collab".to_string())
-          })?;
+        {
+          // update relation cells
+          // db_row_collb: Object {
+          //     "data": Object {
+          //         "cells": Object {
+          //             "MBaTsr": Object {
+          //                 "data": Array [
+          //                     String("eefb5700-8cf7-411e-9596-f60b9a51916e"),
+          //                     String("23d5e054-42c8-4754-ad69-527e4ffc1e46"),
+          //                     // above are published row ids of related database
+          //                     // we need to replace them with respective duplicated row ids
+          //                 ],
+          //                 "field_type": Number(10),
+          //                 // use this condition to filter out relation cells
+          //             },
+          //         },
+          //     },
+          // }
+          let cells: MapRef = db_row_collab
+            .data
+            .get_with_path(&txn, ["data", "cells"])
+            .ok_or_else(|| {
+              AppError::RecordNotFound("no cells found in database row collab".to_string())
+            })?;
 
-        let mut rel_row_idss = vec![];
-        for (_, out) in cells.iter(&txn) {
-          if let Ok(m) = out.cast::<MapRef>() {
-            if let Some(Out::Any(any::Any::BigInt(n))) = m.get(&txn, "field_type") {
-              if n == FieldType::Relation as i64 {
-                let relation_data = m.get(&txn, "data").ok_or_else(|| {
-                  AppError::RecordNotFound("no data found in relation cell".to_string())
-                })?;
-                if let Ok(arr) = relation_data.cast::<ArrayRef>() {
-                  rel_row_idss.push(arr)
-                };
+          let mut rel_row_idss = vec![];
+          for (_, out) in cells.iter(&txn) {
+            if let Ok(m) = out.cast::<MapRef>() {
+              if let Some(Out::Any(Any::BigInt(n))) = m.get(&txn, "field_type") {
+                if n == FieldType::Relation as i64 {
+                  let relation_data = m.get(&txn, "data").ok_or_else(|| {
+                    AppError::RecordNotFound("no data found in relation cell".to_string())
+                  })?;
+                  if let Ok(arr) = relation_data.cast::<ArrayRef>() {
+                    rel_row_idss.push(arr)
+                  };
+                }
               }
             }
           }
-        }
-        for rel_row_ids in rel_row_idss {
-          let num_refs = rel_row_ids.len(&txn);
+          for rel_row_ids in rel_row_idss {
+            let num_refs = rel_row_ids.len(&txn);
 
-          let mut pub_row_ids = Vec::with_capacity(num_refs as usize);
-          for rel_row_id in rel_row_ids.iter(&txn) {
-            if let Out::Any(any::Any::String(s)) = rel_row_id {
-              pub_row_ids.push(s);
+            let mut pub_row_ids = Vec::with_capacity(num_refs as usize);
+            for rel_row_id in rel_row_ids.iter(&txn) {
+              if let Out::Any(Any::String(s)) = rel_row_id {
+                pub_row_ids.push(s);
+              }
+            }
+            rel_row_ids.remove_range(&mut txn, 0, num_refs);
+            for pub_row_id in pub_row_ids {
+              let dup_row_id =
+                self
+                  .duplicated_db_row
+                  .get(pub_row_id.as_ref())
+                  .ok_or_else(|| {
+                    AppError::RecordNotFound(format!("row not found: {}", pub_row_id))
+                  })?;
+              let _ = rel_row_ids.push_back(&mut txn, dup_row_id.as_str());
             }
           }
-          rel_row_ids.remove_range(&mut txn, 0, num_refs);
-          for pub_row_id in pub_row_ids {
-            let dup_row_id = self
-              .duplicated_db_row
-              .get(pub_row_id.as_ref())
-              .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", pub_row_id)))?;
-            let _ = rel_row_ids.push_back(&mut txn, dup_row_id.as_str());
+        }
+
+        {
+          // handle row meta
+          let row_meta: MapRef = db_row_collab
+            .data
+            .get(&txn, "meta")
+            .ok_or_else(|| {
+              AppError::RecordNotFound(format!(
+                "no meta found in database row collab: {}",
+                pub_row_id
+              ))
+            })?
+            .cast()
+            .map_err(|err| AppError::Unhandled(format!("not a map: {:?}", err)))?;
+
+          {
+            // handle document in database row
+            let pub_is_doc_empty_key =
+              meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
+            let pub_is_doc_empty = row_meta.get(&txn, &pub_is_doc_empty_key);
+            if let Some(Out::Any(Any::Bool(is_doc_empty))) = pub_is_doc_empty {
+              row_meta.remove(&mut txn, &pub_is_doc_empty_key);
+              let dup_row_doc_id =
+                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
+              row_meta.insert(&mut txn, dup_row_doc_id.clone(), Any::Bool(is_doc_empty));
+
+              if !is_doc_empty {
+                let pub_row_doc_id =
+                  meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
+
+                let row_doc_doc_state = published_db
+                  .database_row_document_collabs
+                  .get(&pub_row_doc_id)
+                  .ok_or_else(|| {
+                    AppError::RecordNotFound(format!("doc not found: {}", pub_row_doc_id))
+                  })?;
+
+                let doc_collab =
+                  collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
+                let doc =
+                  Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
+                let mut new_doc_view = Box::pin(self.deep_copy_doc(
+                  &pub_row_doc_id,
+                  dup_row_doc_id.clone(),
+                  doc,
+                  PublishViewMetaData::default(),
+                ))
+                .await?;
+                new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
+                self
+                  .views_to_add
+                  .insert(dup_row_doc_id.clone(), new_doc_view);
+              }
+            }
+          }
+          {
+            // handle icon id
+            let pub_icon_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IconId);
+            let pub_icon_id = row_meta.get(&txn, &pub_icon_id_key);
+            if let Some(Out::Any(Any::String(icon_id))) = pub_icon_id {
+              row_meta.remove(&mut txn, &pub_icon_id_key);
+              let dup_icon_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::IconId);
+              row_meta.insert(&mut txn, dup_icon_id_key, icon_id);
+            }
+          }
+          {
+            // handle cover id
+            let pub_cover_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
+            let pub_cover_id = row_meta.get(&txn, &pub_cover_id_key);
+            if let Some(Out::Any(Any::String(cover_id))) = pub_cover_id {
+              row_meta.remove(&mut txn, &pub_cover_id_key);
+              let dup_cover_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::CoverId);
+              row_meta.insert(&mut txn, dup_cover_id_key, cover_id);
+            }
+          }
+          {
+            // handle attachment_count
+            let pub_attach_count_key =
+              meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
+            let pub_attach_count = row_meta.get(&txn, &pub_attach_count_key);
+            if let Some(Out::Any(Any::BigInt(attachment_count))) = pub_attach_count {
+              row_meta.remove(&mut txn, &pub_attach_count_key);
+              let dup_attach_count_key =
+                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::AttachmentCount);
+              row_meta.insert(&mut txn, dup_attach_count_key, attachment_count);
+            }
           }
         }
       }
@@ -804,12 +902,12 @@ impl PublishCollabDuplicator {
         tokio::task::spawn_blocking(move || collab_to_bin(&db_row_collab, CollabType::DatabaseRow))
           .await?;
       self.collabs_to_insert.insert(
-        new_row_id.clone(),
+        dup_row_id.clone(),
         (CollabType::DatabaseRow, db_row_ec_bytes?),
       );
       self
         .duplicated_db_row
-        .insert(old_id.clone(), new_row_id.clone());
+        .insert(pub_row_id.clone(), dup_row_id.clone());
     }
 
     // accumulate list of database views (Board, Cal, ...) to be linked to the database

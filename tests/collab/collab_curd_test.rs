@@ -4,8 +4,7 @@ use collab::entity::EncodedCollab;
 use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  BatchCreateCollabParams, CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams,
-  QueryCollabResult,
+  CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
 
 use reqwest::Method;
@@ -198,68 +197,6 @@ async fn create_collab_compatibility_with_json_params_test() {
     .await
     .unwrap();
 
-  let resp = test_client
-    .api_client
-    .http_client_with_auth(Method::GET, &url)
-    .await
-    .unwrap()
-    .json(&QueryCollabParams {
-      workspace_id,
-      inner: QueryCollab {
-        object_id: object_id.clone(),
-        collab_type: CollabType::Unknown,
-      },
-    })
-    .send()
-    .await
-    .unwrap();
-
-  let encoded_collab_from_server = AppResponse::<EncodedCollab>::from_response(resp)
-    .await
-    .unwrap()
-    .into_data()
-    .unwrap();
-  assert_eq!(encoded_collab, encoded_collab_from_server);
-}
-
-#[tokio::test]
-async fn batch_create_collab_compatibility_with_uncompress_params_test() {
-  let test_client = TestClient::new_user().await;
-  let workspace_id = test_client.workspace_id().await;
-  let object_id = Uuid::new_v4().to_string();
-  let api_client = &test_client.api_client;
-  let url = format!(
-    "{}/api/workspace/{}/collabs",
-    api_client.base_url, workspace_id,
-  );
-
-  let encoded_collab = test_encode_collab_v1(&object_id, "title", "hello world");
-  let params = BatchCreateCollabParams {
-    workspace_id: workspace_id.to_string(),
-    params_list: vec![CollabParams {
-      object_id: object_id.clone(),
-      encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap().into(),
-      collab_type: CollabType::Unknown,
-      embeddings: None,
-    }],
-  }
-  .to_bytes()
-  .unwrap();
-
-  test_client
-    .api_client
-    .http_client_with_auth(Method::POST, &url)
-    .await
-    .unwrap()
-    .body(params)
-    .send()
-    .await
-    .unwrap();
-
-  let url = format!(
-    "{}/api/workspace/{}/collab/{}",
-    api_client.base_url, workspace_id, &object_id
-  );
   let resp = test_client
     .api_client
     .http_client_with_auth(Method::GET, &url)

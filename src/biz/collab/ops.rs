@@ -158,9 +158,11 @@ pub async fn get_collab_member_list(
 
 pub async fn get_user_workspace_structure(
   collab_storage: Arc<CollabAccessControlStorage>,
+  pg_pool: &PgPool,
   uid: i64,
-  workspace_id: String,
+  workspace_id: Uuid,
   depth: u32,
+  root_view_id: &str,
 ) -> Result<FolderView, AppError> {
   let depth_limit = 10;
   if depth > depth_limit {
@@ -169,10 +171,18 @@ pub async fn get_user_workspace_structure(
       depth, depth_limit
     )));
   }
-  let folder =
-    get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, &workspace_id).await?;
-  let folder_view: FolderView = collab_folder_to_folder_view(&folder, depth);
-  Ok(folder_view)
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_id.to_string(),
+  )
+  .await?;
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids: HashSet<String> = publish_view_ids
+    .into_iter()
+    .map(|id| id.to_string())
+    .collect();
+  collab_folder_to_folder_view(root_view_id, &folder, depth, &publish_view_ids)
 }
 
 pub async fn get_latest_collab_folder(
@@ -245,6 +255,6 @@ pub async fn get_published_view(
     .map(|id| id.to_string())
     .collect();
   let published_view: PublishedView =
-    collab_folder_to_published_outline(&folder, &publish_view_ids)?;
+    collab_folder_to_published_outline(&workspace_id.to_string(), &folder, &publish_view_ids)?;
   Ok(published_view)
 }

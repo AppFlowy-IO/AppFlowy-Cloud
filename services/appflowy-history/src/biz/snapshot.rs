@@ -48,6 +48,10 @@ impl SnapshotGenerator {
     !self.pending_snapshots.lock().await.is_empty()
   }
 
+  pub async fn num_pending_snapshots(&self) -> usize {
+    self.pending_snapshots.lock().await.len()
+  }
+
   /// Generate a snapshot if the current edit count is not zero.
   pub async fn generate(&self) {
     if let Some(collab) = self.mutex_collab.upgrade() {
@@ -57,7 +61,7 @@ impl SnapshotGenerator {
         return;
       }
       let threshold_count = *current - *prev;
-      if threshold_count > 10 {
+      if threshold_count > snapshot_min_edit_threshold(&self.collab_type) {
         self
           .prev_edit_count
           .store(self.current_update_count.load_full());
@@ -92,7 +96,7 @@ impl SnapshotGenerator {
       return;
     }
     let threshold_count = *current - *prev;
-    let threshold = gen_snapshot_threshold(&self.collab_type);
+    let threshold = snapshot_max_edit_threshold(&self.collab_type);
     #[cfg(feature = "verbose_log")]
     tracing::trace!(
       "[History] object_id:{}, update count:{}, threshold={}",
@@ -123,14 +127,14 @@ impl SnapshotGenerator {
 }
 
 #[inline]
-fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
+fn snapshot_max_edit_threshold(collab_type: &CollabType) -> u32 {
   match collab_type {
     CollabType::Document => 500,
-    CollabType::Database => 50,
-    CollabType::WorkspaceDatabase => 50,
-    CollabType::Folder => 50,
-    CollabType::DatabaseRow => 50,
-    CollabType::UserAwareness => 50,
+    CollabType::Database => 30,
+    CollabType::WorkspaceDatabase => 10,
+    CollabType::Folder => 10,
+    CollabType::DatabaseRow => 10,
+    CollabType::UserAwareness => 20,
     CollabType::Unknown => {
       if cfg!(debug_assertions) {
         5
@@ -141,6 +145,18 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
   }
 }
 
+#[inline]
+fn snapshot_min_edit_threshold(collab_type: &CollabType) -> u32 {
+  match collab_type {
+    CollabType::Document => 50,
+    CollabType::Database => 10,
+    CollabType::WorkspaceDatabase => 10,
+    CollabType::Folder => 10,
+    CollabType::DatabaseRow => 10,
+    CollabType::UserAwareness => 10,
+    CollabType::Unknown => 5,
+  }
+}
 #[inline]
 pub fn gen_snapshot(collab: &Collab, object_id: &str, reason: &str) -> CollabSnapshot {
   tracing::trace!(

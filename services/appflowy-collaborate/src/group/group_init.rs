@@ -246,7 +246,7 @@ impl CollabGroup {
   #[inline]
   fn timeout_secs(&self) -> u64 {
     match self.collab_type {
-      CollabType::Document => 10 * 60, // 10 minutes
+      CollabType::Document => 30 * 60, // 30 minutes
       CollabType::Database | CollabType::DatabaseRow => 30 * 60, // 30 minutes
       CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 6 * 60 * 60, // 6 hours,
       CollabType::Unknown => {

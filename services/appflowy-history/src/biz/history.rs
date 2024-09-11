@@ -62,7 +62,17 @@ impl CollabHistory {
     }
   }
 
-  pub async fn gen_snapshot_context(&self) -> Result<Option<SnapshotContext>, HistoryError> {
+  pub async fn gen_history(
+    &self,
+    min_snapshot_required: Option<usize>,
+  ) -> Result<Option<HistoryContext>, HistoryError> {
+    if let Some(min_snapshot_required) = min_snapshot_required {
+      let num_snapshot = self.snapshot_generator.num_pending_snapshots().await;
+      if num_snapshot < min_snapshot_required {
+        return Ok(None);
+      }
+    }
+
     let collab = self.collab.clone();
     let timestamp = chrono::Utc::now().timestamp();
     let snapshots: Vec<CollabSnapshot> = self.snapshot_generator.consume_pending_snapshots().await
@@ -107,7 +117,7 @@ impl CollabHistory {
       state_vector,
       chrono::Utc::now().timestamp(),
     );
-    Ok(Some(SnapshotContext {
+    Ok(Some(HistoryContext {
       collab_type,
       state,
       snapshots,
@@ -135,7 +145,7 @@ impl CollabHistory {
   }
 }
 
-pub struct SnapshotContext {
+pub struct HistoryContext {
   pub collab_type: CollabType,
   pub state: CollabSnapshotState,
   pub snapshots: Vec<CollabSnapshot>,

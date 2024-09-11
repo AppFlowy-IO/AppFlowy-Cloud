@@ -226,7 +226,7 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
       interval(Duration::from_secs(10))
     } else {
       // In release mode, save the history every 10 minutes.
-      interval(Duration::from_secs(10 * 60))
+      interval(Duration::from_secs(30 * 60))
     };
     interval.tick().await;
 

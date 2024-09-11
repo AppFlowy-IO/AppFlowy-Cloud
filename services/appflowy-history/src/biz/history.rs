@@ -10,7 +10,9 @@ use std::sync::Arc;
 use database::history::ops::get_snapshot_meta_list;
 use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
 
-use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
+use crate::biz::snapshot::{
+  calculate_edit_count, CollabSnapshot, CollabSnapshotState, SnapshotGenerator,
+};
 use crate::error::HistoryError;
 
 pub struct CollabHistory {
@@ -22,8 +24,25 @@ pub struct CollabHistory {
 
 impl CollabHistory {
   pub async fn new(object_id: &str, collab: Arc<RwLock<Collab>>, collab_type: CollabType) -> Self {
-    let snapshot_generator =
-      SnapshotGenerator::new(object_id, Arc::downgrade(&collab), collab_type.clone());
+    let current_edit_count = {
+      let read_guard = collab.read().await;
+      let txn = read_guard.transact();
+      calculate_edit_count(&txn)
+    };
+
+    #[cfg(feature = "verbose_log")]
+    tracing::trace!(
+      "[History] object:{} init edit count: {}",
+      object_id,
+      current_edit_count
+    );
+
+    let snapshot_generator = SnapshotGenerator::new(
+      object_id,
+      Arc::downgrade(&collab),
+      collab_type.clone(),
+      current_edit_count as u32,
+    );
     collab.read().await.add_plugin(Box::new(CountUpdatePlugin {
       snapshot_generator: snapshot_generator.clone(),
     }));

@@ -1,7 +1,7 @@
 use crate::http::log_request_id;
 use crate::native::GetCollabAction;
 use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
-use crate::{spawn_blocking_brotli_compress, Client};
+use crate::{blocking_brotli_compress, brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::AppError;
@@ -26,6 +26,7 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 
+use rayon::prelude::IntoParallelIterator;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
@@ -150,8 +151,7 @@ impl Client {
   ) -> Result<(), AppResponseError> {
     let device_id = device_id.to_string();
     let payload =
-      spawn_blocking_brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size)
-        .await?;
+      blocking_brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size).await?;
 
     let msg = HttpRealtimeMessage { device_id, payload }.encode_to_vec();
     let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));
@@ -174,22 +174,17 @@ impl Client {
   ) -> Result<(), AppResponseError> {
     let url = self.batch_create_collab_url(workspace_id);
 
-    // Parallel compression
-    let compression_tasks: Vec<_> = params_list
-      .into_iter()
+    let compression_tasks = params_list
+      .into_par_iter()
       .map(|params| {
-        let config = self.config.clone();
-        af_spawn(async move {
-          let data = params.to_bytes().map_err(AppError::from)?;
-          spawn_blocking_brotli_compress(
-            data,
-            config.compression_quality,
-            config.compression_buffer_size,
-          )
-          .await
-        })
+        let data = params.to_bytes().map_err(AppError::from)?;
+        brotli_compress(
+          data,
+          self.config.compression_quality,
+          self.config.compression_buffer_size,
+        )
       })
-      .collect();
+      .collect::<Vec<_>>();
 
     let mut framed_data = Vec::new();
     let mut size_count = 0;

@@ -1,5 +1,5 @@
 use crate::http::log_request_id;
-use crate::{spawn_blocking_brotli_compress, Client};
+use crate::{blocking_brotli_compress, Client};
 use app_error::AppError;
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CreateCollabParams, DeleteCollabParams,
@@ -20,7 +20,7 @@ impl Client {
       .to_bytes()
       .map_err(|err| AppError::Internal(err.into()))?;
 
-    let compress_bytes = spawn_blocking_brotli_compress(
+    let compress_bytes = blocking_brotli_compress(
       bytes,
       self.config.compression_quality,
       self.config.compression_buffer_size,

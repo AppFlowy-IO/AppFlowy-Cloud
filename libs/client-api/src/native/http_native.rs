@@ -1,11 +1,12 @@
 use crate::http::log_request_id;
 use crate::native::GetCollabAction;
 use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
-use crate::{spawn_blocking_brotli_compress, Client};
+use crate::{blocking_brotli_compress, brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
+use rayon::iter::ParallelIterator;
 
 use bytes::Bytes;
 use client_api_entity::{CollabParams, PublishCollabItem, QueryCollabParams};
@@ -26,6 +27,7 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 
+use rayon::prelude::IntoParallelIterator;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
@@ -150,8 +152,7 @@ impl Client {
   ) -> Result<(), AppResponseError> {
     let device_id = device_id.to_string();
     let payload =
-      spawn_blocking_brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size)
-        .await?;
+      blocking_brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size).await?;
 
     let msg = HttpRealtimeMessage { device_id, payload }.encode_to_vec();
     let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));
@@ -174,27 +175,22 @@ impl Client {
   ) -> Result<(), AppResponseError> {
     let url = self.batch_create_collab_url(workspace_id);
 
-    // Parallel compression
-    let compression_tasks: Vec<_> = params_list
-      .into_iter()
-      .map(|params| {
-        let config = self.config.clone();
-        af_spawn(async move {
-          let data = params.to_bytes().map_err(AppError::from)?;
-          spawn_blocking_brotli_compress(
-            data,
-            config.compression_quality,
-            config.compression_buffer_size,
-          )
-          .await
-        })
+    let compression_tasks = params_list
+      .into_par_iter()
+      .filter_map(|params| {
+        let data = params.to_bytes().ok()?;
+        brotli_compress(
+          data,
+          self.config.compression_quality,
+          self.config.compression_buffer_size,
+        )
+        .ok()
       })
-      .collect();
+      .collect::<Vec<_>>();
 
     let mut framed_data = Vec::new();
     let mut size_count = 0;
-    for task in compression_tasks {
-      let compressed = task.await??;
+    for compressed in compression_tasks {
       // The length of a u32 in bytes is 4. The server uses a u32 to read the size of each data frame,
       // hence the frame size header is always 4 bytes. It's crucial not to alter this size value,
       // as the server's logic for frame size reading is based on this fixed 4-byte length.

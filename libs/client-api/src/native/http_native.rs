@@ -6,6 +6,7 @@ use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
+use rayon::iter::ParallelIterator;
 
 use bytes::Bytes;
 use client_api_entity::{CollabParams, PublishCollabItem, QueryCollabParams};
@@ -176,20 +177,20 @@ impl Client {
 
     let compression_tasks = params_list
       .into_par_iter()
-      .map(|params| {
-        let data = params.to_bytes().map_err(AppError::from)?;
+      .filter_map(|params| {
+        let data = params.to_bytes().ok()?;
         brotli_compress(
           data,
           self.config.compression_quality,
           self.config.compression_buffer_size,
         )
+        .ok()
       })
       .collect::<Vec<_>>();
 
     let mut framed_data = Vec::new();
     let mut size_count = 0;
-    for task in compression_tasks {
-      let compressed = task.await??;
+    for compressed in compression_tasks {
       // The length of a u32 in bytes is 4. The server uses a u32 to read the size of each data frame,
       // hence the frame size header is always 4 bytes. It's crucial not to alter this size value,
       // as the server's logic for frame size reading is based on this fixed 4-byte length.

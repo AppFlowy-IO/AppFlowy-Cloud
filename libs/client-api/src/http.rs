@@ -1053,7 +1053,16 @@ pub async fn blocking_brotli_compress(
 }
 
 #[cfg(not(feature = "enable_brotli"))]
-pub async fn spawn_blocking_brotli_compress(
+pub async fn blocking_brotli_compress(
+  data: Vec<u8>,
+  _quality: u32,
+  _buffer_size: usize,
+) -> Result<Vec<u8>, AppError> {
+  Ok(data)
+}
+
+#[cfg(not(feature = "enable_brotli"))]
+pub fn brotli_compress(
   data: Vec<u8>,
   _quality: u32,
   _buffer_size: usize,

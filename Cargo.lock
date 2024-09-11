@@ -2238,7 +2238,6 @@ dependencies = [
  "bincode",
  "collab",
  "collab-entity",
- "rayon",
  "serde",
  "thiserror",
  "tokio",

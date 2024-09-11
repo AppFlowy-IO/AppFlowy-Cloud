@@ -952,6 +952,12 @@ pub struct PublishCollabMetadata<Metadata> {
   pub metadata: Metadata,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PublishCollabKey {
+  pub workspace_id: uuid::Uuid,
+  pub view_id: uuid::Uuid,
+}
+
 #[derive(Debug)]
 pub struct PublishCollabItem<Meta, Data> {
   pub meta: PublishCollabMetadata<Meta>,

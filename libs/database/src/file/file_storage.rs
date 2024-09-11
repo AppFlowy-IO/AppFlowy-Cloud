@@ -32,6 +32,8 @@ pub trait BucketClient {
 
   async fn delete_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError>;
 
+  async fn delete_blobs(&self, object_key: Vec<String>) -> Result<Self::ResponseData, AppError>;
+
   async fn get_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError>;
 
   async fn create_upload(

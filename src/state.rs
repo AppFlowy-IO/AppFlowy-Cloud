@@ -26,8 +26,9 @@ use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
 use workspace_access::WorkspaceAccessControlImpl;
 
-use crate::api::metrics::RequestMetrics;
+use crate::api::metrics::{PublishedCollabMetrics, RequestMetrics};
 use crate::biz::pg_listener::PgListeners;
+use crate::biz::workspace::publish::PublishedCollabStore;
 use crate::config::config::Config;
 use crate::mailer::Mailer;
 
@@ -45,6 +46,7 @@ pub struct AppState {
   pub collab_access_control: CollabAccessControlImpl,
   pub workspace_access_control: WorkspaceAccessControlImpl,
   pub bucket_storage: Arc<S3BucketStorage>,
+  pub published_collab_store: Arc<dyn PublishedCollabStore>,
   pub bucket_client: AwsS3BucketClientImpl,
   pub pg_listeners: Arc<PgListeners>,
   pub access_control: AccessControl,
@@ -123,6 +125,7 @@ pub struct AppMetrics {
   pub realtime_metrics: Arc<CollabRealtimeMetrics>,
   pub access_control_metrics: Arc<AccessControlMetrics>,
   pub collab_metrics: Arc<CollabMetrics>,
+  pub published_collab_metrics: Arc<PublishedCollabMetrics>,
 }
 
 impl Default for AppMetrics {
@@ -138,12 +141,14 @@ impl AppMetrics {
     let realtime_metrics = Arc::new(CollabRealtimeMetrics::register(&mut registry));
     let access_control_metrics = Arc::new(AccessControlMetrics::register(&mut registry));
     let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
+    let published_collab_metrics = Arc::new(PublishedCollabMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       request_metrics,
       realtime_metrics,
       access_control_metrics,
       collab_metrics,
+      published_collab_metrics,
     }
   }
 }

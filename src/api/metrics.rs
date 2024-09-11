@@ -7,6 +7,7 @@ use prometheus_client::encoding::EncodeLabelSet;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::exemplar::CounterWithExemplar;
 use prometheus_client::metrics::family::Family;
+use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -120,5 +121,89 @@ impl RequestMetrics {
       .requests_result
       .get_or_create(&ResultLabel { path, status_code })
       .inc_by(1, trace_id.clone().map(|s| TraceLabel { trace_id: s }));
+  }
+}
+
+#[derive(Clone)]
+pub struct PublishedCollabMetrics {
+  success_write_published_collab_count: Gauge,
+  fallback_write_published_collab_count: Gauge,
+  failure_write_published_collab_count: Gauge,
+  success_read_published_collab_count: Gauge,
+  fallback_read_published_collab_count: Gauge,
+  failure_read_published_collab_count: Gauge,
+}
+
+impl PublishedCollabMetrics {
+  fn init() -> Self {
+    Self {
+      success_write_published_collab_count: Default::default(),
+      fallback_write_published_collab_count: Default::default(),
+      failure_write_published_collab_count: Default::default(),
+      success_read_published_collab_count: Default::default(),
+      fallback_read_published_collab_count: Default::default(),
+      failure_read_published_collab_count: Default::default(),
+    }
+  }
+
+  pub fn register(registry: &mut Registry) -> Self {
+    let metrics = Self::init();
+    let published_collab_registry = registry.sub_registry_with_prefix("published_collab");
+    published_collab_registry.register(
+      "write_success_count",
+      "successfully published collab",
+      metrics.success_write_published_collab_count.clone(),
+    );
+    published_collab_registry.register(
+      "write_fallback_count",
+      "successfully published collab to fallback store",
+      metrics.fallback_write_published_collab_count.clone(),
+    );
+    published_collab_registry.register(
+      "read_success_count",
+      "successfully read published collab",
+      metrics.success_read_published_collab_count.clone(),
+    );
+    published_collab_registry.register(
+      "write_failure_count",
+      "failed to publish collab",
+      metrics.failure_write_published_collab_count.clone(),
+    );
+    published_collab_registry.register(
+      "read_failure_count",
+      "failed to read published collab",
+      metrics.failure_read_published_collab_count.clone(),
+    );
+    published_collab_registry.register(
+      "read_fallback_count",
+      "failed to read published collab from primary store",
+      metrics.fallback_read_published_collab_count.clone(),
+    );
+
+    metrics
+  }
+
+  pub fn incr_success_write_count(&self, count: i64) {
+    self.success_write_published_collab_count.inc_by(count);
+  }
+
+  pub fn incr_fallback_write_count(&self, count: i64) {
+    self.fallback_write_published_collab_count.inc_by(count);
+  }
+
+  pub fn incr_failure_write_count(&self, count: i64) {
+    self.failure_write_published_collab_count.inc_by(count);
+  }
+
+  pub fn incr_success_read_count(&self, count: i64) {
+    self.success_read_published_collab_count.inc_by(count);
+  }
+
+  pub fn incr_fallback_read_count(&self, count: i64) {
+    self.fallback_read_published_collab_count.inc_by(count);
+  }
+
+  pub fn incr_failure_read_count(&self, count: i64) {
+    self.failure_read_published_collab_count.inc_by(count);
   }
 }

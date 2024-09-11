@@ -22,20 +22,20 @@ async fn get_collab_response_compatible_test() {
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
-  let params = QueryCollabParams {
-    workspace_id: workspace_id.clone(),
-    inner: QueryCollab {
-      object_id: workspace_id.clone(),
-      collab_type: CollabType::Folder,
-    },
-  };
   // after 0.3.22, we use [CollabResponse] instead of EncodedCollab as the response
-  let data = test_client.get_collab(params).await.unwrap();
-  assert_eq!(data.object_id, workspace_id);
+  let collab_resp = test_client
+    .get_collab(
+      workspace_id.clone(),
+      workspace_id.clone(),
+      CollabType::Folder,
+    )
+    .await
+    .unwrap();
+  assert_eq!(collab_resp.object_id, workspace_id);
 
-  let json = serde_json::to_value(data.clone()).unwrap();
+  let json = serde_json::to_value(collab_resp.clone()).unwrap();
   let encode_collab: EncodedCollab = serde_json::from_value(json).unwrap();
-  assert_eq!(data.encode_collab, encode_collab);
+  assert_eq!(collab_resp.encode_collab, encode_collab);
 }
 
 #[tokio::test]

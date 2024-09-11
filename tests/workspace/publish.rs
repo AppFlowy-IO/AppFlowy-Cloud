@@ -1,19 +1,18 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
 use appflowy_cloud::biz::workspace::publish_dup::collab_from_doc_state;
-use client_api::entity::{
-  AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabParams,
-};
+use client_api::entity::{AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata};
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use collab::util::MapExt;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
+use collab_database::rows::RowDetail;
 use collab_database::views::DatabaseViews;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use collab_folder::{CollabOrigin, Folder};
+use collab_folder::{CollabOrigin, Folder, UserId};
 use itertools::Itertools;
 use shared_entity::dto::publish_dto::PublishDatabaseData;
 use shared_entity::dto::publish_dto::PublishViewMetaData;
@@ -894,13 +893,11 @@ async fn duplicate_to_workspace_doc_inline_database() {
     }
 
     let collab_resp = client_2
-      .get_collab(QueryCollabParams {
-        workspace_id: workspace_id_2.clone(),
-        inner: QueryCollab {
-          object_id: workspace_id_2.clone(),
-          collab_type: CollabType::Folder,
-        },
-      })
+      .get_collab(
+        workspace_id_2.clone(),
+        workspace_id_2.clone(),
+        CollabType::Folder,
+      )
       .await
       .unwrap();
 
@@ -948,18 +945,9 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .find(|db_meta| db_meta.linked_views.contains(&view_of_grid1_fv.view_id))
         .unwrap()
         .database_id;
-      let db_collab_collab_resp = client_2
-        .get_collab(QueryCollabParams {
-          workspace_id: workspace_id_2,
-          inner: QueryCollab {
-            object_id: dup_grid1_db_id,
-            collab_type: CollabType::Database,
-          },
-        })
-        .await
-        .unwrap();
-      let db_doc_state = db_collab_collab_resp.encode_collab.doc_state;
-      let db_collab = collab_from_doc_state(db_doc_state.to_vec(), "").unwrap();
+      let db_collab = client_2
+        .get_collab_to_collab(workspace_id_2, dup_grid1_db_id, CollabType::Database)
+        .await;
       let dup_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
       assert_ne!(dup_db_id, pub_db_id);
 
@@ -1072,19 +1060,13 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
         .into_iter()
         .find(|v| v.name == "docwithembeddeddb")
         .unwrap();
-      let collab_resp = client_2
-        .get_collab(QueryCollabParams {
-          workspace_id: workspace_id_2.clone(),
-          inner: QueryCollab {
-            object_id: doc_with_embedded_db.view_id.clone(),
-            collab_type: CollabType::Folder,
-          },
-        })
-        .await
-        .unwrap();
-
-      let doc_collab =
-        collab_from_doc_state(collab_resp.encode_collab.doc_state.to_vec(), "").unwrap();
+      let doc_collab = client_2
+        .get_collab_to_collab(
+          workspace_id_2.clone(),
+          doc_with_embedded_db.view_id.clone(),
+          CollabType::Folder,
+        )
+        .await;
       let doc = Document::open(doc_collab).unwrap();
       let doc_data = doc.get_document_data().unwrap();
       let grid = doc_data
@@ -1216,6 +1198,103 @@ async fn duplicate_to_workspace_db_with_relation() {
         .for_each(|(_k, db_id)| {
           assert_eq!(db_id.to_string(), related_db_id);
         });
+    }
+  }
+}
+
+#[tokio::test]
+async fn duplicate_to_workspace_db_row_with_doc() {
+  let client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.workspace_id().await;
+
+  // database with a row having doc data
+  let db_with_row_doc_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  let db_with_row_doc_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::DB_ROW_WITH_DOC_META).unwrap();
+  let db_with_row_doc_blob = hex::decode(published_data::DB_ROW_WITH_DOC_HEX).unwrap();
+
+  client_1
+    .api_client
+    .publish_collabs(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: db_with_row_doc_view_id,
+          publish_name: "db-with-rel-col".to_string(),
+          metadata: db_with_row_doc_metadata.clone(),
+        },
+        data: db_with_row_doc_blob,
+      }],
+    )
+    .await
+    .unwrap();
+
+  {
+    let mut client_2 = TestClient::new_user().await;
+    let workspace_id_2 = client_2.workspace_id().await;
+
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5))
+      .await
+      .unwrap();
+
+    // duplicate db_with_row_doc to workspace2
+    // Result fv should be:
+    // .
+    // ├── Getting Started (existing)
+    // └── db_with_row_doc
+    client_2
+      .api_client
+      .duplicate_published_to_workspace(
+        &workspace_id_2,
+        &PublishedDuplicate {
+          published_view_id: db_with_row_doc_view_id.to_string(),
+          dest_view_id: fv.view_id, // use the root view
+        },
+      )
+      .await
+      .unwrap();
+
+    {
+      let fv = client_2
+        .api_client
+        .get_workspace_folder(&workspace_id_2, Some(5))
+        .await
+        .unwrap();
+      let db_with_row_doc = fv
+        .children
+        .iter()
+        .find(|v| v.name == "db_with_row_doc") // db_w ith_rel_col
+        .unwrap();
+
+      let db_collab = client_2
+        .get_db_collab_from_view(&workspace_id_2, &db_with_row_doc.view_id)
+        .await;
+
+      let db_body = DatabaseBody::from_collab(&db_collab).unwrap();
+
+      // check that doc exists and can be fetched
+      let first_row_id = &db_body.views.get_all_views(&db_collab.transact())[0].row_orders[0].id;
+      let mut row_collab = client_2
+        .get_collab_to_collab(
+          workspace_id_2.clone(),
+          first_row_id.to_string(),
+          CollabType::DatabaseRow,
+        )
+        .await;
+
+      let row_detail = RowDetail::from_collab(&mut row_collab).unwrap();
+      let doc_id = row_detail.document_id;
+      let _doc_collab = client_2
+        .get_collab_to_collab(workspace_id_2.clone(), doc_id.clone(), CollabType::Document)
+        .await;
+      let folder_collab = client_2
+        .get_collab_to_collab(workspace_id_2.clone(), workspace_id_2, CollabType::Folder)
+        .await;
+      let folder = Folder::open(UserId::from(client_2.uid().await), folder_collab, None).unwrap();
+      let doc_view = folder.get_view(&doc_id).unwrap();
+      assert_eq!(doc_view.id, doc_view.parent_view_id);
     }
   }
 }

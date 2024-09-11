@@ -1028,25 +1028,41 @@ pub(crate) fn log_request_id(resp: &reqwest::Response) {
 }
 
 #[cfg(feature = "enable_brotli")]
-pub async fn spawn_blocking_brotli_compress(
+pub fn brotli_compress(
   data: Vec<u8>,
   quality: u32,
   buffer_size: usize,
 ) -> Result<Vec<u8>, AppError> {
-  tokio::task::spawn_blocking(move || {
-    let mut compressor = brotli::CompressorReader::new(&*data, buffer_size, quality, 22);
-    let mut compressed_data = Vec::new();
-    compressor
-      .read_to_end(&mut compressed_data)
-      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress data: {}", err)))?;
-    Ok(compressed_data)
-  })
-  .await
-  .map_err(AppError::from)?
+  let mut compressor = brotli::CompressorReader::new(&*data, buffer_size, quality, 22);
+  let mut compressed_data = Vec::new();
+  compressor
+    .read_to_end(&mut compressed_data)
+    .map_err(|err| AppError::InvalidRequest(format!("Failed to compress data: {}", err)))?;
+  Ok(compressed_data)
+}
+
+#[cfg(feature = "enable_brotli")]
+pub async fn blocking_brotli_compress(
+  data: Vec<u8>,
+  quality: u32,
+  buffer_size: usize,
+) -> Result<Vec<u8>, AppError> {
+  tokio::task::spawn_blocking(move || brotli_compress(data, quality, buffer_size))
+    .await
+    .map_err(AppError::from)?
 }
 
 #[cfg(not(feature = "enable_brotli"))]
-pub async fn spawn_blocking_brotli_compress(
+pub async fn blocking_brotli_compress(
+  data: Vec<u8>,
+  _quality: u32,
+  _buffer_size: usize,
+) -> Result<Vec<u8>, AppError> {
+  Ok(data)
+}
+
+#[cfg(not(feature = "enable_brotli"))]
+pub fn brotli_compress(
   data: Vec<u8>,
   _quality: u32,
   _buffer_size: usize,

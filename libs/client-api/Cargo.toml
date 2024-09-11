@@ -52,6 +52,7 @@ lazy_static = { workspace = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"
 tokio-util = "0.7"
+rayon = "1.10.0"
 infra = { workspace = true, features = ["file_util"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio]

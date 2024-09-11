@@ -1,9 +1,9 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Weak};
-
+use collab::core::collab_plugin::CollabPluginType;
 use collab::lock::RwLock;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Weak};
 use tokio::time::sleep;
 use tracing::{error, trace};
 use yrs::TransactionMut;
@@ -116,5 +116,9 @@ where
         },
       }
     });
+  }
+
+  fn plugin_type(&self) -> CollabPluginType {
+    CollabPluginType::Other("history".to_string())
   }
 }

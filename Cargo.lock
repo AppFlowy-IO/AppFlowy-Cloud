@@ -649,6 +649,7 @@ dependencies = [
  "prometheus-client",
  "prost",
  "rand 0.8.5",
+ "rayon",
  "rcgen",
  "redis 0.25.4",
  "reqwest 0.11.27",

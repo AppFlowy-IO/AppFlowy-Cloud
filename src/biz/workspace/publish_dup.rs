@@ -3,11 +3,16 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 
-use collab::preclude::MapExt;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::meta_id_from_row_id;
+use collab_database::rows::DatabaseRowBody;
+use collab_database::rows::RowId;
 use collab_database::rows::RowMetaKey;
+use collab_database::rows::CELL_FIELD_TYPE;
+use collab_database::rows::ROW_CELLS;
+use collab_database::rows::ROW_DATABASE_ID;
+use collab_database::template::entity::CELL_DATA;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
@@ -730,52 +735,88 @@ impl PublishCollabDuplicator {
       // assign a new id for the row
       let dup_row_id = gen_view_id();
       let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
+      let mut db_row_body = DatabaseRowBody::open(&mut db_row_collab)
+        .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
       {
-        // update database_id and row_id in data
         let mut txn = db_row_collab.context.transact_mut();
-        let data = db_row_collab
+        // update database_id
+        db_row_body
           .data
-          .get(&txn, "data")
-          .ok_or_else(|| {
-            AppError::RecordNotFound("no data found in database row collab".to_string())
-          })?
-          .cast::<MapRef>()
-          .map_err(|err| AppError::Unhandled(format!("data not map: {:?}", err)))?;
-        data.insert(&mut txn, "id", dup_row_id.clone());
-        data.insert(&mut txn, "database_id", new_db_id.clone());
+          .insert(&mut txn, ROW_DATABASE_ID, new_db_id.clone());
+        {
+          // handle document in database row
+          let pub_is_doc_empty_key =
+            meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
+          let pub_is_doc_empty = db_row_body.meta.get(&txn, &pub_is_doc_empty_key);
+          if let Some(Out::Any(Any::Bool(is_doc_empty))) = pub_is_doc_empty {
+            if !is_doc_empty {
+              let pub_row_doc_id =
+                meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
+              let row_doc_doc_state = match published_db
+                .database_row_document_collabs
+                .get(&pub_row_doc_id)
+              {
+                Some(doc_state) => doc_state,
+                None => {
+                  tracing::error!("no document found for row: {}", pub_row_doc_id);
+                  continue;
+                },
+              };
+              let pub_doc_collab =
+                collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
+              let pub_doc =
+                Document::open(pub_doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
+              let dup_row_doc_id =
+                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
+              let mut new_doc_view = Box::pin(self.deep_copy_doc(
+                &pub_row_doc_id,
+                dup_row_doc_id.clone(),
+                pub_doc,
+                PublishViewMetaData::default(),
+              ))
+              .await?;
+              new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
+              self
+                .views_to_add
+                .insert(dup_row_doc_id.clone(), new_doc_view);
+            }
+          }
+        }
+
+        db_row_body
+          .update_id(&mut txn, RowId::from(dup_row_id.clone()))
+          .map_err(|e| AppError::Unhandled(format!("failed to update row id: {:?}", e)))?;
 
         {
-          // update relation cells
-          // db_row_collb: Object {
-          //     "data": Object {
-          //         "cells": Object {
-          //             "MBaTsr": Object {
-          //                 "data": Array [
-          //                     String("eefb5700-8cf7-411e-9596-f60b9a51916e"),
-          //                     String("23d5e054-42c8-4754-ad69-527e4ffc1e46"),
-          //                     // above are published row ids of related database
-          //                     // we need to replace them with respective duplicated row ids
-          //                 ],
-          //                 "field_type": Number(10),
-          //                 // use this condition to filter out relation cells
-          //             },
-          //         },
+          // "cells": Object {
+          //     "MBaTsr": Object {
+          //         "data": Array [
+          //             String("eefb5700-8cf7-411e-9596-f60b9a51916e"),
+          //             String("23d5e054-42c8-4754-ad69-527e4ffc1e46"),
+          //             // above are published row ids of related database
+          //             // we need to replace them with respective duplicated row ids
+          //         ],
+          //         "field_type": Number(10),
+          //         // use this condition to filter out relation cells
           //     },
-          // }
-          let cells: MapRef = db_row_collab
+          // },
+          let cells: MapRef = db_row_body
             .data
-            .get_with_path(&txn, ["data", "cells"])
+            .get(&txn, ROW_CELLS)
             .ok_or_else(|| {
               AppError::RecordNotFound("no cells found in database row collab".to_string())
-            })?;
+            })?
+            .cast()
+            .map_err(|e| AppError::Unhandled(format!("not a map: {:?}", e)))?;
 
+          // collect all cell with field type as relation
           let mut rel_row_idss = vec![];
           for (_, out) in cells.iter(&txn) {
             if let Ok(m) = out.cast::<MapRef>() {
-              if let Some(Out::Any(Any::BigInt(n))) = m.get(&txn, "field_type") {
+              if let Some(Out::Any(Any::BigInt(n))) = m.get(&txn, CELL_FIELD_TYPE) {
                 if n == FieldType::Relation as i64 {
-                  let relation_data = m.get(&txn, "data").ok_or_else(|| {
+                  let relation_data = m.get(&txn, CELL_DATA).ok_or_else(|| {
                     AppError::RecordNotFound("no data found in relation cell".to_string())
                   })?;
                   if let Ok(arr) = relation_data.cast::<ArrayRef>() {
@@ -785,9 +826,9 @@ impl PublishCollabDuplicator {
               }
             }
           }
+          // replace all relation cells with duplicated row ids
           for rel_row_ids in rel_row_idss {
             let num_refs = rel_row_ids.len(&txn);
-
             let mut pub_row_ids = Vec::with_capacity(num_refs as usize);
             for rel_row_id in rel_row_ids.iter(&txn) {
               if let Out::Any(Any::String(s)) = rel_row_id {
@@ -807,95 +848,9 @@ impl PublishCollabDuplicator {
             }
           }
         }
-
-        {
-          // handle row meta
-          let row_meta: MapRef = db_row_collab
-            .data
-            .get(&txn, "meta")
-            .ok_or_else(|| {
-              AppError::RecordNotFound(format!(
-                "no meta found in database row collab: {}",
-                pub_row_id
-              ))
-            })?
-            .cast()
-            .map_err(|err| AppError::Unhandled(format!("not a map: {:?}", err)))?;
-
-          {
-            // handle document in database row
-            let pub_is_doc_empty_key =
-              meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
-            let pub_is_doc_empty = row_meta.get(&txn, &pub_is_doc_empty_key);
-            if let Some(Out::Any(Any::Bool(is_doc_empty))) = pub_is_doc_empty {
-              row_meta.remove(&mut txn, &pub_is_doc_empty_key);
-              let dup_row_doc_id =
-                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
-              row_meta.insert(&mut txn, dup_row_doc_id.clone(), Any::Bool(is_doc_empty));
-
-              if !is_doc_empty {
-                let pub_row_doc_id =
-                  meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
-
-                let row_doc_doc_state = published_db
-                  .database_row_document_collabs
-                  .get(&pub_row_doc_id)
-                  .ok_or_else(|| {
-                    AppError::RecordNotFound(format!("doc not found: {}", pub_row_doc_id))
-                  })?;
-
-                let doc_collab =
-                  collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
-                let doc =
-                  Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
-                let mut new_doc_view = Box::pin(self.deep_copy_doc(
-                  &pub_row_doc_id,
-                  dup_row_doc_id.clone(),
-                  doc,
-                  PublishViewMetaData::default(),
-                ))
-                .await?;
-                new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
-                self
-                  .views_to_add
-                  .insert(dup_row_doc_id.clone(), new_doc_view);
-              }
-            }
-          }
-          {
-            // handle icon id
-            let pub_icon_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IconId);
-            let pub_icon_id = row_meta.get(&txn, &pub_icon_id_key);
-            if let Some(Out::Any(Any::String(icon_id))) = pub_icon_id {
-              row_meta.remove(&mut txn, &pub_icon_id_key);
-              let dup_icon_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::IconId);
-              row_meta.insert(&mut txn, dup_icon_id_key, icon_id);
-            }
-          }
-          {
-            // handle cover id
-            let pub_cover_id_key = meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
-            let pub_cover_id = row_meta.get(&txn, &pub_cover_id_key);
-            if let Some(Out::Any(Any::String(cover_id))) = pub_cover_id {
-              row_meta.remove(&mut txn, &pub_cover_id_key);
-              let dup_cover_id_key = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::CoverId);
-              row_meta.insert(&mut txn, dup_cover_id_key, cover_id);
-            }
-          }
-          {
-            // handle attachment_count
-            let pub_attach_count_key =
-              meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::CoverId);
-            let pub_attach_count = row_meta.get(&txn, &pub_attach_count_key);
-            if let Some(Out::Any(Any::BigInt(attachment_count))) = pub_attach_count {
-              row_meta.remove(&mut txn, &pub_attach_count_key);
-              let dup_attach_count_key =
-                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::AttachmentCount);
-              row_meta.insert(&mut txn, dup_attach_count_key, attachment_count);
-            }
-          }
-        }
       }
+
+      println!("{:#?}", db_row_collab.to_json_value());
 
       // write new row collab to storage
       let db_row_ec_bytes =

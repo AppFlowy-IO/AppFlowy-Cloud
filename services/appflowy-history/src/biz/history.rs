@@ -10,7 +10,9 @@ use std::sync::Arc;
 use database::history::ops::get_snapshot_meta_list;
 use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
 
-use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
+use crate::biz::snapshot::{
+  calculate_edit_count, CollabSnapshot, CollabSnapshotState, SnapshotGenerator,
+};
 use crate::error::HistoryError;
 
 pub struct CollabHistory {
@@ -22,8 +24,25 @@ pub struct CollabHistory {
 
 impl CollabHistory {
   pub async fn new(object_id: &str, collab: Arc<RwLock<Collab>>, collab_type: CollabType) -> Self {
-    let snapshot_generator =
-      SnapshotGenerator::new(object_id, Arc::downgrade(&collab), collab_type.clone());
+    let current_edit_count = {
+      let read_guard = collab.read().await;
+      let txn = read_guard.transact();
+      calculate_edit_count(&txn)
+    };
+
+    #[cfg(feature = "verbose_log")]
+    tracing::trace!(
+      "[History] object:{} init edit count: {}",
+      object_id,
+      current_edit_count
+    );
+
+    let snapshot_generator = SnapshotGenerator::new(
+      object_id,
+      Arc::downgrade(&collab),
+      collab_type.clone(),
+      current_edit_count as u32,
+    );
     collab.read().await.add_plugin(Box::new(CountUpdatePlugin {
       snapshot_generator: snapshot_generator.clone(),
     }));
@@ -43,7 +62,24 @@ impl CollabHistory {
     }
   }
 
-  pub async fn gen_snapshot_context(&self) -> Result<Option<SnapshotContext>, HistoryError> {
+  pub async fn gen_history(
+    &self,
+    min_snapshot_required: Option<usize>,
+  ) -> Result<Option<HistoryContext>, HistoryError> {
+    if let Some(min_snapshot_required) = min_snapshot_required {
+      let num_snapshot = self.snapshot_generator.num_pending_snapshots().await;
+      if num_snapshot < min_snapshot_required {
+        #[cfg(feature = "verbose_log")]
+        tracing::trace!(
+          "[History]: {} current snapshot:{}, minimum required:{}",
+          self.object_id,
+          num_snapshot,
+          min_snapshot_required
+        );
+        return Ok(None);
+      }
+    }
+
     let collab = self.collab.clone();
     let timestamp = chrono::Utc::now().timestamp();
     let snapshots: Vec<CollabSnapshot> = self.snapshot_generator.consume_pending_snapshots().await
@@ -54,6 +90,8 @@ impl CollabHistory {
 
     // If there are no snapshots, we don't need to generate a new snapshot
     if snapshots.is_empty() {
+      #[cfg(feature = "verbose_log")]
+      tracing::trace!("[History]: {} has no snapshots", self.object_id,);
       return Ok(None);
     }
     let collab_type = self.collab_type.clone();
@@ -88,7 +126,7 @@ impl CollabHistory {
       state_vector,
       chrono::Utc::now().timestamp(),
     );
-    Ok(Some(SnapshotContext {
+    Ok(Some(HistoryContext {
       collab_type,
       state,
       snapshots,
@@ -116,7 +154,7 @@ impl CollabHistory {
   }
 }
 
-pub struct SnapshotContext {
+pub struct HistoryContext {
   pub collab_type: CollabType,
   pub state: CollabSnapshotState,
   pub snapshots: Vec<CollabSnapshot>,

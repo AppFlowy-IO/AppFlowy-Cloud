@@ -4,6 +4,7 @@ use client_api_entity::auth_dto::DeleteUserQuery;
 use client_api_entity::workspace_dto::FolderView;
 use client_api_entity::workspace_dto::QueryWorkspaceFolder;
 use client_api_entity::workspace_dto::QueryWorkspaceParam;
+use client_api_entity::workspace_dto::SectionItems;
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
 use gotrue::grant::PasswordGrant;
@@ -715,6 +716,57 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<AFWorkspace>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn get_workspace_favorite(
+    &self,
+    workspace_id: &str,
+  ) -> Result<SectionItems, AppResponseError> {
+    let url = format!("{}/api/workspace/{}/favorite", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<SectionItems>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn get_workspace_recent(
+    &self,
+    workspace_id: &str,
+  ) -> Result<SectionItems, AppResponseError> {
+    let url = format!("{}/api/workspace/{}/recent", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<SectionItems>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn get_workspace_trash(
+    &self,
+    workspace_id: &str,
+  ) -> Result<SectionItems, AppResponseError> {
+    let url = format!("{}/api/workspace/{}/trash", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<SectionItems>::from_response(resp)
       .await?
       .into_data()
   }

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use app_error::AppError;
 use chrono::DateTime;
-use collab_folder::{Folder, ViewLayout as CollabFolderViewLayout};
+use collab_folder::{Folder, SectionItem, ViewLayout as CollabFolderViewLayout};
 use shared_entity::dto::workspace_dto::{FolderView, ViewLayout};
 
 /// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
@@ -107,12 +107,37 @@ fn to_folder_view(
     is_private,
     is_published: published_view_ids.contains(view_id),
     layout: to_view_layout(&view.layout),
-    created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or(DateTime::default()),
-    last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0)
-      .unwrap_or(DateTime::default()),
+    created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
+    last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
     extra,
     children,
   })
+}
+
+pub fn section_items_to_folder_view(
+  section_items: &[SectionItem],
+  folder: &Folder,
+  published_view_ids: &HashSet<String>,
+) -> Vec<FolderView> {
+  section_items
+    .iter()
+    .filter_map(|section_item| {
+      let view = folder.get_view(&section_item.id);
+      view.map(|v| FolderView {
+        view_id: v.id.clone(),
+        name: v.name.clone(),
+        icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
+        is_space: false,
+        is_private: false,
+        is_published: published_view_ids.contains(&v.id),
+        created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+        last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
+        layout: to_view_layout(&v.layout),
+        extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+        children: vec![],
+      })
+    })
+    .collect()
 }
 
 pub fn view_is_space(view: &collab_folder::View) -> bool {
@@ -131,6 +156,13 @@ pub fn view_is_space(view: &collab_folder::View) -> bool {
     Some(is_space_str) => is_space_str.as_bool().unwrap_or(false),
     None => false,
   }
+}
+
+pub fn parse_extra_field_as_json(extra: &str) -> serde_json::Value {
+  serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
+    tracing::warn!("failed to parse extra field({}): {}", extra, e);
+    serde_json::Value::Null
+  })
 }
 
 pub fn to_dto_view_icon(

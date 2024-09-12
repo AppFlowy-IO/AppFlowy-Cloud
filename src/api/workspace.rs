@@ -8,11 +8,12 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
+use rayon::prelude::*;
 use sqlx::types::uuid;
-use tokio::time::Instant;
+
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, event, instrument, trace};
+use tracing::{error, event, info, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -42,7 +43,9 @@ use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
-use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
+use crate::domain::compression::{
+  blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
+};
 use crate::state::AppState;
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
@@ -59,40 +62,39 @@ pub const WORKSPACE_PUBLISH_NAMESPACE_PATTERN: &str =
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
-    .service(web::resource("")
-      .route(web::get().to(list_workspace_handler))
-      .route(web::post().to(create_workspace_handler))
-      .route(web::patch().to(patch_workspace_handler))
+    .service(
+      web::resource("")
+        .route(web::get().to(list_workspace_handler))
+        .route(web::post().to(create_workspace_handler))
+        .route(web::patch().to(patch_workspace_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/invite")
-        .route(web::post().to(post_workspace_invite_handler)) // invite members to workspace
+      web::resource("/{workspace_id}/invite").route(web::post().to(post_workspace_invite_handler)), // invite members to workspace
     )
     .service(
-      web::resource("/invite")
-        .route(web::get().to(get_workspace_invite_handler)) // show invites for user
+      web::resource("/invite").route(web::get().to(get_workspace_invite_handler)), // show invites for user
     )
     .service(
       web::resource("/accept-invite/{invite_id}")
-        .route(web::post().to(post_accept_workspace_invite_handler)) // accept invitation to workspace
+        .route(web::post().to(post_accept_workspace_invite_handler)), // accept invitation to workspace
     )
-    .service(web::resource("/{workspace_id}")
-      .route(web::delete().to(delete_workspace_handler))
-    )
-    .service(web::resource("/{workspace_id}/settings")
+    .service(web::resource("/{workspace_id}").route(web::delete().to(delete_workspace_handler)))
+    .service(
+      web::resource("/{workspace_id}/settings")
         .route(web::get().to(get_workspace_settings_handler))
-        .route(web::post().to(post_workspace_settings_handler))
+        .route(web::post().to(post_workspace_settings_handler)),
     )
     .service(web::resource("/{workspace_id}/open").route(web::put().to(open_workspace_handler)))
     .service(web::resource("/{workspace_id}/leave").route(web::post().to(leave_workspace_handler)))
     .service(
       web::resource("/{workspace_id}/member")
-      .route(web::get().to(get_workspace_members_handler))
-      .route(web::put().to(update_workspace_member_handler))
-      .route(web::delete().to(remove_workspace_member_handler))
+        .route(web::get().to(get_workspace_members_handler))
+        .route(web::put().to(update_workspace_member_handler))
+        .route(web::delete().to(remove_workspace_member_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/member/user/{user_id}").route(web::get().to(get_workspace_member_handler))
+      web::resource("/{workspace_id}/member/user/{user_id}")
+        .route(web::get().to(get_workspace_member_handler)),
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}")
@@ -106,17 +108,11 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}")
-        .route(web::get().to(v1_get_collab_handler))
+        .route(web::get().to(v1_get_collab_handler)),
     )
     .service(
       web::resource("/{workspace_id}/batch/collab")
         .route(web::post().to(batch_create_collab_handler)),
-    )
-    // will be deprecated
-    .service(
-      web::resource("/{workspace_id}/collabs")
-          .app_data(PayloadConfig::new(10 * 1024 * 1024))
-          .route(web::post().to(create_collab_list_handler)),
     )
     .service(
       web::resource("/{workspace_id}/usage").route(web::get().to(get_workspace_usage_handler)),
@@ -139,49 +135,48 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/published/{publish_namespace}/{publish_name}")
-        .route(web::get().to(get_published_collab_handler))
+        .route(web::get().to(get_published_collab_handler)),
     )
     .service(
       web::resource("/published/{publish_namespace}/{publish_name}/blob")
-        .route(web::get().to(get_published_collab_blob_handler))
+        .route(web::get().to(get_published_collab_blob_handler)),
     )
     .service(
       web::resource("{workspace_id}/published-duplicate")
-        .route(web::post().to(post_published_duplicate_handler))
+        .route(web::post().to(post_published_duplicate_handler)),
     )
     .service(
       web::resource("/published-info/{view_id}")
-        .route(web::get().to(get_published_collab_info_handler))
+        .route(web::get().to(get_published_collab_info_handler)),
     )
     .service(
       web::resource("/published-info/{view_id}/comment")
         .route(web::get().to(get_published_collab_comment_handler))
         .route(web::post().to(post_published_collab_comment_handler))
-        .route(web::delete().to(delete_published_collab_comment_handler))
+        .route(web::delete().to(delete_published_collab_comment_handler)),
     )
     .service(
       web::resource("/published-info/{view_id}/reaction")
         .route(web::get().to(get_published_collab_reaction_handler))
         .route(web::post().to(post_published_collab_reaction_handler))
-        .route(web::delete().to(delete_published_collab_reaction_handler))
+        .route(web::delete().to(delete_published_collab_reaction_handler)),
     )
     .service(
       web::resource("/{workspace_id}/publish-namespace")
         .route(web::put().to(put_publish_namespace_handler))
-        .route(web::get().to(get_publish_namespace_handler))
+        .route(web::get().to(get_publish_namespace_handler)),
     )
     .service(
       web::resource("/{workspace_id}/publish")
         .route(web::post().to(post_publish_collabs_handler))
-        .route(web::delete().to(delete_published_collabs_handler))
+        .route(web::delete().to(delete_published_collabs_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/folder")
-        .route(web::get().to(get_workspace_folder_handler))
+      web::resource("/{workspace_id}/folder").route(web::get().to(get_workspace_folder_handler)),
     )
     .service(
       web::resource("/published-outline/{publish_namespace}")
-        .route(web::get().to(get_workspace_publish_outline_handler))
+        .route(web::get().to(get_workspace_publish_outline_handler)),
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}/member/list")
@@ -504,7 +499,7 @@ async fn create_collab_handler(
     })?,
     Some(_) => match compress_type_from_header_value(req.headers())? {
       CompressionType::Brotli { buffer_size } => {
-        let decompress_data = decompress(payload.to_vec(), buffer_size).await?;
+        let decompress_data = blocking_decompress(payload.to_vec(), buffer_size).await?;
         CreateCollabParams::from_bytes(&decompress_data).map_err(|err| {
           AppError::InvalidRequest(format!(
             "Failed to parse CreateCollabParams with brotli decompression data: {}",
@@ -583,68 +578,72 @@ async fn batch_create_collab_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let mut collab_params_list = vec![];
   let workspace_id = workspace_id.into_inner().to_string();
   let compress_type = compress_type_from_header_value(req.headers())?;
-  event!(
-    tracing::Level::DEBUG,
-    "start decompressing collab params list"
-  );
+  event!(tracing::Level::DEBUG, "start decompressing collab list");
 
-  let start_time = Instant::now();
   let mut payload_buffer = Vec::new();
+  let mut offset_len_list = Vec::new();
+  let mut current_offset = 0;
+
   while let Some(item) = payload.next().await {
     if let Ok(bytes) = item {
-      match compress_type {
-        CompressionType::Brotli { buffer_size } => {
-          payload_buffer.extend_from_slice(&bytes);
+      payload_buffer.extend_from_slice(&bytes);
+      while current_offset + 4 <= payload_buffer.len() {
+        // The length of the next frame is determined by the first 4 bytes
+        let size = u32::from_be_bytes([
+          payload_buffer[current_offset],
+          payload_buffer[current_offset + 1],
+          payload_buffer[current_offset + 2],
+          payload_buffer[current_offset + 3],
+        ]) as usize;
 
-          // The client API uses a u32 value as the frame separator, which determines the size of each data frame.
-          // The length of a u32 is fixed at 4 bytes. It's important not to change the size (length) of the u32,
-          // unless you also make a corresponding update in the client API. Any mismatch in frame size handling
-          // between the client and server could lead to incorrect data processing or communication errors.
-          while payload_buffer.len() >= 4 {
-            let size = u32::from_be_bytes([
-              payload_buffer[0],
-              payload_buffer[1],
-              payload_buffer[2],
-              payload_buffer[3],
-            ]) as usize;
+        // Ensure there is enough data for the frame (4 bytes for size + `size` bytes for data)
+        if current_offset + 4 + size > payload_buffer.len() {
+          break;
+        }
 
-            if payload_buffer.len() < 4 + size {
-              break;
-            }
-
-            let compressed_data = payload_buffer[4..4 + size].to_vec();
-            let decompress_data = decompress(compressed_data, buffer_size).await?;
-            let params = CollabParams::from_bytes(&decompress_data).map_err(|err| {
-              AppError::InvalidRequest(format!(
-                "Failed to parse CollabParams with brotli decompression data: {}",
-                err
-              ))
-            })?;
-            params.validate().map_err(AppError::from)?;
-            match params.check_encode_collab().await {
-              Ok(_) => collab_params_list.push(params),
-              Err(err) => error!("Failed to validate collab params: {:?}", err),
-            }
-
-            payload_buffer = payload_buffer[4 + size..].to_vec();
-          }
-        },
+        // Collect the (offset, len) for the current frame (data starts at current_offset + 4)
+        offset_len_list.push((current_offset + 4, size));
+        current_offset += 4 + size;
       }
     }
   }
-  let duration = start_time.elapsed();
-  event!(
-    tracing::Level::DEBUG,
-    "end decompressing collab params list, time taken: {:?}",
-    duration
-  );
+  // Perform decompression and processing in a Rayon thread pool
+  let mut collab_params_list = tokio::task::spawn_blocking(move || {
+    match compress_type {
+      CompressionType::Brotli { buffer_size } => {
+        let list = offset_len_list
+            .par_iter() // Use Rayon parallel iterator
+            .filter_map(|(offset, len)| {
+              let compressed_data = &payload_buffer[*offset..*offset + *len];
+              match decompress(compressed_data.to_vec(), buffer_size) {
+                Ok(decompressed_data) => {
+                  if let Ok(params) = CollabParams::from_bytes(&decompressed_data) {
+                    if params.validate().is_ok() {
+                      return Some(params);
+                    }
+                  }
+                },
+                Err(err) => {
+                  error!("Failed to decompress data: {:?}", err);
+                },
+              }
+              None
+            })
+            .collect::<Vec<_>>();
+        Ok::<_, AppError>(list)
+      },
+    }
+  })
+  .await
+  .map_err(|_| AppError::InvalidRequest("Failed to decompress data".to_string()))??;
 
+  info!("batch create {} collab objects", collab_params_list.len());
   if collab_params_list.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
+
   if state
     .indexer_provider
     .can_index_workspace(&workspace_id)
@@ -658,6 +657,8 @@ async fn batch_create_collab_handler(
       );
     }
   }
+
+  // Process each collab params
   for params in collab_params_list {
     let object_id = params.object_id.clone();
     if validate_encode_collab(
@@ -679,89 +680,6 @@ async fn batch_create_collab_handler(
         .await?;
     }
   }
-  Ok(Json(AppResponse::Ok()))
-}
-
-#[instrument(skip(state, payload), err)]
-async fn create_collab_list_handler(
-  user_uuid: UserUuid,
-  payload: Bytes,
-  state: Data<AppState>,
-  req: HttpRequest,
-) -> Result<Json<AppResponse<()>>> {
-  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let params = match req.headers().get(X_COMPRESSION_TYPE) {
-    None => BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
-      AppError::InvalidRequest(format!(
-        "Failed to parse batch BatchCreateCollabParams: {}",
-        err
-      ))
-    })?,
-    Some(_) => match compress_type_from_header_value(req.headers())? {
-      CompressionType::Brotli { buffer_size } => {
-        let decompress_data = decompress(payload.to_vec(), buffer_size).await?;
-        BatchCreateCollabParams::from_bytes(&decompress_data).map_err(|err| {
-          AppError::InvalidRequest(format!(
-            "Failed to parse BatchCreateCollabParams with decompression data: {}",
-            err
-          ))
-        })?
-      },
-    },
-  };
-
-  params.validate().map_err(AppError::from)?;
-  let BatchCreateCollabParams {
-    workspace_id,
-    params_list,
-  } = params;
-
-  let mut valid_items = Vec::with_capacity(params_list.len());
-  for params in params_list {
-    match params.check_encode_collab().await {
-      Ok(_) => valid_items.push(params),
-      Err(err) => error!("Failed to validate collab params: {:?}", err),
-    }
-  }
-
-  if valid_items.is_empty() {
-    return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
-  }
-
-  if state
-    .indexer_provider
-    .can_index_workspace(&workspace_id)
-    .await?
-  {
-    if let Err(err) = fetch_embeddings(&state.indexer_provider, &mut valid_items).await {
-      tracing::warn!(
-        "failed to fetch embeddings for {} new documents: {}",
-        valid_items.len(),
-        err
-      );
-    }
-  }
-
-  let mut transaction = state
-    .pg_pool
-    .begin()
-    .await
-    .map_err(|err| AppError::Internal(anyhow!("Failed to start inserting collab: {}", err)))?;
-
-  for params in valid_items {
-    let _object_id = params.object_id.clone();
-    state
-      .collab_access_control_storage
-      .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
-      .await?;
-  }
-
-  transaction.commit().await.map_err(|err| {
-    AppError::Internal(anyhow!(
-      "Failed to finish inserting list of collab: {}",
-      err
-    ))
-  })?;
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -1091,12 +1009,10 @@ async fn get_published_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<serde_json::Value>> {
   let (workspace_namespace, publish_name) = path_param.into_inner();
-  let metadata = biz::workspace::publish::get_published_collab(
-    &state.pg_pool,
-    &workspace_namespace,
-    &publish_name,
-  )
-  .await?;
+  let metadata = state
+    .published_collab_store
+    .get_collab_metadata(&workspace_namespace, &publish_name)
+    .await?;
   Ok(Json(metadata))
 }
 
@@ -1105,12 +1021,10 @@ async fn get_published_collab_blob_handler(
   state: Data<AppState>,
 ) -> Result<Vec<u8>> {
   let (publish_namespace, publish_name) = path_param.into_inner();
-  let collab_data = biz::workspace::publish::get_published_collab_blob(
-    &state.pg_pool,
-    &publish_namespace,
-    &publish_name,
-  )
-  .await?;
+  let collab_data = state
+    .published_collab_store
+    .get_collab_blob_by_publish_namespace(&publish_namespace, &publish_name)
+    .await?;
   Ok(collab_data)
 }
 
@@ -1124,6 +1038,7 @@ async fn post_published_duplicate_handler(
   let params = params.into_inner();
   biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
     &state.pg_pool,
+    state.bucket_client.clone(),
     state.collab_access_control_storage.clone(),
     uid,
     params.published_view_id,
@@ -1139,8 +1054,10 @@ async fn get_published_collab_info_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PublishInfo>>> {
   let view_id = view_id.into_inner();
-  let collab_data =
-    biz::workspace::publish::get_published_collab_info(&state.pg_pool, &view_id).await?;
+  let collab_data = state
+    .published_collab_store
+    .get_collab_publish_info(&view_id)
+    .await?;
   Ok(Json(AppResponse::Ok().with_data(collab_data)))
 }
 
@@ -1276,7 +1193,9 @@ async fn post_publish_collabs_handler(
       AppError::InvalidRequest(String::from("did not receive any data to publish")).into(),
     );
   }
-  biz::workspace::publish::publish_collabs(&state.pg_pool, &workspace_id, &user_uuid, accumulator)
+  state
+    .published_collab_store
+    .publish_collabs(accumulator, &workspace_id, &user_uuid)
     .await?;
   Ok(Json(AppResponse::Ok()))
 }
@@ -1292,13 +1211,10 @@ async fn delete_published_collabs_handler(
   if view_ids.is_empty() {
     return Ok(Json(AppResponse::Ok()));
   }
-  biz::workspace::publish::delete_published_workspace_collab(
-    &state.pg_pool,
-    &workspace_id,
-    &view_ids,
-    &user_uuid,
-  )
-  .await?;
+  state
+    .published_collab_store
+    .delete_collab(&workspace_id, &view_ids, &user_uuid)
+    .await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1382,17 +1298,25 @@ async fn get_workspace_usage_handler(
 
 async fn get_workspace_folder_handler(
   user_uuid: UserUuid,
-  workspace_id: web::Path<String>,
+  workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
   query: web::Query<QueryWorkspaceFolder>,
 ) -> Result<Json<AppResponse<FolderView>>> {
   let depth = query.depth.unwrap_or(1);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = workspace_id.into_inner();
+  let root_view_id = if let Some(root_view_id) = query.root_view_id.as_ref() {
+    root_view_id.to_string()
+  } else {
+    workspace_id.to_string()
+  };
   let folder_view = biz::collab::ops::get_user_workspace_structure(
     state.collab_access_control_storage.clone(),
+    &state.pg_pool,
     uid,
-    workspace_id.into_inner(),
+    workspace_id,
     depth,
+    &root_view_id,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(folder_view)))
@@ -1425,7 +1349,7 @@ async fn parser_realtime_msg(
     None => payload,
     Some(_) => match compress_type_from_header_value(req.headers())? {
       CompressionType::Brotli { buffer_size } => {
-        let decompressed_data = decompress(payload, buffer_size).await?;
+        let decompressed_data = blocking_decompress(payload, buffer_size).await?;
         event!(
           tracing::Level::TRACE,
           "Decompress realtime http message with len: {}",

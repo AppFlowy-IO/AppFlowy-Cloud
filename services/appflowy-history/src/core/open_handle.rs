@@ -82,15 +82,6 @@ impl OpenCollabHandle {
       doc_state_version: 1,
     })
   }
-
-  pub async fn generate_history(&self) -> Result<(), HistoryError> {
-    if let Some(history_persistence) = &self.history_persistence {
-      // Generate at least one snapshot if the history is empty.
-      self.history.generate_snapshot_if_empty().await;
-      save_history_if_snapshot_exists(self.history.clone(), history_persistence.clone()).await;
-    }
-    Ok(())
-  }
 }
 
 /// Spawns an asynchronous task to continuously receive and process updates from a given update stream.
@@ -218,49 +209,56 @@ fn apply_updates(
   }
   Ok(())
 }
-
 fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<HistoryPersistence>) {
   tokio::spawn(async move {
     let mut interval = if cfg!(debug_assertions) {
-      // In debug mode, save the history every 10 seconds.
       interval(Duration::from_secs(10))
     } else {
-      // In release mode, save the history every 10 minutes.
-      interval(Duration::from_secs(10 * 60))
+      interval(Duration::from_secs(5 * 60))
     };
-    interval.tick().await;
+    interval.tick().await; // Initial delay
 
+    let mut tick_count = 1;
     loop {
-      interval.tick().await;
-      if let (Some(history), Some(history_persistence)) =
-        (history.upgrade(), history_persistence.upgrade())
+      interval.tick().await; // Wait for the next interval tick
+      if let (Some(history), Some(persistence)) = (history.upgrade(), history_persistence.upgrade())
       {
-        history.generate_snapshot_if_empty().await;
-        save_history_if_snapshot_exists(history, history_persistence).await;
-      } else {
+        let min_snapshot_required = if tick_count % 10 == 0 {
+          history.generate_snapshot_if_empty().await;
+          None // No limit on snapshots every 3 ticks
+        } else {
+          Some(3)
+        };
+
         #[cfg(feature = "verbose_log")]
-        tracing::trace!("[History]: exit periodically save history task.");
+        tracing::trace!(
+          "[History]: {} periodic save history task. tick count: {}, min_snapshot_required:{:?}",
+          &history.object_id,
+          tick_count,
+          min_snapshot_required
+        );
+
+        // Generate history and attempt to insert it into persistence
+        match history.gen_history(min_snapshot_required).await {
+          Ok(Some(ctx)) => {
+            if let Err(err) = persistence
+              .insert_history(ctx.state, ctx.snapshots, ctx.collab_type)
+              .await
+            {
+              error!("Failed to save snapshot: {:?}", err);
+            }
+          },
+          Ok(None) => {}, // No history to save
+          Err(err) => error!("Error generating history: {:?}", err),
+        }
+
+        tick_count += 1;
+      } else {
+        // Exit loop if history or persistence has been dropped
+        #[cfg(feature = "verbose_log")]
+        tracing::trace!("[History]: exiting periodic save history task");
         break;
       }
     }
   });
-}
-
-#[inline]
-async fn save_history_if_snapshot_exists(
-  history: Arc<CollabHistory>,
-  history_persistence: Arc<HistoryPersistence>,
-) {
-  match history.gen_snapshot_context().await {
-    Ok(Some(ctx)) => {
-      if let Err(err) = history_persistence
-        .save_snapshot(ctx.state, ctx.snapshots, ctx.collab_type)
-        .await
-      {
-        error!("Failed to save snapshot: {:?}", err);
-      }
-    },
-    Ok(None) => {},
-    Err(err) => error!("{:?}", err),
-  }
 }

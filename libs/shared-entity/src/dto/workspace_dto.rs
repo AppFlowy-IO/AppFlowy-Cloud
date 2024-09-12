@@ -135,6 +135,10 @@ pub struct FolderView {
   pub icon: Option<ViewIcon>,
   pub is_space: bool,
   pub is_private: bool,
+  pub is_published: bool,
+  pub layout: ViewLayout,
+  pub created_at: DateTime<Utc>,
+  pub last_edited_time: DateTime<Utc>,
   /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<FolderView>,
@@ -178,6 +182,7 @@ pub struct QueryWorkspaceParam {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceFolder {
   pub depth: Option<u32>,
+  pub root_view_id: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

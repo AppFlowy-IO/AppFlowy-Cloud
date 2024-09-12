@@ -1,6 +1,5 @@
 use authentication::jwt::OptionalUserUuid;
 use database_entity::dto::AFWorkspaceSettingsChange;
-use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
 use std::collections::HashMap;
 
@@ -127,20 +126,6 @@ pub async fn get_workspace_publish_namespace(
   workspace_id: &Uuid,
 ) -> Result<String, AppError> {
   select_workspace_publish_namespace(pg_pool, workspace_id).await
-}
-
-pub async fn publish_collabs(
-  pg_pool: &PgPool,
-  workspace_id: &Uuid,
-  publisher_uuid: &Uuid,
-  publish_items: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
-) -> Result<(), AppError> {
-  for publish_item in publish_items {
-    check_collab_publish_name(publish_item.meta.publish_name.as_str())?;
-  }
-  insert_or_replace_publish_collab_metas(pg_pool, workspace_id, publisher_uuid, publish_items)
-    .await?;
-  Ok(())
 }
 
 pub async fn get_published_collab(
@@ -714,25 +699,5 @@ async fn check_if_user_is_allowed_to_delete_comment(
       "User is not allowed to delete this comment".to_string(),
     ));
   }
-  Ok(())
-}
-
-fn check_collab_publish_name(publish_name: &str) -> Result<(), AppError> {
-  // Check len
-  if publish_name.len() > 128 {
-    return Err(AppError::InvalidRequest(
-      "Publish name must be at most 128 characters long".to_string(),
-    ));
-  }
-
-  // Only contain alphanumeric characters and hyphens
-  for c in publish_name.chars() {
-    if !c.is_alphanumeric() && c != '-' {
-      return Err(AppError::InvalidRequest(
-        "Publish name must only contain alphanumeric characters and hyphens".to_string(),
-      ));
-    }
-  }
-
   Ok(())
 }

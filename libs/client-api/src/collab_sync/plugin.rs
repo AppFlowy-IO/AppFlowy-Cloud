@@ -142,6 +142,10 @@ where
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   Channel: Send + Sync + 'static,
 {
+  fn plugin_type(&self) -> CollabPluginType {
+    CollabPluginType::CloudStorage
+  }
+
   fn did_init(&self, _collab: &Collab, _object_id: &str) {
     // Most of the time, it should be successful to queue init sync by 1st time.
     let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10);
@@ -218,10 +222,6 @@ where
   fn receive_update(&self, _object_id: &str, _txn: &yrs::TransactionMut, _update: &[u8]) {}
 
   fn after_transaction(&self, _object_id: &str, _txn: &mut yrs::TransactionMut) {}
-
-  fn plugin_type(&self) -> CollabPluginType {
-    CollabPluginType::CloudStorage
-  }
 }
 
 #[derive(Clone, Debug)]

@@ -24,6 +24,7 @@ pub struct Config {
   pub published_collab: PublishedCollabSetting,
   pub mailer: MailerSetting,
   pub apple_oauth: AppleOAuthSetting,
+  pub appflowy_web_url: Option<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -244,6 +245,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       client_id: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_ID", ""),
       client_secret: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_SECRET", "").into(),
     },
+    appflowy_web_url: std::env::var("APPFLOWY_WEB_URL").ok(),
   };
   Ok(config)
 }

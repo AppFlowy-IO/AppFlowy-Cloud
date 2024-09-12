@@ -752,13 +752,13 @@ impl PublishCollabDuplicator {
         let mut txn = db_row_collab.context.transact_mut();
         // update database_id
         db_row_body
-          .data
+          .get_data()
           .insert(&mut txn, ROW_DATABASE_ID, new_db_id.clone());
         {
           // handle document in database row
           let pub_is_doc_empty_key =
             meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
-          let pub_is_doc_empty = db_row_body.meta.get(&txn, &pub_is_doc_empty_key);
+          let pub_is_doc_empty = db_row_body.get_meta().get(&txn, &pub_is_doc_empty_key);
           if let Some(Out::Any(Any::Bool(is_doc_empty))) = pub_is_doc_empty {
             if !is_doc_empty {
               let pub_row_doc_id =
@@ -812,7 +812,7 @@ impl PublishCollabDuplicator {
           //     },
           // },
           let cells: MapRef = db_row_body
-            .data
+            .get_data()
             .get(&txn, ROW_CELLS)
             .ok_or_else(|| {
               AppError::RecordNotFound("no cells found in database row collab".to_string())

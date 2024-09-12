@@ -57,8 +57,8 @@ async fn invite_workspace_crud() {
     .await
     .unwrap();
 
-  assert_eq!(invitation.workspace_id, alice_workspace_id);
   assert_eq!(invitation.inviter_email, Some(alice.email));
+  assert_eq!(invitation.status , AFWorkspaceInvitationStatus::Pending);
 
   bob_client
     .accept_workspace_invitation(&invite_id)

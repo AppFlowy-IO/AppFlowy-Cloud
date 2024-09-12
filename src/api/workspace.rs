@@ -294,6 +294,7 @@ async fn post_workspace_invite_handler(
     &user_uuid,
     &workspace_id,
     invited_members,
+    state.config.appflowy_web_url.as_deref(),
   )
   .await?;
   Ok(AppResponse::Ok().into())

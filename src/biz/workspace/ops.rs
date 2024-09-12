@@ -450,6 +450,15 @@ pub async fn list_workspace_invitations_for_user(
   Ok(invis)
 }
 
+pub async fn get_workspace_invitations_for_user(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  invite_id: &Uuid,
+) -> Result<AFWorkspaceInvitation, AppError> {
+  let invitation = select_workspace_invitation_for_user(pg_pool, user_uuid, invite_id).await?;
+  Ok(invitation)
+}
+
 // use in tests only
 pub async fn add_workspace_members_db_only(
   pg_pool: &PgPool,

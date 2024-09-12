@@ -75,6 +75,9 @@ pub fn workspace_scope() -> Scope {
       web::resource("/invite").route(web::get().to(get_workspace_invite_handler)), // show invites for user
     )
     .service(
+      web::resource("/invite/{invite_id}").route(web::get().to(get_workspace_invite_by_id_handler)),
+    )
+    .service(
       web::resource("/accept-invite/{invite_id}")
         .route(web::post().to(post_accept_workspace_invite_handler)), // accept invitation to workspace
     )
@@ -304,6 +307,18 @@ async fn get_workspace_invite_handler(
   let query = query.into_inner();
   let res =
     workspace::ops::list_workspace_invitations_for_user(&state.pg_pool, &user_uuid, query.status)
+      .await?;
+  Ok(AppResponse::Ok().with_data(res).into())
+}
+
+async fn get_workspace_invite_by_id_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  invite_id: web::Path<Uuid>,
+) -> Result<JsonAppResponse<AFWorkspaceInvitation>> {
+  let invite_id = invite_id.into_inner();
+  let res =
+    workspace::ops::get_workspace_invitations_for_user(&state.pg_pool, &user_uuid, &invite_id)
       .await?;
   Ok(AppResponse::Ok().with_data(res).into())
 }

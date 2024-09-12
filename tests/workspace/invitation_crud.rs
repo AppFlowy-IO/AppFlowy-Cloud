@@ -4,7 +4,7 @@ use shared_entity::dto::workspace_dto::{QueryWorkspaceParam, WorkspaceMemberInvi
 
 #[tokio::test]
 async fn invite_workspace_crud() {
-  let (alice_client, _alice) = generate_unique_registered_user_client().await;
+  let (alice_client, alice) = generate_unique_registered_user_client().await;
   let alice_workspace_id = alice_client
     .get_workspaces()
     .await
@@ -49,14 +49,19 @@ async fn invite_workspace_crud() {
     .await
     .unwrap();
   assert_eq!(pending_invs.len(), 1);
+  let invite_id = pending_invs.first().unwrap().invite_id.to_string();
 
-  // accept invitation
-  let target_invite = pending_invs
-    .iter()
-    .find(|i| i.workspace_id == alice_workspace_id)
+  // get invitation by id
+  let invitation = bob_client
+    .get_workspace_invitation(&invite_id)
+    .await
     .unwrap();
+
+  assert_eq!(invitation.workspace_id, alice_workspace_id);
+  assert_eq!(invitation.inviter_email, Some(alice.email));
+
   bob_client
-    .accept_workspace_invitation(target_invite.invite_id.to_string().as_str())
+    .accept_workspace_invitation(&invite_id)
     .await
     .unwrap();
 

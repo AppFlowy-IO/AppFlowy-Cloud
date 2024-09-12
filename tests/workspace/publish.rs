@@ -739,7 +739,7 @@ async fn duplicate_to_workspace_references() {
     let workspace_id_2 = client_2.workspace_id().await;
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -764,7 +764,7 @@ async fn duplicate_to_workspace_references() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -846,7 +846,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -872,7 +872,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
     {
       let fv = client_2
         .api_client
-        .get_workspace_folder(&workspace_id_2, Some(5))
+        .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
       let doc_3_fv = fv
@@ -910,7 +910,8 @@ async fn duplicate_to_workspace_doc_inline_database() {
     )
     .unwrap();
 
-    let folder_view = collab_folder_to_folder_view(&folder, 5);
+    let folder_view =
+      collab_folder_to_folder_view(&workspace_id_2, &folder, 5, &HashSet::default()).unwrap();
     let doc_3_fv = folder_view
       .children
       .into_iter()
@@ -1029,7 +1030,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -1053,7 +1054,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
     {
       let fv = client_2
         .api_client
-        .get_workspace_folder(&workspace_id_2, Some(5))
+        .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
       let doc_with_embedded_db = fv
@@ -1135,7 +1136,7 @@ async fn duplicate_to_workspace_db_with_relation() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -1162,7 +1163,7 @@ async fn duplicate_to_workspace_db_with_relation() {
     {
       let fv = client_2
         .api_client
-        .get_workspace_folder(&workspace_id_2, Some(5))
+        .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
       let db_with_rel_col = fv
@@ -1237,7 +1238,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
 
     let fv = client_2
       .api_client
-      .get_workspace_folder(&workspace_id_2, Some(5))
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
 
@@ -1261,7 +1262,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
     {
       let fv = client_2
         .api_client
-        .get_workspace_folder(&workspace_id_2, Some(5))
+        .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
       let db_with_row_doc = fv
@@ -1278,7 +1279,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
 
       // check that doc exists and can be fetched
       let first_row_id = &db_body.views.get_all_views(&db_collab.transact())[0].row_orders[0].id;
-      let mut row_collab = client_2
+      let row_collab = client_2
         .get_collab_to_collab(
           workspace_id_2.clone(),
           first_row_id.to_string(),
@@ -1286,8 +1287,8 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         )
         .await
         .unwrap();
-      let row_detail = RowDetail::from_collab(&mut row_collab).unwrap();
-      assert_eq!(row_detail.meta.is_document_empty, false);
+      let row_detail = RowDetail::from_collab(&row_collab).unwrap();
+      assert!(!row_detail.meta.is_document_empty);
       let doc_id = row_detail.document_id;
       let _doc_collab = client_2
         .get_collab_to_collab(workspace_id_2.clone(), doc_id.clone(), CollabType::Document)

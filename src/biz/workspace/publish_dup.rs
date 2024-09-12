@@ -22,7 +22,11 @@ use collab_rt_entity::{ClientCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use database::collab::GetCollabOrigin;
 use database::collab::{select_workspace_database_oid, CollabStorage};
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
+use database::file::BucketClient;
+use database::file::ResponseBlob;
 use database::publish::select_published_data_for_view_id;
+use database::publish::select_published_metadata_for_view_id;
 use database_entity::dto::CollabParams;
 use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, PublishViewMetaData};
 use shared_entity::dto::workspace_dto;
@@ -43,6 +47,7 @@ use crate::biz::collab::ops::get_latest_collab_encoded;
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
   pg_pool: &PgPool,
+  bucket_client: AwsS3BucketClientImpl,
   collab_storage: Arc<CollabAccessControlStorage>,
   dest_uid: i64,
   publish_view_id: String,
@@ -51,6 +56,7 @@ pub async fn duplicate_published_collab_to_workspace(
 ) -> Result<(), AppError> {
   let copier = PublishCollabDuplicator::new(
     pg_pool.clone(),
+    bucket_client,
     collab_storage.clone(),
     dest_uid,
     dest_workspace_id,
@@ -92,6 +98,8 @@ pub struct PublishCollabDuplicator {
   /// for fetching published data
   /// and writing them to dest workspace
   pg_pool: PgPool,
+  /// for fetching published data from s3
+  bucket_client: AwsS3BucketClientImpl,
   /// user initiating the duplication
   duplicator_uid: i64,
   /// workspace to duplicate into
@@ -103,6 +111,7 @@ pub struct PublishCollabDuplicator {
 impl PublishCollabDuplicator {
   pub fn new(
     pg_pool: PgPool,
+    bucket_client: AwsS3BucketClientImpl,
     collab_storage: Arc<CollabAccessControlStorage>,
     dest_uid: i64,
     dest_workspace_id: String,
@@ -118,8 +127,8 @@ impl PublishCollabDuplicator {
       duplicated_db_main_view: HashMap::new(),
       duplicated_db_view: HashMap::new(),
       duplicated_db_row: HashMap::new(),
-
       pg_pool,
+      bucket_client,
       collab_storage,
       duplicator_uid: dest_uid,
       dest_workspace_id,
@@ -152,6 +161,7 @@ impl PublishCollabDuplicator {
       collabs_to_insert,
       ts_now: _,
       pg_pool,
+      bucket_client: _,
       duplicator_uid,
       dest_workspace_id,
       dest_view_id,
@@ -1053,10 +1063,21 @@ impl PublishCollabDuplicator {
     &self,
     view_id: &uuid::Uuid,
   ) -> Result<Option<(PublishViewMetaData, Vec<u8>)>, AppError> {
-    match select_published_data_for_view_id(&self.pg_pool, view_id).await? {
-      Some((js_val, blob)) => {
+    let result = select_published_metadata_for_view_id(&self.pg_pool, view_id).await?;
+    match result {
+      Some((workspace_id, js_val)) => {
         let metadata = serde_json::from_value(js_val)?;
-        Ok(Some((metadata, blob)))
+        let object_key = format!("published-collab/{}/{}", workspace_id, view_id);
+        match self.bucket_client.get_blob(&object_key).await {
+          Ok(resp) => Ok(Some((metadata, resp.to_blob()))),
+          Err(_) => match select_published_data_for_view_id(&self.pg_pool, view_id).await? {
+            Some((js_val, blob)) => {
+              let metadata = serde_json::from_value(js_val)?;
+              Ok(Some((metadata, blob)))
+            },
+            None => Ok(None),
+          },
+        }
       },
       None => Ok(None),
     }

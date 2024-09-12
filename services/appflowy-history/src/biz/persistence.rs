@@ -19,7 +19,7 @@ impl HistoryPersistence {
       pg_pool,
     }
   }
-  pub async fn save_snapshot(
+  pub async fn insert_history(
     &self,
     state: CollabSnapshotState,
     snapshots: Vec<CollabSnapshot>,

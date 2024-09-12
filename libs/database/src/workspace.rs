@@ -1,6 +1,6 @@
 use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
-  PublishCollabItem, PublishInfo, Reaction,
+  PublishInfo, Reaction,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -1005,62 +1005,6 @@ pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = P
   .await?;
 
   Ok(res)
-}
-
-#[inline]
-pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  workspace_id: &Uuid,
-  publisher_uuid: &Uuid,
-  publish_item: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
-) -> Result<(), AppError> {
-  let view_ids: Vec<Uuid> = publish_item.iter().map(|item| item.meta.view_id).collect();
-  let publish_names: Vec<String> = publish_item
-    .iter()
-    .map(|item| item.meta.publish_name.clone())
-    .collect();
-  let metadatas: Vec<serde_json::Value> = publish_item
-    .iter()
-    .map(|item| item.meta.metadata.clone())
-    .collect();
-
-  let blobs: Vec<Vec<u8>> = publish_item.iter().map(|item| item.data.clone()).collect();
-  let res = sqlx::query!(
-    r#"
-      INSERT INTO af_published_collab (workspace_id, view_id, publish_name, published_by, metadata, blob)
-      SELECT * FROM UNNEST(
-        (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $7))::uuid[],
-        $2::uuid[],
-        $3::text[],
-        (SELECT array_agg((SELECT uid FROM af_user WHERE uuid = $4)) FROM generate_series(1, $7))::bigint[],
-        $5::jsonb[],
-        $6::bytea[]
-      )
-      ON CONFLICT (workspace_id, view_id) DO UPDATE
-      SET metadata = EXCLUDED.metadata,
-          blob = EXCLUDED.blob,
-          published_by = EXCLUDED.published_by,
-          publish_name = EXCLUDED.publish_name
-    "#,
-    workspace_id,
-    &view_ids,
-    &publish_names,
-    publisher_uuid,
-    &metadatas,
-    &blobs,
-    publish_item.len() as i32,
-  )
-  .execute(executor)
-  .await?;
-
-  if res.rows_affected() != publish_item.len() as u64 {
-    tracing::warn!(
-      "Failed to insert or replace publish collab meta batch, workspace_id: {}, publisher_uuid: {}, rows_affected: {}",
-      workspace_id, publisher_uuid, res.rows_affected()
-    );
-  }
-
-  Ok(())
 }
 
 #[inline]

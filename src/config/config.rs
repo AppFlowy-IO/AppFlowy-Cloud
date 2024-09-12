@@ -21,6 +21,7 @@ pub struct Config {
   pub appflowy_ai: AppFlowyAISetting,
   pub grpc_history: GrpcHistorySetting,
   pub collab: CollabSetting,
+  pub published_collab: PublishedCollabSetting,
   pub mailer: MailerSetting,
   pub apple_oauth: AppleOAuthSetting,
 }
@@ -140,6 +141,29 @@ pub struct CollabSetting {
   pub edit_state_max_secs: i64,
 }
 
+#[derive(Clone, Debug)]
+pub enum PublishedCollabStorageBackend {
+  Postgres,
+  S3WithPostgresBackup,
+}
+
+#[derive(Clone, Debug)]
+pub struct PublishedCollabSetting {
+  pub storage_backend: PublishedCollabStorageBackend,
+}
+
+impl TryFrom<&str> for PublishedCollabStorageBackend {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &str) -> Result<Self, Self::Error> {
+    match value {
+      "postgres" => Ok(PublishedCollabStorageBackend::Postgres),
+      "s3_with_postgres_backup" => Ok(PublishedCollabStorageBackend::S3WithPostgresBackup),
+      _ => Err(anyhow::anyhow!("Invalid PublishedCollabStorageBackend")),
+    }
+  }
+}
+
 // Default values favor local development.
 pub fn get_configuration() -> Result<Config, anyhow::Error> {
   let config = Config {
@@ -204,6 +228,11 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       .parse()?,
       edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
       edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "60").parse()?,
+    },
+    published_collab: PublishedCollabSetting {
+      storage_backend: get_env_var("APPFLOWY_PUBLISHED_COLLAB_STORAGE_BACKEND", "postgres")
+        .as_str()
+        .try_into()?,
     },
     mailer: MailerSetting {
       smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),

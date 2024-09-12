@@ -55,7 +55,12 @@ use crate::api::ws::ws_scope;
 use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
-use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
+use crate::biz::workspace::publish::{
+  PublishedCollabPostgresStore, PublishedCollabS3StoreWithPostgresFallback, PublishedCollabStore,
+};
+use crate::config::config::{
+  Config, DatabaseSetting, GoTrueSetting, PublishedCollabStorageBackend, S3Setting,
+};
 use crate::mailer::Mailer;
 use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
 use crate::middleware::metrics_mw::MetricsMiddleware;
@@ -172,6 +177,7 @@ pub async fn run_actix_server(
       .app_data(Data::new(state.config.gotrue.jwt_secret.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
+      .app_data(Data::new(state.published_collab_store.clone()))
   });
 
   server = match pair {
@@ -212,6 +218,27 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     s3_client.clone(),
     pg_pool.clone(),
   ));
+
+  // Published Collab Storage
+  info!("Setting up Published Collab storage...");
+  let published_collab_store: Arc<dyn PublishedCollabStore> =
+    match config.published_collab.storage_backend {
+      PublishedCollabStorageBackend::Postgres => {
+        info!("Using Postgres as the Published Collab storage backend ...");
+        Arc::new(PublishedCollabPostgresStore::new(
+          metrics.published_collab_metrics.clone(),
+          pg_pool.clone(),
+        ))
+      },
+      PublishedCollabStorageBackend::S3WithPostgresBackup => {
+        info!("Using S3 as the Published Collab storage backend with Postgres as the backup ...");
+        Arc::new(PublishedCollabS3StoreWithPostgresFallback::new(
+          metrics.published_collab_metrics.clone(),
+          pg_pool.clone(),
+          s3_client.clone(),
+        ))
+      },
+    };
 
   // Gotrue
   info!("Connecting to GoTrue...");
@@ -306,6 +333,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_access_control,
     workspace_access_control,
     bucket_storage,
+    published_collab_store,
     bucket_client: s3_client,
     pg_listeners,
     access_control,

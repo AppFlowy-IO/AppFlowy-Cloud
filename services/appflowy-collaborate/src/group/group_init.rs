@@ -200,7 +200,7 @@ impl CollabGroup {
         modified_at.elapsed().as_secs(),
         self.subscribers.len()
       );
-      modified_at.elapsed().as_secs() > 60 * 2
+      modified_at.elapsed().as_secs() > 60 * 3
     } else {
       let elapsed_secs = modified_at.elapsed().as_secs();
       if elapsed_secs > self.timeout_secs() {
@@ -246,7 +246,7 @@ impl CollabGroup {
   #[inline]
   fn timeout_secs(&self) -> u64 {
     match self.collab_type {
-      CollabType::Document => 10 * 60, // 10 minutes
+      CollabType::Document => 30 * 60, // 30 minutes
       CollabType::Database | CollabType::DatabaseRow => 30 * 60, // 30 minutes
       CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 6 * 60 * 60, // 6 hours,
       CollabType::Unknown => {

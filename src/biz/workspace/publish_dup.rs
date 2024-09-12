@@ -754,44 +754,41 @@ impl PublishCollabDuplicator {
         db_row_body
           .get_data()
           .insert(&mut txn, ROW_DATABASE_ID, new_db_id.clone());
-        {
-          // handle document in database row
-          let pub_is_doc_empty_key =
-            meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
-          let pub_is_doc_empty = db_row_body.get_meta().get(&txn, &pub_is_doc_empty_key);
-          if let Some(Out::Any(Any::Bool(is_doc_empty))) = pub_is_doc_empty {
-            if !is_doc_empty {
+
+        // handle document in database row
+        match db_row_body.has_document(&txn) {
+          Ok(has_doc) => {
+            if has_doc {
               let pub_row_doc_id =
                 meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
-              let row_doc_doc_state = match published_db
+              match published_db
                 .database_row_document_collabs
                 .get(&pub_row_doc_id)
               {
-                Some(doc_state) => doc_state,
-                None => {
-                  tracing::error!("no document found for row: {}", pub_row_doc_id);
-                  continue;
+                Some(row_doc_doc_state) => {
+                  let pub_doc_collab =
+                    collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
+                  let pub_doc = Document::open(pub_doc_collab)
+                    .map_err(|e| AppError::Unhandled(e.to_string()))?;
+                  let dup_row_doc_id =
+                    meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
+                  let mut new_doc_view = Box::pin(self.deep_copy_doc(
+                    &pub_row_doc_id,
+                    dup_row_doc_id.clone(),
+                    pub_doc,
+                    PublishViewMetaData::default(),
+                  ))
+                  .await?;
+                  new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
+                  self
+                    .views_to_add
+                    .insert(dup_row_doc_id.clone(), new_doc_view);
                 },
+                None => tracing::error!("no document found for row: {}", pub_row_doc_id),
               };
-              let pub_doc_collab =
-                collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
-              let pub_doc =
-                Document::open(pub_doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
-              let dup_row_doc_id =
-                meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
-              let mut new_doc_view = Box::pin(self.deep_copy_doc(
-                &pub_row_doc_id,
-                dup_row_doc_id.clone(),
-                pub_doc,
-                PublishViewMetaData::default(),
-              ))
-              .await?;
-              new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
-              self
-                .views_to_add
-                .insert(dup_row_doc_id.clone(), new_doc_view);
             }
-          }
+          },
+          Err(err) => tracing::error!("failed to check if row has document: {}", err),
         }
 
         db_row_body

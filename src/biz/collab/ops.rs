@@ -4,6 +4,7 @@ use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
+use collab_folder::SectionItem;
 use collab_folder::{CollabOrigin, Folder};
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
@@ -27,6 +28,7 @@ use database_entity::dto::{
 };
 
 use super::folder_view::collab_folder_to_folder_view;
+use super::folder_view::section_items_to_folder_view;
 use super::publish_outline::collab_folder_to_published_outline;
 
 /// Create a new collab member
@@ -154,6 +156,93 @@ pub async fn get_collab_member_list(
   params.validate()?;
   let collab_member = database::collab::select_collab_members(&params.object_id, pg_pool).await?;
   Ok(collab_member)
+}
+
+pub async fn get_user_favorite_folder_views(
+  collab_storage: Arc<CollabAccessControlStorage>,
+  pg_pool: &PgPool,
+  uid: i64,
+  workspace_id: Uuid,
+) -> Result<Vec<FolderView>, AppError> {
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_id.to_string(),
+  )
+  .await?;
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids: HashSet<String> = publish_view_ids
+    .into_iter()
+    .map(|id| id.to_string())
+    .collect();
+  let deleted_section_item_ids: Vec<String> = folder
+    .get_my_trash_sections()
+    .iter()
+    .map(|s| s.id.clone())
+    .collect();
+  let favorite_section_items: Vec<SectionItem> = folder
+    .get_my_favorite_sections()
+    .into_iter()
+    .filter(|s| !deleted_section_item_ids.contains(&s.id))
+    .collect();
+  Ok(section_items_to_folder_view(
+    &favorite_section_items,
+    &folder,
+    &publish_view_ids,
+  ))
+}
+
+pub async fn get_user_recent_folder_views(
+  collab_storage: Arc<CollabAccessControlStorage>,
+  pg_pool: &PgPool,
+  uid: i64,
+  workspace_id: Uuid,
+) -> Result<Vec<FolderView>, AppError> {
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_id.to_string(),
+  )
+  .await?;
+  let deleted_section_item_ids: Vec<String> = folder
+    .get_my_trash_sections()
+    .iter()
+    .map(|s| s.id.clone())
+    .collect();
+  let recent_section_items: Vec<SectionItem> = folder
+    .get_my_recent_sections()
+    .into_iter()
+    .filter(|s| !deleted_section_item_ids.contains(&s.id))
+    .collect();
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids: HashSet<String> = publish_view_ids
+    .into_iter()
+    .map(|id| id.to_string())
+    .collect();
+  Ok(section_items_to_folder_view(
+    &recent_section_items,
+    &folder,
+    &publish_view_ids,
+  ))
+}
+
+pub async fn get_user_trash_folder_views(
+  collab_storage: Arc<CollabAccessControlStorage>,
+  uid: i64,
+  workspace_id: Uuid,
+) -> Result<Vec<FolderView>, AppError> {
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_id.to_string(),
+  )
+  .await?;
+  let section_items = folder.get_my_trash_sections();
+  Ok(section_items_to_folder_view(
+    &section_items,
+    &folder,
+    &HashSet::default(),
+  ))
 }
 
 pub async fn get_user_workspace_structure(

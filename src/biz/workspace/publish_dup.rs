@@ -745,7 +745,7 @@ impl PublishCollabDuplicator {
       // assign a new id for the row
       let dup_row_id = gen_view_id();
       let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
-      let mut db_row_body = DatabaseRowBody::open(dup_row_id.clone().into(), &mut db_row_collab)
+      let mut db_row_body = DatabaseRowBody::open(pub_row_id.clone().into(), &mut db_row_collab)
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
       {
@@ -856,8 +856,6 @@ impl PublishCollabDuplicator {
           }
         }
       }
-
-      println!("{:#?}", db_row_collab.to_json_value());
 
       // write new row collab to storage
       let db_row_ec_bytes =

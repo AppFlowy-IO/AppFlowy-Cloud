@@ -216,12 +216,6 @@ where
       .is_destroyed
       .store(true, std::sync::atomic::Ordering::SeqCst);
   }
-
-  fn init(&self, _object_id: &str, _origin: &CollabOrigin, _doc: &yrs::Doc) {}
-
-  fn receive_update(&self, _object_id: &str, _txn: &yrs::TransactionMut, _update: &[u8]) {}
-
-  fn after_transaction(&self, _object_id: &str, _txn: &mut yrs::TransactionMut) {}
 }
 
 #[derive(Clone, Debug)]

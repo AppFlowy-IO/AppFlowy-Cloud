@@ -1376,3 +1376,24 @@ pub async fn delete_reaction_from_comment<'a, E: Executor<'a, Database = Postgre
 
   Ok(())
 }
+
+pub async fn select_user_is_invitee_for_workspace_invitation(
+  pg_pool: &PgPool,
+  invitee_uuid: &Uuid,
+  invite_id: &Uuid,
+) -> Result<bool, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_workspace_invitation
+        WHERE id = $1 AND invitee_email = (SELECT email FROM af_user WHERE uuid = $2)
+      )
+    "#,
+    invite_id,
+    invitee_uuid,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+  res.map_or(Ok(false), Ok)
+}

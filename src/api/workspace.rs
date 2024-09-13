@@ -340,12 +340,14 @@ async fn post_accept_workspace_invite_handler(
 ) -> Result<JsonAppResponse<()>> {
   let _is_new = verify_token(&auth.token, state.as_ref()).await?;
   let user_uuid = auth.uuid()?;
+  let user_uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let invite_id = invite_id.into_inner();
   // TODO(zack): insert a workspace member in the af_workspace_member by calling  workspace::ops::add_workspace_members.
   // Currently, when the server get restarted, the policy in access control will be lost.
   workspace::ops::accept_workspace_invite(
     &state.pg_pool,
     &state.workspace_access_control,
+    user_uid,
     &user_uuid,
     &invite_id,
   )

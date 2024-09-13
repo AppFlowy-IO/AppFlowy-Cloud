@@ -144,6 +144,11 @@ pub struct FolderView {
   pub children: Vec<FolderView>,
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SectionItems {
+  pub views: Vec<FolderView>,
+}
+
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum IconType {

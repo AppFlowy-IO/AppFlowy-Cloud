@@ -14,7 +14,7 @@ use database::collab::CollabMetadata;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
 use crate::collab::disk_cache::CollabDiskCache;
-use crate::collab::mem_cache::CollabMemCache;
+use crate::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use crate::state::RedisConnectionManager;
 
 #[derive(Clone)]
@@ -82,6 +82,7 @@ impl CollabCache {
 
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
     let object_id = query.object_id.clone();
+    let expiration_secs = cache_exp_secs_from_collab_type(&query.collab_type);
     let encode_collab = self.disk_cache.get_collab_encoded_from_disk(query).await?;
 
     // spawn a task to insert the encoded collab into the memory cache
@@ -90,7 +91,7 @@ impl CollabCache {
     let timestamp = chrono::Utc::now().timestamp();
     tokio::spawn(async move {
       mem_cache
-        .insert_encode_collab(&object_id, cloned_encode_collab, timestamp)
+        .insert_encode_collab(&object_id, cloned_encode_collab, timestamp, expiration_secs)
         .await;
     });
     Ok(encode_collab)
@@ -159,6 +160,7 @@ impl CollabCache {
         &object_id,
         &encode_collab_data,
         chrono::Utc::now().timestamp(),
+        Some(cache_exp_secs_from_collab_type(&params.collab_type)),
       )
       .await
     {
@@ -201,7 +203,12 @@ impl CollabCache {
     let timestamp = chrono::Utc::now().timestamp();
     self
       .mem_cache
-      .insert_encode_collab_data(&params.object_id, &params.encoded_collab_v1, timestamp)
+      .insert_encode_collab_data(
+        &params.object_id,
+        &params.encoded_collab_v1,
+        timestamp,
+        Some(cache_exp_secs_from_collab_type(&params.collab_type)),
+      )
       .await
       .map_err(|err| AppError::Internal(err.into()))?;
     Ok(())

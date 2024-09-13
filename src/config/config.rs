@@ -7,7 +7,7 @@ use semver::Version;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
-use infra::env_util::get_env_var;
+use infra::env_util::{get_env_var, get_env_var_opt};
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -245,7 +245,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       client_id: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_ID", ""),
       client_secret: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_SECRET", "").into(),
     },
-    appflowy_web_url: std::env::var("APPFLOWY_WEB_URL").ok(),
+    appflowy_web_url: get_env_var_opt("APPFLOWY_WEB_URL"),
   };
   Ok(config)
 }

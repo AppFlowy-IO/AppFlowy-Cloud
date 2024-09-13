@@ -319,6 +319,7 @@ pub async fn accept_workspace_invite(
 }
 
 #[instrument(level = "debug", skip_all, err)]
+#[allow(clippy::too_many_arguments)]
 pub async fn invite_workspace_members(
   mailer: &Mailer,
   gotrue_admin: &GoTrueAdmin,

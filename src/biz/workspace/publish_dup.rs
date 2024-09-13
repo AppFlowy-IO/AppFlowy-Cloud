@@ -11,7 +11,6 @@ use collab_database::rows::RowId;
 use collab_database::rows::RowMetaKey;
 use collab_database::rows::CELL_FIELD_TYPE;
 use collab_database::rows::ROW_CELLS;
-use collab_database::rows::ROW_DATABASE_ID;
 use collab_database::template::entity::CELL_DATA;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::blocks::DocumentData;
@@ -751,49 +750,46 @@ impl PublishCollabDuplicator {
       {
         let mut txn = db_row_collab.context.transact_mut();
         // update database_id
-        db_row_body
-          .get_data()
-          .insert(&mut txn, ROW_DATABASE_ID, new_db_id.clone());
+        db_row_body.update(&mut txn, |u| {
+          u.set_database_id(new_db_id.clone());
+        });
 
-        // handle document in database row
-        match db_row_body.has_document(&txn) {
-          Ok(has_doc) => {
-            if has_doc {
-              let pub_row_doc_id =
-                meta_id_from_row_id(&pub_row_id.parse()?, RowMetaKey::DocumentId);
-              match published_db
-                .database_row_document_collabs
-                .get(&pub_row_doc_id)
-              {
-                Some(row_doc_doc_state) => {
-                  let pub_doc_collab =
-                    collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
-                  let pub_doc = Document::open(pub_doc_collab)
-                    .map_err(|e| AppError::Unhandled(e.to_string()))?;
-                  let dup_row_doc_id =
-                    meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
-                  let mut new_doc_view = Box::pin(self.deep_copy_doc(
-                    &pub_row_doc_id,
-                    dup_row_doc_id.clone(),
-                    pub_doc,
-                    PublishViewMetaData::default(),
-                  ))
-                  .await?;
-                  new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
-                  self
-                    .views_to_add
-                    .insert(dup_row_doc_id.clone(), new_doc_view);
-                },
-                None => tracing::error!("no document found for row: {}", pub_row_doc_id),
-              };
-            }
-          },
-          Err(err) => tracing::error!("failed to check if row has document: {}", err),
-        }
+        // get row document id before the id update
+        let pub_row_doc_id = db_row_body
+          .document_id(&txn)
+          .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
+        // updates row id along with meta keys
         db_row_body
           .update_id(&mut txn, RowId::from(dup_row_id.clone()))
           .map_err(|e| AppError::Unhandled(format!("failed to update row id: {:?}", e)))?;
+
+        // duplicate row document if exists
+        if let Some(pub_row_doc_id) = pub_row_doc_id {
+          if let Some(row_doc_doc_state) = published_db
+            .database_row_document_collabs
+            .get(&pub_row_doc_id)
+          {
+            let pub_doc_collab =
+              collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
+            let pub_doc =
+              Document::open(pub_doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
+            let dup_row_doc_id = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
+            let mut new_doc_view = Box::pin(self.deep_copy_doc(
+              &pub_row_doc_id,
+              dup_row_doc_id.clone(),
+              pub_doc,
+              PublishViewMetaData::default(),
+            ))
+            .await?;
+            new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
+            self
+              .views_to_add
+              .insert(dup_row_doc_id.clone(), new_doc_view);
+          } else {
+            tracing::error!("no document found for row: {}", pub_row_doc_id);
+          };
+        }
 
         {
           // "cells": Object {

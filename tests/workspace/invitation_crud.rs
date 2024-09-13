@@ -59,11 +59,20 @@ async fn invite_workspace_crud() {
 
   assert_eq!(invitation.inviter_email, Some(alice.email));
   assert_eq!(invitation.status, AFWorkspaceInvitationStatus::Pending);
+  assert_eq!(invitation.member_count.unwrap_or(0), 1);
 
   bob_client
     .accept_workspace_invitation(&invite_id)
     .await
     .unwrap();
+
+  let invitation = bob_client
+    .get_workspace_invitation(&invite_id)
+    .await
+    .unwrap();
+
+  assert_eq!(invitation.status, AFWorkspaceInvitationStatus::Accepted);
+  assert_eq!(invitation.member_count.unwrap_or(0), 2);
 
   // list invitation with accepted filter
   let accepted_invs = bob_client

@@ -319,6 +319,7 @@ pub async fn accept_workspace_invite(
 }
 
 #[instrument(level = "debug", skip_all, err)]
+#[allow(clippy::too_many_arguments)]
 pub async fn invite_workspace_members(
   mailer: &Mailer,
   gotrue_admin: &GoTrueAdmin,
@@ -327,6 +328,7 @@ pub async fn invite_workspace_members(
   inviter: &Uuid,
   workspace_id: &Uuid,
   invitations: Vec<WorkspaceMemberInvitation>,
+  appflowy_web_url: Option<&str>,
 ) -> Result<(), AppError> {
   let mut txn = pg_pool
     .begin()
@@ -352,12 +354,17 @@ pub async fn invite_workspace_members(
   let pending_invitations =
     database::workspace::select_workspace_pending_invitations(pg_pool, workspace_id).await?;
 
-  for invitation in invitations {
+  // check if any of the invited users are already members of the workspace
+  for invitation in &invitations {
     if workspace_members_by_email.contains_key(&invitation.email) {
-      tracing::warn!("User already in workspace: {}", invitation.email);
-      continue;
+      return Err(AppError::InvalidRequest(format!(
+        "User with email {} is already a member of the workspace",
+        invitation.email
+      )));
     }
+  }
 
+  for invitation in invitations {
     let inviter_name = inviter_name.clone();
     let workspace_name = workspace_name.clone();
     let workspace_member_count = workspace_member_count.to_string();
@@ -384,32 +391,39 @@ pub async fn invite_workspace_members(
         .await?;
         invite_id
       },
-      Some(inv) => {
+      Some(invite_id) => {
         tracing::warn!("User already invited: {}", invitation.email);
-        *inv
+        *invite_id
       },
     };
 
     // Generate a link such that when clicked, the user is added to the workspace.
-    let accept_url = gotrue_client
-      .admin_generate_link(
-        &admin_token,
-        &GenerateLinkParams {
-          type_: GenerateLinkType::MagicLink,
-          email: invitation.email.clone(),
-          redirect_to: format!(
-            "/web/login-callback?action=accept_workspace_invite&workspace_invitation_id={}&workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
-            invite_id, workspace_name,
-            workspace_icon_url,
-            inviter_name,
-            user_icon_url,
-            workspace_member_count,
-          ),
-          ..Default::default()
+    let accept_url = {
+      match appflowy_web_url {
+        Some(appflowy_web_url) => format!("{}/accept-invitation?invitated_id={}", appflowy_web_url, invite_id),
+        None => {
+          gotrue_client
+          .admin_generate_link(
+            &admin_token,
+            &GenerateLinkParams {
+              type_: GenerateLinkType::MagicLink,
+              email: invitation.email.clone(),
+              redirect_to: format!(
+                "/web/login-callback?action=accept_workspace_invite&workspace_invitation_id={}&workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+                invite_id, workspace_name,
+                workspace_icon_url,
+                inviter_name,
+                user_icon_url,
+                workspace_member_count,
+              ),
+              ..Default::default()
+            },
+          )
+          .await?
+          .action_link
         },
-      )
-      .await?
-      .action_link;
+      }
+    };
 
     // send email can be slow, so send email in background
     let cloned_mailer = mailer.clone();
@@ -448,6 +462,15 @@ pub async fn list_workspace_invitations_for_user(
 ) -> Result<Vec<AFWorkspaceInvitation>, AppError> {
   let invis = select_workspace_invitations_for_user(pg_pool, user_uuid, status).await?;
   Ok(invis)
+}
+
+pub async fn get_workspace_invitations_for_user(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  invite_id: &Uuid,
+) -> Result<AFWorkspaceInvitation, AppError> {
+  let invitation = select_workspace_invitation_for_user(pg_pool, user_uuid, invite_id).await?;
+  Ok(invitation)
 }
 
 // use in tests only

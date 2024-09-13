@@ -93,8 +93,9 @@ async fn add_duplicate_workspace_members() {
     .await
     .unwrap();
 
-  // next invite should do nothing since c2 is already a workspace member
-  c1.api_client
+  // next invite should return error since the user is already in the workspace
+  let err = c1
+    .api_client
     .invite_workspace_members(
       &workspace_id,
       vec![WorkspaceMemberInvitation {
@@ -103,7 +104,8 @@ async fn add_duplicate_workspace_members() {
       }],
     )
     .await
-    .unwrap();
+    .unwrap_err();
+  assert_eq!(err.code, ErrorCode::InvalidRequest, "{:?}", err);
 
   // should not find any invitation
   let invitations = c2

@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use collab::entity::EncodedCollab;
+use collab_entity::CollabType;
 use redis::{pipe, AsyncCommands};
 use tracing::{error, instrument, trace};
 
@@ -8,7 +9,7 @@ use crate::state::RedisConnectionManager;
 use app_error::AppError;
 use database::collab::CollabMetadata;
 
-const SEVEN_DAYS: i64 = 604800;
+const SEVEN_DAYS: u64 = 604800;
 const ONE_MONTH: u64 = 2592000;
 #[derive(Clone)]
 pub struct CollabMemCache {
@@ -113,13 +114,14 @@ impl CollabMemCache {
     object_id: &str,
     encoded_collab: EncodedCollab,
     timestamp: i64,
+    expiration_seconds: u64,
   ) {
     trace!("Inserting encode collab into cache: {}", object_id);
     let result = tokio::task::spawn_blocking(move || encoded_collab.encode_to_bytes()).await;
     match result {
       Ok(Ok(bytes)) => {
         if let Err(err) = self
-          .insert_data_with_timestamp(object_id, &bytes, timestamp)
+          .insert_data_with_timestamp(object_id, &bytes, timestamp, Some(expiration_seconds))
           .await
         {
           error!("Failed to cache encoded collab: {:?}", err);
@@ -134,14 +136,17 @@ impl CollabMemCache {
     }
   }
 
+  /// Inserts data into Redis with a conditional timestamp.
+  /// if the expiration_seconds is None, the data will be expired after 7 days.
   pub async fn insert_encode_collab_data(
     &self,
     object_id: &str,
     data: &[u8],
     timestamp: i64,
+    expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
     self
-      .insert_data_with_timestamp(object_id, data, timestamp)
+      .insert_data_with_timestamp(object_id, data, timestamp, expiration_seconds)
       .await
   }
 
@@ -163,6 +168,7 @@ impl CollabMemCache {
     object_id: &str,
     data: &[u8],
     timestamp: i64,
+    expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
     let cache_object_id = encode_collab_key(object_id);
     let mut conn = self.connection_manager.clone();
@@ -211,7 +217,7 @@ impl CollabMemCache {
             .atomic()
             .set(&cache_object_id, data)
             .ignore()
-            .expire(&cache_object_id, SEVEN_DAYS) // Setting the expiration to 7 days
+            .expire(&cache_object_id, expiration_seconds.unwrap_or(SEVEN_DAYS) as i64) // Setting the expiration to 7 days
             .ignore();
         pipeline.query_async(&mut conn).await?;
       }
@@ -285,4 +291,17 @@ fn encode_collab_key(object_id: &str) -> String {
 #[inline]
 fn collab_meta_key(object_id: &str) -> String {
   format!("collab_meta_v0:{}", object_id)
+}
+
+#[inline]
+pub fn cache_exp_secs_from_collab_type(collab_type: &CollabType) -> u64 {
+  match collab_type {
+    CollabType::Document => SEVEN_DAYS * 2,
+    CollabType::Database => SEVEN_DAYS * 2,
+    CollabType::WorkspaceDatabase => ONE_MONTH,
+    CollabType::Folder => SEVEN_DAYS,
+    CollabType::DatabaseRow => ONE_MONTH,
+    CollabType::UserAwareness => SEVEN_DAYS * 2,
+    CollabType::Unknown => SEVEN_DAYS,
+  }
 }

@@ -38,6 +38,9 @@ use crate::api::util::PayloadReader;
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
+use crate::biz::collab::ops::{
+  get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
+};
 use crate::biz::workspace;
 use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
@@ -177,6 +180,11 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/folder").route(web::get().to(get_workspace_folder_handler)),
     )
+    .service(web::resource("/{workspace_id}/recent").route(web::get().to(get_recent_views_handler)))
+    .service(
+      web::resource("/{workspace_id}/favorite").route(web::get().to(get_favorite_views_handler)),
+    )
+    .service(web::resource("/{workspace_id}/trash").route(web::get().to(get_trash_views_handler)))
     .service(
       web::resource("/published-outline/{publish_namespace}")
         .route(web::get().to(get_workspace_publish_outline_handler)),
@@ -1336,6 +1344,65 @@ async fn get_workspace_folder_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(folder_view)))
+}
+
+async fn get_recent_views_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<SectionItems>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = workspace_id.into_inner();
+  let folder_views = get_user_recent_folder_views(
+    state.collab_access_control_storage.clone(),
+    &state.pg_pool,
+    uid,
+    workspace_id,
+  )
+  .await?;
+  let section_items = SectionItems {
+    views: folder_views,
+  };
+  Ok(Json(AppResponse::Ok().with_data(section_items)))
+}
+
+async fn get_favorite_views_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<SectionItems>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = workspace_id.into_inner();
+  let folder_views = get_user_favorite_folder_views(
+    state.collab_access_control_storage.clone(),
+    &state.pg_pool,
+    uid,
+    workspace_id,
+  )
+  .await?;
+  let section_items = SectionItems {
+    views: folder_views,
+  };
+  Ok(Json(AppResponse::Ok().with_data(section_items)))
+}
+
+async fn get_trash_views_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<SectionItems>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = workspace_id.into_inner();
+  let folder_views = get_user_trash_folder_views(
+    state.collab_access_control_storage.clone(),
+    uid,
+    workspace_id,
+  )
+  .await?;
+  let section_items = SectionItems {
+    views: folder_views,
+  };
+  Ok(Json(AppResponse::Ok().with_data(section_items)))
 }
 
 async fn get_workspace_publish_outline_handler(

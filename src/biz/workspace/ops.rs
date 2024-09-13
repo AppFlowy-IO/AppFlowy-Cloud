@@ -400,7 +400,7 @@ pub async fn invite_workspace_members(
     // Generate a link such that when clicked, the user is added to the workspace.
     let accept_url = {
       match appflowy_web_url {
-        Some(appflowy_web_url) => format!("{}/accept-invitation?invitated_id={}", appflowy_web_url, invite_id),
+        Some(appflowy_web_url) => format!("{}/accept-invitation?invited_id={}", appflowy_web_url, invite_id),
         None => {
           gotrue_client
           .admin_generate_link(

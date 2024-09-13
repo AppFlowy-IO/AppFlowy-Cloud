@@ -21,7 +21,7 @@ use access_control::collab::CollabAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
 use appflowy_collaborate::indexer::IndexerProvider;
-use authentication::jwt::{OptionalUserUuid, UserUuid};
+use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
@@ -41,6 +41,7 @@ use crate::biz;
 use crate::biz::collab::ops::{
   get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
 };
+use crate::biz::user::user_verify::verify_token;
 use crate::biz::workspace;
 use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
@@ -333,10 +334,12 @@ async fn get_workspace_invite_by_id_handler(
 }
 
 async fn post_accept_workspace_invite_handler(
-  user_uuid: UserUuid,
+  auth: Authorization,
   invite_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
+  let _is_new = verify_token(&auth.token, state.as_ref()).await?;
+  let user_uuid = auth.uuid()?;
   let invite_id = invite_id.into_inner();
   // TODO(zack): insert a workspace member in the af_workspace_member by calling  workspace::ops::add_workspace_members.
   // Currently, when the server get restarted, the policy in access control will be lost.

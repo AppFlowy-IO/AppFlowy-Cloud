@@ -429,6 +429,33 @@ pub async fn select_workspace_invitations_for_user(
 }
 
 #[inline]
+pub async fn select_workspace_invitation_for_user(
+  pg_pool: &PgPool,
+  invitee_uuid: &Uuid,
+  invite_id: &Uuid,
+) -> Result<AFWorkspaceInvitation, AppError> {
+  let res = sqlx::query_as!(
+    AFWorkspaceInvitation,
+    r#"
+    SELECT
+      id AS invite_id,
+      workspace_id,
+      (SELECT workspace_name FROM public.af_workspace WHERE workspace_id = af_workspace_invitation.workspace_id),
+      (SELECT email FROM public.af_user WHERE uid = af_workspace_invitation.inviter) AS inviter_email,
+      (SELECT name FROM public.af_user WHERE uid = af_workspace_invitation.inviter) AS inviter_name,
+      status,
+      updated_at
+    FROM public.af_workspace_invitation
+    WHERE af_workspace_invitation.invitee_email = (SELECT email FROM public.af_user WHERE uuid = $1)
+      AND id = $2
+    "#,
+    invitee_uuid,
+    invite_id,
+  ).fetch_one(pg_pool).await?;
+  Ok(res)
+}
+
+#[inline]
 #[instrument(level = "trace", skip(pool, email, role), err)]
 pub async fn upsert_workspace_member(
   pool: &PgPool,

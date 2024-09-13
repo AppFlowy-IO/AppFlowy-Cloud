@@ -65,7 +65,6 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "info", skip_all, err)]
   pub async fn list_workspace_invitations(
     &self,
     status: Option<AFWorkspaceInvitationStatus>,
@@ -78,6 +77,21 @@ impl Client {
     let resp = builder.send().await?;
     log_request_id(&resp);
     let res = AppResponse::<Vec<AFWorkspaceInvitation>>::from_response(resp).await?;
+    res.into_data()
+  }
+
+  pub async fn get_workspace_invitation(
+    &self,
+    invite_uuid: &str,
+  ) -> Result<AFWorkspaceInvitation, AppResponseError> {
+    let url = format!("{}/api/workspace/invite/{}", self.base_url, invite_uuid);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    let res: AppResponse<AFWorkspaceInvitation> = AppResponse::from_response(resp).await?;
     res.into_data()
   }
 

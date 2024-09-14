@@ -195,8 +195,8 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/{workspace_id}/collab_list")
-      .route(web::get().to(batch_get_collab_handler)) // deprecated: browser cannot use json param
-                                                      // for GET request
+      .route(web::get().to(batch_get_collab_handler))
+      // Web browser can't carry payload when using GET method, so for browser compatibility, we use POST method
       .route(web::post().to(batch_get_collab_handler)),
     )
 }

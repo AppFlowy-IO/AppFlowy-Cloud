@@ -120,8 +120,12 @@ impl CollabGroup {
 
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
     let lock = self.collab.read().await;
-    let encode_collab =
-      lock.encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
+    let encode_collab = lock.encode_collab_v1(|collab| {
+      self
+        .collab_type
+        .validate_require_data(collab)
+        .map_err(|err| RealtimeError::Internal(err.into()))
+    })?;
     Ok(encode_collab)
   }
 

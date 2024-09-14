@@ -191,7 +191,7 @@ where
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
 {
   if let Err(err) = sync_object.collab_type.validate_require_data(collab) {
-    return Err(SyncError::Internal(err));
+    return Err(SyncError::Internal(err.into()));
   }
 
   match reason {

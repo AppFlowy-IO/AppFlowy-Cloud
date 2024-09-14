@@ -126,7 +126,7 @@ async fn create_user_awareness(
   let user_awareness = UserAwareness::create(collab, None)?;
   let encode_collab = user_awareness
     .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-    .map_err(AppError::Internal)?;
+    .map_err(|err| AppError::Internal(err.into()))?;
   let encoded_collab_v1 = encode_collab
     .encode_to_bytes()
     .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
@@ -167,7 +167,7 @@ async fn create_workspace_database_collab(
 
   let encode_collab = collab
     .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-    .map_err(AppError::Internal)?;
+    .map_err(|err| AppError::Internal(err.into()))?;
 
   let encoded_collab_v1 = encode_collab
     .encode_to_bytes()

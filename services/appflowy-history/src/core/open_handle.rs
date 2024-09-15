@@ -74,8 +74,12 @@ impl OpenCollabHandle {
 
   pub async fn history_state(&self) -> Result<HistoryStatePb, HistoryError> {
     let lock_guard = self.collab.read().await;
-    let encode_collab =
-      lock_guard.encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
+    let encode_collab = lock_guard.encode_collab_v1(|collab| {
+      self
+        .collab_type
+        .validate_require_data(collab)
+        .map_err(|err| HistoryError::Internal(err.into()))
+    })?;
     Ok(HistoryStatePb {
       object_id: self.object_id.clone(),
       doc_state: encode_collab.doc_state.to_vec(),

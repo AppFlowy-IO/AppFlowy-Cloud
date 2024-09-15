@@ -302,12 +302,21 @@ pub async fn open_workspace(
 pub async fn accept_workspace_invite(
   pg_pool: &PgPool,
   workspace_access_control: &impl WorkspaceAccessControl,
+  user_uid: i64,
   user_uuid: &Uuid,
   invite_id: &Uuid,
 ) -> Result<(), AppError> {
   let mut txn = pg_pool.begin().await?;
-  update_workspace_invitation_set_status_accepted(&mut txn, user_uuid, invite_id).await?;
   let inv = get_invitation_by_id(&mut txn, invite_id).await?;
+  if let Some(invitee_uid) = inv.invitee_uid {
+    if invitee_uid != user_uid {
+      return Err(AppError::NotInviteeOfWorkspaceInvitation(format!(
+        "User with uid {} is not the invitee for invite_id {}",
+        user_uid, invite_id
+      )));
+    }
+  }
+  update_workspace_invitation_set_status_accepted(&mut txn, user_uuid, invite_id).await?;
   let invited_uid = inv
     .invitee_uid
     .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Invitee uid is missing for {:?}", inv)))?;
@@ -400,7 +409,7 @@ pub async fn invite_workspace_members(
     // Generate a link such that when clicked, the user is added to the workspace.
     let accept_url = {
       match appflowy_web_url {
-        Some(appflowy_web_url) => format!("{}/accept-invitation?invitated_id={}", appflowy_web_url, invite_id),
+        Some(appflowy_web_url) => format!("{}/accept-invitation?invited_id={}", appflowy_web_url, invite_id),
         None => {
           gotrue_client
           .admin_generate_link(
@@ -469,6 +478,14 @@ pub async fn get_workspace_invitations_for_user(
   user_uuid: &Uuid,
   invite_id: &Uuid,
 ) -> Result<AFWorkspaceInvitation, AppError> {
+  let user_is_invitee =
+    select_user_is_invitee_for_workspace_invitation(pg_pool, user_uuid, invite_id).await?;
+  if !user_is_invitee {
+    return Err(AppError::NotInviteeOfWorkspaceInvitation(format!(
+      "User with uuid {} is not the invitee for invite_id {}",
+      user_uuid, invite_id
+    )));
+  }
   let invitation = select_workspace_invitation_for_user(pg_pool, user_uuid, invite_id).await?;
   Ok(invitation)
 }

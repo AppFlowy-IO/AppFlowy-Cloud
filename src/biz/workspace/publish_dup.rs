@@ -8,7 +8,6 @@ use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::meta_id_from_row_id;
 use collab_database::rows::DatabaseRowBody;
-use collab_database::rows::RowId;
 use collab_database::rows::RowMetaKey;
 use collab_database::rows::CELL_FIELD_TYPE;
 use collab_database::rows::ROW_CELLS;
@@ -212,7 +211,7 @@ impl PublishCollabDuplicator {
           }
           txn_wrapper.encode_update_v1()
         };
-        let updated_ws_w_db_collab = collab_to_bin(&ws_db_collab, CollabType::WorkspaceDatabase);
+        let updated_ws_w_db_collab = collab_to_bin(ws_db_collab, CollabType::WorkspaceDatabase);
         (ws_db_updates, updated_ws_w_db_collab)
       })
       .await?;
@@ -223,7 +222,7 @@ impl PublishCollabDuplicator {
           &duplicator_uid,
           CollabParams {
             object_id: ws_db_oid.clone(),
-            encoded_collab_v1: updated_ws_w_db_collab?.into(),
+            encoded_collab_v1: updated_ws_w_db_collab.await?.into(),
             collab_type: CollabType::WorkspaceDatabase,
             embeddings: None,
           },
@@ -303,7 +302,7 @@ impl PublishCollabDuplicator {
       };
 
       // update folder collab
-      let updated_encoded_collab = collab_to_bin(&folder.collab, CollabType::Folder);
+      let updated_encoded_collab = collab_to_bin(folder.collab, CollabType::Folder);
       (encoded_update, updated_encoded_collab)
     })
     .await?;
@@ -314,7 +313,7 @@ impl PublishCollabDuplicator {
         &duplicator_uid,
         CollabParams {
           object_id: dest_workspace_id.clone(),
-          encoded_collab_v1: updated_encoded_collab?.into(),
+          encoded_collab_v1: updated_encoded_collab.await?.into(),
           collab_type: CollabType::Folder,
           embeddings: None,
         },
@@ -422,7 +421,7 @@ impl PublishCollabDuplicator {
           .map_err(|e| AppError::Unhandled(e.to_string()))
       })
       .await??;
-      let new_doc_bin = collab_to_bin(&new_doc, CollabType::Document).await?;
+      let new_doc_bin = collab_to_bin(new_doc.split().0, CollabType::Document).await?;
       self
         .collabs_to_insert
         .insert(ret_view.id.clone(), (CollabType::Document, new_doc_bin));
@@ -755,7 +754,7 @@ impl PublishCollabDuplicator {
 
         // updates row id along with meta keys
         db_row_body
-          .update_id(&mut txn, RowId::from(dup_row_id.clone()))
+          .update_id(&mut txn, dup_row_id.clone())
           .map_err(|e| AppError::Unhandled(format!("failed to update row id: {:?}", e)))?;
 
         // duplicate row document if exists
@@ -856,14 +855,14 @@ impl PublishCollabDuplicator {
       }
 
       // write new row collab to storage
-      let db_row_ec_bytes = collab_to_bin(&db_row_collab, CollabType::DatabaseRow).await?;
+      let db_row_ec_bytes = collab_to_bin(db_row_collab, CollabType::DatabaseRow).await?;
       self.collabs_to_insert.insert(
-        dup_row_id.clone(),
+        dup_row_id.to_string(),
         (CollabType::DatabaseRow, db_row_ec_bytes),
       );
       self
         .duplicated_db_row
-        .insert(pub_row_id.clone(), dup_row_id.clone());
+        .insert(pub_row_id.clone(), dup_row_id.to_string());
     }
 
     // accumulate list of database views (Board, Cal, ...) to be linked to the database
@@ -913,7 +912,7 @@ impl PublishCollabDuplicator {
     }
 
     // write database collab to storage
-    let db_encoded_collab = collab_to_bin(&db_collab, CollabType::Database).await?;
+    let db_encoded_collab = collab_to_bin(db_collab, CollabType::Database).await?;
     self
       .collabs_to_insert
       .insert(new_db_id.clone(), (CollabType::Database, db_encoded_collab));
@@ -1152,7 +1151,7 @@ fn to_folder_view_layout(layout: workspace_dto::ViewLayout) -> collab_folder::Vi
   }
 }
 
-async fn collab_to_bin(collab: &Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
+async fn collab_to_bin(collab: Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
   tokio::task::spawn_blocking(move || {
     let bin = collab
       .encode_collab_v1(|collab| collab_type.validate_require_data(collab))

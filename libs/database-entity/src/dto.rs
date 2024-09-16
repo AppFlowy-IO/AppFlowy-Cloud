@@ -601,6 +601,9 @@ pub struct AFWorkspaceInvitation {
   pub inviter_name: Option<String>,
   pub status: AFWorkspaceInvitationStatus,
   pub updated_at: DateTime<Utc>,
+  pub inviter_icon: Option<String>,
+  pub workspace_icon: String,
+  pub member_count: Option<i64>, // use unwrap_or(0) to get the value
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]

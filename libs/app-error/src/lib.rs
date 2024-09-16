@@ -142,6 +142,9 @@ pub enum AppError {
 
   #[error("{0}")]
   InvalidFolderView(String),
+
+  #[error("{0}")]
+  NotInviteeOfWorkspaceInvitation(String),
 }
 
 impl AppError {
@@ -208,6 +211,7 @@ impl AppError {
       AppError::InvalidContentType(_) => ErrorCode::InvalidContentType,
       AppError::InvalidPublishedOutline(_) => ErrorCode::InvalidPublishedOutline,
       AppError::InvalidFolderView(_) => ErrorCode::InvalidFolderView,
+      AppError::NotInviteeOfWorkspaceInvitation(_) => ErrorCode::NotInviteeOfWorkspaceInvitation,
     }
   }
 }
@@ -334,6 +338,7 @@ pub enum ErrorCode {
   AppleRevokeTokenError = 1038,
   InvalidPublishedOutline = 1039,
   InvalidFolderView = 1040,
+  NotInviteeOfWorkspaceInvitation = 1041,
 }
 
 impl ErrorCode {

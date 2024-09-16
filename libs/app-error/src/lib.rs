@@ -275,6 +275,12 @@ impl From<crate::gotrue::GoTrueError> for AppError {
   }
 }
 
+impl From<String> for AppError {
+  fn from(err: String) -> Self {
+    AppError::Unhandled(err)
+  }
+}
+
 #[cfg_attr(target_arch = "wasm32", derive(tsify::Tsify))]
 #[derive(
   Eq,

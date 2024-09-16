@@ -3,6 +3,7 @@ use crate::pubsub::{CollabStreamPub, CollabStreamSub};
 use crate::stream::CollabStream;
 use crate::stream_group::{StreamConfig, StreamGroup};
 use redis::aio::ConnectionManager;
+use tracing::error;
 
 pub const CONTROL_STREAM_KEY: &str = "af_collab_control";
 
@@ -36,7 +37,12 @@ impl CollabRedisStream {
       self.connection_manager.clone(),
       StreamConfig::new().with_max_len(1000),
     );
-    group.ensure_consumer_group().await?;
+
+    // don't return error when create consumer group failed
+    if let Err(err) = group.ensure_consumer_group().await {
+      error!("Failed to ensure consumer group: {}", err);
+    }
+
     Ok(group)
   }
 

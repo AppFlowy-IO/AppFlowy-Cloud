@@ -253,6 +253,7 @@ async fn collab_mem_cache_read_write_test() {
       &object_id,
       &encode_collab.encode_to_bytes().unwrap(),
       timestamp,
+      None,
     )
     .await
     .unwrap();
@@ -275,6 +276,7 @@ async fn collab_mem_cache_insert_override_test() {
       &object_id,
       &encode_collab.encode_to_bytes().unwrap(),
       timestamp,
+      None,
     )
     .await
     .unwrap();
@@ -289,6 +291,7 @@ async fn collab_mem_cache_insert_override_test() {
         .encode_to_bytes()
         .unwrap(),
       timestamp,
+      None,
     )
     .await
     .unwrap();
@@ -308,6 +311,7 @@ async fn collab_mem_cache_insert_override_test() {
         .encode_to_bytes()
         .unwrap(),
       timestamp,
+      None,
     )
     .await
     .unwrap();

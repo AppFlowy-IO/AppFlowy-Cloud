@@ -329,8 +329,11 @@ async fn create_chat_context_test() {
     .get_answer(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
-  assert!(answer.content.contains("US"));
   println!("answer: {:?}", answer);
+  if answer.content.contains("United States") {
+    return;
+  }
+  assert!(answer.content.contains("US"));
 }
 
 // #[tokio::test]

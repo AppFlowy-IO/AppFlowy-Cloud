@@ -36,9 +36,9 @@ impl Mailer {
 
     HANDLEBARS
       .write()
-      .unwrap()
+      .map_err(|err| anyhow::anyhow!(format!("Failed to write handlebars: {}", err)))?
       .register_template_string("workspace_invite", workspace_invite_template)
-      .unwrap();
+      .map_err(|err| anyhow::anyhow!(format!("Failed to register handlebars template: {}", err)))?;
 
     Ok(Self {
       smtp_transport,
@@ -51,10 +51,10 @@ impl Mailer {
     email: String,
     param: WorkspaceInviteMailerParam,
   ) -> Result<(), anyhow::Error> {
-    let rendered = HANDLEBARS
-      .read()
-      .unwrap()
-      .render("workspace_invite", &param)?;
+    let rendered = match HANDLEBARS.read() {
+      Ok(registory) => registory.render("workspace_invite", &param)?,
+      Err(err) => anyhow::bail!(format!("Failed to render handlebars template: {}", err)),
+    };
 
     let email = Message::builder()
       .from(lettre::message::Mailbox::new(
@@ -63,7 +63,7 @@ impl Mailer {
       ))
       .to(lettre::message::Mailbox::new(
         Some(param.username.clone()),
-        email.parse().unwrap(),
+        email.parse()?,
       ))
       .subject(format!(
         "Action required: {} invited you to {} in AppFlowy",

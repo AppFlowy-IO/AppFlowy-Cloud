@@ -1,10 +1,8 @@
 use client_api_test::*;
-use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab_document::{blocks::json_str_to_hashmap, document::Document};
 use collab_entity::CollabType;
 use collab_folder::{IconType, ViewIcon, ViewLayout};
-use database_entity::dto::{QueryCollab, QueryCollabParams};
 
 /// Get the document collab from the remote server
 async fn get_document_collab_from_remote(
@@ -12,17 +10,13 @@ async fn get_document_collab_from_remote(
   workspace_id: String,
   document_id: &str,
 ) -> Document {
-  let params = QueryCollabParams {
-    workspace_id,
-    inner: QueryCollab {
-      object_id: document_id.to_string(),
-      collab_type: CollabType::Document,
-    },
-  };
-  let resp = test_client.get_collab(params).await.unwrap();
+  let resp = test_client
+    .get_collab(workspace_id, document_id.to_string(), CollabType::Document)
+    .await
+    .unwrap();
   Document::open_with_options(
     CollabOrigin::Empty,
-    DataSource::DocStateV1(resp.encode_collab.doc_state.to_vec()),
+    resp.encode_collab.into(),
     document_id,
     vec![],
   )

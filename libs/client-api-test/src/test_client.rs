@@ -193,23 +193,18 @@ impl TestClient {
 
   pub async fn get_workspace_database_collab(&self, workspace_id: &str) -> Collab {
     let db_storage_id = self.open_workspace(workspace_id).await.database_storage_id;
-    let ws_db_doc_state = self
-      .get_collab(QueryCollabParams {
-        workspace_id: workspace_id.to_string(),
-        inner: QueryCollab {
-          object_id: db_storage_id.to_string(),
-          collab_type: CollabType::WorkspaceDatabase,
-        },
-      })
+    let collab_resp = self
+      .get_collab(
+        workspace_id.to_string(),
+        db_storage_id.to_string(),
+        CollabType::WorkspaceDatabase,
+      )
       .await
-      .unwrap()
-      .encode_collab
-      .doc_state
-      .to_vec();
+      .unwrap();
     Collab::new_with_source(
       CollabOrigin::Server,
       &db_storage_id.to_string(),
-      DataSource::DocStateV1(ws_db_doc_state),
+      collab_resp.encode_collab.into(),
       vec![],
       false,
     )
@@ -227,13 +222,11 @@ impl TestClient {
       .unwrap()
       .database_id;
     let db_collab_collab_resp = self
-      .get_collab(QueryCollabParams {
-        workspace_id: workspace_id.to_string(),
-        inner: QueryCollab {
-          object_id: db_id.clone(),
-          collab_type: CollabType::Database,
-        },
-      })
+      .get_collab(
+        workspace_id.to_string(),
+        db_id.clone(),
+        CollabType::Database,
+      )
       .await
       .unwrap();
     Collab::new_with_source(
@@ -571,9 +564,40 @@ impl TestClient {
 
   pub async fn get_collab(
     &self,
-    query: QueryCollabParams,
+    workspace_id: String,
+    object_id: String,
+    collab_type: CollabType,
   ) -> Result<CollabResponse, AppResponseError> {
-    self.api_client.get_collab(query).await
+    self
+      .api_client
+      .get_collab(QueryCollabParams {
+        workspace_id,
+        inner: QueryCollab {
+          object_id,
+          collab_type,
+        },
+      })
+      .await
+  }
+
+  pub async fn get_collab_to_collab(
+    &self,
+    workspace_id: String,
+    object_id: String,
+    collab_type: CollabType,
+  ) -> Result<Collab, AppResponseError> {
+    let resp = self
+      .get_collab(workspace_id, object_id.clone(), collab_type)
+      .await?;
+    let collab = Collab::new_with_source(
+      CollabOrigin::Server,
+      &object_id,
+      resp.encode_collab.into(),
+      vec![],
+      false,
+    )
+    .unwrap();
+    Ok(collab)
   }
 
   pub async fn batch_get_collab(

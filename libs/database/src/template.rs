@@ -570,6 +570,8 @@ pub async fn select_template_view_by_id<'a, E: Executor<'a, Database = Postgres>
             '{}'
           ) AS account_links
         FROM af_template_view template
+        JOIN af_published_collab
+        USING (view_id)
         JOIN af_template_creator creator
         USING (creator_id)
         LEFT OUTER JOIN af_template_creator_account_link account_link
@@ -721,6 +723,8 @@ pub async fn select_templates<'a, E: Executor<'a, Database = Postgres>>(
       USING (category_id)
       JOIN af_template_view template
       USING (view_id)
+      JOIN af_published_collab
+      USING (view_id)
       WHERE TRUE
     "#,
   );
@@ -797,6 +801,8 @@ pub async fn select_template_homepage<'a, E: Executor<'a, Database = Postgres>>(
         JOIN af_template_category category
         USING (category_id)
         JOIN af_template_view template
+        USING (view_id)
+        JOIN af_published_collab
         USING (view_id)
       ),
       template_group_by_category_and_view AS (

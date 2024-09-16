@@ -421,17 +421,10 @@ impl PublishCollabDuplicator {
           .map_err(|e| AppError::Unhandled(e.to_string()))
       })
       .await??;
-      let new_doc_bin = tokio::task::spawn_blocking(move || {
-        new_doc
-          .encode_collab()
-          .map_err(|e| AppError::Unhandled(e.to_string()))
-          .map(|ec| ec.encode_to_bytes())
-      })
-      .await?;
-
+      let new_doc_bin = collab_to_bin(&new_doc, CollabType::Document).await?;
       self
         .collabs_to_insert
-        .insert(ret_view.id.clone(), (CollabType::Document, new_doc_bin??));
+        .insert(ret_view.id.clone(), (CollabType::Document, new_doc_bin));
     }
     Ok(ret_view)
   }
@@ -854,12 +847,10 @@ impl PublishCollabDuplicator {
       }
 
       // write new row collab to storage
-      let db_row_ec_bytes =
-        tokio::task::spawn_blocking(move || collab_to_bin(&db_row_collab, CollabType::DatabaseRow))
-          .await?;
+      let db_row_ec_bytes = collab_to_bin(&db_row_collab, CollabType::DatabaseRow).await?;
       self.collabs_to_insert.insert(
         dup_row_id.clone(),
-        (CollabType::DatabaseRow, db_row_ec_bytes?),
+        (CollabType::DatabaseRow, db_row_ec_bytes),
       );
       self
         .duplicated_db_row
@@ -913,12 +904,10 @@ impl PublishCollabDuplicator {
     }
 
     // write database collab to storage
-    let db_encoded_collab =
-      tokio::task::spawn_blocking(move || collab_to_bin(&db_collab, CollabType::Database)).await?;
-    self.collabs_to_insert.insert(
-      new_db_id.clone(),
-      (CollabType::Database, db_encoded_collab?),
-    );
+    let db_encoded_collab = collab_to_bin(&db_collab, CollabType::Database).await?;
+    self
+      .collabs_to_insert
+      .insert(new_db_id.clone(), (CollabType::Database, db_encoded_collab));
 
     // Add this database as linked view
     self
@@ -1154,10 +1143,13 @@ fn to_folder_view_layout(layout: workspace_dto::ViewLayout) -> collab_folder::Vi
   }
 }
 
-fn collab_to_bin(collab: &Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
-  let bin = collab
-    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-    .map_err(|e| AppError::Unhandled(e.to_string()))?
-    .encode_to_bytes()?;
-  Ok(bin)
+async fn collab_to_bin(collab: &Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
+  tokio::task::spawn_blocking(move || {
+    let bin = collab
+      .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+      .map_err(|e| AppError::Unhandled(e.to_string()))?
+      .encode_to_bytes()?;
+    Ok(bin)
+  })
+  .await?
 }

@@ -763,22 +763,26 @@ impl PublishCollabDuplicator {
             .database_row_document_collabs
             .get(&pub_row_doc_id)
           {
-            let pub_doc_collab =
-              collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id)?;
-            let pub_doc =
-              Document::open(pub_doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
-            let dup_row_doc_id = meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
-            let mut new_doc_view = Box::pin(self.deep_copy_doc(
-              &pub_row_doc_id,
-              dup_row_doc_id.clone(),
-              pub_doc,
-              PublishViewMetaData::default(),
-            ))
-            .await?;
-            new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
-            self
-              .views_to_add
-              .insert(dup_row_doc_id.clone(), new_doc_view);
+            match collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id) {
+              Ok(pub_doc_collab) => {
+                let pub_doc =
+                  Document::open(pub_doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
+                let dup_row_doc_id =
+                  meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
+                let mut new_doc_view = Box::pin(self.deep_copy_doc(
+                  &pub_row_doc_id,
+                  dup_row_doc_id.clone(),
+                  pub_doc,
+                  PublishViewMetaData::default(),
+                ))
+                .await?;
+                new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
+                self
+                  .views_to_add
+                  .insert(dup_row_doc_id.clone(), new_doc_view);
+              },
+              Err(err) => tracing::error!("failed to open row document: {}", err),
+            };
           } else {
             tracing::error!("no document found for row: {}", pub_row_doc_id);
           };
@@ -812,12 +816,16 @@ impl PublishCollabDuplicator {
             if let Ok(m) = out.cast::<MapRef>() {
               if let Some(Out::Any(Any::BigInt(n))) = m.get(&txn, CELL_FIELD_TYPE) {
                 if n == FieldType::Relation as i64 {
-                  let relation_data = m.get(&txn, CELL_DATA).ok_or_else(|| {
-                    AppError::RecordNotFound("no data found in relation cell".to_string())
-                  })?;
-                  if let Ok(arr) = relation_data.cast::<ArrayRef>() {
-                    rel_row_idss.push(arr)
-                  };
+                  match m.get(&txn, CELL_DATA) {
+                    Some(relation_data) => {
+                      if let Ok(arr) = relation_data.cast::<ArrayRef>() {
+                        rel_row_idss.push(arr)
+                      };
+                    },
+                    None => {
+                      tracing::warn!("no data found in relation cell, pub_row_id: {}", pub_row_id)
+                    },
+                  }
                 }
               }
             }

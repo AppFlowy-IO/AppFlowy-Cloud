@@ -3,6 +3,7 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 
+use collab_database::database::gen_row_id;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::meta_id_from_row_id;
@@ -735,7 +736,7 @@ impl PublishCollabDuplicator {
     // duplicate db collab rows
     for (pub_row_id, row_bin_data) in &published_db.database_row_collabs {
       // assign a new id for the row
-      let dup_row_id = gen_view_id();
+      let dup_row_id = gen_row_id();
       let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
       let mut db_row_body = DatabaseRowBody::open(pub_row_id.clone().into(), &mut db_row_collab)
         .map_err(|e| AppError::Unhandled(e.to_string()))?;

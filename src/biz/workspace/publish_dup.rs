@@ -987,7 +987,7 @@ impl PublishCollabDuplicator {
               AppError::RecordNotFound(format!("main view not found: {}", pub_view_id))
             })?;
 
-          let view_info = view_info_by_id.get(main_view_id).ok_or_else(|| {
+          let view_info = view_info_by_id.get(pub_view_id).ok_or_else(|| {
             AppError::RecordNotFound(format!("metadata not found for view: {}", main_view_id))
           })?;
 

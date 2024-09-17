@@ -15,7 +15,6 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, UserId};
 use itertools::Itertools;
 use shared_entity::dto::publish_dto::PublishDatabaseData;
-use shared_entity::dto::publish_dto::PublishViewMetaData;
 use shared_entity::dto::workspace_dto::PublishedDuplicate;
 use std::collections::{HashMap, HashSet};
 use std::thread::sleep;
@@ -1317,8 +1316,8 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
   let workspace_id = client_1.workspace_id().await;
 
   // database with a row referencing itself
-  // uuid must be fixed because the collab contains row data which reference itself
-  let doc_4_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  // uuid must be fixed because there is inline block that have parent_id that references this
+  let doc_4_view_id: uuid::Uuid = "bb429fb8-3bb8-4f8c-99d8-0d8c48047efc".parse().unwrap();
   client_1
     .publish_collabs(
       &workspace_id,
@@ -1368,7 +1367,6 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
       .get_workspace_folder(&workspace_id_2, Some(5), None)
       .await
       .unwrap();
-    println!("{:#?}", fv);
 
     let doc_4_fv = fv.children.iter().find(|v| v.name == "doc4").unwrap();
     let _ = doc_4_fv

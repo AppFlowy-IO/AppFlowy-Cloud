@@ -2027,6 +2027,7 @@ dependencies = [
  "dotenvy",
  "futures",
  "gotrue",
+ "hex",
  "image",
  "lazy_static",
  "mime",

@@ -15,7 +15,6 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, UserId};
 use itertools::Itertools;
 use shared_entity::dto::publish_dto::PublishDatabaseData;
-use shared_entity::dto::publish_dto::PublishViewMetaData;
 use shared_entity::dto::workspace_dto::PublishedDuplicate;
 use std::collections::{HashMap, HashSet};
 use std::thread::sleep;
@@ -682,57 +681,34 @@ async fn duplicate_to_workspace_references() {
   let client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
 
-  // doc2 contains a reference to doc1
   let doc_2_view_id = uuid::Uuid::new_v4();
-  let doc_2_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::DOC_2_META).unwrap();
-  let doc_2_doc_state = hex::decode(published_data::DOC_2_DOC_STATE_HEX).unwrap();
-
-  // doc_1_view_id needs to be fixed because doc_2 references it
   let doc_1_view_id: uuid::Uuid = "e8c4f99a-50ea-4758-bca0-afa7df5c2434".parse().unwrap();
-  let doc_1_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::DOC_1_META).unwrap();
-  let doc_1_doc_state = hex::decode(published_data::DOC_1_DOC_STATE_HEX).unwrap();
-
-  // doc1 contains @reference database to grid1 (not inline)
   let grid_1_view_id: uuid::Uuid = "8e062f61-d7ae-4f4b-869c-f44c43149399".parse().unwrap();
-  let grid_1_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::GRID_1_META).unwrap();
-  let grid_1_db_data = hex::decode(published_data::GRID_1_DB_DATA).unwrap();
-
   client_1
-    .api_client
     .publish_collabs(
       &workspace_id,
       vec![
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: doc_1_view_id,
-            publish_name: doc_1_metadata.view.name.clone(),
-            metadata: doc_1_metadata.clone(),
-          },
-          data: doc_1_doc_state,
-        },
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: doc_2_view_id,
-            publish_name: doc_2_metadata.view.name.clone(),
-            metadata: doc_2_metadata.clone(),
-          },
-          data: doc_2_doc_state,
-        },
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: grid_1_view_id,
-            publish_name: grid_1_metadata.view.name.clone(),
-            metadata: grid_1_metadata.clone(),
-          },
-          data: grid_1_db_data,
-        },
+        (
+          // doc2 contains a reference to doc1
+          doc_2_view_id,
+          published_data::DOC_2_META,
+          published_data::DOC_2_DOC_STATE_HEX,
+        ),
+        (
+          // doc_1_view_id needs to be fixed because doc_2 references it
+          doc_1_view_id,
+          published_data::DOC_1_META,
+          published_data::DOC_1_DOC_STATE_HEX,
+        ),
+        (
+          // doc1 contains @reference database to grid1 (not inline)
+          grid_1_view_id,
+          published_data::GRID_1_META,
+          published_data::GRID_1_DB_DATA,
+        ),
       ],
     )
-    .await
-    .unwrap();
+    .await;
 
   {
     let client_2 = TestClient::new_user().await;
@@ -768,24 +744,20 @@ async fn duplicate_to_workspace_references() {
       .await
       .unwrap();
 
-    let doc_2_fv = fv
-      .children
-      .into_iter()
-      .find(|v| v.name == doc_2_metadata.view.name)
-      .unwrap();
+    let doc_2_fv = fv.children.into_iter().find(|v| v.name == "doc2").unwrap();
     assert_ne!(doc_2_fv.view_id, doc_1_view_id.to_string());
 
     let doc_1_fv = doc_2_fv
       .children
       .into_iter()
-      .find(|v| v.name == doc_1_metadata.view.name)
+      .find(|v| v.name == "doc1")
       .unwrap();
     assert_ne!(doc_1_fv.view_id, doc_1_view_id.to_string());
 
     let grid_1_fv = doc_1_fv
       .children
       .into_iter()
-      .find(|v| v.name == grid_1_metadata.view.name)
+      .find(|v| v.name == "grid1")
       .unwrap();
     assert_ne!(grid_1_fv.view_id, grid_1_view_id.to_string());
   }
@@ -798,42 +770,29 @@ async fn duplicate_to_workspace_doc_inline_database() {
 
   // doc3 contains inline database to a view in grid1 (view of grid1)
   let doc_3_view_id = uuid::Uuid::new_v4();
-  let doc_3_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::DOC_3_META).unwrap();
-  let doc_3_doc_state = hex::decode(published_data::DOC_3_DOC_STATE_HEX).unwrap();
 
   // view of grid1
   let view_of_grid_1_view_id: uuid::Uuid = "d8589e98-88fc-42e4-888c-b03338bf22bb".parse().unwrap();
-  let view_of_grid_1_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::VIEW_OF_GRID1_META).unwrap();
   let view_of_grid_1_db_data = hex::decode(published_data::VIEW_OF_GRID_1_DB_DATA).unwrap();
   let (pub_db_id, pub_row_ids) = get_database_id_and_row_ids(&view_of_grid_1_db_data);
 
   client_1
-    .api_client
     .publish_collabs(
       &workspace_id,
       vec![
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: doc_3_view_id,
-            publish_name: doc_3_metadata.view.name.clone(),
-            metadata: doc_3_metadata.clone(),
-          },
-          data: doc_3_doc_state,
-        },
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: view_of_grid_1_view_id,
-            publish_name: view_of_grid_1_metadata.view.name.replace(' ', "-"),
-            metadata: view_of_grid_1_metadata.clone(),
-          },
-          data: view_of_grid_1_db_data,
-        },
+        (
+          doc_3_view_id,
+          published_data::DOC_3_META,
+          published_data::DOC_3_DOC_STATE_HEX,
+        ),
+        (
+          view_of_grid_1_view_id,
+          published_data::VIEW_OF_GRID_1_META,
+          published_data::VIEW_OF_GRID_1_DB_DATA,
+        ),
       ],
     )
-    .await
-    .unwrap();
+    .await;
 
   {
     let mut client_2 = TestClient::new_user().await;
@@ -875,11 +834,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
-      let doc_3_fv = fv
-        .children
-        .into_iter()
-        .find(|v| v.name == doc_3_metadata.view.name)
-        .unwrap();
+      let doc_3_fv = fv.children.into_iter().find(|v| v.name == "doc3").unwrap();
       let grid1_fv = doc_3_fv
         .children
         .into_iter()
@@ -915,7 +870,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
     let doc_3_fv = folder_view
       .children
       .into_iter()
-      .find(|v| v.name == doc_3_metadata.view.name)
+      .find(|v| v.name == "doc3")
       .unwrap();
     assert_ne!(doc_3_fv.view_id, doc_3_view_id.to_string());
 
@@ -982,42 +937,26 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
   // embedded doc with db
   // database is created in the doc, not linked from a separate view
   let doc_with_embedded_db_view_id: uuid::Uuid = uuid::Uuid::new_v4();
-  let doc_with_embedded_db_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::DOC_WITH_EMBEDDED_DB_META).unwrap();
-  let doc_with_embedded_db_blob = hex::decode(published_data::DOC_WITH_EMBEDDED_DB_HEX).unwrap();
-
-  // user will also need to publish the database (even though it is embedded)
-  // uuid must be fixed because it is referenced in the doc
-  let embedded_db_view_id: uuid::Uuid = "bb221175-14da-4a05-a09d-595e42d2350f".parse().unwrap();
-  let embedded_db_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::EMBEDDED_DB_META).unwrap();
-  let embedded_db_blob = hex::decode(published_data::EMBEDDED_DB_HEX).unwrap();
 
   client_1
-    .api_client
     .publish_collabs(
       &workspace_id,
       vec![
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: doc_with_embedded_db_view_id,
-            publish_name: "doc-with-embedded-db".to_string(),
-            metadata: doc_with_embedded_db_metadata.clone(),
-          },
-          data: doc_with_embedded_db_blob,
-        },
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: embedded_db_view_id,
-            publish_name: "embedded-db".to_string(),
-            metadata: embedded_db_metadata.clone(),
-          },
-          data: embedded_db_blob,
-        },
+        (
+          doc_with_embedded_db_view_id,
+          published_data::DOC_WITH_EMBEDDED_DB_META,
+          published_data::DOC_WITH_EMBEDDED_DB_HEX,
+        ),
+        (
+          // user will also need to publish the database (even though it is embedded)
+          // uuid must be fixed because it is referenced in the doc
+          "bb221175-14da-4a05-a09d-595e42d2350f".parse().unwrap(),
+          published_data::EMBEDDED_DB_META,
+          published_data::EMBEDDED_DB_HEX,
+        ),
       ],
     )
-    .await
-    .unwrap();
+    .await;
 
   {
     let mut client_2 = TestClient::new_user().await;
@@ -1093,42 +1032,38 @@ async fn duplicate_to_workspace_db_with_relation() {
 
   // database with relation column to another database
   let db_with_rel_col_view_id: uuid::Uuid = uuid::Uuid::new_v4();
-  let db_with_rel_col_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::DB_WITH_REL_COL_META).unwrap();
-  let db_with_rel_col_blob = hex::decode(published_data::DB_WITH_REL_COL_HEX).unwrap();
-
-  // related database
-  // uuid must be fixed because it is related to the db_with_rel_col
-  let related_db_view_id: uuid::Uuid = "5fc669fa-8867-4f6d-98f1-ce387597eabd".parse().unwrap();
-  let related_db_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::RELATED_DB_META).unwrap();
-  let related_db_blob = hex::decode(published_data::RELATED_DB_HEX).unwrap();
 
   client_1
-    .api_client
     .publish_collabs(
       &workspace_id,
       vec![
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: db_with_rel_col_view_id,
-            publish_name: "db-with-rel-col".to_string(),
-            metadata: db_with_rel_col_metadata.clone(),
-          },
-          data: db_with_rel_col_blob,
-        },
-        PublishCollabItem {
-          meta: PublishCollabMetadata {
-            view_id: related_db_view_id,
-            publish_name: "related-db".to_string(),
-            metadata: related_db_metadata.clone(),
-          },
-          data: related_db_blob,
-        },
+        (
+          db_with_rel_col_view_id,
+          published_data::DB_WITH_REL_COL_META,
+          published_data::DB_WITH_REL_COL_HEX,
+        ),
+        (
+          // related database
+          // uuid must be fixed because it is related to the db_with_rel_col
+          "5fc669fa-8867-4f6d-98f1-ce387597eabd".parse().unwrap(),
+          published_data::RELATED_DB_META,
+          published_data::RELATED_DB_HEX,
+        ),
       ],
     )
-    .await
-    .unwrap();
+    .await;
+
+  let db_with_row_doc_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  client_1
+    .publish_collabs(
+      &workspace_id,
+      vec![(
+        db_with_row_doc_view_id,
+        published_data::DB_ROW_WITH_DOC_META,
+        published_data::DB_ROW_WITH_DOC_HEX,
+      )],
+    )
+    .await;
 
   {
     let mut client_2 = TestClient::new_user().await;
@@ -1210,27 +1145,17 @@ async fn duplicate_to_workspace_db_row_with_doc() {
   let client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
 
-  // database with a row having doc data
   let db_with_row_doc_view_id: uuid::Uuid = uuid::Uuid::new_v4();
-  let db_with_row_doc_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::DB_ROW_WITH_DOC_META).unwrap();
-  let db_with_row_doc_blob = hex::decode(published_data::DB_ROW_WITH_DOC_HEX).unwrap();
-
   client_1
-    .api_client
     .publish_collabs(
       &workspace_id,
-      vec![PublishCollabItem {
-        meta: PublishCollabMetadata {
-          view_id: db_with_row_doc_view_id,
-          publish_name: "db-with-rel-col".to_string(),
-          metadata: db_with_row_doc_metadata.clone(),
-        },
-        data: db_with_row_doc_blob,
-      }],
+      vec![(
+        db_with_row_doc_view_id,
+        published_data::DB_ROW_WITH_DOC_META,
+        published_data::DB_ROW_WITH_DOC_HEX,
+      )],
     )
-    .await
-    .unwrap();
+    .await;
 
   {
     let mut client_2 = TestClient::new_user().await;
@@ -1309,28 +1234,17 @@ async fn duplicate_to_workspace_db_rel_self() {
   let client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
 
-  // database with a row referencing itself
-  // uuid must be fixed because the collab contains row data which reference itself
   let db_rel_self_view_id: uuid::Uuid = "18d72589-80d7-4041-9342-5d572facb7c9".parse().unwrap();
-  let db_rel_self_metadata: PublishViewMetaData =
-    serde_json::from_str(published_data::DB_REL_SELF_META).unwrap();
-  let db_rel_self_blob = hex::decode(published_data::DB_REL_SELF_HEX).unwrap();
-
   client_1
-    .api_client
     .publish_collabs(
       &workspace_id,
-      vec![PublishCollabItem {
-        meta: PublishCollabMetadata {
-          view_id: db_rel_self_view_id,
-          publish_name: "db-rel-self".to_string(),
-          metadata: db_rel_self_metadata.clone(),
-        },
-        data: db_rel_self_blob,
-      }],
+      vec![(
+        db_rel_self_view_id,
+        published_data::DB_REL_SELF_META,
+        published_data::DB_REL_SELF_HEX,
+      )],
     )
-    .await
-    .unwrap();
+    .await;
 
   {
     let mut client_2 = TestClient::new_user().await;
@@ -1383,6 +1297,84 @@ async fn duplicate_to_workspace_db_rel_self() {
       .collect::<Vec<_>>();
     assert_eq!(rel_fields.len(), 1);
     assert_eq!(rel_fields[0].1.to_string(), database_id);
+  }
+}
+
+#[tokio::test]
+async fn duplicate_to_workspace_inline_db_doc_with_relation() {
+  // scenario:
+  // client_1 publish doc4
+  // doc4 has inline database grid3
+  // grid3 has relation to grid2
+  // grid2 has relation to grid3
+  // .
+  // ├── grid2
+  // └┬─ doc4
+  //  └── grid3
+
+  let client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.workspace_id().await;
+
+  // database with a row referencing itself
+  // uuid must be fixed because there is inline block that have parent_id that references this
+  let doc_4_view_id: uuid::Uuid = "bb429fb8-3bb8-4f8c-99d8-0d8c48047efc".parse().unwrap();
+  client_1
+    .publish_collabs(
+      &workspace_id,
+      vec![
+        (
+          doc_4_view_id,
+          published_data::DOC_4_META,
+          published_data::DOC_4_DOC_STATE_HEX,
+        ),
+        (
+          "5ecf6aa1-d4d6-47e4-af0f-3a7a9fd8299d".parse().unwrap(),
+          published_data::GRID_3_META,
+          published_data::GRID_3_HEX,
+        ),
+        (
+          "cfdd03b2-b539-4f1d-84c3-3c0424bbd345".parse().unwrap(),
+          published_data::GRID_2_META,
+          published_data::GRID_2_HEX,
+        ),
+      ],
+    )
+    .await;
+
+  {
+    let client_2 = TestClient::new_user().await;
+    let workspace_id_2 = client_2.workspace_id().await;
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
+      .await
+      .unwrap();
+
+    client_2
+      .api_client
+      .duplicate_published_to_workspace(
+        &workspace_id_2,
+        &PublishedDuplicate {
+          published_view_id: doc_4_view_id.to_string(),
+          dest_view_id: fv.view_id, // use the root view
+        },
+      )
+      .await
+      .unwrap();
+
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
+      .await
+      .unwrap();
+
+    let doc_4_fv = fv.children.iter().find(|v| v.name == "doc4").unwrap();
+    let _ = doc_4_fv
+      .children
+      .iter()
+      .find(|v| v.name == "grid3")
+      .unwrap();
+    let _ = fv.children.iter().find(|v| v.name == "grid2").unwrap();
   }
 }
 

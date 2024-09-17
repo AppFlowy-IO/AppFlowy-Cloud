@@ -717,7 +717,7 @@ impl PublishCollabDuplicator {
         new_db_view_ids.push(new_db_view_id);
       }
       // if there is no main view id, use the inline view id
-      if let None = self.duplicated_db_main_view.get(&pub_db_id) {
+      if !self.duplicated_db_main_view.contains_key(&pub_db_id) {
         self
           .duplicated_db_main_view
           .insert(pub_db_id.clone(), db_body.get_inline_view_id(&txn));

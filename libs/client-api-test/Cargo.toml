@@ -37,6 +37,7 @@ client-websocket.workspace = true
 futures = "0.3.30"
 anyhow = "1.0.80"
 serde = { version = "1.0.199", features = ["derive"] }
+hex = "0.4.3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["console"] }

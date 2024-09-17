@@ -20,6 +20,7 @@ use collab_user::core::UserAwareness;
 use mime::Mime;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use shared_entity::dto::publish_dto::PublishViewMetaData;
 use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing::trace;
@@ -28,7 +29,7 @@ use uuid::Uuid;
 #[cfg(feature = "collab-sync")]
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::entity::id::user_awareness_object_id;
-use client_api::entity::QueryWorkspaceMember;
+use client_api::entity::{PublishCollabItem, PublishCollabMetadata, QueryWorkspaceMember};
 use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
@@ -829,6 +830,31 @@ impl TestClient {
     let lock = self.collabs.get(object_id).unwrap().collab.read().await;
     let collab = (*lock).borrow();
     collab.to_json_value()
+  }
+
+  /// data: [(view_id, meta_json, blob_hex)]
+  pub async fn publish_collabs(&self, workspace_id: &str, data: Vec<(Uuid, &str, &str)>) {
+    let pub_items = data
+      .into_iter()
+      .map(|(view_id, meta_json, blob_hex)| {
+        let meta: PublishViewMetaData = serde_json::from_str(meta_json).unwrap();
+        let blob = hex::decode(blob_hex).unwrap();
+        PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id,
+            publish_name: uuid::Uuid::new_v4().to_string(),
+            metadata: meta,
+          },
+          data: blob,
+        }
+      })
+      .collect();
+
+    self
+      .api_client
+      .publish_collabs(&workspace_id, pub_items)
+      .await
+      .unwrap();
   }
 }
 

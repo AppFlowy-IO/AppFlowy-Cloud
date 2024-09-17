@@ -694,6 +694,44 @@ impl PublishCollabDuplicator {
       .insert(pub_db_id.clone(), Some(new_db_id.clone()));
 
     {
+      // assign new id to all views of database.
+      // this will mark the database as duplicated
+      let txn = db_collab.context.transact();
+      let mut db_views = db_body.views.get_all_views(&txn);
+      let mut new_db_view_ids: Vec<String> = Vec::with_capacity(db_views.len());
+      for db_view in db_views.iter_mut() {
+        let new_db_view_id = if db_view.id == publish_view_id {
+          self
+            .duplicated_db_main_view
+            .insert(pub_db_id.clone(), new_view_id.clone());
+          new_view_id.clone()
+        } else {
+          gen_view_id()
+        };
+        self
+          .duplicated_db_view
+          .insert(db_view.id.clone(), new_db_view_id.clone());
+
+        new_db_view_ids.push(new_db_view_id);
+      }
+
+      // Add this database as linked view
+      self
+        .workspace_databases
+        .insert(new_db_id.clone(), new_db_view_ids);
+    }
+
+    // assign new id to all rows of database.
+    // this will mark the rows as duplicated
+    for pub_row_id in published_db.database_row_collabs.keys() {
+      // assign a new id for the row
+      let dup_row_id = gen_row_id();
+      self
+        .duplicated_db_row
+        .insert(pub_row_id.clone(), dup_row_id.to_string());
+    }
+
+    {
       // handle row relations
       let mut txn = db_collab.context.transact_mut();
       let all_fields = db_body.fields.get_all_fields(&txn);
@@ -734,8 +772,12 @@ impl PublishCollabDuplicator {
 
     // duplicate db collab rows
     for (pub_row_id, row_bin_data) in &published_db.database_row_collabs {
-      // assign a new id for the row
-      let dup_row_id = gen_row_id();
+      let dup_row_id = self
+        .duplicated_db_row
+        .get(pub_row_id)
+        .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", pub_row_id)))?
+        .clone();
+
       let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
       let mut db_row_body = DatabaseRowBody::open(pub_row_id.clone().into(), &mut db_row_collab)
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
@@ -754,7 +796,7 @@ impl PublishCollabDuplicator {
 
         // updates row id along with meta keys
         db_row_body
-          .update_id(&mut txn, dup_row_id.clone())
+          .update_id(&mut txn, dup_row_id.clone().into())
           .map_err(|e| AppError::Unhandled(format!("failed to update row id: {:?}", e)))?;
 
         // duplicate row document if exists
@@ -860,34 +902,24 @@ impl PublishCollabDuplicator {
         dup_row_id.to_string(),
         (CollabType::DatabaseRow, db_row_ec_bytes),
       );
-      self
-        .duplicated_db_row
-        .insert(pub_row_id.clone(), dup_row_id.to_string());
     }
 
     // accumulate list of database views (Board, Cal, ...) to be linked to the database
-    let mut new_db_view_ids: Vec<String> = vec![];
     {
       let mut txn = db_collab.context.transact_mut();
       db_body.root.insert(&mut txn, "id", new_db_id.clone());
 
       let mut db_views = db_body.views.get_all_views(&txn);
       for db_view in db_views.iter_mut() {
-        let new_db_view_id = if db_view.id == publish_view_id {
-          self
-            .duplicated_db_main_view
-            .insert(pub_db_id.clone(), new_view_id.clone());
-          new_view_id.clone()
-        } else {
-          gen_view_id()
-        };
-        self
-          .duplicated_db_view
-          .insert(db_view.id.clone(), new_db_view_id.clone());
+        let new_db_view_id = self.duplicated_db_view.get(&db_view.id).ok_or_else(|| {
+          AppError::Unhandled(format!(
+            "view not found in duplicated_db_view: {}",
+            db_view.id
+          ))
+        })?;
 
-        db_view.id.clone_from(&new_db_view_id);
+        db_view.id.clone_from(new_db_view_id);
         db_view.database_id.clone_from(&new_db_id);
-        new_db_view_ids.push(db_view.id.clone());
 
         // update all views's row's id
         for row_order in db_view.row_orders.iter_mut() {
@@ -916,11 +948,6 @@ impl PublishCollabDuplicator {
     self
       .collabs_to_insert
       .insert(new_db_id.clone(), (CollabType::Database, db_encoded_collab));
-
-    // Add this database as linked view
-    self
-      .workspace_databases
-      .insert(new_db_id.clone(), new_db_view_ids);
 
     Ok((pub_db_id, new_db_id, false))
   }

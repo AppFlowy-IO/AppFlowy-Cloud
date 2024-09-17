@@ -852,7 +852,7 @@ impl TestClient {
 
     self
       .api_client
-      .publish_collabs(&workspace_id, pub_items)
+      .publish_collabs(workspace_id, pub_items)
       .await
       .unwrap();
   }

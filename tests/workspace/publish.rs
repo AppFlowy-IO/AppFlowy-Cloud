@@ -1304,6 +1304,88 @@ async fn duplicate_to_workspace_db_row_with_doc() {
   }
 }
 
+#[tokio::test]
+async fn duplicate_to_workspace_db_rel_self() {
+  let client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.workspace_id().await;
+
+  // database with a row referencing itself
+  // uuid must be fixed because the collab contains row data which reference itself
+  let db_rel_self_view_id: uuid::Uuid = "18d72589-80d7-4041-9342-5d572facb7c9".parse().unwrap();
+  let db_rel_self_metadata: PublishViewMetaData =
+    serde_json::from_str(published_data::DB_REL_SELF_META).unwrap();
+  let db_rel_self_blob = hex::decode(published_data::DB_REL_SELF_HEX).unwrap();
+
+  client_1
+    .api_client
+    .publish_collabs(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: db_rel_self_view_id,
+          publish_name: "db-rel-self".to_string(),
+          metadata: db_rel_self_metadata.clone(),
+        },
+        data: db_rel_self_blob,
+      }],
+    )
+    .await
+    .unwrap();
+
+  {
+    let mut client_2 = TestClient::new_user().await;
+    let workspace_id_2 = client_2.workspace_id().await;
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
+      .await
+      .unwrap();
+
+    client_2
+      .api_client
+      .duplicate_published_to_workspace(
+        &workspace_id_2,
+        &PublishedDuplicate {
+          published_view_id: db_rel_self_view_id.to_string(),
+          dest_view_id: fv.view_id, // use the root view
+        },
+      )
+      .await
+      .unwrap();
+
+    let fv = client_2
+      .api_client
+      .get_workspace_folder(&workspace_id_2, Some(5), None)
+      .await
+      .unwrap();
+    println!("{:#?}", fv);
+
+    let db_rel_self = fv
+      .children
+      .iter()
+      .find(|v| v.name == "self_ref_db")
+      .unwrap();
+
+    let db_rel_self_collab = client_2
+      .get_db_collab_from_view(&workspace_id_2, &db_rel_self.view_id)
+      .await;
+    let txn = db_rel_self_collab.transact();
+    let db_rel_self_body = DatabaseBody::from_collab(&db_rel_self_collab).unwrap();
+    let database_id = db_rel_self_body.get_database_id(&txn);
+    let all_fields = db_rel_self_body.fields.get_all_fields(&txn);
+    let rel_fields = all_fields
+      .iter()
+      .map(|f| &f.type_options)
+      .flat_map(|t| t.iter())
+      .filter(|(k, _v)| **k == FieldType::Relation.type_id())
+      .map(|(_k, v)| v)
+      .flat_map(|v| v.iter())
+      .collect::<Vec<_>>();
+    assert_eq!(rel_fields.len(), 1);
+    assert_eq!(rel_fields[0].1.to_string(), database_id);
+  }
+}
+
 fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<String>) {
   let pub_db_data = serde_json::from_slice::<PublishDatabaseData>(published_db_blob).unwrap();
   let db_collab = collab_from_doc_state(pub_db_data.database_collab, "").unwrap();

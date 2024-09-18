@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
-use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
+use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::ops::Deref;
+use std::{collections::HashMap, ops::Deref};
 use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
@@ -120,6 +120,20 @@ pub struct CollabResponse {
   /// We can remove this 'serde(default)' after the 0325 version is stable.
   #[serde(default)]
   pub object_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageCollabData {
+  pub encoded_collab: Vec<u8>,
+  pub row_data: HashMap<String, Vec<u8>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageCollab {
+  pub view: FolderView,
+  pub data: PageCollabData,
+  pub owner: Option<AFWebUser>,
+  pub last_editor: Option<AFWebUser>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

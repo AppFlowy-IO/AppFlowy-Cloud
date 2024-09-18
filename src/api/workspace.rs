@@ -47,6 +47,7 @@ use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
+use crate::biz::workspace::page_view::get_page_view_collab;
 use crate::domain::compression::{
   blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
 };
@@ -116,6 +117,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}")
         .route(web::get().to(v1_get_collab_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page_view/{view_id}")
+        .route(web::get().to(get_page_view_handler)),
     )
     .service(
       web::resource("/{workspace_id}/batch/collab")
@@ -774,6 +779,28 @@ async fn v1_get_collab_handler(
   };
 
   Ok(Json(AppResponse::Ok().with_data(resp)))
+}
+
+async fn get_page_view_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PageCollab>>> {
+  let (workspace_uuid, view_id) = path.into_inner();
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  let page_collab = get_page_view_collab(
+    &state.pg_pool,
+    state.collab_access_control_storage.clone(),
+    uid,
+    workspace_uuid,
+    &view_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(page_collab)))
 }
 
 #[instrument(level = "trace", skip_all, err)]

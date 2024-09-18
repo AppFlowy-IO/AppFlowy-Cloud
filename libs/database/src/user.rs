@@ -1,3 +1,4 @@
+use database_entity::dto::AFWebUser;
 use futures_util::stream::BoxStream;
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
@@ -239,4 +240,23 @@ pub async fn select_name_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<St
   .fetch_one(pool)
   .await?;
   Ok(email)
+}
+
+pub async fn select_web_user_from_uid(pool: &PgPool, uid: i64) -> Result<AFWebUser, AppError> {
+  let row = sqlx::query_as!(
+    AFWebUser,
+    r#"
+    SELECT
+      uuid,
+      name,
+      metadata ->> 'icon_url' AS avatar_url
+    FROM af_user
+    WHERE uid = $1
+    "#,
+    uid
+  )
+  .fetch_one(pool)
+  .await?;
+
+  Ok(row)
 }

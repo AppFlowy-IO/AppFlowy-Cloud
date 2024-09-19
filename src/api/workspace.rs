@@ -119,7 +119,7 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(v1_get_collab_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/page_view/{view_id}")
+      web::resource("/{workspace_id}/page-view/{view_id}")
         .route(web::get().to(get_page_view_handler)),
     )
     .service(

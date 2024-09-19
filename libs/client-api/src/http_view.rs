@@ -12,7 +12,7 @@ impl Client {
     view_id: Uuid,
   ) -> Result<PageCollab, AppResponseError> {
     let url = format!(
-      "{}/api/workspace/{}/page_view/{}",
+      "{}/api/workspace/{}/page-view/{}",
       self.base_url, workspace_id, view_id
     );
     let resp = self

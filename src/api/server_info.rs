@@ -10,7 +10,8 @@ async fn server_info_handler() -> actix_web::Result<JsonAppResponse<ServerInfoRe
   Ok(
     AppResponse::Ok()
       .with_data(ServerInfoResponseItem {
-        version: env!("CARGO_PKG_VERSION").to_string(),
+        supported_client_features: vec![],
+        minimum_supported_client_version: None,
       })
       .into(),
   )

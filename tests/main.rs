@@ -6,6 +6,7 @@ mod gotrue;
 mod search;
 mod sql_test;
 mod user;
+mod util;
 mod websocket;
 mod workspace;
 mod yrs_version;

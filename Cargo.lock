@@ -626,6 +626,7 @@ dependencies = [
  "derive_more",
  "dotenvy",
  "fancy-regex",
+ "flate2",
  "futures",
  "futures-util",
  "gotrue",

@@ -625,7 +625,7 @@ dependencies = [
  "database-entity",
  "derive_more",
  "dotenvy",
- "fancy-regex",
+ "fancy-regex 0.11.0",
  "futures",
  "futures-util",
  "gotrue",
@@ -659,6 +659,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
+ "sha2",
  "shared-entity",
  "snowflake",
  "sqlx",
@@ -1872,6 +1873,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "chrono-tz"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd6dd8046d00723a59a2f8c5f295c515b9bb9a331ee4f8f3d4dd49e428acd3b6"
+dependencies = [
+ "chrono",
+ "chrono-tz-build",
+ "phf 0.11.2",
+]
+
+[[package]]
+name = "chrono-tz-build"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e94fea34d77a245229e7746bd2beb786cd2a896f306ff491fb8cecb3074b10a7"
+dependencies = [
+ "parse-zoneinfo",
+ "phf_codegen 0.11.2",
+]
+
+[[package]]
 name = "chumsky"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2092,7 +2114,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6095da99533c4547364f71dfb7c0db3a1bace562#6095da99533c4547364f71dfb7c0db3a1bace562"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=586a9400e66cf29e5980d01c73672e08c5b2fe04#586a9400e66cf29e5980d01c73672e08c5b2fe04"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2117,24 +2139,31 @@ dependencies = [
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6095da99533c4547364f71dfb7c0db3a1bace562#6095da99533c4547364f71dfb7c0db3a1bace562"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=586a9400e66cf29e5980d01c73672e08c5b2fe04#586a9400e66cf29e5980d01c73672e08c5b2fe04"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
+ "chrono-tz",
  "collab",
  "collab-entity",
  "csv",
  "dashmap 5.5.3",
+ "fancy-regex 0.13.0",
  "futures",
  "getrandom 0.2.15",
  "js-sys",
  "lazy_static",
  "nanoid",
+ "percent-encoding",
  "rayon",
+ "rust_decimal",
+ "rusty-money",
  "serde",
  "serde_json",
  "serde_repr",
+ "sha2",
  "strum",
  "strum_macros",
  "thiserror",
@@ -2149,13 +2178,14 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6095da99533c4547364f71dfb7c0db3a1bace562#6095da99533c4547364f71dfb7c0db3a1bace562"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=586a9400e66cf29e5980d01c73672e08c5b2fe04#586a9400e66cf29e5980d01c73672e08c5b2fe04"
 dependencies = [
  "anyhow",
  "arc-swap",
  "collab",
  "collab-entity",
  "getrandom 0.2.15",
+ "markdown",
  "nanoid",
  "serde",
  "serde_json",
@@ -2169,7 +2199,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6095da99533c4547364f71dfb7c0db3a1bace562#6095da99533c4547364f71dfb7c0db3a1bace562"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=586a9400e66cf29e5980d01c73672e08c5b2fe04#586a9400e66cf29e5980d01c73672e08c5b2fe04"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2189,7 +2219,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6095da99533c4547364f71dfb7c0db3a1bace562#6095da99533c4547364f71dfb7c0db3a1bace562"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=586a9400e66cf29e5980d01c73672e08c5b2fe04#586a9400e66cf29e5980d01c73672e08c5b2fe04"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2274,7 +2304,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6095da99533c4547364f71dfb7c0db3a1bace562#6095da99533c4547364f71dfb7c0db3a1bace562"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=586a9400e66cf29e5980d01c73672e08c5b2fe04#586a9400e66cf29e5980d01c73672e08c5b2fe04"
 dependencies = [
  "anyhow",
  "collab",
@@ -3072,6 +3102,17 @@ checksum = "b95f7c0680e4142284cf8b22c14a476e87d61b004a3a0861872b32ef7ead40a2"
 dependencies = [
  "bit-set",
  "regex",
+]
+
+[[package]]
+name = "fancy-regex"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "531e46835a22af56d1e3b66f04844bed63158bc094a628bec1d321d9b4c44bf2"
+dependencies = [
+ "bit-set",
+ "regex-automata 0.4.7",
+ "regex-syntax 0.8.4",
 ]
 
 [[package]]
@@ -4217,6 +4258,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
+name = "markdown"
+version = "1.0.0-alpha.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6491e6c702bf7e3b24e769d800746d5f2c06a6c6a2db7992612e0f429029e81"
+dependencies = [
+ "unicode-id",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4224,7 +4274,7 @@ checksum = "7a2629bb1404f3d34c2e921f21fd34ba00b206124c81f65c50b43b6aaefeb016"
 dependencies = [
  "log",
  "phf 0.10.1",
- "phf_codegen",
+ "phf_codegen 0.10.0",
  "string_cache",
  "string_cache_codegen",
  "tendril",
@@ -4700,6 +4750,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "944553dd59c802559559161f9816429058b869003836120e262e8caec061b7ae"
 
 [[package]]
+name = "parse-zoneinfo"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f2a05b18d44e2957b88f96ba460715e295bc1d7510468a2f3d3b44535d26c24"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "password-hash"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4831,6 +4890,16 @@ checksum = "4fb1c3a8bc4dd4e5cfce29b44ffc14bedd2ee294559a294e2a4d4c9e9a6a13cd"
 dependencies = [
  "phf_generator 0.10.0",
  "phf_shared 0.10.0",
+]
+
+[[package]]
+name = "phf_codegen"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8d39688d359e6b34654d328e262234662d16cc0f60ec8dcbe5e718709342a5a"
+dependencies = [
+ "phf_generator 0.11.2",
+ "phf_shared 0.11.2",
 ]
 
 [[package]]
@@ -5828,9 +5897,9 @@ dependencies = [
 
 [[package]]
 name = "rust_decimal"
-version = "1.35.0"
+version = "1.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1790d1c4c0ca81211399e0e0af16333276f375209e71a37b67698a373db5b47a"
+checksum = "b082d80e3e3cc52b2ed634388d436fe1f4de6af5786cc2de9ba9737527bdf555"
 dependencies = [
  "arrayvec",
  "borsh",
@@ -5840,6 +5909,16 @@ dependencies = [
  "rkyv",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rust_decimal_macros"
+version = "1.36.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da991f231869f34268415a49724c6578e740ad697ba0999199d6f22b3949332c"
+dependencies = [
+ "quote",
+ "rust_decimal",
 ]
 
 [[package]]
@@ -5974,6 +6053,16 @@ name = "rustversion"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
+
+[[package]]
+name = "rusty-money"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b28f881005eac7ad8d46b6f075da5f322bd7f4f83a38720fc069694ddadd683"
+dependencies = [
+ "rust_decimal",
+ "rust_decimal_macros",
+]
 
 [[package]]
 name = "ryu"
@@ -6125,7 +6214,7 @@ dependencies = [
  "log",
  "new_debug_unreachable",
  "phf 0.10.1",
- "phf_codegen",
+ "phf_codegen 0.10.0",
  "precomputed-hash",
  "servo_arc",
  "smallvec",
@@ -7500,6 +7589,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08f95100a766bf4f8f28f90d77e0a5461bbdb219042e7679bebe79004fed8d75"
 
 [[package]]
+name = "unicode-id"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10103c57044730945224467c09f71a4db0071c123a0648cc3e818913bde6b561"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8308,3 +8403,8 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "collab-importer"
+version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=586a9400e66cf29e5980d01c73672e08c5b2fe04#586a9400e66cf29e5980d01c73672e08c5b2fe04"

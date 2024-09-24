@@ -44,6 +44,7 @@ use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::ai::ai_completion_scope;
 use crate::api::chat::chat_scope;
+use crate::api::data_import::data_import_scope;
 use crate::api::file_storage::file_storage_scope;
 use crate::api::history::history_scope;
 use crate::api::metrics::metrics_scope;
@@ -169,6 +170,7 @@ pub async fn run_actix_server(
       .service(metrics_scope())
       .service(search_scope())
       .service(template_scope())
+      .service(data_import_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))

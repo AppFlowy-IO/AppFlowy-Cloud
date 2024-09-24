@@ -89,7 +89,11 @@ where
 
     spawn_period_check_inactive_group(Arc::downgrade(&group_manager), &group_sender_by_object_id);
 
-    spawn_collaboration_command(command_recv, &group_sender_by_object_id);
+    spawn_collaboration_command(
+      command_recv,
+      &group_sender_by_object_id,
+      Arc::downgrade(&group_manager),
+    );
 
     spawn_metrics(metrics.clone(), storage.clone());
 

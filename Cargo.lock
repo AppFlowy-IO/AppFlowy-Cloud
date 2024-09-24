@@ -723,6 +723,7 @@ dependencies = [
  "prometheus-client",
  "prost",
  "rand 0.8.5",
+ "rayon",
  "redis 0.25.4",
  "secrecy",
  "semver",

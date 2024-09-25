@@ -2,6 +2,7 @@ mod default_user_workspace;
 mod edit_workspace;
 mod invitation_crud;
 mod member_crud;
+mod page_view;
 mod publish;
 mod published_data;
 mod template;

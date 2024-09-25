@@ -205,6 +205,7 @@ pub fn workspace_scope() -> Scope {
       // Web browser can't carry payload when using GET method, so for browser compatibility, we use POST method
       .route(web::post().to(batch_get_collab_handler)),
     )
+    .service(web::resource("/{workspace_id}/database").route(web::get().to(list_database_handler)))
 }
 
 pub fn collab_scope() -> Scope {
@@ -1448,6 +1449,23 @@ async fn get_workspace_publish_outline_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(published_view)))
+}
+
+async fn list_database_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<String>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<Vec<AFDatabase>>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = workspace_id.into_inner();
+  let dbs = biz::collab::ops::list_database(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(dbs)))
 }
 
 #[inline]

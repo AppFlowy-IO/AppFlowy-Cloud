@@ -215,3 +215,16 @@ pub struct PublishedView {
   pub extra: Option<serde_json::Value>,
   pub children: Vec<PublishedView>,
 }
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct AFDatabase {
+  pub id: String,
+  pub name: String,
+  pub fields: Vec<AFDatabaseField>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AFDatabaseField {
+  pub name: String,
+  pub field_type: String,
+}

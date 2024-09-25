@@ -154,6 +154,18 @@ services:
       - APPFLOWY_HISTORY_ENVIRONMENT=production
       - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
 
+  appflowy_worker:
+    restart: on-failure
+    image: appflowyinc/appflowy_worker:${APPFLOWY_HISTORY_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: ./services/appflowy-worker/Dockerfile
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_WORKER_REDIS_URL=redis://redis:6379
+      - APPFLOWY_WORKER_ENVIRONMENT=production
+      - APPFLOWY_WORKER_DATABASE_URL=${APPFLOWY_WORKER_DATABASE_URL}
+
 volumes:
   postgres_data:
   minio_data:

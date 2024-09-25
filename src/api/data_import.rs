@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use actix_multipart::Multipart;
 use actix_web::web::Data;
-use actix_web::{web, HttpRequest, Scope};
+use actix_web::{web, Scope};
 use anyhow::anyhow;
 use app_error::AppError;
 use authentication::jwt::UserUuid;
@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
 use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tracing::trace;
 use uuid::Uuid;
 
@@ -28,7 +28,7 @@ async fn import_notion_data_handler(
   state: Data<AppState>,
   mut payload: Multipart,
 ) -> actix_web::Result<JsonAppResponse<()>> {
-  let file_name = format!("{}.zip", Uuid::new_v4().to_string());
+  let file_name = format!("{}.zip", Uuid::new_v4());
   let file_path = temp_dir().join(&file_name);
   let mut file = File::create(&file_path).await?;
   while let Some(item) = payload.next().await {
@@ -52,18 +52,22 @@ async fn import_notion_data_handler(
 
   let task = json!({
       "user_uuid": user_uuid,
+      "workspace_id": workspace_id,
       "s3_key": workspace_id,
       "file_type": "zip",
   });
 
   trace!("Push task:{} to redis queue", task);
-  // push task to redis queue
   let _: () = state
     .redis_connection_manager
     .clone()
-    .rpush("import_notion_task_queue", task.to_string())
+    .xadd(
+      "import_notion_task_stream",
+      "*",
+      &[("task", task.to_string())],
+    )
     .await
-    .map_err(|err| AppError::Internal(anyhow!("Failed to push task to redis queue: {}", err)))?;
+    .map_err(|err| AppError::Internal(anyhow!("Failed to push task to Redis stream: {}", err)))?;
 
   Ok(AppResponse::Ok().into())
 }

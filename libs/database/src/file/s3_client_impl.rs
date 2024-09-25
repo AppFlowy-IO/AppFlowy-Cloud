@@ -17,7 +17,6 @@ use database_entity::file_dto::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartData,
   UploadPartResponse,
 };
-use tokio::io::AsyncRead;
 
 use tracing::{error, trace};
 

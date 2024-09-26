@@ -87,13 +87,15 @@ pub async fn approve_or_reject_access_request(
 
   let mut txn = pg_pool.begin().await.context("approving request")?;
   let role = AFRole::Member;
-  upsert_workspace_member_with_txn(
-    &mut txn,
-    &access_request.workspace.workspace_id,
-    &access_request.requester.email,
-    role,
-  )
-  .await?;
+  if is_approved {
+    upsert_workspace_member_with_txn(
+      &mut txn,
+      &access_request.workspace.workspace_id,
+      &access_request.requester.email,
+      role,
+    )
+    .await?;
+  }
   let status = if is_approved {
     AFAccessRequestStatusColumn::Approved
   } else {

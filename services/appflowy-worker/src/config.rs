@@ -1,5 +1,6 @@
 use anyhow::{Context, Error};
 use infra::env_util::get_env_var;
+use secrecy::Secret;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use std::str::FromStr;
@@ -9,6 +10,7 @@ pub struct Config {
   pub app_env: Environment,
   pub redis_url: String,
   pub db_settings: DatabaseSetting,
+  pub s3_setting: S3Setting,
 }
 
 impl Config {
@@ -30,6 +32,16 @@ impl Config {
           .parse()
           .context("fail to get APPFLOWY_WORKER_DATABASE_MAX_CONNECTIONS")?,
         database_name: get_env_var("APPFLOWY_WORKER_DATABASE_NAME", "postgres"),
+      },
+      s3_setting: S3Setting {
+        use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true")
+          .parse()
+          .context("fail to get APPFLOWY_S3_USE_MINIO")?,
+        minio_url: get_env_var("APPFLOWY_S3_MINIO_URL", "http://localhost:9000"),
+        access_key: get_env_var("APPFLOWY_S3_ACCESS_KEY", "minioadmin"),
+        secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
+        bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
+        region: get_env_var("APPFLOWY_S3_REGION", ""),
       },
     })
   }
@@ -93,4 +105,14 @@ impl FromStr for Environment {
       ),
     }
   }
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct S3Setting {
+  pub use_minio: bool,
+  pub minio_url: String,
+  pub access_key: String,
+  pub secret_key: Secret<String>,
+  pub bucket: String,
+  pub region: String,
 }

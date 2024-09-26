@@ -10,7 +10,7 @@ use database::file::BucketClient;
 use futures_util::StreamExt;
 use redis::AsyncCommands;
 use serde_json::json;
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
 use tokio::fs::File;
@@ -28,6 +28,7 @@ async fn import_notion_data_handler(
   state: Data<AppState>,
   mut payload: Multipart,
 ) -> actix_web::Result<JsonAppResponse<()>> {
+  let host = "".to_string();
   let file_name = format!("{}.zip", Uuid::new_v4());
   let file_path = temp_dir().join(&file_name);
   let mut file = File::create(&file_path).await?;
@@ -53,6 +54,7 @@ async fn import_notion_data_handler(
   let task = json!({
       "user_uuid": user_uuid,
       "workspace_id": workspace_id,
+      "host": host,
       "s3_key": workspace_id,
       "file_type": "zip",
   });
@@ -70,23 +72,4 @@ async fn import_notion_data_handler(
     .map_err(|err| AppError::Internal(anyhow!("Failed to push task to Redis stream: {}", err)))?;
 
   Ok(AppResponse::Ok().into())
-}
-
-async fn calculate_key(
-  user_uuid: &UserUuid,
-  file: &mut File,
-) -> Result<String, Box<dyn std::error::Error>> {
-  let mut hasher = Sha256::new();
-  hasher.update(user_uuid.as_bytes());
-
-  let mut buf_reader = BufReader::new(file);
-  let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-  while let Ok(bytes_read) = buf_reader.read(&mut buffer).await {
-    if bytes_read == 0 {
-      break;
-    }
-    hasher.update(&buffer[..bytes_read]);
-  }
-
-  Ok(format!("{:x}", hasher.finalize()))
 }

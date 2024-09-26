@@ -1,7 +1,8 @@
 mod application;
 mod config;
-mod error;
-mod notion_import;
+pub mod error;
+pub mod notion_import;
+pub(crate) mod s3_client;
 
 use crate::application::run_server;
 use crate::config::Config;

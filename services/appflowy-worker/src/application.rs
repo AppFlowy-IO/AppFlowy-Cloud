@@ -1,17 +1,21 @@
-use crate::config::{Config, DatabaseSetting, Environment};
+use crate::config::{Config, DatabaseSetting, Environment, S3Setting};
 use anyhow::Error;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
 use crate::notion_import::task_queue::run_notion_importer;
+use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
+
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Router;
+use secrecy::ExposeSecret;
 use std::sync::Once;
 use std::time::Duration;
 use tokio::net::TcpListener;
 
+use crate::s3_client::S3Client;
 use tracing::info;
 use tracing::subscriber::set_global_default;
 use tracing_subscriber::layer::SubscriberExt;
@@ -77,12 +81,15 @@ pub async fn create_app(config: Config) -> Result<Router<()>, Error> {
     .await
     .expect("failed to get redis connection manager");
 
+  let s3_client = get_aws_s3_client(&config.s3_setting).await?;
+
   let state = AppState {
     redis_client,
     pg_pool,
+    s3_client,
   };
 
-  run_notion_importer(state.redis_client.clone());
+  run_notion_importer(state.redis_client.clone(), state.s3_client.clone());
 
   let app = Router::new()
     .route("/health", get(health_check))
@@ -99,6 +106,7 @@ async fn health_check() -> StatusCode {
 pub struct AppState {
   pub redis_client: ConnectionManager,
   pub pg_pool: PgPool,
+  pub s3_client: S3Client,
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {
@@ -114,4 +122,32 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
     .connect_with(setting.with_db())
     .await
     .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))
+}
+
+pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<S3Client, Error> {
+  let credentials = Credentials::new(
+    s3_setting.access_key.clone(),
+    s3_setting.secret_key.expose_secret().clone(),
+    None,
+    None,
+    "custom",
+  );
+  let shared_credentials = SharedCredentialsProvider::new(credentials);
+
+  // Configure the AWS SDK
+  let config_builder = aws_sdk_s3::Config::builder()
+    .credentials_provider(shared_credentials)
+    .force_path_style(true)
+    .region(Region::new(s3_setting.region.clone()));
+
+  let config = if s3_setting.use_minio {
+    config_builder.endpoint_url(&s3_setting.minio_url).build()
+  } else {
+    config_builder.build()
+  };
+  let client = aws_sdk_s3::Client::from_conf(config);
+  Ok(S3Client {
+    inner: client,
+    bucket: s3_setting.bucket.clone(),
+  })
 }

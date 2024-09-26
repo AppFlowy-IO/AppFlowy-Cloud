@@ -8,6 +8,8 @@ edition = "2021"
 path = "src/main.rs"
 name = "appflowy-worker"
 
+[lib]
+path = "src/lib.rs"
 
 [dependencies]
 collab.workspace = true
@@ -33,3 +35,11 @@ futures = "0.3.30"
 infra.workspace = true
 sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 tonic = "0.12.2"
+secrecy = { version = "0.8", features = ["serde"] }
+aws-sdk-s3 = { version = "1.36.0", features = [
+    "behavior-version-latest",
+    "rt-tokio",
+] }
+tokio-util = { version = "0.7.12", features = ["compat"] }
+async_zip = { version = "0.0.17", features = ["full"] }
+

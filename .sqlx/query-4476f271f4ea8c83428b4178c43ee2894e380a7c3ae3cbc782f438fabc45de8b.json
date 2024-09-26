@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      DELETE FROM af_access_request\n      WHERE request_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4476f271f4ea8c83428b4178c43ee2894e380a7c3ae3cbc782f438fabc45de8b"
+}

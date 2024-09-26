@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWorkspace, AFWorkspaceInvitationStatus,
+  AccessRequestMinimal, AccessRequestStatus, AccessRequestWithViewId, AccessRequesterInfo,
   AccountLink, GlobalComment, Reaction, Template, TemplateCategory, TemplateCategoryMinimal,
   TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
 };
@@ -12,7 +13,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 /// Represent the row of the af_workspace table
-#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, sqlx::Type)]
 pub struct AFWorkspaceRow {
   pub workspace_id: Uuid,
   pub database_storage_id: Option<Uuid>,
@@ -500,5 +501,86 @@ impl From<AFTemplateGroupRow> for TemplateGroup {
       category: value.category.into(),
       templates,
     }
+  }
+}
+
+#[derive(sqlx::Type, Serialize, Deserialize, Debug)]
+#[repr(i32)]
+pub enum AFAccessRequestStatusColumn {
+  Pending = 0,
+  Approved = 1,
+  Rejected = 2,
+}
+
+impl From<AFAccessRequestStatusColumn> for AccessRequestStatus {
+  fn from(value: AFAccessRequestStatusColumn) -> Self {
+    match value {
+      AFAccessRequestStatusColumn::Pending => AccessRequestStatus::Pending,
+      AFAccessRequestStatusColumn::Approved => AccessRequestStatus::Approved,
+      AFAccessRequestStatusColumn::Rejected => AccessRequestStatus::Rejected,
+    }
+  }
+}
+
+#[derive(sqlx::Type, Serialize, Debug)]
+pub struct AFAccessRequesterColumn {
+  pub uuid: Uuid,
+  pub name: String,
+  pub email: String,
+  pub avatar_url: Option<String>,
+}
+
+impl From<AFAccessRequesterColumn> for AccessRequesterInfo {
+  fn from(value: AFAccessRequesterColumn) -> Self {
+    Self {
+      uuid: value.uuid,
+      name: value.name,
+      email: value.email,
+      avatar_url: value.avatar_url,
+    }
+  }
+}
+
+#[derive(sqlx::Type, Serialize, Debug)]
+pub struct AFAccessRequestMinimalColumn {
+  pub request_id: Uuid,
+  pub workspace_id: Uuid,
+  pub requester_id: Uuid,
+  pub view_id: Uuid,
+}
+
+impl From<AFAccessRequestMinimalColumn> for AccessRequestMinimal {
+  fn from(value: AFAccessRequestMinimalColumn) -> Self {
+    Self {
+      request_id: value.request_id,
+      workspace_id: value.workspace_id,
+      requester_id: value.requester_id,
+      view_id: value.view_id,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AFAccessRequestWithViewIdColumn {
+  pub request_id: Uuid,
+  pub workspace: AFWorkspaceRow,
+  pub requester: AccessRequesterInfo,
+  pub view_id: Uuid,
+  pub status: AFAccessRequestStatusColumn,
+  pub created_at: DateTime<Utc>,
+}
+
+impl TryFrom<AFAccessRequestWithViewIdColumn> for AccessRequestWithViewId {
+  type Error = anyhow::Error;
+
+  fn try_from(value: AFAccessRequestWithViewIdColumn) -> Result<Self, Self::Error> {
+    Ok(Self {
+      request_id: value.request_id,
+      workspace: value.workspace.try_into()?,
+      requester: value.requester,
+      view_id: value.view_id,
+      status: value.status.into(),
+      created_at: value.created_at,
+    })
   }
 }

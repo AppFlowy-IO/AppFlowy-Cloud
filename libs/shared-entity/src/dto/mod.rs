@@ -1,3 +1,4 @@
+pub mod access_request_dto;
 pub mod ai_dto;
 pub mod auth_dto;
 pub mod billing_dto;

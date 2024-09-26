@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE af_access_request\n      SET status = $2\n      WHERE request_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "95b1b405028c45c074121110d046f42f8229f150c2384671802ee7c1ef9e376d"
+}

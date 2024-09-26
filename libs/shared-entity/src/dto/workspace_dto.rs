@@ -159,6 +159,14 @@ pub struct FolderView {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct FolderViewMinimal {
+  pub view_id: String,
+  pub name: String,
+  pub icon: Option<ViewIcon>,
+  pub layout: ViewLayout,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct SectionItems {
   pub views: Vec<FolderView>,
 }

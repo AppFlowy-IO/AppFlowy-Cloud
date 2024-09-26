@@ -70,8 +70,8 @@ pub async fn select_access_request_by_request_id<'a, E: Executor<'a, Database = 
       ) AS "workspace!: AFWorkspaceRow",
       (
         af_user.uuid,
-        af_user.email,
         af_user.name,
+        af_user.email,
         af_user.metadata ->> 'avatar'
       ) AS "requester!: AFAccessRequesterColumn",
       status AS "status: AFAccessRequestStatusColumn",

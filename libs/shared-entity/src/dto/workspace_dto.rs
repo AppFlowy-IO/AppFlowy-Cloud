@@ -223,3 +223,13 @@ pub struct PublishedView {
   pub extra: Option<serde_json::Value>,
   pub children: Vec<PublishedView>,
 }
+
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct AppAPIKey {
+  pub scopes: Vec<APIKeyPermission>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub enum APIKeyPermission {
+  Workspace,
+}

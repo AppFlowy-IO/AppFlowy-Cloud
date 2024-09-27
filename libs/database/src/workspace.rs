@@ -143,6 +143,33 @@ pub async fn select_user_is_workspace_owner(
   Ok(exists.unwrap_or(false))
 }
 
+/// Checks whether a user, identified by a UUID, is in a workspace
+#[inline]
+pub async fn select_user_is_in_workspace(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_uuid: &Uuid,
+) -> Result<bool, AppError> {
+  let exists = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM public.af_workspace_member
+        WHERE workspace_id = $1
+        AND uid = (
+          SELECT uid FROM public.af_user WHERE uuid = $2
+        )
+      ) AS "exists";
+    "#,
+    workspace_uuid,
+    user_uuid
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}
+
 pub async fn select_user_is_collab_publisher_for_all_views(
   pg_pool: &PgPool,
   user_uuid: &Uuid,

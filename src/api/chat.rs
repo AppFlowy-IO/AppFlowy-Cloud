@@ -81,6 +81,7 @@ pub fn chat_scope() -> Scope {
           .route(web::post().to(create_chat_context_handler))
     )
 }
+
 async fn create_chat_handler(
   path: web::Path<String>,
   state: Data<AppState>,

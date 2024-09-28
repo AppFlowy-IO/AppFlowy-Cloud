@@ -439,7 +439,7 @@ pub async fn invite_workspace_members(
     tokio::spawn(async move {
       if let Err(err) = cloned_mailer
         .send_workspace_invite(
-          invitation.email,
+          &invitation.email,
           WorkspaceInviteMailerParam {
             user_icon_url,
             username: inviter_name,

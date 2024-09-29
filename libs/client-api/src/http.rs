@@ -1,6 +1,8 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
+use app_error::ErrorCode;
 use client_api_entity::auth_dto::DeleteUserQuery;
+use client_api_entity::server_info_dto::ServerInfoResponseItem;
 use client_api_entity::workspace_dto::FolderView;
 use client_api_entity::workspace_dto::QueryWorkspaceFolder;
 use client_api_entity::workspace_dto::QueryWorkspaceParam;
@@ -11,6 +13,7 @@ use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
+use reqwest::StatusCode;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceParam, PatchWorkspaceParam};
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "enable_brotli")]
@@ -965,6 +968,26 @@ impl Client {
     AppResponse::<WorkspaceSpaceUsage>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn get_server_info(&self) -> Result<ServerInfoResponseItem, AppResponseError> {
+    let url = format!("{}/api/server", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    if resp.status() == StatusCode::NOT_FOUND {
+      Err(AppResponseError::new(
+        ErrorCode::Unhandled,
+        "server info not implemented",
+      ))
+    } else {
+      AppResponse::<ServerInfoResponseItem>::from_response(resp)
+        .await?
+        .into_data()
+    }
   }
 
   // Refresh token if given timestamp is close to the token expiration time

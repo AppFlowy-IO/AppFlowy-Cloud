@@ -4,6 +4,7 @@ mod collab_history;
 mod file_test;
 mod gotrue;
 mod search;
+mod server_info;
 mod sql_test;
 mod user;
 mod websocket;

@@ -1,5 +1,5 @@
 use crate::error::{ImportError, WorkerError};
-use crate::notion_import::unzip::unzip_async;
+use crate::import_worker::unzip::unzip_async;
 use crate::s3_client::{S3Client, S3StreamResponse};
 use anyhow::anyhow;
 use async_zip::base::read::stream::ZipFileReader;
@@ -39,7 +39,7 @@ use tokio::time::interval;
 use tracing::{error, info, trace};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImportTask {
+pub struct NotionImportTask {
   uid: i64,
   user_uuid: String,
   workspace_id: String,
@@ -50,11 +50,18 @@ pub struct ImportTask {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum ImportTask {
+  Notion(NotionImportTask),
+  Custom(serde_json::Value),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ImportFileType {
   Zip,
 }
 
-pub async fn run_notion_importer(
+pub async fn run_import_worker(
   mut redis_client: ConnectionManager,
   s3_client: S3Client,
   pg_pool: PgPool,
@@ -146,34 +153,36 @@ pub async fn run_notion_importer(
 async fn process_task(
   import_task: ImportTask,
   s3_client: &S3Client,
-  _pg_pool: &PgPool,
+  pg_pool: &PgPool,
 ) -> Result<(), ImportError> {
   trace!("Processing task: {:?}", import_task);
-
-  // 1. unzip file to temp dir
-  let unzip_file = download_zip_file(&import_task, s3_client).await?;
-
-  // 2. import zip
-  // let result = process_unzip_file(&import_task, &unzip_file, pg_pool, s3_client).await;
-
-  // 3. delete zip file regardless of success or failure
-  if let Err(err) = fs::remove_file(unzip_file).await {
-    error!("Failed to delete unzip file: {:?}", err);
+  match import_task {
+    ImportTask::Notion(task) => {
+      // 1. unzip file to temp dir
+      let unzip_file = download_zip_file(&task, s3_client).await?;
+      // 2. import zip
+      let result = process_unzip_file(&task, &unzip_file, pg_pool, s3_client).await;
+      // 3. delete zip file regardless of success or failure
+      if let Err(err) = fs::remove_file(unzip_file).await {
+        error!("Failed to delete unzip file: {:?}", err);
+      }
+      // 4. notify import result
+      notify_user(&task, result).await?;
+      // 5. remove file from S3
+      if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
+        error!("Failed to delete zip file from S3: {:?}", err);
+      }
+      Ok(())
+    },
+    ImportTask::Custom(value) => {
+      trace!("Custom task: {:?}", value);
+      Ok(())
+    },
   }
-
-  // 4. notify import result
-  // notify_user(&import_task, result).await?;
-
-  // 5. remove file from S3
-  if let Err(err) = s3_client.delete_blob(import_task.s3_key.as_str()).await {
-    error!("Failed to delete zip file from S3: {:?}", err);
-  }
-
-  Ok(())
 }
 
 async fn download_zip_file(
-  import_task: &ImportTask,
+  import_task: &NotionImportTask,
   s3_client: &S3Client,
 ) -> Result<PathBuf, ImportError> {
   let S3StreamResponse {
@@ -193,7 +202,7 @@ async fn download_zip_file(
 }
 
 async fn process_unzip_file(
-  import_task: &ImportTask,
+  import_task: &NotionImportTask,
   unzip_file: &PathBuf,
   pg_pool: &PgPool,
   s3_client: &S3Client,
@@ -252,7 +261,7 @@ async fn process_unzip_file(
   let mut collab_params_list = vec![];
   let mut database_view_ids_by_database_id: HashMap<String, Vec<String>> = HashMap::new();
 
-  // 2. Collect all collabs and resources
+  // 3. Collect all collabs and resources
   let mut stream = imported.into_collab_stream().await;
   while let Some(imported_collab) = stream.next().await {
     trace!("Imported collab: {}", imported_collab);
@@ -283,12 +292,30 @@ async fn process_unzip_file(
     }
   }
 
-  // 3. Insert collabs' views into the folder
+  // 4. Insert collabs' views into the folder
   folder.insert_nested_views(nested_views.into_inner());
 
-  // 4. Update workspace database records
-  if let Some(mut w_database) = workspace_database {
-    if !database_view_ids_by_database_id.is_empty() {
+  // 5. Edit workspace database collab and then encode workspace database collab
+  if !database_view_ids_by_database_id.is_empty() {
+    let w_database_id = select_workspace_database_storage_id(&pg_pool, &import_task.workspace_id)
+      .await
+      .map_err(|err| {
+        ImportError::Internal(anyhow!(
+          "Failed to select workspace database storage id: {:?}",
+          err
+        ))
+      })?
+      .to_string();
+
+    let w_db_collab =
+      get_encode_collab_from_bytes(&w_database_id, &CollabType::WorkspaceDatabase, pg_pool).await?;
+    let mut w_database = WorkspaceDatabaseBody::from_collab_doc_state(
+      &w_database_id,
+      CollabOrigin::Server,
+      w_db_collab.into(),
+    )
+    .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
+    {
       let collab: &mut Collab = w_database.borrow_mut();
       let mut txn = collab.transact_mut();
       for (database_id, view_ids) in database_view_ids_by_database_id {
@@ -296,9 +323,24 @@ async fn process_unzip_file(
       }
       drop(txn);
     }
+
+    let w_database_collab = w_database.encode_collab_v1().map_err(|err| {
+      ImportError::Internal(anyhow!(
+        "Failed to encode workspace database collab: {:?}",
+        err
+      ))
+    })?;
+
+    let w_database_collab_params = CollabParams {
+      object_id: imported.workspace_id.clone(),
+      collab_type: CollabType::WorkspaceDatabase,
+      embeddings: None,
+      encoded_collab_v1: Bytes::from(w_database_collab.encode_to_bytes().unwrap()),
+    };
+    collab_params_list.push(w_database_collab_params);
   }
 
-  // 5. Encode Folder
+  // 6. Encode Folder
   let folder_collab = folder
     .encode_collab_v1(|collab| CollabType::Folder.validate_require_data(collab))
     .map_err(|err| ImportError::Internal(err.into()))?;
@@ -310,7 +352,7 @@ async fn process_unzip_file(
   };
   collab_params_list.push(folder_collab_params);
 
-  // 6. Start a transaction to insert all collabs
+  // 7. Start a transaction to insert all collabs
   let mut transaction = pg_pool.begin().await.map_err(|err| {
     ImportError::Internal(anyhow!(
       "Failed to start transaction when importing data: {:?}",
@@ -339,7 +381,7 @@ async fn process_unzip_file(
     ))
   })?;
 
-  // 5. after inserting all collabs, upload all files to S3
+  // 8. after inserting all collabs, upload all files to S3
   batch_upload_files_to_s3(&import_task.workspace_id, s3_client, resources)
     .await
     .map_err(|err| ImportError::Internal(anyhow!("Failed to upload files to S3: {:?}", err)))?;
@@ -348,7 +390,7 @@ async fn process_unzip_file(
 }
 
 async fn notify_user(
-  import_task: &ImportTask,
+  import_task: &NotionImportTask,
   result: Result<(), ImportError>,
 ) -> Result<(), WorkerError> {
   // send email

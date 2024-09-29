@@ -1,9 +1,14 @@
 use anyhow::Result;
-use appflowy_worker::notion_import::unzip::unzip_async;
+use appflowy_worker::import_worker::unzip::unzip_async;
 use async_zip::base::read::stream::ZipFileReader;
 use futures::io::Cursor;
 use std::path::PathBuf;
 use tokio::fs;
+
+#[tokio::test]
+async fn create_task_test() {
+  let redis_client = redis_client().await;
+}
 
 #[tokio::test]
 async fn test_unzip_async() -> Result<()> {
@@ -23,4 +28,9 @@ async fn test_unzip_async() -> Result<()> {
   assert_eq!(file_name, "project&task");
 
   Ok(())
+}
+
+pub async fn redis_client() -> redis::Client {
+  let redis_uri = "redis://localhost:6379";
+  redis::Client::open(redis_uri).unwrap()
 }

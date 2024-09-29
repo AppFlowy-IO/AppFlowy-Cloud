@@ -4,7 +4,7 @@ use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
-use crate::notion_import::task_queue::run_notion_importer;
+use crate::import_worker::task_queue::run_import_worker;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 
 use crate::s3_client::S3Client;
@@ -89,7 +89,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
   };
 
   let local_set = LocalSet::new();
-  let notion_importer_future = local_set.run_until(run_notion_importer(
+  let import_worker_fut = local_set.run_until(run_import_worker(
     state.redis_client.clone(),
     state.s3_client.clone(),
     state.pg_pool.clone(),
@@ -100,7 +100,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     .with_state(state);
 
   tokio::select! {
-    _ = notion_importer_future => {
+    _ = import_worker_fut => {
       info!("Notion importer stopped");
     },
     _ = axum::serve(listener, app) => {

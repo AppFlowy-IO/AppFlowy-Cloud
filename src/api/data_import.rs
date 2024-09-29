@@ -7,6 +7,7 @@ use app_error::AppError;
 use authentication::jwt::UserUuid;
 use aws_sdk_s3::primitives::ByteStream;
 use database::file::BucketClient;
+use database::user::select_uid_from_uuid;
 use futures_util::StreamExt;
 use redis::AsyncCommands;
 use serde_json::json;
@@ -27,6 +28,7 @@ async fn import_notion_data_handler(
   state: Data<AppState>,
   mut payload: Multipart,
 ) -> actix_web::Result<JsonAppResponse<()>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let host = "".to_string();
   let file_name = format!("{}.zip", Uuid::new_v4());
   let file_path = temp_dir().join(&file_name);
@@ -50,12 +52,16 @@ async fn import_notion_data_handler(
     .put_blob_as_content_type(&workspace_id, stream, "zip")
     .await?;
 
+  // This task will be deserialized into ImportTask
   let task = json!({
-      "user_uuid": user_uuid,
-      "workspace_id": workspace_id,
-      "host": host,
-      "s3_key": workspace_id,
-      "file_type": "zip",
+      "notion": {
+         "uid": uid,
+         "user_uuid": user_uuid,
+         "workspace_id": workspace_id,
+         "s3_key": workspace_id,
+         "file_type": "zip",
+         "host": host,
+      }
   });
 
   trace!("Push task:{} to redis queue", task);

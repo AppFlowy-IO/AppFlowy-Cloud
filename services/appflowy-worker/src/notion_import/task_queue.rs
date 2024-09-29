@@ -12,7 +12,7 @@ use collab_importer::imported_collab::ImportType;
 use collab_importer::notion::page::CollabResource;
 use collab_importer::notion::NotionImporter;
 use collab_importer::util::FileId;
-use database::collab::select_blob_from_af_collab;
+use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
 use futures::stream::FuturesUnordered;
 use futures::{stream, StreamExt};
 use redis::aio::ConnectionManager;
@@ -21,12 +21,19 @@ use redis::{AsyncCommands, Value};
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::env::temp_dir;
 use std::path::{Path, PathBuf};
 
+use bytes::Bytes;
+use collab::preclude::Collab;
+use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_entity::proto::collab::CollabType::WorkspaceDatabase;
 use std::time::Duration;
 use tokio::fs;
 
+use database::workspace::select_workspace_database_storage_id;
+use database_entity::dto::CollabParams;
 use tokio::task::spawn_local;
 use tokio::time::interval;
 use tracing::{error, info, trace};
@@ -216,32 +223,114 @@ async fn process_unzip_file(
   )
   .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
 
-  let mut resources = vec![];
-  // 2. Start a transaction to insert all collabs to the database
-  let transaction = pg_pool.begin().await.map_err(|err| {
-    ImportError::Internal(anyhow!(
-      "Failed to start transaction when importing data: {:?}",
-      err
-    ))
-  })?;
+  // 2. Open workspace database collab
+  let workspace_database = if imported.num_of_csv() > 0 {
+    let w_database_id = select_workspace_database_storage_id(&pg_pool, &import_task.workspace_id)
+      .await
+      .map_err(|err| {
+        ImportError::Internal(anyhow!(
+          "Failed to select workspace database storage id: {:?}",
+          err
+        ))
+      })?
+      .to_string();
 
+    let w_db_collab =
+      get_encode_collab_from_bytes(&w_database_id, &CollabType::WorkspaceDatabase, pg_pool).await?;
+    let w_database = WorkspaceDatabaseBody::from_collab_doc_state(
+      &w_database_id,
+      CollabOrigin::Server,
+      w_db_collab.into(),
+    )
+    .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
+    Some(w_database)
+  } else {
+    None
+  };
+
+  let mut resources = vec![];
+  let mut collab_params_list = vec![];
+  let mut database_view_ids_by_database_id: HashMap<String, Vec<String>> = HashMap::new();
+
+  // 2. Collect all collabs and resources
   let mut stream = imported.into_collab_stream().await;
   while let Some(imported_collab) = stream.next().await {
     trace!("Imported collab: {}", imported_collab);
     resources.push(imported_collab.resource);
+    collab_params_list.extend(
+      imported_collab
+        .collabs
+        .into_iter()
+        .map(|imported_collab| CollabParams {
+          object_id: imported_collab.object_id,
+          collab_type: imported_collab.collab_type,
+          embeddings: None,
+          encoded_collab_v1: Bytes::from(imported_collab.encoded_collab.encode_to_bytes().unwrap()),
+        })
+        .collect(),
+    );
+
     match imported_collab.import_type {
-      ImportType::Database => {},
-      ImportType::Document => {},
+      ImportType::Database {
+        database_id,
+        view_ids,
+      } => {
+        database_view_ids_by_database_id.insert(database_id, view_ids);
+      },
+      ImportType::Document => {
+        // do nothing
+      },
     }
   }
 
   // 3. Insert collabs' views into the folder
   folder.insert_nested_views(nested_views.into_inner());
 
-  // 4. write folder collab to disk
+  // 4. Update workspace database records
+  if let Some(mut w_database) = workspace_database {
+    if !database_view_ids_by_database_id.is_empty() {
+      let collab: &mut Collab = w_database.borrow_mut();
+      let mut txn = collab.transact_mut();
+      for (database_id, view_ids) in database_view_ids_by_database_id {
+        w_database.add_database_with_txn(&mut txn, &database_id, view_ids);
+      }
+      drop(txn);
+    }
+  }
+
+  // 5. Encode Folder
   let folder_collab = folder
     .encode_collab_v1(|collab| CollabType::Folder.validate_require_data(collab))
     .map_err(|err| ImportError::Internal(err.into()))?;
+  let folder_collab_params = CollabParams {
+    object_id: imported.workspace_id.clone(),
+    collab_type: CollabType::Folder,
+    embeddings: None,
+    encoded_collab_v1: Bytes::from(folder_collab.encode_to_bytes().unwrap()),
+  };
+  collab_params_list.push(folder_collab_params);
+
+  // 6. Start a transaction to insert all collabs
+  let mut transaction = pg_pool.begin().await.map_err(|err| {
+    ImportError::Internal(anyhow!(
+      "Failed to start transaction when importing data: {:?}",
+      err
+    ))
+  })?;
+
+  insert_into_af_collab_bulk_for_user(
+    &mut transaction,
+    &import_task.uid,
+    &import_task.workspace_id,
+    &collab_params_list,
+  )
+  .await
+  .map_err(|err| {
+    ImportError::Internal(anyhow!(
+      "Failed to insert collabs into database when importing data: {:?}",
+      err
+    ))
+  })?;
 
   transaction.commit().await.map_err(|err| {
     ImportError::Internal(anyhow!(

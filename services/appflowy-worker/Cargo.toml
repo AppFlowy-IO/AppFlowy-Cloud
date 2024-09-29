@@ -16,11 +16,13 @@ collab.workspace = true
 collab-entity.workspace = true
 collab-importer.workspace = true
 collab-folder.workspace = true
+collab-database.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 database.workspace = true
+database-entity.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager"] }
@@ -44,4 +46,5 @@ aws-sdk-s3 = { version = "1.36.0", features = [
 tokio-util = { version = "0.7.12", features = ["compat"] }
 async_zip = { version = "0.0.17", features = ["full"] }
 mime_guess = "2.0"
+bytes.workspace = true
 

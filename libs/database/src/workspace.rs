@@ -684,6 +684,28 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
   .await?;
   Ok(workspace)
 }
+
+#[inline]
+pub async fn select_workspace_database_storage_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &str,
+) -> Result<Uuid, AppError> {
+  let workspace_id = Uuid::parse_str(workspace_id)?;
+  let result = sqlx::query!(
+    r#"
+        SELECT
+            database_storage_id
+        FROM public.af_workspace
+        WHERE workspace_id = $1
+        "#,
+    workspace_id
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(result.database_storage_id)
+}
+
 #[inline]
 pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,

@@ -7,6 +7,7 @@ use sqlx::PgPool;
 use crate::notion_import::task_queue::run_notion_importer;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 
+use crate::s3_client::S3Client;
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Router;
@@ -14,8 +15,7 @@ use secrecy::ExposeSecret;
 use std::sync::Once;
 use std::time::Duration;
 use tokio::net::TcpListener;
-
-use crate::s3_client::S3Client;
+use tokio::task::LocalSet;
 use tracing::info;
 use tracing::subscriber::set_global_default;
 use tracing_subscriber::layer::SubscriberExt;
@@ -31,8 +31,7 @@ pub async fn run_server(
 
   // Start the server
   info!("Starting server at: {:?}", listener.local_addr());
-  let app = create_app(config).await.unwrap();
-  axum::serve(listener, app).await?;
+  create_app(listener, config).await.unwrap();
   Ok(())
 }
 
@@ -69,7 +68,7 @@ pub fn init_subscriber(app_env: &Environment) {
   });
 }
 
-pub async fn create_app(config: Config) -> Result<Router<()>, Error> {
+pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Error> {
   // Postgres
   info!("Preparing to run database migrations...");
   let pg_pool = get_connection_pool(&config.db_settings).await?;
@@ -89,13 +88,27 @@ pub async fn create_app(config: Config) -> Result<Router<()>, Error> {
     s3_client,
   };
 
-  run_notion_importer(state.redis_client.clone(), state.s3_client.clone());
+  let local_set = LocalSet::new();
+  let notion_importer_future = local_set.run_until(run_notion_importer(
+    state.redis_client.clone(),
+    state.s3_client.clone(),
+    state.pg_pool.clone(),
+  ));
 
   let app = Router::new()
     .route("/health", get(health_check))
     .with_state(state);
 
-  Ok(app)
+  tokio::select! {
+    _ = notion_importer_future => {
+      info!("Notion importer stopped");
+    },
+    _ = axum::serve(listener, app) => {
+      info!("worker stopped");
+    },
+  }
+
+  Ok(())
 }
 
 async fn health_check() -> StatusCode {

@@ -83,15 +83,6 @@ pub enum Environment {
   Production,
 }
 
-impl Environment {
-  pub fn as_str(&self) -> &'static str {
-    match self {
-      Environment::Local => "local",
-      Environment::Production => "production",
-    }
-  }
-}
-
 impl FromStr for Environment {
   type Err = anyhow::Error;
 

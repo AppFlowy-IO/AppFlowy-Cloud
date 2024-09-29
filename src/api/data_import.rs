@@ -10,11 +10,10 @@ use database::file::BucketClient;
 use futures_util::StreamExt;
 use redis::AsyncCommands;
 use serde_json::json;
-use sha2::Digest;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
 use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::AsyncWriteExt;
 use tracing::trace;
 use uuid::Uuid;
 

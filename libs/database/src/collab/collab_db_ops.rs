@@ -161,6 +161,158 @@ pub async fn insert_into_af_collab(
   Ok(())
 }
 
+/// Inserts or updates multiple collaboration records for a specific user in bulk. It assumes you are the
+/// owner of the workspace.
+///
+/// This function performs a bulk insert or update operation for collaboration records (`af_collab`)
+/// and corresponding member records (`af_collab_member`) for a given user and workspace. It processes a
+/// list of collaboration parameters (`CollabParams`) and ensures that the data is inserted efficiently.
+///
+/// It will return error: ON CONFLICT DO UPDATE command cannot affect row a second time, when you're
+/// trying to insert duplicate rows with the same constrained values in a single INSERT statement.
+/// PostgreSQL’s ON CONFLICT DO UPDATE cannot handle multiple duplicate rows within the same batch.
+///
+/// # Concurrency and Locking:
+///
+/// - **Row-level locks**: PostgreSQL acquires row-level locks during inserts or updates, especially with
+///   the `ON CONFLICT` clause, which resolves conflicts by updating existing rows. If multiple transactions
+///   attempt to modify the same rows (with the same `oid` and `partition_key`), PostgreSQL will serialize
+///   access, allowing only one transaction to modify the rows at a time.
+/// - **No table-wide locks**: Other inserts or updates on different rows can proceed concurrently without
+///   locking the entire table.
+/// - **Deadlock risk**: Deadlocks may occur when transactions attempt to modify the same rows concurrently,
+///   but PostgreSQL automatically resolves them by aborting one of the transactions. To minimize this risk,
+///   ensure transactions access rows in a consistent order.
+///
+/// # Best Practices for High Concurrency:
+///
+/// - **Batch inserts**: To reduce row-level contention, consider breaking large datasets into smaller batches
+///   (e.g., 100 rows at a time) when performing bulk inserts.
+/// | Row Size | Total Rows | Batch Insert Time | Chunked Insert Time (2000-row chunks) |
+/// |----------|------------|-------------------|--------------------------------------|
+/// | 1KB      | 500        | 41.43 ms          | 31.24 ms                             |
+/// | 1KB      | 1000       | 79.30 ms          | 48.07 ms                             |
+/// | 1KB      | 2000       | 129.50 ms         | 86.75 ms                             |
+/// | 1KB      | 3000       | 153.59 ms         | 121.09 ms                            |
+/// | 1KB      | 6000       | 427.08 ms         | 500.08 ms                            |
+/// | 5KB      | 500        | 79.70 ms          | 66.98 ms                             |
+/// | 5KB      | 1000       | 140.58 ms         | 121.60 ms                            |
+/// | 5KB      | 2000       | 257.42 ms         | 245.02 ms                            |
+/// | 5KB      | 3000       | 418.10 ms         | 380.64 ms                            |
+/// | 5KB      | 6000       | 776.63 ms         | 730.69 ms                            |
+/// For 1KB rows: Chunked inserts provide better performance for small datasets (up to 3000 rows), but batch inserts become more efficient for larger datasets (6000+ rows).
+/// For 5KB rows: Chunked inserts consistently outperform or match batch inserts, making them the preferred method across different dataset sizes.
+///
+/// - **Consistent transaction ordering**: Access rows in a consistent order across transactions to reduce
+///   the risk of deadlocks.
+/// - **Optimistic concurrency control**: For highly concurrent environments, implement optimistic concurrency
+///   control to handle conflicts after they occur rather than preventing them upfront.
+///
+/// # Why Use a Transaction Instead of `PgPool`:
+///
+/// -  Using a transaction ensures that all database operations (insert/update for both
+///   `af_collab` and `af_collab_member`) succeed or fail together. This means that if any part of the
+///   operation fails, all changes will be rolled back, ensuring data consistency.
+///
+///
+#[inline]
+#[instrument(level = "trace", skip_all, fields(uid=%uid, workspace_id=%workspace_id), err)]
+pub async fn insert_into_af_collab_bulk_for_user(
+  tx: &mut Transaction<'_, Postgres>,
+  uid: &i64,
+  workspace_id: &str,
+  collab_params_list: &[CollabParams],
+) -> Result<(), AppError> {
+  if collab_params_list.is_empty() {
+    return Ok(());
+  }
+
+  let encrypt = 0;
+  let workspace_uuid = Uuid::from_str(workspace_id)?;
+
+  // Insert values into the `af_collab_member` and `af_collab` tables in bulk
+  let len = collab_params_list.len();
+  let mut object_ids: Vec<Uuid> = Vec::with_capacity(len);
+  let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(len);
+  let mut lengths: Vec<i32> = Vec::with_capacity(len);
+  let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
+  let mut permission_ids: Vec<i32> = Vec::with_capacity(len);
+  let uids: Vec<i64> = vec![*uid; collab_params_list.len()];
+  let workspace_ids: Vec<Uuid> = vec![workspace_uuid; collab_params_list.len()];
+
+  let permission_id: i32 = sqlx::query_scalar!(
+    r#"
+      SELECT rp.permission_id
+      FROM af_role_permissions rp
+      JOIN af_roles ON rp.role_id = af_roles.id
+      WHERE af_roles.name = 'Owner';
+    "#
+  )
+  .fetch_one(tx.deref_mut())
+  .await?;
+
+  for params in collab_params_list {
+    let partition_key = partition_key_from_collab_type(&params.collab_type);
+    object_ids.push(Uuid::from_str(&params.object_id)?);
+    blobs.push(params.encoded_collab_v1.to_vec());
+    lengths.push(params.encoded_collab_v1.len() as i32);
+    partition_keys.push(partition_key);
+    permission_ids.push(permission_id);
+  }
+
+  // Bulk insert into `af_collab_member` for the user and provided collab params
+  sqlx::query!(
+    r#"
+      INSERT INTO af_collab_member (uid, oid, permission_id)
+      SELECT * FROM UNNEST($1::bigint[], $2::uuid[], $3::int[])
+      ON CONFLICT (uid, oid)
+      DO UPDATE
+      SET permission_id = excluded.permission_id;
+    "#,
+    &uids,
+    &object_ids,
+    &permission_ids
+  )
+  .execute(tx.deref_mut())
+  .await
+  .map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Bulk insert/update into af_collab_member failed for uid: {}, error details: {:?}",
+      uid,
+      err
+    ))
+  })?;
+
+  // Bulk insert into `af_collab` for the provided collab params
+  sqlx::query!(
+      r#"
+        INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
+        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::int[], $6::bigint[], $7::uuid[])
+        ON CONFLICT (oid, partition_key)
+        DO UPDATE
+        SET blob = excluded.blob, len = excluded.len, encrypt = excluded.encrypt, owner_uid = excluded.owner_uid;
+      "#,
+      &object_ids,
+      &blobs,
+      &lengths,
+      &partition_keys,
+      &vec![encrypt; collab_params_list.len()],
+      &uids,
+      &workspace_ids
+    )
+      .execute(tx.deref_mut())
+      .await
+      .map_err(|err| {
+        AppError::Internal(anyhow!(
+            "Bulk insert/update into af_collab failed for uid: {}, error details: {:?}",
+            uid,
+            err
+        ))
+      })?;
+
+  Ok(())
+}
+
 #[inline]
 pub async fn select_blob_from_af_collab<'a, E>(
   conn: E,

@@ -1,11 +1,10 @@
 use crate::error::WorkerError;
 use anyhow::anyhow;
 use aws_sdk_s3::error::SdkError;
-use aws_sdk_s3::operation::get_object::GetObjectError;
 
-use futures::TryStreamExt;
+use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::primitives::ByteStream;
 use std::ops::Deref;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
 #[derive(Clone, Debug)]
@@ -51,6 +50,51 @@ impl S3Client {
       },
       Err(err) => Err(WorkerError::from(anyhow!(
         "Failed to get object from S3: {}",
+        err
+      ))),
+    }
+  }
+
+  pub(crate) async fn put_blob(
+    &self,
+    object_key: &str,
+    content: ByteStream,
+    content_type: Option<&str>,
+  ) -> Result<(), WorkerError> {
+    match self
+      .inner
+      .put_object()
+      .bucket(&self.bucket)
+      .key(object_key)
+      .body(content)
+      .content_type(content_type.unwrap_or("application/octet-stream"))
+      .send()
+      .await
+    {
+      Ok(_) => Ok(()),
+      Err(err) => Err(WorkerError::from(anyhow!(
+        "Failed to put object to S3: {}",
+        err
+      ))),
+    }
+  }
+
+  pub(crate) async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError> {
+    match self
+      .inner
+      .delete_object()
+      .bucket(&self.bucket)
+      .key(object_key)
+      .send()
+      .await
+    {
+      Ok(_) => Ok(()),
+      Err(SdkError::ServiceError(service_err)) => Err(WorkerError::from(anyhow!(
+        "Failed to delete object from S3: {:?}",
+        service_err
+      ))),
+      Err(err) => Err(WorkerError::from(anyhow!(
+        "Failed to delete object from S3: {}",
         err
       ))),
     }

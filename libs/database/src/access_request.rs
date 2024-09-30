@@ -1,6 +1,6 @@
 use crate::pg_row::{
   AFAccessRequestStatusColumn, AFAccessRequestWithViewIdColumn, AFAccessRequesterColumn,
-  AFWorkspaceRow,
+  AFWorkspaceWithMemberCountRow,
 };
 use app_error::AppError;
 use database_entity::dto::AccessRequestWithViewId;
@@ -54,6 +54,15 @@ pub async fn select_access_request_by_request_id<'a, E: Executor<'a, Database = 
   let access_request = sqlx::query_as!(
     AFAccessRequestWithViewIdColumn,
     r#"
+      WITH request_id_workspace_member_count AS (
+        SELECT
+          request_id,
+          COUNT(*) AS member_count
+        FROM af_access_request
+        JOIN af_workspace_member USING (workspace_id)
+        WHERE request_id = $1
+        GROUP BY request_id
+      )
       SELECT
       request_id,
       view_id,
@@ -66,13 +75,14 @@ pub async fn select_access_request_by_request_id<'a, E: Executor<'a, Database = 
         af_workspace.workspace_type,
         af_workspace.deleted_at,
         af_workspace.workspace_name,
-        af_workspace.icon
-      ) AS "workspace!: AFWorkspaceRow",
+        af_workspace.icon,
+        request_id_workspace_member_count.member_count
+      ) AS "workspace!: AFWorkspaceWithMemberCountRow",
       (
         af_user.uuid,
         af_user.name,
         af_user.email,
-        af_user.metadata ->> 'avatar'
+        af_user.metadata ->> 'icon_url'
       ) AS "requester!: AFAccessRequesterColumn",
       status AS "status: AFAccessRequestStatusColumn",
       af_access_request.created_at AS created_at
@@ -80,6 +90,7 @@ pub async fn select_access_request_by_request_id<'a, E: Executor<'a, Database = 
       JOIN af_user USING (uid)
       JOIN af_workspace USING (workspace_id)
       JOIN af_user AS owner_profile ON af_workspace.owner_uid = owner_profile.uid
+      JOIN request_id_workspace_member_count USING (request_id)
       WHERE request_id = $1
     "#,
     request_id,

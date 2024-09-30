@@ -58,6 +58,10 @@ async fn access_request_test() {
     access_request_to_be_approved.workspace.workspace_id,
     workspace_id
   );
+  assert_eq!(
+    access_request_to_be_approved.workspace.member_count,
+    Some(1)
+  );
   owner_client
     .approve_access_request(access_request_id)
     .await

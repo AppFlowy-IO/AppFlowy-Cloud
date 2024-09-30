@@ -50,6 +50,7 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::history::history_scope;
 use crate::api::metrics::metrics_scope;
 use crate::api::search::search_scope;
+use crate::api::server_info::server_info_scope;
 use crate::api::template::template_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
@@ -160,6 +161,7 @@ pub async fn run_actix_server(
       // .wrap(DecryptPayloadMiddleware)
       .wrap(access_control.clone())
       .wrap(RequestIdMiddleware)
+      .service(server_info_scope())
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())

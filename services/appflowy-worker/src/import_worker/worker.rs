@@ -1,11 +1,15 @@
-use crate::error::{ImportError, WorkerError};
+use crate::error::ImportError;
 use crate::import_worker::unzip::unzip_async;
 use crate::s3_client::{S3Client, S3StreamResponse};
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use async_zip::base::read::stream::ZipFileReader;
 use aws_sdk_s3::primitives::ByteStream;
+use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
+
+use collab_database::workspace_database::WorkspaceDatabaseBody;
+
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use collab_importer::imported_collab::ImportType;
@@ -17,43 +21,42 @@ use futures::stream::FuturesUnordered;
 use futures::{stream, StreamExt};
 use redis::aio::ConnectionManager;
 use redis::streams::{
-  StreamClaimOptions, StreamClaimReply, StreamId, StreamPendingData, StreamPendingReply,
-  StreamReadOptions, StreamReadReply,
+  StreamClaimOptions, StreamClaimReply, StreamId, StreamPendingReply, StreamReadOptions,
+  StreamReadReply,
 };
-use redis::{AsyncCommands, ErrorKind, RedisResult, Value};
+use redis::{AsyncCommands, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use sqlx::{PgPool, Pool, Postgres};
 use std::collections::HashMap;
 use std::env::temp_dir;
 use std::path::{Path, PathBuf};
-
-use bytes::Bytes;
-use collab::preclude::Collab;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
-use collab_entity::proto::collab::CollabType::WorkspaceDatabase;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
 
+use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResultBuilder};
 use database::workspace::select_workspace_database_storage_id;
 use database_entity::dto::CollabParams;
+
 use tokio::task::spawn_local;
 use tokio::time::interval;
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn};
 
+const STREAM_NAME: &str = "import_notion_task_stream";
+const GROUP_NAME: &str = "import_notion_task_group";
+const CONSUMER_NAME: &str = "appflowy_worker_notion_importer";
 pub async fn run_import_worker(
   mut redis_client: ConnectionManager,
   s3_client: S3Client,
   pg_pool: PgPool,
+  notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
   info!("Starting notion importer worker");
-  let stream_name = "import_notion_task_stream";
-  let group_name = "import_notion_task_group";
-  let consumer_name = "appflowy_worker_notion_importer";
 
-  if let Err(err) = ensure_consumer_group(stream_name, group_name, &mut redis_client)
+  if let Err(err) = ensure_consumer_group(STREAM_NAME, GROUP_NAME, &mut redis_client)
     .await
-    .map_err(|e| ImportError::Internal(e))
+    .map_err(ImportError::Internal)
   {
     error!("Failed to ensure consumer group: {:?}", err);
   }
@@ -62,9 +65,10 @@ pub async fn run_import_worker(
     &mut redis_client,
     &s3_client,
     &pg_pool,
-    &stream_name,
-    group_name,
-    consumer_name,
+    STREAM_NAME,
+    GROUP_NAME,
+    CONSUMER_NAME,
+    notifier.clone(),
   )
   .await;
 
@@ -72,9 +76,10 @@ pub async fn run_import_worker(
     &mut redis_client,
     s3_client,
     pg_pool,
-    &stream_name,
-    group_name,
-    consumer_name,
+    STREAM_NAME,
+    GROUP_NAME,
+    CONSUMER_NAME,
+    notifier.clone(),
   )
   .await?;
 
@@ -85,23 +90,26 @@ async fn process_un_acked_tasks(
   mut redis_client: &mut ConnectionManager,
   s3_client: &S3Client,
   pg_pool: &PgPool,
-  stream_name: &&str,
+  stream_name: &str,
   group_name: &str,
   consumer_name: &str,
+  notifier: Arc<dyn ImportNotifier>,
 ) {
   // when server restarts, we need to check if there are any unacknowledged tasks
-  match get_un_ack_tasks(stream_name, group_name, consumer_name, &mut redis_client).await {
+  match get_un_ack_tasks(stream_name, group_name, consumer_name, redis_client).await {
     Ok(un_ack_tasks) => {
+      info!("Found {} unacknowledged tasks", un_ack_tasks.len());
       for un_ack_task in un_ack_tasks {
         // Ignore the error here since the consume task will handle the error
         let _ = consume_task(
-          &stream_name,
+          stream_name,
           group_name,
           un_ack_task.task,
           &un_ack_task.stream_id.id,
-          &mut redis_client,
-          &s3_client,
-          &pg_pool,
+          redis_client,
+          s3_client,
+          pg_pool,
+          notifier.clone(),
         )
         .await;
       }
@@ -114,9 +122,10 @@ async fn process_upcoming_tasks(
   redis_client: &mut ConnectionManager,
   s3_client: S3Client,
   pg_pool: PgPool,
-  stream_name: &&str,
+  stream_name: &str,
   group_name: &str,
   consumer_name: &str,
+  notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
   let options = StreamReadOptions::default()
     .group(group_name, consumer_name)
@@ -141,23 +150,28 @@ async fn process_upcoming_tasks(
     for stream_key in tasks.keys {
       // For each stream key, iterate through the stream entries
       for stream_id in stream_key.ids {
-        match ImportTask::try_from(stream_id) {
+        match ImportTask::try_from(&stream_id) {
           Ok(import_task) => {
             let entry_id = stream_id.id.clone();
             let mut cloned_redis_client = redis_client.clone();
             let cloned_s3_client = s3_client.clone();
             let pg_pool = pg_pool.clone();
+            let notifier = notifier.clone();
+            let stream_name = stream_name.to_string();
+            let group_name = group_name.to_string();
             task_handlers.push(spawn_local(async move {
               consume_task(
-                stream_name,
-                group_name,
+                &stream_name,
+                &group_name,
                 import_task,
                 &entry_id,
                 &mut cloned_redis_client,
                 &cloned_s3_client,
                 &pg_pool,
+                notifier,
               )
-              .await?
+              .await?;
+              Ok::<(), ImportError>(())
             }));
           },
           Err(err) => {
@@ -178,15 +192,16 @@ async fn process_upcoming_tasks(
 }
 
 async fn consume_task(
-  stream_name: &&str,
+  stream_name: &str,
   group_name: &str,
   import_task: ImportTask,
   entry_id: &String,
   redis_client: &mut ConnectionManager,
   s3_client: &S3Client,
   pg_pool: &Pool<Postgres>,
+  notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
-  process_task(import_task, &s3_client, &pg_pool).await?;
+  process_task(import_task, s3_client, pg_pool, notifier).await?;
   let _: () = redis_client
     .xack(stream_name, group_name, &[entry_id])
     .await
@@ -201,6 +216,7 @@ async fn process_task(
   import_task: ImportTask,
   s3_client: &S3Client,
   pg_pool: &PgPool,
+  notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
   trace!("Processing task: {:?}", import_task);
   match import_task {
@@ -214,7 +230,7 @@ async fn process_task(
         error!("Failed to delete unzip file: {:?}", err);
       }
       // 4. notify import result
-      notify_user(&task, result).await?;
+      notify_user(&task, result, notifier).await?;
       // 5. remove file from S3
       if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
         error!("Failed to delete zip file from S3: {:?}", err);
@@ -223,6 +239,17 @@ async fn process_task(
     },
     ImportTask::Custom(value) => {
       trace!("Custom task: {:?}", value);
+      match value.get("workspace_id").and_then(|v| v.as_str()) {
+        None => {
+          warn!("Missing workspace_id in custom task");
+        },
+        Some(workspace_id) => {
+          let result = ImportResultBuilder::new(workspace_id.to_string()).build();
+          notifier
+            .notify_progress(ImportProgress::Finished(result))
+            .await;
+        },
+      }
       Ok(())
     },
   }
@@ -244,7 +271,7 @@ async fn download_zip_file(
   let temp_dir = temp_dir();
   let unzip_file = unzip_async(zip_reader, temp_dir)
     .await
-    .map_err(|err| ImportError::Internal(err.into()))?;
+    .map_err(|err| ImportError::Internal(err))?;
   Ok(unzip_file)
 }
 
@@ -280,7 +307,7 @@ async fn process_unzip_file(
   .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
 
   // 2. Open workspace database collab
-  let workspace_database = if imported.num_of_csv() > 0 {
+  let _workspace_database = if imported.num_of_csv() > 0 {
     let w_database_id = select_workspace_database_storage_id(pg_pool, &import_task.workspace_id)
       .await
       .map_err(|err| {
@@ -362,7 +389,7 @@ async fn process_unzip_file(
       w_db_collab.into(),
     )
     .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
-    w_database.add_database_with_txn(database_view_ids_by_database_id);
+    w_database.batch_add_database(database_view_ids_by_database_id);
 
     let w_database_collab = w_database.encode_collab_v1().map_err(|err| {
       ImportError::Internal(anyhow!(
@@ -430,8 +457,9 @@ async fn process_unzip_file(
 }
 
 async fn notify_user(
-  import_task: &NotionImportTask,
-  result: Result<(), ImportError>,
+  _import_task: &NotionImportTask,
+  _result: Result<(), ImportError>,
+  _notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
   // send email
   Ok(())
@@ -517,6 +545,8 @@ async fn get_encode_collab_from_bytes(
   .await
   .map_err(|err| ImportError::Internal(err.into()))?
 }
+
+/// Ensure the consumer group exists, if not, create it.
 async fn ensure_consumer_group(
   stream_key: &str,
   group_name: &str,
@@ -575,7 +605,7 @@ async fn get_un_ack_tasks(
         .into_iter()
         .filter_map(|stream_id| {
           ImportTask::try_from(&stream_id)
-            .and_then(|task| Ok(UnAckTask { stream_id, task }))
+            .map(|task| UnAckTask { stream_id, task })
             .ok()
         })
         .collect::<Vec<_>>();

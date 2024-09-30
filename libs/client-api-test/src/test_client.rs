@@ -213,11 +213,10 @@ impl TestClient {
   }
 
   pub async fn get_db_collab_from_view(&mut self, workspace_id: &str, view_id: &str) -> Collab {
-    let mut ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
-    let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
-    let txn = ws_db_collab.transact();
+    let ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
+    let ws_db_body = WorkspaceDatabaseBody::open(ws_db_collab).unwrap();
     let db_id = ws_db_body
-      .get_all_database_meta(&txn)
+      .get_all_database_meta()
       .into_iter()
       .find(|db_meta| db_meta.linked_views.contains(&view_id.to_string()))
       .unwrap()

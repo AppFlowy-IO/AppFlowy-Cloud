@@ -1,7 +1,5 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-
-use app_error::ErrorCode;
+use anyhow::anyhow;
+use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
 use collab::core::collab::Collab;
@@ -18,6 +16,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use shared_entity::dto::workspace_dto::{FolderView, PageCollab, PageCollabData};
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::biz::collab::folder_view::{
@@ -131,12 +131,13 @@ async fn get_page_collab_data_for_database(
     CollabType::WorkspaceDatabase,
   )
   .await?;
-  let mut ws_db_collab = collab_from_doc_state(ws_db.doc_state.to_vec(), &ws_db_oid)?;
-  let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
+  let ws_db_collab = collab_from_doc_state(ws_db.doc_state.to_vec(), &ws_db_oid)?;
+  let ws_db_body = WorkspaceDatabaseBody::open(ws_db_collab).map_err(|err| {
+    AppError::Internal(anyhow!("Failed to open workspace database body: {}", err))
+  })?;
   let db_oid = {
-    let txn = ws_db_collab.transact();
     ws_db_body
-      .get_database_meta_with_view_id(&txn, view_id)
+      .get_database_meta_with_view_id(view_id)
       .ok_or(AppResponseError::new(
         ErrorCode::NoRequiredData,
         format!("Database view {} not found", view_id),

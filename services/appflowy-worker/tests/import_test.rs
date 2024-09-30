@@ -1,6 +1,6 @@
 use anyhow::Result;
-use appflowy_worker::import_worker::task_queue::ImportTask;
 use appflowy_worker::import_worker::unzip::unzip_async;
+use appflowy_worker::import_worker::worker::ImportTask;
 use async_zip::base::read::stream::ZipFileReader;
 use futures::io::Cursor;
 use redis::streams::{StreamReadOptions, StreamReadReply};
@@ -12,14 +12,13 @@ use tokio::fs;
 #[tokio::test]
 async fn create_task_test() {
   let mut redis_client = redis_client().await;
-  let stream_name = "import_notion_task_stream";
+  let stream_name = format!("import_notion_task_stream_{}", uuid::Uuid::new_v4());
   let consumer_group = "import_notion_task_group";
   let consumer_name = "appflowy_worker_notion_importer";
   let workspace_id = uuid::Uuid::new_v4().to_string();
   let user_uuid = uuid::Uuid::new_v4().to_string();
 
-  let _: RedisResult<()> = redis_client.xgroup_create_mkstream(stream_name, consumer_group, "0");
-
+  let _: RedisResult<()> = redis_client.xgroup_create_mkstream(&stream_name, consumer_group, "0");
   // 1. insert a task
   let task = json!({
       "notion": {
@@ -33,7 +32,7 @@ async fn create_task_test() {
   });
 
   let _: () = redis_client
-    .xadd(stream_name, "*", &[("task", task.to_string())])
+    .xadd(&stream_name, "*", &[("task", task.to_string())])
     .unwrap();
   tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
@@ -43,9 +42,8 @@ async fn create_task_test() {
     .count(3);
 
   let tasks: StreamReadReply = redis_client
-    .xread_options(&[stream_name], &[">"], &options)
+    .xread_options(&[&stream_name], &[">"], &options)
     .unwrap();
-
   assert!(!tasks.keys.is_empty());
 
   for stream_key in tasks.keys {
@@ -58,11 +56,9 @@ async fn create_task_test() {
         None => continue,
       };
 
-      let task = from_str::<ImportTask>(&task_str).unwrap();
-      println!("{:?}", task);
-
+      let _ = from_str::<ImportTask>(&task_str).unwrap();
       let _: () = redis_client
-        .xack(stream_name, consumer_group, &[stream_id.id.clone()])
+        .xack(&stream_name, consumer_group, &[stream_id.id.clone()])
         .unwrap();
     }
   }

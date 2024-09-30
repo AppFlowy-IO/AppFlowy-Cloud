@@ -4,15 +4,16 @@ use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
-use crate::import_worker::task_queue::run_import_worker;
+use crate::import_worker::worker::run_import_worker;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 
+use crate::import_worker::email_notifier::EmailNotifier;
 use crate::s3_client::S3Client;
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Router;
 use secrecy::ExposeSecret;
-use std::sync::Once;
+use std::sync::{Arc, Once};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::task::LocalSet;
@@ -89,10 +90,12 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
   };
 
   let local_set = LocalSet::new();
+  let email_notifier = EmailNotifier;
   let import_worker_fut = local_set.run_until(run_import_worker(
     state.redis_client.clone(),
     state.s3_client.clone(),
     state.pg_pool.clone(),
+    Arc::new(email_notifier),
   ));
 
   let app = Router::new()

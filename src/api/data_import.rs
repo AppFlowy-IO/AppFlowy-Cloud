@@ -7,7 +7,7 @@ use app_error::AppError;
 use authentication::jwt::UserUuid;
 use aws_sdk_s3::primitives::ByteStream;
 use database::file::BucketClient;
-use database::user::select_uid_from_uuid;
+
 use futures_util::StreamExt;
 use redis::AsyncCommands;
 use serde_json::json;

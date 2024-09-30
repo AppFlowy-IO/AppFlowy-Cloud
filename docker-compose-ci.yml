@@ -28,9 +28,7 @@ services:
 
   postgres:
     restart: on-failure
-    build:
-      context: ./postgres
-      dockerfile: postgres.Dockerfile
+    image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
     environment:

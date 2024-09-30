@@ -1,4 +1,5 @@
 pub mod access_request;
+pub mod api_key;
 pub mod chat;
 pub mod collab;
 pub mod pg_listener;
@@ -7,4 +8,3 @@ pub mod template;
 pub mod user;
 pub mod utils;
 pub mod workspace;
-pub mod api_key;

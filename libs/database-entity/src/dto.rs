@@ -1283,6 +1283,12 @@ pub struct ApproveAccessRequestParams {
   pub is_approved: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[repr(i16)]
+pub enum APIKeyPermission {
+  Workspace,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CollabParams, CollabParamsV0};

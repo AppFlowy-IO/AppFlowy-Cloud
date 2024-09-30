@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
-use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus};
+use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus, APIKeyPermission};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{collections::HashMap, ops::Deref};
@@ -227,9 +227,5 @@ pub struct PublishedView {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct AppAPIKey {
   pub scopes: Vec<APIKeyPermission>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub enum APIKeyPermission {
-  Workspace,
+  pub expiration_date: NaiveDateTime,
 }

@@ -23,7 +23,13 @@ async fn post_api_key_handler(
   param: web::Query<AppAPIKey>,
 ) -> Result<JsonAppResponse<String>> {
   let req = param.into_inner();
-  let generated_api_key: String =
-    biz::api_key::create_api_key(&state.pg_pool, &user_uuid, &workspace_id, req.scopes).await?;
+  let generated_api_key: String = biz::api_key::create_api_key(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+    req.scopes,
+    req.expiration_date,
+  )
+  .await?;
   Ok(AppResponse::Ok().with_data(generated_api_key).into())
 }

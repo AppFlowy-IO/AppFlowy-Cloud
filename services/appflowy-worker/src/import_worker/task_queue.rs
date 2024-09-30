@@ -1,7 +1,7 @@
 use crate::error::{ImportError, WorkerError};
 use crate::import_worker::unzip::unzip_async;
 use crate::s3_client::{S3Client, S3StreamResponse};
-use anyhow::anyhow;
+use anyhow::{anyhow, Error};
 use async_zip::base::read::stream::ZipFileReader;
 use aws_sdk_s3::primitives::ByteStream;
 use collab::core::origin::CollabOrigin;
@@ -16,11 +16,14 @@ use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_
 use futures::stream::FuturesUnordered;
 use futures::{stream, StreamExt};
 use redis::aio::ConnectionManager;
-use redis::streams::{StreamReadOptions, StreamReadReply};
-use redis::{AsyncCommands, Value};
+use redis::streams::{
+  StreamClaimOptions, StreamClaimReply, StreamId, StreamPendingData, StreamPendingReply,
+  StreamReadOptions, StreamReadReply,
+};
+use redis::{AsyncCommands, ErrorKind, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
-use sqlx::PgPool;
+use sqlx::{PgPool, Pool, Postgres};
 use std::collections::HashMap;
 use std::env::temp_dir;
 use std::path::{Path, PathBuf};
@@ -38,42 +41,85 @@ use tokio::task::spawn_local;
 use tokio::time::interval;
 use tracing::{error, info, trace};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NotionImportTask {
-  uid: i64,
-  user_uuid: String,
-  workspace_id: String,
-  s3_key: String,
-  file_type: ImportFileType,
-  host: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ImportTask {
-  Notion(NotionImportTask),
-  Custom(serde_json::Value),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ImportFileType {
-  Zip,
-}
-
 pub async fn run_import_worker(
   mut redis_client: ConnectionManager,
   s3_client: S3Client,
   pg_pool: PgPool,
 ) -> Result<(), ImportError> {
   info!("Starting notion importer worker");
-
   let stream_name = "import_notion_task_stream";
-  let consumer_group = "import_notion_task_group";
+  let group_name = "import_notion_task_group";
   let consumer_name = "appflowy_worker_notion_importer";
 
+  if let Err(err) = ensure_consumer_group(stream_name, group_name, &mut redis_client)
+    .await
+    .map_err(|e| ImportError::Internal(e))
+  {
+    error!("Failed to ensure consumer group: {:?}", err);
+  }
+
+  process_un_acked_tasks(
+    &mut redis_client,
+    &s3_client,
+    &pg_pool,
+    &stream_name,
+    group_name,
+    consumer_name,
+  )
+  .await;
+
+  process_upcoming_tasks(
+    &mut redis_client,
+    s3_client,
+    pg_pool,
+    &stream_name,
+    group_name,
+    consumer_name,
+  )
+  .await?;
+
+  Ok(())
+}
+
+async fn process_un_acked_tasks(
+  mut redis_client: &mut ConnectionManager,
+  s3_client: &S3Client,
+  pg_pool: &PgPool,
+  stream_name: &&str,
+  group_name: &str,
+  consumer_name: &str,
+) {
+  // when server restarts, we need to check if there are any unacknowledged tasks
+  match get_un_ack_tasks(stream_name, group_name, consumer_name, &mut redis_client).await {
+    Ok(un_ack_tasks) => {
+      for un_ack_task in un_ack_tasks {
+        // Ignore the error here since the consume task will handle the error
+        let _ = consume_task(
+          &stream_name,
+          group_name,
+          un_ack_task.task,
+          &un_ack_task.stream_id.id,
+          &mut redis_client,
+          &s3_client,
+          &pg_pool,
+        )
+        .await;
+      }
+    },
+    Err(err) => error!("Failed to get unacknowledged tasks: {:?}", err),
+  }
+}
+
+async fn process_upcoming_tasks(
+  redis_client: &mut ConnectionManager,
+  s3_client: S3Client,
+  pg_pool: PgPool,
+  stream_name: &&str,
+  group_name: &str,
+  consumer_name: &str,
+) -> Result<(), ImportError> {
   let options = StreamReadOptions::default()
-    .group(consumer_group, consumer_name)
+    .group(group_name, consumer_name)
     .count(3);
   let mut interval = interval(Duration::from_secs(30));
   interval.tick().await;
@@ -95,36 +141,23 @@ pub async fn run_import_worker(
     for stream_key in tasks.keys {
       // For each stream key, iterate through the stream entries
       for stream_id in stream_key.ids {
-        let task_str = match stream_id.map.get("task") {
-          Some(value) => match value {
-            Value::Data(data) => String::from_utf8_lossy(data).to_string(),
-            _ => {
-              error!("Unexpected value type for task field: {:?}", value);
-              continue;
-            },
-          },
-          None => {
-            error!("Task field not found in Redis stream entry");
-            continue;
-          },
-        };
-
-        match from_str::<ImportTask>(&task_str) {
+        match ImportTask::try_from(stream_id) {
           Ok(import_task) => {
             let entry_id = stream_id.id.clone();
             let mut cloned_redis_client = redis_client.clone();
             let cloned_s3_client = s3_client.clone();
             let pg_pool = pg_pool.clone();
             task_handlers.push(spawn_local(async move {
-              process_task(import_task, &cloned_s3_client, &pg_pool).await?;
-              let _: () = cloned_redis_client
-                .xack(stream_name, consumer_group, &[entry_id])
-                .await
-                .map_err(|e| {
-                  error!("Failed to acknowledge task: {:?}", e);
-                  ImportError::Internal(e.into())
-                })?;
-              Ok::<_, ImportError>(())
+              consume_task(
+                stream_name,
+                group_name,
+                import_task,
+                &entry_id,
+                &mut cloned_redis_client,
+                &cloned_s3_client,
+                &pg_pool,
+              )
+              .await?
             }));
           },
           Err(err) => {
@@ -136,18 +169,32 @@ pub async fn run_import_worker(
 
     while let Some(result) = task_handlers.next().await {
       match result {
-        Ok(Ok(())) => {
-          trace!("Task completed successfully");
-        },
-        Ok(Err(e)) => {
-          error!("Task failed: {:?}", e);
-        },
-        Err(e) => {
-          error!("Runtime error: {:?}", e);
-        },
+        Ok(Ok(())) => trace!("Task completed successfully"),
+        Ok(Err(e)) => error!("Task failed: {:?}", e),
+        Err(e) => error!("Runtime error: {:?}", e),
       }
     }
   }
+}
+
+async fn consume_task(
+  stream_name: &&str,
+  group_name: &str,
+  import_task: ImportTask,
+  entry_id: &String,
+  redis_client: &mut ConnectionManager,
+  s3_client: &S3Client,
+  pg_pool: &Pool<Postgres>,
+) -> Result<(), ImportError> {
+  process_task(import_task, &s3_client, &pg_pool).await?;
+  let _: () = redis_client
+    .xack(stream_name, group_name, &[entry_id])
+    .await
+    .map_err(|e| {
+      error!("Failed to acknowledge task: {:?}", e);
+      ImportError::Internal(e.into())
+    })?;
+  Ok::<_, ImportError>(())
 }
 
 async fn process_task(
@@ -234,7 +281,7 @@ async fn process_unzip_file(
 
   // 2. Open workspace database collab
   let workspace_database = if imported.num_of_csv() > 0 {
-    let w_database_id = select_workspace_database_storage_id(&pg_pool, &import_task.workspace_id)
+    let w_database_id = select_workspace_database_storage_id(pg_pool, &import_task.workspace_id)
       .await
       .map_err(|err| {
         ImportError::Internal(anyhow!(
@@ -276,7 +323,7 @@ async fn process_unzip_file(
           embeddings: None,
           encoded_collab_v1: Bytes::from(imported_collab.encoded_collab.encode_to_bytes().unwrap()),
         })
-        .collect(),
+        .collect::<Vec<_>>(),
     );
 
     match imported_collab.import_type {
@@ -297,7 +344,7 @@ async fn process_unzip_file(
 
   // 5. Edit workspace database collab and then encode workspace database collab
   if !database_view_ids_by_database_id.is_empty() {
-    let w_database_id = select_workspace_database_storage_id(&pg_pool, &import_task.workspace_id)
+    let w_database_id = select_workspace_database_storage_id(pg_pool, &import_task.workspace_id)
       .await
       .map_err(|err| {
         ImportError::Internal(anyhow!(
@@ -315,14 +362,7 @@ async fn process_unzip_file(
       w_db_collab.into(),
     )
     .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
-    {
-      let collab: &mut Collab = w_database.borrow_mut();
-      let mut txn = collab.transact_mut();
-      for (database_id, view_ids) in database_view_ids_by_database_id {
-        w_database.add_database_with_txn(&mut txn, &database_id, view_ids);
-      }
-      drop(txn);
-    }
+    w_database.add_database_with_txn(database_view_ids_by_database_id);
 
     let w_database_collab = w_database.encode_collab_v1().map_err(|err| {
       ImportError::Internal(anyhow!(
@@ -332,7 +372,7 @@ async fn process_unzip_file(
     })?;
 
     let w_database_collab_params = CollabParams {
-      object_id: imported.workspace_id.clone(),
+      object_id: import_task.workspace_id.clone(),
       collab_type: CollabType::WorkspaceDatabase,
       embeddings: None,
       encoded_collab_v1: Bytes::from(w_database_collab.encode_to_bytes().unwrap()),
@@ -345,7 +385,7 @@ async fn process_unzip_file(
     .encode_collab_v1(|collab| CollabType::Folder.validate_require_data(collab))
     .map_err(|err| ImportError::Internal(err.into()))?;
   let folder_collab_params = CollabParams {
-    object_id: imported.workspace_id.clone(),
+    object_id: import_task.workspace_id.clone(),
     collab_type: CollabType::Folder,
     embeddings: None,
     encoded_collab_v1: Bytes::from(folder_collab.encode_to_bytes().unwrap()),
@@ -392,7 +432,7 @@ async fn process_unzip_file(
 async fn notify_user(
   import_task: &NotionImportTask,
   result: Result<(), ImportError>,
-) -> Result<(), WorkerError> {
+) -> Result<(), ImportError> {
   // send email
   Ok(())
 }
@@ -476,4 +516,122 @@ async fn get_encode_collab_from_bytes(
   })
   .await
   .map_err(|err| ImportError::Internal(err.into()))?
+}
+async fn ensure_consumer_group(
+  stream_key: &str,
+  group_name: &str,
+  redis_client: &mut ConnectionManager,
+) -> Result<(), anyhow::Error> {
+  let result: RedisResult<()> = redis_client
+    .xgroup_create_mkstream(stream_key, group_name, "0")
+    .await;
+
+  if let Err(redis_error) = result {
+    if let Some(code) = redis_error.code() {
+      if code == "BUSYGROUP" {
+        return Ok(()); // Group already exists, considered as success.
+      }
+    }
+    error!("Error when creating consumer group: {:?}", redis_error);
+    return Err(redis_error.into());
+  }
+
+  Ok(())
+}
+
+struct UnAckTask {
+  stream_id: StreamId,
+  task: ImportTask,
+}
+
+async fn get_un_ack_tasks(
+  stream_key: &str,
+  group_name: &str,
+  consumer_name: &str,
+  redis_client: &mut ConnectionManager,
+) -> Result<Vec<UnAckTask>, anyhow::Error> {
+  let reply: StreamPendingReply = redis_client.xpending(stream_key, group_name).await?;
+  match reply {
+    StreamPendingReply::Empty => Ok(vec![]),
+    StreamPendingReply::Data(pending) => {
+      let opts = StreamClaimOptions::default()
+        .idle(500)
+        .with_force()
+        .retry(2);
+
+      // If the start_id and end_id are the same, we only need to claim one message.
+      let mut ids = Vec::with_capacity(2);
+      ids.push(pending.start_id.clone());
+      if pending.start_id != pending.end_id {
+        ids.push(pending.end_id);
+      }
+
+      let result: StreamClaimReply = redis_client
+        .xclaim_options(stream_key, group_name, consumer_name, 500, &ids, opts)
+        .await?;
+
+      let tasks = result
+        .ids
+        .into_iter()
+        .filter_map(|stream_id| {
+          ImportTask::try_from(&stream_id)
+            .and_then(|task| Ok(UnAckTask { stream_id, task }))
+            .ok()
+        })
+        .collect::<Vec<_>>();
+
+      trace!("Claimed tasks: {}", tasks.len());
+      Ok(tasks)
+    },
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotionImportTask {
+  uid: i64,
+  user_uuid: String,
+  workspace_id: String,
+  s3_key: String,
+  file_type: ImportFileType,
+  host: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportTask {
+  Notion(NotionImportTask),
+  Custom(serde_json::Value),
+}
+
+impl TryFrom<&StreamId> for ImportTask {
+  type Error = ImportError;
+
+  fn try_from(stream_id: &StreamId) -> Result<Self, Self::Error> {
+    let task_str = match stream_id.map.get("task") {
+      Some(value) => match value {
+        Value::Data(data) => String::from_utf8_lossy(data).to_string(),
+        _ => {
+          error!("Unexpected value type for task field: {:?}", value);
+          return Err(ImportError::Internal(anyhow!(
+            "Unexpected value type for task field: {:?}",
+            value
+          )));
+        },
+      },
+      None => {
+        error!("Task field not found in Redis stream entry");
+        return Err(ImportError::Internal(anyhow!(
+          "Task field not found in Redis stream entry"
+        )));
+      },
+    };
+
+    from_str::<ImportTask>(&task_str).map_err(|err| ImportError::Internal(err.into()))
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportFileType {
+  Zip,
 }

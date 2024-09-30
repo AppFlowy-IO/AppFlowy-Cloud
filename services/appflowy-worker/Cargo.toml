@@ -25,7 +25,7 @@ database.workspace = true
 database-entity.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager"] }
+redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager", "streams"] }
 dotenvy = "0.15.0"
 axum = "0.7.4"
 thiserror = "1.0.58"
@@ -47,4 +47,5 @@ tokio-util = { version = "0.7.12", features = ["compat"] }
 async_zip = { version = "0.0.17", features = ["full"] }
 mime_guess = "2.0"
 bytes.workspace = true
+uuid.workspace = true
 

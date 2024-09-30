@@ -8,7 +8,7 @@ pub async fn insert_into_api_key<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
   workspace_id: &Uuid,
-  api_key_hash: String,
+  api_key_hash: &[u8],
   scopes: Vec<APIKeyPermission>,
   expiration_date: NaiveDateTime,
 ) -> Result<(), AppError> {

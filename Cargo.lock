@@ -659,6 +659,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
+ "sha2",
  "shared-entity",
  "snowflake",
  "sqlx",

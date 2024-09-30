@@ -148,6 +148,7 @@ handlebars = "5.1.2"
 pin-project = "1.1.5"
 byteorder = "1.5.0"
 rayon = "1.10.0"
+sha2 = "0.10.8"
 
 
 [dev-dependencies]

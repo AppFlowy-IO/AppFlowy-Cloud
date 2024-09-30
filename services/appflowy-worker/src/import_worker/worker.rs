@@ -195,6 +195,7 @@ async fn process_upcoming_tasks(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn consume_task(
   stream_name: &str,
   group_name: &str,

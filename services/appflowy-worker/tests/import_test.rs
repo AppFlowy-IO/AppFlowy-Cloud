@@ -31,21 +31,43 @@ async fn create_custom_task_test(pg_pool: PgPool) {
   let stream_name = uuid::Uuid::new_v4().to_string();
   let notifier = Arc::new(MockNotifier::new());
   let mut task_provider = MockTaskProvider::new(redis_client.clone(), stream_name.clone());
-  let _ = run_importer_worker(pg_pool, redis_client.clone(), notifier.clone(), stream_name);
+  let _ = run_importer_worker(
+    pg_pool,
+    redis_client.clone(),
+    notifier.clone(),
+    stream_name,
+    3,
+  );
 
-  // generate a task
-  let workspace_id = uuid::Uuid::new_v4().to_string();
-  task_provider
-    .create_task(ImportTask::Custom(json!({"workspace_id": workspace_id})))
-    .await;
+  let mut task_workspace_ids = vec![];
+  // generate 5 tasks
+  for _ in 0..5 {
+    let workspace_id = uuid::Uuid::new_v4().to_string();
+    task_workspace_ids.push(workspace_id.clone());
+    task_provider
+      .create_task(ImportTask::Custom(json!({"workspace_id": workspace_id})))
+      .await;
+  }
 
   let mut rx = notifier.subscribe();
-  // wait for 10 secs
-  let progress = timeout(Duration::from_secs(30), rx.recv())
-    .await
-    .unwrap()
-    .unwrap();
-  assert!(matches!(progress, ImportProgress::Finished(_)));
+  timeout(Duration::from_secs(30), async {
+    while let Ok(task) = rx.recv().await {
+      task_workspace_ids.retain(|id| {
+        if let ImportProgress::Finished(result) = &task {
+          if result.workspace_id == *id {
+            return false;
+          }
+        }
+        true
+      });
+
+      if task_workspace_ids.is_empty() {
+        break;
+      }
+    }
+  })
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -142,6 +164,7 @@ fn run_importer_worker(
   redis_client: ConnectionManager,
   notifier: Arc<dyn ImportNotifier>,
   stream_name: String,
+  tick_interval_secs: u64,
 ) -> std::thread::JoinHandle<()> {
   setup_log();
 
@@ -154,7 +177,7 @@ fn run_importer_worker(
       Arc::new(MockS3Client),
       notifier,
       &stream_name,
-      5,
+      tick_interval_secs,
     ));
     runtime.block_on(import_worker_fut).unwrap();
   })
@@ -200,6 +223,7 @@ impl MockNotifier {
 #[async_trait]
 impl ImportNotifier for MockNotifier {
   async fn notify_progress(&self, progress: ImportProgress) {
+    println!("notify_progress: {:?}", progress);
     self.tx.send(progress).unwrap();
   }
 }

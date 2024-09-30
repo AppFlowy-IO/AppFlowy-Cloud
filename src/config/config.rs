@@ -48,6 +48,7 @@ pub struct CasbinSetting {
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct S3Setting {
+  pub create_bucket: bool,
   pub use_minio: bool,
   pub minio_url: String,
   pub access_key: String,
@@ -205,6 +206,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     s3: S3Setting {
+      create_bucket: get_env_var("APPFLOWY_S3_CREATE_BUCKET", "true")
+        .parse()
+        .context("fail to get APPFLOWY_S3_CREATE_BUCKET")?,
       use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true")
         .parse()
         .context("fail to get APPFLOWY_S3_USE_MINIO")?,

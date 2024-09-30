@@ -4,16 +4,29 @@ use aws_sdk_s3::error::SdkError;
 
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::primitives::ByteStream;
+use axum::async_trait;
 use std::ops::Deref;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
+#[async_trait]
+pub trait S3Client: Send + Sync {
+  async fn get_blob(&self, object_key: &str) -> Result<S3StreamResponse, WorkerError>;
+  async fn put_blob(
+    &self,
+    object_key: &str,
+    content: ByteStream,
+    content_type: Option<&str>,
+  ) -> Result<(), WorkerError>;
+  async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError>;
+}
+
 #[derive(Clone, Debug)]
-pub struct S3Client {
+pub struct S3ClientImpl {
   pub inner: aws_sdk_s3::Client,
   pub bucket: String,
 }
 
-impl Deref for S3Client {
+impl Deref for S3ClientImpl {
   type Target = aws_sdk_s3::Client;
 
   fn deref(&self) -> &Self::Target {
@@ -21,8 +34,9 @@ impl Deref for S3Client {
   }
 }
 
-impl S3Client {
-  pub(crate) async fn get_blob(&self, object_key: &str) -> Result<S3StreamResponse, WorkerError> {
+#[async_trait]
+impl S3Client for S3ClientImpl {
+  async fn get_blob(&self, object_key: &str) -> Result<S3StreamResponse, WorkerError> {
     match self
       .inner
       .get_object()
@@ -55,7 +69,7 @@ impl S3Client {
     }
   }
 
-  pub(crate) async fn put_blob(
+  async fn put_blob(
     &self,
     object_key: &str,
     content: ByteStream,
@@ -79,7 +93,7 @@ impl S3Client {
     }
   }
 
-  pub(crate) async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError> {
+  async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError> {
     match self
       .inner
       .delete_object()

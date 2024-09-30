@@ -1,16 +1,55 @@
 use anyhow::Result;
+use appflowy_worker::error::WorkerError;
+use appflowy_worker::import_worker::report::{ImportNotifier, ImportProgress};
 use appflowy_worker::import_worker::unzip::unzip_async;
-use appflowy_worker::import_worker::worker::ImportTask;
+use appflowy_worker::import_worker::worker::{run_import_worker, ImportTask};
+use appflowy_worker::s3_client::{S3Client, S3StreamResponse};
 use async_zip::base::read::stream::ZipFileReader;
+use aws_sdk_s3::primitives::ByteStream;
+use axum::async_trait;
 use futures::io::Cursor;
+use redis::aio::ConnectionManager;
 use redis::streams::{StreamReadOptions, StreamReadReply};
+use redis::AsyncCommands;
 use redis::{Commands, RedisResult, Value};
 use serde_json::{from_str, json};
+use sqlx::PgPool;
+use sqlx::__rt::timeout;
 use std::path::PathBuf;
+use std::sync::{Arc, Once};
+use std::time::Duration;
 use tokio::fs;
+use tokio::runtime::Builder;
+use tokio::task::LocalSet;
+use tracing_subscriber::fmt::Subscriber;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
+
+#[sqlx::test(migrations = false)]
+async fn create_custom_task_test(pg_pool: PgPool) {
+  let redis_client = redis_connection_manager().await;
+  let stream_name = uuid::Uuid::new_v4().to_string();
+  let notifier = Arc::new(MockNotifier::new());
+  let mut task_provider = MockTaskProvider::new(redis_client.clone(), stream_name.clone());
+  let _ = run_importer_worker(pg_pool, redis_client.clone(), notifier.clone(), stream_name);
+
+  // generate a task
+  let workspace_id = uuid::Uuid::new_v4().to_string();
+  task_provider
+    .create_task(ImportTask::Custom(json!({"workspace_id": workspace_id})))
+    .await;
+
+  let mut rx = notifier.subscribe();
+  // wait for 10 secs
+  let progress = timeout(Duration::from_secs(30), rx.recv())
+    .await
+    .unwrap()
+    .unwrap();
+  assert!(matches!(progress, ImportProgress::Finished(_)));
+}
 
 #[tokio::test]
-async fn create_task_test() {
+async fn consume_group_task_test() {
   let mut redis_client = redis_client().await;
   let stream_name = format!("import_notion_task_stream_{}", uuid::Uuid::new_v4());
   let consumer_group = "import_notion_task_group";
@@ -87,4 +126,121 @@ async fn test_unzip_async() -> Result<()> {
 pub async fn redis_client() -> redis::Client {
   let redis_uri = "redis://localhost:6379";
   redis::Client::open(redis_uri).unwrap()
+}
+
+pub async fn redis_connection_manager() -> redis::aio::ConnectionManager {
+  let redis_uri = "redis://localhost:6379";
+  redis::Client::open(redis_uri)
+    .expect("failed to create redis client")
+    .get_connection_manager()
+    .await
+    .expect("failed to get redis connection manager")
+}
+
+fn run_importer_worker(
+  pg_pool: PgPool,
+  redis_client: ConnectionManager,
+  notifier: Arc<dyn ImportNotifier>,
+  stream_name: String,
+) -> std::thread::JoinHandle<()> {
+  setup_log();
+
+  std::thread::spawn(move || {
+    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let local_set = LocalSet::new();
+    let import_worker_fut = local_set.run_until(run_import_worker(
+      pg_pool,
+      redis_client,
+      Arc::new(MockS3Client),
+      notifier,
+      &stream_name,
+      5,
+    ));
+    runtime.block_on(import_worker_fut).unwrap();
+  })
+}
+
+struct MockTaskProvider {
+  redis_client: ConnectionManager,
+  stream_name: String,
+}
+
+impl MockTaskProvider {
+  fn new(redis_client: ConnectionManager, stream_name: String) -> Self {
+    Self {
+      redis_client,
+      stream_name,
+    }
+  }
+
+  async fn create_task(&mut self, task: ImportTask) {
+    let task = serde_json::to_string(&task).unwrap();
+    let result: RedisResult<()> = self
+      .redis_client
+      .xadd(&self.stream_name, "*", &[("task", task.to_string())])
+      .await;
+    result.unwrap();
+  }
+}
+
+struct MockNotifier {
+  tx: tokio::sync::broadcast::Sender<ImportProgress>,
+}
+
+impl MockNotifier {
+  fn new() -> Self {
+    let (tx, _) = tokio::sync::broadcast::channel(100);
+    Self { tx }
+  }
+  fn subscribe(&self) -> tokio::sync::broadcast::Receiver<ImportProgress> {
+    self.tx.subscribe()
+  }
+}
+
+#[async_trait]
+impl ImportNotifier for MockNotifier {
+  async fn notify_progress(&self, progress: ImportProgress) {
+    self.tx.send(progress).unwrap();
+  }
+}
+
+struct MockS3Client;
+
+#[async_trait]
+impl S3Client for MockS3Client {
+  async fn get_blob(
+    &self,
+    _object_key: &str,
+  ) -> std::result::Result<S3StreamResponse, WorkerError> {
+    todo!()
+  }
+
+  async fn put_blob(
+    &self,
+    _object_key: &str,
+    _content: ByteStream,
+    _content_type: Option<&str>,
+  ) -> std::result::Result<(), WorkerError> {
+    todo!()
+  }
+
+  async fn delete_blob(&self, _object_key: &str) -> std::result::Result<(), WorkerError> {
+    todo!()
+  }
+}
+
+pub fn setup_log() {
+  static START: Once = Once::new();
+  START.call_once(|| {
+    let level = std::env::var("RUST_LOG").unwrap_or("trace".to_string());
+    let mut filters = vec![];
+    filters.push(format!("appflowy_worker={}", level));
+    std::env::set_var("RUST_LOG", filters.join(","));
+
+    let subscriber = Subscriber::builder()
+      .with_ansi(true)
+      .with_env_filter(EnvFilter::from_default_env())
+      .finish();
+    subscriber.try_init().unwrap();
+  });
 }

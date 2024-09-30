@@ -1,6 +1,6 @@
 use crate::error::ImportError;
 use crate::import_worker::unzip::unzip_async;
-use crate::s3_client::{S3Client, S3StreamResponse};
+use crate::s3_client::S3StreamResponse;
 use anyhow::anyhow;
 use async_zip::base::read::stream::ZipFileReader;
 use aws_sdk_s3::primitives::ByteStream;
@@ -39,22 +39,23 @@ use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResultB
 use database::workspace::select_workspace_database_storage_id;
 use database_entity::dto::CollabParams;
 
+use crate::s3_client::S3Client;
 use tokio::task::spawn_local;
 use tokio::time::interval;
 use tracing::{error, info, trace, warn};
 
-const STREAM_NAME: &str = "import_notion_task_stream";
 const GROUP_NAME: &str = "import_notion_task_group";
 const CONSUMER_NAME: &str = "appflowy_worker_notion_importer";
 pub async fn run_import_worker(
-  mut redis_client: ConnectionManager,
-  s3_client: S3Client,
   pg_pool: PgPool,
+  mut redis_client: ConnectionManager,
+  s3_client: Arc<dyn S3Client>,
   notifier: Arc<dyn ImportNotifier>,
+  stream_name: &str,
+  tick_interval_secs: u64,
 ) -> Result<(), ImportError> {
-  info!("Starting notion importer worker");
-
-  if let Err(err) = ensure_consumer_group(STREAM_NAME, GROUP_NAME, &mut redis_client)
+  info!("Starting importer worker");
+  if let Err(err) = ensure_consumer_group(stream_name, GROUP_NAME, &mut redis_client)
     .await
     .map_err(ImportError::Internal)
   {
@@ -65,7 +66,7 @@ pub async fn run_import_worker(
     &mut redis_client,
     &s3_client,
     &pg_pool,
-    STREAM_NAME,
+    stream_name,
     GROUP_NAME,
     CONSUMER_NAME,
     notifier.clone(),
@@ -74,12 +75,13 @@ pub async fn run_import_worker(
 
   process_upcoming_tasks(
     &mut redis_client,
-    s3_client,
+    &s3_client,
     pg_pool,
-    STREAM_NAME,
+    stream_name,
     GROUP_NAME,
     CONSUMER_NAME,
     notifier.clone(),
+    tick_interval_secs,
   )
   .await?;
 
@@ -87,8 +89,8 @@ pub async fn run_import_worker(
 }
 
 async fn process_un_acked_tasks(
-  mut redis_client: &mut ConnectionManager,
-  s3_client: &S3Client,
+  redis_client: &mut ConnectionManager,
+  s3_client: &Arc<dyn S3Client>,
   pg_pool: &PgPool,
   stream_name: &str,
   group_name: &str,
@@ -118,19 +120,21 @@ async fn process_un_acked_tasks(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_upcoming_tasks(
   redis_client: &mut ConnectionManager,
-  s3_client: S3Client,
+  s3_client: &Arc<dyn S3Client>,
   pg_pool: PgPool,
   stream_name: &str,
   group_name: &str,
   consumer_name: &str,
   notifier: Arc<dyn ImportNotifier>,
+  interval_secs: u64,
 ) -> Result<(), ImportError> {
   let options = StreamReadOptions::default()
     .group(group_name, consumer_name)
     .count(3);
-  let mut interval = interval(Duration::from_secs(30));
+  let mut interval = interval(Duration::from_secs(interval_secs));
   interval.tick().await;
 
   loop {
@@ -197,7 +201,7 @@ async fn consume_task(
   import_task: ImportTask,
   entry_id: &String,
   redis_client: &mut ConnectionManager,
-  s3_client: &S3Client,
+  s3_client: &Arc<dyn S3Client>,
   pg_pool: &Pool<Postgres>,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
@@ -214,7 +218,7 @@ async fn consume_task(
 
 async fn process_task(
   import_task: ImportTask,
-  s3_client: &S3Client,
+  s3_client: &Arc<dyn S3Client>,
   pg_pool: &PgPool,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
@@ -257,7 +261,7 @@ async fn process_task(
 
 async fn download_zip_file(
   import_task: &NotionImportTask,
-  s3_client: &S3Client,
+  s3_client: &Arc<dyn S3Client>,
 ) -> Result<PathBuf, ImportError> {
   let S3StreamResponse {
     stream,
@@ -271,7 +275,7 @@ async fn download_zip_file(
   let temp_dir = temp_dir();
   let unzip_file = unzip_async(zip_reader, temp_dir)
     .await
-    .map_err(|err| ImportError::Internal(err))?;
+    .map_err(ImportError::Internal)?;
   Ok(unzip_file)
 }
 
@@ -279,7 +283,7 @@ async fn process_unzip_file(
   import_task: &NotionImportTask,
   unzip_file: &PathBuf,
   pg_pool: &PgPool,
-  s3_client: &S3Client,
+  s3_client: &Arc<dyn S3Client>,
 ) -> Result<(), ImportError> {
   let notion_importer = NotionImporter::new(
     unzip_file,
@@ -467,7 +471,7 @@ async fn notify_user(
 
 pub async fn batch_upload_files_to_s3(
   workspace_id: &str,
-  client: &S3Client,
+  client: &Arc<dyn S3Client>,
   collab_resources: Vec<CollabResource>,
 ) -> Result<(), anyhow::Error> {
   // Flatten the collab_resources into an iterator of (workspace_id, object_id, file_path)
@@ -508,7 +512,7 @@ pub async fn batch_upload_files_to_s3(
 }
 
 async fn upload_file_to_s3(
-  client: &S3Client,
+  client: &Arc<dyn S3Client>,
   workspace_id: &str,
   object_id: &str,
   file_path: &str,

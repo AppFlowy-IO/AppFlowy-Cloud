@@ -8,7 +8,7 @@ use crate::import_worker::worker::run_import_worker;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 
 use crate::import_worker::email_notifier::EmailNotifier;
-use crate::s3_client::S3Client;
+use crate::s3_client::S3ClientImpl;
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Router;
@@ -92,10 +92,12 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
   let local_set = LocalSet::new();
   let email_notifier = EmailNotifier;
   let import_worker_fut = local_set.run_until(run_import_worker(
-    state.redis_client.clone(),
-    state.s3_client.clone(),
     state.pg_pool.clone(),
+    state.redis_client.clone(),
+    Arc::new(state.s3_client.clone()),
     Arc::new(email_notifier),
+    "import_notion_task_stream",
+    30,
   ));
 
   let app = Router::new()
@@ -122,7 +124,7 @@ async fn health_check() -> StatusCode {
 pub struct AppState {
   pub redis_client: ConnectionManager,
   pub pg_pool: PgPool,
-  pub s3_client: S3Client,
+  pub s3_client: S3ClientImpl,
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {
@@ -140,7 +142,7 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
     .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))
 }
 
-pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<S3Client, Error> {
+pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<S3ClientImpl, Error> {
   let credentials = Credentials::new(
     s3_setting.access_key.clone(),
     s3_setting.secret_key.expose_secret().clone(),
@@ -162,7 +164,7 @@ pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<S3Client, Error
     config_builder.build()
   };
   let client = aws_sdk_s3::Client::from_conf(config);
-  Ok(S3Client {
+  Ok(S3ClientImpl {
     inner: client,
     bucket: s3_setting.bucket.clone(),
   })

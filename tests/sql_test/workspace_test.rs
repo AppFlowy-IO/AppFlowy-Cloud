@@ -203,7 +203,7 @@ async fn test_batch_insert_comparison(pool: PgPool) {
     .unwrap();
 
   // Define the different test cases
-  let row_sizes = vec![1 * 1024, 5 * 1024]; // 1KB and 5KB row sizes
+  let row_sizes = vec![1024, 5 * 1024]; // 1KB and 5KB row sizes
   let total_rows = vec![500, 1000, 2000, 3000, 6000]; // Number of rows
   let chunk_sizes = vec![2000]; // Chunk size for batch inserts
 

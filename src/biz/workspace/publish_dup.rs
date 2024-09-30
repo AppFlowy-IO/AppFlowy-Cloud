@@ -221,10 +221,10 @@ impl PublishCollabDuplicator {
 
         let updated_ws_w_db_collab = ws_db_body
           .encode_collab_v1()
-          .map(|encoded_collab| encoded_collab.encode_to_bytes())
+          .map(|encoded_collab| encoded_collab.encode_to_bytes().unwrap())
           .map_err(|err| {
             AppError::Internal(anyhow!("failed to encode workspace database: {}", err))
-          })?;
+          });
 
         (ws_db_updates, updated_ws_w_db_collab)
       })

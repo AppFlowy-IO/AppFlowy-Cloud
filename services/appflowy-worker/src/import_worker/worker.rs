@@ -416,7 +416,7 @@ async fn process_unzip_file(
       import_task.workspace_id
     );
     let w_database_collab_params = CollabParams {
-      object_id: import_task.workspace_id.clone(),
+      object_id: w_database_id.to_string(),
       collab_type: CollabType::WorkspaceDatabase,
       embeddings: None,
       encoded_collab_v1: Bytes::from(w_database_collab.encode_to_bytes().unwrap()),

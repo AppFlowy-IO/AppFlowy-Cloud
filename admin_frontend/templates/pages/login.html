@@ -92,9 +92,7 @@
     <div id="oauth-container">
       {% for provider in oauth_providers %}
       <div class="oauth-icon">
-        <a
-          href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to=/web/login"
-        >
+        <a href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to=/web/login">
           <div
             hx-get="../assets/{{ provider|escape }}/logo.html"
             hx-trigger="load"

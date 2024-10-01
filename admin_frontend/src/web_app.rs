@@ -6,13 +6,14 @@ use crate::ext::api::{
   get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
   verify_token_cloud,
 };
-use crate::models::{OAuthLoginAction, WebAppOAuthLoginRequest};
+use crate::models::{OAuthLoginAction, OAuthRedirect, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
-use axum_extra::extract::CookieJar;
+use axum_extra::extract::cookie::Cookie;
+use axum_extra::extract::{CookieJar, Query as QueryExtra};
 use gotrue_entity::dto::User;
 
 use crate::{templates, AppState};
@@ -129,7 +130,10 @@ async fn login_callback_query_handler(
   .await?;
 
   let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(new_session_id.to_string(), token);
+  let new_session = session::UserSession {
+    session_id: new_session_id.to_string(),
+    token,
+  };
   state.session_store.put_user_session(&new_session).await?;
   jar = jar.add(new_session_cookie(new_session_id));
 
@@ -350,14 +354,16 @@ async fn user_user_handler(
 async fn login_handler(State(state): State<AppState>) -> Result<Html<String>, WebAppError> {
   let external = state.gotrue_client.settings().await?.external;
   let oauth_providers = external.oauth_providers();
-  render_template(templates::Login { oauth_providers })
+  render_template(templates::Login {
+    oauth_providers: &oauth_providers,
+  })
 }
 
 async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::ChangePassword)
 }
 
-async fn home_handler(
+pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {

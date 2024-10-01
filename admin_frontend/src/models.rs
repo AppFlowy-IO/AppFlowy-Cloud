@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct WebApiLoginRequest {
@@ -60,4 +60,15 @@ pub struct WebAppOAuthLoginRequest {
 #[serde(rename_all = "snake_case")]
 pub enum OAuthLoginAction {
   AcceptWorkspaceInvite,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthRedirect {
+  pub client_id: Option<Vec<String>>, // for some reason, zapier sends more than 1 client_id
+  pub state: Option<String>,
+  pub redirect_uri: Option<String>,
+  pub response_type: Option<String>,
+  pub scope: Option<String>,
+  pub code_challenge: Option<String>,
+  pub code_challenge_method: Option<String>,
 }

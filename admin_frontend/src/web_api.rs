@@ -4,20 +4,21 @@ use crate::ext::api::{
   verify_token_cloud,
 };
 use crate::models::{
-  WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest,
-  WebApiInviteUserRequest, WebApiPutUserRequest,
+  OAuthRedirect, WebApiAdminCreateUserRequest, WebApiChangePasswordRequest,
+  WebApiCreateSSOProviderRequest, WebApiInviteUserRequest, WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
 use crate::session::{self, new_session_cookie, UserSession};
+use crate::web_app::home_handler;
 use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::Path;
 use axum::http::{status, HeaderMap};
 use axum::response::Result;
-use axum::routing::delete;
+use axum::routing::{delete, get};
 use axum::Form;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
-use axum_extra::extract::CookieJar;
+use axum_extra::extract::{CookieJar, Query as QueryExtra};
 use gotrue::params::{
   AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
   MagicLinkParams,
@@ -28,6 +29,7 @@ use tracing::info;
 pub fn router() -> Router<AppState> {
   Router::new()
     .route("/signin", post(sign_in_handler))
+    .route("/oauth-redirect", get(oauth_redirect_handler))
     .route("/signup", post(sign_up_handler))
     .route("/login-refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
@@ -356,6 +358,18 @@ async fn sign_in_handler(
   session_login(State(state), token, jar).await
 }
 
+async fn oauth_redirect_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  QueryExtra(oauth_redirect): QueryExtra<OAuthRedirect>,
+  mut jar: CookieJar,
+) -> Result<HeaderMap, WebApiError<'static>> {
+  if true {
+    panic!("goal reached");
+  }
+  Ok(htmx_redirect("test"))
+}
+
 async fn sign_up_handler(
   State(state): State<AppState>,
   jar: CookieJar,
@@ -428,7 +442,10 @@ async fn session_login(
   .await?;
 
   let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(new_session_id.to_string(), token);
+  let new_session = session::UserSession {
+    session_id: new_session_id.to_string(),
+    token,
+  };
   state.session_store.put_user_session(&new_session).await?;
 
   Ok((

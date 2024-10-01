@@ -699,6 +699,7 @@ dependencies = [
  "anyhow",
  "app-error",
  "appflowy-ai-client",
+ "arc-swap",
  "async-stream",
  "async-trait",
  "authentication",

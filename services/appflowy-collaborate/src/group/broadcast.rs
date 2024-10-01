@@ -1,11 +1,14 @@
 use std::borrow::BorrowMut;
+use std::pin::Pin;
 use std::sync::{Arc, Weak};
 
 use anyhow::anyhow;
+use arc_swap::{ArcSwap, ArcSwapOption};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
+use futures::Stream;
 use futures_util::{SinkExt, StreamExt};
 use tokio::select;
 use tokio::sync::broadcast::{channel, Sender};
@@ -30,8 +33,13 @@ use crate::group::group_init::EditState;
 use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabRealtimeMetrics;
 
+pub type DataStream =
+  Pin<Box<dyn Stream<Item = Result<Vec<u8>, RealtimeError>> + Send + Sync + 'static>>;
+
 pub trait CollabUpdateStreaming: 'static + Send + Sync {
   fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError>;
+  fn receive_updates(&self) -> DataStream;
+  fn receive_awareness_updates(&self) -> DataStream;
 }
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with
@@ -40,18 +48,11 @@ pub trait CollabUpdateStreaming: 'static + Send + Sync {
 pub struct CollabBroadcast {
   object_id: String,
   broadcast_sender: Sender<CollabMessage>,
-  awareness_sub: Option<YrsSubscription>,
-  /// Keep the lifetime of the document observer subscription. The subscription will be stopped
-  /// when the broadcast is dropped.
-  doc_subscription: Option<YrsSubscription>,
   edit_state: Arc<EditState>,
   /// The last modified time of the document.
-  pub modified_at: Arc<parking_lot::Mutex<Instant>>,
+  modified_at: Arc<ArcSwap<Instant>>,
   update_streaming: Arc<dyn CollabUpdateStreaming>,
 }
-
-unsafe impl Send for CollabBroadcast {}
-unsafe impl Sync for CollabBroadcast {}
 
 impl Drop for CollabBroadcast {
   fn drop(&mut self) {
@@ -70,27 +71,25 @@ impl CollabBroadcast {
     object_id: &str,
     buffer_capacity: usize,
     edit_state: Arc<EditState>,
-    collab: &Collab,
-    update_streaming: impl CollabUpdateStreaming,
+    update_streaming: Arc<impl CollabUpdateStreaming>,
   ) -> Self {
-    let update_streaming = Arc::new(update_streaming);
+    let update_stream = update_streaming.receive_updates();
+    let awareness_update_stream = update_streaming.receive_awareness_updates();
     let object_id = object_id.to_owned();
     // broadcast channel
     let (sender, _) = channel(buffer_capacity);
     let mut this = CollabBroadcast {
       object_id,
       broadcast_sender: sender,
-      awareness_sub: Default::default(),
-      doc_subscription: Default::default(),
       edit_state,
-      modified_at: Arc::new(parking_lot::Mutex::new(Instant::now())),
+      modified_at: Arc::new(ArcSwap::new(Arc::new(Instant::now()))),
       update_streaming,
     };
-    this.observe_collab_changes(collab);
+    this.observe_collab_changes(update_stream, awareness_update_stream);
     this
   }
 
-  fn observe_collab_changes(&mut self, collab: &Collab) {
+  fn observe_collab_changes(&mut self, mut updates: DataStream, mut awareness_updates: DataStream) {
     let (doc_sub, awareness_sub) = {
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
@@ -145,9 +144,10 @@ impl CollabBroadcast {
         });
       (doc_sub, awareness_sub)
     };
+  }
 
-    self.doc_subscription = Some(doc_sub);
-    self.awareness_sub = Some(awareness_sub);
+  pub fn modified_at(&self) -> Instant {
+    *self.modified_at.load_full()
   }
 
   /// Subscribes a new connection to a broadcast group
@@ -184,7 +184,6 @@ impl CollabBroadcast {
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
-    collab: Weak<RwLock<Collab>>,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
   ) -> Subscription
   where
@@ -252,16 +251,7 @@ impl CollabBroadcast {
                 break
               }
               let message_map = result.unwrap();
-              match collab.upgrade() {
-                None => {
-                  trace!("{} stop receiving user:{} messages because of collab is drop", user.user_device(), object_id);
-                  // break the loop if the collab is dropped
-                  break
-                },
-                Some(collab) => {
-                  handle_client_messages(&object_id, message_map, &mut sink, collab, &metrics_calculate, &edit_state).await;
-                }
-              }
+              handle_client_messages(&object_id, message_map, &mut sink, &metrics_calculate, &edit_state).await;
             }
           }
         }
@@ -281,7 +271,6 @@ async fn handle_client_messages<Sink>(
   object_id: &str,
   message_map: MessageByObjectId,
   sink: &mut Sink,
-  collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &Arc<CollabRealtimeMetrics>,
   edit_state: &Arc<EditState>,
 ) where
@@ -304,14 +293,8 @@ async fn handle_client_messages<Sink>(
     }
 
     for collab_message in collab_messages {
-      match handle_one_client_message(
-        object_id,
-        &collab_message,
-        &collab,
-        metrics_calculate,
-        edit_state,
-      )
-      .await
+      match handle_one_client_message(object_id, &collab_message, metrics_calculate, edit_state)
+        .await
       {
         Ok(response) => {
           trace!("[realtime]: sending response: {}", response);
@@ -339,7 +322,6 @@ async fn handle_client_messages<Sink>(
 async fn handle_one_client_message(
   object_id: &str,
   collab_msg: &ClientCollabMessage,
-  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &Arc<CollabRealtimeMetrics>,
   edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
@@ -347,7 +329,7 @@ async fn handle_one_client_message(
   let message_origin = collab_msg.origin().clone();
 
   // If the payload is empty, we don't need to apply any updates .
-  // Currently, only the ping message should has an empty payload.
+  // Currently, only the ping message should have an empty payload.
   if collab_msg.payload().is_empty() {
     if !matches!(collab_msg, ClientCollabMessage::ClientCollabStateCheck(_)) {
       error!("receive unexpected empty payload message:{}", collab_msg);
@@ -371,7 +353,6 @@ async fn handle_one_client_message(
     message_origin.clone(),
     msg_id,
     collab_msg.payload(),
-    collab,
     metrics_calculate,
     edit_state,
   )
@@ -384,7 +365,6 @@ async fn handle_one_message_payload(
   message_origin: CollabOrigin,
   msg_id: MsgId,
   payload: &Bytes,
-  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &Arc<CollabRealtimeMetrics>,
   edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
@@ -395,7 +375,6 @@ async fn handle_one_message_payload(
   let result = handle_message(
     &payload,
     &message_origin,
-    collab,
     metrics_calculate,
     object_id,
     msg_id,
@@ -418,7 +397,6 @@ async fn handle_one_message_payload(
 async fn handle_message(
   payload: &Bytes,
   message_origin: &CollabOrigin,
-  collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &Arc<CollabRealtimeMetrics>,
   object_id: &str,
   msg_id: MsgId,

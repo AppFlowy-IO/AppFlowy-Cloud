@@ -26,6 +26,7 @@ module.exports = {
     userName: "{{ username }}",
     acceptUrl: "{{ accept_url }}",
     approveUrl: "{{ approve_url }}",
+    launchWorkspaceUrl: "{{ launch_workspace_url }}",
     workspaceName: "{{ workspace_name }}",
     workspaceMembersCount: "{{ workspace_member_count }}",
     workspaceIconURL: "{{ workspace_icon_url }}",

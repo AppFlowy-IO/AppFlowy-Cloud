@@ -8,3 +8,4 @@ pub mod middleware;
 mod self_signed;
 pub mod state;
 pub mod telemetry;
+pub mod authentication;

@@ -47,7 +47,7 @@ impl FromRequest for UserUuid {
   type Future = std::future::Ready<Result<Self, Self::Error>>;
 
   fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-    let auth = get_auth_from_request(req);
+    let auth = Authorization::from_actix_request(req);
     match auth {
       Ok(auth) => match UserUuid::from_auth(auth) {
         Ok(uuid) => std::future::ready(Ok(uuid)),
@@ -68,7 +68,7 @@ impl FromRequest for OptionalUserUuid {
   type Future = std::future::Ready<Result<Self, Self::Error>>;
 
   fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-    let auth = get_auth_from_request(req);
+    let auth = Authorization::from_actix_request(req);
     match auth {
       Ok(auth) => match UserUuid::from_auth(auth) {
         Ok(uuid) => std::future::ready(Ok(OptionalUserUuid(Some(uuid)))),
@@ -108,6 +108,34 @@ impl Authorization {
         ))
       })
   }
+
+  pub fn from_actix_request(req: &HttpRequest) -> Result<Authorization, actix_web::Error> {
+    let jwt_secret_data =
+      req
+        .app_data::<Data<Secret<String>>>()
+        .ok_or(actix_web::error::ErrorInternalServerError(
+          "jwt secret not found",
+        ))?;
+    let bearer = req
+      .headers()
+      .get("Authorization")
+      .ok_or(actix_web::error::ErrorUnauthorized(
+        "No Authorization header",
+      ))?;
+
+    let bearer_str = bearer
+      .to_str()
+      .map_err(actix_web::error::ErrorUnauthorized)?;
+
+    let (_, token) =
+      bearer_str
+        .split_once("Bearer ")
+        .ok_or(actix_web::error::ErrorUnauthorized(
+          "Invalid Authorization header, missing Bearer",
+        ))?;
+
+    authorization_from_token(token, jwt_secret_data)
+  }
 }
 
 impl FromRequest for Authorization {
@@ -116,7 +144,7 @@ impl FromRequest for Authorization {
   type Future = std::future::Ready<Result<Self, Self::Error>>;
 
   fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-    let auth = get_auth_from_request(req);
+    let auth = Authorization::from_actix_request(req);
     match auth {
       Ok(auth) => std::future::ready(Ok(auth)),
       Err(e) => std::future::ready(Err(e)),
@@ -124,37 +152,10 @@ impl FromRequest for Authorization {
   }
 }
 
-fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::Error> {
-  let jwt_secret_data =
-    req
-      .app_data::<Data<Secret<String>>>()
-      .ok_or(actix_web::error::ErrorInternalServerError(
-        "jwt secret not found",
-      ))?;
-  let bearer = req
-    .headers()
-    .get("Authorization")
-    .ok_or(actix_web::error::ErrorUnauthorized(
-      "No Authorization header",
-    ))?;
-
-  let bearer_str = bearer
-    .to_str()
-    .map_err(actix_web::error::ErrorUnauthorized)?;
-
-  let (_, token) = bearer_str
-    .split_once("Bearer ")
-    .ok_or(actix_web::error::ErrorUnauthorized(
-      "Invalid Authorization header, missing Bearer",
-    ))?;
-
-  authorization_from_token(token, jwt_secret_data)
-}
-
 #[instrument(level = "trace", skip_all, err)]
 pub fn authorization_from_token(
   token: &str,
-  jwt_secret: &Data<Secret<String>>,
+  jwt_secret: &Secret<String>,
 ) -> Result<Authorization, actix_web::Error> {
   let claims = gotrue_jwt_claims_from_token(token, jwt_secret)?;
   Ok(Authorization {
@@ -166,7 +167,7 @@ pub fn authorization_from_token(
 #[instrument(level = "trace", skip_all, err)]
 fn gotrue_jwt_claims_from_token(
   token: &str,
-  jwt_secret: &Data<Secret<String>>,
+  jwt_secret: &Secret<String>,
 ) -> Result<GoTrueJWTClaims, actix_web::Error> {
   let claims =
     GoTrueJWTClaims::decode(token, jwt_secret.expose_secret().as_bytes()).map_err(|err| {

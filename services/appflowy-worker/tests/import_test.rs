@@ -8,6 +8,7 @@ use async_zip::base::read::stream::ZipFileReader;
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
 use futures::io::Cursor;
+
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::AsyncCommands;
@@ -21,6 +22,7 @@ use std::time::Duration;
 use tokio::fs;
 use tokio::runtime::Builder;
 use tokio::task::LocalSet;
+
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -73,9 +75,9 @@ async fn create_custom_task_test(pg_pool: PgPool) {
 #[tokio::test]
 async fn consume_group_task_test() {
   let mut redis_client = redis_client().await;
-  let stream_name = format!("import_notion_task_stream_{}", uuid::Uuid::new_v4());
-  let consumer_group = "import_notion_task_group";
-  let consumer_name = "appflowy_worker_notion_importer";
+  let stream_name = format!("import_task_stream_{}", uuid::Uuid::new_v4());
+  let consumer_group = "import_task_group";
+  let consumer_name = "appflowy_worker";
   let workspace_id = uuid::Uuid::new_v4().to_string();
   let user_uuid = uuid::Uuid::new_v4().to_string();
 
@@ -135,12 +137,11 @@ async fn test_unzip_async() -> Result<()> {
   let zip_reader = ZipFileReader::new(cursor);
   let extract_file = unzip_async(zip_reader, output_dir.clone()).await?;
   assert!(
-    extract_file.exists(),
+    extract_file.unzip_dir_path.exists(),
     "The first extracted file should exist"
   );
 
-  let file_name = extract_file.file_name().unwrap().to_str().unwrap();
-  assert_eq!(file_name, "project&task");
+  assert_eq!(extract_file.file_name, "project&task");
 
   Ok(())
 }
@@ -232,10 +233,7 @@ struct MockS3Client;
 
 #[async_trait]
 impl S3Client for MockS3Client {
-  async fn get_blob(
-    &self,
-    _object_key: &str,
-  ) -> std::result::Result<S3StreamResponse, WorkerError> {
+  async fn get_blob(&self, _object_key: &str) -> Result<S3StreamResponse, WorkerError> {
     todo!()
   }
 
@@ -248,8 +246,8 @@ impl S3Client for MockS3Client {
     todo!()
   }
 
-  async fn delete_blob(&self, _object_key: &str) -> std::result::Result<(), WorkerError> {
-    todo!()
+  async fn delete_blob(&self, _object_key: &str) -> Result<(), WorkerError> {
+    Ok(())
   }
 }
 

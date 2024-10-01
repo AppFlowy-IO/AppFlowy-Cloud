@@ -10,9 +10,11 @@ use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use crate::import_worker::email_notifier::EmailNotifier;
 use crate::s3_client::S3ClientImpl;
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
+use axum::{Json, Router};
 use secrecy::ExposeSecret;
+use serde_json::json;
 use std::sync::{Arc, Once};
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -96,7 +98,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     state.redis_client.clone(),
     Arc::new(state.s3_client.clone()),
     Arc::new(email_notifier),
-    "import_notion_task_stream",
+    "import_task_stream",
     30,
   ));
 
@@ -116,8 +118,9 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
   Ok(())
 }
 
-async fn health_check() -> StatusCode {
-  StatusCode::OK
+async fn health_check() -> impl IntoResponse {
+  let response_body = json!({ "status": "AppFlowy-Worker is running" });
+  (StatusCode::OK, Json(response_body))
 }
 
 #[derive(Clone)]

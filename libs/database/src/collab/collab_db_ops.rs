@@ -266,8 +266,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
       INSERT INTO af_collab_member (uid, oid, permission_id)
       SELECT * FROM UNNEST($1::bigint[], $2::uuid[], $3::int[])
       ON CONFLICT (uid, oid)
-      DO UPDATE
-      SET permission_id = excluded.permission_id;
+      DO NOTHING;
     "#,
     &uids,
     &object_ids,

@@ -502,3 +502,14 @@ impl From<AFTemplateGroupRow> for TemplateGroup {
     }
   }
 }
+
+#[derive(Debug, FromRow, Serialize, Deserialize)]
+pub struct AFImportTask {
+  pub task_id: Uuid,
+  pub file_size: i64,
+  pub workspace_id: String,
+  pub created_by: i64,
+  pub status: i32,
+  pub metadata: serde_json::Value,
+  pub created_at: DateTime<Utc>,
+}

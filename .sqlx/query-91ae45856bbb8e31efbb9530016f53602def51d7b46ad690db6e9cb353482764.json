@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n    INSERT INTO public.af_workspace (owner_uid, workspace_name)\n    VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2)\n    RETURNING\n      workspace_id,\n      database_storage_id,\n      owner_uid,\n      (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,\n      created_at,\n      workspace_type,\n      deleted_at,\n      workspace_name,\n      icon\n    ;\n    ",
+  "query": "\n      SELECT\n        w.workspace_id,\n        w.database_storage_id,\n        w.owner_uid,\n        (SELECT name FROM public.af_user WHERE uid = w.owner_uid) AS owner_name,\n        w.created_at,\n        w.workspace_type,\n        w.deleted_at,\n        w.workspace_name,\n        w.icon\n      FROM af_workspace w\n      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id\n      WHERE wm.uid = (\n         SELECT uid FROM public.af_user WHERE uuid = $1\n      )\n      AND COALESCE(w.is_initialized, false) = true;\n    ",
   "describe": {
     "columns": [
       {
@@ -51,8 +51,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -67,5 +66,5 @@
       false
     ]
   },
-  "hash": "29a6f76da0baf71c215b69078cce66d55f43d63f5c1c9e6786a4e80b52b4c5df"
+  "hash": "91ae45856bbb8e31efbb9530016f53602def51d7b46ad690db6e9cb353482764"
 }

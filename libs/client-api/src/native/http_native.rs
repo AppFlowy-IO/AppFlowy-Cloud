@@ -16,26 +16,29 @@ use client_api_entity::{
 use collab_rt_entity::HttpRealtimeMessage;
 use futures::Stream;
 use futures_util::stream;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use prost::Message;
-use reqwest::{Body, Method};
+use reqwest::{multipart, Body, Method};
 use serde::Serialize;
 use shared_entity::dto::workspace_dto::CollabResponse;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
-
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 
 use rayon::prelude::IntoParallelIterator;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tokio::fs::File;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Condition, RetryIf};
+use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::{debug, event, info, instrument, trace};
 
 pub use infra::file_util::ChunkedBytes;
 use shared_entity::dto::ai_dto::CompleteTextParams;
+use shared_entity::dto::import_dto::UserImportTask;
 
 impl Client {
   pub async fn stream_completion_text(
@@ -293,6 +296,49 @@ impl Client {
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn import_file(&self, file_path: &Path) -> Result<(), AppResponseError> {
+    let file = File::open(&file_path).await?;
+    let file_name = file_path
+      .file_name()
+      .map(|s| s.to_string_lossy().to_string())
+      .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    let stream = FramedRead::new(file, BytesCodec::new());
+    let mime = mime_guess::from_path(file_path)
+      .first_or_octet_stream()
+      .to_string();
+
+    let file_part = multipart::Part::stream(reqwest::Body::wrap_stream(stream))
+      .file_name(file_name)
+      .mime_str(&mime)?;
+
+    let form = multipart::Form::new().part("file", file_part);
+    let url = format!("{}/api/import", self.base_url);
+    let mut builder = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .multipart(form);
+
+    // set the host header
+    builder = builder.header("host", self.base_url.clone());
+    let resp = builder.send().await?;
+
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_import_list(&self) -> Result<UserImportTask, AppResponseError> {
+    let url = format!("{}/api/import", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<UserImportTask>::from_response(resp)
+      .await?
+      .into_data()
   }
 }
 

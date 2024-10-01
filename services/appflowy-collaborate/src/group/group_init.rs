@@ -1,9 +1,4 @@
-use std::collections::VecDeque;
-use std::fmt::Display;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-
+use arc_swap::{ArcSwap, ArcSwapOption};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::lock::RwLock;
@@ -11,7 +6,14 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
+use std::collections::VecDeque;
+use std::fmt::Display;
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
+use tokio::time::{interval, MissedTickBehavior};
+use tokio_util::sync::CancellationToken;
 use tracing::{error, event, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -27,30 +29,28 @@ use collab_stream::stream_group::StreamGroup;
 use database::collab::CollabStorage;
 
 use crate::error::RealtimeError;
-use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, Subscription};
-use crate::group::persistence::GroupPersistence;
+use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, DataStream, Subscription};
 use crate::indexer::Indexer;
 use crate::metrics::CollabRealtimeMetrics;
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
-  pub workspace_id: String,
-  pub object_id: String,
-  collab: Arc<RwLock<Collab>>,
+  workspace_id: String,
+  object_id: String,
   collab_type: CollabType,
-  /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
-  /// to subscribes.
-  broadcast: CollabBroadcast,
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
-  subscribers: DashMap<RealtimeUser, Subscription>,
+  subscribers: Arc<DashMap<RealtimeUser, Subscription>>,
+  persister: Arc<CollabPersister>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
-  destroy_group_tx: mpsc::Sender<Arc<RwLock<Collab>>>,
+  /// Cancellation token triggered when current collab group is about to be stopped.
+  /// This will also shut down all subsequent [Subscription]s.
+  shutdown: CancellationToken,
 }
 
 impl Drop for CollabGroup {
   fn drop(&mut self) {
-    trace!("Drop collab group:{}", self.object_id);
+    self.shutdown.cancel();
   }
 }
 
@@ -61,65 +61,107 @@ impl CollabGroup {
     workspace_id: String,
     object_id: String,
     collab_type: CollabType,
-    collab: Arc<RwLock<Collab>>,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
     storage: Arc<S>,
     is_new_collab: bool,
     collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
-    edit_state_max_count: u32,
-    edit_state_max_secs: i64,
     indexer: Option<Arc<dyn Indexer>>,
   ) -> Result<Self, StreamError>
   where
     S: CollabStorage,
   {
-    let edit_state = Arc::new(EditState::new(
-      edit_state_max_count,
-      edit_state_max_secs,
-      is_new_collab,
+    let persister = Arc::new(CollabPersister::new(
+      workspace_id.clone(),
+      object_id.clone(),
+      collab_type.clone(),
+      storage,
+      collab_redis_stream,
+      indexer,
     ));
-    let broadcast = {
-      let lock = collab.read().await;
-      CollabBroadcast::new(
-        &object_id,
-        10,
-        edit_state.clone(),
-        &lock,
-        CollabUpdateStreamingImpl::new(&workspace_id, &object_id, &collab_redis_stream).await?,
-      )
-    };
-    let (destroy_group_tx, rx) = mpsc::channel(1);
 
-    tokio::spawn(
-      GroupPersistence::new(
-        workspace_id.clone(),
-        object_id.clone(),
-        uid,
-        storage,
-        edit_state.clone(),
-        Arc::downgrade(&collab),
-        collab_type.clone(),
+    let shutdown = CancellationToken::new();
+    let subscribers = Arc::new(DashMap::new());
+
+    // setup task used to receive messages from Redis
+    {
+      let oid = object_id.clone();
+      let shutdown = shutdown.clone();
+      tokio::spawn(async move {
+        if let Err(err) = Self::inbound_task(shutdown).await {
+          tracing::warn!("`{}` failed to receive message: {}", oid, err);
+        }
+      });
+    }
+
+    // setup task used to send messages to Redis
+    {
+      let oid = object_id.clone();
+      let shutdown = shutdown.clone();
+      tokio::spawn(async move {
+        if let Err(err) = Self::outbound_task(shutdown).await {
+          tracing::warn!("`{}` failed to send message: {}", oid, err);
+        }
+      });
+    }
+
+    // setup periodic snapshot
+    {
+      let shutdown = shutdown.clone();
+      tokio::spawn(Self::snapshot_task(
         persistence_interval,
-        indexer,
-      )
-      .run(rx),
-    );
+        persister.clone(),
+        shutdown,
+      ));
+    }
 
     Ok(Self {
       workspace_id,
       object_id,
       collab_type,
-      collab,
-      broadcast,
-      subscribers: Default::default(),
+      subscribers,
       metrics_calculate,
-      destroy_group_tx,
+      shutdown,
+      persister,
     })
   }
 
+  /// Task used to receive messages from Redis.
+  async fn inbound_task(shutdown: CancellationToken) -> Result<(), RealtimeError> {
+    todo!()
+  }
+
+  /// Task used to send messages to Redis.
+  async fn outbound_task(shutdown: CancellationToken) -> Result<(), RealtimeError> {
+    todo!()
+  }
+
+  async fn snapshot_task(
+    interval: Duration,
+    persister: Arc<CollabPersister>,
+    shutdown: CancellationToken,
+  ) {
+    let mut snapshot_tick = tokio::time::interval(interval);
+    snapshot_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+    loop {
+      tokio::select! {
+        _ = snapshot_tick.tick() => {
+          if let Err(err) = persister.save().await {
+            tracing::warn!("failed to persist document `{}`: {}", persister.object_id, err);
+          }
+        },
+        _ = shutdown.cancelled() => {
+          if let Err(err) = persister.save().await {
+            tracing::warn!("failed to persist document `{}`: {}", persister.object_id, err);
+          }
+        }
+      }
+    }
+  }
+
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
-    let lock = self.collab.read().await;
+    let lock = self.load().await?;
     let encode_collab = lock.encode_collab_v1(|collab| {
       self
         .collab_type
@@ -158,14 +200,10 @@ impl CollabGroup {
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
   {
     // create new subscription for new subscriber
-    let sub = self.broadcast.subscribe(
-      user,
-      subscriber_origin,
-      sink,
-      stream,
-      Arc::downgrade(&self.collab),
-      self.metrics_calculate.clone(),
-    );
+    let metrics = self.metrics_calculate.clone();
+    let sub = self
+      .broadcast
+      .subscribe(user, subscriber_origin, sink, stream, metrics);
 
     if let Some(mut old) = self.subscribers.insert((*user).clone(), sub) {
       tracing::warn!("{}: remove old subscriber: {}", &self.object_id, user);
@@ -173,8 +211,7 @@ impl CollabGroup {
     }
 
     if cfg!(debug_assertions) {
-      event!(
-        tracing::Level::TRACE,
+      trace!(
         "{}: add new subscriber, current group member: {}",
         &self.object_id,
         self.user_count(),
@@ -193,7 +230,7 @@ impl CollabGroup {
   /// Check if the group is active. A group is considered active if it has at least one
   /// subscriber
   pub async fn is_inactive(&self) -> bool {
-    let modified_at = self.broadcast.modified_at.lock();
+    let modified_at = self.modified_at();
 
     // In debug mode, we set the timeout to 60 seconds
     if cfg!(debug_assertions) {
@@ -235,7 +272,7 @@ impl CollabGroup {
     for mut entry in self.subscribers.iter_mut() {
       entry.value_mut().stop().await;
     }
-    let _ = self.destroy_group_tx.send(self.collab.clone()).await;
+    self.shutdown.cancel();
   }
 
   /// Returns the timeout duration in seconds for different collaboration types.
@@ -260,131 +297,8 @@ impl CollabGroup {
   }
 }
 
-pub(crate) struct EditState {
-  /// Clients rely on `edit_count` to verify message ordering. A non-continuous sequence suggests
-  /// missing updates, prompting the client to request an initial synchronization.
-  /// Continuous sequence numbers ensure the client receives and displays updates in the correct order.
-  ///
-  edit_counter: AtomicU32,
-  prev_edit_count: AtomicU32,
-  prev_flush_timestamp: AtomicI64,
-
-  max_edit_count: u32,
-  max_secs: i64,
-  /// Indicate the collab object is just created in the client and not exist in server database.
-  is_new: AtomicBool,
-  /// Indicate the collab is ready to save to disk.
-  /// If is_ready_to_save is true, which means the collab contains the requirement data and ready to save to disk.
-  is_ready_to_save: AtomicBool,
-}
-
-impl Display for EditState {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(
-        f,
-        "EditState {{ edit_counter: {}, prev_edit_count: {},  max_edit_count: {}, max_secs: {}, is_new: {}, is_ready_to_save: {}",
-        self.edit_counter.load(Ordering::SeqCst),
-        self.prev_edit_count.load(Ordering::SeqCst),
-        self.max_edit_count,
-        self.max_secs,
-        self.is_new.load(Ordering::SeqCst),
-        self.is_ready_to_save.load(Ordering::SeqCst),
-        )
-  }
-}
-
-impl EditState {
-  fn new(max_edit_count: u32, max_secs: i64, is_new: bool) -> Self {
-    Self {
-      edit_counter: AtomicU32::new(0),
-      prev_edit_count: Default::default(),
-      prev_flush_timestamp: AtomicI64::new(chrono::Utc::now().timestamp()),
-      max_edit_count,
-      max_secs,
-      is_new: AtomicBool::new(is_new),
-      is_ready_to_save: AtomicBool::new(false),
-    }
-  }
-
-  pub(crate) fn edit_count(&self) -> u32 {
-    self.edit_counter.load(Ordering::SeqCst)
-  }
-
-  /// Increments the edit count and returns the old value
-  pub(crate) fn increment_edit_count(&self) -> u32 {
-    self
-      .edit_counter
-      .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
-        Some(current + 1)
-      })
-      // safety: unwrap when returning the new value
-      .unwrap()
-  }
-
-  pub(crate) fn tick(&self) {
-    self
-      .prev_edit_count
-      .store(self.edit_counter.load(Ordering::SeqCst), Ordering::SeqCst);
-    self
-      .prev_flush_timestamp
-      .store(chrono::Utc::now().timestamp(), Ordering::SeqCst);
-  }
-
-  pub(crate) fn is_edit(&self) -> bool {
-    self.edit_counter.load(Ordering::SeqCst) != self.prev_edit_count.load(Ordering::SeqCst)
-  }
-
-  pub(crate) fn is_new(&self) -> bool {
-    self.is_new.load(Ordering::SeqCst)
-  }
-
-  pub(crate) fn set_is_new(&self, is_new: bool) {
-    self.is_new.store(is_new, Ordering::SeqCst);
-  }
-
-  pub(crate) fn set_ready_to_save(&self) {
-    self.is_ready_to_save.store(true, Ordering::Relaxed);
-  }
-
-  pub(crate) fn should_save_to_disk(&self) -> bool {
-    if !self.is_ready_to_save.load(Ordering::Relaxed) {
-      return false;
-    }
-
-    if self.is_new.load(Ordering::Relaxed) {
-      return true;
-    }
-
-    let current_edit_count = self.edit_counter.load(Ordering::SeqCst);
-    let prev_edit_count = self.prev_edit_count.load(Ordering::SeqCst);
-
-    // If the collab is new, save it to disk and reset the flag
-    if self.is_new.load(Ordering::SeqCst) {
-      return true;
-    }
-
-    if current_edit_count == prev_edit_count {
-      return false;
-    }
-
-    // Check if the edit count exceeds the maximum allowed since the last save
-    let edit_count_exceeded = (current_edit_count > prev_edit_count)
-      && ((current_edit_count - prev_edit_count) >= self.max_edit_count);
-
-    // Calculate the time since the last flush and check if it exceeds the maximum allowed
-    let now = chrono::Utc::now().timestamp();
-    let prev_flush_timestamp = self.prev_flush_timestamp.load(Ordering::SeqCst);
-    let time_exceeded =
-      (now > prev_flush_timestamp) && (now - prev_flush_timestamp >= self.max_secs);
-
-    // Determine if we should save based on either condition being met
-    edit_count_exceeded || (current_edit_count != prev_edit_count && time_exceeded)
-  }
-}
-
 struct CollabUpdateStreamingImpl {
   sender: mpsc::UnboundedSender<Vec<u8>>,
-  stopped: Arc<AtomicBool>,
 }
 
 impl CollabUpdateStreamingImpl {
@@ -396,16 +310,13 @@ impl CollabUpdateStreamingImpl {
     let stream = collab_redis_stream
       .collab_update_stream(workspace_id, object_id, "collaborate_update_producer")
       .await?;
-    let stopped = Arc::new(AtomicBool::new(false));
     let (sender, receiver) = mpsc::unbounded_channel();
-    let cloned_stopped = stopped.clone();
     tokio::spawn(async move {
       if let Err(err) = Self::consume_messages(receiver, stream).await {
         error!("Failed to consume incoming updates: {}", err);
       }
-      cloned_stopped.store(true, Ordering::SeqCst);
     });
-    Ok(Self { sender, stopped })
+    Ok(Self { sender })
   }
 
   async fn consume_messages(
@@ -438,42 +349,104 @@ impl CollabUpdateStreamingImpl {
     }
     Ok(())
   }
-
-  pub fn is_stopped(&self) -> bool {
-    self.stopped.load(Ordering::SeqCst)
-  }
 }
 
 impl CollabUpdateStreaming for CollabUpdateStreamingImpl {
   fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError> {
-    if self.is_stopped() {
+    if let Err(_) = self.sender.send(update) {
       Err(RealtimeError::Internal(anyhow::anyhow!(
         "stream stopped processing incoming updates"
       )))
-    } else if let Err(err) = self.sender.send(update) {
-      Err(RealtimeError::Internal(err.into()))
     } else {
       Ok(())
     }
   }
+
+  fn receive_updates(&self) -> DataStream {
+    todo!()
+  }
+
+  fn receive_awareness_updates(&self) -> DataStream {
+    todo!()
+  }
 }
 
-#[cfg(test)]
-mod tests {
-  use crate::group::group_init::EditState;
+struct CollabPersister {
+  workspace_id: String,
+  object_id: String,
+  collab_type: CollabType,
+  storage: Arc<dyn CollabStorage>,
+  collab_redis_stream: Arc<CollabRedisStream>,
+  indexer: Option<Arc<dyn Indexer>>,
+  /// Collab stored temporarily.
+  temp_collab: ArcSwapOption<CollabSnapshot>,
+}
 
-  #[test]
-  fn edit_state_test() {
-    let edit_state = EditState::new(10, 10, false);
-    edit_state.set_ready_to_save();
-    edit_state.increment_edit_count();
-
-    for _ in 0..10 {
-      edit_state.increment_edit_count();
+impl CollabPersister {
+  pub fn new(
+    workspace_id: String,
+    object_id: String,
+    collab_type: CollabType,
+    storage: Arc<dyn CollabStorage>,
+    collab_redis_stream: Arc<CollabRedisStream>,
+    indexer: Option<Arc<dyn Indexer>>,
+  ) -> Self {
+    Self {
+      workspace_id,
+      object_id,
+      collab_type,
+      storage,
+      collab_redis_stream,
+      indexer,
+      temp_collab: Default::default(),
     }
-    assert!(edit_state.should_save_to_disk());
-    assert!(edit_state.should_save_to_disk());
-    edit_state.tick();
-    assert!(!edit_state.should_save_to_disk());
   }
+
+  /// Drop temp collab i.e. because it was no longer up to date or was not accessed for too long.
+  fn reset(&self) {
+    self.temp_collab.store(None); // cleanup temp collab
+  }
+
+  async fn send_update(&self, update: Vec<u8>) {
+    // send updates to redis queue
+    todo!()
+  }
+
+  async fn send_awareness(&self, awareness_update: Vec<u8>) {
+    // send awareness updates to redis queue: is it needed? What are we using awareness for here?
+    todo!()
+  }
+
+  async fn load(&self) -> Result<Arc<CollabSnapshot>, RealtimeError> {
+    match self.temp_collab.load_full() {
+      Some(collab) => Ok(collab), // return cached collab
+      None => self.force_load().await,
+    }
+  }
+
+  async fn force_load(&self) -> Result<Arc<CollabSnapshot>, RealtimeError> {
+    // 1. Try to load the latest snapshot from storage
+    // 2. consume all Redis updates on top of it (keep redis msg id)
+    todo!()
+  }
+
+  async fn receive_updates(&self) -> DataStream {
+    // 1. loop with yield on incoming Redis stream updates
+    todo!()
+  }
+
+  async fn save(&self) -> Result<(), RealtimeError> {
+    // 1. try to acquire lock
+    // 2. if successful -> self.load()
+    // 3.     if collab has any changes (any redis updates were applied):
+    // 4.         generate embeddings
+    // 5.         store collab
+    // 6.         prune any redis msg ids older than 5 min. since collab snapshot time
+    todo!()
+  }
+}
+
+pub struct CollabSnapshot {
+  pub collab: Collab,
+  pub last_msg_id: String,
 }

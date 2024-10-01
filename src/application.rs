@@ -42,6 +42,7 @@ use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
 use workspace_access::WorkspaceAccessControlImpl;
 
+use crate::api::access_request::access_request_scope;
 use crate::api::ai::ai_completion_scope;
 use crate::api::chat::chat_scope;
 use crate::api::data_import::data_import_scope;
@@ -49,6 +50,7 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::history::history_scope;
 use crate::api::metrics::metrics_scope;
 use crate::api::search::search_scope;
+use crate::api::server_info::server_info_scope;
 use crate::api::template::template_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
@@ -159,6 +161,7 @@ pub async fn run_actix_server(
       // .wrap(DecryptPayloadMiddleware)
       .wrap(access_control.clone())
       .wrap(RequestIdMiddleware)
+      .service(server_info_scope())
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())
@@ -171,6 +174,7 @@ pub async fn run_actix_server(
       .service(search_scope())
       .service(template_scope())
       .service(data_import_scope())
+      .service(access_request_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))

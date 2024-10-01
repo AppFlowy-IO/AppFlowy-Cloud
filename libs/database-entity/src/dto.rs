@@ -527,6 +527,7 @@ pub struct AFWorkspace {
   pub database_storage_id: Uuid,
   pub owner_uid: i64,
   pub owner_name: String,
+  pub owner_email: String,
   pub workspace_type: i32,
   pub workspace_name: String,
   pub created_at: DateTime<Utc>,
@@ -1236,6 +1237,51 @@ pub struct TemplateHomePageQueryParams {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AvatarImageSource {
   pub file_id: String,
+}
+
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Copy, Clone)]
+#[repr(i32)]
+pub enum AccessRequestStatus {
+  Pending = 0,
+  Approved = 1,
+  Rejected = 2,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AccessRequestWithViewId {
+  pub request_id: Uuid,
+  pub workspace: AFWorkspace,
+  pub requester: AccessRequesterInfo,
+  pub view_id: Uuid,
+  pub status: AccessRequestStatus,
+  pub created_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AccessRequesterInfo {
+  pub uuid: Uuid,
+  pub email: String,
+  pub name: String,
+  pub avatar_url: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AccessRequestMinimal {
+  pub request_id: Uuid,
+  pub workspace_id: Uuid,
+  pub requester_id: Uuid,
+  pub view_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateAccessRequestParams {
+  pub workspace_id: Uuid,
+  pub view_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ApproveAccessRequestParams {
+  pub is_approved: bool,
 }
 
 #[cfg(test)]

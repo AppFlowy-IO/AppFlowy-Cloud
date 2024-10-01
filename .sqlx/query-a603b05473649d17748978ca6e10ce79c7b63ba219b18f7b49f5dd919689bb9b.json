@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n        w.workspace_id,\n        w.database_storage_id,\n        w.owner_uid,\n        (SELECT name FROM public.af_user WHERE uid = w.owner_uid) AS owner_name,\n        w.created_at,\n        w.workspace_type,\n        w.deleted_at,\n        w.workspace_name,\n        w.icon\n      FROM af_workspace w\n      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id\n      WHERE wm.uid = (\n         SELECT uid FROM public.af_user WHERE uuid = $1\n      )\n      AND COALESCE(w.is_initialized, false) = true;\n    ",
+  "query": "\n      SELECT\n        w.workspace_id,\n        w.database_storage_id,\n        w.owner_uid,\n        u.name AS owner_name,\n        u.email AS owner_email,\n        w.created_at,\n        w.workspace_type,\n        w.deleted_at,\n        w.workspace_name,\n        w.icon\n      FROM af_workspace w\n      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id\n      JOIN public.af_user u ON w.owner_uid = u.uid\n      WHERE wm.uid = (\n         SELECT uid FROM public.af_user WHERE uuid = $1\n      )\n      AND COALESCE(w.is_initialized, true) = true;\n    ",
   "describe": {
     "columns": [
       {
@@ -25,26 +25,31 @@
       },
       {
         "ordinal": 4,
+        "name": "owner_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "workspace_type",
         "type_info": "Int4"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "deleted_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "workspace_name",
         "type_info": "Text"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "icon",
         "type_info": "Text"
       }
@@ -58,7 +63,8 @@
       false,
       false,
       false,
-      null,
+      false,
+      false,
       true,
       false,
       true,
@@ -66,5 +72,5 @@
       false
     ]
   },
-  "hash": "91ae45856bbb8e31efbb9530016f53602def51d7b46ad690db6e9cb353482764"
+  "hash": "a603b05473649d17748978ca6e10ce79c7b63ba219b18f7b49f5dd919689bb9b"
 }

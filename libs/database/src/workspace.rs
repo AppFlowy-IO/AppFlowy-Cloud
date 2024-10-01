@@ -41,19 +41,24 @@ pub async fn insert_user_workspace(
   let workspace = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-    INSERT INTO public.af_workspace (owner_uid, workspace_name, is_initialized)
-    VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2, $3)
-    RETURNING
+    WITH new_workspace AS (
+      INSERT INTO public.af_workspace (owner_uid, workspace_name, is_initialized)
+      VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2, $3)
+      RETURNING *
+    )
+    SELECT
       workspace_id,
       database_storage_id,
       owner_uid,
-      (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,
-      created_at,
+      owner_profile.name AS owner_name,
+      owner_profile.email AS owner_email,
+      new_workspace.created_at,
       workspace_type,
-      deleted_at,
+      new_workspace.deleted_at,
       workspace_name,
       icon
-    ;
+    FROM new_workspace
+    JOIN public.af_user AS owner_profile ON new_workspace.owner_uid = owner_profile.uid;
     "#,
     user_uuid,
     workspace_name,
@@ -673,13 +678,16 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
         workspace_id,
         database_storage_id,
         owner_uid,
-        (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,
-        created_at,
+        owner_profile.name as owner_name,
+        owner_profile.email as owner_email,
+        af_workspace.created_at,
         workspace_type,
-        deleted_at,
+        af_workspace.deleted_at,
         workspace_name,
         icon
-      FROM public.af_workspace WHERE workspace_id = $1
+      FROM public.af_workspace
+      JOIN public.af_user owner_profile ON af_workspace.owner_uid = owner_profile.uid
+      WHERE workspace_id = $1
     "#,
     workspace_id
   )
@@ -743,7 +751,8 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
         w.workspace_id,
         w.database_storage_id,
         w.owner_uid,
-        (SELECT name FROM public.af_user WHERE uid = w.owner_uid) AS owner_name,
+        u.name AS owner_name,
+        u.email AS owner_email,
         w.created_at,
         w.workspace_type,
         w.deleted_at,
@@ -751,6 +760,7 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
         w.icon
       FROM af_workspace w
       JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
+      JOIN public.af_user u ON w.owner_uid = u.uid
       WHERE wm.uid = (
          SELECT uid FROM public.af_user WHERE uuid = $1
       )

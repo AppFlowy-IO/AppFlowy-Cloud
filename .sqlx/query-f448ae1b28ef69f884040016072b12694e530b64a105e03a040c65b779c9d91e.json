@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n    INSERT INTO public.af_workspace (owner_uid, workspace_name)\n    VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2)\n    RETURNING\n      workspace_id,\n      database_storage_id,\n      owner_uid,\n      (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,\n      created_at,\n      workspace_type,\n      deleted_at,\n      workspace_name,\n      icon\n    ;\n    ",
+  "query": "\n      SELECT\n        workspace_id,\n        database_storage_id,\n        owner_uid,\n        owner_profile.name as owner_name,\n        owner_profile.email as owner_email,\n        af_workspace.created_at,\n        workspace_type,\n        af_workspace.deleted_at,\n        workspace_name,\n        icon\n      FROM public.af_workspace\n      JOIN public.af_user owner_profile ON af_workspace.owner_uid = owner_profile.uid\n      WHERE workspace_id = $1\n    ",
   "describe": {
     "columns": [
       {
@@ -25,41 +25,46 @@
       },
       {
         "ordinal": 4,
+        "name": "owner_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "workspace_type",
         "type_info": "Int4"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "deleted_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "workspace_name",
         "type_info": "Text"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "icon",
         "type_info": "Text"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      null,
+      false,
+      false,
       true,
       false,
       true,
@@ -67,5 +72,5 @@
       false
     ]
   },
-  "hash": "29a6f76da0baf71c215b69078cce66d55f43d63f5c1c9e6786a4e80b52b4c5df"
+  "hash": "f448ae1b28ef69f884040016072b12694e530b64a105e03a040c65b779c9d91e"
 }

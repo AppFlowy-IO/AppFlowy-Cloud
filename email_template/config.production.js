@@ -15,15 +15,17 @@ module.exports = {
   build: {
     templates: {
       destination: {
-        path: '../assets/mailer_templates/build_production',
+        path: "../assets/mailer_templates/build_production",
       },
     },
   },
   locals: {
-    cdnBaseUrl: 'https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/',
+    cdnBaseUrl:
+      "https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/",
     userIconUrl: "{{ user_icon_url }}",
     userName: "{{ username }}",
     acceptUrl: "{{ accept_url }}",
+    approveUrl: "{{ approve_url }}",
     workspaceName: "{{ workspace_name }}",
     workspaceMembersCount: "{{ workspace_member_count }}",
     workspaceIconURL: "{{ workspace_icon_url }}",
@@ -32,4 +34,4 @@ module.exports = {
   removeUnusedCSS: true,
   shorthandCSS: true,
   prettify: true,
-}
+};

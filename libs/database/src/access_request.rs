@@ -71,6 +71,7 @@ pub async fn select_access_request_by_request_id<'a, E: Executor<'a, Database = 
         af_workspace.database_storage_id,
         af_workspace.owner_uid,
         owner_profile.name,
+        owner_profile.email,
         af_workspace.created_at,
         af_workspace.workspace_type,
         af_workspace.deleted_at,

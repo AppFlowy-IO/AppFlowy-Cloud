@@ -73,9 +73,17 @@ pub async fn get_access_request(
   pg_pool: &PgPool,
   collab_storage: Arc<CollabAccessControlStorage>,
   access_request_id: Uuid,
+  user_uuid: Uuid,
+  user_uid: i64,
 ) -> Result<AccessRequest, AppError> {
   let access_request_with_view_id =
     select_access_request_by_request_id(pg_pool, access_request_id).await?;
+  if access_request_with_view_id.workspace.owner_uid != user_uid {
+    return Err(AppError::NotEnoughPermissions {
+      user: user_uuid.to_string(),
+      action: "get access request".to_string(),
+    });
+  }
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::Server,

@@ -40,6 +40,13 @@ async fn access_request_test() {
     resp.unwrap_err().code,
     ErrorCode::AccessRequestAlreadyExists
   );
+  // Only workspace owner should be allowed to view access requests
+  let resp = requester_client
+    .get_access_request(access_request.request_id)
+    .await;
+  assert!(resp.is_err());
+  assert_eq!(resp.unwrap_err().code, ErrorCode::NotEnoughPermissions);
+
   let access_request_id = access_request.request_id;
   let access_request_to_be_approved = owner_client
     .get_access_request(access_request_id)

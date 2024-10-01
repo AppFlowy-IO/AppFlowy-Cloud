@@ -32,15 +32,18 @@ pub fn access_request_scope() -> Scope {
 }
 
 async fn get_access_request_handler(
-  _uuid: UserUuid,
+  uuid: UserUuid,
   access_request_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AccessRequest>> {
   let access_request_id = access_request_id.into_inner();
+  let uid = state.user_cache.get_user_uid(&uuid).await?;
   let access_request = get_access_request(
     &state.pg_pool,
     state.collab_access_control_storage.clone(),
     access_request_id,
+    *uuid,
+    uid,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(access_request)))

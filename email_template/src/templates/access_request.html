@@ -1,0 +1,129 @@
+---
+title: "Request to join the workspace"
+preheader: "Approve a user's request to join the workspace."
+bodyClass: bg-purple-50
+---
+
+<x-main>
+  <div
+    class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black"
+  >
+    <table align="center">
+      <tr>
+        <td class="w-[552px] max-w-full">
+          <div class="w-full text-center">
+            <img
+              src="{{ userIconUrl }}"
+              class="rounded-full overflow-hidden object-cover"
+              width="48px"
+              height="48px"
+              alt="{{ userName }}"
+            />
+          </div>
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="text-3xl font-bold">{{ userName }}</span>
+            <span class="mx-2=1">has requested access to </span>
+            <span class="text-3xl font-bold">{{ workspaceName }}</span>
+          </p>
+          <x-divider space-x="20%" />
+          <table align="center">
+            <tr>
+              <td class="w-[60px]">
+                <div
+                  style="border: 2px solid black"
+                  class="rounded-2xl mr-2 w-[60px] h-[60px] bg-white overflow-hidden"
+                >
+                  <img
+                    src="{{ workspaceIconURL }}"
+                    class="overflow-hidden object-cover"
+                    width="100%"
+                    height="100%"
+                    alt="{{ workspaceName }}"
+                  />
+                </div>
+              </td>
+              <td>
+                <div class="font-bold mb-2">{{ workspaceName }}</div>
+                <div class="text-sm text-slate-500">
+                  {{ workspaceMembersCount }} members
+                </div>
+              </td>
+            </tr>
+          </table>
+          <x-button
+            align="center"
+            class="hover:opacity-90 cursor-pointer !text-xl !leading-[20px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
+            href="{{ approveUrl }}"
+          >
+            <div class="font-medium text-[24px]">Approve request</div>
+          </x-button>
+          <div
+            class="mx-auto leading-4.5 text-sm text-slate-500 text-center w-[70%]"
+          >
+            By clicking "Approve request" above, the user will be added to the
+            workspace.
+          </div>
+          <x-divider space-x="20%" />
+        </td>
+      </tr>
+      <tr>
+        <td class="text-center text-slate-600 text-xs px-6">
+          <p class="m-0 mb-4 uppercase cursor-pointer">
+            <a href="https://appflowy.io">
+              <img
+                src="{{ cdnBaseUrl }}images/appflowy-logo.png"
+                width="150px"
+              />
+            </a>
+          </p>
+          <p class="m-0 text-sm text-black font-medium">
+            Bring projects, knowledge, and teams together with the power of AI.
+          </p>
+
+          <p class="cursor-default">
+            <a
+              href="https://twitter.com/appflowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/twitter.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://www.reddit.com/r/AppFlowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/reddit.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://github.com/AppFlowy-IO/AppFlowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/github.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://discord.gg/9Q2xaN37tV"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/discord.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</x-main>

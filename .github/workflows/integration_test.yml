@@ -51,7 +51,7 @@ jobs:
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker push appflowyinc/appflowy_history:${GITHUB_SHA}
-          APPFLOWY_HISTORY_VERSION=${GITHUB_SHA} 
+          APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
           APPFLOWY_CLOUD_VERSION=0.1.1
 
   test:
@@ -93,6 +93,7 @@ jobs:
           sed -i "s|LOCAL_AI_AWS_SECRET_ACCESS_KEY=.*|LOCAL_AI_AWS_SECRET_ACCESS_KEY=${{ secrets.LOCAL_AI_AWS_SECRET_ACCESS_KEY }}|" .env
           sed -i 's|APPFLOWY_INDEXER_REDIS_URL=.*|APPFLOWY_INDEXER_REDIS_URL=redis://localhost:6379|' .env
           sed -i 's|APPFLOWY_INDEXER_DATABASE_URL=.*|APPFLOWY_INDEXER_DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
+          sed -i 's|APPFLOWY_WEB_URL=.*|APPFLOWY_WEB_URL=http://localhost:3000|' .env
         shell: bash
 
       - name: Update Nginx Configuration

@@ -144,6 +144,33 @@ impl TestClient {
     .unwrap()
   }
 
+  pub async fn get_workspace_database(&self, workspace_id: &str) -> WorkspaceDatabaseBody {
+    let workspaces = self.api_client.get_workspaces().await.unwrap();
+    let workspace_database_id = workspaces
+      .iter()
+      .find(|w| w.workspace_id.to_string() == workspace_id)
+      .unwrap()
+      .database_storage_id
+      .to_string();
+
+    let collab = self
+      .api_client
+      .get_collab(QueryCollabParams::new(
+        workspace_database_id.clone(),
+        CollabType::WorkspaceDatabase,
+        workspace_id.to_string(),
+      ))
+      .await
+      .unwrap();
+
+    WorkspaceDatabaseBody::from_collab_doc_state(
+      &workspace_database_id,
+      CollabOrigin::Empty,
+      collab.encode_collab.into(),
+    )
+    .unwrap()
+  }
+
   pub async fn get_connect_users(&self, object_id: &str) -> Vec<i64> {
     #[derive(Deserialize)]
     struct UserId {

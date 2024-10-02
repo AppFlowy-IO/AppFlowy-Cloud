@@ -1,4 +1,6 @@
 use client_api_test::TestClient;
+use collab_entity::CollabType;
+use collab_folder::ViewLayout;
 use shared_entity::dto::import_dto::ImportTaskStatus;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -45,6 +47,59 @@ async fn import_notion_zip_test() {
   // check the imported workspace
   let imported_workspace_id = workspaces[1].workspace_id.to_string();
   let folder = client.get_folder(&imported_workspace_id).await;
-  let workspace_sub_views = folder.get_views_belong_to(&imported_workspace_id);
+  let workspace_database = client.get_workspace_database(&imported_workspace_id).await;
+  let mut workspace_sub_views = folder.get_views_belong_to(&imported_workspace_id);
   assert_eq!(workspace_sub_views.len(), 1);
+
+  let imported_view = workspace_sub_views.pop().unwrap();
+  assert_eq!(imported_view.name, "Projects & Tasks");
+  assert_eq!(imported_view.children.len(), 2);
+  assert_eq!(imported_view.layout, ViewLayout::Document);
+
+  let sub_views = folder.get_views_belong_to(&imported_view.id);
+  for (index, view) in sub_views.iter().enumerate() {
+    if index == 0 {
+      assert_eq!(view.name, "Projects");
+      assert_eq!(view.layout, ViewLayout::Grid);
+
+      let database_id = workspace_database
+        .get_database_meta_with_view_id(&view.id)
+        .unwrap()
+        .database_id
+        .clone();
+      let _encoded_collab = client
+        .get_collab(
+          imported_workspace_id.clone(),
+          database_id,
+          CollabType::Database,
+        )
+        .await
+        .unwrap()
+        .encode_collab;
+      continue;
+    }
+
+    if index == 1 {
+      assert_eq!(view.name, "Tasks");
+      assert_eq!(view.layout, ViewLayout::Grid);
+
+      let database_id = workspace_database
+        .get_database_meta_with_view_id(&view.id)
+        .unwrap()
+        .database_id
+        .clone();
+      let _encoded_collab = client
+        .get_collab(
+          imported_workspace_id.clone(),
+          database_id,
+          CollabType::Database,
+        )
+        .await
+        .unwrap()
+        .encode_collab;
+      continue;
+    }
+
+    panic!("Unexpected view found: {:?}", view);
+  }
 }

@@ -102,9 +102,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     30,
   ));
 
-  let app = Router::new()
-    .route("/health", get(health_check))
-    .with_state(state);
+  let app = Router::new().with_state(state);
 
   tokio::select! {
     _ = import_worker_fut => {
@@ -116,11 +114,6 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
   }
 
   Ok(())
-}
-
-async fn health_check() -> impl IntoResponse {
-  let response_body = json!({ "status": "AppFlowy-Worker is running" });
-  (StatusCode::OK, Json(response_body))
 }
 
 #[derive(Clone)]

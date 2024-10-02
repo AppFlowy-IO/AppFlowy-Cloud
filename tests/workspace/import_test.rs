@@ -7,7 +7,7 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn import_blog_post_test() {
-  let (client, imported_workspace_id) = import_zip().await;
+  let (client, imported_workspace_id) = import_zip("blog_post.zip").await;
   let folder = client.get_folder(&imported_workspace_id).await;
   let mut workspace_sub_views = folder.get_views_belong_to(&imported_workspace_id);
   assert_eq!(workspace_sub_views.len(), 1);
@@ -45,7 +45,7 @@ async fn import_blog_post_test() {
 
 #[tokio::test]
 async fn import_project_and_task_zip_test() {
-  let (client, imported_workspace_id) = import_zip().await;
+  let (client, imported_workspace_id) = import_zip("project&task.zip").await;
   let folder = client.get_folder(&imported_workspace_id).await;
   let workspace_database = client.get_workspace_database(&imported_workspace_id).await;
   let mut workspace_sub_views = folder.get_views_belong_to(&imported_workspace_id);
@@ -103,10 +103,10 @@ async fn import_project_and_task_zip_test() {
   }
 }
 
-async fn import_zip() -> (TestClient, String) {
+async fn import_zip(name: &str) -> (TestClient, String) {
   let client = TestClient::new_user().await;
 
-  let file_path = PathBuf::from("tests/workspace/asset/blog_post.zip");
+  let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
   client.api_client.import_file(&file_path).await.unwrap();
 
   // when importing a file, the workspace for the file should be created and it's

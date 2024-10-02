@@ -8,14 +8,14 @@ use tokio::time::sleep;
 use tracing::{event, instrument, Level};
 use uuid::Uuid;
 
-use crate::collab::decode_util::encode_collab_from_bytes;
-use app_error::AppError;
-use database::collab::{
+use crate::collab::util::encode_collab_from_bytes;
+use crate::collab::{
   batch_select_collab_blob, insert_into_af_collab, is_collab_exists, select_blob_from_af_collab,
   select_collab_meta_from_af_collab, AppResult,
 };
-use database::index::upsert_collab_embeddings;
-use database::pg_row::AFCollabRowMeta;
+use crate::index::upsert_collab_embeddings;
+use crate::pg_row::AFCollabRowMeta;
+use app_error::AppError;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
 #[derive(Clone)]

@@ -190,7 +190,7 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
   let data = select_blob_from_af_collab(&pool, &CollabType::Unknown, &object_id)
     .await
     .unwrap();
-  assert_ne!(data, encoded_collab_v1); // should equal the second data
+  assert_eq!(data, encoded_collab_v1); // should equal the data that insert first time
 }
 
 #[sqlx::test(migrations = false)]

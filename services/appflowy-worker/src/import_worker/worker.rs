@@ -27,6 +27,7 @@ use redis::streams::{
 use redis::{AsyncCommands, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
+use sqlx::types::chrono;
 use sqlx::{PgPool, Pool, Postgres};
 use std::collections::HashMap;
 use std::env::temp_dir;
@@ -45,6 +46,7 @@ use database::workspace::{
 use database_entity::dto::CollabParams;
 
 use crate::s3_client::S3Client;
+use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use tokio::task::spawn_local;
 use tokio::time::interval;
 use tracing::{error, info, trace, warn};
@@ -212,7 +214,7 @@ async fn consume_task(
   pg_pool: &Pool<Postgres>,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
-  process_task(import_task, s3_client, pg_pool, notifier).await?;
+  process_task(import_task, s3_client, redis_client, pg_pool, notifier).await?;
   let _: () = redis_client
     .xack(stream_name, group_name, &[entry_id])
     .await
@@ -226,6 +228,7 @@ async fn consume_task(
 async fn process_task(
   import_task: ImportTask,
   s3_client: &Arc<dyn S3Client>,
+  redis_client: &mut ConnectionManager,
   pg_pool: &PgPool,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
@@ -235,7 +238,8 @@ async fn process_task(
       // 1. unzip file to temp dir
       let unzip_dir_path = download_zip_file(&task, s3_client).await?;
       // 2. import zip
-      let result = process_unzip_file(&task, &unzip_dir_path, pg_pool, s3_client).await;
+      let result =
+        process_unzip_file(&task, &unzip_dir_path, pg_pool, redis_client, s3_client).await;
       // 3. delete zip file regardless of success or failure
       match fs::remove_dir_all(unzip_dir_path).await {
         Ok(_) => trace!("[Import]: {} deleted unzip file", task.workspace_id),
@@ -308,6 +312,7 @@ async fn process_unzip_file(
   import_task: &NotionImportTask,
   unzip_dir_path: &PathBuf,
   pg_pool: &PgPool,
+  redis_client: &mut ConnectionManager,
   s3_client: &Arc<dyn S3Client>,
 ) -> Result<(), ImportError> {
   let notion_importer = NotionImporter::new(
@@ -322,6 +327,11 @@ async fn process_unzip_file(
     .await
     .map_err(ImportError::ImportCollabError)?;
   let nested_views = imported.build_nested_views(import_task.uid).await;
+  trace!(
+    "[Import]: {} imported nested views:{}",
+    import_task.workspace_id,
+    nested_views
+  );
 
   // 1. Open the workspace folder
   let folder_collab =
@@ -335,11 +345,21 @@ async fn process_unzip_file(
   )
   .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
 
+  // 2. Insert collabs' views into the folder
+  trace!(
+    "[Import]: {} insert views:{} to folder",
+    import_task.workspace_id,
+    nested_views.len()
+  );
+  folder.insert_nested_views(nested_views.into_inner());
+
   let mut resources = vec![];
   let mut collab_params_list = vec![];
   let mut database_view_ids_by_database_id: HashMap<String, Vec<String>> = HashMap::new();
+  let mem_cache = CollabMemCache::new(redis_client.clone());
+  let timestamp = chrono::Utc::now().timestamp();
 
-  // 2. Collect all collabs and resources
+  // 3. Collect all collabs and resources
   let mut stream = imported.into_collab_stream().await;
   while let Some(imported_collab) = stream.next().await {
     trace!(
@@ -374,26 +394,18 @@ async fn process_unzip_file(
     }
   }
 
-  // 3. Insert collabs' views into the folder
-  trace!(
-    "[Import]: {} insert views:{} to folder",
-    import_task.workspace_id,
-    nested_views.len()
-  );
-  folder.insert_nested_views(nested_views.into_inner());
+  let w_database_id = select_workspace_database_storage_id(pg_pool, &import_task.workspace_id)
+    .await
+    .map_err(|err| {
+      ImportError::Internal(anyhow!(
+        "Failed to select workspace database storage id: {:?}",
+        err
+      ))
+    })
+    .map(|id| id.to_string())?;
 
   // 4. Edit workspace database collab and then encode workspace database collab
   if !database_view_ids_by_database_id.is_empty() {
-    let w_database_id = select_workspace_database_storage_id(pg_pool, &import_task.workspace_id)
-      .await
-      .map_err(|err| {
-        ImportError::Internal(anyhow!(
-          "Failed to select workspace database storage id: {:?}",
-          err
-        ))
-      })?
-      .to_string();
-
     let w_db_collab =
       get_encode_collab_from_bytes(&w_database_id, &CollabType::WorkspaceDatabase, pg_pool).await?;
     let mut w_database = WorkspaceDatabaseBody::from_collab_doc_state(
@@ -410,13 +422,22 @@ async fn process_unzip_file(
         err
       ))
     })?;
+    // Update the workspace database cache because newly created workspace databases are cached in Redis.
+    mem_cache
+      .insert_encode_collab(
+        &w_database_id,
+        w_database_collab.clone(),
+        timestamp,
+        cache_exp_secs_from_collab_type(&CollabType::WorkspaceDatabase),
+      )
+      .await;
 
     trace!(
       "[Import]: {} did encode workspace database collab",
       import_task.workspace_id
     );
     let w_database_collab_params = CollabParams {
-      object_id: w_database_id.to_string(),
+      object_id: w_database_id.clone(),
       collab_type: CollabType::WorkspaceDatabase,
       embeddings: None,
       encoded_collab_v1: Bytes::from(w_database_collab.encode_to_bytes().unwrap()),
@@ -428,6 +449,18 @@ async fn process_unzip_file(
   let folder_collab = folder
     .encode_collab_v1(|collab| CollabType::Folder.validate_require_data(collab))
     .map_err(|err| ImportError::Internal(err.into()))?;
+
+  // Update the folder cache because newly created folders are cached in Redis.
+  // Other collaboration objects do not use caching yet, so there is no need to insert them into Redis.
+  mem_cache
+    .insert_encode_collab(
+      &import_task.workspace_id,
+      folder_collab.clone(),
+      timestamp,
+      cache_exp_secs_from_collab_type(&CollabType::Folder),
+    )
+    .await;
+
   let folder_collab_params = CollabParams {
     object_id: import_task.workspace_id.clone(),
     collab_type: CollabType::Folder,
@@ -452,6 +485,8 @@ async fn process_unzip_file(
     "[Import]: {} insert collabs into database",
     import_task.workspace_id
   );
+
+  // 7. write all collab to disk
   insert_into_af_collab_bulk_for_user(
     &mut transaction,
     &import_task.uid,
@@ -493,12 +528,22 @@ async fn process_unzip_file(
       ))
     })?;
 
-  transaction.commit().await.map_err(|err| {
+  let result = transaction.commit().await.map_err(|err| {
     ImportError::Internal(anyhow!(
       "Failed to commit transaction when importing data: {:?}",
       err
     ))
-  })?;
+  });
+
+  if result.is_err() {
+    // remove cache in redis
+    let _ = mem_cache.remove_encode_collab(&w_database_id).await;
+    let _ = mem_cache
+      .remove_encode_collab(&import_task.workspace_id)
+      .await;
+
+    return result;
+  }
 
   // 7. after inserting all collabs, upload all files to S3
   trace!("[Import]: {} upload files to s3", import_task.workspace_id,);

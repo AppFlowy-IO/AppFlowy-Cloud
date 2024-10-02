@@ -43,6 +43,7 @@ sha2 = "0.10.8"
 base64 = "0.21.7"
 rust_decimal = "1.36.0"
 bincode.workspace = true
+itertools = "0.12.1"
 
 [features]
 default = ["s3"]

@@ -21,8 +21,8 @@ pub enum ImportTaskStatus {
   Failed,
 }
 
-impl From<i32> for ImportTaskStatus {
-  fn from(status: i32) -> Self {
+impl From<i16> for ImportTaskStatus {
+  fn from(status: i16) -> Self {
     match status {
       0 => ImportTaskStatus::Pending,
       1 => ImportTaskStatus::Completed,

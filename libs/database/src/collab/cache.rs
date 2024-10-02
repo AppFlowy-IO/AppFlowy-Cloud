@@ -9,13 +9,11 @@ use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
 use tracing::{error, event, Level};
 
-use app_error::AppError;
-use database::collab::CollabMetadata;
-use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
-
 use crate::collab::disk_cache::CollabDiskCache;
 use crate::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
-use crate::state::RedisConnectionManager;
+use crate::collab::CollabMetadata;
+use app_error::AppError;
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
 #[derive(Clone)]
 pub struct CollabCache {
@@ -26,7 +24,7 @@ pub struct CollabCache {
 }
 
 impl CollabCache {
-  pub fn new(redis_conn_manager: RedisConnectionManager, pg_pool: PgPool) -> Self {
+  pub fn new(redis_conn_manager: redis::aio::ConnectionManager, pg_pool: PgPool) -> Self {
     let mem_cache = CollabMemCache::new(redis_conn_manager.clone());
     let disk_cache = CollabDiskCache::new(pg_pool.clone());
     Self {

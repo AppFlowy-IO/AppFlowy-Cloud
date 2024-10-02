@@ -4,20 +4,19 @@ use collab_entity::CollabType;
 use redis::{pipe, AsyncCommands};
 use tracing::{error, instrument, trace};
 
-use crate::collab::decode_util::encode_collab_from_bytes;
-use crate::state::RedisConnectionManager;
+use crate::collab::util::encode_collab_from_bytes;
+use crate::collab::CollabMetadata;
 use app_error::AppError;
-use database::collab::CollabMetadata;
 
 const SEVEN_DAYS: u64 = 604800;
 const ONE_MONTH: u64 = 2592000;
 #[derive(Clone)]
 pub struct CollabMemCache {
-  connection_manager: RedisConnectionManager,
+  connection_manager: redis::aio::ConnectionManager,
 }
 
 impl CollabMemCache {
-  pub fn new(connection_manager: RedisConnectionManager) -> Self {
+  pub fn new(connection_manager: redis::aio::ConnectionManager) -> Self {
     Self { connection_manager }
   }
 

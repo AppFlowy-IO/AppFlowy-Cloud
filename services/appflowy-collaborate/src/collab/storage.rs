@@ -15,10 +15,10 @@ use tracing::{error, instrument, trace};
 use validator::Validate;
 
 use crate::collab::access_control::CollabAccessControlImpl;
-use crate::collab::cache::CollabCache;
 use crate::command::{CLCommandSender, CollaborationCommand};
 use crate::shared_state::RealtimeSharedState;
 use app_error::AppError;
+use database::collab::cache::CollabCache;
 use database::collab::{
   AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl, GetCollabOrigin,
 };

@@ -557,7 +557,7 @@ pub struct AFImportTask {
   pub file_size: i64,
   pub workspace_id: String,
   pub created_by: i64,
-  pub status: i32,
+  pub status: i16,
   pub metadata: serde_json::Value,
   pub created_at: DateTime<Utc>,
 }

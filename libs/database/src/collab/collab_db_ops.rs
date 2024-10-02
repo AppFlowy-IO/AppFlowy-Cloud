@@ -288,8 +288,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
         INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
         SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::int[], $6::bigint[], $7::uuid[])
         ON CONFLICT (oid, partition_key)
-        DO UPDATE
-        SET blob = excluded.blob, len = excluded.len, encrypt = excluded.encrypt, owner_uid = excluded.owner_uid;
+        DO NOTHING;
       "#,
       &object_ids,
       &blobs,

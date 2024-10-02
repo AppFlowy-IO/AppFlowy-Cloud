@@ -12,5 +12,6 @@ pub(crate) async fn encode_collab_from_bytes(bytes: Vec<u8>) -> Result<EncodedCo
       err
     ))),
   })
-  .await?
+  .await
+  .map_err(|err| AppError::Internal(anyhow!("Failed to spawn blocking task: {:?}", err)))?
 }

@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
       "./services/appflowy-worker/Cargo.toml",
     ])
     .spawn()
-    .context("Failed to start AppFlowy-History process")?;
+    .context("Failed to start AppFlowy-Worker process")?;
 
   select! {
       status = appflowy_cloud_cmd.wait() => {

@@ -43,8 +43,8 @@ async fn import_notion_zip_test() {
   assert_eq!(workspaces.len(), 2);
 
   // check the imported workspace
-  // let imported_workspace_id = workspaces[1].workspace_id.to_string();
-  // let folder = client.get_folder(&imported_workspace_id).await;
-  // let view = folder.get_views_belong_to(&imported_workspace_id);
-  // assert_eq!(view.len(), 1);
+  let imported_workspace_id = workspaces[1].workspace_id.to_string();
+  let folder = client.get_folder(&imported_workspace_id).await;
+  let view = folder.get_views_belong_to(&imported_workspace_id);
+  assert_eq!(view.len(), 1);
 }

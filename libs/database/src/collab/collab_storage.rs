@@ -138,6 +138,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     &self,
     uid: &i64,
     queries: Vec<QueryCollab>,
+    from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult>;
 
   /// Deletes a collaboration from the storage.
@@ -249,8 +250,12 @@ where
     &self,
     uid: &i64,
     queries: Vec<QueryCollab>,
+    from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult> {
-    self.as_ref().batch_get_collab(uid, queries).await
+    self
+      .as_ref()
+      .batch_get_collab(uid, queries, from_editing_collab)
+      .await
   }
 
   async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()> {

@@ -31,7 +31,7 @@ async fn import_blog_post_test() {
 
   let page_block_id = document.get_page_id().unwrap();
   let block_ids = document.get_block_children_ids(&page_block_id);
-  for (_, block_id) in block_ids.iter().enumerate() {
+  for block_id in block_ids.iter() {
     if let Some((block_type, block_data)) = document.get_block_data(block_id) {
       if matches!(block_type, BlockType::Image) {
         let url = block_data.get(URL_FIELD).unwrap().as_str().unwrap();

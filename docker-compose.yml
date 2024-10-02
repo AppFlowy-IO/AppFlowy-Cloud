@@ -154,7 +154,7 @@ services:
 
   appflowy_worker:
     restart: on-failure
-    image: appflowyinc/appflowy_worker:${APPFLOWY_HISTORY_VERSION:-latest}
+    image: appflowyinc/appflowy_worker:${APPFLOWY_WORKER_VERSION:-latest}
     build:
       context: .
       dockerfile: ./services/appflowy-worker/Dockerfile

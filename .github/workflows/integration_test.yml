@@ -52,6 +52,7 @@ jobs:
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker push appflowyinc/appflowy_history:${GITHUB_SHA}
           APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
+          APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           APPFLOWY_CLOUD_VERSION=0.1.1
 
   test:
@@ -103,6 +104,7 @@ jobs:
       - name: Run Docker-Compose
         run: |
           export APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
+          export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           export APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a

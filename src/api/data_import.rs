@@ -16,7 +16,7 @@ use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tracing::trace;
+use tracing::{error, trace};
 use uuid::Uuid;
 
 pub fn data_import_scope() -> Scope {
@@ -63,10 +63,13 @@ async fn import_data_handler(
   req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-
   let host = get_host_from_request(&req);
-  let workspace_name = Uuid::new_v4().to_string();
-  let file_name = format!("{}.zip", workspace_name);
+
+  let time = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
+  let workspace_name = format!("import-{}", time);
+
+  // file_name must be unique
+  let file_name = format!("{}.zip", Uuid::new_v4());
   let file_path = temp_dir().join(&file_name);
 
   let mut file_size = 0;
@@ -80,6 +83,7 @@ async fn import_data_handler(
     }
   }
   file.shutdown().await?;
+  drop(file);
 
   let workspace = create_empty_workspace(
     &state.pg_pool,
@@ -98,13 +102,20 @@ async fn import_data_handler(
     file_size,
     workspace_id
   );
-  let stream = ByteStream::from_path(file_path).await.map_err(|e| {
+  let stream = ByteStream::from_path(&file_path).await.map_err(|e| {
     AppError::Internal(anyhow!("Failed to create ByteStream from file path: {}", e))
   })?;
   state
     .bucket_client
     .put_blob_as_content_type(&workspace_id, stream, "zip")
     .await?;
+
+  // delete the file after uploading
+  tokio::spawn(async move {
+    if let Err(err) = tokio::fs::remove_file(file_path).await {
+      error!("Failed to delete file after uploading: {}", err);
+    }
+  });
 
   create_upload_task(
     uid,

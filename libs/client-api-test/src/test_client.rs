@@ -122,6 +122,28 @@ impl TestClient {
     Self::new(registered_user, false).await
   }
 
+  pub async fn get_folder(&self, workspace_id: &str) -> Folder {
+    let uid = self.uid().await;
+    let folder_collab = self
+      .api_client
+      .get_collab(QueryCollabParams::new(
+        workspace_id.to_string(),
+        CollabType::Folder,
+        workspace_id.to_string(),
+      ))
+      .await
+      .unwrap()
+      .encode_collab;
+    Folder::from_collab_doc_state(
+      uid,
+      CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone())),
+      folder_collab.into(),
+      &workspace_id,
+      vec![],
+    )
+    .unwrap()
+  }
+
   pub async fn get_connect_users(&self, object_id: &str) -> Vec<i64> {
     #[derive(Deserialize)]
     struct UserId {

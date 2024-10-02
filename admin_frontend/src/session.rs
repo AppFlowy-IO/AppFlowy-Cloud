@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
   async_trait,
-  extract::FromRequestParts,
+  extract::{FromRequestParts, OriginalUri},
   http::request::Parts,
   response::{IntoResponse, Redirect},
 };
@@ -87,27 +87,13 @@ impl FromRequestParts<AppState> for UserSession {
 
     let session =
       match get_session_from_store(&cookie_jar, &state.session_store, &state.gotrue_client).await {
-        Ok(session) => {
-          {
-            // redirect to url just before login (if any)
-            let pre_login_url = cookie_jar
-              .get("pre_login_url")
-              .map(|c| c.value().to_string());
-            if let Some(url) = pre_login_url {
-              cookie_jar = cookie_jar.remove("pre_login_url");
-              return Err(SessionRejection::new(
-                cookie_jar,
-                SessionRejectionKind::Redirect(url),
-              ));
-            }
-          }
-          session
-        },
+        Ok(session) => session,
         Err(err) => {
-          let url = parts.uri.to_string();
-          let mut pre_login_cookie = Cookie::new("pre_login_url", url);
-          pre_login_cookie.set_path("/");
-          cookie_jar = cookie_jar.add(pre_login_cookie);
+          if let Some(original_url) = parts.extensions.get::<OriginalUri>() {
+            let mut pre_login_cookie = Cookie::new("pre_login_url", original_url.to_string());
+            pre_login_cookie.set_path("/");
+            cookie_jar = cookie_jar.add(pre_login_cookie);
+          };
           return Err(SessionRejection::new(cookie_jar, err));
         },
       };

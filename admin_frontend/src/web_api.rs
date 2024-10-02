@@ -9,11 +9,10 @@ use crate::models::{
 };
 use crate::response::WebApiResponse;
 use crate::session::{self, new_session_cookie, UserSession};
-use crate::web_app::home_handler;
 use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::Path;
 use axum::http::{status, HeaderMap};
-use axum::response::Result;
+use axum::response::{IntoResponse, Redirect, Result};
 use axum::routing::{delete, get};
 use axum::Form;
 use axum::{extract::State, routing::post, Router};
@@ -363,11 +362,10 @@ async fn oauth_redirect_handler(
   session: UserSession,
   QueryExtra(oauth_redirect): QueryExtra<OAuthRedirect>,
   mut jar: CookieJar,
-) -> Result<HeaderMap, WebApiError<'static>> {
-  if true {
-    panic!("goal reached");
-  }
-  Ok(htmx_redirect("test"))
+) -> Result<axum::response::Response, WebApiError<'static>> {
+  println!("oauth_redirect: {:?}", oauth_redirect);
+  let resp = Redirect::to("https://appflowy.io").into_response();
+  Ok(resp)
 }
 
 async fn sign_up_handler(

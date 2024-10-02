@@ -6,14 +6,13 @@ use crate::ext::api::{
   get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
   verify_token_cloud,
 };
-use crate::models::{OAuthLoginAction, OAuthRedirect, WebAppOAuthLoginRequest};
+use crate::models::{OAuthLoginAction, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
-use axum::response::Result;
+use axum::response::{IntoResponse, Redirect, Result};
 use axum::{response::Html, routing::get, Router};
-use axum_extra::extract::cookie::Cookie;
-use axum_extra::extract::{CookieJar, Query as QueryExtra};
+use axum_extra::extract::CookieJar;
 use gotrue_entity::dto::User;
 
 use crate::{templates, AppState};
@@ -78,7 +77,7 @@ async fn login_callback_query_handler(
   session: Option<UserSession>,
   Query(query): Query<WebAppOAuthLoginRequest>,
   mut jar: CookieJar,
-) -> Result<(CookieJar, Html<String>), WebAppError> {
+) -> Result<axum::response::Response, WebAppError> {
   let refresh_token = {
     match query.refresh_token {
       Some(refresh_token) => refresh_token,
@@ -92,19 +91,16 @@ async fn login_callback_query_handler(
               query.error_code,
               query.error_description
             );
-            let expired_url = format!(
+            let redirect_url = format!(
                 "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
                 query.workspace_name.unwrap_or_default(),
                 query.workspace_icon.unwrap_or_default(),
                 query.user_name.unwrap_or_default(),
                 query.user_icon.unwrap_or_default(),
                 query.workspace_member_count.unwrap_or_default());
-            return Ok((
-              jar,
-              render_template(templates::Redirect {
-                redirect_url: expired_url,
-              })?,
-            ));
+
+            let expired_html = render_template(templates::Redirect { redirect_url })?;
+            return Ok(expired_html.into_response());
           },
           None => {
             return Err(WebAppError::BadRequest(
@@ -157,7 +153,8 @@ async fn login_callback_query_handler(
             .iter()
             .find(|w| w.invite_id.to_string() == invite_id);
           if found.is_some() {
-            return Ok((jar, render_template(templates::OpenAppFlowyOrDownload {})?));
+            let open_or_dl_html = render_template(templates::OpenAppFlowyOrDownload {})?;
+            return Ok((jar, open_or_dl_html).into_response());
           }
         }
 
@@ -169,24 +166,21 @@ async fn login_callback_query_handler(
         .await
         {
           tracing::error!("accepting workspace invitation: {:?}", err);
-          let expired_url = format!(
+          let redirect_url = format!(
             "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
             query.workspace_name.unwrap_or_default(),
             query.workspace_icon.unwrap_or_default(),
             query.user_name.unwrap_or_default(),
             query.user_icon.unwrap_or_default(),
             query.workspace_member_count.unwrap_or_default());
-          return Ok((
-            jar,
-            render_template(templates::Redirect {
-              redirect_url: expired_url,
-            })?,
-          ));
+          let redirect_html = render_template(templates::Redirect { redirect_url })?;
+          return Ok(redirect_html.into_response());
         };
-        Ok((jar, render_template(templates::OpenAppFlowyOrDownload {})?))
+        let open_or_dl_html = render_template(templates::OpenAppFlowyOrDownload {})?;
+        return Ok((jar, open_or_dl_html).into_response());
       },
     },
-    None => Ok((jar, home_handler(State(state), new_session).await?)),
+    None => home_handler(State(state), new_session, jar).await,
   }
 }
 
@@ -366,15 +360,24 @@ async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
 pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
-) -> Result<Html<String>, WebAppError> {
+  mut jar: CookieJar,
+) -> Result<axum::response::Response, WebAppError> {
+  // redirect to url just before login (if any)
+  let pre_login_url = jar.get("pre_login_url").map(|c| c.value().to_string());
+  if let Some(url) = pre_login_url {
+    jar = jar.remove("pre_login_url");
+    return Ok((jar, Redirect::temporary(&url)).into_response());
+  }
+
   let user = state
     .gotrue_client
     .user_info(&session.token.access_token)
     .await?;
-  render_template(templates::Home {
+  let home_html_str = render_template(templates::Home {
     user: &user,
     is_admin: is_admin(&user),
-  })
+  })?;
+  Ok(home_html_str.into_response())
 }
 
 async fn admin_home_handler(

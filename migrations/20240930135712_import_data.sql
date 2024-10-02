@@ -4,7 +4,7 @@ CREATE TABLE af_import_task(
     file_size BIGINT NOT NULL,          -- File size in bytes, BIGINT for large files
     workspace_id TEXT NOT NULL,         -- Workspace id
     created_by BIGINT NOT NULL,         -- User ID
-    status INT NOT NULL,                -- Status of the file import (e.g., 0 for pending, 1 for completed, 2 for failed)
+    status SMALLINT NOT NULL,           -- Status of the file import (e.g., 0 for pending, 1 for completed, 2 for failed)
     metadata JSONB DEFAULT '{}' NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

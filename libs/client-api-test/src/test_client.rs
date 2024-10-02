@@ -138,7 +138,7 @@ impl TestClient {
       uid,
       CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone())),
       folder_collab.into(),
-      &workspace_id,
+      workspace_id,
       vec![],
     )
     .unwrap()

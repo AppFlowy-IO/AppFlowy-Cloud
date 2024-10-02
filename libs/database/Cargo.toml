@@ -21,12 +21,12 @@ serde_json.workspace = true
 tonic-proto.workspace = true
 
 sqlx = { workspace = true, default-features = false, features = [
-    "postgres",
-    "chrono",
-    "uuid",
-    "macros",
-    "runtime-tokio-rustls",
-    "rust_decimal",
+  "postgres",
+  "chrono",
+  "uuid",
+  "macros",
+  "runtime-tokio-rustls",
+  "rust_decimal",
 ] }
 pgvector = { workspace = true, features = ["sqlx"] }
 tracing = { version = "0.1.40" }
@@ -36,8 +36,8 @@ redis.workspace = true
 futures-util = "0.3.30"
 bytes = "1.5"
 aws-sdk-s3 = { version = "1.36.0", features = [
-    "behavior-version-latest",
-    "rt-tokio",
+  "behavior-version-latest",
+  "rt-tokio",
 ], optional = true }
 sha2 = "0.10.8"
 base64 = "0.21.7"

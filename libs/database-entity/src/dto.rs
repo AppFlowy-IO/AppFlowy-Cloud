@@ -574,6 +574,7 @@ pub struct AFWorkspace {
   pub database_storage_id: Uuid,
   pub owner_uid: i64,
   pub owner_name: String,
+  #[serde(default)]
   pub owner_email: String,
   pub workspace_type: i32,
   pub workspace_name: String,

@@ -88,7 +88,22 @@ async fn post_approve_access_request_handler(
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let access_request_id = access_request_id.into_inner();
   let is_approved = approve_access_request_params.is_approved;
-  approve_or_reject_access_request(&state.pg_pool, access_request_id, uid, *uuid, is_approved)
-    .await?;
+  let appflowy_web_url = state
+    .config
+    .appflowy_web_url
+    .clone()
+    .ok_or(AppError::Internal(anyhow!(
+      "AppFlowy web url has not been set"
+    )))?;
+  approve_or_reject_access_request(
+    &state.pg_pool,
+    state.mailer.clone(),
+    &appflowy_web_url,
+    access_request_id,
+    uid,
+    *uuid,
+    is_approved,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }

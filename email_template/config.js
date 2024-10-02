@@ -30,6 +30,7 @@ module.exports = {
     userName: "John Doe",
     acceptUrl: "https://appflowy.io",
     approveUrl: "https://appflowy.io",
+    launchWorkspaceUrl: "https://appflowy.io",
     workspaceName: "AppFlowy",
     workspaceMembersCount: "100",
     workspaceIconURL: "https://cdn-icons-png.flaticon.com/512/1078/1078013.png",

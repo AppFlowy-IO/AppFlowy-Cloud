@@ -7,6 +7,7 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::Transaction;
 use tokio::time::timeout;
 use tracing::warn;
@@ -154,6 +155,40 @@ where
       Err(_) => {
         error!("Timeout waiting for encode collab from realtime server");
         None
+      },
+    }
+  }
+
+  async fn batch_get_encode_collab_from_editing(
+    &self,
+    object_ids: Vec<String>,
+  ) -> HashMap<String, EncodedCollab> {
+    let (ret, rx) = tokio::sync::oneshot::channel();
+    let timeout_duration = Duration::from_secs(10);
+
+    // Attempt to send the command to the realtime server
+    if let Err(err) = self
+      .rt_cmd_sender
+      .send(CollaborationCommand::BatchGetEncodeCollab { object_ids, ret })
+      .await
+    {
+      error!(
+        "Failed to send get encode collab command to realtime server: {}",
+        err
+      );
+      return HashMap::new();
+    }
+
+    // Await the response from the realtime server with a timeout
+    match timeout(timeout_duration, rx).await {
+      Ok(Ok(batch_encoded_collab)) => batch_encoded_collab,
+      Ok(Err(err)) => {
+        error!("Failed to get encode collab from realtime server: {}", err);
+        HashMap::new()
+      },
+      Err(_) => {
+        error!("Timeout waiting for encode collab from realtime server");
+        HashMap::new()
       },
     }
   }
@@ -326,6 +361,7 @@ where
     &self,
     _uid: &i64,
     queries: Vec<QueryCollab>,
+    from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult> {
     // Partition queries based on validation into valid queries and errors (with associated error messages).
     let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
@@ -340,8 +376,48 @@ where
             },
           )),
         });
+    let cache_queries = if from_editing_collab {
+      let editing_queries = valid_queries.clone();
+      let editing_results = self
+        .batch_get_encode_collab_from_editing(
+          editing_queries
+            .iter()
+            .map(|q| q.object_id.clone())
+            .collect(),
+        )
+        .await;
+      let editing_query_collab_results: HashMap<String, QueryCollabResult> =
+        tokio::task::spawn_blocking(move || {
+          let par_iter = editing_results.into_par_iter();
+          par_iter
+            .map(|(object_id, encoded_collab)| {
+              let encoding_result = encoded_collab.encode_to_bytes();
+              let query_collab_result = match encoding_result {
+                Ok(encoded_collab_bytes) => QueryCollabResult::Success {
+                  encode_collab_v1: encoded_collab_bytes,
+                },
+                Err(err) => QueryCollabResult::Failed {
+                  error: err.to_string(),
+                },
+              };
 
-    results.extend(self.cache.batch_get_encode_collab(valid_queries).await);
+              (object_id.clone(), query_collab_result)
+            })
+            .collect()
+        })
+        .await
+        .unwrap();
+      let editing_object_ids: Vec<String> = editing_query_collab_results.keys().cloned().collect();
+      results.extend(editing_query_collab_results);
+      valid_queries
+        .into_iter()
+        .filter(|q| !editing_object_ids.contains(&q.object_id))
+        .collect()
+    } else {
+      valid_queries
+    };
+
+    results.extend(self.cache.batch_get_encode_collab(cache_queries).await);
     results
   }
 

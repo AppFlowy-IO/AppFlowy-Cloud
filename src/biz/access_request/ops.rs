@@ -21,7 +21,7 @@ use crate::{
     folder_view::{to_dto_view_icon, to_view_layout},
     ops::get_latest_collab_folder,
   },
-  mailer::{Mailer, WorkspaceAccessRequestMailerParam},
+  mailer::{Mailer, WorkspaceAccessRequestApprovedMailerParam, WorkspaceAccessRequestMailerParam},
 };
 
 pub async fn create_access_request(
@@ -58,7 +58,7 @@ pub async fn create_access_request(
           workspace_name: access_request.workspace.workspace_name,
           workspace_icon_url,
           workspace_member_count: access_request.workspace.member_count.unwrap_or(0),
-          approve_url: approve_url.to_string(),
+          approve_url,
         },
       )
       .await
@@ -73,9 +73,17 @@ pub async fn get_access_request(
   pg_pool: &PgPool,
   collab_storage: Arc<CollabAccessControlStorage>,
   access_request_id: Uuid,
+  user_uuid: Uuid,
+  user_uid: i64,
 ) -> Result<AccessRequest, AppError> {
   let access_request_with_view_id =
     select_access_request_by_request_id(pg_pool, access_request_id).await?;
+  if access_request_with_view_id.workspace.owner_uid != user_uid {
+    return Err(AppError::NotEnoughPermissions {
+      user: user_uuid.to_string(),
+      action: "get access request".to_string(),
+    });
+  }
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::Server,
@@ -110,6 +118,8 @@ pub async fn get_access_request(
 
 pub async fn approve_or_reject_access_request(
   pg_pool: &PgPool,
+  mailer: Mailer,
+  appflowy_web_url: &str,
   request_id: Uuid,
   uid: i64,
   user_uuid: Uuid,
@@ -133,6 +143,35 @@ pub async fn approve_or_reject_access_request(
       role,
     )
     .await?;
+    let cloned_mailer = mailer.clone();
+    let launch_workspace_url = format!(
+      "{}/app/{}",
+      appflowy_web_url, &access_request.workspace.workspace_id
+    );
+
+    // use default icon until we have workspace icon
+    let workspace_icon_url =
+      "https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png".to_string();
+    tokio::spawn(async move {
+      if let Err(err) = cloned_mailer
+        .send_workspace_access_request_approval_notification(
+          &access_request.requester.name,
+          &access_request.requester.email,
+          WorkspaceAccessRequestApprovedMailerParam {
+            workspace_name: access_request.workspace.workspace_name,
+            workspace_icon_url,
+            workspace_member_count: access_request.workspace.member_count.unwrap_or(0),
+            launch_workspace_url,
+          },
+        )
+        .await
+      {
+        tracing::error!(
+          "Failed to send access request approved notification email: {:?}",
+          err
+        );
+      };
+    });
   }
   let status = if is_approved {
     AFAccessRequestStatusColumn::Approved

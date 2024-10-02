@@ -463,7 +463,11 @@ pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Cli
     config_builder.build()
   };
   let client = aws_sdk_s3::Client::from_conf(config);
-  create_bucket_if_not_exists(&client, s3_setting).await?;
+  if s3_setting.create_bucket {
+    create_bucket_if_not_exists(&client, s3_setting).await?;
+  } else {
+    info!("Skipping bucket creation, assumed to be created externally");
+  }
   Ok(client)
 }
 

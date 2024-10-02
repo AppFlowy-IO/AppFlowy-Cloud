@@ -2798,6 +2798,7 @@ dependencies = [
  "bytes",
  "chrono",
  "collab-entity",
+ "prost",
  "serde",
  "serde_json",
  "serde_repr",

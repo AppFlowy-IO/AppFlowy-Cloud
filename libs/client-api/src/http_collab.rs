@@ -1,6 +1,7 @@
 use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, Client};
 use app_error::AppError;
+use client_api_entity::workspace_dto::AFDatabase;
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CreateCollabParams, DeleteCollabParams,
   QueryCollab,
@@ -103,6 +104,7 @@ impl Client {
       .await?
       .into_data()
   }
+
   #[instrument(level = "info", skip_all, err)]
   pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
@@ -117,5 +119,22 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn list_databases(
+    &self,
+    workspace_id: &str,
+  ) -> Result<Vec<AFDatabase>, AppResponseError> {
+    let url = format!("{}/api/workspace/{}/database", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp)
+      .await?
+      .into_data()
   }
 }

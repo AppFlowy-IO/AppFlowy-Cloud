@@ -13,7 +13,9 @@ use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
 use collab::lock::{Mutex, RwLock};
 use collab::preclude::{Collab, Prelim};
+use collab_database::database::{Database, DatabaseContext};
 use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use collab_user::core::UserAwareness;
@@ -43,6 +45,7 @@ use shared_entity::dto::workspace_dto::{
 };
 use shared_entity::response::AppResponseError;
 
+use crate::database_util::TestDatabaseCollabService;
 use crate::user::{generate_unique_registered_user, User};
 use crate::{load_env, localhost_client_with_device_id, setup_log};
 
@@ -142,6 +145,27 @@ impl TestClient {
       vec![],
     )
     .unwrap()
+  }
+
+  pub async fn get_database(&self, workspace_id: &str, database_id: &str) -> Database {
+    let service = TestDatabaseCollabService {
+      api_client: self.api_client.clone(),
+      workspace_id: workspace_id.to_string(),
+    };
+    let context = DatabaseContext::new(Arc::new(service));
+    Database::open(database_id, context).await.unwrap()
+  }
+
+  pub async fn get_document(&self, workspace_id: &str, document_id: &str) -> Document {
+    let collab = self
+      .get_collab_to_collab(
+        workspace_id.to_string(),
+        document_id.to_string(),
+        CollabType::Document,
+      )
+      .await
+      .unwrap();
+    Document::open(collab).unwrap()
   }
 
   pub async fn get_workspace_database(&self, workspace_id: &str) -> WorkspaceDatabaseBody {

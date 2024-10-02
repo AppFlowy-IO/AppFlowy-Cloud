@@ -675,6 +675,7 @@ dependencies = [
  "tracing",
  "tracing-bunyan-formatter",
  "tracing-subscriber",
+ "unicode-normalization",
  "unicode-segmentation",
  "url",
  "uuid",
@@ -1011,9 +1012,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.81"
+version = "0.1.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e0c28dcc82d7c8ead5cb13beb15405b57b8546e93215673ff8ca0349a028107"
+checksum = "721cae7de5c34fbb2acd27e21e6d2cf7b886dce0c27388d46c4e6c47ea4318dd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2148,6 +2149,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert-json-diff",
+ "async-trait",
  "bytes",
  "client-api",
  "client-websocket",
@@ -2227,7 +2229,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2df329ef5f5261fb3d02df0c93a4f223f2493567#2df329ef5f5261fb3d02df0c93a4f223f2493567"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b7b2ecae84047b83ea5d4361ac1e48f2a6f90531#b7b2ecae84047b83ea5d4361ac1e48f2a6f90531"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2252,7 +2254,7 @@ dependencies = [
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2df329ef5f5261fb3d02df0c93a4f223f2493567#2df329ef5f5261fb3d02df0c93a4f223f2493567"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b7b2ecae84047b83ea5d4361ac1e48f2a6f90531#b7b2ecae84047b83ea5d4361ac1e48f2a6f90531"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2291,7 +2293,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2df329ef5f5261fb3d02df0c93a4f223f2493567#2df329ef5f5261fb3d02df0c93a4f223f2493567"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b7b2ecae84047b83ea5d4361ac1e48f2a6f90531#b7b2ecae84047b83ea5d4361ac1e48f2a6f90531"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2312,7 +2314,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2df329ef5f5261fb3d02df0c93a4f223f2493567#2df329ef5f5261fb3d02df0c93a4f223f2493567"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b7b2ecae84047b83ea5d4361ac1e48f2a6f90531#b7b2ecae84047b83ea5d4361ac1e48f2a6f90531"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2332,7 +2334,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2df329ef5f5261fb3d02df0c93a4f223f2493567#2df329ef5f5261fb3d02df0c93a4f223f2493567"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b7b2ecae84047b83ea5d4361ac1e48f2a6f90531#b7b2ecae84047b83ea5d4361ac1e48f2a6f90531"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2354,7 +2356,7 @@ dependencies = [
 [[package]]
 name = "collab-importer"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2df329ef5f5261fb3d02df0c93a4f223f2493567#2df329ef5f5261fb3d02df0c93a4f223f2493567"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b7b2ecae84047b83ea5d4361ac1e48f2a6f90531#b7b2ecae84047b83ea5d4361ac1e48f2a6f90531"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -2451,7 +2453,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2df329ef5f5261fb3d02df0c93a4f223f2493567#2df329ef5f5261fb3d02df0c93a4f223f2493567"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b7b2ecae84047b83ea5d4361ac1e48f2a6f90531#b7b2ecae84047b83ea5d4361ac1e48f2a6f90531"
 dependencies = [
  "anyhow",
  "collab",
@@ -7832,9 +7834,9 @@ checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
 
 [[package]]
 name = "unicode-normalization"
-version = "0.1.23"
+version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a56d1686db2308d901306f92a263857ef59ea39678a5458e7cb17f01415101f5"
+checksum = "5033c97c4262335cded6d6fc3e5c18ab755e1a3dc96376350f3d8e9f009ad956"
 dependencies = [
  "tinyvec",
 ]

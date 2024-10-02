@@ -55,7 +55,7 @@ jobs:
           docker push appflowyinc/appflowy_worker:${GITHUB_SHA}
           APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
           APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
-          APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
+          APPFLOWY_CLOUD_VERSION=0.1.1
 
   test:
     name: Integration Tests

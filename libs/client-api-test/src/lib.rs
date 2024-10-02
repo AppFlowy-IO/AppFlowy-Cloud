@@ -1,4 +1,5 @@
 mod client;
+mod database_util;
 mod log;
 mod test_client;
 mod user;

@@ -30,14 +30,10 @@ dotenvy = "0.15.0"
 axum = "0.7.4"
 thiserror = "1.0.58"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tower-service = "0.3"
-tower-http = { version = "0.5", features = ["cors", "fs"] }
-tower = "0.4"
 serde_repr = "0.1.18"
 futures = "0.3.30"
 infra.workspace = true
 sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
-tonic = "0.12.2"
 secrecy = { version = "0.8", features = ["serde"] }
 aws-sdk-s3 = { version = "1.36.0", features = [
     "behavior-version-latest",

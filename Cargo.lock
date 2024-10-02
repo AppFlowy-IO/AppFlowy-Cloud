@@ -647,7 +647,7 @@ dependencies = [
  "pgvector",
  "pin-project",
  "prometheus-client",
- "prost 0.12.6",
+ "prost",
  "rand 0.8.5",
  "rayon",
  "rcgen",
@@ -669,7 +669,7 @@ dependencies = [
  "tokio-stream",
  "tokio-tungstenite",
  "tokio-util",
- "tonic 0.11.0",
+ "tonic",
  "tonic-build",
  "tonic-proto",
  "tracing",
@@ -722,7 +722,7 @@ dependencies = [
  "md5",
  "parking_lot 0.12.3",
  "prometheus-client",
- "prost 0.12.6",
+ "prost",
  "rand 0.8.5",
  "redis 0.25.4",
  "secrecy",
@@ -764,7 +764,7 @@ dependencies = [
  "futures",
  "infra",
  "log",
- "prost 0.12.6",
+ "prost",
  "rand 0.8.5",
  "redis 0.25.4",
  "serde",
@@ -775,7 +775,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
- "tonic 0.11.0",
+ "tonic",
  "tonic-proto",
  "tower",
  "tower-http",
@@ -815,10 +815,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "tonic 0.12.2",
- "tower",
- "tower-http",
- "tower-service",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -2109,7 +2105,7 @@ dependencies = [
  "parking_lot 0.12.3",
  "percent-encoding",
  "pin-project",
- "prost 0.12.6",
+ "prost",
  "rayon",
  "reqwest 0.11.27",
  "scraper",
@@ -2321,7 +2317,7 @@ dependencies = [
  "bytes",
  "collab",
  "getrandom 0.2.15",
- "prost 0.12.6",
+ "prost",
  "prost-build",
  "protoc-bin-vendored",
  "serde",
@@ -2402,7 +2398,7 @@ dependencies = [
  "collab-entity",
  "collab-rt-protocol",
  "database-entity",
- "prost 0.12.6",
+ "prost",
  "prost-build",
  "protoc-bin-vendored",
  "serde",
@@ -2439,7 +2435,7 @@ dependencies = [
  "chrono",
  "collab-entity",
  "futures",
- "prost 0.12.6",
+ "prost",
  "rand 0.8.5",
  "redis 0.25.4",
  "serde",
@@ -4028,19 +4024,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-timeout"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3203a961e5c83b6f5498933e78b6b263e208c197b63e9c6c53cc82ffd3f63793"
-dependencies = [
- "hyper 1.4.1",
- "hyper-util",
- "pin-project-lite",
- "tokio",
- "tower-service",
-]
-
-[[package]]
 name = "hyper-tls"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5423,15 +5406,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prost"
-version = "0.13.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b0487d90e047de87f984913713b85c601c05609aad5b0df4b4573fbf69aa13f"
-dependencies = [
- "bytes",
-]
-
-[[package]]
 name = "prost-build"
 version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5445,7 +5419,7 @@ dependencies = [
  "once_cell",
  "petgraph",
  "prettyplease",
- "prost 0.12.6",
+ "prost",
  "prost-types",
  "regex",
  "syn 2.0.72",
@@ -5471,7 +5445,7 @@ version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9091c90b0a32608e984ff2fa4091273cbdd755d54935c51d520887f4a1dbd5b0"
 dependencies = [
- "prost 0.12.6",
+ "prost",
 ]
 
 [[package]]
@@ -7548,40 +7522,10 @@ dependencies = [
  "http 0.2.12",
  "http-body 0.4.6",
  "hyper 0.14.30",
- "hyper-timeout 0.4.1",
+ "hyper-timeout",
  "percent-encoding",
  "pin-project",
- "prost 0.12.6",
- "tokio",
- "tokio-stream",
- "tower",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tonic"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6f6ba989e4b2c58ae83d862d3a3e27690b6e3ae630d0deb59f3697f32aa88ad"
-dependencies = [
- "async-stream",
- "async-trait",
- "axum 0.7.5",
- "base64 0.22.1",
- "bytes",
- "h2 0.4.5",
- "http 1.1.0",
- "http-body 1.0.1",
- "http-body-util",
- "hyper 1.4.1",
- "hyper-timeout 0.5.1",
- "hyper-util",
- "percent-encoding",
- "pin-project",
- "prost 0.13.3",
- "socket2",
+ "prost",
  "tokio",
  "tokio-stream",
  "tower",
@@ -7607,9 +7551,9 @@ dependencies = [
 name = "tonic-proto"
 version = "0.1.0"
 dependencies = [
- "prost 0.12.6",
+ "prost",
  "serde",
- "tonic 0.11.0",
+ "tonic",
  "tonic-build",
  "tracing",
 ]

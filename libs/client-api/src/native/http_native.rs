@@ -322,7 +322,7 @@ impl Client {
       .multipart(form);
 
     // set the host header
-    builder = builder.header("host", self.base_url.clone());
+    builder = builder.header("X-Host", self.base_url.clone());
     let resp = builder.send().await?;
 
     AppResponse::<()>::from_response(resp).await?.into_error()

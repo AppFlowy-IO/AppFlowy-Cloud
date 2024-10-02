@@ -134,7 +134,7 @@ async fn import_data_handler(
 fn get_host_from_request(req: &HttpRequest) -> String {
   req
     .headers()
-    .get("host")
+    .get("X-Host")
     .and_then(|h| h.to_str().ok())
     .unwrap_or("https://beta.appflowy.cloud")
     .to_string()

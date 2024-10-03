@@ -1,11 +1,13 @@
-use authentication::jwt::OptionalUserUuid;
+use authentication::jwt::{OptionalUserUuid, UserUuid};
 use database_entity::dto::AFWorkspaceSettingsChange;
 use std::collections::HashMap;
 
 use std::ops::DerefMut;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
+use redis::AsyncCommands;
+use serde_json::json;
 use sqlx::{types::uuid, PgPool};
 use tracing::instrument;
 use uuid::Uuid;
@@ -30,9 +32,12 @@ use shared_entity::dto::workspace_dto::{
 use shared_entity::response::AppResponseError;
 use workspace_template::document::getting_started::GettingStartedTemplate;
 
-use crate::biz::user::user_init::initialize_workspace_for_user;
+use crate::biz::user::user_init::{
+  create_user_awareness, create_workspace_collab, create_workspace_database_collab,
+  initialize_workspace_for_user,
+};
 use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
-use crate::state::GoTrueAdmin;
+use crate::state::{GoTrueAdmin, RedisConnectionManager};
 
 const MAX_COMMENT_LENGTH: usize = 5000;
 
@@ -55,6 +60,61 @@ pub async fn delete_workspace_for_user(
   Ok(())
 }
 
+/// Create an empty workspace with default folder, workspace database and user awareness collab
+/// object.
+pub async fn create_empty_workspace(
+  pg_pool: &PgPool,
+  workspace_access_control: &impl WorkspaceAccessControl,
+  collab_storage: &Arc<CollabAccessControlStorage>,
+  user_uuid: &Uuid,
+  user_uid: i64,
+  workspace_name: &str,
+) -> Result<AFWorkspace, AppResponseError> {
+  let mut txn = pg_pool.begin().await?;
+  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name, false).await?;
+  workspace_access_control
+    .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
+    .await?;
+  let workspace_id = new_workspace_row.workspace_id.to_string();
+
+  // create CollabType::Folder
+  create_workspace_collab(
+    user_uid,
+    &workspace_id,
+    workspace_name,
+    collab_storage,
+    &mut txn,
+  )
+  .await?;
+
+  // create CollabType::WorkspaceDatabase
+  if let Some(database_storage_id) = new_workspace_row.database_storage_id.as_ref() {
+    let workspace_database_object_id = database_storage_id.to_string();
+    create_workspace_database_collab(
+      &workspace_id,
+      &user_uid,
+      &workspace_database_object_id,
+      collab_storage,
+      &mut txn,
+      vec![],
+    )
+    .await?;
+  }
+
+  // create CollabType::UserAwareness
+  create_user_awareness(
+    &user_uid,
+    user_uuid,
+    &workspace_id,
+    collab_storage,
+    &mut txn,
+  )
+  .await?;
+  let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
+  txn.commit().await?;
+  Ok(new_workspace)
+}
+
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
   workspace_access_control: &impl WorkspaceAccessControl,
@@ -64,7 +124,7 @@ pub async fn create_workspace_for_user(
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
   let mut txn = pg_pool.begin().await?;
-  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name).await?;
+  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name, true).await?;
 
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
@@ -631,5 +691,47 @@ async fn check_if_user_is_allowed_to_delete_comment(
       "User is not allowed to delete this comment".to_string(),
     ));
   }
+  Ok(())
+}
+
+pub async fn create_upload_task(
+  uid: i64,
+  user_uuid: &UserUuid,
+  workspace_id: &str,
+  file_size: usize,
+  host: &str,
+  redis_client: &RedisConnectionManager,
+  pg_pool: &PgPool,
+) -> Result<(), AppError> {
+  let task_id = Uuid::new_v4();
+
+  // Insert the task into the database
+  insert_import_task(
+    task_id,
+    file_size as i64,
+    workspace_id.to_string(),
+    uid,
+    Some(json!({"host": host})),
+    pg_pool,
+  )
+  .await?;
+
+  // This task will be deserialized into ImportTask
+  let task = json!({
+      "notion": {
+         "uid": uid,
+         "user_uuid": user_uuid,
+         "task_id": task_id,
+         "workspace_id": workspace_id,
+         "s3_key": workspace_id,
+         "host": host,
+      }
+  });
+  let _: () = redis_client
+    .clone()
+    .xadd("import_task_stream", "*", &[("task", task.to_string())])
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to push task to Redis stream: {}", err)))?;
+
   Ok(())
 }

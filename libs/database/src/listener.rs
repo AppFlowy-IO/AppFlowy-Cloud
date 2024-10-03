@@ -3,7 +3,7 @@ use serde::de::DeserializeOwned;
 use sqlx::postgres::PgListener;
 use sqlx::PgPool;
 use tokio::sync::broadcast;
-use tracing::{error, trace};
+use tracing::error;
 
 pub struct PostgresDBListener<T: Clone> {
   pub notify: broadcast::Sender<T>,
@@ -22,7 +22,6 @@ where
     let notify = tx.clone();
     tokio::spawn(async move {
       while let Ok(notification) = listener.recv().await {
-        trace!("Received notification: {}", notification.payload());
         match serde_json::from_str::<T>(notification.payload()) {
           Ok(change) => {
             let _ = tx.send(change);

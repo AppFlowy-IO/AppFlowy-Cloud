@@ -2,13 +2,13 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::instrument;
 
-use crate::collab::cache::CollabCache;
 use access_control::access::ObjectType;
 use access_control::access::{enable_access_control, AccessControl};
 use access_control::act::{Action, ActionVariant};
 use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
+use database::collab::cache::CollabCache;
 use database::collab::CollabStorageAccessControl;
 use database_entity::dto::AFAccessLevel;
 

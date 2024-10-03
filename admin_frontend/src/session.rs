@@ -26,6 +26,10 @@ fn session_id_key(session_id: &str) -> String {
   format!("web::session::{}", session_id)
 }
 
+fn code_session_key(code: &str) -> String {
+  format!("web::session::code::{}", code)
+}
+
 impl SessionStorage {
   pub fn new(redis_client: ConnectionManager) -> Self {
     Self { redis_client }
@@ -34,6 +38,18 @@ impl SessionStorage {
   pub async fn get_user_session(&self, session_id: &str) -> Option<UserSession> {
     let key = session_id_key(session_id);
     let s: Result<UserSession, redis::RedisError> = self.redis_client.clone().get(&key).await;
+    match s {
+      Ok(s) => Some(s),
+      Err(e) => {
+        tracing::info!("get user session in redis error: {:?}", e);
+        None
+      },
+    }
+  }
+
+  pub async fn get_code_session(&self, session_id: &str) -> Option<CodeSession> {
+    let key = code_session_key(session_id);
+    let s: Result<CodeSession, redis::RedisError> = self.redis_client.clone().get(&key).await;
     match s {
       Ok(s) => Some(s),
       Err(e) => {
@@ -63,10 +79,10 @@ impl SessionStorage {
     Ok(())
   }
 
-  pub async fn associate_code_with_session(
+  pub async fn put_code_session(
     &self,
     code: &str,
-    session_id: &str,
+    code_session: &CodeSession,
   ) -> redis::RedisResult<()> {
     let key = format!("session::code::{}", code);
     self
@@ -74,32 +90,34 @@ impl SessionStorage {
       .clone()
       .set_options(
         key,
-        session_id,
+        code_session,
         redis::SetOptions::default().with_expiration(redis::SetExpiry::EX(60 * 5)), // code is valid for 5 minutes
       )
       .await
   }
+}
 
-  pub async fn get_user_session_from_code(&self, code: &str) -> Option<UserSession> {
-    let key = format!("session::code::{}", code);
-    let session_id: Result<String, redis::RedisError> = self.redis_client.clone().get(&key).await;
-    match session_id {
-      Ok(session_id) => {
-        let session = self.get_user_session(&session_id).await?;
-        // delete the code after it is used
-        self
-          .redis_client
-          .clone()
-          .del(key)
-          .await
-          .unwrap_or_else(|err| tracing::error!("failed to delete code: {}", err));
-        Some(session)
-      },
-      Err(e) => {
-        tracing::info!("get user session from code in redis error: {:?}", e);
-        None
-      },
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeSession {
+  pub session_id: String,
+  pub code_challenge: Option<String>,
+  pub code_challenge_method: Option<String>,
+}
+
+impl ToRedisArgs for CodeSession {
+  fn write_redis_args<W>(&self, out: &mut W)
+  where
+    W: ?Sized + redis::RedisWrite,
+  {
+    let s = serde_json::to_string(self).unwrap();
+    out.write_arg(s.as_bytes());
+  }
+}
+
+impl FromRedisValue for CodeSession {
+  fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
+    let bytes = expect_redis_value_data(v)?;
+    expect_redis_json_bytes(bytes)
   }
 }
 

@@ -8,7 +8,7 @@ use crate::models::{
   WebApiCreateSSOProviderRequest, WebApiInviteUserRequest, WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
-use crate::session::{self, new_session_cookie, UserSession};
+use crate::session::{self, new_session_cookie, CodeSession, UserSession};
 use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::{Path, Query};
 use axum::http::{status, HeaderMap, StatusCode};
@@ -18,6 +18,8 @@ use axum::Form;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
+use base64::engine::Engine;
+use base64::prelude::BASE64_STANDARD_NO_PAD;
 use gotrue::params::{
   AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
   MagicLinkParams,
@@ -25,6 +27,7 @@ use gotrue::params::{
 use gotrue_entity::dto::{GotrueTokenResponse, SignUpResponse, UpdateGotrueUserParams, User};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
+use sha2::Digest;
 use tracing::info;
 
 pub fn router() -> Router<AppState> {
@@ -407,12 +410,17 @@ async fn oauth_redirect_handler(
     }
   }
 
-  // TODO: handle code challenge and code challenge method
-
   let code = gen_rand_alpha_num(32);
   state
     .session_store
-    .associate_code_with_session(&code, &session.session_id)
+    .put_code_session(
+      &code,
+      &CodeSession {
+        session_id: session.session_id.clone(),
+        code_challenge: oauth_redirect.code_challenge,
+        code_challenge_method: oauth_redirect.code_challenge_method,
+      },
+    )
     .await?;
 
   let url = format!(
@@ -430,18 +438,63 @@ async fn oauth_redirect_token_handler(
 ) -> Result<axum::response::Response, WebApiError<'static>> {
   // TODO: check client_id and secret
   // TODO: handle code challenge and code challenge method
-  // TODO: check redirect_uri (security measure)
 
-  let session = state
+  let code_session = state
     .session_store
-    .get_user_session_from_code(&token_req.code)
+    .get_code_session(&token_req.code)
     .await
     .ok_or(WebApiError::new(
       status::StatusCode::BAD_REQUEST,
       "invalid code or expired",
     ))?;
 
-  let resp = axum::Json::from(session.token);
+  if let Some(code_challenge) = code_session.code_challenge {
+    match code_session.code_challenge_method.as_deref() {
+      Some("S256") => {
+        let verifier = token_req.code_verifier.ok_or_else(|| {
+          WebApiError::new(status::StatusCode::BAD_REQUEST, "missing code_verifier")
+        })?;
+
+        // get code challenge based64 decoded
+        let code_challenge = BASE64_STANDARD_NO_PAD
+          .decode(code_challenge)
+          .map_err(|err| {
+            WebApiError::new(
+              status::StatusCode::BAD_REQUEST,
+              format!("failed to base64 decode code challege: {}", err),
+            )
+          })?;
+
+        // hash the verifier and check against the original code challenge
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(verifier.as_bytes());
+        let verifier_hashed = hasher.finalize().to_vec();
+        if verifier_hashed != code_challenge {
+          return Err(WebApiError::new(
+            status::StatusCode::BAD_REQUEST,
+            "invalid code_verifier",
+          ));
+        }
+      },
+      _ => {
+        return Err(WebApiError::new(
+          status::StatusCode::BAD_REQUEST,
+          "invalid code_challenge_method, only support S256",
+        ));
+      },
+    }
+  }
+
+  let user_session = state
+    .session_store
+    .get_user_session(&code_session.session_id)
+    .await
+    .ok_or(WebApiError::new(
+      status::StatusCode::BAD_REQUEST,
+      "invalid session_id or expired session",
+    ))?;
+
+  let resp = axum::Json::from(user_session.token);
   Ok(resp.into_response())
 }
 

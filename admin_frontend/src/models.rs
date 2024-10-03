@@ -62,13 +62,23 @@ pub enum OAuthLoginAction {
   AcceptWorkspaceInvite,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct OAuthRedirect {
-  pub client_id: Option<Vec<String>>, // for some reason, zapier sends more than 1 client_id
+  pub client_id: Option<String>,
   pub state: Option<String>,
   pub redirect_uri: Option<String>,
   pub response_type: Option<String>,
   pub scope: Option<String>,
   pub code_challenge: Option<String>,
   pub code_challenge_method: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OAuthRedirectToken {
+  pub code: String,
+  pub client_id: Option<String>,
+  pub client_secret: Option<String>,
+  pub grant_type: String,
+  pub redirect_uri: Option<String>,
+  pub code_verifier: Option<String>,
 }

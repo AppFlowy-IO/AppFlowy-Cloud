@@ -4,31 +4,34 @@ use crate::ext::api::{
   verify_token_cloud,
 };
 use crate::models::{
-  OAuthRedirect, WebApiAdminCreateUserRequest, WebApiChangePasswordRequest,
+  OAuthRedirect, OAuthRedirectToken, WebApiAdminCreateUserRequest, WebApiChangePasswordRequest,
   WebApiCreateSSOProviderRequest, WebApiInviteUserRequest, WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
 use crate::session::{self, new_session_cookie, UserSession};
 use crate::{models::WebApiLoginRequest, AppState};
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::http::{status, HeaderMap};
 use axum::response::{IntoResponse, Redirect, Result};
 use axum::routing::{delete, get};
 use axum::Form;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
-use axum_extra::extract::{CookieJar, Query as QueryExtra};
+use axum_extra::extract::CookieJar;
 use gotrue::params::{
   AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
   MagicLinkParams,
 };
 use gotrue_entity::dto::{GotrueTokenResponse, SignUpResponse, UpdateGotrueUserParams, User};
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 use tracing::info;
 
 pub fn router() -> Router<AppState> {
   Router::new()
     .route("/signin", post(sign_in_handler))
     .route("/oauth-redirect", get(oauth_redirect_handler))
+    .route("/oauth-redirect/token", get(oauth_redirect_token_handler))
     .route("/signup", post(sign_up_handler))
     .route("/login-refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
@@ -360,12 +363,47 @@ async fn sign_in_handler(
 async fn oauth_redirect_handler(
   State(state): State<AppState>,
   session: UserSession,
-  QueryExtra(oauth_redirect): QueryExtra<OAuthRedirect>,
-  mut jar: CookieJar,
+  Query(oauth_redirect): Query<OAuthRedirect>,
 ) -> Result<axum::response::Response, WebApiError<'static>> {
-  println!("oauth_redirect: {:?}", oauth_redirect);
-  let resp = Redirect::to("https://appflowy.io").into_response();
+  // TODO: handle code challenge and code challenge method
+  // TODO: handle client_id
+
+  let code = gen_rand_alpha_num(32);
+  state
+    .session_store
+    .associate_code_with_session(&code, &session.session_id)
+    .await?;
+
+  let url = format!(
+    "{}?code={}&state={}",
+    oauth_redirect.redirect_uri.unwrap_or_default(),
+    code,
+    oauth_redirect.state.unwrap_or_default(),
+  );
+
+  let resp = Redirect::to(&url).into_response();
   Ok(resp)
+}
+
+async fn oauth_redirect_token_handler(
+  State(state): State<AppState>,
+  Query(token_req): Query<OAuthRedirectToken>,
+) -> Result<axum::response::Response, WebApiError<'static>> {
+  // TODO: check client_id and secret
+  // TODO: handle code challenge and code challenge method
+  // TODO: check redirect_uri (security measure)
+
+  let session = state
+    .session_store
+    .get_user_session_from_code(&token_req.code)
+    .await
+    .ok_or(WebApiError::new(
+      status::StatusCode::BAD_REQUEST,
+      "invalid code or expired",
+    ))?;
+
+  let resp = axum::Json::from(session.token);
+  Ok(resp.into_response())
 }
 
 async fn sign_up_handler(
@@ -492,4 +530,13 @@ fn get_header_value_or_default<'a>(
     },
     None => default,
   }
+}
+
+fn gen_rand_alpha_num(n: usize) -> String {
+  let random_string: String = rand::thread_rng()
+    .sample_iter(&Alphanumeric)
+    .take(n)
+    .map(char::from)
+    .collect();
+  random_string
 }

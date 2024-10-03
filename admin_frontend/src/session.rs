@@ -62,6 +62,35 @@ impl SessionStorage {
     tracing::info!("del user session: {} res: {}", session_id, res);
     Ok(())
   }
+
+  pub async fn associate_code_with_session(
+    &self,
+    code: &str,
+    session_id: &str,
+  ) -> redis::RedisResult<()> {
+    let key = format!("session::code::{}", code);
+    self
+      .redis_client
+      .clone()
+      .set_options(
+        key,
+        session_id,
+        redis::SetOptions::default().with_expiration(redis::SetExpiry::EX(60 * 5)), // code is valid for 5 minutes
+      )
+      .await
+  }
+
+  pub async fn get_user_session_from_code(&self, code: &str) -> Option<UserSession> {
+    let key = format!("session::code::{}", code);
+    let session_id: Result<String, redis::RedisError> = self.redis_client.clone().get(&key).await;
+    match session_id {
+      Ok(session_id) => self.get_user_session(&session_id).await,
+      Err(e) => {
+        tracing::info!("get user session from code in redis error: {:?}", e);
+        None
+      },
+    }
+  }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

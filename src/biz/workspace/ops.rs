@@ -1,6 +1,5 @@
 use authentication::jwt::OptionalUserUuid;
 use database_entity::dto::AFWorkspaceSettingsChange;
-use database_entity::dto::PublishInfo;
 use std::collections::HashMap;
 
 use std::ops::DerefMut;
@@ -104,54 +103,6 @@ pub async fn patch_workspace(
   Ok(())
 }
 
-pub async fn set_workspace_namespace(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_id: &Uuid,
-  new_namespace: &str,
-) -> Result<(), AppError> {
-  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
-  check_workspace_namespace(new_namespace).await?;
-  if select_workspace_publish_namespace_exists(pg_pool, workspace_id, new_namespace).await? {
-    return Err(AppError::PublishNamespaceAlreadyTaken(
-      "publish namespace is already taken".to_string(),
-    ));
-  };
-  update_workspace_publish_namespace(pg_pool, workspace_id, new_namespace).await?;
-  Ok(())
-}
-
-pub async fn get_workspace_publish_namespace(
-  pg_pool: &PgPool,
-  workspace_id: &Uuid,
-) -> Result<String, AppError> {
-  select_workspace_publish_namespace(pg_pool, workspace_id).await
-}
-
-pub async fn get_published_collab(
-  pg_pool: &PgPool,
-  publish_namespace: &str,
-  publish_name: &str,
-) -> Result<serde_json::Value, AppError> {
-  let metadata = select_publish_collab_meta(pg_pool, publish_namespace, publish_name).await?;
-  Ok(metadata)
-}
-
-pub async fn get_published_collab_blob(
-  pg_pool: &PgPool,
-  publish_namespace: &str,
-  publish_name: &str,
-) -> Result<Vec<u8>, AppError> {
-  select_published_collab_blob(pg_pool, publish_namespace, publish_name).await
-}
-
-pub async fn get_published_collab_info(
-  pg_pool: &PgPool,
-  view_id: &Uuid,
-) -> Result<PublishInfo, AppError> {
-  select_published_collab_info(pg_pool, view_id).await
-}
-
 pub async fn get_comments_on_published_view(
   pg_pool: &PgPool,
   view_id: &Uuid,
@@ -231,17 +182,6 @@ pub async fn remove_reaction_on_comment(
   user_uuid: &Uuid,
 ) -> Result<(), AppError> {
   delete_reaction_from_comment(pg_pool, comment_id, user_uuid, reaction_type).await?;
-  Ok(())
-}
-
-pub async fn delete_published_workspace_collab(
-  pg_pool: &PgPool,
-  workspace_id: &Uuid,
-  view_ids: &[Uuid],
-  user_uuid: &Uuid,
-) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, view_ids).await?;
-  delete_published_collabs(pg_pool, workspace_id, view_ids).await?;
   Ok(())
 }
 
@@ -676,54 +616,6 @@ pub async fn check_workspace_owner(
       "User is not the owner of the workspace".to_string(),
     )),
   }
-}
-
-async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> {
-  // Check len
-  if new_namespace.len() < 8 {
-    return Err(AppError::InvalidRequest(
-      "Namespace must be at least 8 characters long".to_string(),
-    ));
-  }
-
-  if new_namespace.len() > 64 {
-    return Err(AppError::InvalidRequest(
-      "Namespace must be at most 32 characters long".to_string(),
-    ));
-  }
-
-  // Only contain alphanumeric characters and hyphens
-  for c in new_namespace.chars() {
-    if !c.is_alphanumeric() && c != '-' {
-      return Err(AppError::InvalidRequest(
-        "Namespace must only contain alphanumeric characters and hyphens".to_string(),
-      ));
-    }
-  }
-
-  // TODO: add more checks for reserved words
-
-  Ok(())
-}
-
-async fn check_workspace_owner_or_publisher(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_id: &Uuid,
-  view_id: &[Uuid],
-) -> Result<(), AppError> {
-  let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
-  if !is_owner {
-    let is_publisher =
-      select_user_is_collab_publisher_for_all_views(pg_pool, user_uuid, workspace_id, view_id)
-        .await?;
-    if !is_publisher {
-      return Err(AppError::UserUnAuthorized(
-        "User is not the owner of the workspace or the publisher of the document".to_string(),
-      ));
-    }
-  }
-  Ok(())
 }
 
 async fn check_if_user_is_allowed_to_delete_comment(

@@ -123,6 +123,7 @@ async fn import_zip(name: &str) -> (TestClient, String) {
 
   let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
   client.api_client.import_file(&file_path).await.unwrap();
+  let default_workspace_id = client.workspace_id().await;
 
   // when importing a file, the workspace for the file should be created and it's
   // not visible until the import task is completed
@@ -153,10 +154,14 @@ async fn import_zip(name: &str) -> (TestClient, String) {
   );
 
   // after the import task is completed, the new workspace should be visible
-  let workspaces = client.api_client.get_workspaces().await.unwrap();
+  let mut workspaces = client.api_client.get_workspaces().await.unwrap();
   assert_eq!(workspaces.len(), 2);
 
-  // check the imported workspace
-  let imported_workspace_id = workspaces[1].workspace_id.to_string();
+  let imported_workspace = workspaces
+    .into_iter()
+    .find(|workspace| workspace.workspace_id.to_string() != default_workspace_id)
+    .expect("Failed to find imported workspace");
+
+  let imported_workspace_id = imported_workspace.workspace_id.to_string();
   (client, imported_workspace_id)
 }

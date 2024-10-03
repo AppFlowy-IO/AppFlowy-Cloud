@@ -148,33 +148,6 @@ pub async fn select_user_is_workspace_owner(
   Ok(exists.unwrap_or(false))
 }
 
-pub async fn select_user_is_collab_publisher_for_all_views(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_uuid: &Uuid,
-  view_ids: &[Uuid],
-) -> Result<bool, AppError> {
-  let count = sqlx::query_scalar!(
-    r#"
-      SELECT COUNT(*)
-      FROM af_published_collab
-      WHERE workspace_id = $1
-        AND view_id = ANY($2)
-        AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
-    "#,
-    workspace_uuid,
-    view_ids,
-    user_uuid,
-  )
-  .fetch_one(pg_pool)
-  .await?;
-
-  match count {
-    Some(c) => Ok(c == view_ids.len() as i64),
-    None => Ok(false),
-  }
-}
-
 pub async fn select_user_is_allowed_to_delete_comment(
   pg_pool: &PgPool,
   user_uuid: &Uuid,

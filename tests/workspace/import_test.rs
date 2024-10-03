@@ -10,7 +10,12 @@ async fn import_blog_post_test() {
   let (client, imported_workspace_id) = import_zip("blog_post.zip").await;
   let folder = client.get_folder(&imported_workspace_id).await;
   let mut workspace_sub_views = folder.get_views_belong_to(&imported_workspace_id);
-  assert_eq!(workspace_sub_views.len(), 1);
+  assert_eq!(
+    workspace_sub_views.len(),
+    1,
+    "Expected 1 view, found {:?}",
+    workspace_sub_views
+  );
 
   let imported_view = workspace_sub_views.pop().unwrap();
   assert_eq!(imported_view.name, "Blog Post");
@@ -49,11 +54,21 @@ async fn import_project_and_task_zip_test() {
   let folder = client.get_folder(&imported_workspace_id).await;
   let workspace_database = client.get_workspace_database(&imported_workspace_id).await;
   let mut workspace_sub_views = folder.get_views_belong_to(&imported_workspace_id);
-  assert_eq!(workspace_sub_views.len(), 1);
+  assert_eq!(
+    workspace_sub_views.len(),
+    1,
+    "Expected 1 view, found {:?}",
+    workspace_sub_views
+  );
 
   let imported_view = workspace_sub_views.pop().unwrap();
   assert_eq!(imported_view.name, "Projects & Tasks");
-  assert_eq!(imported_view.children.len(), 2);
+  assert_eq!(
+    imported_view.children.len(),
+    2,
+    "Expected 2 views, found {:?}",
+    imported_view.children
+  );
   assert_eq!(imported_view.layout, ViewLayout::Document);
 
   let sub_views = folder.get_views_belong_to(&imported_view.id);

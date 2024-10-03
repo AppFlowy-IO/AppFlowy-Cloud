@@ -37,7 +37,7 @@ async fn main() {
     .expect("gotrue health check failed");
   info!("Gotrue client initialized.");
 
-  let redis_client = redis::Client::open(config.redis_url)
+  let redis_client = redis::Client::open(config.redis_url.clone())
     .expect("failed to create redis client")
     .get_connection_manager()
     .await
@@ -46,10 +46,12 @@ async fn main() {
 
   let session_store = session::SessionStorage::new(redis_client);
 
+  let address = format!("{}:{}", config.host, config.port);
   let state = AppState {
-    appflowy_cloud_url: config.appflowy_cloud_url,
+    appflowy_cloud_url: config.appflowy_cloud_url.clone(),
     gotrue_client,
     session_store,
+    config,
   };
 
   let web_app_router = web_app::router(state.clone()).with_state(state.clone());
@@ -65,7 +67,6 @@ async fn main() {
     .nest_service("/web-api", web_api_router)
     .nest_service("/assets", ServeDir::new("assets"));
 
-  let address = format!("{}:{}", config.host, config.port);
   let listener = TcpListener::bind(address)
     .await
     .expect("failed to bind to port");
@@ -80,4 +81,5 @@ pub struct AppState {
   pub appflowy_cloud_url: String,
   pub gotrue_client: gotrue::api::Client,
   pub session_store: session::SessionStorage,
+  pub config: Config,
 }

@@ -11,7 +11,7 @@ use crate::response::WebApiResponse;
 use crate::session::{self, new_session_cookie, UserSession};
 use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::{Path, Query};
-use axum::http::{status, HeaderMap};
+use axum::http::{status, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Result};
 use axum::routing::{delete, get};
 use axum::Form;
@@ -365,8 +365,49 @@ async fn oauth_redirect_handler(
   session: UserSession,
   Query(oauth_redirect): Query<OAuthRedirect>,
 ) -> Result<axum::response::Response, WebApiError<'static>> {
+  {
+    // OAuthRedirect verification
+    if oauth_redirect.client_id != state.config.oauth.client_id {
+      return Err(WebApiError::new(
+        StatusCode::BAD_REQUEST,
+        "invalid client_id",
+      ));
+    }
+    if oauth_redirect.response_type != "code" {
+      return Err(WebApiError::new(
+        StatusCode::BAD_REQUEST,
+        "invalid response_type, only 'code' is support",
+      ));
+    }
+    if oauth_redirect.response_type != "code" {
+      return Err(WebApiError::new(
+        StatusCode::BAD_REQUEST,
+        "invalid response_type, only 'code' is support",
+      ));
+    }
+    {
+      // Check if the redirect_uri is in the allowable list
+      let mut found = false;
+      for allowable_uri in &state.config.oauth.allowable_redirect_uris {
+        if oauth_redirect.redirect_uri == *allowable_uri {
+          found = true;
+          break;
+        }
+      }
+      if !found {
+        return Err(WebApiError::new(
+          StatusCode::BAD_REQUEST,
+          format!(
+            "invalid redirect_uri: {}, allowable_uris: {}",
+            oauth_redirect.redirect_uri,
+            state.config.oauth.allowable_redirect_uris.join(", ")
+          ),
+        ));
+      }
+    }
+  }
+
   // TODO: handle code challenge and code challenge method
-  // TODO: handle client_id
 
   let code = gen_rand_alpha_num(32);
   state
@@ -376,9 +417,7 @@ async fn oauth_redirect_handler(
 
   let url = format!(
     "{}?code={}&state={}",
-    oauth_redirect.redirect_uri.unwrap_or_default(),
-    code,
-    oauth_redirect.state.unwrap_or_default(),
+    oauth_redirect.redirect_uri, code, oauth_redirect.state,
   );
 
   let resp = Redirect::to(&url).into_response();

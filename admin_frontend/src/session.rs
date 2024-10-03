@@ -84,7 +84,17 @@ impl SessionStorage {
     let key = format!("session::code::{}", code);
     let session_id: Result<String, redis::RedisError> = self.redis_client.clone().get(&key).await;
     match session_id {
-      Ok(session_id) => self.get_user_session(&session_id).await,
+      Ok(session_id) => {
+        let session = self.get_user_session(&session_id).await?;
+        // delete the code after it is used
+        self
+          .redis_client
+          .clone()
+          .del(key)
+          .await
+          .unwrap_or_else(|err| tracing::error!("failed to delete code: {}", err));
+        Some(session)
+      },
       Err(e) => {
         tracing::info!("get user session from code in redis error: {:?}", e);
         None

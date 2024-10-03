@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct WebApiLoginRequest {
@@ -64,11 +64,11 @@ pub enum OAuthLoginAction {
 
 #[derive(Debug, Deserialize)]
 pub struct OAuthRedirect {
-  pub client_id: Option<String>,
-  pub state: Option<String>,
-  pub redirect_uri: Option<String>,
-  pub response_type: Option<String>,
-  pub scope: Option<String>,
+  pub client_id: String,
+  pub state: String,
+  pub redirect_uri: String,
+  pub response_type: String,
+  // pub scope: Option<String>,
   pub code_challenge: Option<String>,
   pub code_challenge_method: Option<String>,
 }

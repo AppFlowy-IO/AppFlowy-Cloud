@@ -2,20 +2,32 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 
+use access_control::casbin::access::AccessControl;
+use access_control::casbin::collab::{CollabAccessControlImpl, RealtimeCollabAccessControlImpl};
+use access_control::casbin::workspace::WorkspaceAccessControlImpl;
+use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
+use access_control::noops::collab::{
+  CollabAccessControlImpl as NoOpsCollabAccessControlImpl,
+  RealtimeCollabAccessControlImpl as NoOpsRealtimeCollabAccessControlImpl,
+};
+use access_control::noops::workspace::WorkspaceAccessControlImpl as NoOpsWorkspaceAccessControlImpl;
+use access_control::workspace::WorkspaceAccessControl;
 use actix::Supervisor;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
-use actix_web::middleware::NormalizePath;
+use actix_web::middleware::{Condition, NormalizePath};
 use actix_web::{dev::Server, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
+use appflowy_collaborate::collab::access_control::CollabStorageAccessControlImpl;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
 use collab::lock::Mutex;
+use database::collab::cache::CollabCache;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -23,24 +35,18 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use access_control::access::{enable_access_control, AccessControl};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
-use appflowy_collaborate::collab::access_control::{
-  CollabAccessControlImpl, CollabStorageAccessControlImpl, RealtimeCollabAccessControlImpl,
-};
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
-use database::collab::cache::CollabCache;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
-use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::access_request::access_request_scope;
 use crate::api::ai::ai_completion_scope;
@@ -125,17 +131,17 @@ pub async fn run_actix_server(
   let access_control = MiddlewareAccessControlTransform::new()
     .with_acs(WorkspaceMiddlewareAccessControl::new(
       state.pg_pool.clone(),
-      state.workspace_access_control.clone().into(),
+      state.workspace_access_control.clone(),
     ))
     .with_acs(CollabMiddlewareAccessControl::new(
-      state.collab_access_control.clone().into(),
+      state.collab_access_control.clone(),
       state.collab_cache.clone(),
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let realtime_server = CollaborationServer::<_, _>::new(
+  let realtime_server = CollaborationServer::<_>::new(
     storage.clone(),
-    RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
+    state.realtime_access_control.clone(),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
     state.redis_connection_manager.clone(),
@@ -159,7 +165,7 @@ pub async fn run_actix_server(
           .build(),
       )
       // .wrap(DecryptPayloadMiddleware)
-      .wrap(access_control.clone())
+      .wrap(Condition::new(config.access_control.is_enabled, access_control.clone()))
       .wrap(RequestIdMiddleware)
       .service(server_info_scope())
       .service(user_scope())
@@ -267,7 +273,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!(
     "Setting up access controls, is_enable: {}",
-    enable_access_control()
+    &config.access_control.is_enabled
   );
   let access_control =
     AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
@@ -280,13 +286,28 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   // );
 
   let user_cache = UserCache::new(pg_pool.clone()).await;
-  let collab_access_control = CollabAccessControlImpl::new(access_control.clone());
-  let workspace_access_control = WorkspaceAccessControlImpl::new(access_control.clone());
+  let collab_access_control: Arc<dyn CollabAccessControl> = if config.access_control.is_enabled {
+    Arc::new(CollabAccessControlImpl::new(access_control.clone()))
+  } else {
+    Arc::new(NoOpsCollabAccessControlImpl::new())
+  };
+  let workspace_access_control: Arc<dyn WorkspaceAccessControl> =
+    if config.access_control.is_enabled {
+      Arc::new(WorkspaceAccessControlImpl::new(access_control.clone()))
+    } else {
+      Arc::new(NoOpsWorkspaceAccessControlImpl::new())
+    };
+  let realtime_access_control: Arc<dyn RealtimeAccessControl> = if config.access_control.is_enabled
+  {
+    Arc::new(RealtimeCollabAccessControlImpl::new(access_control))
+  } else {
+    Arc::new(NoOpsRealtimeCollabAccessControlImpl::new())
+  };
   let collab_cache = CollabCache::new(redis_conn_manager.clone(), pg_pool.clone());
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {
-    collab_access_control: collab_access_control.clone().into(),
-    workspace_access_control: workspace_access_control.clone().into(),
+    collab_access_control: collab_access_control.clone(),
+    workspace_access_control: workspace_access_control.clone(),
     cache: collab_cache.clone(),
   };
   let snapshot_control = SnapshotControl::new(
@@ -338,11 +359,11 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_access_control_storage,
     collab_access_control,
     workspace_access_control,
+    realtime_access_control,
     bucket_storage,
     published_collab_store,
     bucket_client: s3_client,
     pg_listeners,
-    access_control,
     metrics,
     gotrue_admin,
     mailer,

@@ -1,30 +1,29 @@
 use std::sync::Arc;
 
+use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
+use access_control::workspace::WorkspaceAccessControl;
 use collab::lock::Mutex;
 use dashmap::DashMap;
+use database::collab::cache::CollabCache;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
-use appflowy_collaborate::collab::access_control::CollabAccessControlImpl;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
-use database::collab::cache::CollabCache;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
-use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::metrics::{PublishedCollabMetrics, RequestMetrics};
 use crate::biz::pg_listener::PgListeners;
@@ -43,13 +42,13 @@ pub struct AppState {
   pub redis_connection_manager: RedisConnectionManager,
   pub collab_cache: CollabCache,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
-  pub collab_access_control: CollabAccessControlImpl,
-  pub workspace_access_control: WorkspaceAccessControlImpl,
+  pub collab_access_control: Arc<dyn CollabAccessControl>,
+  pub workspace_access_control: Arc<dyn WorkspaceAccessControl>,
+  pub realtime_access_control: Arc<dyn RealtimeAccessControl>,
   pub bucket_storage: Arc<S3BucketStorage>,
   pub published_collab_store: Arc<dyn PublishedCollabStore>,
   pub bucket_client: AwsS3BucketClientImpl,
   pub pg_listeners: Arc<PgListeners>,
-  pub access_control: AccessControl,
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
   pub mailer: Mailer,

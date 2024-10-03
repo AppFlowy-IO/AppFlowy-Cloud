@@ -1,6 +1,5 @@
 use crate::api::workspace::{COLLAB_OBJECT_ID_PATH, WORKSPACE_ID_PATH};
 use crate::state::AppState;
-use access_control::access::enable_access_control;
 use actix_router::{Path, Url};
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ResourceDef, ServiceRequest, ServiceResponse};
@@ -116,12 +115,6 @@ where
   forward_ready!(service);
 
   fn call(&self, mut req: ServiceRequest) -> Self::Future {
-    // If the access control is not enabled, skip the access control
-    if !enable_access_control() {
-      let fut = self.service.call(req);
-      return Box::pin(fut);
-    }
-
     let path = req.match_pattern().map(|pattern| {
       // Create ResourceDef will cause memory leak, so we use the cache to store the ResourceDef
       let mut path = req.match_info().clone();

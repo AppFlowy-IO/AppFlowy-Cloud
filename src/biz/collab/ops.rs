@@ -37,7 +37,7 @@ use super::publish_outline::collab_folder_to_published_outline;
 pub async fn create_collab_member(
   pg_pool: &PgPool,
   params: &InsertCollabMemberParams,
-  collab_access_control: &impl CollabAccessControl,
+  collab_access_control: Arc<dyn CollabAccessControl>,
 ) -> Result<(), AppError> {
   params.validate()?;
 
@@ -83,7 +83,7 @@ pub async fn upsert_collab_member(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,
   params: &UpdateCollabMemberParams,
-  collab_access_control: &impl CollabAccessControl,
+  collab_access_control: Arc<dyn CollabAccessControl>,
 ) -> Result<(), AppError> {
   params.validate()?;
   let mut transaction = pg_pool
@@ -123,7 +123,7 @@ pub async fn get_collab_member(
 pub async fn delete_collab_member(
   pg_pool: &PgPool,
   params: &CollabMemberIdentify,
-  collab_access_control: &impl CollabAccessControl,
+  collab_access_control: Arc<dyn CollabAccessControl>,
 ) -> Result<(), AppError> {
   params.validate()?;
   let mut transaction = pg_pool

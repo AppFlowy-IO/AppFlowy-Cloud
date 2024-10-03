@@ -1,5 +1,5 @@
-use crate::access::ObjectType;
 use crate::act::ActionVariant;
+use crate::entity::ObjectType;
 
 pub struct GroupPolicyRequest<'a> {
   pub guid: &'a str,

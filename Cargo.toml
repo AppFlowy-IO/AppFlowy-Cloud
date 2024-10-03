@@ -128,7 +128,6 @@ gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
 authentication.workspace = true
 access-control.workspace = true
-workspace-access.workspace = true
 app-error = { workspace = true, features = [
   "sqlx_error",
   "actix_web_error",
@@ -195,7 +194,6 @@ members = [
   "libs/gotrue-entity",
   "admin_frontend",
   "libs/app-error",
-  "libs/workspace-access",
   "libs/workspace-template",
   "libs/encrypt",
   "libs/authentication",
@@ -226,7 +224,6 @@ shared-entity = { path = "libs/shared-entity" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 authentication = { path = "libs/authentication" }
 access-control = { path = "libs/access-control" }
-workspace-access = { path = "libs/workspace-access" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
 prometheus-client = "0.22.0"

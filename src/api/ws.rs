@@ -15,7 +15,6 @@ use tracing::{debug, error, instrument, trace};
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
-use appflowy_collaborate::collab::access_control::RealtimeCollabAccessControlImpl;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
@@ -31,8 +30,7 @@ pub fn ws_scope() -> Scope {
 }
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
-pub type RealtimeServerAddr =
-  Addr<RealtimeServerActor<CollabAccessControlStorage, RealtimeCollabAccessControlImpl>>;
+pub type RealtimeServerAddr = Addr<RealtimeServerActor<CollabAccessControlStorage>>;
 
 /// This function will not be used after the 0.5.0 of the client.
 #[instrument(skip_all, err)]

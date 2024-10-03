@@ -1,6 +1,7 @@
+use super::adapter::PgAdapter;
+use super::enforcer::{AFEnforcer, NoEnforceGroup};
 use crate::act::{Action, ActionVariant, Acts};
-use crate::adapter::PgAdapter;
-use crate::enforcer::{AFEnforcer, NoEnforceGroup};
+use crate::entity::ObjectType;
 use crate::metrics::{tick_metric, AccessControlMetrics};
 
 use anyhow::anyhow;
@@ -8,7 +9,6 @@ use app_error::AppError;
 use casbin::rhai::ImmutableString;
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
-use lazy_static::lazy_static;
 
 use sqlx::PgPool;
 
@@ -80,30 +80,19 @@ impl AccessControl {
     obj: ObjectType<'_>,
     act: ActionVariant<'_>,
   ) -> Result<(), AppError> {
-    if enable_access_control() {
-      let change = AccessControlChange::UpdatePolicy {
-        uid: *uid,
-        oid: obj.object_id().to_string(),
-      };
-      self.enforcer.update_policy(uid, obj, act).await?;
+    let access_control_change = self.enforcer.update_policy(uid, obj, act).await?;
+    if let Some(change) = access_control_change {
       let _ = self.change_tx.send(change);
-      Ok(())
-    } else {
-      Ok(())
     }
+    Ok(())
   }
 
   pub async fn remove_policy(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
-    if enable_access_control() {
-      self.enforcer.remove_policy(uid, obj).await?;
-      let _ = self.change_tx.send(AccessControlChange::RemovePolicy {
-        uid: *uid,
-        oid: obj.object_id().to_string(),
-      });
-      Ok(())
-    } else {
-      Ok(())
+    let access_control_change = self.enforcer.remove_policy(uid, obj).await?;
+    if let Some(change) = access_control_change {
+      let _ = self.change_tx.send(change);
     }
+    Ok(())
   }
 
   pub async fn enforce(
@@ -113,14 +102,10 @@ impl AccessControl {
     obj: ObjectType<'_>,
     act: ActionVariant<'_>,
   ) -> Result<bool, AppError> {
-    if enable_access_control() {
-      self
-        .enforcer
-        .enforce_policy(workspace_id, uid, obj, act)
-        .await
-    } else {
-      Ok(true)
-    }
+    self
+      .enforcer
+      .enforce_policy(workspace_id, uid, obj, act)
+      .await
   }
 }
 
@@ -255,45 +240,6 @@ pub const POLICY_FIELD_INDEX_ACTION: usize = 2;
 const GROUPING_FIELD_INDEX_ROLE: usize = 0;
 #[allow(dead_code)]
 const GROUPING_FIELD_INDEX_ACTION: usize = 1;
-
-/// Represents the object type that is stored in the access control policy.
-#[derive(Debug)]
-pub enum ObjectType<'id> {
-  /// Stored as `workspace::<uuid>`
-  Workspace(&'id str),
-  /// Stored as `collab::<uuid>`
-  Collab(&'id str),
-}
-
-impl ObjectType<'_> {
-  pub fn policy_object(&self) -> String {
-    match self {
-      ObjectType::Collab(s) => format!("collab::{}", s),
-      ObjectType::Workspace(s) => format!("workspace::{}", s),
-    }
-  }
-
-  pub fn object_id(&self) -> &str {
-    match self {
-      ObjectType::Collab(s) => s,
-      ObjectType::Workspace(s) => s,
-    }
-  }
-}
-
-lazy_static! {
-  static ref ENABLE_ACCESS_CONTROL: bool = {
-    match std::env::var("APPFLOWY_ACCESS_CONTROL") {
-      Ok(value) => value.eq_ignore_ascii_case("true") || value.eq("1"),
-      Err(_) => false,
-    }
-  };
-}
-
-#[inline]
-pub fn enable_access_control() -> bool {
-  *ENABLE_ACCESS_CONTROL
-}
 
 pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), AppError> {
   // Grouping definition of access level to action.

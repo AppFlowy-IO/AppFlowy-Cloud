@@ -793,6 +793,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async_zip",
+ "aws-config",
  "aws-sdk-s3",
  "axum 0.7.5",
  "bytes",

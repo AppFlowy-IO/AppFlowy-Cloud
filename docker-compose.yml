@@ -160,6 +160,7 @@ services:
       dockerfile: ./services/appflowy-worker/Dockerfile
     environment:
       - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_ENVIRONMENT=production
       - APPFLOWY_WORKER_REDIS_URL=redis://redis:6379
       - APPFLOWY_WORKER_ENVIRONMENT=production
       - APPFLOWY_WORKER_DATABASE_URL=${APPFLOWY_WORKER_DATABASE_URL}
@@ -169,7 +170,6 @@ services:
       - APPFLOWY_S3_SECRET_KEY=${APPFLOWY_S3_SECRET_KEY}
       - APPFLOWY_S3_BUCKET=${APPFLOWY_S3_BUCKET}
       - APPFLOWY_S3_REGION=${APPFLOWY_S3_REGION}
-
 volumes:
   postgres_data:
   minio_data:

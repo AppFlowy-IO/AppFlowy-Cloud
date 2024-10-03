@@ -142,7 +142,7 @@ pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<S3ClientImpl, E
     s3_setting.secret_key.expose_secret().clone(),
     None,
     None,
-    "custom",
+    "appflowy-worker",
   );
   let shared_credentials = SharedCredentialsProvider::new(credentials);
 

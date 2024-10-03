@@ -163,6 +163,8 @@ services:
     build:
       context: .
       dockerfile: ./services/appflowy-worker/Dockerfile
+    ports:
+      - "4001:4001"
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_WORKER_REDIS_URL=redis://redis:6379

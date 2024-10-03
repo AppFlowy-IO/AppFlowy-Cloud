@@ -3,6 +3,8 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 
+use anyhow::anyhow;
+use bytes::Bytes;
 use collab_database::database::gen_row_id;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -188,7 +190,7 @@ impl PublishCollabDuplicator {
     // update database if any
     if !workspace_databases.is_empty() {
       let ws_db_oid = select_workspace_database_oid(&pg_pool, &dest_workspace_id.parse()?).await?;
-      let mut ws_db_collab = {
+      let ws_db_collab = {
         let ws_database_ec = get_latest_collab_encoded(
           collab_storage.clone(),
           GetCollabOrigin::User {
@@ -202,19 +204,33 @@ impl PublishCollabDuplicator {
         collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid)?
       };
 
-      let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
+      let mut ws_db_body = WorkspaceDatabaseBody::open(ws_db_collab).map_err(|err| {
+        AppError::Unhandled(format!("failed to open workspace database: {}", err))
+      })?;
       let (ws_db_updates, updated_ws_w_db_collab) = tokio::task::spawn_blocking(move || {
         let ws_db_updates = {
-          let mut txn_wrapper = ws_db_collab.transact_mut();
-          for (db_collab_id, linked_views) in &workspace_databases {
-            ws_db_body.add_database(&mut txn_wrapper, db_collab_id, linked_views.clone());
-          }
-          txn_wrapper.encode_update_v1()
+          let view_ids_by_database_id = workspace_databases
+            .into_iter()
+            .map(|(database_id, view_ids)| (database_id, view_ids.into_iter().collect()))
+            .collect::<HashMap<_, _>>();
+
+          ws_db_body
+            .batch_add_database(view_ids_by_database_id)
+            .encode_update_v1()
         };
-        let updated_ws_w_db_collab = collab_to_bin(ws_db_collab, CollabType::WorkspaceDatabase);
+
+        let updated_ws_w_db_collab = ws_db_body
+          .encode_collab_v1()
+          .map(|encoded_collab| encoded_collab.encode_to_bytes().unwrap())
+          .map_err(|err| {
+            AppError::Internal(anyhow!("failed to encode workspace database: {}", err))
+          });
+
         (ws_db_updates, updated_ws_w_db_collab)
       })
       .await?;
+
+      let updated_ws_w_db_collab = updated_ws_w_db_collab?;
 
       collab_storage
         .insert_new_collab_with_transaction(
@@ -222,7 +238,7 @@ impl PublishCollabDuplicator {
           &duplicator_uid,
           CollabParams {
             object_id: ws_db_oid.clone(),
-            encoded_collab_v1: updated_ws_w_db_collab.await?.into(),
+            encoded_collab_v1: Bytes::from(updated_ws_w_db_collab),
             collab_type: CollabType::WorkspaceDatabase,
             embeddings: None,
           },

@@ -14,9 +14,9 @@ use tokio::time::{interval, sleep, sleep_until, Instant};
 use tracing::{error, instrument, trace, warn};
 
 use app_error::AppError;
+use database::collab::cache::CollabCache;
 use database_entity::dto::{AFCollabEmbeddings, CollabParams, QueryCollab, QueryCollabResult};
 
-use crate::collab::cache::CollabCache;
 use crate::collab::queue_redis_ops::{
   get_pending_meta, remove_pending_meta, storage_cache_key, PendingWrite, WritePriority,
   PENDING_WRITE_META_EXPIRE_SECS,

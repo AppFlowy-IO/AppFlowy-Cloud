@@ -9,7 +9,7 @@ use tracing::{instrument, trace};
 use access_control::act::Action;
 use access_control::collab::CollabAccessControl;
 use app_error::AppError;
-use appflowy_collaborate::collab::cache::CollabCache;
+use database::collab::cache::CollabCache;
 use database_entity::dto::AFAccessLevel;
 
 use crate::api::workspace::{COLLAB_PATTERN, V1_COLLAB_PATTERN};

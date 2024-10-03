@@ -890,13 +890,12 @@ async fn duplicate_to_workspace_doc_inline_database() {
 
     {
       // check that database_id is different
-      let mut ws_db_collab = client_2
+      let ws_db_collab = client_2
         .get_workspace_database_collab(&workspace_id_2)
         .await;
-      let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
-      let txn = ws_db_collab.transact();
+      let ws_db_body = WorkspaceDatabaseBody::open(ws_db_collab).unwrap();
       let dup_grid1_db_id = ws_db_body
-        .get_all_database_meta(&txn)
+        .get_all_database_meta()
         .into_iter()
         .find(|db_meta| db_meta.linked_views.contains(&view_of_grid1_fv.view_id))
         .unwrap()
@@ -908,6 +907,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
       let dup_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
       assert_ne!(dup_db_id, pub_db_id);
 
+      let txn = db_collab.transact();
       let view_map = {
         let map_ref = db_collab
           .data

@@ -1,11 +1,15 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use async_stream::stream;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use dashmap::DashMap;
+use futures::channel::mpsc::{SendError, Sender};
+use futures::Sink;
 use futures_util::StreamExt;
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 use tracing::{instrument, trace, warn};
 
 use collab_rt_entity::user::RealtimeUser;
@@ -207,16 +211,13 @@ where
     };
 
     if let Some(group) = self.group_manager.get_group(&object_id).await {
-      let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
       let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
-      group
-        .subscribe(
-          &server_rt_user,
-          CollabOrigin::Server,
-          collab_message_sender,
-          message_by_oid_receiver,
-        )
-        .await;
+      group.subscribe(
+        &server_rt_user,
+        CollabOrigin::Server,
+        NullSender::default(),
+        message_by_oid_receiver,
+      );
       let message = HashMap::from([(object_id.clone(), messages)]);
       if let Err(err) = message_by_oid_sender.try_send(message) {
         tracing::error!(
@@ -310,5 +311,44 @@ pub async fn forward_message_to_group(
       warn!("Send user:{} message to group:{}", user.uid, err);
       client_msg_router.remove(user);
     }
+  }
+}
+
+/// Futures [Sink] compatible sender, that always throws the input away.
+/// Essentially: a `/dev/null` equivalent.
+#[derive(Clone)]
+struct NullSender<T> {
+  _marker: PhantomData<T>,
+}
+
+impl<T> Default for NullSender<T> {
+  fn default() -> Self {
+    NullSender {
+      _marker: PhantomData::default(),
+    }
+  }
+}
+
+impl<T> Sink<T> for NullSender<T> {
+  type Error = RealtimeError;
+
+  #[inline]
+  fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    Poll::Ready(Ok(()))
+  }
+
+  #[inline]
+  fn start_send(self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
+    Ok(())
+  }
+
+  #[inline]
+  fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    Poll::Ready(Ok(()))
+  }
+
+  #[inline]
+  fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    Poll::Ready(Ok(()))
   }
 }

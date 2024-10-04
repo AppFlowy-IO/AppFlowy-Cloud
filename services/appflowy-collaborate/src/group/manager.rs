@@ -115,9 +115,7 @@ where
         object_id,
         self.access_control.clone(),
       );
-      group
-        .subscribe(user, message_origin.clone(), sink, stream)
-        .await;
+      group.subscribe(user, message_origin.clone(), sink, stream);
       // explicitly drop the group to release the lock.
       drop(group);
 

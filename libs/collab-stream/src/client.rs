@@ -1,8 +1,12 @@
+use crate::collab_update_sink::CollabUpdateSink;
 use crate::error::StreamError;
+use crate::model::{CollabStreamUpdate, CollabStreamUpdateBatch, CollabUpdateEvent, MessageId};
 use crate::pubsub::{CollabStreamPub, CollabStreamSub};
-use crate::stream::CollabStream;
 use crate::stream_group::{StreamConfig, StreamGroup};
+use futures::Stream;
 use redis::aio::ConnectionManager;
+use redis::streams::{StreamReadOptions, StreamReadReply};
+use redis::AsyncCommands;
 use tracing::error;
 
 pub const CONTROL_STREAM_KEY: &str = "af_collab_control";
@@ -20,10 +24,6 @@ impl CollabRedisStream {
 
   pub fn new_with_connection_manager(connection_manager: ConnectionManager) -> Self {
     Self { connection_manager }
-  }
-
-  pub async fn stream(&self, workspace_id: &str, oid: &str) -> CollabStream {
-    CollabStream::new(workspace_id, oid, self.connection_manager.clone())
   }
 
   pub async fn collab_control_stream(
@@ -46,7 +46,7 @@ impl CollabRedisStream {
     Ok(group)
   }
 
-  pub async fn collab_update_stream(
+  pub async fn collab_update_stream_group(
     &self,
     workspace_id: &str,
     oid: &str,
@@ -66,29 +66,34 @@ impl CollabRedisStream {
     group.ensure_consumer_group().await?;
     Ok(group)
   }
-}
 
-pub struct PubSubClient {
-  redis_client: redis::Client,
-  connection_manager: ConnectionManager,
-}
-
-impl PubSubClient {
-  pub async fn new(redis_client: redis::Client) -> Result<Self, redis::RedisError> {
-    let connection_manager = redis_client.get_connection_manager().await?;
-    Ok(Self {
-      redis_client,
-      connection_manager,
-    })
+  pub fn collab_update_sink(&self, workspace_id: &str, object_id: &str) -> CollabUpdateSink {
+    let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
+    CollabUpdateSink::new(self.connection_manager.clone(), stream_key)
   }
 
-  pub async fn collab_pub(&self) -> CollabStreamPub {
-    CollabStreamPub::new(self.connection_manager.clone())
-  }
-
-  #[allow(deprecated)]
-  pub async fn collab_sub(&self) -> Result<CollabStreamSub, StreamError> {
-    let conn = self.redis_client.get_async_connection().await?;
-    Ok(CollabStreamSub::new(conn))
+  pub fn collab_updates(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    since: Option<MessageId>,
+  ) -> impl Stream<Item = Result<CollabStreamUpdate, StreamError>> {
+    // use `:` separator as it adheres to Redis naming conventions
+    let mut conn = self.connection_manager.clone();
+    let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
+    let read_options = StreamReadOptions::default().count(100);
+    let mut since = since.unwrap_or_default();
+    async_stream::try_stream! {
+      loop {
+        let last_id = since.to_string();
+        let batch: CollabStreamUpdateBatch = conn
+          .xread_options(&[&stream_key], &[&last_id], &read_options)
+          .await?;
+        for (message_id, update) in batch.updates {
+          since = since.max(message_id);
+          yield update;
+        }
+      }
+    }
   }
 }

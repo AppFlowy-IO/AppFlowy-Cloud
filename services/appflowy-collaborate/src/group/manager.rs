@@ -111,14 +111,12 @@ where
     if let Some(group) = self.state.get_mut_group(object_id).await {
       trace!("[realtime]: {} subscribe group:{}", user, object_id,);
       let (sink, stream) = client_msg_router.init_client_communication::<CollabMessage, _>(
-        &group.workspace_id,
+        group.workspace_id(),
         user,
         object_id,
         self.access_control.clone(),
       );
-      group
-        .subscribe(user, message_origin.clone(), sink, stream)
-        .await;
+      group.subscribe(user, message_origin.clone(), sink, stream);
       // explicitly drop the group to release the lock.
       drop(group);
 
@@ -230,14 +228,11 @@ where
         workspace_id.to_string(),
         object_id.to_string(),
         collab_type,
-        collab,
         self.metrics_calculate.clone(),
         self.storage.clone(),
         is_new_collab,
         self.collab_redis_stream.clone(),
         self.persistence_interval,
-        self.edit_state_max_count,
-        self.edit_state_max_secs,
         indexer,
       )
       .await?,

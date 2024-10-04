@@ -60,6 +60,9 @@ pub enum RealtimeError {
 
   #[error("Collab redis stream error: {0}")]
   StreamError(#[from] StreamError),
+
+  #[error("failed to obtain lease: {0}")]
+  Lease(Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[derive(Debug)]

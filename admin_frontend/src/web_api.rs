@@ -436,17 +436,13 @@ async fn oauth_redirect_token_handler(
   State(state): State<AppState>,
   Query(token_req): Query<OAuthRedirectToken>,
 ) -> Result<axum::response::Response, WebApiError<'static>> {
-  // TODO: check client_id and secret
-  // TODO: handle code challenge and code challenge method
+  // TODO: check client secret
 
   let code_session = state
     .session_store
     .get_code_session(&token_req.code)
-    .await
-    .ok_or(WebApiError::new(
-      status::StatusCode::BAD_REQUEST,
-      "invalid code or expired",
-    ))?;
+    .await?
+    .ok_or_else(|| WebApiError::new(StatusCode::BAD_REQUEST, "invalid code"))?;
 
   if let Some(code_challenge) = code_session.code_challenge {
     match code_session.code_challenge_method.as_deref() {
@@ -488,11 +484,8 @@ async fn oauth_redirect_token_handler(
   let user_session = state
     .session_store
     .get_user_session(&code_session.session_id)
-    .await
-    .ok_or(WebApiError::new(
-      status::StatusCode::BAD_REQUEST,
-      "invalid session_id or expired session",
-    ))?;
+    .await?
+    .ok_or_else(|| WebApiError::new(StatusCode::BAD_REQUEST, "invalid session"))?;
 
   let resp = axum::Json::from(user_session.token);
   Ok(resp.into_response())

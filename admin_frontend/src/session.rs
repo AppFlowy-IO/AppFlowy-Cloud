@@ -35,28 +35,22 @@ impl SessionStorage {
     Self { redis_client }
   }
 
-  pub async fn get_user_session(&self, session_id: &str) -> Option<UserSession> {
+  pub async fn get_user_session(
+    &self,
+    session_id: &str,
+  ) -> Result<Option<UserSession>, redis::RedisError> {
     let key = session_id_key(session_id);
-    let s: Result<UserSession, redis::RedisError> = self.redis_client.clone().get(&key).await;
-    match s {
-      Ok(s) => Some(s),
-      Err(e) => {
-        tracing::info!("get user session in redis error: {:?}", e);
-        None
-      },
-    }
+    let user_session_optional: UserSessionOptional = self.redis_client.clone().get(&key).await?;
+    Ok(user_session_optional.0)
   }
 
-  pub async fn get_code_session(&self, session_id: &str) -> Option<CodeSession> {
-    let key = code_session_key(session_id);
-    let s: Result<CodeSession, redis::RedisError> = self.redis_client.clone().get(&key).await;
-    match s {
-      Ok(s) => Some(s),
-      Err(e) => {
-        tracing::info!("get user session in redis error: {:?}", e);
-        None
-      },
-    }
+  pub async fn get_code_session(
+    &self,
+    code: &str,
+  ) -> Result<Option<CodeSession>, redis::RedisError> {
+    let key = code_session_key(code);
+    let code_session_optional: CodeSessionOptional = self.redis_client.clone().get(&key).await?;
+    Ok(code_session_optional.0)
   }
 
   pub async fn put_user_session(&self, user_session: &UserSession) -> redis::RedisResult<()> {
@@ -84,7 +78,7 @@ impl SessionStorage {
     code: &str,
     code_session: &CodeSession,
   ) -> redis::RedisResult<()> {
-    let key = format!("session::code::{}", code);
+    let key = code_session_key(code);
     self
       .redis_client
       .clone()
@@ -103,6 +97,7 @@ pub struct CodeSession {
   pub code_challenge: Option<String>,
   pub code_challenge_method: Option<String>,
 }
+pub struct CodeSessionOptional(Option<CodeSession>);
 
 impl ToRedisArgs for CodeSession {
   fn write_redis_args<W>(&self, out: &mut W)
@@ -114,10 +109,16 @@ impl ToRedisArgs for CodeSession {
   }
 }
 
-impl FromRedisValue for CodeSession {
+impl FromRedisValue for CodeSessionOptional {
   fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
     let bytes = expect_redis_value_data(v)?;
-    expect_redis_json_bytes(bytes)
+    match bytes {
+      Some(bytes) => {
+        let session = expect_redis_json_bytes(bytes).unwrap();
+        Ok(CodeSessionOptional(Some(session)))
+      },
+      None => Ok(CodeSessionOptional(None)),
+    }
   }
 }
 
@@ -126,6 +127,7 @@ pub struct UserSession {
   pub session_id: String,
   pub token: GotrueTokenResponse,
 }
+pub struct UserSessionOptional(Option<UserSession>);
 
 #[async_trait]
 impl FromRequestParts<AppState> for UserSession {
@@ -170,6 +172,10 @@ async fn get_session_from_store(
   let mut session = session_store
     .get_user_session(session_id)
     .await
+    .map_err(|err| {
+      tracing::info!("failed to get session from store: {}", err);
+      SessionRejectionKind::SessionNotFound
+    })?
     .ok_or(SessionRejectionKind::SessionNotFound)?;
 
   if has_expired(session.token.access_token.as_str()) {
@@ -275,10 +281,16 @@ impl ToRedisArgs for UserSession {
   }
 }
 
-impl FromRedisValue for UserSession {
+impl FromRedisValue for UserSessionOptional {
   fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
     let bytes = expect_redis_value_data(v)?;
-    expect_redis_json_bytes(bytes)
+    match bytes {
+      Some(bytes) => {
+        let session = expect_redis_json_bytes(bytes).unwrap();
+        Ok(UserSessionOptional(Some(session)))
+      },
+      None => Ok(UserSessionOptional(None)),
+    }
   }
 }
 
@@ -297,9 +309,10 @@ where
   }
 }
 
-fn expect_redis_value_data(v: &redis::Value) -> redis::RedisResult<&[u8]> {
+fn expect_redis_value_data(v: &redis::Value) -> redis::RedisResult<Option<&[u8]>> {
   match v {
-    redis::Value::Data(ref bytes) => Ok(bytes),
+    redis::Value::Data(ref bytes) => Ok(Some(bytes)),
+    redis::Value::Nil => Ok(None),
     x => Err(redis::RedisError::from((
       redis::ErrorKind::TypeError,
       "unexpected value from redis",

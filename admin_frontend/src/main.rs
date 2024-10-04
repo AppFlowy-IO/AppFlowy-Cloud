@@ -25,6 +25,7 @@ async fn main() {
   tracing_subscriber::fmt()
     .json()
     .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    .with_line_number(true)
     .init();
 
   let config = Config::from_env().unwrap();

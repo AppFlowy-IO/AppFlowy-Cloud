@@ -22,6 +22,10 @@
     <h3>Email Login</h3>
     <form>
       <table style="width: 100%">
+        {% if let Some(redirect_to) = redirect_to %}
+          <input type="hidden" name="redirect_to" value="{{ redirect_to }}">
+        {% endif %}
+
         <tr>
           <td>Email</td>
           <td>
@@ -92,7 +96,7 @@
     <div id="oauth-container">
       {% for provider in oauth_providers %}
       <div class="oauth-icon">
-        <a href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to=/web/login">
+        <a href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ redirect_to|default("/web/login")|escape }}">
           <div
             hx-get="../assets/{{ provider|escape }}/logo.html"
             hx-trigger="load"

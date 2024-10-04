@@ -61,6 +61,7 @@ pub struct ChangePassword;
 #[template(path = "pages/login.html")]
 pub struct Login<'a> {
   pub oauth_providers: &'a [&'a str],
+  pub redirect_to: Option<&'a str>,
 }
 
 #[derive(Template)]

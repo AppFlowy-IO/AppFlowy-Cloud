@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub struct WebApiLoginRequest {
   pub email: String,
   pub password: String,
+  pub redirect_to: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -81,4 +82,9 @@ pub struct OAuthRedirectToken {
   pub grant_type: String,
   pub redirect_uri: Option<String>,
   pub code_verifier: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoginParams {
+  pub redirect_to: Option<String>,
 }

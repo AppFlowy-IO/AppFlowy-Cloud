@@ -6,7 +6,7 @@ use crate::ext::api::{
   get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
   verify_token_cloud,
 };
-use crate::models::{OAuthLoginAction, WebAppOAuthLoginRequest};
+use crate::models::{LoginParams, OAuthLoginAction, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
@@ -345,11 +345,16 @@ async fn user_user_handler(
   render_template(templates::UserDetails { user: &user })
 }
 
-async fn login_handler(State(state): State<AppState>) -> Result<Html<String>, WebAppError> {
+async fn login_handler(
+  State(state): State<AppState>,
+  Query(login): Query<LoginParams>,
+) -> Result<Html<String>, WebAppError> {
+  let redirect_to = login.redirect_to;
   let external = state.gotrue_client.settings().await?.external;
   let oauth_providers = external.oauth_providers();
   render_template(templates::Login {
     oauth_providers: &oauth_providers,
+    redirect_to: redirect_to.as_deref(),
   })
 }
 

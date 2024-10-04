@@ -4,8 +4,9 @@ use crate::ext::api::{
   verify_token_cloud,
 };
 use crate::models::{
-  OAuthRedirect, OAuthRedirectToken, WebApiAdminCreateUserRequest, WebApiChangePasswordRequest,
-  WebApiCreateSSOProviderRequest, WebApiInviteUserRequest, WebApiPutUserRequest,
+  LoginParams, OAuthRedirect, OAuthRedirectToken, WebApiAdminCreateUserRequest,
+  WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest, WebApiInviteUserRequest,
+  WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
 use crate::session::{self, new_session_cookie, CodeSession, UserSession};
@@ -316,6 +317,7 @@ async fn login_refresh_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Path(refresh_token): Path<String>,
+  Query(login): Query<LoginParams>,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
   let token = state
     .gotrue_client
@@ -334,7 +336,7 @@ async fn login_refresh_handler(
     ))
     .await?;
 
-  session_login(State(state), token, jar).await
+  session_login(State(state), token, jar, login.redirect_to.as_deref()).await
 }
 
 // login and set the cookie
@@ -344,8 +346,14 @@ async fn sign_in_handler(
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
-  if param.password.is_empty() {
-    let res = send_magic_link(State(state), &param.email).await?;
+  let WebApiLoginRequest {
+    email,
+    password,
+    redirect_to,
+  } = param;
+
+  if password.is_empty() {
+    let res = send_magic_link(State(state), &email).await?;
     return Ok((CookieJar::new(), HeaderMap::new(), res));
   }
 
@@ -354,13 +362,13 @@ async fn sign_in_handler(
     .gotrue_client
     .token(&gotrue::grant::Grant::Password(
       gotrue::grant::PasswordGrant {
-        email: param.email.to_owned(),
-        password: param.password.to_owned(),
+        email: email.to_owned(),
+        password: password.to_owned(),
       },
     ))
     .await?;
 
-  session_login(State(state), token, jar).await
+  session_login(State(state), token, jar, redirect_to.as_deref()).await
 }
 
 async fn oauth_redirect_handler(
@@ -423,11 +431,11 @@ async fn oauth_redirect_handler(
     )
     .await?;
 
-  let url = format!(
+  let ext_url = format!(
     "{}?code={}&state={}",
     oauth_redirect.redirect_uri, code, oauth_redirect.state,
   );
-
+  let url = format!("/web/login?redirect_to={}", urlencoding::encode(&ext_url));
   let resp = Redirect::to(&url).into_response();
   Ok(resp)
 }
@@ -496,19 +504,27 @@ async fn sign_up_handler(
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
-  if param.password.is_empty() {
-    let res = send_magic_link(State(state), &param.email).await?;
+  let WebApiLoginRequest {
+    email,
+    password,
+    redirect_to,
+  } = param;
+
+  if password.is_empty() {
+    let res = send_magic_link(State(state), &email).await?;
     return Ok((CookieJar::new(), HeaderMap::new(), res));
   }
 
   let sign_up_res = state
     .gotrue_client
-    .sign_up(&param.email, &param.password, Some("/"))
+    .sign_up(&email, &password, Some("/"))
     .await?;
 
   match sign_up_res {
     // when GOTRUE_MAILER_AUTOCONFIRM=true, auto sign in
-    SignUpResponse::Authenticated(token) => session_login(State(state), token, jar).await,
+    SignUpResponse::Authenticated(token) => {
+      session_login(State(state), token, jar, redirect_to.as_deref()).await
+    },
     SignUpResponse::NotAuthenticated(user) => {
       info!("user signed up and not authenticated: {:?}", user);
       Ok((
@@ -555,6 +571,7 @@ async fn session_login(
   State(state): State<AppState>,
   token: GotrueTokenResponse,
   jar: CookieJar,
+  redirect_to: Option<&str>,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
   verify_token_cloud(
     token.access_token.as_str(),
@@ -571,7 +588,7 @@ async fn session_login(
 
   Ok((
     jar.add(new_session_cookie(new_session_id)),
-    htmx_redirect("/web/home"),
+    htmx_redirect(redirect_to.unwrap_or("/web/home")),
     ().into(),
   ))
 }

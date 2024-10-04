@@ -137,23 +137,22 @@ impl FromRequestParts<AppState> for UserSession {
     parts: &mut Parts,
     state: &AppState,
   ) -> Result<Self, Self::Rejection> {
-    let mut cookie_jar = CookieJar::from_request_parts(parts, state)
+    let cookie_jar = CookieJar::from_request_parts(parts, state)
       .await
       .map_err(|e| {
         tracing::error!("failed to get cookie jar");
-        SessionRejection::new_no_cookie(SessionRejectionKind::CookieError(e.to_string()))
+        SessionRejection::new(SessionRejectionKind::CookieError(e.to_string()), None)
       })?;
 
     let session =
       match get_session_from_store(&cookie_jar, &state.session_store, &state.gotrue_client).await {
         Ok(session) => session,
         Err(err) => {
-          if let Some(original_url) = parts.extensions.get::<OriginalUri>() {
-            let mut pre_login_cookie = Cookie::new("pre_login_url", original_url.to_string());
-            pre_login_cookie.set_path("/");
-            cookie_jar = cookie_jar.add(pre_login_cookie);
-          };
-          return Err(SessionRejection::new(cookie_jar, err));
+          let original_url = parts
+            .extensions
+            .get::<OriginalUri>()
+            .map(|uri| urlencoding::encode(&uri.to_string()).to_string());
+          return Err(SessionRejection::new(err, original_url));
         },
       };
     Ok(session)
@@ -227,36 +226,28 @@ fn get_session_expiration(access_token: &str) -> Option<u64> {
 
 #[derive(Clone, Debug)]
 pub struct SessionRejection {
-  pub cookie_jar: CookieJar,
-  pub session_rejection: SessionRejectionKind,
+  pub kind: SessionRejectionKind,
+  pub redirect_url: Option<String>,
 }
 
 impl SessionRejection {
-  fn new_no_cookie(kind: SessionRejectionKind) -> Self {
-    Self {
-      cookie_jar: CookieJar::new(),
-      session_rejection: kind,
-    }
-  }
-
-  fn new(cookie_jar: CookieJar, kind: SessionRejectionKind) -> Self {
-    Self {
-      cookie_jar,
-      session_rejection: kind,
-    }
+  fn new(kind: SessionRejectionKind, redirect_url: Option<String>) -> Self {
+    Self { kind, redirect_url }
   }
 }
 
 impl IntoResponse for SessionRejection {
   fn into_response(self) -> axum::response::Response {
     tracing::info!("session rejection: {:?}", self);
-    match self.session_rejection {
-      SessionRejectionKind::Redirect(url) => {
-        (self.cookie_jar, Redirect::temporary(&url)).into_response()
-      },
-      x => {
-        tracing::info!("session rejection: {:?}", x);
-        (self.cookie_jar, Redirect::temporary("/web/login")).into_response()
+    match self.kind {
+      any => {
+        tracing::info!("session rejection: {:?}", any);
+        match self.redirect_url {
+          Some(url) => {
+            Redirect::temporary(&format!("/web/login?redirect_to={}", url)).into_response()
+          },
+          None => Redirect::temporary("/web/login").into_response(),
+        }
       },
     }
   }
@@ -268,7 +259,6 @@ pub enum SessionRejectionKind {
   SessionNotFound,
   CookieError(String),
   RefreshTokenError(String),
-  Redirect(String),
 }
 
 impl ToRedisArgs for UserSession {

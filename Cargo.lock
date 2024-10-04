@@ -403,6 +403,7 @@ dependencies = [
  "tower-service",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
  "uuid",
 ]
 

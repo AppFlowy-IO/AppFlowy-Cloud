@@ -1,12 +1,13 @@
 use crate::error::{internal, StreamError};
 use bytes::Bytes;
+use collab::core::origin::{CollabClient, CollabOrigin};
 use collab_entity::proto::collab::collab_update_event::Update;
 use collab_entity::{proto, CollabType};
 use prost::Message;
 use redis::streams::StreamId;
 use redis::{FromRedisValue, RedisError, RedisResult, Value};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -20,7 +21,7 @@ use std::str::FromStr;
 ///
 /// An example message ID might look like this: 1631020452097-0. In this example, 1631020452097 is
 /// the timestamp in milliseconds, and 0 is the sequence number.
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, Default, Ord, PartialOrd, Eq, PartialEq)]
 pub struct MessageId {
   pub timestamp_ms: u64,
   pub sequence_number: u16,
@@ -355,8 +356,177 @@ impl TryFrom<CollabUpdateEvent> for StreamBinary {
   }
 }
 
+pub struct CollabStreamUpdate {
+  pub data: Vec<u8>,
+  pub sender: CollabOrigin,
+  pub flags: UpdateFlags,
+}
+
+impl CollabStreamUpdate {
+  pub fn new<B, F>(data: B, sender: CollabOrigin, flags: F) -> Self
+  where
+    B: Into<Vec<u8>>,
+    F: Into<UpdateFlags>,
+  {
+    CollabStreamUpdate {
+      data: data.into(),
+      sender,
+      flags: flags.into(),
+    }
+  }
+}
+
+pub(crate) struct CollabStreamUpdateBatch {
+  pub updates: BTreeMap<MessageId, CollabStreamUpdate>,
+}
+type SRRows = Vec<HashMap<String, Vec<HashMap<String, HashMap<String, Value>>>>>;
+impl FromRedisValue for CollabStreamUpdateBatch {
+  fn from_redis_value(v: &Value) -> RedisResult<Self> {
+    let sr: SRRows = SRRows::from_redis_value(v)?;
+    let mut updates = BTreeMap::new();
+    for stream in sr {
+      for (_stream_key, messages) in stream {
+        for message in messages {
+          for (message_id, fields) in message {
+            let message_id =
+              MessageId::try_from(message_id).map_err(|e| internal(e.to_string()))?;
+            let sender = match fields.get("sender") {
+              None => CollabOrigin::Empty,
+              Some(sender) => {
+                let raw_origin = String::from_redis_value(sender)?;
+                let collab_origin = collab_origin_from_str(&raw_origin)?;
+                collab_origin
+              },
+            };
+            let flags = match fields.get("flags") {
+              None => UpdateFlags::default(),
+              Some(flags) => u8::from_redis_value(flags).unwrap_or(0).into(),
+            };
+            let data_raw = fields
+              .get("data")
+              .ok_or_else(|| internal("expecting field `data`"))?;
+            let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
+            updates.insert(
+              message_id,
+              CollabStreamUpdate {
+                data,
+                sender,
+                flags,
+              },
+            );
+          }
+        }
+      }
+    }
+
+    Ok(CollabStreamUpdateBatch { updates })
+  }
+}
+
+//FIXME: this should be `impl FromStr for CollabOrigin`
+fn collab_origin_from_str(value: &str) -> RedisResult<CollabOrigin> {
+  match value {
+    "" => Ok(CollabOrigin::Empty),
+    "server" => Ok(CollabOrigin::Server),
+    other => {
+      let mut split = other.split('|');
+      match (split.next(), split.next()) {
+        (Some(uid), Some(device_id)) | (Some(device_id), Some(uid))
+          if uid.starts_with("uid:") && device_id.starts_with("device_id:") =>
+        {
+          let uid = uid.trim_start_matches("uid:");
+          let device_id = device_id.trim_start_matches("device_id:").to_string();
+          let uid: i64 = uid
+            .parse()
+            .map_err(|err| internal(format!("failed to parse uid: {}", err)))?;
+          Ok(CollabOrigin::Client(CollabClient { uid, device_id }))
+        },
+        _ => Err(internal(format!(
+          "couldn't parse collab origin from `{}`",
+          other
+        ))),
+      }
+    },
+  }
+}
+
+#[repr(transparent)]
+#[derive(Copy, Clone, Eq, PartialEq, Default)]
+pub struct UpdateFlags(u8);
+
+impl UpdateFlags {
+  /// Flag bit to mark if update is encoded using [EncoderV2] (if set) or [EncoderV1] (if clear).
+  pub const IS_V2_ENCODED: u8 = 0b0000_0001;
+  /// Flag bit to mark if update is compressed.
+  pub const IS_COMPRESSED: u8 = 0b0000_0010;
+
+  #[inline]
+  pub fn is_v2_encoded(&self) -> bool {
+    self.0 & Self::IS_V2_ENCODED != 0
+  }
+
+  #[inline]
+  pub fn is_v1_encoded(&self) -> bool {
+    !self.is_v2_encoded()
+  }
+
+  #[inline]
+  pub fn is_compressed(&self) -> bool {
+    self.0 & Self::IS_COMPRESSED != 0
+  }
+}
+
+impl From<u8> for UpdateFlags {
+  #[inline]
+  fn from(value: u8) -> Self {
+    UpdateFlags(value)
+  }
+}
+
+impl Display for UpdateFlags {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    if self.is_v2_encoded() {
+      write!(f, ".v1")?;
+    } else {
+      write!(f, ".v2")?;
+    }
+
+    if self.is_compressed() {
+      write!(f, ".zstd")?;
+    }
+
+    Ok(())
+  }
+}
+
 #[cfg(test)]
 mod test {
+  use crate::model::collab_origin_from_str;
+  use collab::core::origin::{CollabClient, CollabOrigin};
+
+  #[test]
+  fn parse_collab_origin_empty() {
+    let expected = CollabOrigin::Empty;
+    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
+    assert_eq!(actual, expected);
+  }
+
+  #[test]
+  fn parse_collab_origin_server() {
+    let expected = CollabOrigin::Server;
+    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
+    assert_eq!(actual, expected);
+  }
+
+  #[test]
+  fn parse_collab_origin_client() {
+    let expected = CollabOrigin::Client(CollabClient {
+      uid: 123,
+      device_id: "test-device".to_string(),
+    });
+    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
+    assert_eq!(actual, expected);
+  }
 
   #[test]
   fn test_collab_update_event_decoding() {

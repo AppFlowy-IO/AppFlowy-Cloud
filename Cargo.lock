@@ -2451,9 +2451,11 @@ name = "collab-stream"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "bincode",
  "bytes",
  "chrono",
+ "collab",
  "collab-entity",
  "futures",
  "prost",

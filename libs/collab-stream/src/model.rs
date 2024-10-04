@@ -5,7 +5,7 @@ use collab_entity::proto::collab::collab_update_event::Update;
 use collab_entity::{proto, CollabType};
 use prost::Message;
 use redis::streams::StreamId;
-use redis::{FromRedisValue, RedisError, RedisResult, Value};
+use redis::{FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
@@ -374,6 +374,11 @@ impl CollabStreamUpdate {
       flags: flags.into(),
     }
   }
+
+  /// Returns Redis stream key, that's storing entries mapped to/from [CollabStreamUpdate].
+  pub fn stream_key(workspace_id: &str, object_id: &str) -> String {
+    format!("af_update:{}:{}", workspace_id, object_id)
+  }
 }
 
 pub(crate) struct CollabStreamUpdateBatch {
@@ -473,6 +478,16 @@ impl UpdateFlags {
   #[inline]
   pub fn is_compressed(&self) -> bool {
     self.0 & Self::IS_COMPRESSED != 0
+  }
+}
+
+impl ToRedisArgs for UpdateFlags {
+  #[inline]
+  fn write_redis_args<W>(&self, out: &mut W)
+  where
+    W: ?Sized + RedisWrite,
+  {
+    self.0.write_redis_args(out)
   }
 }
 

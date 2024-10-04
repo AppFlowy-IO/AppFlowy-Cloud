@@ -7,7 +7,7 @@ use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
-use futures::{Sink, Stream};
+use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
@@ -29,8 +29,11 @@ use collab_rt_entity::{AckCode, BroadcastSync, CollabAck, MessageByObjectId, Msg
 use collab_rt_entity::{ClientCollabMessage, CollabMessage};
 use collab_rt_protocol::{decode_update, Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
+use collab_stream::collab_update_sink::CollabUpdateSink;
 use collab_stream::error::StreamError;
-use collab_stream::model::{CollabStreamUpdate, CollabUpdateEvent, StreamBinary};
+use collab_stream::model::{
+  CollabStreamUpdate, CollabUpdateEvent, MessageId, StreamBinary, UpdateFlags,
+};
 use collab_stream::stream_group::StreamGroup;
 use database::collab::CollabStorage;
 
@@ -89,22 +92,21 @@ impl CollabGroup {
       seq_no: AtomicU32::new(0),
     });
 
+    /*
+     NOTE: we don't want to pass `Weak<CollabGroupState>` to tasks and terminate them when they
+     cannot be upgraded since we want to be sure that ie. when collab group is to be removed,
+     that we're going to call for a final save of the document state.
+
+     For that we use `CancellationToken` instead, which is racing against internal loops of child
+     tasks and triggered when this `CollabGroup` is dropped.
+    */
+
     // setup task used to receive messages from Redis
     {
       let state = state.clone();
       tokio::spawn(async move {
         if let Err(err) = Self::inbound_task(state).await {
           tracing::warn!("failed to receive message: {}", err);
-        }
-      });
-    }
-
-    // setup task used to send messages to Redis
-    {
-      let state = state.clone();
-      tokio::spawn(async move {
-        if let Err(err) = Self::outbound_task(state).await {
-          tracing::warn!("failed to send message: {}", err);
         }
       });
     }
@@ -138,6 +140,7 @@ impl CollabGroup {
       &state.object_id,
       None,
     );
+    pin_mut!(updates);
     loop {
       tokio::select! {
         _ = state.shutdown.cancelled() => {
@@ -150,7 +153,7 @@ impl CollabGroup {
               state.last_activity.store(Arc::new(Instant::now()));
             },
             Some(Err(err)) => {
-              tracing::warn!("failed to handle incoming update for collab `{}`: {}", state.object_id, err)
+              tracing::warn!("failed to handle incoming update for collab `{}`: {}", state.object_id, err);
               break;
             },
             None => {
@@ -181,11 +184,6 @@ impl CollabGroup {
         );
       }
     }
-  }
-
-  /// Task used to send messages to Redis.
-  async fn outbound_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
-    todo!()
   }
 
   async fn snapshot_task(state: Arc<CollabGroupState>, interval: Duration, is_new_collab: bool) {
@@ -267,7 +265,6 @@ impl CollabGroup {
     // create new subscription for new subscriber
     let subscriber_shutdown = self.state.shutdown.child_token();
 
-    //TODO: spawn task for receiving messages from stream
     tokio::spawn(Self::receive_from_client_task(
       self.state.clone(),
       sink.clone(),
@@ -543,7 +540,7 @@ impl CollabGroup {
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     state.metrics.apply_update_size.observe(update.len() as f64);
     let start = tokio::time::Instant::now();
-    state.persister.send_update(origin, update).await;
+    state.persister.send_update(origin.clone(), update).await;
     let elapsed = start.elapsed();
     state
       .metrics
@@ -676,7 +673,7 @@ impl CollabUpdateStreamingImpl {
     collab_redis_stream: &CollabRedisStream,
   ) -> Result<Self, StreamError> {
     let stream = collab_redis_stream
-      .collab_update_stream(workspace_id, object_id, "collaborate_update_producer")
+      .collab_update_stream_group(workspace_id, object_id, "collaborate_update_producer")
       .await?;
     let (sender, receiver) = mpsc::unbounded_channel();
     tokio::spawn(async move {
@@ -765,6 +762,7 @@ struct CollabPersister {
   indexer: Option<Arc<dyn Indexer>>,
   /// Collab stored temporarily.
   temp_collab: ArcSwapOption<CollabSnapshot>,
+  update_sink: CollabUpdateSink,
 }
 
 impl CollabPersister {
@@ -776,6 +774,7 @@ impl CollabPersister {
     collab_redis_stream: Arc<CollabRedisStream>,
     indexer: Option<Arc<dyn Indexer>>,
   ) -> Self {
+    let update_sink = collab_redis_stream.collab_update_sink(&workspace_id, &object_id);
     Self {
       workspace_id,
       object_id,
@@ -783,6 +782,7 @@ impl CollabPersister {
       storage,
       collab_redis_stream,
       indexer,
+      update_sink,
       temp_collab: Default::default(),
     }
   }
@@ -792,8 +792,21 @@ impl CollabPersister {
     self.temp_collab.store(None); // cleanup temp collab
   }
 
-  async fn send_update(&self, sender_session: &CollabOrigin, update: Vec<u8>) {
+  async fn send_update(
+    &self,
+    sender: CollabOrigin,
+    update: Vec<u8>,
+  ) -> Result<MessageId, StreamError> {
     // send updates to redis queue
+    let msg_id = self
+      .update_sink
+      .send(&CollabStreamUpdate::new(
+        update,
+        sender,
+        UpdateFlags::default(),
+      ))
+      .await?;
+    Ok(msg_id)
   }
 
   async fn send_awareness(&self, sender_session: &CollabOrigin, awareness_update: AwarenessUpdate) {
@@ -811,11 +824,6 @@ impl CollabPersister {
   async fn force_load(&self) -> Result<Arc<CollabSnapshot>, RealtimeError> {
     // 1. Try to load the latest snapshot from storage
     // 2. consume all Redis updates on top of it (keep redis msg id)
-    todo!()
-  }
-
-  async fn receive_updates(&self) -> UpdateStream {
-    // 1. loop with yield on incoming Redis stream updates
     todo!()
   }
 

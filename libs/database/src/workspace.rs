@@ -9,8 +9,9 @@ use tracing::{event, instrument};
 use uuid::Uuid;
 
 use crate::pg_row::{
-  AFGlobalCommentRow, AFPermissionRow, AFReactionRow, AFUserProfileRow, AFWebUserColumn,
-  AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow, AFWorkspaceMemberRow, AFWorkspaceRow,
+  AFGlobalCommentRow, AFImportTask, AFPermissionRow, AFReactionRow, AFUserProfileRow,
+  AFWebUserColumn, AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow, AFWorkspaceMemberRow,
+  AFWorkspaceRow,
 };
 use crate::user::select_uid_from_email;
 use app_error::AppError;
@@ -35,13 +36,14 @@ pub async fn insert_user_workspace(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   user_uuid: &Uuid,
   workspace_name: &str,
+  is_initialized: bool,
 ) -> Result<AFWorkspaceRow, AppError> {
   let workspace = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
     WITH new_workspace AS (
-      INSERT INTO public.af_workspace (owner_uid, workspace_name)
-      VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2)
+      INSERT INTO public.af_workspace (owner_uid, workspace_name, is_initialized)
+      VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2, $3)
       RETURNING *
     )
     SELECT
@@ -60,6 +62,7 @@ pub async fn insert_user_workspace(
     "#,
     user_uuid,
     workspace_name,
+    is_initialized,
   )
   .fetch_one(tx.deref_mut())
   .await?;
@@ -146,33 +149,6 @@ pub async fn select_user_is_workspace_owner(
   .await?;
 
   Ok(exists.unwrap_or(false))
-}
-
-pub async fn select_user_is_collab_publisher_for_all_views(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_uuid: &Uuid,
-  view_ids: &[Uuid],
-) -> Result<bool, AppError> {
-  let count = sqlx::query_scalar!(
-    r#"
-      SELECT COUNT(*)
-      FROM af_published_collab
-      WHERE workspace_id = $1
-        AND view_id = ANY($2)
-        AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
-    "#,
-    workspace_uuid,
-    view_ids,
-    user_uuid,
-  )
-  .fetch_one(pg_pool)
-  .await?;
-
-  match count {
-    Some(c) => Ok(c == view_ids.len() as i64),
-    None => Ok(false),
-  }
 }
 
 pub async fn select_user_is_allowed_to_delete_comment(
@@ -692,6 +668,28 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
   .await?;
   Ok(workspace)
 }
+
+#[inline]
+pub async fn select_workspace_database_storage_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &str,
+) -> Result<Uuid, AppError> {
+  let workspace_id = Uuid::parse_str(workspace_id)?;
+  let result = sqlx::query!(
+    r#"
+        SELECT
+            database_storage_id
+        FROM public.af_workspace
+        WHERE workspace_id = $1
+        "#,
+    workspace_id
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(result.database_storage_id)
+}
+
 #[inline]
 pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
@@ -738,7 +736,8 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
       JOIN public.af_user u ON w.owner_uid = u.uid
       WHERE wm.uid = (
          SELECT uid FROM public.af_user WHERE uuid = $1
-      );
+      )
+      AND COALESCE(w.is_initialized, true) = true;
     "#,
     user_uuid
   )
@@ -764,6 +763,33 @@ pub async fn select_user_owned_workspaces_id<'a, E: Executor<'a, Database = Post
   .fetch_all(executor)
   .await?;
   Ok(workspace_ids)
+}
+
+pub async fn update_workspace_status<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &str,
+  is_initialized: bool,
+) -> Result<(), AppError> {
+  let workspace_id = Uuid::parse_str(workspace_id)?;
+  let res = sqlx::query!(
+    r#"
+    UPDATE public.af_workspace
+    SET is_initialized = $2
+    WHERE workspace_id = $1
+    "#,
+    workspace_id,
+    is_initialized
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to update workspace status, workspace_id: {}",
+      workspace_id
+    );
+  }
+  Ok(())
 }
 
 pub async fn select_member_count_for_workspaces<'a, E: Executor<'a, Database = Postgres>>(
@@ -1406,4 +1432,118 @@ pub async fn select_user_is_invitee_for_workspace_invitation(
   .fetch_one(pg_pool)
   .await?;
   res.map_or(Ok(false), Ok)
+}
+
+/// Get the import task for the user
+/// Status of the file import (e.g., 0 for pending, 1 for completed, 2 for failed)
+pub async fn select_import_task(
+  user_id: i64,
+  pg_pool: &PgPool,
+  filter_by_status: Option<i32>,
+) -> Result<Vec<AFImportTask>, AppError> {
+  let mut query = String::from("SELECT * FROM af_import_task WHERE created_by = $1");
+  if filter_by_status.is_some() {
+    query.push_str(" AND status = $2");
+  }
+  query.push_str(" ORDER BY created_at DESC");
+
+  let import_tasks = if let Some(status) = filter_by_status {
+    sqlx::query_as::<_, AFImportTask>(&query)
+      .bind(user_id)
+      .bind(status)
+      .fetch_all(pg_pool)
+      .await?
+  } else {
+    sqlx::query_as::<_, AFImportTask>(&query)
+      .bind(user_id)
+      .fetch_all(pg_pool)
+      .await?
+  };
+
+  Ok(import_tasks)
+}
+
+/// Update import task status
+///  0 => Pending,
+///   1 => Completed,
+///   2 => Failed,
+pub async fn update_import_task_status<'a, E: Executor<'a, Database = Postgres>>(
+  task_id: &Uuid,
+  new_status: i32,
+  executor: E,
+) -> Result<(), AppError> {
+  let query = "UPDATE af_import_task SET status = $1 WHERE task_id = $2";
+  sqlx::query(query)
+    .bind(new_status)
+    .bind(task_id)
+    .execute(executor)
+    .await
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to update status for task_id {}: {:?}",
+        task_id,
+        err
+      ))
+    })?;
+
+  Ok(())
+}
+
+pub async fn insert_import_task(
+  task_id: Uuid,
+  file_size: i64,
+  workspace_id: String,
+  created_by: i64,
+  metadata: Option<serde_json::Value>,
+  pg_pool: &PgPool,
+) -> Result<(), AppError> {
+  let query = r#"
+        INSERT INTO af_import_task (task_id, file_size, workspace_id, created_by, status, metadata)
+        VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'))
+    "#;
+
+  sqlx::query(query)
+    .bind(task_id)
+    .bind(file_size)
+    .bind(workspace_id)
+    .bind(created_by)
+    .bind(0)
+    .bind(metadata)
+    .execute(pg_pool)
+    .await
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to create a new import task: {:?}",
+        err
+      ))
+    })?;
+
+  Ok(())
+}
+
+pub async fn update_import_task_metadata(
+  task_id: Uuid,
+  new_metadata: serde_json::Value,
+  pg_pool: &PgPool,
+) -> Result<(), AppError> {
+  let query = r#"
+        UPDATE af_import_task
+        SET metadata = metadata || $1
+        WHERE task_id = $2
+    "#;
+
+  sqlx::query(query)
+    .bind(new_metadata)
+    .bind(task_id)
+    .execute(pg_pool)
+    .await
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to update metadata for task_id {}: {:?}",
+        task_id,
+        err
+      ))
+    })?;
+
+  Ok(())
 }

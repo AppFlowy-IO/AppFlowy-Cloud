@@ -15,6 +15,7 @@ use tracing::{info, warn};
 use crate::actix_ws::server::RealtimeServerActor;
 use access_control::access::AccessControl;
 use appflowy_ai_client::client::AppFlowyAIClient;
+use database::collab::cache::CollabCache;
 use workspace_access::notification::spawn_listen_on_workspace_member_change;
 use workspace_access::WorkspaceAccessControlImpl;
 
@@ -22,7 +23,6 @@ use crate::api::{collab_scope, ws_scope};
 use crate::collab::access_control::{
   CollabAccessControlImpl, CollabStorageAccessControlImpl, RealtimeCollabAccessControlImpl,
 };
-use crate::collab::cache::CollabCache;
 use crate::collab::notification::spawn_listen_on_collab_member_change;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};

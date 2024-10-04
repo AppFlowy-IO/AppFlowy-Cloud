@@ -1,5 +1,5 @@
 use crate::response::{AppResponse, AppResponseError};
-use app_error::ErrorCode;
+use app_error::{AppError, ErrorCode};
 use bytes::{Buf, Bytes, BytesMut};
 use futures::{ready, Stream, TryStreamExt};
 
@@ -9,11 +9,11 @@ use serde_json::de::SliceRead;
 use serde_json::StreamDeserializer;
 
 use crate::dto::ai_dto::StringOrMessage;
+use anyhow::anyhow;
+use futures::stream::StreamExt;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-
-use futures::stream::StreamExt;
 
 impl<T> AppResponse<T>
 where
@@ -149,7 +149,8 @@ where
                   Poll::Ready(None)
                 } else {
                   // Return any other errors that occur during deserialization
-                  Poll::Ready(Some(Err(AppResponseError::from(err))))
+                  let err = AppError::Internal(anyhow!("Error deserializing JSON:{}", err));
+                  Poll::Ready(Some(Err(err.into())))
                 }
               },
             }

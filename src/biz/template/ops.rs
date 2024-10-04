@@ -3,6 +3,7 @@ use std::{ops::DerefMut, path::Path};
 use actix_multipart::form::bytes::Bytes as MPBytes;
 use anyhow::Context;
 use app_error::ErrorCode;
+use aws_sdk_s3::primitives::ByteStream;
 use database::{
   file::{s3_client_impl::AwsS3BucketClientImpl, BucketClient, ResponseBlob},
   template::*,
@@ -339,7 +340,11 @@ pub async fn upload_avatar(
 
   let object_key = avatar_object_key(&file_id);
   client
-    .put_blob_as_content_type(&object_key, avatar.data.as_ref(), &content_type)
+    .put_blob_as_content_type(
+      &object_key,
+      ByteStream::from(avatar.data.to_vec()),
+      &content_type,
+    )
     .await?;
   Ok(file_id.to_string())
 }

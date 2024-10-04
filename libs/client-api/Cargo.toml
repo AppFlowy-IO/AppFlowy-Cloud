@@ -8,7 +8,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["multipart"] }
 anyhow = "1.0.79"
 serde_repr = "0.1.18"
 gotrue = { path = "../gotrue" }
@@ -48,6 +48,7 @@ futures.workspace = true
 pin-project = "1.1.5"
 percent-encoding = "2.3.1"
 lazy_static = { workspace = true }
+mime_guess = "2.0.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"

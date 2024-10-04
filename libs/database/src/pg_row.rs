@@ -551,6 +551,16 @@ impl From<AFTemplateGroupRow> for TemplateGroup {
   }
 }
 
+#[derive(Debug, FromRow, Serialize, Deserialize)]
+pub struct AFImportTask {
+  pub task_id: Uuid,
+  pub file_size: i64,
+  pub workspace_id: String,
+  pub created_by: i64,
+  pub status: i16,
+  pub metadata: serde_json::Value,
+  pub created_at: DateTime<Utc>,
+}
 #[derive(sqlx::Type, Serialize, Deserialize, Debug)]
 #[repr(i32)]
 pub enum AFAccessRequestStatusColumn {

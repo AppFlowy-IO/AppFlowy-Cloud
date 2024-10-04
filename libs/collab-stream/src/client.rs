@@ -1,3 +1,4 @@
+use crate::collab_update_sink::CollabUpdateSink;
 use crate::error::StreamError;
 use crate::model::{CollabStreamUpdate, CollabStreamUpdateBatch, CollabUpdateEvent, MessageId};
 use crate::pubsub::{CollabStreamPub, CollabStreamSub};
@@ -45,7 +46,7 @@ impl CollabRedisStream {
     Ok(group)
   }
 
-  pub async fn collab_update_stream(
+  pub async fn collab_update_stream_group(
     &self,
     workspace_id: &str,
     oid: &str,
@@ -66,6 +67,11 @@ impl CollabRedisStream {
     Ok(group)
   }
 
+  pub fn collab_update_sink(&self, workspace_id: &str, object_id: &str) -> CollabUpdateSink {
+    let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
+    CollabUpdateSink::new(self.connection_manager.clone(), stream_key)
+  }
+
   pub fn collab_updates(
     &self,
     workspace_id: &str,
@@ -74,7 +80,7 @@ impl CollabRedisStream {
   ) -> impl Stream<Item = Result<CollabStreamUpdate, StreamError>> {
     // use `:` separator as it adheres to Redis naming conventions
     let mut conn = self.connection_manager.clone();
-    let stream_key = format!("af_update:{}:{}", workspace_id, object_id);
+    let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
     let read_options = StreamReadOptions::default().count(100);
     let mut since = since.unwrap_or_default();
     async_stream::try_stream! {

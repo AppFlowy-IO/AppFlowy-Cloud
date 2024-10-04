@@ -13,13 +13,16 @@ pub fn collab_folder_to_folder_view(
   pubished_view_ids: &HashSet<String>,
 ) -> Result<FolderView, AppError> {
   let mut unviewable = HashSet::new();
-  for private_section in folder.get_all_private_sections() {
-    unviewable.insert(private_section.id);
-  }
-  let mut private_view_ids = HashSet::new();
+  let mut my_private_view_ids = HashSet::new();
   for private_section in folder.get_my_private_sections() {
-    unviewable.remove(&private_section.id);
-    private_view_ids.insert(private_section.id);
+    my_private_view_ids.insert(private_section.id);
+  }
+  for private_section in folder.get_all_private_sections() {
+    if let Some(private_view) = folder.get_view(&private_section.id) {
+      if view_is_space(&private_view) && !my_private_view_ids.contains(&private_section.id) {
+        unviewable.insert(private_section.id);
+      }
+    }
   }
   for trash_view in folder.get_all_trash_sections() {
     unviewable.insert(trash_view.id);
@@ -30,7 +33,7 @@ pub fn collab_folder_to_folder_view(
     root_view_id,
     folder,
     &unviewable,
-    &private_view_ids,
+    &my_private_view_ids,
     pubished_view_ids,
     false,
     0,

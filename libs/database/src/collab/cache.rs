@@ -179,7 +179,7 @@ impl CollabCache {
     Ok(encode_collab)
   }
 
-  pub async fn insert_encode_collab_in_disk(
+  pub async fn insert_encode_collab_to_disk(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -193,11 +193,7 @@ impl CollabCache {
     Ok(())
   }
 
-  /// Insert the encoded collab data into the memory cache.
-  pub async fn insert_encode_collab_data_in_mem(
-    &self,
-    params: &CollabParams,
-  ) -> Result<(), AppError> {
+  pub async fn insert_encode_collab_to_mem(&self, params: CollabParams) -> Result<(), AppError> {
     let timestamp = chrono::Utc::now().timestamp();
     self
       .mem_cache

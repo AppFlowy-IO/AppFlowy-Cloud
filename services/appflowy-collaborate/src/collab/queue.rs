@@ -103,7 +103,7 @@ impl StorageQueue {
     trace!("queuing {} object to pending write queue", params.object_id,);
     self
       .collab_cache
-      .insert_encode_collab_data_in_mem(params)
+      .insert_encode_collab_to_mem(params)
       .await?;
 
     let seq = self
@@ -456,7 +456,7 @@ async fn write_pending_to_disk(
       .execute(transaction.deref_mut())
       .await?;
     if let Err(_err) = collab_cache
-      .insert_encode_collab_in_disk(&record.workspace_id, &record.uid, params, &mut transaction)
+      .insert_encode_collab_to_disk(&record.workspace_id, &record.uid, params, &mut transaction)
       .await
     {
       sqlx::query(&format!("ROLLBACK TO SAVEPOINT {}", savepoint_name))

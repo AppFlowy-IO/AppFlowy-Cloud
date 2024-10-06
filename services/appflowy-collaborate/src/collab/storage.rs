@@ -229,6 +229,14 @@ where
     let mut transaction = self.cache.pg_pool().begin().await?;
     insert_into_af_collab_bulk_for_user(&mut transaction, uid, workspace_id, &params_list).await?;
     transaction.commit().await?;
+
+    // update the mem cache without blocking the current task
+    let cache = self.cache.clone();
+    tokio::spawn(async move {
+      for params in params_list {
+        let _ = cache.insert_encode_collab_to_mem(params).await;
+      }
+    });
     Ok(())
   }
 }
@@ -292,6 +300,8 @@ where
     self
       .check_write_workspace_permission(workspace_id, uid)
       .await?;
+
+    // TODO(nathan): batch insert permission
     for params in &params_list {
       self
         .access_control

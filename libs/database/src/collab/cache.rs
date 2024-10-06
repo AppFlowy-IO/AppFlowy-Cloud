@@ -193,7 +193,7 @@ impl CollabCache {
     Ok(())
   }
 
-  pub async fn insert_encode_collab_to_mem(&self, params: CollabParams) -> Result<(), AppError> {
+  pub async fn insert_encode_collab_to_mem(&self, params: &CollabParams) -> Result<(), AppError> {
     let timestamp = chrono::Utc::now().timestamp();
     self
       .mem_cache

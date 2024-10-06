@@ -234,7 +234,7 @@ where
     let cache = self.cache.clone();
     tokio::spawn(async move {
       for params in params_list {
-        let _ = cache.insert_encode_collab_to_mem(params).await;
+        let _ = cache.insert_encode_collab_to_mem(&params).await;
       }
     });
     Ok(())

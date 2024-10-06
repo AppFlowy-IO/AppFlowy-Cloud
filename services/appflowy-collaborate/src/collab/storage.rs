@@ -20,7 +20,8 @@ use crate::shared_state::RealtimeSharedState;
 use app_error::AppError;
 use database::collab::cache::CollabCache;
 use database::collab::{
-  AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl, GetCollabOrigin,
+  insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStorage,
+  CollabStorageAccessControl, GetCollabOrigin,
 };
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
@@ -218,6 +219,18 @@ where
       .await
       .map_err(AppError::from)
   }
+
+  async fn batch_insert_collabs(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params_list: Vec<CollabParams>,
+  ) -> Result<(), AppError> {
+    let mut transaction = self.cache.pg_pool().begin().await?;
+    insert_into_af_collab_bulk_for_user(&mut transaction, uid, workspace_id, &params_list).await?;
+    transaction.commit().await?;
+    Ok(())
+  }
 }
 
 #[async_trait]
@@ -230,7 +243,7 @@ where
     (state.total_attempts, state.success_attempts)
   }
 
-  async fn insert_or_update_collab(
+  async fn queue_insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -270,23 +283,23 @@ where
     Ok(())
   }
 
-  async fn insert_new_collab(
+  async fn batch_insert_new_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params_list: Vec<CollabParams>,
   ) -> AppResult<()> {
-    params.validate()?;
-
     self
       .check_write_workspace_permission(workspace_id, uid)
       .await?;
+    for params in &params_list {
+      self
+        .access_control
+        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+        .await?;
+    }
     self
-      .access_control
-      .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-      .await?;
-    self
-      .queue_insert_collab(workspace_id, uid, params, WritePriority::High)
+      .batch_insert_collabs(workspace_id, uid, params_list)
       .await?;
     Ok(())
   }

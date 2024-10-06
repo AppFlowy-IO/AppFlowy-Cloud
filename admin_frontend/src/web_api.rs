@@ -431,11 +431,10 @@ async fn oauth_redirect_handler(
     )
     .await?;
 
-  let ext_url = format!(
+  let url = format!(
     "{}?code={}&state={}",
     oauth_redirect.redirect_uri, code, oauth_redirect.state,
   );
-  let url = format!("/web/login?redirect_to={}", urlencoding::encode(&ext_url));
   let resp = Redirect::to(&url).into_response();
   Ok(resp)
 }

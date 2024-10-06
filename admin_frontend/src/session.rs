@@ -97,7 +97,7 @@ pub struct CodeSession {
   pub code_challenge: Option<String>,
   pub code_challenge_method: Option<String>,
 }
-pub struct CodeSessionOptional(Option<CodeSession>);
+struct CodeSessionOptional(Option<CodeSession>);
 
 impl ToRedisArgs for CodeSession {
   fn write_redis_args<W>(&self, out: &mut W)
@@ -127,7 +127,7 @@ pub struct UserSession {
   pub session_id: String,
   pub token: GotrueTokenResponse,
 }
-pub struct UserSessionOptional(Option<UserSession>);
+struct UserSessionOptional(Option<UserSession>);
 
 #[async_trait]
 impl FromRequestParts<AppState> for UserSession {

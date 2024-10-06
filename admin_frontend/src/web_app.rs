@@ -10,7 +10,7 @@ use crate::models::{LoginParams, OAuthLoginAction, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
-use axum::response::{IntoResponse, Redirect, Result};
+use axum::response::{IntoResponse, Result};
 use axum::{response::Html, routing::get, Router};
 use axum_extra::extract::CookieJar;
 use gotrue_entity::dto::User;
@@ -180,7 +180,7 @@ async fn login_callback_query_handler(
         return Ok((jar, open_or_dl_html).into_response());
       },
     },
-    None => home_handler(State(state), new_session, jar).await,
+    None => home_handler(State(state), new_session).await,
   }
 }
 
@@ -349,7 +349,10 @@ async fn login_handler(
   State(state): State<AppState>,
   Query(login): Query<LoginParams>,
 ) -> Result<Html<String>, WebAppError> {
-  let redirect_to = login.redirect_to;
+  let redirect_to = login
+    .redirect_to
+    .map(|r| urlencoding::encode(&r).to_string());
+
   let external = state.gotrue_client.settings().await?.external;
   let oauth_providers = external.oauth_providers();
   render_template(templates::Login {
@@ -365,15 +368,7 @@ async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
 pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
-  mut jar: CookieJar,
 ) -> Result<axum::response::Response, WebAppError> {
-  // redirect to url just before login (if any)
-  let pre_login_url = jar.get("pre_login_url").map(|c| c.value().to_string());
-  if let Some(url) = pre_login_url {
-    jar = jar.remove("pre_login_url");
-    return Ok((jar, Redirect::temporary(&url)).into_response());
-  }
-
   let user = state
     .gotrue_client
     .user_info(&session.token.access_token)

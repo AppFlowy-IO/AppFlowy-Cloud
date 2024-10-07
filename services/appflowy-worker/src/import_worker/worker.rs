@@ -316,6 +316,7 @@ async fn process_unzip_file(
   s3_client: &Arc<dyn S3Client>,
 ) -> Result<(), ImportError> {
   let notion_importer = NotionImporter::new(
+    import_task.uid,
     unzip_dir_path,
     import_task.workspace_id.clone(),
     import_task.host.clone(),
@@ -326,7 +327,7 @@ async fn process_unzip_file(
     .import()
     .await
     .map_err(ImportError::ImportCollabError)?;
-  let nested_views = imported.build_nested_views(import_task.uid).await;
+  let nested_views = imported.build_nested_views().await;
   trace!(
     "[Import]: {} imported nested views:{}",
     import_task.workspace_id,

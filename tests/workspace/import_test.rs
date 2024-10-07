@@ -9,16 +9,18 @@ use std::time::Duration;
 async fn import_blog_post_test() {
   let (client, imported_workspace_id) = import_zip("blog_post.zip").await;
   let folder = client.get_folder(&imported_workspace_id).await;
-  let mut workspace_sub_views = folder.get_views_belong_to(&imported_workspace_id);
+  let mut space_views = folder.get_views_belong_to(&imported_workspace_id);
   assert_eq!(
-    workspace_sub_views.len(),
+    space_views.len(),
     1,
     "Expected 1 view, found {:?}",
-    workspace_sub_views
+    space_views
   );
 
-  let imported_view = workspace_sub_views.pop().unwrap();
-  assert_eq!(imported_view.name, "Blog Post");
+  let space_view = space_views.pop().unwrap();
+  assert_eq!(space_view.name, "blog_post");
+  let imported_view = folder.get_views_belong_to(&space_view.id).pop().unwrap();
+
   let document = client
     .get_document(&imported_workspace_id, &imported_view.id)
     .await;
@@ -53,15 +55,18 @@ async fn import_project_and_task_zip_test() {
   let (client, imported_workspace_id) = import_zip("project&task.zip").await;
   let folder = client.get_folder(&imported_workspace_id).await;
   let workspace_database = client.get_workspace_database(&imported_workspace_id).await;
-  let mut workspace_sub_views = folder.get_views_belong_to(&imported_workspace_id);
+  let space_views = folder.get_views_belong_to(&imported_workspace_id);
   assert_eq!(
-    workspace_sub_views.len(),
+    space_views.len(),
     1,
     "Expected 1 view, found {:?}",
-    workspace_sub_views
+    space_views
   );
+  assert_eq!(space_views[0].name, "project&task");
+  assert!(space_views[0].space_info().is_some());
 
-  let imported_view = workspace_sub_views.pop().unwrap();
+  let mut sub_views = folder.get_views_belong_to(&space_views[0].id);
+  let imported_view = sub_views.pop().unwrap();
   assert_eq!(imported_view.name, "Projects & Tasks");
   assert_eq!(
     imported_view.children.len(),
@@ -154,7 +159,7 @@ async fn import_zip(name: &str) -> (TestClient, String) {
   );
 
   // after the import task is completed, the new workspace should be visible
-  let mut workspaces = client.api_client.get_workspaces().await.unwrap();
+  let workspaces = client.api_client.get_workspaces().await.unwrap();
   assert_eq!(workspaces.len(), 2);
 
   let imported_workspace = workspaces

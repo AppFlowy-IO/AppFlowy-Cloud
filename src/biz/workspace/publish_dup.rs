@@ -172,17 +172,20 @@ impl PublishCollabDuplicator {
     // for self.collabs_to_insert
     let mut txn = pg_pool.begin().await?;
     for (oid, (collab_type, encoded_collab)) in collabs_to_insert.into_iter() {
+      let params = CollabParams {
+        object_id: oid.clone(),
+        encoded_collab_v1: encoded_collab.into(),
+        collab_type,
+        embeddings: None,
+      };
+      let action = format!("duplicate collab: {}", params);
       collab_storage
         .insert_new_collab_with_transaction(
           &dest_workspace_id,
           &duplicator_uid,
-          CollabParams {
-            object_id: oid.clone(),
-            encoded_collab_v1: encoded_collab.into(),
-            collab_type,
-            embeddings: None,
-          },
+          params,
           &mut txn,
+          &action,
         )
         .await?;
     }
@@ -243,6 +246,7 @@ impl PublishCollabDuplicator {
             embeddings: None,
           },
           &mut txn,
+          "duplicate workspace database collab",
         )
         .await?;
       broadcast_update(&collab_storage, &ws_db_oid, ws_db_updates).await?;
@@ -334,6 +338,7 @@ impl PublishCollabDuplicator {
           embeddings: None,
         },
         &mut txn,
+        "duplicate folder collab",
       )
       .await?;
 

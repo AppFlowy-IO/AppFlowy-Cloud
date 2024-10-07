@@ -9,6 +9,7 @@ use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::Transaction;
+
 use tokio::time::timeout;
 use tracing::warn;
 use tracing::{error, instrument, trace};
@@ -188,7 +189,7 @@ where
         HashMap::new()
       },
       Err(_) => {
-        error!("Timeout waiting for encode collab from realtime server");
+        error!("Timeout waiting for batch encode collab from realtime server");
         HashMap::new()
       },
     }
@@ -322,6 +323,7 @@ where
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
+    action_description: &str,
   ) -> AppResult<()> {
     params.validate()?;
     self
@@ -331,11 +333,24 @@ where
       .access_control
       .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
       .await?;
-    self
-      .cache
-      .insert_encode_collab_data(workspace_id, uid, &params, transaction)
-      .await?;
-    Ok(())
+
+    match tokio::time::timeout(
+      Duration::from_secs(120),
+      self
+        .cache
+        .insert_encode_collab_data(workspace_id, uid, &params, transaction),
+    )
+    .await
+    {
+      Ok(result) => result,
+      Err(_) => {
+        error!(
+          "Timeout waiting for action completed: {}",
+          action_description
+        );
+        Err(AppError::RequestTimeout(action_description.to_string()))
+      },
+    }
   }
 
   #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, from_editing_collab = %from_editing_collab))]

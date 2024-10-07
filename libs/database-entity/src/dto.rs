@@ -77,6 +77,18 @@ pub struct CollabParams {
   pub embeddings: Option<AFCollabEmbeddings>,
 }
 
+impl Display for CollabParams {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "object_id: {}, collab_type: {:?}, size:{}",
+      self.object_id,
+      self.collab_type,
+      self.encoded_collab_v1.len()
+    )
+  }
+}
+
 impl CollabParams {
   pub fn new<T: ToString>(
     object_id: T,

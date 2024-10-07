@@ -66,7 +66,7 @@ async fn import_data_handler(
   let host = get_host_from_request(&req);
   let content_length = req
     .headers()
-    .get("Content-Length")
+    .get("X-Content-Length")
     .and_then(|h| h.to_str().ok())
     .and_then(|s| s.parse::<usize>().ok())
     .unwrap_or(0);
@@ -92,6 +92,12 @@ async fn import_data_handler(
   drop(file);
 
   if content_length != file_size {
+    trace!(
+      "Import file fail. The Content-Length:{} doesn't match file size:{}",
+      content_length,
+      file_size
+    );
+
     return Err(
       AppError::InvalidRequest(format!(
         "Content-Length:{} doesn't match file size:{}",

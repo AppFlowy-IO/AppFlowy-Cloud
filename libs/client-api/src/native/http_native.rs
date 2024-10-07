@@ -324,8 +324,9 @@ impl Client {
       .multipart(form);
 
     // set the host header
-    builder = builder.header("X-Host", self.base_url.clone());
-    builder = builder.header(CONTENT_LENGTH, metadata.len());
+    builder = builder
+      .header("X-Host", self.base_url.clone())
+      .header("X-Content-Length", metadata.len());
     let resp = builder.send().await?;
 
     AppResponse::<()>::from_response(resp).await?.into_error()

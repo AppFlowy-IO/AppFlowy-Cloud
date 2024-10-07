@@ -64,6 +64,12 @@ async fn import_data_handler(
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let host = get_host_from_request(&req);
+  let content_length = req
+    .headers()
+    .get("Content-Length")
+    .and_then(|h| h.to_str().ok())
+    .and_then(|s| s.parse::<usize>().ok())
+    .unwrap_or(0);
 
   let time = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
   let workspace_name = format!("import-{}", time);
@@ -85,6 +91,16 @@ async fn import_data_handler(
   file.shutdown().await?;
   drop(file);
 
+  if content_length != file_size {
+    return Err(
+      AppError::InvalidRequest(format!(
+        "Content-Length:{} doesn't match file size:{}",
+        content_length, file_size
+      ))
+      .into(),
+    );
+  }
+
   let workspace = create_empty_workspace(
     &state.pg_pool,
     &state.workspace_access_control,
@@ -100,7 +116,7 @@ async fn import_data_handler(
     "User:{} import data:{} to new workspace:{}",
     uid,
     file_size,
-    workspace_id
+    workspace_id,
   );
   let stream = ByteStream::from_path(&file_path).await.map_err(|e| {
     AppError::Internal(anyhow!("Failed to create ByteStream from file path: {}", e))

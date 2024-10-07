@@ -28,6 +28,7 @@ use std::pin::Pin;
 use std::sync::atomic::Ordering;
 
 use rayon::prelude::IntoParallelIterator;
+use reqwest::header::CONTENT_LENGTH;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::fs::File;
@@ -300,6 +301,7 @@ impl Client {
 
   pub async fn import_file(&self, file_path: &Path) -> Result<(), AppResponseError> {
     let file = File::open(&file_path).await?;
+    let metadata = file.metadata().await?;
     let file_name = file_path
       .file_name()
       .map(|s| s.to_string_lossy().to_string())
@@ -323,6 +325,7 @@ impl Client {
 
     // set the host header
     builder = builder.header("X-Host", self.base_url.clone());
+    builder = builder.header(CONTENT_LENGTH, metadata.len());
     let resp = builder.send().await?;
 
     AppResponse::<()>::from_response(resp).await?.into_error()

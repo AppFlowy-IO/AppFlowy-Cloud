@@ -51,6 +51,8 @@ pub struct WebAppOAuthLoginRequest {
   pub user_icon: Option<String>,
   pub workspace_member_count: Option<String>,
 
+  // pub redirect
+
   // Errors
   pub error: Option<String>,
   pub error_code: Option<i64>,

@@ -180,7 +180,7 @@ async fn login_callback_query_handler(
         return Ok((jar, open_or_dl_html).into_response());
       },
     },
-    None => home_handler(State(state), new_session).await,
+    None => home_handler(State(state), new_session, jar).await,
   }
 }
 
@@ -368,6 +368,7 @@ async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
 pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
+  jar: CookieJar,
 ) -> Result<axum::response::Response, WebAppError> {
   let user = state
     .gotrue_client
@@ -377,7 +378,7 @@ pub async fn home_handler(
     user: &user,
     is_admin: is_admin(&user),
   })?;
-  Ok(home_html_str.into_response())
+  Ok((jar, home_html_str).into_response())
 }
 
 async fn admin_home_handler(

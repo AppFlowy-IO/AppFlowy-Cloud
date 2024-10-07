@@ -96,7 +96,7 @@
     <div id="oauth-container">
       {% for provider in oauth_providers %}
       <div class="oauth-icon">
-        <a href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ redirect_to|default("/web/login")|escape }}">
+        <a href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to=/web/login-callback">
           <div
             hx-get="../assets/{{ provider|escape }}/logo.html"
             hx-trigger="load"
@@ -126,53 +126,5 @@
       </i></small>
     </div>
   </div>
-
-  <script>
-    // OAuthLogin (This is done because axum doesn't support fragment in the URL)
-    // https://github.com/tokio-rs/axum/discussions/2147
-
-    // Parse the fragment and extract the parameters
-    const paramMap = {};
-    if (window.location.hash) {
-      const fragments = window.location.href.split('#').slice(1);
-      for (let i = 0; i < fragments.length; i++) {
-        const params = fragments[i].split('&');
-        for (let j = 0; j < params.length; j++) {
-          const keyValue = params[j].split('=');
-          if (keyValue.length === 2) {
-            const key = keyValue[0];
-            const value = keyValue[1];
-            paramMap[key] = value;
-          }
-        }
-      }
-
-      if (paramMap.hasOwnProperty('refresh_token')) {
-        // Clear the fragment from the URL
-        history.replaceState("", document.title, window.location.pathname + window.location.search);
-
-        // Login in via refresh_token
-        const refreshToken = paramMap['refresh_token'];
-        const redirect_to = new URLSearchParams(window.location.search).get('redirect_to');
-        fetch(`/web-api/login-refresh/${refreshToken}?redirect_to=${redirect_to}`, {
-          method: "POST",
-        }).then((response) => {
-          if (!response.ok) {
-            displayHttpStatusAndPayload(response);
-          } else {
-            const redirect_to = paramMap['redirect_to'];
-            if (redirect_to && redirect_to.trim() !== "") {
-              console.log("redirect_to is not empty");
-              window.location.href = "/web/home#" + redirect_to;
-            } else {
-              window.location.href = "/web/home";
-            }
-          }
-        });
-      } else {
-        alert(JSON.stringify(paramMap));
-      }
-    }
-  </script>
   {% endblock %}
 </div>

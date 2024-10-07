@@ -113,7 +113,9 @@ async fn admin_create_sso_handler(
 /// The client application should implement handling for this URL format, typically through the
 /// `sign_in_with_url` method in the `client-api` crate. See [client_api::Client::sign_in_with_url] for more details.
 ///
-async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError<'static>> {
+async fn open_app_handler(
+  session: UserSession,
+) -> Result<axum::response::Response, WebApiError<'static>> {
   let app_sign_in_url = format!(
       "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
         session.token.access_token,
@@ -122,16 +124,16 @@ async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError
         session.token.refresh_token,
         session.token.token_type,
   );
-  Ok(htmx_redirect(&app_sign_in_url))
+  Ok(Redirect::to(&app_sign_in_url).into_response())
 }
 
 /// Delete the user account and all associated data.
 async fn delete_account_handler(
   state: State<AppState>,
   session: UserSession,
-) -> Result<HeaderMap, WebApiError<'static>> {
+) -> Result<axum::response::Response, WebApiError<'static>> {
   delete_current_user(&session.token.access_token, &state.appflowy_cloud_url).await?;
-  Ok(htmx_redirect("/web/login"))
+  Ok(Redirect::to("/web/login").into_response())
 }
 
 // Invite another user, this will trigger email sending
@@ -318,7 +320,7 @@ async fn login_refresh_handler(
   jar: CookieJar,
   Path(refresh_token): Path<String>,
   Query(login): Query<LoginParams>,
-) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+) -> Result<axum::response::Response, WebApiError<'static>> {
   let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::RefreshToken(
@@ -345,7 +347,7 @@ async fn sign_in_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
-) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+) -> Result<axum::response::Response, WebApiError<'static>> {
   let WebApiLoginRequest {
     email,
     password,
@@ -354,7 +356,7 @@ async fn sign_in_handler(
 
   if password.is_empty() {
     let res = send_magic_link(State(state), &email).await?;
-    return Ok((CookieJar::new(), HeaderMap::new(), res));
+    return Ok(res.into_response());
   }
 
   // Attempt to sign in with email and password
@@ -502,7 +504,7 @@ async fn sign_up_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
-) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+) -> Result<axum::response::Response, WebApiError<'static>> {
   let WebApiLoginRequest {
     email,
     password,
@@ -511,7 +513,7 @@ async fn sign_up_handler(
 
   if password.is_empty() {
     let res = send_magic_link(State(state), &email).await?;
-    return Ok((CookieJar::new(), HeaderMap::new(), res));
+    return Ok(res.into_response());
   }
 
   let sign_up_res = state
@@ -526,11 +528,7 @@ async fn sign_up_handler(
     },
     SignUpResponse::NotAuthenticated(user) => {
       info!("user signed up and not authenticated: {:?}", user);
-      Ok((
-        jar,
-        HeaderMap::new(),
-        WebApiResponse::<()>::from_str("Email Verification Sent".into()),
-      ))
+      Ok(WebApiResponse::<()>::from_str("Email Verification Sent".into()).into_response())
     },
   }
 }
@@ -538,7 +536,7 @@ async fn sign_up_handler(
 async fn logout_handler(
   State(state): State<AppState>,
   jar: CookieJar,
-) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
+) -> Result<axum::response::Response, WebApiError<'static>> {
   let session_id = jar
     .get("session_id")
     .ok_or(WebApiError::new(
@@ -548,16 +546,13 @@ async fn logout_handler(
     .value();
 
   state.session_store.del_user_session(session_id).await?;
-  Ok((
-    jar.remove(Cookie::from("session_id")),
-    htmx_redirect("/web"),
-  ))
-}
-
-fn htmx_redirect(url: &str) -> HeaderMap {
-  let mut h = HeaderMap::new();
-  h.insert("HX-Redirect", url.parse().unwrap());
-  h
+  Ok(
+    (
+      jar.remove(Cookie::from("session_id")),
+      htmx_redirect("/web/login"),
+    )
+      .into_response(),
+  )
 }
 
 fn htmx_trigger(trigger: &str) -> HeaderMap {
@@ -571,7 +566,7 @@ async fn session_login(
   token: GotrueTokenResponse,
   jar: CookieJar,
   redirect_to: Option<&str>,
-) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+) -> Result<axum::response::Response, WebApiError<'static>> {
   verify_token_cloud(
     token.access_token.as_str(),
     state.appflowy_cloud_url.as_str(),
@@ -585,11 +580,23 @@ async fn session_login(
   };
   state.session_store.put_user_session(&new_session).await?;
 
-  Ok((
-    jar.add(new_session_cookie(new_session_id)),
-    htmx_redirect(redirect_to.unwrap_or("/web/home")),
-    ().into(),
-  ))
+  let decoded_redirect_to = redirect_to
+    .map(|s| match urlencoding::decode(s) {
+      Ok(r) => Some(r),
+      Err(err) => {
+        tracing::error!("failed to decode redirect_to: {}", err);
+        None
+      },
+    })
+    .flatten();
+
+  Ok(
+    (
+      jar.add(new_session_cookie(new_session_id)),
+      htmx_redirect(decoded_redirect_to.as_deref().unwrap_or("/web/home")),
+    )
+      .into_response(),
+  )
 }
 
 async fn send_magic_link(
@@ -607,6 +614,13 @@ async fn send_magic_link(
     )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Magic Link Sent".into()))
+}
+
+fn htmx_redirect(url: &str) -> HeaderMap {
+  let mut h = HeaderMap::new();
+  h.insert("Location", url.parse().unwrap());
+  h.insert("HX-Redirect", url.parse().unwrap());
+  h
 }
 
 fn get_base_url(header_map: &HeaderMap) -> String {

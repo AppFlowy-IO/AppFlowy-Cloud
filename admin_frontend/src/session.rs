@@ -1,9 +1,12 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+  collections::HashMap,
+  time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
   async_trait,
   extract::{FromRequestParts, OriginalUri},
-  http::request::Parts,
+  http::{header, request::Parts, HeaderMap, StatusCode},
   response::{IntoResponse, Redirect},
 };
 use axum_extra::extract::{cookie::Cookie, CookieJar};
@@ -13,7 +16,7 @@ use jwt::{Claims, Header};
 use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue, ToRedisArgs};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::AppState;
+use crate::{ext::api::verify_token_cloud, AppState};
 
 static SESSION_EXPIRATION: usize = 60 * 60 * 24; // 1 day
 
@@ -131,31 +134,89 @@ struct UserSessionOptional(Option<UserSession>);
 
 #[async_trait]
 impl FromRequestParts<AppState> for UserSession {
-  type Rejection = SessionRejection;
+  type Rejection = axum::response::Response;
 
   async fn from_request_parts(
     parts: &mut Parts,
     state: &AppState,
   ) -> Result<Self, Self::Rejection> {
-    let cookie_jar = CookieJar::from_request_parts(parts, state)
-      .await
-      .map_err(|e| {
-        tracing::error!("failed to get cookie jar");
-        SessionRejection::new(SessionRejectionKind::CookieError(e.to_string()), None)
-      })?;
+    let jar = match CookieJar::from_request_parts(parts, state).await {
+      Ok(jar) => jar,
+      Err(err) => {
+        tracing::error!("failed to get cookie jar, error: {}", err);
+        return Err(Redirect::to("/web/login").into_response());
+      },
+    };
 
-    let session =
-      match get_session_from_store(&cookie_jar, &state.session_store, &state.gotrue_client).await {
-        Ok(session) => session,
-        Err(err) => {
-          let original_url = parts
-            .extensions
-            .get::<OriginalUri>()
-            .map(|uri| urlencoding::encode(&uri.to_string()).to_string());
-          return Err(SessionRejection::new(err, original_url));
+    if let Some(session) =
+      get_session_from_store(&jar, &state.session_store, &state.gotrue_client).await
+    {
+      return Ok(session);
+    }
+
+    let original_url = parts
+      .extensions
+      .get::<OriginalUri>()
+      .map(|uri| urlencoding::encode(&uri.to_string()).to_string());
+
+    // attempt to redirect after setting new session
+    if let Some(p) = parts.uri.query() {
+      match serde_urlencoded::from_str::<HashMap<String, String>>(p) {
+        Ok(params) => {
+          if let Some(refresh_token) = params.get("refresh_token") {
+            match state
+              .gotrue_client
+              .token(&gotrue::grant::Grant::RefreshToken(
+                gotrue::grant::RefreshTokenGrant {
+                  refresh_token: refresh_token.to_string(),
+                },
+              ))
+              .await
+            {
+              Ok(token) => {
+                match verify_token_cloud(
+                  token.access_token.as_str(),
+                  state.appflowy_cloud_url.as_str(),
+                )
+                .await
+                {
+                  Ok(()) => {
+                    let new_session_id = uuid::Uuid::new_v4();
+                    let new_session = UserSession {
+                      session_id: new_session_id.to_string(),
+                      token,
+                    };
+                    state
+                      .session_store
+                      .put_user_session(&new_session)
+                      .await
+                      .unwrap();
+
+                    let session_cookie = jar.add(new_session_cookie(new_session_id));
+
+                    if let Some(original_url) = original_url {
+                      let mut headers = HeaderMap::new();
+                      headers.insert(header::LOCATION, original_url.parse().unwrap());
+                      return Err((StatusCode::SEE_OTHER, headers, session_cookie).into_response());
+                    }
+                  },
+                  Err(err) => {
+                    tracing::warn!("failed to verify token: {}", format!("{:?}", err))
+                  },
+                }
+              },
+              Err(err) => tracing::error!("failed to refresh token: {}", err),
+            };
+          }
         },
-      };
-    Ok(session)
+        Err(err) => tracing::error!("failed to parse query params: {}", err),
+      }
+    }
+
+    match original_url {
+      Some(url) => Err(Redirect::to(&format!("/web/login?redirect_to={}", url)).into_response()),
+      None => Err(Redirect::to("/web/login").into_response()),
+    }
   }
 }
 
@@ -163,28 +224,37 @@ async fn get_session_from_store(
   cookie_jar: &CookieJar,
   session_store: &SessionStorage,
   gotrue_client: &gotrue::api::Client,
-) -> Result<UserSession, SessionRejectionKind> {
-  let session_id = cookie_jar
-    .get("session_id")
-    .ok_or(SessionRejectionKind::NoSessionId)?
-    .value();
+) -> Option<UserSession> {
+  let session_id = match cookie_jar.get("session_id") {
+    Some(cookie) => cookie.value(),
+    None => {
+      tracing::info!("no session_id cookie found");
+      return None;
+    },
+  };
+
   let mut session = session_store
     .get_user_session(session_id)
     .await
-    .map_err(|err| {
-      tracing::info!("failed to get session from store: {}", err);
-      SessionRejectionKind::SessionNotFound
-    })?
-    .ok_or(SessionRejectionKind::SessionNotFound)?;
+    .unwrap_or_else(|err| {
+      tracing::error!("failed to get session from store: {}", err);
+      None
+    })?;
 
   if has_expired(session.token.access_token.as_str()) {
     // Get new pair of access token and refresh token
     let refresh_token = session.token.refresh_token;
-    let new_token = gotrue_client
+    let new_token = match gotrue_client
       .clone()
       .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
       .await
-      .map_err(|err| SessionRejectionKind::RefreshTokenError(err.to_string()))?;
+    {
+      Ok(token) => token,
+      Err(err) => {
+        tracing::warn!("failed to refresh token: {}", err);
+        return None;
+      },
+    };
 
     session.token.access_token = new_token.access_token;
     session.token.refresh_token = new_token.refresh_token;
@@ -196,7 +266,7 @@ async fn get_session_from_store(
       .unwrap_or_else(|err| tracing::error!("failed to update session: {}", err));
   }
 
-  Ok(session)
+  Some(session)
 }
 
 fn has_expired(access_token: &str) -> bool {
@@ -222,43 +292,6 @@ fn get_session_expiration(access_token: &str) -> Option<u64> {
       None
     },
   }
-}
-
-#[derive(Clone, Debug)]
-pub struct SessionRejection {
-  pub kind: SessionRejectionKind,
-  pub redirect_url: Option<String>,
-}
-
-impl SessionRejection {
-  fn new(kind: SessionRejectionKind, redirect_url: Option<String>) -> Self {
-    Self { kind, redirect_url }
-  }
-}
-
-impl IntoResponse for SessionRejection {
-  fn into_response(self) -> axum::response::Response {
-    tracing::info!("session rejection: {:?}", self);
-    match self.kind {
-      any => {
-        tracing::info!("session rejection: {:?}", any);
-        match self.redirect_url {
-          Some(url) => {
-            Redirect::temporary(&format!("/web/login?redirect_to={}", url)).into_response()
-          },
-          None => Redirect::temporary("/web/login").into_response(),
-        }
-      },
-    }
-  }
-}
-
-#[derive(Clone, Debug)]
-pub enum SessionRejectionKind {
-  NoSessionId,
-  SessionNotFound,
-  CookieError(String),
-  RefreshTokenError(String),
 }
 
 impl ToRedisArgs for UserSession {

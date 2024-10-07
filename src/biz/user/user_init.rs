@@ -65,6 +65,7 @@ where
           embeddings: None,
         },
         txn,
+        "initialize workspace for user",
       )
       .await?;
 
@@ -143,6 +144,7 @@ pub(crate) async fn create_user_awareness(
         embeddings: None,
       },
       txn,
+      "create user awareness",
     )
     .await?;
   Ok(object_id)
@@ -179,6 +181,7 @@ pub(crate) async fn create_workspace_collab(
         embeddings: None,
       },
       txn,
+      "create workspace collab",
     )
     .await?;
   Ok(())
@@ -217,6 +220,7 @@ pub(crate) async fn create_workspace_database_collab(
         embeddings: None,
       },
       txn,
+      "create database collab",
     )
     .await?;
 

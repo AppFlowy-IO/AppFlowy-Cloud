@@ -299,35 +299,33 @@ fn spawn_period_write(
         let cloned_total_write_count = total_write_count.clone();
         let cloned_total_success_write_count = success_write_count.clone();
 
-        tokio::spawn(async move {
-          if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
-            if metas.is_empty() {
-              error!("the pending write keys is not empty, but metas is empty");
-              return;
-            }
-
-            match retry_write_pending_to_disk(&cloned_collab_cache, metas).await {
-              Ok(success_result) => {
-                #[cfg(debug_assertions)]
-                tracing::info!("success write pending: {:?}", keys,);
-
-                trace!("{:?}", success_result);
-                cloned_total_write_count.fetch_add(
-                  success_result.expected as i64,
-                  std::sync::atomic::Ordering::Relaxed,
-                );
-                cloned_total_success_write_count.fetch_add(
-                  success_result.success as i64,
-                  std::sync::atomic::Ordering::Relaxed,
-                );
-              },
-              Err(err) => error!("{:?}", err),
-            }
-            // Remove pending metadata from Redis even if some records fail to write to disk after retries.
-            // Records that fail repeatedly are considered potentially corrupt or invalid.
-            let _ = remove_pending_meta(&keys, &mut cloned_connection_manager).await;
+        if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
+          if metas.is_empty() {
+            error!("the pending write keys is not empty, but metas is empty");
+            return;
           }
-        });
+
+          match retry_write_pending_to_disk(&cloned_collab_cache, metas).await {
+            Ok(success_result) => {
+              #[cfg(debug_assertions)]
+              tracing::info!("success write pending: {:?}", keys,);
+
+              trace!("{:?}", success_result);
+              cloned_total_write_count.fetch_add(
+                success_result.expected as i64,
+                std::sync::atomic::Ordering::Relaxed,
+              );
+              cloned_total_success_write_count.fetch_add(
+                success_result.success as i64,
+                std::sync::atomic::Ordering::Relaxed,
+              );
+            },
+            Err(err) => error!("{:?}", err),
+          }
+          // Remove pending metadata from Redis even if some records fail to write to disk after retries.
+          // Records that fail repeatedly are considered potentially corrupt or invalid.
+          let _ = remove_pending_meta(&keys, &mut cloned_connection_manager).await;
+        }
       }
     }
   });

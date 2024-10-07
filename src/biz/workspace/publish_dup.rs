@@ -34,7 +34,10 @@ use shared_entity::dto::workspace_dto;
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
 use std::collections::HashSet;
+use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
+
+use tracing::error;
 use workspace_template::gen_view_id;
 use yrs::updates::encoder::Encode;
 use yrs::Any;
@@ -343,10 +346,30 @@ impl PublishCollabDuplicator {
       .await?;
 
     // broadcast folder changes
-    broadcast_update(&collab_storage, &dest_workspace_id, encoded_update).await?;
+    match tokio::time::timeout(
+      Duration::from_secs(30),
+      broadcast_update(&collab_storage, &dest_workspace_id, encoded_update).await,
+    )
+    .await
+    {
+      Ok(result) => result.map_err(AppError::from),
+      Err(_) => {
+        error!("Timeout waiting for broadcasting the updates");
+        Err(AppError::RequestTimeout(
+          "timeout while duplicating".to_string(),
+        ))
+      },
+    }
 
-    txn.commit().await?;
-    Ok(())
+    match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
+      Ok(result) => result.map_err(AppError::from),
+      Err(_) => {
+        error!("Timeout waiting for duplicating collabs");
+        Err(AppError::RequestTimeout(
+          "timeout while duplicating".to_string(),
+        ))
+      },
+    }
   }
 
   /// Deep copy a published collab to the destination workspace.

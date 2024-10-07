@@ -309,10 +309,19 @@ where
         .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
         .await?;
     }
-    self
-      .batch_insert_collabs(workspace_id, uid, params_list)
-      .await?;
-    Ok(())
+
+    match tokio::time::timeout(
+      Duration::from_secs(60),
+      self.batch_insert_collabs(workspace_id, uid, params_list),
+    )
+    .await
+    {
+      Ok(result) => result,
+      Err(_) => {
+        error!("Timeout waiting for action completed",);
+        Err(AppError::RequestTimeout("".to_string()))
+      },
+    }
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, ty = %params.collab_type, err)]

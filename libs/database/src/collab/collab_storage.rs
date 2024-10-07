@@ -106,6 +106,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
+    action_description: &str,
   ) -> AppResult<()>;
 
   /// Retrieves a collaboration from the storage.
@@ -216,10 +217,17 @@ where
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
+    action_description: &str,
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_new_collab_with_transaction(workspace_id, uid, params, transaction)
+      .insert_new_collab_with_transaction(
+        workspace_id,
+        uid,
+        params,
+        transaction,
+        action_description,
+      )
       .await
   }
 

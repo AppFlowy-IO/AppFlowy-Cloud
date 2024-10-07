@@ -589,9 +589,11 @@ async fn create_collab_handler(
     .await
     .context("acquire transaction to upsert collab")
     .map_err(AppError::from)?;
+
+  let action = format!("Create new collab: {}", params);
   state
     .collab_access_control_storage
-    .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+    .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction, &action)
     .await?;
 
   transaction

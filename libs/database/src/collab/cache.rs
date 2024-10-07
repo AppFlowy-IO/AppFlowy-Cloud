@@ -143,6 +143,7 @@ impl CollabCache {
     params: &CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
+    let collab_type = params.collab_type.clone();
     let object_id = params.object_id.clone();
     let encode_collab_data = params.encoded_collab_v1.clone();
     self
@@ -152,21 +153,23 @@ impl CollabCache {
 
     // when the data is written to the disk cache but fails to be written to the memory cache
     // we log the error and continue.
-    if let Err(err) = self
-      .mem_cache
-      .insert_encode_collab_data(
-        &object_id,
-        &encode_collab_data,
-        chrono::Utc::now().timestamp(),
-        Some(cache_exp_secs_from_collab_type(&params.collab_type)),
-      )
-      .await
-    {
-      error!(
-        "Failed to insert encode collab into memory cache: {:?}",
-        err
-      );
-    }
+    let mem_cache = self.mem_cache.clone();
+    tokio::spawn(async move {
+      if let Err(err) = mem_cache
+        .insert_encode_collab_data(
+          &object_id,
+          &encode_collab_data,
+          chrono::Utc::now().timestamp(),
+          Some(cache_exp_secs_from_collab_type(&collab_type)),
+        )
+        .await
+      {
+        error!(
+          "Failed to insert encode collab into memory cache: {:?}",
+          err
+        );
+      }
+    });
 
     Ok(())
   }

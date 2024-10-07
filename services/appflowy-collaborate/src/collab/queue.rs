@@ -10,6 +10,7 @@ use collab::lock::Mutex;
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+
 use tokio::time::{interval, sleep, sleep_until, Instant};
 use tracing::{error, instrument, trace, warn};
 
@@ -237,7 +238,7 @@ impl StorageQueue {
 /// Spawn a task that periodically checks the number of active connections in the PostgreSQL pool
 /// It aims to adjust the write interval based on the number of active connections.
 fn spawn_period_check_pg_conn_count(pg_pool: PgPool, next_duration: Arc<Mutex<Duration>>) {
-  let mut interval = interval(tokio::time::Duration::from_secs(5));
+  let mut interval = interval(tokio::time::Duration::from_secs(10));
   tokio::spawn(async move {
     loop {
       interval.tick().await;
@@ -247,7 +248,7 @@ fn spawn_period_check_pg_conn_count(pg_pool: PgPool, next_duration: Arc<Mutex<Du
           *next_duration.lock().await = Duration::from_secs(1);
         },
         _ => {
-          *next_duration.lock().await = Duration::from_secs(2);
+          *next_duration.lock().await = Duration::from_secs(5);
         },
       }
     }
@@ -284,7 +285,7 @@ fn spawn_period_write(
         );
       }
 
-      let chunk_keys = consume_pending_write(&pending_write_set, 30, 10).await;
+      let chunk_keys = consume_pending_write(&pending_write_set, 20, 5).await;
       if chunk_keys.is_empty() {
         continue;
       }
@@ -440,6 +441,7 @@ async fn write_pending_to_disk(
     .map_err(AppError::from)?;
 
   // Insert each record into the database within the transaction context
+  let mut action_description = String::new();
   for (index, record) in records.into_iter().enumerate() {
     let params = CollabParams {
       object_id: record.object_id.clone(),
@@ -447,6 +449,7 @@ async fn write_pending_to_disk(
       encoded_collab_v1: record.encode_collab_v1,
       embeddings: record.embeddings,
     };
+    action_description = format!("{}", params);
     let savepoint_name = format!("sp_{}", index);
 
     // using savepoint to rollback the transaction if the insert fails
@@ -466,12 +469,21 @@ async fn write_pending_to_disk(
   }
 
   // Commit the transaction to finalize all writes
-  transaction
-    .commit()
-    .await
-    .context("Failed to commit the transaction for pending collaboration data")
-    .map_err(AppError::from)?;
-  Ok(success_write_objects)
+  match tokio::time::timeout(Duration::from_secs(10), transaction.commit()).await {
+    Ok(result) => {
+      result.map_err(AppError::from)?;
+      Ok(success_write_objects)
+    },
+    Err(_) => {
+      error!(
+        "Timeout waiting for committing the transaction for pending write:{}",
+        action_description
+      );
+      Err(AppError::Internal(anyhow!(
+        "Timeout when committing the transaction for pending collaboration data"
+      )))
+    },
+  }
 }
 
 const MAXIMUM_CHUNK_SIZE: usize = 5 * 1024 * 1024;

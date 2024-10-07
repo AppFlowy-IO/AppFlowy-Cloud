@@ -345,26 +345,26 @@ impl PublishCollabDuplicator {
       )
       .await?;
 
+    match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
+      Ok(result) => result.map_err(AppError::from),
+      Err(_) => {
+        error!("Timeout waiting for duplicating collabs");
+        Err(AppError::RequestTimeout(
+          "timeout while duplicating".to_string(),
+        ))
+      },
+    }?;
+
     // broadcast folder changes
     match tokio::time::timeout(
       Duration::from_secs(30),
-      broadcast_update(&collab_storage, &dest_workspace_id, encoded_update).await,
+      broadcast_update(&collab_storage, &dest_workspace_id, encoded_update),
     )
     .await
     {
       Ok(result) => result.map_err(AppError::from),
       Err(_) => {
         error!("Timeout waiting for broadcasting the updates");
-        Err(AppError::RequestTimeout(
-          "timeout while duplicating".to_string(),
-        ))
-      },
-    }
-
-    match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
-      Ok(result) => result.map_err(AppError::from),
-      Err(_) => {
-        error!("Timeout waiting for duplicating collabs");
         Err(AppError::RequestTimeout(
           "timeout while duplicating".to_string(),
         ))

@@ -34,7 +34,10 @@ use shared_entity::dto::workspace_dto;
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
 use std::collections::HashSet;
+use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
+
+use tracing::error;
 use workspace_template::gen_view_id;
 use yrs::updates::encoder::Encode;
 use yrs::Any;
@@ -172,17 +175,20 @@ impl PublishCollabDuplicator {
     // for self.collabs_to_insert
     let mut txn = pg_pool.begin().await?;
     for (oid, (collab_type, encoded_collab)) in collabs_to_insert.into_iter() {
+      let params = CollabParams {
+        object_id: oid.clone(),
+        encoded_collab_v1: encoded_collab.into(),
+        collab_type,
+        embeddings: None,
+      };
+      let action = format!("duplicate collab: {}", params);
       collab_storage
         .insert_new_collab_with_transaction(
           &dest_workspace_id,
           &duplicator_uid,
-          CollabParams {
-            object_id: oid.clone(),
-            encoded_collab_v1: encoded_collab.into(),
-            collab_type,
-            embeddings: None,
-          },
+          params,
           &mut txn,
+          &action,
         )
         .await?;
     }
@@ -243,6 +249,7 @@ impl PublishCollabDuplicator {
             embeddings: None,
           },
           &mut txn,
+          "duplicate workspace database collab",
         )
         .await?;
       broadcast_update(&collab_storage, &ws_db_oid, ws_db_updates).await?;
@@ -334,14 +341,35 @@ impl PublishCollabDuplicator {
           embeddings: None,
         },
         &mut txn,
+        "duplicate folder collab",
       )
       .await?;
 
-    // broadcast folder changes
-    broadcast_update(&collab_storage, &dest_workspace_id, encoded_update).await?;
+    match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
+      Ok(result) => result.map_err(AppError::from),
+      Err(_) => {
+        error!("Timeout waiting for duplicating collabs");
+        Err(AppError::RequestTimeout(
+          "timeout while duplicating".to_string(),
+        ))
+      },
+    }?;
 
-    txn.commit().await?;
-    Ok(())
+    // broadcast folder changes
+    match tokio::time::timeout(
+      Duration::from_secs(30),
+      broadcast_update(&collab_storage, &dest_workspace_id, encoded_update),
+    )
+    .await
+    {
+      Ok(result) => result.map_err(AppError::from),
+      Err(_) => {
+        error!("Timeout waiting for broadcasting the updates");
+        Err(AppError::RequestTimeout(
+          "timeout while duplicating".to_string(),
+        ))
+      },
+    }
   }
 
   /// Deep copy a published collab to the destination workspace.

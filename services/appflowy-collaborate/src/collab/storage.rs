@@ -9,6 +9,7 @@ use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::Transaction;
+
 use tokio::time::timeout;
 use tracing::warn;
 use tracing::{error, instrument, trace};
@@ -20,7 +21,8 @@ use crate::shared_state::RealtimeSharedState;
 use app_error::AppError;
 use database::collab::cache::CollabCache;
 use database::collab::{
-  AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl, GetCollabOrigin,
+  insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStorage,
+  CollabStorageAccessControl, GetCollabOrigin,
 };
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
@@ -187,7 +189,7 @@ where
         HashMap::new()
       },
       Err(_) => {
-        error!("Timeout waiting for encode collab from realtime server");
+        error!("Timeout waiting for batch encode collab from realtime server");
         HashMap::new()
       },
     }
@@ -218,6 +220,26 @@ where
       .await
       .map_err(AppError::from)
   }
+
+  async fn batch_insert_collabs(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params_list: Vec<CollabParams>,
+  ) -> Result<(), AppError> {
+    let mut transaction = self.cache.pg_pool().begin().await?;
+    insert_into_af_collab_bulk_for_user(&mut transaction, uid, workspace_id, &params_list).await?;
+    transaction.commit().await?;
+
+    // update the mem cache without blocking the current task
+    let cache = self.cache.clone();
+    tokio::spawn(async move {
+      for params in params_list {
+        let _ = cache.insert_encode_collab_to_mem(&params).await;
+      }
+    });
+    Ok(())
+  }
 }
 
 #[async_trait]
@@ -230,7 +252,7 @@ where
     (state.total_attempts, state.success_attempts)
   }
 
-  async fn insert_or_update_collab(
+  async fn queue_insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -270,25 +292,36 @@ where
     Ok(())
   }
 
-  async fn insert_new_collab(
+  async fn batch_insert_new_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params_list: Vec<CollabParams>,
   ) -> AppResult<()> {
-    params.validate()?;
-
     self
       .check_write_workspace_permission(workspace_id, uid)
       .await?;
-    self
-      .access_control
-      .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-      .await?;
-    self
-      .queue_insert_collab(workspace_id, uid, params, WritePriority::High)
-      .await?;
-    Ok(())
+
+    // TODO(nathan): batch insert permission
+    for params in &params_list {
+      self
+        .access_control
+        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+        .await?;
+    }
+
+    match tokio::time::timeout(
+      Duration::from_secs(60),
+      self.batch_insert_collabs(workspace_id, uid, params_list),
+    )
+    .await
+    {
+      Ok(result) => result,
+      Err(_) => {
+        error!("Timeout waiting for action completed",);
+        Err(AppError::RequestTimeout("".to_string()))
+      },
+    }
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, ty = %params.collab_type, err)]
@@ -299,6 +332,7 @@ where
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
+    action_description: &str,
   ) -> AppResult<()> {
     params.validate()?;
     self
@@ -308,11 +342,24 @@ where
       .access_control
       .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
       .await?;
-    self
-      .cache
-      .insert_encode_collab_data(workspace_id, uid, &params, transaction)
-      .await?;
-    Ok(())
+
+    match tokio::time::timeout(
+      Duration::from_secs(120),
+      self
+        .cache
+        .insert_encode_collab_data(workspace_id, uid, &params, transaction),
+    )
+    .await
+    {
+      Ok(result) => result,
+      Err(_) => {
+        error!(
+          "Timeout waiting for action completed: {}",
+          action_description
+        );
+        Err(AppError::RequestTimeout(action_description.to_string()))
+      },
+    }
   }
 
   #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, from_editing_collab = %from_editing_collab))]

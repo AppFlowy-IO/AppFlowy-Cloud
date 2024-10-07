@@ -76,7 +76,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// if write_immediately is true, the data will be written to disk immediately. Otherwise, the data will
   /// be scheduled to be written to disk later.
   ///
-  async fn insert_or_update_collab(
+  async fn queue_insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -84,11 +84,11 @@ pub trait CollabStorage: Send + Sync + 'static {
     write_immediately: bool,
   ) -> AppResult<()>;
 
-  async fn insert_new_collab(
+  async fn batch_insert_new_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params: Vec<CollabParams>,
   ) -> AppResult<()>;
 
   /// Insert a new collaboration in the storage.
@@ -185,7 +185,7 @@ where
     self.as_ref().encode_collab_redis_query_state()
   }
 
-  async fn insert_or_update_collab(
+  async fn queue_insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -194,19 +194,19 @@ where
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_or_update_collab(workspace_id, uid, params, write_immediately)
+      .queue_insert_or_update_collab(workspace_id, uid, params, write_immediately)
       .await
   }
 
-  async fn insert_new_collab(
+  async fn batch_insert_new_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params: Vec<CollabParams>,
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_new_collab(workspace_id, uid, params)
+      .batch_insert_new_collab(workspace_id, uid, params)
       .await
   }
 

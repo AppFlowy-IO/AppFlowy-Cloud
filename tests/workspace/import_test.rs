@@ -154,7 +154,7 @@ async fn import_zip(name: &str) -> (TestClient, String) {
   );
 
   // after the import task is completed, the new workspace should be visible
-  let mut workspaces = client.api_client.get_workspaces().await.unwrap();
+  let workspaces = client.api_client.get_workspaces().await.unwrap();
   assert_eq!(workspaces.len(), 2);
 
   let imported_workspace = workspaces

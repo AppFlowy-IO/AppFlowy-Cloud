@@ -111,6 +111,7 @@ pub trait CollabSyncProtocol {
       Message::Auth(reason) => self.handle_auth(collab, reason).await,
       //FIXME: where is the QueryAwareness protocol?
       Message::Awareness(update) => {
+        let update = AwarenessUpdate::decode_v1(&update)?;
         self
           .handle_awareness_update(message_origin, collab, update)
           .await
@@ -135,7 +136,7 @@ pub trait CollabSyncProtocol {
         .map_err(|e| RTProtocolError::YrsTransaction(e.to_string()))?
         .state_vector();
       let awareness_update = awareness.update()?;
-      (state_vector, awareness_update)
+      (state_vector, awareness_update.encode_v1())
     };
 
     // 1. encode doc state vector

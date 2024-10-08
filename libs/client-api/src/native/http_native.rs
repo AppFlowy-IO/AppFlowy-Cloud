@@ -313,10 +313,10 @@ impl Client {
       .to_string();
 
     let file_part = multipart::Part::stream(reqwest::Body::wrap_stream(stream))
-      .file_name(file_name)
+      .file_name(file_name.clone())
       .mime_str(&mime)?;
 
-    let form = multipart::Form::new().part("file", file_part);
+    let form = multipart::Form::new().part(file_name, file_part);
     let url = format!("{}/api/import", self.base_url);
     let mut builder = self
       .http_client_with_auth(Method::POST, &url)

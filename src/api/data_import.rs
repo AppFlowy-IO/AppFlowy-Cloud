@@ -16,7 +16,7 @@ use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tracing::{error, trace};
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
 pub fn data_import_scope() -> Scope {
@@ -71,8 +71,7 @@ async fn import_data_handler(
     .and_then(|s| s.parse::<usize>().ok())
     .unwrap_or(0);
 
-  let time = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
-  let workspace_name = format!("import-{}", time);
+  let mut workspace_name = "".to_string();
 
   // file_name must be unique
   let file_name = format!("{}.zip", Uuid::new_v4());
@@ -82,6 +81,16 @@ async fn import_data_handler(
   let mut file = File::create(&file_path).await?;
   while let Some(item) = payload.next().await {
     let mut field = item?;
+    workspace_name = field
+      .content_disposition()
+      .and_then(|c| c.get_name().map(|f| f.to_string()))
+      .unwrap_or_else(|| {
+        format!(
+          "import-{}",
+          chrono::Local::now().format("%d/%m/%Y %H:%M").to_string()
+        )
+      });
+
     while let Some(chunk) = field.next().await {
       let data = chunk?;
       file_size += data.len();
@@ -90,6 +99,10 @@ async fn import_data_handler(
   }
   file.shutdown().await?;
   drop(file);
+
+  if workspace_name.is_empty() {
+    return Err(AppError::InvalidRequest("Invalid file".to_string()).into());
+  }
 
   if content_length != file_size {
     trace!(
@@ -118,11 +131,9 @@ async fn import_data_handler(
   .await?;
 
   let workspace_id = workspace.workspace_id.to_string();
-  trace!(
-    "User:{} import data:{} to new workspace:{}",
-    uid,
-    file_size,
-    workspace_id,
+  info!(
+    "User:{} import data:{} to new workspace:{}, name:{}",
+    uid, file_size, workspace_id, workspace_name,
   );
   let stream = ByteStream::from_path(&file_path).await.map_err(|e| {
     AppError::Internal(anyhow!("Failed to create ByteStream from file path: {}", e))

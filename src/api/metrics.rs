@@ -32,11 +32,13 @@ async fn metrics_handler(reg: web::Data<Arc<Registry>>) -> Result<HttpResponse> 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct PathLabel {
   pub path: String,
+  pub method: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct ResultLabel {
   pub path: String,
+  pub method: String,
   pub status_code: u16,
 }
 
@@ -108,18 +110,35 @@ impl RequestMetrics {
   }
 
   // app services/middleware should call this method to increase the request count for the path
-  pub fn record_request(&self, trace_id: Option<String>, path: String, ms: u64, status_code: u16) {
+  pub fn record_request(
+    &self,
+    trace_id: Option<String>,
+    path: String,
+    method: String,
+    ms: u64,
+    status_code: u16,
+  ) {
     self
       .requests_count
-      .get_or_create(&PathLabel { path: path.clone() })
+      .get_or_create(&PathLabel {
+        path: path.clone(),
+        method: method.clone(),
+      })
       .inc();
     self
       .requests_latency
-      .get_or_create(&PathLabel { path: path.clone() })
+      .get_or_create(&PathLabel {
+        path: path.clone(),
+        method: method.clone(),
+      })
       .inc_by(ms, trace_id.clone().map(|s| TraceLabel { trace_id: s }));
     self
       .requests_result
-      .get_or_create(&ResultLabel { path, status_code })
+      .get_or_create(&ResultLabel {
+        path,
+        method,
+        status_code,
+      })
       .inc_by(1, trace_id.clone().map(|s| TraceLabel { trace_id: s }));
   }
 }

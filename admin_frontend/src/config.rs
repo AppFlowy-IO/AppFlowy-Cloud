@@ -13,6 +13,7 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct OAuthConfig {
   pub client_id: String,
+  pub client_secret: Option<String>,
   pub allowable_redirect_uris: Vec<String>,
 }
 
@@ -31,6 +32,7 @@ impl Config {
       ),
       oauth: OAuthConfig {
         client_id: get_or_default("ADMIN_FRONTEND_OAUTH_CLIENT_ID", "appflowy_cloud"),
+        client_secret: get_optional("ADMIN_FRONTEND_OAUTH_CLIENT_SECRET"),
         allowable_redirect_uris: get_or_default(
           "ADMIN_FRONTEND_OAUTH_ALLOWABLE_REDIRECT_URIS",
           "http://localhost:3000",
@@ -52,4 +54,20 @@ fn get_or_default(key: &str, default: &str) -> String {
     );
     default.to_string()
   })
+}
+
+fn get_optional(key: &str) -> Option<String> {
+  let s = match std::env::var(key) {
+    Ok(s) => s,
+    Err(err) => {
+      warn!("failed to get env var: {}, err: {}", key, err);
+      return None;
+    },
+  };
+  if s.is_empty() {
+    warn!("env var: {} is empty", key);
+    None
+  } else {
+    Some(s)
+  }
 }

@@ -445,7 +445,25 @@ async fn oauth_redirect_token_handler(
   State(state): State<AppState>,
   Query(token_req): Query<OAuthRedirectToken>,
 ) -> Result<axum::response::Response, WebApiError<'static>> {
-  // TODO: check client secret
+  // Check client secret (if exists)
+  if let Some(server_client_secret) = state.config.oauth.client_secret {
+    match token_req.client_secret {
+      Some(given_client_secret) => {
+        if server_client_secret != given_client_secret {
+          return Err(WebApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid client_secret",
+          ));
+        }
+      },
+      _ => {
+        return Err(WebApiError::new(
+          StatusCode::BAD_REQUEST,
+          "expecting client_secret",
+        ));
+      },
+    }
+  };
 
   let code_session = state
     .session_store

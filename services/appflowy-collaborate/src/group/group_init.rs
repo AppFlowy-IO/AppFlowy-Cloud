@@ -12,14 +12,17 @@ use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::{AckCode, BroadcastSync, CollabAck, MessageByObjectId, MsgId};
+use collab_rt_entity::{
+  AckCode, AwarenessSync, BroadcastSync, CollabAck, MessageByObjectId, MsgId,
+};
 use collab_rt_entity::{ClientCollabMessage, CollabMessage};
 use collab_rt_protocol::{decode_update, Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
-use collab_stream::collab_update_sink::CollabUpdateSink;
+use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
 use collab_stream::error::StreamError;
 use collab_stream::model::{
-  CollabStreamUpdate, CollabUpdateEvent, MessageId, StreamBinary, UpdateFlags,
+  AwarenessStreamUpdate, CollabStreamUpdate, CollabUpdateEvent, MessageId, StreamBinary,
+  UpdateFlags,
 };
 use collab_stream::stream_group::StreamGroup;
 use dashmap::DashMap;
@@ -124,12 +127,22 @@ impl CollabGroup {
      tasks and triggered when this `CollabGroup` is dropped.
     */
 
-    // setup task used to receive messages from Redis
+    // setup task used to receive collab updates from Redis
     {
       let state = state.clone();
       tokio::spawn(async move {
         if let Err(err) = Self::inbound_task(state).await {
-          tracing::warn!("failed to receive message: {}", err);
+          tracing::warn!("failed to receive collab update: {}", err);
+        }
+      });
+    }
+
+    // setup task used to receive awareness updates from Redis
+    {
+      let state = state.clone();
+      tokio::spawn(async move {
+        if let Err(err) = Self::inbound_awareness_task(state).await {
+          tracing::warn!("failed to receive awareness update: {}", err);
         }
       });
     }
@@ -156,7 +169,7 @@ impl CollabGroup {
     &self.state.object_id
   }
 
-  /// Task used to receive messages from Redis.
+  /// Task used to receive collab updates from Redis.
   async fn inbound_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
     let mut updates = state.persister.collab_redis_stream.collab_updates(
       &state.workspace_id,
@@ -209,6 +222,64 @@ impl CollabGroup {
       if let Err(err) = subscription.sink.send(message.clone().into()).await {
         tracing::debug!(
           "failed to send collab `{}` update to `{}`: {}",
+          state.object_id,
+          subscription.collab_origin,
+          err
+        );
+      }
+
+      state.last_activity.store(Arc::new(Instant::now()));
+    }
+  }
+
+  /// Task used to receive awareness updates from Redis.
+  async fn inbound_awareness_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
+    let mut updates = state.persister.collab_redis_stream.awareness_updates(
+      &state.workspace_id,
+      &state.object_id,
+      None,
+    );
+    pin_mut!(updates);
+    loop {
+      tokio::select! {
+        _ = state.shutdown.cancelled() => {
+          break;
+        }
+        res = updates.next() => {
+          match res {
+            Some(Ok(awareness_update)) => {
+              Self::handle_inbound_awareness(&state, awareness_update).await;
+            },
+            Some(Err(err)) => {
+              tracing::warn!("failed to handle incoming update for collab `{}`: {}", state.object_id, err);
+              break;
+            },
+            None => {
+              break;
+            }
+          }
+        }
+      }
+    }
+    Ok(())
+  }
+
+  async fn handle_inbound_awareness(state: &CollabGroupState, update: AwarenessStreamUpdate) {
+    let sender = update.sender;
+    let message = AwarenessSync::new(
+      state.object_id.clone(),
+      Message::Awareness(update.data).encode_v1(),
+      sender.clone(),
+    );
+    for mut e in state.subscribers.iter_mut() {
+      let subscription = e.value_mut();
+      if sender == subscription.collab_origin {
+        continue; // don't send update to its sender
+      }
+
+      if let Err(err) = subscription.sink.send(message.clone().into()).await {
+        tracing::debug!(
+          "failed to send awareness `{}` update to `{}`: {}",
           state.object_id,
           subscription.collab_origin,
           err
@@ -606,7 +677,7 @@ impl CollabGroup {
   async fn handle_awareness_update(
     state: &CollabGroupState,
     origin: &CollabOrigin,
-    update: AwarenessUpdate,
+    update: Vec<u8>,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     state
       .persister
@@ -791,6 +862,7 @@ struct CollabPersister {
   /// Collab stored temporarily.
   temp_collab: ArcSwapOption<CollabSnapshot>,
   update_sink: CollabUpdateSink,
+  awareness_sink: AwarenessUpdateSink,
 }
 
 impl CollabPersister {
@@ -803,6 +875,7 @@ impl CollabPersister {
     indexer: Option<Arc<dyn Indexer>>,
   ) -> Self {
     let update_sink = collab_redis_stream.collab_update_sink(&workspace_id, &object_id);
+    let awareness_sink = collab_redis_stream.awareness_update_sink(&workspace_id, &object_id);
     Self {
       workspace_id,
       object_id,
@@ -811,6 +884,7 @@ impl CollabPersister {
       collab_redis_stream,
       indexer,
       update_sink,
+      awareness_sink,
       temp_collab: Default::default(),
     }
   }
@@ -842,10 +916,18 @@ impl CollabPersister {
   async fn send_awareness(
     &self,
     sender_session: &CollabOrigin,
-    awareness_update: AwarenessUpdate,
+    awareness_update: Vec<u8>,
   ) -> Result<MessageId, StreamError> {
-    // send awareness updates to redis queue: is it needed? What are we using awareness for here?
-    todo!()
+    // send awareness updates to redis queue:
+    // QUESTION: is it needed? Maybe we could reuse update_sink?
+    let msg_id = self
+      .awareness_sink
+      .send(&AwarenessStreamUpdate {
+        data: awareness_update,
+        sender: sender_session.clone(),
+      })
+      .await?;
+    Ok(msg_id)
   }
 
   async fn load(&self) -> Result<Arc<CollabSnapshot>, RealtimeError> {
@@ -878,10 +960,11 @@ impl CollabPersister {
   }
 
   async fn save(&self) -> Result<(), RealtimeError> {
-    // 1. try to acquire lock
+    // 1. try to acquire lease
     if let Some(lease) = self
       .collab_redis_stream
       .lease(&self.workspace_id, &self.object_id)
+      .await?
     {
       // 3.     if collab has any changes (any redis updates were applied):
       // 4.         generate embeddings

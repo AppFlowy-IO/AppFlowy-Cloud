@@ -177,10 +177,22 @@ async fn login_callback_query_handler(
           return Ok(redirect_html.into_response());
         };
         let open_or_dl_html = render_template(templates::OpenAppFlowyOrDownload {})?;
-        return Ok((jar, open_or_dl_html).into_response());
+        Ok((jar, open_or_dl_html).into_response())
       },
     },
-    None => home_handler(State(state), new_session, jar).await,
+    None => match query.redirect_to {
+      Some(redirect_url) => match urlencoding::decode(&redirect_url).map(String::from) {
+        Ok(redirect_url) => {
+          let redirect_html = render_template(templates::Redirect { redirect_url })?;
+          Ok((jar, redirect_html).into_response())
+        },
+        Err(err) => {
+          tracing::error!("Error decoding redirect_url: {:?}", err);
+          home_handler(State(state), new_session, jar).await
+        },
+      },
+      None => home_handler(State(state), new_session, jar).await,
+    },
   }
 }
 
@@ -351,13 +363,22 @@ async fn login_handler(
 ) -> Result<Html<String>, WebAppError> {
   let redirect_to = login
     .redirect_to
-    .map(|r| urlencoding::encode(&r).to_string());
+    .as_ref()
+    .map(|r| urlencoding::encode(r).to_string());
+  let oauth_redirect_to = login.redirect_to.as_ref().map(|r| {
+    urlencoding::encode(&format!(
+      "/web/login-callback?redirect_to={}",
+      urlencoding::encode(r)
+    ))
+    .to_string()
+  });
 
   let external = state.gotrue_client.settings().await?.external;
   let oauth_providers = external.oauth_providers();
   render_template(templates::Login {
     oauth_providers: &oauth_providers,
     redirect_to: redirect_to.as_deref(),
+    oauth_redirect_to: oauth_redirect_to.as_deref(),
   })
 }
 

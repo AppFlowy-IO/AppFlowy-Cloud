@@ -44,6 +44,8 @@ pub struct WebAppOAuthLoginRequest {
 
   // Use actions (with params) after login
   pub action: Option<OAuthLoginAction>,
+
+  // Workspace Invitation
   pub workspace_invitation_id: Option<String>,
   pub workspace_name: Option<String>,
   pub workspace_icon: Option<String>,
@@ -51,7 +53,8 @@ pub struct WebAppOAuthLoginRequest {
   pub user_icon: Option<String>,
   pub workspace_member_count: Option<String>,
 
-  // pub redirect
+  // Redirect
+  pub redirect_to: Option<String>,
 
   // Errors
   pub error: Option<String>,

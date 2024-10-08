@@ -1,12 +1,9 @@
-use std::{
-  collections::HashMap,
-  time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
   async_trait,
   extract::{FromRequestParts, OriginalUri},
-  http::{header, request::Parts, HeaderMap, StatusCode},
+  http::request::Parts,
   response::{IntoResponse, Redirect},
 };
 use axum_extra::extract::{cookie::Cookie, CookieJar};
@@ -16,7 +13,7 @@ use jwt::{Claims, Header};
 use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue, ToRedisArgs};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::{ext::api::verify_token_cloud, AppState};
+use crate::AppState;
 
 static SESSION_EXPIRATION: usize = 60 * 60 * 24; // 1 day
 
@@ -158,60 +155,6 @@ impl FromRequestParts<AppState> for UserSession {
       .extensions
       .get::<OriginalUri>()
       .map(|uri| urlencoding::encode(&uri.to_string()).to_string());
-
-    // attempt to redirect after setting new session
-    if let Some(p) = parts.uri.query() {
-      match serde_urlencoded::from_str::<HashMap<String, String>>(p) {
-        Ok(params) => {
-          if let Some(refresh_token) = params.get("refresh_token") {
-            match state
-              .gotrue_client
-              .token(&gotrue::grant::Grant::RefreshToken(
-                gotrue::grant::RefreshTokenGrant {
-                  refresh_token: refresh_token.to_string(),
-                },
-              ))
-              .await
-            {
-              Ok(token) => {
-                match verify_token_cloud(
-                  token.access_token.as_str(),
-                  state.appflowy_cloud_url.as_str(),
-                )
-                .await
-                {
-                  Ok(()) => {
-                    let new_session_id = uuid::Uuid::new_v4();
-                    let new_session = UserSession {
-                      session_id: new_session_id.to_string(),
-                      token,
-                    };
-                    state
-                      .session_store
-                      .put_user_session(&new_session)
-                      .await
-                      .unwrap();
-
-                    let session_cookie = jar.add(new_session_cookie(new_session_id));
-
-                    if let Some(original_url) = original_url {
-                      let mut headers = HeaderMap::new();
-                      headers.insert(header::LOCATION, original_url.parse().unwrap());
-                      return Err((StatusCode::SEE_OTHER, headers, session_cookie).into_response());
-                    }
-                  },
-                  Err(err) => {
-                    tracing::warn!("failed to verify token: {}", format!("{:?}", err))
-                  },
-                }
-              },
-              Err(err) => tracing::error!("failed to refresh token: {}", err),
-            };
-          }
-        },
-        Err(err) => tracing::error!("failed to parse query params: {}", err),
-      }
-    }
 
     match original_url {
       Some(url) => Err(Redirect::to(&format!("/web/login?redirect_to={}", url)).into_response()),

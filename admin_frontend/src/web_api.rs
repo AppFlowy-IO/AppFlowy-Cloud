@@ -580,15 +580,13 @@ async fn session_login(
   };
   state.session_store.put_user_session(&new_session).await?;
 
-  let decoded_redirect_to = redirect_to
-    .map(|s| match urlencoding::decode(s) {
-      Ok(r) => Some(r),
-      Err(err) => {
-        tracing::error!("failed to decode redirect_to: {}", err);
-        None
-      },
-    })
-    .flatten();
+  let decoded_redirect_to = redirect_to.and_then(|s| match urlencoding::decode(s) {
+    Ok(r) => Some(r),
+    Err(err) => {
+      tracing::error!("failed to decode redirect_to: {}", err);
+      None
+    },
+  });
 
   Ok(
     (

@@ -1,7 +1,10 @@
-use crate::collab_update_sink::CollabUpdateSink;
+use crate::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
 use crate::error::StreamError;
 use crate::lease::{Lease, LeaseAcquisition};
-use crate::model::{CollabStreamUpdate, CollabStreamUpdateBatch, CollabUpdateEvent, MessageId};
+use crate::model::{
+  AwarenessStreamUpdate, AwarenessStreamUpdateBatch, CollabStreamUpdate, CollabStreamUpdateBatch,
+  CollabUpdateEvent, MessageId,
+};
 use crate::pubsub::{CollabStreamPub, CollabStreamSub};
 use crate::stream_group::{StreamConfig, StreamGroup};
 use futures::Stream;
@@ -88,6 +91,11 @@ impl CollabRedisStream {
     CollabUpdateSink::new(self.connection_manager.clone(), stream_key)
   }
 
+  pub fn awareness_update_sink(&self, workspace_id: &str, object_id: &str) -> AwarenessUpdateSink {
+    let stream_key = AwarenessStreamUpdate::stream_key(workspace_id, object_id);
+    AwarenessUpdateSink::new(self.connection_manager.clone(), stream_key)
+  }
+
   pub fn collab_updates(
     &self,
     workspace_id: &str,
@@ -103,6 +111,31 @@ impl CollabRedisStream {
       loop {
         let last_id = since.to_string();
         let batch: CollabStreamUpdateBatch = conn
+          .xread_options(&[&stream_key], &[&last_id], &read_options)
+          .await?;
+        for (message_id, update) in batch.updates {
+          since = since.max(message_id);
+          yield update;
+        }
+      }
+    }
+  }
+
+  pub fn awareness_updates(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    since: Option<MessageId>,
+  ) -> impl Stream<Item = Result<AwarenessStreamUpdate, StreamError>> {
+    // use `:` separator as it adheres to Redis naming conventions
+    let mut conn = self.connection_manager.clone();
+    let stream_key = AwarenessStreamUpdate::stream_key(workspace_id, object_id);
+    let read_options = StreamReadOptions::default().count(100);
+    let mut since = since.unwrap_or_default();
+    async_stream::try_stream! {
+      loop {
+        let last_id = since.to_string();
+        let batch: AwarenessStreamUpdateBatch = conn
           .xread_options(&[&stream_key], &[&last_id], &read_options)
           .await?;
         for (message_id, update) in batch.updates {

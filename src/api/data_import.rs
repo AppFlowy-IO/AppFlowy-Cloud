@@ -154,6 +154,7 @@ async fn import_data_handler(
     uid,
     &user_uuid,
     &workspace_id,
+    &workspace_name,
     file_size,
     &host,
     &state.redis_connection_manager,

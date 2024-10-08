@@ -28,7 +28,6 @@ use std::pin::Pin;
 use std::sync::atomic::Ordering;
 
 use rayon::prelude::IntoParallelIterator;
-use reqwest::header::CONTENT_LENGTH;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::fs::File;

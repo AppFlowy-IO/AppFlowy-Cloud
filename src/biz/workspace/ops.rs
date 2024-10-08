@@ -698,6 +698,7 @@ pub async fn create_upload_task(
   uid: i64,
   user_uuid: &UserUuid,
   workspace_id: &str,
+  workspace_name: &str,
   file_size: usize,
   host: &str,
   redis_client: &RedisConnectionManager,
@@ -725,6 +726,7 @@ pub async fn create_upload_task(
          "workspace_id": workspace_id,
          "s3_key": workspace_id,
          "host": host,
+         "workspace_name": workspace_name,
       }
   });
   let _: () = redis_client

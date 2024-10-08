@@ -392,6 +392,20 @@ impl CollabStreamUpdate {
   pub fn stream_key(workspace_id: &str, object_id: &str) -> String {
     format!("af:{}:{}:updates", workspace_id, object_id)
   }
+
+  pub fn into_update(self) -> Result<collab::preclude::Update, StreamError> {
+    let bytes = if self.flags.is_compressed() {
+      zstd::decode_all(std::io::Cursor::new(self.data))?
+    } else {
+      self.data
+    };
+    let update = if self.flags.is_v1_encoded() {
+      collab::preclude::Update::decode_v1(&bytes)?
+    } else {
+      collab::preclude::Update::decode_v2(&bytes)?
+    };
+    Ok(update)
+  }
 }
 
 pub(crate) struct CollabStreamUpdateBatch {

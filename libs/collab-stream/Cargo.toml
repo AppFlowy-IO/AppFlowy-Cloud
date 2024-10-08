@@ -23,6 +23,7 @@ chrono = "0.4"
 tokio-util = { version = "0.7" }
 prost.workspace = true
 async-stream.workspace = true
+async-trait.workspace = true
 
 
 [dev-dependencies]

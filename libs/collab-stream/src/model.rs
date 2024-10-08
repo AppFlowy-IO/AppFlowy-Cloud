@@ -368,7 +368,7 @@ impl TryFrom<CollabUpdateEvent> for StreamBinary {
 }
 
 pub struct CollabStreamUpdate {
-  pub data: Vec<u8>,
+  pub data: Vec<u8>, // yrs::Update::encode_v1
   pub state_vector: StateVector,
   pub sender: CollabOrigin,
   pub flags: UpdateFlags,
@@ -390,7 +390,7 @@ impl CollabStreamUpdate {
 
   /// Returns Redis stream key, that's storing entries mapped to/from [CollabStreamUpdate].
   pub fn stream_key(workspace_id: &str, object_id: &str) -> String {
-    format!("af_update:{}:{}", workspace_id, object_id)
+    format!("af:{}:{}:updates", workspace_id, object_id)
   }
 }
 
@@ -448,6 +448,53 @@ impl FromRedisValue for CollabStreamUpdateBatch {
     }
 
     Ok(CollabStreamUpdateBatch { updates })
+  }
+}
+
+pub struct AwarenessStreamUpdate {
+  pub data: Vec<u8>, // AwarenessUpdate::encode_v1
+  pub sender: CollabOrigin,
+}
+
+impl AwarenessStreamUpdate {
+  /// Returns Redis stream key, that's storing entries mapped to/from [AwarenessStreamUpdate].
+  pub fn stream_key(workspace_id: &str, object_id: &str) -> String {
+    format!("af:{}:{}:awareness", workspace_id, object_id)
+  }
+}
+
+pub(crate) struct AwarenessStreamUpdateBatch {
+  pub updates: BTreeMap<MessageId, AwarenessStreamUpdate>,
+}
+impl FromRedisValue for AwarenessStreamUpdateBatch {
+  fn from_redis_value(v: &Value) -> RedisResult<Self> {
+    let sr: SRRows = SRRows::from_redis_value(v)?;
+    let mut updates = BTreeMap::new();
+    for stream in sr {
+      for (_stream_key, messages) in stream {
+        for message in messages {
+          for (message_id, fields) in message {
+            let message_id =
+              MessageId::try_from(message_id).map_err(|e| internal(e.to_string()))?;
+            let sender = match fields.get("sender") {
+              None => CollabOrigin::Empty,
+              Some(sender) => {
+                let raw_origin = String::from_redis_value(sender)?;
+                let collab_origin = collab_origin_from_str(&raw_origin)?;
+                collab_origin
+              },
+            };
+            let data_raw = fields
+              .get("data")
+              .ok_or_else(|| internal("expecting field `data`"))?;
+            let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
+            updates.insert(message_id, AwarenessStreamUpdate { data, sender });
+          }
+        }
+      }
+    }
+
+    Ok(AwarenessStreamUpdateBatch { updates })
   }
 }
 

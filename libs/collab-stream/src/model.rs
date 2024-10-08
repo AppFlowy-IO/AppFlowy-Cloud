@@ -1,6 +1,8 @@
 use crate::error::{internal, StreamError};
 use bytes::Bytes;
 use collab::core::origin::{CollabClient, CollabOrigin};
+use collab::preclude::updates::decoder::Decode;
+use collab::preclude::StateVector;
 use collab_entity::proto::collab::collab_update_event::Update;
 use collab_entity::{proto, CollabType};
 use prost::Message;
@@ -25,6 +27,15 @@ use std::str::FromStr;
 pub struct MessageId {
   pub timestamp_ms: u64,
   pub sequence_number: u16,
+}
+
+impl MessageId {
+  pub fn new(timestamp_ms: u64, sequence_number: u16) -> Self {
+    MessageId {
+      timestamp_ms,
+      sequence_number,
+    }
+  }
 }
 
 impl Display for MessageId {
@@ -358,12 +369,13 @@ impl TryFrom<CollabUpdateEvent> for StreamBinary {
 
 pub struct CollabStreamUpdate {
   pub data: Vec<u8>,
+  pub state_vector: StateVector,
   pub sender: CollabOrigin,
   pub flags: UpdateFlags,
 }
 
 impl CollabStreamUpdate {
-  pub fn new<B, F>(data: B, sender: CollabOrigin, flags: F) -> Self
+  pub fn new<B, F>(data: B, state_vector: StateVector, sender: CollabOrigin, flags: F) -> Self
   where
     B: Into<Vec<u8>>,
     F: Into<UpdateFlags>,
@@ -371,6 +383,7 @@ impl CollabStreamUpdate {
     CollabStreamUpdate {
       data: data.into(),
       sender,
+      state_vector,
       flags: flags.into(),
     }
   }
@@ -403,6 +416,15 @@ impl FromRedisValue for CollabStreamUpdateBatch {
                 collab_origin
               },
             };
+            let state_vector = match fields.get("sv") {
+              Some(value) => {
+                let bytes = Bytes::from_redis_value(value)?;
+                let state_vector =
+                  StateVector::decode_v1(&bytes).map_err(|err| internal(err.to_string()))?;
+                Ok(state_vector)
+              },
+              None => Err(internal("expecting field `sv`")),
+            }?;
             let flags = match fields.get("flags") {
               None => UpdateFlags::default(),
               Some(flags) => u8::from_redis_value(flags).unwrap_or(0).into(),
@@ -416,6 +438,7 @@ impl FromRedisValue for CollabStreamUpdateBatch {
               CollabStreamUpdate {
                 data,
                 sender,
+                state_vector,
                 flags,
               },
             );

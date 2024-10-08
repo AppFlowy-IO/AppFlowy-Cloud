@@ -1,5 +1,6 @@
 use crate::collab_update_sink::CollabUpdateSink;
 use crate::error::StreamError;
+use crate::lease::{Lease, LeaseAcquisition};
 use crate::model::{CollabStreamUpdate, CollabStreamUpdateBatch, CollabUpdateEvent, MessageId};
 use crate::pubsub::{CollabStreamPub, CollabStreamSub};
 use crate::stream_group::{StreamConfig, StreamGroup};
@@ -7,6 +8,7 @@ use futures::Stream;
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::AsyncCommands;
+use std::time::Duration;
 use tracing::error;
 
 pub const CONTROL_STREAM_KEY: &str = "af_collab_control";
@@ -17,6 +19,8 @@ pub struct CollabRedisStream {
 }
 
 impl CollabRedisStream {
+  pub const LEASE_TTL: Duration = Duration::from_secs(60);
+
   pub async fn new(redis_client: redis::Client) -> Result<Self, redis::RedisError> {
     let connection_manager = redis_client.get_connection_manager().await?;
     Ok(Self::new_with_connection_manager(connection_manager))
@@ -24,6 +28,18 @@ impl CollabRedisStream {
 
   pub fn new_with_connection_manager(connection_manager: ConnectionManager) -> Self {
     Self { connection_manager }
+  }
+
+  pub async fn lease(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> Result<Option<LeaseAcquisition>, StreamError> {
+    let lease_key = format!("af_snapshot:lease:{}:{}", workspace_id, object_id);
+    self
+      .connection_manager
+      .lease(lease_key, Self::LEASE_TTL)
+      .await
   }
 
   pub async fn collab_control_stream(

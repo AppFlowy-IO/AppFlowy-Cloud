@@ -238,14 +238,14 @@ pub trait CollabSyncProtocol {
   }
 }
 
-const LARGE_UPDATE_THRESHOLD: usize = 1024 * 1024; // 1MB
+pub const LARGE_UPDATE_THRESHOLD: usize = 1024 * 1024; // 1MB
 
 #[inline]
-pub async fn decode_update(update: Vec<u8>) -> Result<Update, RTProtocolError> {
+pub async fn decode_update(update: Vec<u8>) -> Result<Update, yrs::encoding::read::Error> {
   let update = if update.len() > LARGE_UPDATE_THRESHOLD {
     spawn_blocking(move || Update::decode_v1(&update))
       .await
-      .map_err(|err| RTProtocolError::Internal(err.into()))?
+      .map_err(|err| yrs::encoding::read::Error::Custom(err.to_string()))?
   } else {
     Update::decode_v1(&update)
   }?;

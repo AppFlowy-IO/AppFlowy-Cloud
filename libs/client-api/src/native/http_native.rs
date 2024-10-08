@@ -303,7 +303,7 @@ impl Client {
     let file = File::open(&file_path).await?;
     let metadata = file.metadata().await?;
     let file_name = file_path
-      .file_name()
+      .file_stem()
       .map(|s| s.to_string_lossy().to_string())
       .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 

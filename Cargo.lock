@@ -2456,6 +2456,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tracing",
+ "zstd",
 ]
 
 [[package]]

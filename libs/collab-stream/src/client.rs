@@ -38,7 +38,7 @@ impl CollabRedisStream {
     workspace_id: &str,
     object_id: &str,
   ) -> Result<Option<LeaseAcquisition>, StreamError> {
-    let lease_key = format!("af_snapshot:lease:{}:{}", workspace_id, object_id);
+    let lease_key = format!("af:{}:{}:snapshot_lease", workspace_id, object_id);
     self
       .connection_manager
       .lease(lease_key, Self::LEASE_TTL)
@@ -101,7 +101,7 @@ impl CollabRedisStream {
     workspace_id: &str,
     object_id: &str,
     since: Option<MessageId>,
-  ) -> impl Stream<Item = Result<CollabStreamUpdate, StreamError>> {
+  ) -> impl Stream<Item = Result<(MessageId, CollabStreamUpdate), StreamError>> {
     // use `:` separator as it adheres to Redis naming conventions
     let mut conn = self.connection_manager.clone();
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
@@ -115,7 +115,7 @@ impl CollabRedisStream {
           .await?;
         for (message_id, update) in batch.updates {
           since = since.max(message_id);
-          yield update;
+          yield (message_id, update);
         }
       }
     }

@@ -298,7 +298,7 @@ async fn download_and_unzip_file(
   let reader = BufReader::with_capacity(buffer_size, stream);
   let zip_reader = ZipFileReader::new(reader);
 
-  let unique_file_name = uuid::Uuid::new_v4().to_string();
+  let unique_file_name = Uuid::new_v4().to_string();
   let output_file_path = temp_dir().join(unique_file_name);
   fs::create_dir_all(&output_file_path)
     .await
@@ -325,14 +325,14 @@ fn buffer_size_from_content_length(content_length: Option<i64>) -> usize {
   match content_length {
     Some(file_size) => {
       if file_size < 10 * 1024 * 1024 {
-        1024 * 1024 // 1MB buffer
+        3 * 1024 * 1024
       } else if file_size < 100 * 1024 * 1024 {
-        5 * 1024 * 1024 // 2MB buffer
+        5 * 1024 * 1024 // 5MB buffer
       } else {
-        10 * 1024 * 1024 // 5MB buffer
+        10 * 1024 * 1024 // 10MB buffer
       }
     },
-    None => 1024 * 1024,
+    None => 3 * 1024 * 1024,
   }
 }
 

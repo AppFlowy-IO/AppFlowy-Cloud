@@ -10,7 +10,7 @@ use tokio_util::compat::TokioAsyncReadCompatExt;
 
 #[async_trait]
 pub trait S3Client: Send + Sync {
-  async fn get_blob(&self, object_key: &str) -> Result<S3StreamResponse, WorkerError>;
+  async fn get_blob_stream(&self, object_key: &str) -> Result<S3StreamResponse, WorkerError>;
   async fn put_blob(
     &self,
     object_key: &str,
@@ -36,7 +36,7 @@ impl Deref for S3ClientImpl {
 
 #[async_trait]
 impl S3Client for S3ClientImpl {
-  async fn get_blob(&self, object_key: &str) -> Result<S3StreamResponse, WorkerError> {
+  async fn get_blob_stream(&self, object_key: &str) -> Result<S3StreamResponse, WorkerError> {
     match self
       .inner
       .get_object()
@@ -48,9 +48,11 @@ impl S3Client for S3ClientImpl {
       Ok(output) => {
         let stream = output.body.into_async_read().compat();
         let content_type = output.content_type;
+        let content_length = output.content_length;
         Ok(S3StreamResponse {
           stream: Box::new(stream),
           content_type,
+          content_length,
         })
       },
       Err(SdkError::ServiceError(service_err)) => match service_err.err() {
@@ -118,4 +120,5 @@ impl S3Client for S3ClientImpl {
 pub struct S3StreamResponse {
   pub stream: Box<dyn futures::AsyncBufRead + Unpin + Send>,
   pub content_type: Option<String>,
+  pub content_length: Option<i64>,
 }

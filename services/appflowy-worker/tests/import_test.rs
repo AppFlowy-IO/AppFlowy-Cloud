@@ -203,7 +203,7 @@ struct MockS3Client;
 
 #[async_trait]
 impl S3Client for MockS3Client {
-  async fn get_blob(&self, _object_key: &str) -> Result<S3StreamResponse, WorkerError> {
+  async fn get_blob_stream(&self, _object_key: &str) -> Result<S3StreamResponse, WorkerError> {
     todo!()
   }
 

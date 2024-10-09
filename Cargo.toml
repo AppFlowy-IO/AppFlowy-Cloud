@@ -149,6 +149,7 @@ pin-project = "1.1.5"
 byteorder = "1.5.0"
 sha2 = "0.10.8"
 rayon.workspace = true
+mailer.workspace = true
 
 
 [dev-dependencies]
@@ -215,6 +216,7 @@ members = [
   # xtask
   "xtask",
   "libs/tonic-proto",
+  "libs/mailer",
 ]
 
 [workspace.dependencies]
@@ -227,6 +229,7 @@ gotrue-entity = { path = "libs/gotrue-entity" }
 authentication = { path = "libs/authentication" }
 access-control = { path = "libs/access-control" }
 workspace-access = { path = "libs/workspace-access" }
+mailer = { path = "libs/mailer" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
 prometheus-client = "0.22.0"

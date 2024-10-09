@@ -4,6 +4,7 @@ pub mod error;
 pub mod import_worker;
 pub(crate) mod s3_client;
 
+mod mailer;
 use crate::application::run_server;
 use crate::config::Config;
 use tokio::net::TcpListener;

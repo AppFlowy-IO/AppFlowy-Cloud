@@ -1,5 +1,5 @@
 use crate::error::ImportError;
-use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResultBuilder};
+use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResult};
 use crate::import_worker::unzip::unzip_async;
 use crate::s3_client::S3StreamResponse;
 use anyhow::anyhow;
@@ -50,7 +50,8 @@ use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCach
 use tokio::task::spawn_local;
 use tokio::time::interval;
 
-use tracing::{error, info, trace, warn};
+use crate::mailer::ImportNotionReportMailerParam;
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
 const GROUP_NAME: &str = "import_task_group";
@@ -239,7 +240,7 @@ async fn process_task(
   trace!("[Import]: Processing task: {}", import_task);
 
   match import_task {
-    ImportTask::Notion(task) => {
+    ImportTask::Notion { task } => {
       // 1. download zip file
       match download_and_unzip_file(&task, s3_client).await {
         Ok(unzip_dir_path) => {
@@ -264,19 +265,16 @@ async fn process_task(
 
       Ok(())
     },
-    ImportTask::Custom(value) => {
+    ImportTask::Custom { value } => {
       trace!("Custom task: {:?}", value);
-      match value.get("workspace_id").and_then(|v| v.as_str()) {
-        None => {
-          warn!("Missing workspace_id in custom task");
-        },
-        Some(workspace_id) => {
-          let result = ImportResultBuilder::new(workspace_id.to_string()).build();
-          notifier
-            .notify_progress(ImportProgress::Finished(result))
-            .await;
-        },
-      }
+      let result = ImportResult {
+        user_name: "".to_string(),
+        user_email: "".to_string(),
+        value: Default::default(),
+      };
+      notifier
+        .notify_progress(ImportProgress::Finished(result))
+        .await;
       Ok(())
     },
   }
@@ -592,7 +590,7 @@ async fn process_unzip_file(
 async fn notify_user(
   import_task: &NotionImportTask,
   result: Result<(), ImportError>,
-  _notifier: Arc<dyn ImportNotifier>,
+  notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
   match result {
     Ok(_) => {
@@ -605,7 +603,20 @@ async fn notify_user(
       );
     },
   }
-  // send email
+
+  let value = serde_json::to_value(ImportNotionReportMailerParam {
+    user_name: import_task.user_name.clone(),
+    file_name: import_task.workspace_name.clone(),
+  })
+  .unwrap();
+
+  notifier
+    .notify_progress(ImportProgress::Finished(ImportResult {
+      user_name: import_task.user_name.clone(),
+      user_email: import_task.user_email.clone(),
+      value,
+    }))
+    .await;
   Ok(())
 }
 
@@ -763,8 +774,9 @@ async fn get_un_ack_tasks(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotionImportTask {
   pub uid: i64,
+  pub user_name: String,
+  pub user_email: String,
   pub task_id: Uuid,
-  pub user_uuid: String,
   pub workspace_id: String,
   pub workspace_name: String,
   pub s3_key: String,
@@ -774,8 +786,8 @@ impl Display for NotionImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      "NotionImportTask {{ workspace_id: {}, workspace_name: {} }}",
-      self.workspace_id, self.workspace_name
+      "NotionImportTask {{ workspace_id: {}, workspace_name: {}, user_name: {}, user_email: {} }}",
+      self.workspace_id, self.workspace_name, self.user_name, self.user_email
     )
   }
 }
@@ -783,19 +795,19 @@ impl Display for NotionImportTask {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ImportTask {
-  Notion(NotionImportTask),
-  Custom(serde_json::Value),
+  Notion { task: NotionImportTask },
+  Custom { value: serde_json::Value },
 }
 
 impl Display for ImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      ImportTask::Notion(task) => write!(
+      ImportTask::Notion { task, .. } => write!(
         f,
         "NotionImportTask {{ workspace_id: {}, workspace_name: {} }}",
         task.workspace_id, task.workspace_name
       ),
-      ImportTask::Custom(value) => write!(f, "CustomTask {{ {} }}", value),
+      ImportTask::Custom { value, .. } => write!(f, "CustomTask {{ {} }}", value),
     }
   }
 }

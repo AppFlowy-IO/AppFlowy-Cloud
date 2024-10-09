@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use anyhow::Error;
 use async_trait::async_trait;
 use collab::core::origin::CollabOrigin;
-use collab::lock::RwLock;
+
 use collab::preclude::Collab;
 use collab_database::database::{timestamp, DatabaseData};
 use collab_database::entity::CreateDatabaseParams;
@@ -66,12 +65,7 @@ impl GettingStartedTemplate {
     create_database_params: CreateDatabaseParams,
   ) -> anyhow::Result<Vec<TemplateData>> {
     let database_id = create_database_params.database_id.clone();
-    let encoded_database = tokio::task::spawn_blocking({
-      let create_database_params = create_database_params.clone();
-      move || create_database_collab(create_database_params)
-    })
-    .await?
-    .await?;
+    let encoded_database = create_database_collab(create_database_params).await?;
 
     let encoded_database_collab = encoded_database
       .encoded_database_collab
@@ -236,7 +230,7 @@ impl WorkspaceTemplate for GettingStartedTemplate {
   async fn create_workspace_view(
     &self,
     _uid: i64,
-    workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
+    workspace_view_builder: &mut WorkspaceViewBuilder,
   ) -> anyhow::Result<Vec<TemplateData>> {
     let general_view_uuid = gen_view_id().to_string();
     let shared_view_uuid = gen_view_id().to_string();
@@ -263,12 +257,10 @@ impl WorkspaceTemplate for GettingStartedTemplate {
       )
       .await?;
 
-    let mut builder = workspace_view_builder.write().await;
-
     // Create general space with 2 built-in views: Getting started, To-dos
     //    The Getting started view is a document view, and the To-dos view is a board view
     //    The Getting started view contains 2 sub views: Desktop guide, Mobile guide
-    builder
+    workspace_view_builder
       .with_view_builder(|view_builder| async {
         let created_at = timestamp();
         let mut view_builder = view_builder
@@ -305,7 +297,7 @@ impl WorkspaceTemplate for GettingStartedTemplate {
       .await;
 
     // Create shared space without any built-in views
-    builder
+    workspace_view_builder
       .with_view_builder(|view_builder| async {
         let created_at = timestamp();
         let view_builder = view_builder
@@ -371,12 +363,11 @@ impl WorkspaceTemplate for DocumentTemplate {
   async fn create_workspace_view(
     &self,
     _uid: i64,
-    workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
+    workspace_view_builder: &mut WorkspaceViewBuilder,
   ) -> anyhow::Result<Vec<TemplateData>> {
     let view_id = gen_view_id().to_string();
 
-    let mut builder = workspace_view_builder.write().await;
-    builder
+    workspace_view_builder
       .with_view_builder(|view_builder| async {
         view_builder
           .with_name("Getting started")

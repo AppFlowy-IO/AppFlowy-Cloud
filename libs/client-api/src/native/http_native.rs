@@ -298,10 +298,38 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  /// Sends a POST request to import a file to the server.
+  ///
+  /// This function streams the contents of a file located at the provided `file_path`
+  /// as part of a multipart form data request to the server's `/api/import` endpoint.
+  ///
+  /// ### HTTP Request Details:
+  ///
+  /// - **Method:** POST
+  /// - **URL:** `{base_url}/api/import`
+  ///   - The `base_url` is dynamically provided and appended with `/api/import`.
+  ///
+  /// - **Headers:**
+  ///   - `X-Host`: The value of the `base_url` is sent as the host header.
+  ///   - `X-Content-Length`: The size of the file, in bytes, is provided from the file's metadata.
+  ///
+  /// - **Multipart Form:**
+  ///   - The file is sent as a multipart form part:
+  ///     - **Field Name:** The file name derived from the file path or a UUID if unavailable.
+  ///     - **File Content:** The file's content is streamed using `reqwest::Body::wrap_stream`.
+  ///     - **MIME Type:** Guessed from the file's extension using the `mime_guess` crate,
+  ///       defaulting to `application/octet-stream` if undetermined.
+  ///
+  /// ### Parameters:
+  /// - `file_path`: The path to the file to be uploaded.
+  ///   - The file is opened asynchronously and its metadata (like size) is extracted.
+  /// - The MIME type is automatically determined based on the file extension using `mime_guess`.
+  ///
   pub async fn import_file(&self, file_path: &Path) -> Result<(), AppResponseError> {
     let file = File::open(&file_path).await?;
+    let metadata = file.metadata().await?;
     let file_name = file_path
-      .file_name()
+      .file_stem()
       .map(|s| s.to_string_lossy().to_string())
       .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
@@ -311,10 +339,10 @@ impl Client {
       .to_string();
 
     let file_part = multipart::Part::stream(reqwest::Body::wrap_stream(stream))
-      .file_name(file_name)
+      .file_name(file_name.clone())
       .mime_str(&mime)?;
 
-    let form = multipart::Form::new().part("file", file_part);
+    let form = multipart::Form::new().part(file_name, file_part);
     let url = format!("{}/api/import", self.base_url);
     let mut builder = self
       .http_client_with_auth(Method::POST, &url)
@@ -322,7 +350,9 @@ impl Client {
       .multipart(form);
 
     // set the host header
-    builder = builder.header("X-Host", self.base_url.clone());
+    builder = builder
+      .header("X-Host", self.base_url.clone())
+      .header("X-Content-Length", metadata.len());
     let resp = builder.send().await?;
 
     AppResponse::<()>::from_response(resp).await?.into_error()

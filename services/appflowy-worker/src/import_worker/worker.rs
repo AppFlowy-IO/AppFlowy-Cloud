@@ -1,15 +1,15 @@
 use crate::error::ImportError;
+use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResultBuilder};
 use crate::import_worker::unzip::unzip_async;
 use crate::s3_client::S3StreamResponse;
 use anyhow::anyhow;
 use async_zip::base::read::stream::ZipFileReader;
 use aws_sdk_s3::primitives::ByteStream;
+
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-
 use collab_database::workspace_database::WorkspaceDatabaseBody;
-
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use collab_importer::imported_collab::ImportType;
@@ -17,6 +17,11 @@ use collab_importer::notion::page::CollabResource;
 use collab_importer::notion::NotionImporter;
 use collab_importer::util::FileId;
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
+use database::workspace::{
+  select_workspace_database_storage_id, update_import_task_status, update_workspace_status,
+};
+use database_entity::dto::CollabParams;
+use futures::io::BufReader;
 use futures::stream::FuturesUnordered;
 use futures::{stream, StreamExt};
 use redis::aio::ConnectionManager;
@@ -31,6 +36,7 @@ use sqlx::types::chrono;
 use sqlx::{PgPool, Pool, Postgres};
 use std::collections::HashMap;
 use std::env::temp_dir;
+use std::fmt::Display;
 use std::fs::Permissions;
 use std::ops::DerefMut;
 use std::os::unix::fs::PermissionsExt;
@@ -39,16 +45,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
 
-use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResultBuilder};
-use database::workspace::{
-  select_workspace_database_storage_id, update_import_task_status, update_workspace_status,
-};
-use database_entity::dto::CollabParams;
-
 use crate::s3_client::S3Client;
 use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use tokio::task::spawn_local;
 use tokio::time::interval;
+
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
@@ -214,7 +215,9 @@ async fn consume_task(
   pg_pool: &Pool<Postgres>,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
-  process_task(import_task, s3_client, redis_client, pg_pool, notifier).await?;
+  let result = process_task(import_task, s3_client, redis_client, pg_pool, notifier).await;
+
+  // Each task will be consumed only once, regardless of success or failure.
   let _: () = redis_client
     .xack(stream_name, group_name, &[entry_id])
     .await
@@ -222,7 +225,8 @@ async fn consume_task(
       error!("Failed to acknowledge task: {:?}", e);
       ImportError::Internal(e.into())
     })?;
-  Ok::<_, ImportError>(())
+
+  result
 }
 
 async fn process_task(
@@ -232,31 +236,32 @@ async fn process_task(
   pg_pool: &PgPool,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
-  trace!("Processing task: {:?}", import_task);
+  trace!("[Import]: Processing task: {}", import_task);
+
   match import_task {
     ImportTask::Notion(task) => {
-      // 1. unzip file to temp dir
-      let unzip_dir_path = download_zip_file(&task, s3_client).await?;
-      // 2. import zip
-      let result =
-        process_unzip_file(&task, &unzip_dir_path, pg_pool, redis_client, s3_client).await;
-      // 3. delete zip file regardless of success or failure
-      match fs::remove_dir_all(unzip_dir_path).await {
-        Ok(_) => trace!("[Import]: {} deleted unzip file", task.workspace_id),
-        Err(err) => error!("Failed to delete unzip file: {:?}", err),
+      // 1. download zip file
+      match download_and_unzip_file(&task, s3_client).await {
+        Ok(unzip_dir_path) => {
+          // 2. process unzip file
+          let result =
+            process_unzip_file(&task, &unzip_dir_path, pg_pool, redis_client, s3_client).await;
+
+          // 3. remove file from S3
+          if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
+            error!("Failed to delete zip file from S3: {:?}", err);
+          }
+          notify_user(&task, result, notifier).await?;
+        },
+        Err(err) => {
+          // If there is any errors when download or unzip the file, we will remove the file from S3 and notify the user.
+          if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
+            error!("Failed to delete zip file from S3: {:?}", err);
+          }
+          notify_user(&task, Err(err), notifier).await?;
+        },
       }
-      // 4. notify import result
-      trace!(
-        "[Import]: {}:{} import result: {:?}",
-        task.workspace_id,
-        task.task_id,
-        result
-      );
-      notify_user(&task, result, notifier).await?;
-      // 5. remove file from S3
-      if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
-        error!("Failed to delete zip file from S3: {:?}", err);
-      }
+
       Ok(())
     },
     ImportTask::Custom(value) => {
@@ -277,20 +282,23 @@ async fn process_task(
   }
 }
 
-async fn download_zip_file(
+async fn download_and_unzip_file(
   import_task: &NotionImportTask,
   s3_client: &Arc<dyn S3Client>,
 ) -> Result<PathBuf, ImportError> {
   let S3StreamResponse {
     stream,
     content_type: _,
+    content_length,
   } = s3_client
-    .get_blob(import_task.s3_key.as_str())
+    .get_blob_stream(import_task.s3_key.as_str())
     .await
     .map_err(|err| ImportError::Internal(err.into()))?;
+  let buffer_size = buffer_size_from_content_length(content_length);
+  let reader = BufReader::with_capacity(buffer_size, stream);
+  let zip_reader = ZipFileReader::new(reader);
 
-  let zip_reader = ZipFileReader::new(stream);
-  let unique_file_name = uuid::Uuid::new_v4().to_string();
+  let unique_file_name = Uuid::new_v4().to_string();
   let output_file_path = temp_dir().join(unique_file_name);
   fs::create_dir_all(&output_file_path)
     .await
@@ -306,6 +314,26 @@ async fn download_zip_file(
     .await
     .map_err(ImportError::Internal)?;
   Ok(unzip_file.unzip_dir_path)
+}
+
+/// Determines the buffer size based on the content length of the file.
+/// If the buffer is too small, the zip reader will frequently pause to fetch more data,
+/// causing delays. This can make the unzip process appear slower and can even cause premature
+/// errors (like EOF) if there is a delay in fetching more data.
+#[inline]
+fn buffer_size_from_content_length(content_length: Option<i64>) -> usize {
+  match content_length {
+    Some(file_size) => {
+      if file_size < 10 * 1024 * 1024 {
+        3 * 1024 * 1024
+      } else if file_size < 100 * 1024 * 1024 {
+        5 * 1024 * 1024 // 5MB buffer
+      } else {
+        10 * 1024 * 1024 // 10MB buffer
+      }
+    },
+    None => 3 * 1024 * 1024,
+  }
 }
 
 async fn process_unzip_file(
@@ -552,14 +580,31 @@ async fn process_unzip_file(
     .await
     .map_err(|err| ImportError::Internal(anyhow!("Failed to upload files to S3: {:?}", err)))?;
 
+  // 3. delete zip file regardless of success or failure
+  match fs::remove_dir_all(unzip_dir_path).await {
+    Ok(_) => trace!("[Import]: {} deleted unzip file", import_task.workspace_id),
+    Err(err) => error!("Failed to delete unzip file: {:?}", err),
+  }
+
   Ok(())
 }
 
 async fn notify_user(
-  _import_task: &NotionImportTask,
-  _result: Result<(), ImportError>,
+  import_task: &NotionImportTask,
+  result: Result<(), ImportError>,
   _notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
+  match result {
+    Ok(_) => {
+      trace!("[Import]: successfully imported:{}", import_task);
+    },
+    Err(err) => {
+      error!(
+        "[Import]: failed to import:{}: error:{:?}",
+        import_task, err
+      );
+    },
+  }
   // send email
   Ok(())
 }
@@ -721,8 +766,18 @@ pub struct NotionImportTask {
   pub task_id: Uuid,
   pub user_uuid: String,
   pub workspace_id: String,
+  pub workspace_name: String,
   pub s3_key: String,
   pub host: String,
+}
+impl Display for NotionImportTask {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "NotionImportTask {{ workspace_id: {}, workspace_name: {} }}",
+      self.workspace_id, self.workspace_name
+    )
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -730,6 +785,19 @@ pub struct NotionImportTask {
 pub enum ImportTask {
   Notion(NotionImportTask),
   Custom(serde_json::Value),
+}
+
+impl Display for ImportTask {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ImportTask::Notion(task) => write!(
+        f,
+        "NotionImportTask {{ workspace_id: {}, workspace_name: {} }}",
+        task.workspace_id, task.workspace_name
+      ),
+      ImportTask::Custom(value) => write!(f, "CustomTask {{ {} }}", value),
+    }
+  }
 }
 
 impl TryFrom<&StreamId> for ImportTask {

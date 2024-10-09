@@ -392,12 +392,6 @@ async fn oauth_redirect_handler(
         "invalid response_type, only 'code' is support",
       ));
     }
-    if oauth_redirect.response_type != "code" {
-      return Err(WebApiError::new(
-        StatusCode::BAD_REQUEST,
-        "invalid response_type, only 'code' is support",
-      ));
-    }
     {
       // Check if the redirect_uri is in the allowable list
       let mut found = false;

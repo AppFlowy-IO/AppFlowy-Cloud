@@ -114,7 +114,7 @@ impl FromRedisValue for CodeSessionOptional {
     let bytes = expect_redis_value_data(v)?;
     match bytes {
       Some(bytes) => {
-        let session = expect_redis_json_bytes(bytes).unwrap();
+        let session = expect_redis_json_bytes(bytes)?;
         Ok(CodeSessionOptional(Some(session)))
       },
       None => Ok(CodeSessionOptional(None)),
@@ -252,7 +252,7 @@ impl FromRedisValue for UserSessionOptional {
     let bytes = expect_redis_value_data(v)?;
     match bytes {
       Some(bytes) => {
-        let session = expect_redis_json_bytes(bytes).unwrap();
+        let session = expect_redis_json_bytes(bytes)?;
         Ok(UserSessionOptional(Some(session)))
       },
       None => Ok(UserSessionOptional(None)),

@@ -84,12 +84,7 @@ async fn import_data_handler(
     workspace_name = field
       .content_disposition()
       .and_then(|c| c.get_name().map(|f| f.to_string()))
-      .unwrap_or_else(|| {
-        format!(
-          "import-{}",
-          chrono::Local::now().format("%d/%m/%Y %H:%M").to_string()
-        )
-      });
+      .unwrap_or_else(|| format!("import-{}", chrono::Local::now().format("%d/%m/%Y %H:%M")));
 
     while let Some(chunk) = field.next().await {
       let data = chunk?;

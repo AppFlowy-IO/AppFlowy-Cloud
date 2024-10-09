@@ -694,6 +694,7 @@ async fn check_if_user_is_allowed_to_delete_comment(
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_upload_task(
   uid: i64,
   user_uuid: &UserUuid,

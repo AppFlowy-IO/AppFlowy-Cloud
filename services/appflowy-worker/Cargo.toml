@@ -45,5 +45,6 @@ async_zip = { version = "0.0.17", features = ["full"] }
 mime_guess = "2.0"
 bytes.workspace = true
 uuid.workspace = true
+mailer.workspace = true
 
 

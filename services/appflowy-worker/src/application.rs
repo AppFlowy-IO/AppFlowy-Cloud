@@ -13,6 +13,8 @@ use crate::s3_client::S3ClientImpl;
 use axum::Router;
 use secrecy::ExposeSecret;
 
+use crate::mailer::AFWorkerMailer;
+use mailer::sender::Mailer;
 use std::sync::{Arc, Once};
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -75,22 +77,24 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
   let pg_pool = get_connection_pool(&config.db_settings).await?;
 
   // Redis
-  let redis_client = redis::Client::open(config.redis_url)
+  let redis_client = redis::Client::open(config.redis_url.clone())
     .expect("failed to create redis client")
     .get_connection_manager()
     .await
     .expect("failed to get redis connection manager");
 
+  let mailer = get_worker_mailer(&config).await?;
   let s3_client = get_aws_s3_client(&config.s3_setting).await?;
 
   let state = AppState {
     redis_client,
     pg_pool,
     s3_client,
+    mailer: mailer.clone(),
   };
 
   let local_set = LocalSet::new();
-  let email_notifier = EmailNotifier;
+  let email_notifier = EmailNotifier::new(mailer);
   let import_worker_fut = local_set.run_until(run_import_worker(
     state.pg_pool.clone(),
     state.redis_client.clone(),
@@ -119,6 +123,19 @@ pub struct AppState {
   pub redis_client: ConnectionManager,
   pub pg_pool: PgPool,
   pub s3_client: S3ClientImpl,
+  pub mailer: AFWorkerMailer,
+}
+
+async fn get_worker_mailer(config: &Config) -> Result<AFWorkerMailer, Error> {
+  let mailer = Mailer::new(
+    config.mailer.smtp_username.clone(),
+    config.mailer.smtp_password.expose_secret().clone(),
+    &config.mailer.smtp_host,
+    config.mailer.smtp_port,
+  )
+  .await?;
+
+  AFWorkerMailer::new(mailer).await
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {

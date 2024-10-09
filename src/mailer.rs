@@ -1,109 +1,19 @@
-use lettre::message::header::ContentType;
-use lettre::message::Message;
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::Address;
-use lettre::AsyncSmtpTransport;
-use lettre::AsyncTransport;
+use mailer::sender::Mailer;
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::RwLock;
-
-lazy_static::lazy_static! {
-    static ref HANDLEBARS: Arc<RwLock<handlebars::Handlebars<'static>>> =
-        Arc::new(handlebars::Handlebars::new().into());
-}
-
-#[derive(Clone)]
-pub struct Mailer {
-  smtp_transport: AsyncSmtpTransport<lettre::Tokio1Executor>,
-  smtp_username: String,
-}
 
 pub const WORKSPACE_INVITE_TEMPLATE_NAME: &str = "workspace_invite";
 pub const WORKSPACE_ACCESS_REQUEST_TEMPLATE_NAME: &str = "workspace_access_request";
 pub const WORKSPACE_ACCESS_REQUEST_APPROVED_NOTIFICATION_TEMPLATE_NAME: &str =
   "workspace_access_request_approved_notification";
 
-impl Mailer {
-  pub async fn new(
-    smtp_username: String,
-    smtp_password: String,
-    smtp_host: &str,
-    smtp_port: u16,
-  ) -> Result<Self, anyhow::Error> {
-    let creds = Credentials::new(smtp_username.clone(), smtp_password);
-    let smtp_transport = AsyncSmtpTransport::<lettre::Tokio1Executor>::relay(smtp_host)?
-      .credentials(creds)
-      .port(smtp_port)
-      .build();
-
-    let workspace_invite_template =
-      include_str!("../assets/mailer_templates/build_production/workspace_invitation.html");
-    let access_request_template =
-      include_str!("../assets/mailer_templates/build_production/access_request.html");
-    let access_request_approved_notification_template = include_str!(
-      "../assets/mailer_templates/build_production/access_request_approved_notification.html"
-    );
-    let template_strings = HashMap::from([
-      (WORKSPACE_INVITE_TEMPLATE_NAME, workspace_invite_template),
-      (
-        WORKSPACE_ACCESS_REQUEST_TEMPLATE_NAME,
-        access_request_template,
-      ),
-      (
-        WORKSPACE_ACCESS_REQUEST_APPROVED_NOTIFICATION_TEMPLATE_NAME,
-        access_request_approved_notification_template,
-      ),
-    ]);
-
-    for (template_name, template_string) in template_strings {
-      HANDLEBARS
-        .write()
-        .map_err(|err| anyhow::anyhow!(format!("Failed to write handlebars: {}", err)))?
-        .register_template_string(template_name, template_string)
-        .map_err(|err| {
-          anyhow::anyhow!(format!("Failed to register handlebars template: {}", err))
-        })?;
-    }
-
-    Ok(Self {
-      smtp_transport,
-      smtp_username,
-    })
+#[derive(Clone)]
+pub struct AFCloudMailer(Mailer);
+impl AFCloudMailer {
+  pub async fn new(mut mailer: Mailer) -> Result<Self, anyhow::Error> {
+    register_mailer(&mut mailer).await?;
+    Ok(Self(mailer))
   }
 
-  async fn send_email_template<T>(
-    &self,
-    recipient_name: Option<String>,
-    email: &str,
-    template_name: &str,
-    param: T,
-    subject: &str,
-  ) -> Result<(), anyhow::Error>
-  where
-    T: serde::Serialize,
-  {
-    let rendered = match HANDLEBARS.read() {
-      Ok(registory) => registory.render(template_name, &param)?,
-      Err(err) => anyhow::bail!(format!("Failed to render handlebars template: {}", err)),
-    };
-
-    let email = Message::builder()
-      .from(lettre::message::Mailbox::new(
-        Some("AppFlowy Notification".to_string()),
-        self.smtp_username.parse::<Address>()?,
-      ))
-      .to(lettre::message::Mailbox::new(
-        recipient_name,
-        email.parse()?,
-      ))
-      .subject(subject)
-      .header(ContentType::TEXT_HTML)
-      .body(rendered)?;
-
-    AsyncTransport::send(&self.smtp_transport, email).await?;
-    Ok(())
-  }
   pub async fn send_workspace_invite(
     &self,
     email: &str,
@@ -114,6 +24,7 @@ impl Mailer {
       param.username, param.workspace_name
     );
     self
+      .0
       .send_email_template(
         Some(param.username.clone()),
         email,
@@ -135,6 +46,7 @@ impl Mailer {
       param.username, param.workspace_name
     );
     self
+      .0
       .send_email_template(
         Some(recipient_name.to_string()),
         email,
@@ -153,6 +65,7 @@ impl Mailer {
   ) -> Result<(), anyhow::Error> {
     let subject = "Notification: Workspace access request approved";
     self
+      .0
       .send_email_template(
         Some(recipient_name.to_string()),
         email,
@@ -162,6 +75,36 @@ impl Mailer {
       )
       .await
   }
+}
+
+async fn register_mailer(mailer: &mut Mailer) -> Result<(), anyhow::Error> {
+  let workspace_invite_template =
+    include_str!("../assets/mailer_templates/build_production/workspace_invitation.html");
+  let access_request_template =
+    include_str!("../assets/mailer_templates/build_production/access_request.html");
+  let access_request_approved_notification_template = include_str!(
+    "../assets/mailer_templates/build_production/access_request_approved_notification.html"
+  );
+  let template_strings = HashMap::from([
+    (WORKSPACE_INVITE_TEMPLATE_NAME, workspace_invite_template),
+    (
+      WORKSPACE_ACCESS_REQUEST_TEMPLATE_NAME,
+      access_request_template,
+    ),
+    (
+      WORKSPACE_ACCESS_REQUEST_APPROVED_NOTIFICATION_TEMPLATE_NAME,
+      access_request_approved_notification_template,
+    ),
+  ]);
+
+  for (template_name, template_string) in template_strings {
+    mailer
+      .register_template(template_name, template_string)
+      .await
+      .map_err(|err| anyhow::anyhow!(format!("Failed to register handlebars template: {}", err)))?;
+  }
+
+  Ok(())
 }
 
 #[derive(serde::Serialize)]

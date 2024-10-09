@@ -9,6 +9,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use database::file::BucketClient;
 
 use crate::biz::workspace::ops::{create_empty_workspace, create_upload_task};
+use database::user::select_name_and_email_from_uuid;
 use database::workspace::select_import_task;
 use futures_util::StreamExt;
 use shared_entity::dto::import_dto::{ImportTaskDetail, ImportTaskStatus, UserImportTask};
@@ -63,6 +64,7 @@ async fn import_data_handler(
   req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (user_name, user_email) = select_name_and_email_from_uuid(&state.pg_pool, &user_uuid).await?;
   let host = get_host_from_request(&req);
   let content_length = req
     .headers()
@@ -147,7 +149,8 @@ async fn import_data_handler(
 
   create_upload_task(
     uid,
-    &user_uuid,
+    &user_name,
+    &user_email,
     &workspace_id,
     &workspace_name,
     file_size,

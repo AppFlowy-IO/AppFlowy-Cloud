@@ -242,6 +242,22 @@ pub async fn select_name_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<St
   Ok(email)
 }
 
+pub async fn select_name_and_email_from_uuid(
+  pool: &PgPool,
+  user_uuid: &Uuid,
+) -> Result<(String, String), AppError> {
+  let row = sqlx::query!(
+    r#"
+    SELECT name, email FROM af_user WHERE uuid = $1
+    "#,
+    user_uuid
+  )
+  .fetch_one(pool)
+  .await?;
+
+  Ok((row.name, row.email))
+}
+
 pub async fn select_web_user_from_uid(pool: &PgPool, uid: i64) -> Result<AFWebUser, AppError> {
   let row = sqlx::query_as!(
     AFWebUser,

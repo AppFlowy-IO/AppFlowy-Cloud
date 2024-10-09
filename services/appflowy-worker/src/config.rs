@@ -1,5 +1,6 @@
 use anyhow::{Context, Error};
 use infra::env_util::get_env_var;
+use mailer::config::MailerSetting;
 use secrecy::Secret;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
@@ -11,6 +12,7 @@ pub struct Config {
   pub redis_url: String,
   pub db_settings: DatabaseSetting,
   pub s3_setting: S3Setting,
+  pub mailer: MailerSetting,
 }
 
 impl Config {
@@ -42,6 +44,12 @@ impl Config {
         secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
         bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
         region: get_env_var("APPFLOWY_S3_REGION", ""),
+      },
+      mailer: MailerSetting {
+        smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),
+        smtp_port: get_env_var("APPFLOWY_MAILER_SMTP_PORT", "465").parse()?,
+        smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
+        smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
       },
     })
   }

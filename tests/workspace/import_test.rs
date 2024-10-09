@@ -18,7 +18,7 @@ async fn import_blog_post_test() {
   );
 
   let space_view = space_views.pop().unwrap();
-  assert_eq!(space_view.name, "blog_post");
+  assert_eq!(space_view.name, "Imported Space");
   let imported_view = folder.get_views_belong_to(&space_view.id).pop().unwrap();
 
   let document = client
@@ -62,7 +62,7 @@ async fn import_project_and_task_zip_test() {
     "Expected 1 view, found {:?}",
     space_views
   );
-  assert_eq!(space_views[0].name, "project&task");
+  assert_eq!(space_views[0].name, "Imported Space");
   assert!(space_views[0].space_info().is_some());
 
   let mut sub_views = folder.get_views_belong_to(&space_views[0].id);

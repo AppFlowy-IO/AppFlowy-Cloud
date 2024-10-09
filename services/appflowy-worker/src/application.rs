@@ -97,7 +97,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     Arc::new(state.s3_client.clone()),
     Arc::new(email_notifier),
     "import_task_stream",
-    30,
+    10,
   ));
 
   let app = Router::new().with_state(state);

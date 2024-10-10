@@ -767,10 +767,9 @@ pub async fn select_user_owned_workspaces_id<'a, E: Executor<'a, Database = Post
 
 pub async fn update_workspace_status<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  workspace_id: &str,
+  workspace_id: &Uuid,
   is_initialized: bool,
 ) -> Result<(), AppError> {
-  let workspace_id = Uuid::parse_str(workspace_id)?;
   let res = sqlx::query!(
     r#"
     UPDATE public.af_workspace

@@ -1,4 +1,3 @@
-use crate::error::ImportError;
 use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResultBuilder};
 use crate::import_worker::unzip::unzip_async;
 use crate::s3_client::S3StreamResponse;
@@ -50,6 +49,8 @@ use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCach
 use tokio::task::spawn_local;
 use tokio::time::interval;
 
+use crate::error::ImportError;
+use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
@@ -343,6 +344,8 @@ async fn process_unzip_file(
   redis_client: &mut ConnectionManager,
   s3_client: &Arc<dyn S3Client>,
 ) -> Result<(), ImportError> {
+  let workspace_id =
+    Uuid::parse_str(&import_task.workspace_id).map_err(|err| ImportError::Internal(err.into()))?;
   let notion_importer = NotionImporter::new(
     import_task.uid,
     unzip_dir_path,
@@ -548,7 +551,7 @@ async fn process_unzip_file(
     "[Import]: {} set is_initialized to true",
     import_task.workspace_id,
   );
-  update_workspace_status(transaction.deref_mut(), &import_task.workspace_id, true)
+  update_workspace_status(transaction.deref_mut(), &workspace_id, true)
     .await
     .map_err(|err| {
       ImportError::Internal(anyhow!(
@@ -556,6 +559,30 @@ async fn process_unzip_file(
         err
       ))
     })?;
+  let upload_resources = process_resources(resources).await;
+
+  // insert metadata into database
+  let metas = upload_resources
+    .iter()
+    .map(|res| res.meta.clone())
+    .collect::<Vec<_>>();
+  let affected_rows = insert_blob_metadata_bulk(transaction.deref_mut(), &workspace_id, metas)
+    .await
+    .map_err(|err| {
+      ImportError::Internal(anyhow!(
+        "Failed to insert blob metadata into database when importing data: {:?}",
+        err
+      ))
+    })?;
+
+  if affected_rows != upload_resources.len() as u64 {
+    warn!(
+      "[Import]: {}, Affected rows: {}, upload resources: {}",
+      import_task.workspace_id,
+      affected_rows,
+      upload_resources.len()
+    );
+  }
 
   let result = transaction.commit().await.map_err(|err| {
     ImportError::Internal(anyhow!(
@@ -565,7 +592,6 @@ async fn process_unzip_file(
   });
 
   if result.is_err() {
-    // remove cache in redis
     let _ = mem_cache.remove_encode_collab(&w_database_id).await;
     let _ = mem_cache
       .remove_encode_collab(&import_task.workspace_id)
@@ -576,7 +602,7 @@ async fn process_unzip_file(
 
   // 7. after inserting all collabs, upload all files to S3
   trace!("[Import]: {} upload files to s3", import_task.workspace_id,);
-  batch_upload_files_to_s3(&import_task.workspace_id, s3_client, resources)
+  batch_upload_files_to_s3(&import_task.workspace_id, s3_client, upload_resources)
     .await
     .map_err(|err| ImportError::Internal(anyhow!("Failed to upload files to S3: {:?}", err)))?;
 
@@ -596,7 +622,7 @@ async fn notify_user(
 ) -> Result<(), ImportError> {
   match result {
     Ok(_) => {
-      trace!("[Import]: successfully imported:{}", import_task);
+      info!("[Import]: successfully imported:{}", import_task);
     },
     Err(err) => {
       error!(
@@ -609,38 +635,33 @@ async fn notify_user(
   Ok(())
 }
 
-pub async fn batch_upload_files_to_s3(
+async fn batch_upload_files_to_s3(
   workspace_id: &str,
   client: &Arc<dyn S3Client>,
-  collab_resources: Vec<CollabResource>,
+  resources: Vec<UploadCollabResource>,
 ) -> Result<(), anyhow::Error> {
-  // Flatten the collab_resources into an iterator of (workspace_id, object_id, file_path)
-  let file_tasks = collab_resources
-    .into_iter()
-    .flat_map(|resource| {
-      let object_id = resource.object_id;
-      resource
-        .files
-        .into_iter()
-        .map(move |file| (object_id.clone(), file))
-    })
-    .collect::<Vec<(String, String)>>();
-
   // Create a stream of upload tasks
-  let upload_stream = stream::iter(file_tasks.into_iter().map(
-    |(object_id, file_path)| async move {
-      match upload_file_to_s3(client, workspace_id, &object_id, &file_path).await {
-        Ok(_) => {
-          trace!("Successfully uploaded: {}", file_path);
-          Ok(())
-        },
-        Err(e) => {
-          error!("Failed to upload {}: {:?}", file_path, e);
-          Err(e)
-        },
-      }
-    },
-  ))
+  let upload_stream = stream::iter(resources.into_iter().map(|res| async move {
+    match upload_file_to_s3(
+      client,
+      workspace_id,
+      &res.object_id,
+      &res.meta.file_id,
+      &res.meta.file_type,
+      &res.file_path,
+    )
+    .await
+    {
+      Ok(_) => {
+        trace!("Successfully uploaded: {}", res);
+        Ok(())
+      },
+      Err(e) => {
+        error!("Failed to upload {}: {:?}", res, e);
+        Err(e)
+      },
+    }
+  }))
   .buffer_unordered(5);
   let results: Vec<_> = upload_stream.collect().await;
   let errors: Vec<_> = results.into_iter().filter_map(Result::err).collect();
@@ -655,18 +676,19 @@ async fn upload_file_to_s3(
   client: &Arc<dyn S3Client>,
   workspace_id: &str,
   object_id: &str,
+  file_id: &str,
+  file_type: &str,
   file_path: &str,
 ) -> Result<(), anyhow::Error> {
   let path = Path::new(file_path);
   if !path.exists() {
     return Err(anyhow!("File does not exist: {:?}", path));
   }
-  let file_id = FileId::from_path(&path.to_path_buf()).await?;
-  let mime_type = mime_guess::from_path(file_path).first_or_octet_stream();
+
   let object_key = format!("{}/{}/{}", workspace_id, object_id, file_id);
   let byte_stream = ByteStream::from_path(path).await?;
   client
-    .put_blob(&object_key, byte_stream, Some(mime_type.as_ref()))
+    .put_blob(&object_key, byte_stream, Some(file_type))
     .await?;
   Ok(())
 }
@@ -825,4 +847,70 @@ impl TryFrom<&StreamId> for ImportTask {
 
     from_str::<ImportTask>(&task_str).map_err(|err| ImportError::Internal(err.into()))
   }
+}
+
+async fn process_resources(resources: Vec<CollabResource>) -> Vec<UploadCollabResource> {
+  let upload_resources_stream = stream::iter(resources)
+    .flat_map(|resource| {
+      let object_id = resource.object_id.clone();
+      stream::iter(resource.files.into_iter().map(move |file_path| {
+        let object_id = object_id.clone();
+        let path = PathBuf::from(file_path.clone());
+        async move {
+          match insert_meta_from_path(&object_id, &path).await {
+            Ok(meta) => Some(UploadCollabResource {
+              object_id,
+              file_path,
+              meta,
+            }),
+            Err(_) => None,
+          }
+        }
+      }))
+    })
+    // buffer_unordered method limits how many futures (tasks) are run concurrently.
+    .buffer_unordered(20);
+
+  upload_resources_stream
+    .filter_map(|result| async { result })
+    .collect::<Vec<UploadCollabResource>>()
+    .await
+}
+
+struct UploadCollabResource {
+  object_id: String,
+  file_path: String,
+  meta: BulkInsertMeta,
+}
+
+impl Display for UploadCollabResource {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "UploadCollabResource {{ object_id: {}, file_path: {}, file_size: {} }}",
+      self.object_id, self.file_path, self.meta.file_size
+    )
+  }
+}
+
+async fn insert_meta_from_path(
+  object_id: &str,
+  path: &PathBuf,
+) -> Result<BulkInsertMeta, ImportError> {
+  let file_id = FileId::from_path(path).await?;
+  let object_id = object_id.to_string();
+  let file_type = mime_guess::from_path(path)
+    .first_or_octet_stream()
+    .to_string();
+  let file_size = fs::metadata(path)
+    .await
+    .map_err(|err| ImportError::Internal(err.into()))?
+    .len() as i64;
+
+  Ok(BulkInsertMeta {
+    object_id,
+    file_id,
+    file_type,
+    file_size,
+  })
 }

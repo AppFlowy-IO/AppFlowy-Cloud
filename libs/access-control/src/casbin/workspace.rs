@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use tracing::instrument;
 use uuid::Uuid;
 
-use access_control::access::AccessControl;
-use access_control::access::ObjectType;
-use access_control::act::{Action, ActionVariant};
-use access_control::workspace::WorkspaceAccessControl;
+use super::access::AccessControl;
+use crate::act::{Action, ActionVariant};
+use crate::entity::ObjectType;
+use crate::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use database_entity::dto::AFRole;
 

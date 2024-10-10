@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use sqlx::types::uuid;
 use tracing::{event, instrument, trace};
 
-use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use database::user::{create_user, is_user_exist};
 use database::workspace::select_workspace;

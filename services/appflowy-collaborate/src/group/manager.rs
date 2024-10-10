@@ -26,10 +26,10 @@ use crate::group::state::GroupManagementState;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabRealtimeMetrics;
 
-pub struct GroupManager<S, AC> {
+pub struct GroupManager<S> {
   state: GroupManagementState,
   storage: Arc<S>,
-  access_control: Arc<AC>,
+  access_control: Arc<dyn RealtimeAccessControl>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
   collab_redis_stream: Arc<CollabRedisStream>,
   control_event_stream: Arc<Mutex<StreamGroup>>,
@@ -39,15 +39,14 @@ pub struct GroupManager<S, AC> {
   indexer_provider: Arc<IndexerProvider>,
 }
 
-impl<S, AC> GroupManager<S, AC>
+impl<S> GroupManager<S>
 where
   S: CollabStorage,
-  AC: RealtimeAccessControl,
 {
   #[allow(clippy::too_many_arguments)]
   pub async fn new(
     storage: Arc<S>,
-    access_control: Arc<AC>,
+    access_control: Arc<dyn RealtimeAccessControl>,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
     collab_stream: CollabRedisStream,
     persistence_interval: Duration,
@@ -110,7 +109,7 @@ where
     // Lock the group and subscribe the user to the group.
     if let Some(group) = self.state.get_mut_group(object_id).await {
       trace!("[realtime]: {} subscribe group:{}", user, object_id,);
-      let (sink, stream) = client_msg_router.init_client_communication::<CollabMessage, _>(
+      let (sink, stream) = client_msg_router.init_client_communication::<CollabMessage>(
         &group.workspace_id,
         user,
         object_id,

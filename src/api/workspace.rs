@@ -232,7 +232,7 @@ async fn create_workspace_handler(
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let new_workspace = workspace::ops::create_workspace_for_user(
     &state.pg_pool,
-    &state.workspace_access_control,
+    state.workspace_access_control.clone(),
     &state.collab_access_control_storage,
     &uuid,
     uid,
@@ -351,7 +351,7 @@ async fn post_accept_workspace_invite_handler(
   // Currently, when the server get restarted, the policy in access control will be lost.
   workspace::ops::accept_workspace_invite(
     &state.pg_pool,
-    &state.workspace_access_control,
+    state.workspace_access_control.clone(),
     user_uid,
     &user_uuid,
     &invite_id,
@@ -369,7 +369,7 @@ async fn get_workspace_settings_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let settings = workspace::ops::get_workspace_settings(
     &state.pg_pool,
-    &state.workspace_access_control,
+    state.workspace_access_control.clone(),
     &workspace_id,
     &uid,
   )
@@ -389,7 +389,7 @@ async fn post_workspace_settings_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let settings = workspace::ops::update_workspace_settings(
     &state.pg_pool,
-    &state.workspace_access_control,
+    state.workspace_access_control.clone(),
     &workspace_id,
     &uid,
     data,
@@ -435,7 +435,7 @@ async fn remove_workspace_member_handler(
     &state.pg_pool,
     &workspace_id,
     &member_emails,
-    &state.workspace_access_control,
+    state.workspace_access_control.clone(),
   )
   .await?;
 
@@ -482,7 +482,7 @@ async fn leave_workspace_handler(
     &state.pg_pool,
     &workspace_id,
     &user_uuid,
-    &state.workspace_access_control,
+    state.workspace_access_control.clone(),
   )
   .await?;
   Ok(AppResponse::Ok().into())
@@ -508,7 +508,7 @@ async fn update_workspace_member_handler(
       &state.pg_pool,
       &workspace_id,
       &changeset,
-      &state.workspace_access_control,
+      state.workspace_access_control.clone(),
     )
     .await?;
   }
@@ -983,8 +983,12 @@ async fn add_collab_member_handler(
     );
   }
 
-  biz::collab::ops::create_collab_member(&state.pg_pool, &payload, &state.collab_access_control)
-    .await?;
+  biz::collab::ops::create_collab_member(
+    &state.pg_pool,
+    &payload,
+    state.collab_access_control.clone(),
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1009,7 +1013,7 @@ async fn update_collab_member_handler(
     &state.pg_pool,
     &user_uuid,
     &payload,
-    &state.collab_access_control,
+    state.collab_access_control.clone(),
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
@@ -1030,8 +1034,12 @@ async fn remove_collab_member_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  biz::collab::ops::delete_collab_member(&state.pg_pool, &payload, &state.collab_access_control)
-    .await?;
+  biz::collab::ops::delete_collab_member(
+    &state.pg_pool,
+    &payload,
+    state.collab_access_control.clone(),
+  )
+  .await?;
 
   Ok(Json(AppResponse::Ok()))
 }

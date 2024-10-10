@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
+use database::collab::cache::CollabCache;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::Transaction;
@@ -15,11 +16,9 @@ use tracing::warn;
 use tracing::{error, instrument, trace};
 use validator::Validate;
 
-use crate::collab::access_control::CollabAccessControlImpl;
 use crate::command::{CLCommandSender, CollaborationCommand};
 use crate::shared_state::RealtimeSharedState;
 use app_error::AppError;
-use database::collab::cache::CollabCache;
 use database::collab::{
   insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStorage,
   CollabStorageAccessControl, GetCollabOrigin,
@@ -28,7 +27,6 @@ use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
-use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use crate::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
@@ -38,9 +36,7 @@ use crate::metrics::CollabMetrics;
 use crate::snapshot::SnapshotControl;
 use crate::state::RedisConnectionManager;
 
-pub type CollabAccessControlStorage = CollabStorageImpl<
-  CollabStorageAccessControlImpl<CollabAccessControlImpl, WorkspaceAccessControlImpl>,
->;
+pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessControlImpl>;
 
 /// A wrapper around the actual storage implementation that provides access control and caching.
 #[derive(Clone)]

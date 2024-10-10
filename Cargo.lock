@@ -17,10 +17,12 @@ dependencies = [
  "lazy_static",
  "prometheus-client",
  "redis 0.25.4",
+ "serde",
  "sqlx",
  "tokio",
  "tokio-stream",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -684,7 +686,6 @@ dependencies = [
  "url",
  "uuid",
  "validator",
- "workspace-access",
  "workspace-template",
  "yrs",
 ]
@@ -746,7 +747,6 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "validator",
- "workspace-access",
  "workspace-template",
  "yrs",
 ]
@@ -955,9 +955,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.11"
+version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd066d0b4ef8ecb03a55319dc13aa6910616d0f44008a045bb1835af830abff5"
+checksum = "7e614738943d3f68c628ae3dbce7c3daffb196665f82f8c8ea6b65de73c79429"
 dependencies = [
  "bzip2",
  "deflate64",
@@ -8435,20 +8435,6 @@ checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
 dependencies = [
  "cfg-if 1.0.0",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "workspace-access"
-version = "0.1.0"
-dependencies = [
- "access-control",
- "app-error",
- "async-trait",
- "database-entity",
- "serde",
- "tokio",
- "tracing",
- "uuid",
 ]
 
 [[package]]

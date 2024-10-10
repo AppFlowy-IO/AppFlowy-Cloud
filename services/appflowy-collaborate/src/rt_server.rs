@@ -30,9 +30,9 @@ use crate::state::RedisConnectionManager;
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
-pub struct CollaborationServer<S, AC> {
+pub struct CollaborationServer<S> {
   /// Keep track of all collab groups
-  group_manager: Arc<GroupManager<S, AC>>,
+  group_manager: Arc<GroupManager<S>>,
   connect_state: ConnectState,
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
   storage: Arc<S>,
@@ -41,15 +41,14 @@ pub struct CollaborationServer<S, AC> {
   enable_custom_runtime: bool,
 }
 
-impl<S, AC> CollaborationServer<S, AC>
+impl<S> CollaborationServer<S>
 where
   S: CollabStorage,
-  AC: RealtimeAccessControl,
 {
   #[allow(clippy::too_many_arguments)]
   pub async fn new(
     storage: Arc<S>,
-    access_control: AC,
+    access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
     redis_connection_manager: RedisConnectionManager,
@@ -69,7 +68,6 @@ where
     }
 
     let connect_state = ConnectState::new();
-    let access_control = Arc::new(access_control);
     let collab_stream = CollabRedisStream::new_with_connection_manager(redis_connection_manager);
     let group_manager = Arc::new(
       GroupManager::new(
@@ -285,12 +283,11 @@ fn spawn_handle_unindexed_collabs(
   ));
 }
 
-fn spawn_period_check_inactive_group<S, AC>(
-  weak_groups: Weak<GroupManager<S, AC>>,
+fn spawn_period_check_inactive_group<S>(
+  weak_groups: Weak<GroupManager<S>>,
   group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
 ) where
   S: CollabStorage,
-  AC: RealtimeAccessControl,
 {
   let mut interval = interval(Duration::from_secs(20));
   let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();

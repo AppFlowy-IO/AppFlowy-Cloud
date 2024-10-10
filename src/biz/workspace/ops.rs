@@ -65,7 +65,7 @@ pub async fn delete_workspace_for_user(
 /// object.
 pub async fn create_empty_workspace(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   collab_storage: &Arc<CollabAccessControlStorage>,
   user_uuid: &Uuid,
   user_uid: i64,
@@ -118,7 +118,7 @@ pub async fn create_empty_workspace(
 
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   collab_storage: &Arc<CollabAccessControlStorage>,
   user_uuid: &Uuid,
   user_uid: i64,
@@ -302,7 +302,7 @@ pub async fn open_workspace(
 
 pub async fn accept_workspace_invite(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   user_uid: i64,
   user_uuid: &Uuid,
   invite_id: &Uuid,
@@ -528,7 +528,7 @@ pub async fn leave_workspace(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   user_uuid: &Uuid,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
 ) -> Result<(), AppResponseError> {
   let email = database::user::select_email_from_user_uuid(pg_pool, user_uuid).await?;
   remove_workspace_members(pg_pool, workspace_id, &[email], workspace_access_control).await
@@ -538,7 +538,7 @@ pub async fn remove_workspace_members(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   member_emails: &[String],
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
 ) -> Result<(), AppResponseError> {
   let mut txn = pg_pool
     .begin()
@@ -584,7 +584,7 @@ pub async fn update_workspace_member(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   changeset: &WorkspaceMemberChangeset,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
 ) -> Result<(), AppError> {
   if let Some(role) = &changeset.role {
     upsert_workspace_member(pg_pool, workspace_id, &changeset.email, role.clone()).await?;
@@ -611,7 +611,7 @@ pub async fn get_workspace_document_total_bytes(
 
 pub async fn get_workspace_settings(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   workspace_id: &Uuid,
   owner_uid: &i64,
 ) -> Result<AFWorkspaceSettings, AppResponseError> {
@@ -632,7 +632,7 @@ pub async fn get_workspace_settings(
 
 pub async fn update_workspace_settings(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   workspace_id: &Uuid,
   owner_uid: &i64,
   change: AFWorkspaceSettingsChange,

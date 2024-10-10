@@ -1,5 +1,6 @@
-use access_control::access::{AccessControl, ObjectType};
-use access_control::act::ActionVariant;
+use super::access::AccessControl;
+use crate::act::ActionVariant;
+use crate::entity::ObjectType;
 use database_entity::dto::AFRole;
 use serde::Deserialize;
 use tokio::sync::broadcast;
@@ -7,7 +8,6 @@ use tracing::error;
 use tracing::log::warn;
 use uuid::Uuid;
 
-#[allow(dead_code)]
 pub fn spawn_listen_on_workspace_member_change(
   mut listener: broadcast::Receiver<WorkspaceMemberNotification>,
   access_control: AccessControl,

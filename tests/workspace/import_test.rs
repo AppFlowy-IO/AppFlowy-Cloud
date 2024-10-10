@@ -4,10 +4,12 @@ use collab_folder::ViewLayout;
 use shared_entity::dto::import_dto::ImportTaskStatus;
 use std::path::PathBuf;
 use std::time::Duration;
-
 #[tokio::test]
 async fn import_blog_post_test() {
+  // Step 1: Import the blog post zip
   let (client, imported_workspace_id) = import_zip("blog_post.zip").await;
+
+  // Step 2: Fetch the folder and views
   let folder = client.get_folder(&imported_workspace_id).await;
   let mut space_views = folder.get_views_belong_to(&imported_workspace_id);
   assert_eq!(
@@ -17,27 +19,48 @@ async fn import_blog_post_test() {
     space_views
   );
 
+  // Step 3: Validate the space view name
   let space_view = space_views.pop().unwrap();
   assert_eq!(space_view.name, "Imported Space");
-  let imported_view = folder.get_views_belong_to(&space_view.id).pop().unwrap();
 
+  // Step 4: Fetch the imported view and document
+  let imported_view = folder.get_views_belong_to(&space_view.id).pop().unwrap();
   let document = client
     .get_document(&imported_workspace_id, &imported_view.id)
     .await;
 
+  // Step 5: Generate the expected blob URLs
   let host = client.api_client.base_url.clone();
   let object_id = imported_view.id.clone();
-  let mut expected_urls = vec![
+  let blob_names = vec![
     "PGTRCFsf2duc7iP3KjE62Xs8LE7B96a0aQtLtGtfIcw=.jpg",
     "fFWPgqwdqbaxPe7Q_vUO143Sa2FypnRcWVibuZYdkRI=.jpg",
     "EIj9Z3yj8Gw8UW60U8CLXx7ulckEs5Eu84LCFddCXII=.jpg",
-  ]
-  .into_iter()
-  .map(|s| format!("{host}/{imported_workspace_id}/v1/blob/{object_id}/{s}"))
-  .collect::<Vec<String>>();
+  ];
 
+  let mut expected_urls = blob_names
+    .iter()
+    .map(|s| format!("{host}/api/file_storage/{imported_workspace_id}/v1/blob/{object_id}/{s}"))
+    .collect::<Vec<String>>();
+
+  // Step 6: Concurrently fetch blobs
+  let fetch_blob_futures = blob_names.into_iter().map(|blob_name| {
+    client
+      .api_client
+      .get_blob_v1(&imported_workspace_id, &object_id, blob_name)
+  });
+
+  let blob_results = futures::future::join_all(fetch_blob_futures).await;
+
+  // Ensure all blobs are fetched successfully
+  for result in blob_results {
+    result.unwrap();
+  }
+
+  // Step 7: Extract block URLs from the document and filter expected URLs
   let page_block_id = document.get_page_id().unwrap();
   let block_ids = document.get_block_children_ids(&page_block_id);
+
   for block_id in block_ids.iter() {
     if let Some((block_type, block_data)) = document.get_block_data(block_id) {
       if matches!(block_type, BlockType::Image) {
@@ -46,6 +69,8 @@ async fn import_blog_post_test() {
       }
     }
   }
+
+  // Step 8: Ensure no expected URLs remain
   println!("{:?}", expected_urls);
   assert!(expected_urls.is_empty());
 }

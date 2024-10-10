@@ -16,18 +16,15 @@ use crate::api::workspace::{COLLAB_PATTERN, V1_COLLAB_PATTERN};
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
 
 #[derive(Clone)]
-pub struct CollabMiddlewareAccessControl<AC: CollabAccessControl> {
-  pub access_control: Arc<AC>,
+pub struct CollabMiddlewareAccessControl {
+  pub access_control: Arc<dyn CollabAccessControl>,
   collab_cache: CollabCache,
   skip_resources: Vec<(Method, ResourceDef)>,
   require_access_levels: Vec<(ResourceDef, HashMap<Method, AFAccessLevel>)>,
 }
 
-impl<AC> CollabMiddlewareAccessControl<AC>
-where
-  AC: CollabAccessControl,
-{
-  pub fn new(access_control: Arc<AC>, collab_cache: CollabCache) -> Self {
+impl CollabMiddlewareAccessControl {
+  pub fn new(access_control: Arc<dyn CollabAccessControl>, collab_cache: CollabCache) -> Self {
     Self {
       skip_resources: vec![
         // Skip access control when trying to create a collab
@@ -79,10 +76,7 @@ where
 }
 
 #[async_trait]
-impl<AC> MiddlewareAccessControl for CollabMiddlewareAccessControl<AC>
-where
-  AC: CollabAccessControl,
-{
+impl MiddlewareAccessControl for CollabMiddlewareAccessControl {
   fn resource(&self) -> AccessResource {
     AccessResource::Collab
   }

@@ -17,10 +17,12 @@ dependencies = [
  "lazy_static",
  "prometheus-client",
  "redis 0.25.4",
+ "serde",
  "sqlx",
  "tokio",
  "tokio-stream",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -681,7 +683,6 @@ dependencies = [
  "url",
  "uuid",
  "validator",
- "workspace-access",
  "workspace-template",
  "yrs",
 ]
@@ -743,7 +744,6 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "validator",
- "workspace-access",
  "workspace-template",
  "yrs",
 ]
@@ -953,9 +953,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.11"
+version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd066d0b4ef8ecb03a55319dc13aa6910616d0f44008a045bb1835af830abff5"
+checksum = "7e614738943d3f68c628ae3dbce7c3daffb196665f82f8c8ea6b65de73c79429"
 dependencies = [
  "bzip2",
  "deflate64",
@@ -2232,7 +2232,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2934851d337c7d322c5dd7a944c05cb7ffb930d4#2934851d337c7d322c5dd7a944c05cb7ffb930d4"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=83c85320f74de9694f4f520580261c41e8b012a1#83c85320f74de9694f4f520580261c41e8b012a1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2257,7 +2257,7 @@ dependencies = [
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2934851d337c7d322c5dd7a944c05cb7ffb930d4#2934851d337c7d322c5dd7a944c05cb7ffb930d4"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=83c85320f74de9694f4f520580261c41e8b012a1#83c85320f74de9694f4f520580261c41e8b012a1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2296,7 +2296,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2934851d337c7d322c5dd7a944c05cb7ffb930d4#2934851d337c7d322c5dd7a944c05cb7ffb930d4"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=83c85320f74de9694f4f520580261c41e8b012a1#83c85320f74de9694f4f520580261c41e8b012a1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2317,7 +2317,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2934851d337c7d322c5dd7a944c05cb7ffb930d4#2934851d337c7d322c5dd7a944c05cb7ffb930d4"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=83c85320f74de9694f4f520580261c41e8b012a1#83c85320f74de9694f4f520580261c41e8b012a1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2337,7 +2337,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2934851d337c7d322c5dd7a944c05cb7ffb930d4#2934851d337c7d322c5dd7a944c05cb7ffb930d4"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=83c85320f74de9694f4f520580261c41e8b012a1#83c85320f74de9694f4f520580261c41e8b012a1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2359,7 +2359,7 @@ dependencies = [
 [[package]]
 name = "collab-importer"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2934851d337c7d322c5dd7a944c05cb7ffb930d4#2934851d337c7d322c5dd7a944c05cb7ffb930d4"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=83c85320f74de9694f4f520580261c41e8b012a1#83c85320f74de9694f4f520580261c41e8b012a1"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -2457,7 +2457,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2934851d337c7d322c5dd7a944c05cb7ffb930d4#2934851d337c7d322c5dd7a944c05cb7ffb930d4"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=83c85320f74de9694f4f520580261c41e8b012a1#83c85320f74de9694f4f520580261c41e8b012a1"
 dependencies = [
  "anyhow",
  "collab",
@@ -8444,20 +8444,6 @@ checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
 dependencies = [
  "cfg-if 1.0.0",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "workspace-access"
-version = "0.1.0"
-dependencies = [
- "access-control",
- "app-error",
- "async-trait",
- "database-entity",
- "serde",
- "tokio",
- "tracing",
- "uuid",
 ]
 
 [[package]]

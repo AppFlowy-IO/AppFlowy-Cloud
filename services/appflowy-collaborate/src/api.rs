@@ -26,7 +26,6 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use crate::actix_ws::client::RealtimeClient;
 use crate::actix_ws::entities::ClientStreamMessage;
 use crate::actix_ws::server::RealtimeServerActor;
-use crate::collab::access_control::RealtimeCollabAccessControlImpl;
 use crate::collab::storage::CollabAccessControlStorage;
 use crate::compression::{
   decompress, CompressionType, X_COMPRESSION_BUFFER_SIZE, X_COMPRESSION_TYPE,
@@ -49,8 +48,7 @@ pub fn collab_scope() -> Scope {
 
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
-pub type RealtimeServerAddr =
-  Addr<RealtimeServerActor<CollabAccessControlStorage, RealtimeCollabAccessControlImpl>>;
+pub type RealtimeServerAddr = Addr<RealtimeServerActor<CollabAccessControlStorage>>;
 
 #[instrument(skip_all, err)]
 pub async fn establish_ws_connection_v1(

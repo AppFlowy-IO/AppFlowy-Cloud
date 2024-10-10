@@ -29,25 +29,28 @@ use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::access_control::{
   CollabAccessControlImpl, CollabStorageAccessControlImpl, RealtimeCollabAccessControlImpl,
 };
-use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
+use database::collab::cache::CollabCache;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
 use workspace_access::WorkspaceAccessControlImpl;
 
+use crate::api::access_request::access_request_scope;
 use crate::api::ai::ai_completion_scope;
 use crate::api::chat::chat_scope;
+use crate::api::data_import::data_import_scope;
 use crate::api::file_storage::file_storage_scope;
 use crate::api::history::history_scope;
 use crate::api::metrics::metrics_scope;
 use crate::api::search::search_scope;
+use crate::api::server_info::server_info_scope;
 use crate::api::template::template_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
@@ -158,6 +161,7 @@ pub async fn run_actix_server(
       // .wrap(DecryptPayloadMiddleware)
       .wrap(access_control.clone())
       .wrap(RequestIdMiddleware)
+      .service(server_info_scope())
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())
@@ -169,6 +173,8 @@ pub async fn run_actix_server(
       .service(metrics_scope())
       .service(search_scope())
       .service(template_scope())
+      .service(data_import_scope())
+      .service(access_request_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
@@ -457,7 +463,11 @@ pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Cli
     config_builder.build()
   };
   let client = aws_sdk_s3::Client::from_conf(config);
-  create_bucket_if_not_exists(&client, s3_setting).await?;
+  if s3_setting.create_bucket {
+    create_bucket_if_not_exists(&client, s3_setting).await?;
+  } else {
+    info!("Skipping bucket creation, assumed to be created externally");
+  }
   Ok(client)
 }
 

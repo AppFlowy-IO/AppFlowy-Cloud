@@ -10,14 +10,14 @@ use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sqlx::types::uuid;
+use std::time::Instant;
 
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, event, info, instrument, trace};
+use tracing::{error, event, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
 
-use access_control::collab::CollabAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
 use appflowy_collaborate::indexer::IndexerProvider;
@@ -589,9 +589,11 @@ async fn create_collab_handler(
     .await
     .context("acquire transaction to upsert collab")
     .map_err(AppError::from)?;
+
+  let action = format!("Create new collab: {}", params);
   state
     .collab_access_control_storage
-    .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+    .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction, &action)
     .await?;
 
   transaction
@@ -619,7 +621,7 @@ async fn batch_create_collab_handler(
   let mut payload_buffer = Vec::new();
   let mut offset_len_list = Vec::new();
   let mut current_offset = 0;
-
+  let start = Instant::now();
   while let Some(item) = payload.next().await {
     if let Ok(bytes) = item {
       payload_buffer.extend_from_slice(&bytes);
@@ -644,39 +646,51 @@ async fn batch_create_collab_handler(
     }
   }
   // Perform decompression and processing in a Rayon thread pool
-  let mut collab_params_list = tokio::task::spawn_blocking(move || {
-    match compress_type {
-      CompressionType::Brotli { buffer_size } => {
-        let list = offset_len_list
-            .par_iter() // Use Rayon parallel iterator
-            .filter_map(|(offset, len)| {
-              let compressed_data = &payload_buffer[*offset..*offset + *len];
-              match decompress(compressed_data.to_vec(), buffer_size) {
-                Ok(decompressed_data) => {
-                  if let Ok(params) = CollabParams::from_bytes(&decompressed_data) {
-                    if params.validate().is_ok() {
-                      return Some(params);
-                    }
-                  }
-                },
-                Err(err) => {
-                  error!("Failed to decompress data: {:?}", err);
-                },
+  let mut collab_params_list = tokio::task::spawn_blocking(move || match compress_type {
+    CompressionType::Brotli { buffer_size } => offset_len_list
+      .into_par_iter()
+      .filter_map(|(offset, len)| {
+        let compressed_data = &payload_buffer[offset..offset + len];
+        match decompress(compressed_data.to_vec(), buffer_size) {
+          Ok(decompressed_data) => {
+            let params = CollabParams::from_bytes(&decompressed_data).ok()?;
+            if params.validate().is_ok() {
+              match validate_encode_collab(
+                &params.object_id,
+                &params.encoded_collab_v1,
+                &params.collab_type,
+              ) {
+                Ok(_) => Some(params),
+                Err(_) => None,
               }
+            } else {
               None
-            })
-            .collect::<Vec<_>>();
-        Ok::<_, AppError>(list)
-      },
-    }
+            }
+          },
+          Err(err) => {
+            error!("Failed to decompress data: {:?}", err);
+            None
+          },
+        }
+      })
+      .collect::<Vec<_>>(),
   })
   .await
-  .map_err(|_| AppError::InvalidRequest("Failed to decompress data".to_string()))??;
+  .map_err(|_| AppError::InvalidRequest("Failed to decompress data".to_string()))?;
 
-  info!("batch create {} collab objects", collab_params_list.len());
   if collab_params_list.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
+
+  let total_size = collab_params_list
+    .iter()
+    .fold(0, |acc, x| acc + x.encoded_collab_v1.len());
+  event!(
+    tracing::Level::INFO,
+    "decompressed {} collab objects in {:?}",
+    collab_params_list.len(),
+    start.elapsed()
+  );
 
   if state
     .indexer_provider
@@ -692,28 +706,18 @@ async fn batch_create_collab_handler(
     }
   }
 
-  // Process each collab params
-  for params in collab_params_list {
-    let object_id = params.object_id.clone();
-    if validate_encode_collab(
-      &params.object_id,
-      &params.encoded_collab_v1,
-      &params.collab_type,
-    )
-    .await
-    .is_ok()
-    {
-      state
-        .collab_access_control_storage
-        .insert_new_collab(&workspace_id, &uid, params)
-        .await?;
+  let start = Instant::now();
+  state
+    .collab_access_control_storage
+    .batch_insert_new_collab(&workspace_id, &uid, collab_params_list)
+    .await?;
 
-      state
-        .collab_access_control
-        .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
-        .await?;
-    }
-  }
+  event!(
+    tracing::Level::INFO,
+    "inserted collab objects to disk in {:?}, total size:{}",
+    start.elapsed(),
+    total_size
+  );
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -885,7 +889,7 @@ async fn batch_get_collab_handler(
   let result = BatchQueryCollabResult(
     state
       .collab_access_control_storage
-      .batch_get_collab(&uid, payload.into_inner().0)
+      .batch_get_collab(&uid, payload.into_inner().0, false)
       .await,
   );
   Ok(Json(AppResponse::Ok().with_data(result)))
@@ -934,7 +938,7 @@ async fn update_collab_handler(
 
   state
     .collab_access_control_storage
-    .insert_or_update_collab(&workspace_id, &uid, params, false)
+    .queue_insert_or_update_collab(&workspace_id, &uid, params, false)
     .await?;
   Ok(AppResponse::Ok().into())
 }

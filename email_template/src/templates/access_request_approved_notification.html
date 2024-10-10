@@ -1,0 +1,135 @@
+---
+title: "Your access request has been approved"
+preheader: "Workspace access request approved notification"
+bodyClass: bg-purple-50
+---
+
+<x-main>
+  <div
+    class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black"
+  >
+    <table align="center">
+      <tr>
+        <td class="w-[552px] max-w-full">
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="mx-2=1">Your request to access </span>
+            <span class="text-3xl font-bold">{{ workspaceName }}</span>
+            <span class="mx-2=1"> has been approved </span>
+          </p>
+          <x-divider space-x="20%" />
+          <table align="center">
+            <tr>
+              <td class="w-[60px]">
+                <div
+                  style="border: 2px solid black"
+                  class="rounded-2xl mr-2 w-[60px] h-[60px] bg-white overflow-hidden"
+                >
+                  <img
+                    src="{{ workspaceIconURL }}"
+                    class="overflow-hidden object-cover"
+                    width="100%"
+                    height="100%"
+                    alt="{{ workspaceName }}"
+                  />
+                </div>
+              </td>
+              <td>
+                <div class="font-bold mb-2">{{ workspaceName }}</div>
+                <div class="text-sm text-slate-500">
+                  {{ workspaceMembersCount }} members
+                </div>
+              </td>
+            </tr>
+          </table>
+          <x-button
+            align="center"
+            class="hover:opacity-90 cursor-pointer !text-xl !leading-[20px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
+            href="{{ launchWorkspaceUrl }}"
+          >
+            <div class="font-medium text-[24px]">View workspace</div>
+          </x-button>
+          <div
+            style="
+              margin-left: auto;
+              margin-right: auto;
+              width: 70%;
+              text-align: center;
+              font-size: 14px;
+              line-height: 18px;
+              color: #64748b;
+            "
+          >
+            By clicking "View workspace" above, you confirm that you have read,
+            understood, and agreed to AppFlowy's
+            <a href="https://appflowy.io/terms/app" style="color: #64748b"
+              >Terms & Conditions</a
+            >
+            and
+            <a href="https://appflowy.io/privacy/app" style="color: #64748b"
+              >Privacy Policy</a
+            >.
+          </div>
+          <x-divider space-x="20%" />
+        </td>
+      </tr>
+      <tr>
+        <td class="text-center text-slate-600 text-xs px-6">
+          <p class="m-0 mb-4 uppercase cursor-pointer">
+            <a href="https://appflowy.io">
+              <img
+                src="{{ cdnBaseUrl }}images/appflowy-logo.png"
+                width="150px"
+              />
+            </a>
+          </p>
+          <p class="m-0 text-sm text-black font-medium">
+            Bring projects, knowledge, and teams together with the power of AI.
+          </p>
+
+          <p class="cursor-default">
+            <a
+              href="https://twitter.com/appflowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/twitter.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://www.reddit.com/r/AppFlowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/reddit.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://github.com/AppFlowy-IO/AppFlowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/github.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://discord.gg/9Q2xaN37tV"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/discord.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</x-main>

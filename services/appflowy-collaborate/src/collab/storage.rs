@@ -7,19 +7,22 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use itertools::{Either, Itertools};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::Transaction;
+
 use tokio::time::timeout;
 use tracing::warn;
 use tracing::{error, instrument, trace};
 use validator::Validate;
 
 use crate::collab::access_control::CollabAccessControlImpl;
-use crate::collab::cache::CollabCache;
 use crate::command::{CLCommandSender, CollaborationCommand};
 use crate::shared_state::RealtimeSharedState;
 use app_error::AppError;
+use database::collab::cache::CollabCache;
 use database::collab::{
-  AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl, GetCollabOrigin,
+  insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStorage,
+  CollabStorageAccessControl, GetCollabOrigin,
 };
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
@@ -158,6 +161,40 @@ where
     }
   }
 
+  async fn batch_get_encode_collab_from_editing(
+    &self,
+    object_ids: Vec<String>,
+  ) -> HashMap<String, EncodedCollab> {
+    let (ret, rx) = tokio::sync::oneshot::channel();
+    let timeout_duration = Duration::from_secs(10);
+
+    // Attempt to send the command to the realtime server
+    if let Err(err) = self
+      .rt_cmd_sender
+      .send(CollaborationCommand::BatchGetEncodeCollab { object_ids, ret })
+      .await
+    {
+      error!(
+        "Failed to send get encode collab command to realtime server: {}",
+        err
+      );
+      return HashMap::new();
+    }
+
+    // Await the response from the realtime server with a timeout
+    match timeout(timeout_duration, rx).await {
+      Ok(Ok(batch_encoded_collab)) => batch_encoded_collab,
+      Ok(Err(err)) => {
+        error!("Failed to get encode collab from realtime server: {}", err);
+        HashMap::new()
+      },
+      Err(_) => {
+        error!("Timeout waiting for batch encode collab from realtime server");
+        HashMap::new()
+      },
+    }
+  }
+
   async fn queue_insert_collab(
     &self,
     workspace_id: &str,
@@ -183,6 +220,26 @@ where
       .await
       .map_err(AppError::from)
   }
+
+  async fn batch_insert_collabs(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params_list: Vec<CollabParams>,
+  ) -> Result<(), AppError> {
+    let mut transaction = self.cache.pg_pool().begin().await?;
+    insert_into_af_collab_bulk_for_user(&mut transaction, uid, workspace_id, &params_list).await?;
+    transaction.commit().await?;
+
+    // update the mem cache without blocking the current task
+    let cache = self.cache.clone();
+    tokio::spawn(async move {
+      for params in params_list {
+        let _ = cache.insert_encode_collab_to_mem(&params).await;
+      }
+    });
+    Ok(())
+  }
 }
 
 #[async_trait]
@@ -195,7 +252,7 @@ where
     (state.total_attempts, state.success_attempts)
   }
 
-  async fn insert_or_update_collab(
+  async fn queue_insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -235,25 +292,36 @@ where
     Ok(())
   }
 
-  async fn insert_new_collab(
+  async fn batch_insert_new_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params_list: Vec<CollabParams>,
   ) -> AppResult<()> {
-    params.validate()?;
-
     self
       .check_write_workspace_permission(workspace_id, uid)
       .await?;
-    self
-      .access_control
-      .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-      .await?;
-    self
-      .queue_insert_collab(workspace_id, uid, params, WritePriority::High)
-      .await?;
-    Ok(())
+
+    // TODO(nathan): batch insert permission
+    for params in &params_list {
+      self
+        .access_control
+        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+        .await?;
+    }
+
+    match tokio::time::timeout(
+      Duration::from_secs(60),
+      self.batch_insert_collabs(workspace_id, uid, params_list),
+    )
+    .await
+    {
+      Ok(result) => result,
+      Err(_) => {
+        error!("Timeout waiting for action completed",);
+        Err(AppError::RequestTimeout("".to_string()))
+      },
+    }
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, ty = %params.collab_type, err)]
@@ -264,6 +332,7 @@ where
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
+    action_description: &str,
   ) -> AppResult<()> {
     params.validate()?;
     self
@@ -273,11 +342,24 @@ where
       .access_control
       .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
       .await?;
-    self
-      .cache
-      .insert_encode_collab_data(workspace_id, uid, &params, transaction)
-      .await?;
-    Ok(())
+
+    match tokio::time::timeout(
+      Duration::from_secs(120),
+      self
+        .cache
+        .insert_encode_collab_data(workspace_id, uid, &params, transaction),
+    )
+    .await
+    {
+      Ok(result) => result,
+      Err(_) => {
+        error!(
+          "Timeout waiting for action completed: {}",
+          action_description
+        );
+        Err(AppError::RequestTimeout(action_description.to_string()))
+      },
+    }
   }
 
   #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, from_editing_collab = %from_editing_collab))]
@@ -326,6 +408,7 @@ where
     &self,
     _uid: &i64,
     queries: Vec<QueryCollab>,
+    from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult> {
     // Partition queries based on validation into valid queries and errors (with associated error messages).
     let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
@@ -340,8 +423,48 @@ where
             },
           )),
         });
+    let cache_queries = if from_editing_collab {
+      let editing_queries = valid_queries.clone();
+      let editing_results = self
+        .batch_get_encode_collab_from_editing(
+          editing_queries
+            .iter()
+            .map(|q| q.object_id.clone())
+            .collect(),
+        )
+        .await;
+      let editing_query_collab_results: HashMap<String, QueryCollabResult> =
+        tokio::task::spawn_blocking(move || {
+          let par_iter = editing_results.into_par_iter();
+          par_iter
+            .map(|(object_id, encoded_collab)| {
+              let encoding_result = encoded_collab.encode_to_bytes();
+              let query_collab_result = match encoding_result {
+                Ok(encoded_collab_bytes) => QueryCollabResult::Success {
+                  encode_collab_v1: encoded_collab_bytes,
+                },
+                Err(err) => QueryCollabResult::Failed {
+                  error: err.to_string(),
+                },
+              };
 
-    results.extend(self.cache.batch_get_encode_collab(valid_queries).await);
+              (object_id.clone(), query_collab_result)
+            })
+            .collect()
+        })
+        .await
+        .unwrap();
+      let editing_object_ids: Vec<String> = editing_query_collab_results.keys().cloned().collect();
+      results.extend(editing_query_collab_results);
+      valid_queries
+        .into_iter()
+        .filter(|q| !editing_object_ids.contains(&q.object_id))
+        .collect()
+    } else {
+      valid_queries
+    };
+
+    results.extend(self.cache.batch_get_encode_collab(cache_queries).await);
     results
   }
 

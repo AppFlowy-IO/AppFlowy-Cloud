@@ -301,6 +301,7 @@ async fn answer_stream_v2_handler(
   {
     Ok(answer_stream) => {
       let new_answer_stream = answer_stream.map_err(AppError::from);
+
       Ok(
         HttpResponse::Ok()
           .content_type("text/event-stream")

@@ -5,7 +5,7 @@ pub use anyhow::Result;
 use async_trait::async_trait;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::lock::RwLock;
+
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{
@@ -30,7 +30,7 @@ pub trait WorkspaceTemplate {
   async fn create_workspace_view(
     &self,
     uid: i64,
-    workspace_view_builder: Arc<RwLock<WorkspaceViewBuilder>>,
+    workspace_view_builder: &mut WorkspaceViewBuilder,
   ) -> Result<Vec<TemplateData>>;
 }
 
@@ -91,22 +91,18 @@ impl WorkspaceTemplateBuilder {
   }
 
   pub async fn build(&self) -> Result<Vec<TemplateData>> {
-    let workspace_view_builder = Arc::new(RwLock::from(WorkspaceViewBuilder::new(
-      self.workspace_id.clone(),
-      self.uid,
-    )));
-
+    let mut workspace_view_builder = WorkspaceViewBuilder::new(self.workspace_id.clone(), self.uid);
     let mut templates: Vec<TemplateData> = vec![];
     for handler in self.handlers.values() {
       if let Ok(template) = handler
-        .create_workspace_view(self.uid, workspace_view_builder.clone())
+        .create_workspace_view(self.uid, &mut workspace_view_builder)
         .await
       {
         templates.extend(template);
       }
     }
 
-    let views = workspace_view_builder.write().await.build();
+    let views = workspace_view_builder.build();
     // Safe to unwrap because we have at least one view.
     let first_view = views.first().unwrap().parent_view.clone();
     let first_level_views = views

@@ -4,11 +4,13 @@ use crate::resource_usage::{
 };
 use app_error::AppError;
 use async_trait::async_trait;
+use aws_sdk_s3::primitives::ByteStream;
 use database_entity::file_dto::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartData,
   UploadPartResponse,
 };
 use sqlx::PgPool;
+
 use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
@@ -26,7 +28,7 @@ pub trait BucketClient {
   async fn put_blob_as_content_type(
     &self,
     object_key: &str,
-    content: &[u8],
+    stream: ByteStream,
     content_type: &str,
   ) -> Result<(), AppError>;
 

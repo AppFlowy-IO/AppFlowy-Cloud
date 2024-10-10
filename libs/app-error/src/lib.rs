@@ -11,6 +11,7 @@ use appflowy_ai_client::error::AIError;
 use reqwest::StatusCode;
 use serde::Serialize;
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error, Default)]
 pub enum AppError {
@@ -145,6 +146,12 @@ pub enum AppError {
 
   #[error("{0}")]
   NotInviteeOfWorkspaceInvitation(String),
+
+  #[error("{0}")]
+  MissingView(String),
+
+  #[error("There is existing access request for workspace {workspace_id} and view {view_id}")]
+  AccessRequestAlreadyExists { workspace_id: Uuid, view_id: Uuid },
 }
 
 impl AppError {
@@ -212,6 +219,8 @@ impl AppError {
       AppError::InvalidPublishedOutline(_) => ErrorCode::InvalidPublishedOutline,
       AppError::InvalidFolderView(_) => ErrorCode::InvalidFolderView,
       AppError::NotInviteeOfWorkspaceInvitation(_) => ErrorCode::NotInviteeOfWorkspaceInvitation,
+      AppError::MissingView(_) => ErrorCode::MissingView,
+      AppError::AccessRequestAlreadyExists { .. } => ErrorCode::AccessRequestAlreadyExists,
     }
   }
 }
@@ -339,6 +348,8 @@ pub enum ErrorCode {
   InvalidPublishedOutline = 1039,
   InvalidFolderView = 1040,
   NotInviteeOfWorkspaceInvitation = 1041,
+  MissingView = 1042,
+  AccessRequestAlreadyExists = 1043,
 }
 
 impl ErrorCode {

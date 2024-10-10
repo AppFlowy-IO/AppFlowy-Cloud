@@ -6,6 +6,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::CollabType;
+use collab_folder::{Folder, FolderData, Workspace};
 use collab_user::core::UserAwareness;
 use database::collab::CollabStorage;
 use database::pg_row::AFWorkspaceRow;
@@ -64,6 +65,7 @@ where
           embeddings: None,
         },
         txn,
+        "initialize workspace for user",
       )
       .await?;
 
@@ -111,7 +113,7 @@ where
   Ok(())
 }
 
-async fn create_user_awareness(
+pub(crate) async fn create_user_awareness(
   uid: &i64,
   user_uuid: &Uuid,
   workspace_id: &str,
@@ -142,12 +144,50 @@ async fn create_user_awareness(
         embeddings: None,
       },
       txn,
+      "create user awareness",
     )
     .await?;
   Ok(object_id)
 }
 
-async fn create_workspace_database_collab(
+pub(crate) async fn create_workspace_collab(
+  uid: i64,
+  workspace_id: &str,
+  name: &str,
+  storage: &Arc<CollabAccessControlStorage>,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+) -> Result<(), AppError> {
+  let workspace = Workspace::new(workspace_id.to_string(), name.to_string(), uid);
+  let folder_data = FolderData::new(workspace);
+
+  let collab = Collab::new_with_origin(CollabOrigin::Empty, workspace_id, vec![], false);
+  let folder = Folder::create(uid, collab, None, folder_data);
+  let encode_collab = folder
+    .encode_collab()
+    .map_err(|err| AppError::Internal(err.into()))?;
+
+  let encoded_collab_v1 = encode_collab
+    .encode_to_bytes()
+    .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
+
+  storage
+    .insert_new_collab_with_transaction(
+      workspace_id,
+      &uid,
+      CollabParams {
+        object_id: workspace_id.to_string(),
+        encoded_collab_v1: encoded_collab_v1.into(),
+        collab_type: CollabType::Folder,
+        embeddings: None,
+      },
+      txn,
+      "create workspace collab",
+    )
+    .await?;
+  Ok(())
+}
+
+pub(crate) async fn create_workspace_database_collab(
   workspace_id: &str,
   uid: &i64,
   object_id: &str,
@@ -156,17 +196,13 @@ async fn create_workspace_database_collab(
   initial_database_records: Vec<(String, String)>,
 ) -> Result<(), AppError> {
   let collab_type = CollabType::WorkspaceDatabase;
-  let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
-  {
-    let workspace_database_body = WorkspaceDatabaseBody::create(&mut collab);
-    let mut txn = collab.context.transact_mut();
-    for (object_id, database_id) in initial_database_records {
-      workspace_database_body.add_database(&mut txn, &database_id, vec![object_id]);
-    }
-  };
-
-  let encode_collab = collab
-    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+  let mut workspace_database_body = WorkspaceDatabaseBody::create(collab);
+  for (object_id, database_id) in initial_database_records {
+    workspace_database_body.add_database(&database_id, vec![object_id]);
+  }
+  let encode_collab = workspace_database_body
+    .encode_collab_v1()
     .map_err(|err| AppError::Internal(err.into()))?;
 
   let encoded_collab_v1 = encode_collab
@@ -184,6 +220,7 @@ async fn create_workspace_database_collab(
         embeddings: None,
       },
       txn,
+      "create database collab",
     )
     .await?;
 

@@ -5,7 +5,6 @@ use crate::{
     manager::GroupManager,
   },
 };
-use access_control::collab::RealtimeAccessControl;
 use collab::entity::EncodedCollab;
 use collab_rt_entity::ClientCollabMessage;
 use dashmap::DashMap;
@@ -38,13 +37,12 @@ pub enum CollaborationCommand {
   },
 }
 
-pub(crate) fn spawn_collaboration_command<S, AC>(
+pub(crate) fn spawn_collaboration_command<S>(
   mut command_recv: CLCommandReceiver,
   group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
-  weak_groups: Weak<GroupManager<S, AC>>,
+  weak_groups: Weak<GroupManager<S>>,
 ) where
   S: CollabStorage,
-  AC: RealtimeAccessControl,
 {
   let group_sender_by_object_id = group_sender_by_object_id.clone();
   tokio::spawn(async move {

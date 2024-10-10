@@ -2,27 +2,27 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 
+use access_control::casbin::collab::{CollabAccessControlImpl, RealtimeCollabAccessControlImpl};
+use access_control::casbin::notification::spawn_listen_on_workspace_member_change;
+use access_control::casbin::workspace::WorkspaceAccessControlImpl;
 use actix::Supervisor;
 use actix_web::dev::Server;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer};
 use anyhow::{Context, Error};
+use database::collab::cache::CollabCache;
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::{info, warn};
 
 use crate::actix_ws::server::RealtimeServerActor;
-use access_control::access::AccessControl;
+use crate::collab::access_control::CollabStorageAccessControlImpl;
+use access_control::casbin::access::AccessControl;
 use appflowy_ai_client::client::AppFlowyAIClient;
-use database::collab::cache::CollabCache;
-use workspace_access::notification::spawn_listen_on_workspace_member_change;
-use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::{collab_scope, ws_scope};
-use crate::collab::access_control::{
-  CollabAccessControlImpl, CollabStorageAccessControlImpl, RealtimeCollabAccessControlImpl,
-};
+
 use crate::collab::notification::spawn_listen_on_collab_member_change;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
@@ -69,9 +69,11 @@ pub async fn run_actix_server(
   let storage = state.collab_access_control_storage.clone();
 
   // Initialize metrics that which are registered in the registry.
-  let realtime_server = CollaborationServer::<_, _>::new(
+  let realtime_server = CollaborationServer::<_>::new(
     storage.clone(),
-    RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
+    Arc::new(RealtimeCollabAccessControlImpl::new(
+      state.access_control.clone(),
+    )),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
     state.redis_connection_manager.clone(),
@@ -132,8 +134,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let collab_cache = CollabCache::new(redis_conn_manager.clone(), pg_pool.clone());
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {
-    collab_access_control: collab_access_control.clone().into(),
-    workspace_access_control: workspace_access_control.clone().into(),
+    collab_access_control: Arc::new(collab_access_control.clone()),
+    workspace_access_control: Arc::new(workspace_access_control.clone()),
     cache: collab_cache.clone(),
   };
   let snapshot_control = SnapshotControl::new(

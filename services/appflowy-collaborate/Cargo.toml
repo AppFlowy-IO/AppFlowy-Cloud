@@ -86,7 +86,6 @@ parking_lot = "0.12.1"
 lazy_static = "1.4.0"
 itertools = "0.12.0"
 validator = "0.16.1"
-workspace-access.workspace = true
 rayon.workspace = true
 
 [dev-dependencies]

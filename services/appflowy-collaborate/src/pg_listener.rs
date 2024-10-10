@@ -1,10 +1,10 @@
 use crate::collab::notification::CollabMemberNotification;
+use access_control::casbin::notification::WorkspaceMemberNotification;
 use anyhow::Error;
 use database::listener::PostgresDBListener;
 use database::pg_row::AFUserNotification;
 use sqlx::PgPool;
 use tokio::sync::broadcast;
-use workspace_access::notification::WorkspaceMemberNotification;
 
 pub struct PgListeners {
   user_listener: UserListener,

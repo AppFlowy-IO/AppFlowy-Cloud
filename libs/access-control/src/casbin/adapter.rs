@@ -1,7 +1,6 @@
-use crate::access::ObjectType;
-
 use async_trait::async_trait;
 
+use crate::entity::ObjectType;
 use crate::metrics::AccessControlMetrics;
 use casbin::Adapter;
 use casbin::Filter;

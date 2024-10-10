@@ -12,6 +12,7 @@ use infra::env_util::{get_env_var, get_env_var_opt};
 #[derive(Clone, Debug)]
 pub struct Config {
   pub app_env: Environment,
+  pub access_control: AccessControlSetting,
   pub db_settings: DatabaseSetting,
   pub gotrue: GoTrueSetting,
   pub application: ApplicationSetting,
@@ -25,6 +26,11 @@ pub struct Config {
   pub mailer: MailerSetting,
   pub apple_oauth: AppleOAuthSetting,
   pub appflowy_web_url: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct AccessControlSetting {
+  pub is_enabled: bool,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -172,6 +178,11 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     app_env: get_env_var("APPFLOWY_ENVIRONMENT", "local")
       .parse()
       .context("fail to get APPFLOWY_ENVIRONMENT")?,
+    access_control: AccessControlSetting {
+      is_enabled: get_env_var("APPFLOWY_ACCESS_CONTROL", "false")
+        .parse()
+        .context("fail to get APPFLOWY_ACCESS_CONTROL")?,
+    },
     db_settings: DatabaseSetting {
       pg_conn_opts: PgConnectOptions::from_str(&get_env_var(
         "APPFLOWY_DATABASE_URL",

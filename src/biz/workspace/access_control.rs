@@ -27,18 +27,15 @@ use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessContr
 use crate::state::UserCache;
 
 #[derive(Clone)]
-pub struct WorkspaceMiddlewareAccessControl<AC: WorkspaceAccessControl> {
+pub struct WorkspaceMiddlewareAccessControl {
   pub pg_pool: PgPool,
-  pub access_control: Arc<AC>,
+  pub access_control: Arc<dyn WorkspaceAccessControl>,
   skip_resources: Vec<(Method, ResourceDef)>,
   require_role_rules: Vec<(ResourceDef, HashMap<Method, AFRole>)>,
 }
 
-impl<AC> WorkspaceMiddlewareAccessControl<AC>
-where
-  AC: WorkspaceAccessControl,
-{
-  pub fn new(pg_pool: PgPool, access_control: Arc<AC>) -> Self {
+impl WorkspaceMiddlewareAccessControl {
+  pub fn new(pg_pool: PgPool, access_control: Arc<dyn WorkspaceAccessControl>) -> Self {
     Self {
       pg_pool,
       // Skip access control when the request matches the following resources
@@ -102,10 +99,7 @@ where
 }
 
 #[async_trait]
-impl<AC> MiddlewareAccessControl for WorkspaceMiddlewareAccessControl<AC>
-where
-  AC: WorkspaceAccessControl,
-{
+impl MiddlewareAccessControl for WorkspaceMiddlewareAccessControl {
   fn resource(&self) -> AccessResource {
     AccessResource::Workspace
   }

@@ -3,31 +3,39 @@ use crate::ext::api::{
   accept_workspace_invitation, delete_current_user, invite_user_to_workspace, leave_workspace,
   verify_token_cloud,
 };
+use crate::models::{AppState, WebApiLoginRequest};
 use crate::models::{
-  WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest,
-  WebApiInviteUserRequest, WebApiPutUserRequest,
+  LoginParams, OAuthRedirect, OAuthRedirectToken, WebApiAdminCreateUserRequest,
+  WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest, WebApiInviteUserRequest,
+  WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
-use crate::session::{self, new_session_cookie, UserSession};
-use crate::{models::WebApiLoginRequest, AppState};
-use axum::extract::Path;
-use axum::http::{status, HeaderMap};
-use axum::response::Result;
-use axum::routing::delete;
+use crate::session::{self, new_session_cookie, CodeSession, UserSession};
+use axum::extract::{Path, Query};
+use axum::http::{status, HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Redirect, Result};
+use axum::routing::{delete, get};
 use axum::Form;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
+use base64::engine::Engine;
+use base64::prelude::BASE64_STANDARD_NO_PAD;
 use gotrue::params::{
   AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
   MagicLinkParams,
 };
 use gotrue_entity::dto::{GotrueTokenResponse, SignUpResponse, UpdateGotrueUserParams, User};
+use rand::distributions::Alphanumeric;
+use rand::Rng;
+use sha2::Digest;
 use tracing::info;
 
 pub fn router() -> Router<AppState> {
   Router::new()
     .route("/signin", post(sign_in_handler))
+    .route("/oauth-redirect", get(oauth_redirect_handler))
+    .route("/oauth-redirect/token", get(oauth_redirect_token_handler))
     .route("/signup", post(sign_up_handler))
     .route("/login-refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
@@ -105,7 +113,9 @@ async fn admin_create_sso_handler(
 /// The client application should implement handling for this URL format, typically through the
 /// `sign_in_with_url` method in the `client-api` crate. See [client_api::Client::sign_in_with_url] for more details.
 ///
-async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError<'static>> {
+async fn open_app_handler(
+  session: UserSession,
+) -> Result<axum::response::Response, WebApiError<'static>> {
   let app_sign_in_url = format!(
       "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
         session.token.access_token,
@@ -114,16 +124,16 @@ async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError
         session.token.refresh_token,
         session.token.token_type,
   );
-  Ok(htmx_redirect(&app_sign_in_url))
+  Ok(Redirect::to(&app_sign_in_url).into_response())
 }
 
 /// Delete the user account and all associated data.
 async fn delete_account_handler(
   state: State<AppState>,
   session: UserSession,
-) -> Result<HeaderMap, WebApiError<'static>> {
+) -> Result<axum::response::Response, WebApiError<'static>> {
   delete_current_user(&session.token.access_token, &state.appflowy_cloud_url).await?;
-  Ok(htmx_redirect("/web/login"))
+  Ok(Redirect::to("/web/login").into_response())
 }
 
 // Invite another user, this will trigger email sending
@@ -309,7 +319,8 @@ async fn login_refresh_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Path(refresh_token): Path<String>,
-) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  Query(login): Query<LoginParams>,
+) -> Result<axum::response::Response, WebApiError<'static>> {
   let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::RefreshToken(
@@ -327,7 +338,7 @@ async fn login_refresh_handler(
     ))
     .await?;
 
-  session_login(State(state), token, jar).await
+  session_login(State(state), token, jar, login.redirect_to.as_deref()).await
 }
 
 // login and set the cookie
@@ -336,10 +347,16 @@ async fn sign_in_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
-) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
-  if param.password.is_empty() {
-    let res = send_magic_link(State(state), &param.email).await?;
-    return Ok((CookieJar::new(), HeaderMap::new(), res));
+) -> Result<axum::response::Response, WebApiError<'static>> {
+  let WebApiLoginRequest {
+    email,
+    password,
+    redirect_to,
+  } = param;
+
+  if password.is_empty() {
+    let res = send_magic_link(State(state), &email).await?;
+    return Ok(res.into_response());
   }
 
   // Attempt to sign in with email and password
@@ -347,40 +364,183 @@ async fn sign_in_handler(
     .gotrue_client
     .token(&gotrue::grant::Grant::Password(
       gotrue::grant::PasswordGrant {
-        email: param.email.to_owned(),
-        password: param.password.to_owned(),
+        email: email.to_owned(),
+        password: password.to_owned(),
       },
     ))
     .await?;
 
-  session_login(State(state), token, jar).await
+  session_login(State(state), token, jar, redirect_to.as_deref()).await
+}
+
+async fn oauth_redirect_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Query(oauth_redirect): Query<OAuthRedirect>,
+) -> Result<axum::response::Response, WebApiError<'static>> {
+  {
+    // OAuthRedirect verification
+    if oauth_redirect.client_id != state.config.oauth.client_id {
+      return Err(WebApiError::new(
+        StatusCode::BAD_REQUEST,
+        "invalid client_id",
+      ));
+    }
+    if oauth_redirect.response_type != "code" {
+      return Err(WebApiError::new(
+        StatusCode::BAD_REQUEST,
+        "invalid response_type, only 'code' is support",
+      ));
+    }
+    {
+      // Check if the redirect_uri is in the allowable list
+      let mut found = false;
+      for allowable_uri in &state.config.oauth.allowable_redirect_uris {
+        if oauth_redirect.redirect_uri == *allowable_uri {
+          found = true;
+          break;
+        }
+      }
+      if !found {
+        return Err(WebApiError::new(
+          StatusCode::BAD_REQUEST,
+          format!(
+            "invalid redirect_uri: {}, allowable_uris: {}",
+            oauth_redirect.redirect_uri,
+            state.config.oauth.allowable_redirect_uris.join(", ")
+          ),
+        ));
+      }
+    }
+  }
+
+  let code = gen_rand_alpha_num(32);
+  state
+    .session_store
+    .put_code_session(
+      &code,
+      &CodeSession {
+        session_id: session.session_id.clone(),
+        code_challenge: oauth_redirect.code_challenge,
+        code_challenge_method: oauth_redirect.code_challenge_method,
+      },
+    )
+    .await?;
+
+  let url = format!(
+    "{}?code={}&state={}",
+    oauth_redirect.redirect_uri, code, oauth_redirect.state,
+  );
+  let resp = Redirect::to(&url).into_response();
+  Ok(resp)
+}
+
+async fn oauth_redirect_token_handler(
+  State(state): State<AppState>,
+  Query(token_req): Query<OAuthRedirectToken>,
+) -> Result<axum::response::Response, WebApiError<'static>> {
+  // Check client secret (if exists)
+  if let Some(server_client_secret) = state.config.oauth.client_secret {
+    match token_req.client_secret {
+      Some(given_client_secret) => {
+        if server_client_secret != given_client_secret {
+          return Err(WebApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid client_secret",
+          ));
+        }
+      },
+      _ => {
+        return Err(WebApiError::new(
+          StatusCode::BAD_REQUEST,
+          "expecting client_secret",
+        ));
+      },
+    }
+  };
+
+  let code_session = state
+    .session_store
+    .get_code_session(&token_req.code)
+    .await?
+    .ok_or_else(|| WebApiError::new(StatusCode::BAD_REQUEST, "invalid code"))?;
+
+  if let Some(code_challenge) = code_session.code_challenge {
+    match code_session.code_challenge_method.as_deref() {
+      Some("S256") => {
+        let verifier = token_req.code_verifier.ok_or_else(|| {
+          WebApiError::new(status::StatusCode::BAD_REQUEST, "missing code_verifier")
+        })?;
+
+        // get code challenge based64 decoded
+        let code_challenge = BASE64_STANDARD_NO_PAD
+          .decode(code_challenge)
+          .map_err(|err| {
+            WebApiError::new(
+              status::StatusCode::BAD_REQUEST,
+              format!("failed to base64 decode code challege: {}", err),
+            )
+          })?;
+
+        // hash the verifier and check against the original code challenge
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(verifier.as_bytes());
+        let verifier_hashed = hasher.finalize().to_vec();
+        if verifier_hashed != code_challenge {
+          return Err(WebApiError::new(
+            status::StatusCode::BAD_REQUEST,
+            "invalid code_verifier",
+          ));
+        }
+      },
+      _ => {
+        return Err(WebApiError::new(
+          status::StatusCode::BAD_REQUEST,
+          "invalid code_challenge_method, only support S256",
+        ));
+      },
+    }
+  }
+
+  let user_session = state
+    .session_store
+    .get_user_session(&code_session.session_id)
+    .await?
+    .ok_or_else(|| WebApiError::new(StatusCode::BAD_REQUEST, "invalid session"))?;
+
+  let resp = axum::Json::from(user_session.token);
+  Ok(resp.into_response())
 }
 
 async fn sign_up_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
-) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
-  if param.password.is_empty() {
-    let res = send_magic_link(State(state), &param.email).await?;
-    return Ok((CookieJar::new(), HeaderMap::new(), res));
+) -> Result<axum::response::Response, WebApiError<'static>> {
+  let WebApiLoginRequest {
+    email,
+    password,
+    redirect_to,
+  } = param;
+
+  if password.is_empty() {
+    let res = send_magic_link(State(state), &email).await?;
+    return Ok(res.into_response());
   }
 
   let sign_up_res = state
     .gotrue_client
-    .sign_up(&param.email, &param.password, Some("/"))
+    .sign_up(&email, &password, Some("/"))
     .await?;
 
   match sign_up_res {
     // when GOTRUE_MAILER_AUTOCONFIRM=true, auto sign in
-    SignUpResponse::Authenticated(token) => session_login(State(state), token, jar).await,
+    SignUpResponse::Authenticated(token) => {
+      session_login(State(state), token, jar, redirect_to.as_deref()).await
+    },
     SignUpResponse::NotAuthenticated(user) => {
       info!("user signed up and not authenticated: {:?}", user);
-      Ok((
-        jar,
-        HeaderMap::new(),
-        WebApiResponse::<()>::from_str("Email Verification Sent".into()),
-      ))
+      Ok(WebApiResponse::<()>::from_str("Email Verification Sent".into()).into_response())
     },
   }
 }
@@ -388,7 +548,7 @@ async fn sign_up_handler(
 async fn logout_handler(
   State(state): State<AppState>,
   jar: CookieJar,
-) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
+) -> Result<axum::response::Response, WebApiError<'static>> {
   let session_id = jar
     .get("session_id")
     .ok_or(WebApiError::new(
@@ -398,16 +558,13 @@ async fn logout_handler(
     .value();
 
   state.session_store.del_user_session(session_id).await?;
-  Ok((
-    jar.remove(Cookie::from("session_id")),
-    htmx_redirect("/web"),
-  ))
-}
-
-fn htmx_redirect(url: &str) -> HeaderMap {
-  let mut h = HeaderMap::new();
-  h.insert("HX-Redirect", url.parse().unwrap());
-  h
+  Ok(
+    (
+      jar.remove(Cookie::from("session_id")),
+      htmx_redirect("/web/login"),
+    )
+      .into_response(),
+  )
 }
 
 fn htmx_trigger(trigger: &str) -> HeaderMap {
@@ -420,7 +577,8 @@ async fn session_login(
   State(state): State<AppState>,
   token: GotrueTokenResponse,
   jar: CookieJar,
-) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  redirect_to: Option<&str>,
+) -> Result<axum::response::Response, WebApiError<'static>> {
   verify_token_cloud(
     token.access_token.as_str(),
     state.appflowy_cloud_url.as_str(),
@@ -428,14 +586,27 @@ async fn session_login(
   .await?;
 
   let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(new_session_id.to_string(), token);
+  let new_session = session::UserSession {
+    session_id: new_session_id.to_string(),
+    token,
+  };
   state.session_store.put_user_session(&new_session).await?;
 
-  Ok((
-    jar.add(new_session_cookie(new_session_id)),
-    htmx_redirect("/web/home"),
-    ().into(),
-  ))
+  let decoded_redirect_to = redirect_to.and_then(|s| match urlencoding::decode(s) {
+    Ok(r) => Some(r),
+    Err(err) => {
+      tracing::error!("failed to decode redirect_to: {}", err);
+      None
+    },
+  });
+
+  Ok(
+    (
+      jar.add(new_session_cookie(new_session_id)),
+      htmx_redirect(decoded_redirect_to.as_deref().unwrap_or("/web/home")),
+    )
+      .into_response(),
+  )
 }
 
 async fn send_magic_link(
@@ -453,6 +624,13 @@ async fn send_magic_link(
     )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Magic Link Sent".into()))
+}
+
+fn htmx_redirect(url: &str) -> HeaderMap {
+  let mut h = HeaderMap::new();
+  h.insert("Location", url.parse().unwrap());
+  h.insert("HX-Redirect", url.parse().unwrap());
+  h
 }
 
 fn get_base_url(header_map: &HeaderMap) -> String {
@@ -477,4 +655,13 @@ fn get_header_value_or_default<'a>(
     },
     None => default,
   }
+}
+
+fn gen_rand_alpha_num(n: usize) -> String {
+  let random_string: String = rand::thread_rng()
+    .sample_iter(&Alphanumeric)
+    .take(n)
+    .map(char::from)
+    .collect();
+  random_string
 }

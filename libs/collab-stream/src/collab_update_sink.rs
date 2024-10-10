@@ -55,6 +55,9 @@ impl AwarenessUpdateSink {
     let mut lock = self.conn.lock().await;
     let msg_id: MessageId = cmd("XADD")
       .arg(&self.stream_key)
+      .arg("MAXLEN")
+      .arg("~")
+      .arg(100) // we cap awareness stream to at most 20 awareness updates
       .arg("*")
       .arg("sender")
       .arg(msg.sender.to_string())

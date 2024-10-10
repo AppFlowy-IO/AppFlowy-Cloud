@@ -9,8 +9,8 @@ use crate::pubsub::{CollabStreamPub, CollabStreamSub};
 use crate::stream_group::{StreamConfig, StreamGroup};
 use futures::Stream;
 use redis::aio::ConnectionManager;
-use redis::streams::{StreamReadOptions, StreamReadReply};
-use redis::AsyncCommands;
+use redis::streams::{StreamRangeReply, StreamReadOptions, StreamReadReply};
+use redis::{AsyncCommands, FromRedisValue};
 use std::time::Duration;
 use tracing::error;
 
@@ -144,5 +144,29 @@ impl CollabRedisStream {
         }
       }
     }
+  }
+
+  pub async fn prune_stream(
+    &self,
+    stream_key: &str,
+    message_id: MessageId,
+  ) -> Result<usize, StreamError> {
+    let mut conn = self.connection_manager.clone();
+    let value = conn.xrange(stream_key, "-", message_id.to_string()).await?;
+    let value = StreamRangeReply::from_owned_redis_value(value)?;
+    let msg_ids: Vec<_> = value
+      .ids
+      .into_iter()
+      .map(|stream_id| stream_id.id)
+      .collect();
+    let count: usize = conn.xdel(stream_key, &msg_ids).await?;
+    drop(conn);
+    tracing::debug!(
+      "Pruned redis stream `{}` <= `{}` ({} objects)",
+      stream_key,
+      message_id,
+      count
+    );
+    Ok(count)
   }
 }

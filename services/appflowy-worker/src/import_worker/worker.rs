@@ -17,7 +17,8 @@ use collab_importer::notion::NotionImporter;
 use collab_importer::util::FileId;
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
 use database::workspace::{
-  select_workspace_database_storage_id, update_import_task_status, update_workspace_status,
+  delete_from_workspace, select_workspace_database_storage_id, update_import_task_status,
+  update_workspace_status,
 };
 use database_entity::dto::CollabParams;
 use futures::io::BufReader;
@@ -40,6 +41,7 @@ use std::fs::Permissions;
 use std::ops::DerefMut;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
@@ -248,10 +250,16 @@ async fn process_task(
           let result =
             process_unzip_file(&task, &unzip_dir_path, pg_pool, redis_client, s3_client).await;
 
-          // 3. remove file from S3
-          if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
-            error!("Failed to delete zip file from S3: {:?}", err);
+          // If there is any errors when processing the unzip file, we will remove the workspace and notify the user.
+          if result.is_err() {
+            info!(
+              "[Import]: failed to import notion file, delete workspace:{}",
+              task.workspace_id
+            );
+            remove_workspace(&task.workspace_id, pg_pool).await;
           }
+
+          clean_up(s3_client, &task).await;
           notify_user(&task, result, notifier).await?;
         },
         Err(err) => {
@@ -259,6 +267,8 @@ async fn process_task(
           if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
             error!("Failed to delete zip file from S3: {:?}", err);
           }
+          remove_workspace(&task.workspace_id, pg_pool).await;
+          clean_up(s3_client, &task).await;
           notify_user(&task, Err(err), notifier).await?;
         },
       }
@@ -613,6 +623,23 @@ async fn process_unzip_file(
   }
 
   Ok(())
+}
+
+async fn clean_up(s3_client: &Arc<dyn S3Client>, task: &NotionImportTask) {
+  if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
+    error!("Failed to delete zip file from S3: {:?}", err);
+  }
+}
+
+async fn remove_workspace(workspace_id: &str, pg_pool: &PgPool) {
+  if let Ok(workspace_id) = Uuid::from_str(workspace_id) {
+    if let Err(err) = delete_from_workspace(pg_pool, &workspace_id).await {
+      error!(
+        "Failed to delete workspace: {:?} when fail to import notion file",
+        err
+      );
+    }
+  }
 }
 
 async fn notify_user(

@@ -8,6 +8,7 @@ use test_config::TestConfig;
 
 pub struct AdminFrontendClient {
   test_config: TestConfig,
+  #[allow(dead_code)]
   server_config: Config,
   session_id: Option<String>,
   http_client: reqwest::Client,

@@ -10,6 +10,7 @@ mod web_api;
 mod web_app;
 
 use axum::{response::Redirect, routing::get, Router};
+use models::AppState;
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
 use tracing::info;
@@ -75,12 +76,4 @@ async fn main() {
   axum::serve(listener, app)
     .await
     .expect("failed to run server");
-}
-
-#[derive(Clone)]
-pub struct AppState {
-  pub appflowy_cloud_url: String,
-  pub gotrue_client: gotrue::api::Client,
-  pub session_store: session::SessionStorage,
-  pub config: Config,
 }

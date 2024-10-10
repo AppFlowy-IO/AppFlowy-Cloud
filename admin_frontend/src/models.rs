@@ -1,6 +1,16 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
+use crate::{config::Config, session};
+
+#[derive(Clone)]
+pub struct AppState {
+  pub appflowy_cloud_url: String,
+  pub gotrue_client: gotrue::api::Client,
+  pub session_store: session::SessionStorage,
+  pub config: Config,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct WebApiLoginRequest {
   pub email: String,
   pub password: String,
@@ -68,7 +78,7 @@ pub enum OAuthLoginAction {
   AcceptWorkspaceInvite,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OAuthRedirect {
   pub client_id: String,
   pub state: String,
@@ -79,7 +89,7 @@ pub struct OAuthRedirect {
   pub code_challenge_method: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct OAuthRedirectToken {
   pub code: String,
   pub client_id: Option<String>,

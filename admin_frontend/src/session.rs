@@ -1,3 +1,4 @@
+use crate::models::AppState;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
@@ -12,8 +13,6 @@ use gotrue_entity::dto::GotrueTokenResponse;
 use jwt::{Claims, Header};
 use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue, ToRedisArgs};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
-use crate::AppState;
 
 static SESSION_EXPIRATION: usize = 60 * 60 * 24; // 1 day
 

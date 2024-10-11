@@ -29,7 +29,7 @@ use collab_stream::stream_group::StreamGroup;
 use dashmap::DashMap;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::{
-  AFCollabEmbeddings, CollabParams, InsertSnapshotParams, QueryCollabParams,
+  AFCollabEmbeddings, CollabParams, InsertSnapshotParams, QueryCollabParams, SnapshotData,
 };
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
@@ -1077,25 +1077,36 @@ impl CollabPersister {
       // if we want history-keeping variant, we need to get a snapshot
       let snapshot = self
         .storage
-        .get_collab_snapshot(&self.workspace_id, &self.object_id, &1)
+        .get_latest_snapshot(&self.workspace_id, &self.object_id)
         .await
         .map_err(|err| RealtimeError::Internal(err.into()))?;
-      let encoded_collab = EncodedCollab::decode_from_bytes(&snapshot.encoded_collab_v1)
-        .map_err(|err| RealtimeError::Internal(err.into()))?;
-      encoded_collab.doc_state
+      match snapshot {
+        None => None,
+        Some(snapshot) => {
+          let encoded_collab = EncodedCollab::decode_from_bytes(&snapshot.encoded_collab_v1)
+            .map_err(|err| RealtimeError::Internal(err.into()))?;
+          Some(encoded_collab.doc_state)
+        },
+      }
     } else {
-      // if we want a lightweight variant, we need to get a collab
-      let params = QueryCollabParams::new(
-        self.object_id.clone(),
-        self.collab_type.clone(),
-        self.workspace_id.clone(),
-      );
-      self
-        .storage
-        .get_encode_collab(GetCollabOrigin::Server, params, false)
-        .await
-        .map_err(|err| RealtimeError::Internal(err.into()))?
-        .doc_state
+      None // if we want a lightweight variant, we'll fallback to default
+    };
+    let doc_state = match doc_state {
+      Some(doc_state) => doc_state,
+      None => {
+        // we didn't find a snapshot, or we want a lightweight collab version
+        let params = QueryCollabParams::new(
+          self.object_id.clone(),
+          self.collab_type.clone(),
+          self.workspace_id.clone(),
+        );
+        self
+          .storage
+          .get_encode_collab(GetCollabOrigin::Server, params, false)
+          .await
+          .map_err(|err| RealtimeError::Internal(err.into()))?
+          .doc_state
+      },
     };
 
     let collab: Collab = Collab::new_with_source(

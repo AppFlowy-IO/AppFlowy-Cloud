@@ -551,6 +551,28 @@ pub async fn select_snapshot(
   Ok(row)
 }
 
+#[inline]
+pub async fn select_latest_snapshot(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  object_id: &str,
+) -> Result<Option<AFSnapshotRow>, Error> {
+  let row = sqlx::query_as!(
+    AFSnapshotRow,
+    r#"
+      SELECT * FROM af_collab_snapshot
+      WHERE workspace_id = $1 AND oid = $2 AND deleted_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 1;
+    "#,
+    workspace_id,
+    object_id
+  )
+  .fetch_optional(pg_pool)
+  .await?;
+  Ok(row)
+}
+
 /// Returns list of snapshots for given object_id in descending order of creation time.
 pub async fn get_all_collab_snapshot_meta(
   pg_pool: &PgPool,

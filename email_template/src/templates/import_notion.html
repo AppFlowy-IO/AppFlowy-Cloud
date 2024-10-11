@@ -5,107 +5,160 @@ bodyClass: bg-purple-50
 ---
 
 <x-main>
-    <div class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black">
-        <table align="center">
+  <div
+    class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black"
+  >
+    <table align="center">
+      <tr>
+        <td class="w-[552px] max-w-full">
+          <!-- Conditional Rendering for Success or Error -->
+          {% if error %}
+          <p
+            class="w-full text-center break-words whitespace-normal text-2xl text-red-600"
+          >
+            <span class="text-3xl font-bold">Error:</span>
+            <span class="mx-2">{{ error }}</span>
+          </p>
+
+          <!-- Show the button to copy error details only if detail_error is set -->
+          {% if detail_error %}
+          <div class="w-full text-center mt-4">
+            <button
+              id="copyErrorDetails"
+              class="bg-[#9327ff] text-white py-2 px-4 rounded-2xl hover:opacity-90"
+            >
+              Copy Error Details
+            </button>
+          </div>
+
+          <!-- Hidden element containing detailed error -->
+          <textarea id="errorDetails" class="hidden">
+{{ detailError }}</textarea
+          >
+          {% endif %} {% else %}
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="text-3xl font-bold">{{ userName }}</span>
+            <span class="mx-2">successfully imported</span>
+            <span class="text-3xl font-bold">{{ workspaceName }}</span>
+          </p>
+          <x-divider space-x="20%" />
+          <table align="center">
             <tr>
-                <td class="w-[552px] max-w-full">
-                    <!-- Conditional Rendering for Success or Error -->
-                    {% if error %}
-                    <p class="w-full text-center break-words whitespace-normal text-2xl text-red-600">
-                        <span class="text-3xl font-bold">Error:</span>
-                        <span class="mx-2">{{ error }}</span>
-                    </p>
-
-                    <!-- Show the button to copy error details only if detail_error is set -->
-                    {% if detail_error %}
-                    <div class="w-full text-center mt-4">
-                        <button id="copyErrorDetails"
-                                class="bg-[#9327ff] text-white py-2 px-4 rounded-2xl hover:opacity-90">
-                            Copy Error Details
-                        </button>
-                    </div>
-
-                    <!-- Hidden element containing detailed error -->
-                    <textarea id="errorDetails" class="hidden">{{ detail_error }}</textarea>
-                    {% endif %}
-                    {% else %}
-                    <p class="w-full text-center break-words whitespace-normal text-2xl">
-                        <span class="text-3xl font-bold">{{ userName }}</span>
-                        <span class="mx-2">successfully imported</span>
-                        <span class="text-3xl font-bold">{{ workspace_name }}</span>
-                    </p>
-                    <x-divider space-x="20%"/>
-                    <table align="center">
-                        <tr>
-                            <td class="w-[60px]">
-                                <div style="border: 2px solid black;"
-                                     class="rounded-2xl mr-2 w-[60px] h-[60px] bg-white overflow-hidden">
-                                    <img src="{{ workspaceIconURL }}" class="overflow-hidden object-cover" width="100%"
-                                         height="100%" alt="{{ workspace_name }}">
-                                </div>
-                            </td>
-                        </tr>
-                    </table>
-                    <x-divider space-x="20%"/>
-                    {% endif %}
-
-                    <!-- Show Action Button only if open_workspace is true and no error -->
-                    {% if not error and open_workspace %}
-                    <x-button align="center"
-                              class="hover:opacity-90 cursor-pointer !text-xl !leading-[20px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
-                              href="{{ workspaceUrl }}">
-                        <div class="font-medium text-[24px]">
-                            Go to Workspace
-                        </div>
-                    </x-button>
-                    {% endif %}
-
-                    <!-- Footer Text -->
-                    <div class="mx-auto leading-4.5 text-sm text-slate-500 text-center w-[70%]">
-                        For any issues, contact support or refer to our <a href="https://appflowy.io/terms/app"
-                                                                           class="text-slate-500">Terms & Conditions</a>
-                        and <a class="text-slate-500" href="https://appflowy.io/privacy/app">Privacy Policy</a>.
-                    </div>
-                    <x-divider space-x="20%"/>
-                </td>
+              <td class="w-[60px]">
+                <div
+                  style="border: 2px solid black"
+                  class="rounded-2xl mr-2 w-[60px] h-[60px] bg-white overflow-hidden"
+                >
+                  <img
+                    src="{{ workspaceIconURL }}"
+                    class="overflow-hidden object-cover"
+                    width="100%"
+                    height="100%"
+                    alt="{{ workspace_name }}"
+                  />
+                </div>
+              </td>
             </tr>
-            <tr>
-                <td class="text-center text-slate-600 text-xs px-6">
-                    <p class="m-0 mb-4 uppercase cursor-pointer">
-                        <a href="https://appflowy.io">
-                            <img src="{{ cdnBaseUrl }}images/appflowy-logo.png" width="150px">
-                        </a>
-                    </p>
-                    <p class="m-0 text-sm text-black font-medium">
-                        Bring projects, knowledge, and teams together with the power of AI.
-                    </p>
-                    <p class="cursor-default">
-                        <a href="https://twitter.com/appflowy" class="text-indigo-700 [text-decoration:none] mr-4">
-                            <img src="{{ cdnBaseUrl }}images/twitter.png" width="20" alt="Twitter">
-                        </a>
-                        <a href="https://www.reddit.com/r/AppFlowy" class="text-indigo-700 [text-decoration:none] mr-4">
-                            <img src="{{ cdnBaseUrl }}images/reddit.png" width="20" alt="Reddit">
-                        </a>
-                        <a href="https://github.com/AppFlowy-IO/AppFlowy"
-                           class="text-indigo-700 [text-decoration:none] mr-4">
-                            <img src="{{ cdnBaseUrl }}images/github.png" width="20" alt="GitHub">
-                        </a>
-                        <a href="https://discord.gg/9Q2xaN37tV" class="text-indigo-700 [text-decoration:none] mr-4">
-                            <img src="{{ cdnBaseUrl }}images/discord.png" width="20" alt="Discord">
-                        </a>
-                    </p>
-                </td>
-            </tr>
-        </table>
-    </div>
+          </table>
+          <x-divider space-x="20%" />
+          {% endif %}
+
+          <!-- Show Action Button only if open_workspace is true and no error -->
+          {% if not error and open_workspace %}
+          <x-button
+            align="center"
+            class="hover:opacity-90 cursor-pointer !text-xl !leading-[20px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
+            href="{{ workspaceUrl }}"
+          >
+            <div class="font-medium text-[24px]">Go to Workspace</div>
+          </x-button>
+          {% endif %}
+
+          <!-- Footer Text -->
+          <div
+            class="mx-auto leading-4.5 text-sm text-slate-500 text-center w-[70%]"
+          >
+            For any issues, contact support or refer to our
+            <a href="https://appflowy.io/terms/app" class="text-slate-500"
+              >Terms & Conditions</a
+            >
+            and
+            <a class="text-slate-500" href="https://appflowy.io/privacy/app"
+              >Privacy Policy</a
+            >.
+          </div>
+          <x-divider space-x="20%" />
+        </td>
+      </tr>
+      <tr>
+        <td class="text-center text-slate-600 text-xs px-6">
+          <p class="m-0 mb-4 uppercase cursor-pointer">
+            <a href="https://appflowy.io">
+              <img
+                src="{{ cdnBaseUrl }}images/appflowy-logo.png"
+                width="150px"
+              />
+            </a>
+          </p>
+          <p class="m-0 text-sm text-black font-medium">
+            Bring projects, knowledge, and teams together with the power of AI.
+          </p>
+          <p class="cursor-default">
+            <a
+              href="https://twitter.com/appflowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/twitter.png"
+                width="20"
+                alt="Twitter"
+              />
+            </a>
+            <a
+              href="https://www.reddit.com/r/AppFlowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/reddit.png"
+                width="20"
+                alt="Reddit"
+              />
+            </a>
+            <a
+              href="https://github.com/AppFlowy-IO/AppFlowy"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/github.png"
+                width="20"
+                alt="GitHub"
+              />
+            </a>
+            <a
+              href="https://discord.gg/9Q2xaN37tV"
+              class="text-indigo-700 [text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/discord.png"
+                width="20"
+                alt="Discord"
+              />
+            </a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
 </x-main>
 
 <!-- JavaScript to handle copying error details to clipboard -->
 <script>
-    document.getElementById('copyErrorDetails').addEventListener('click', function () {
-        const errorDetails = document.getElementById('errorDetails');
-        errorDetails.select();
-        document.execCommand('copy');
-        alert('Error details copied to clipboard!');
+  document
+    .getElementById("copyErrorDetails")
+    .addEventListener("click", function () {
+      const errorDetails = document.getElementById("errorDetails");
+      errorDetails.select();
+      document.execCommand("copy");
+      alert("Error details copied to clipboard!");
     });
 </script>

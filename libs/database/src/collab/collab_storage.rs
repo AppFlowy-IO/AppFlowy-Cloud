@@ -165,6 +165,12 @@ pub trait CollabStorage: Send + Sync + 'static {
     snapshot_id: &i64,
   ) -> AppResult<SnapshotData>;
 
+  async fn get_latest_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> AppResult<Option<SnapshotData>>;
+
   /// Returns list of snapshots for given object_id in descending order of creation time.
   async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas>;
 }
@@ -297,6 +303,17 @@ where
     self
       .as_ref()
       .get_collab_snapshot(workspace_id, object_id, snapshot_id)
+      .await
+  }
+
+  async fn get_latest_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> AppResult<Option<SnapshotData>> {
+    self
+      .as_ref()
+      .get_latest_snapshot(workspace_id, object_id)
       .await
   }
 

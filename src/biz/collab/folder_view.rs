@@ -16,14 +16,13 @@ pub fn collab_folder_to_folder_view(
   for private_section in folder.get_all_private_sections() {
     unviewable.insert(private_section.id);
   }
-  for trash_view in folder.get_all_trash_sections() {
-    unviewable.insert(trash_view.id);
-  }
-
   let mut private_view_ids = HashSet::new();
   for private_section in folder.get_my_private_sections() {
     unviewable.remove(&private_section.id);
     private_view_ids.insert(private_section.id);
+  }
+  for trash_view in folder.get_all_trash_sections() {
+    unviewable.insert(trash_view.id);
   }
 
   to_folder_view(

@@ -484,6 +484,17 @@ where
       .await
   }
 
+  async fn get_latest_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> AppResult<Option<SnapshotData>> {
+    self
+      .snapshot_control
+      .get_latest_snapshot(workspace_id, object_id)
+      .await
+  }
+
   async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
     self.snapshot_control.get_collab_snapshot_list(oid).await
   }

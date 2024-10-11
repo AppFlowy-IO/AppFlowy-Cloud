@@ -645,21 +645,29 @@ async fn notify_user(
   result: Result<(), ImportError>,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
-  match result {
+  let (error, error_detail) = match result {
     Ok(_) => {
       info!("[Import]: successfully imported:{}", import_task);
+      (None, None)
     },
     Err(err) => {
       error!(
         "[Import]: failed to import:{}: error:{:?}",
         import_task, err
       );
+      let (error, error_detail) = err.report();
+      (Some(error), Some(error_detail))
     },
-  }
+  };
 
   let value = serde_json::to_value(ImportNotionReportMailerParam {
     user_name: import_task.user_name.clone(),
     file_name: import_task.workspace_name.clone(),
+    workspace_id: import_task.workspace_id.clone(),
+    workspace_name: import_task.workspace_name.clone(),
+    open_workspace: false,
+    error,
+    error_detail,
   })
   .unwrap();
 

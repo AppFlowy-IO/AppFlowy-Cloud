@@ -16,7 +16,7 @@ impl Deref for AFWorkerMailer {
 impl AFWorkerMailer {
   pub async fn new(mut mailer: Mailer) -> Result<Self, anyhow::Error> {
     let import_notion_report =
-      include_str!("../../../assets/mailer_templates/build_production/import_notion_report.html");
+      include_str!("../../../assets/mailer_templates/build_production/import_notion.html");
 
     for (name, template) in [(IMPORT_NOTION_TEMPLATE_NAME, import_notion_report)] {
       mailer
@@ -54,4 +54,9 @@ impl AFWorkerMailer {
 pub struct ImportNotionReportMailerParam {
   pub user_name: String,
   pub file_name: String,
+  pub workspace_id: String,
+  pub workspace_name: String,
+  pub open_workspace: bool,
+  pub error: Option<String>,
+  pub error_detail: Option<String>,
 }

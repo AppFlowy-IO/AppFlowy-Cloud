@@ -1,3 +1,4 @@
+use crate::mailer::ImportNotionReportMailerParam;
 use axum::async_trait;
 
 #[async_trait]
@@ -15,5 +16,5 @@ pub enum ImportProgress {
 pub struct ImportResult {
   pub user_name: String,
   pub user_email: String,
-  pub value: serde_json::Value,
+  pub value: Option<ImportNotionReportMailerParam>,
 }

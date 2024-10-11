@@ -41,6 +41,14 @@ impl Mailer {
     Ok(())
   }
 
+  pub fn render<T>(&self, name: &str, param: &T) -> Result<String, anyhow::Error>
+  where
+    T: serde::Serialize,
+  {
+    let rendered = self.handlers.render(name, param)?;
+    Ok(rendered)
+  }
+
   pub async fn send_email_template<T>(
     &self,
     recipient_name: Option<String>,

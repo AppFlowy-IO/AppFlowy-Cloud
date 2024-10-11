@@ -243,7 +243,7 @@ async fn process_task(
   trace!("[Import]: Processing task: {}", import_task);
 
   match import_task {
-    ImportTask::Notion { task } => {
+    ImportTask::Notion(task) => {
       // 1. download zip file
       match download_and_unzip_file(&task, s3_client).await {
         Ok(unzip_dir_path) => {
@@ -276,7 +276,7 @@ async fn process_task(
 
       Ok(())
     },
-    ImportTask::Custom { value } => {
+    ImportTask::Custom(value) => {
       trace!("Custom task: {:?}", value);
       let result = ImportResult {
         user_name: "".to_string(),
@@ -660,7 +660,7 @@ async fn notify_user(
     },
   };
 
-  let value = serde_json::to_value(ImportNotionReportMailerParam {
+  let value = ImportNotionReportMailerParam {
     user_name: import_task.user_name.clone(),
     file_name: import_task.workspace_name.clone(),
     workspace_id: import_task.workspace_id.clone(),
@@ -668,14 +668,13 @@ async fn notify_user(
     open_workspace: false,
     error,
     error_detail,
-  })
-  .unwrap();
+  };
 
   notifier
     .notify_progress(ImportProgress::Finished(ImportResult {
       user_name: import_task.user_name.clone(),
       user_email: import_task.user_email.clone(),
-      value,
+      value: Some(value),
     }))
     .await;
   Ok(())
@@ -852,19 +851,19 @@ impl Display for NotionImportTask {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ImportTask {
-  Notion { task: NotionImportTask },
-  Custom { value: serde_json::Value },
+  Notion(NotionImportTask),
+  Custom(serde_json::Value),
 }
 
 impl Display for ImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      ImportTask::Notion { task, .. } => write!(
+      ImportTask::Notion(task) => write!(
         f,
         "NotionImportTask {{ workspace_id: {}, workspace_name: {} }}",
         task.workspace_id, task.workspace_name
       ),
-      ImportTask::Custom { value, .. } => write!(f, "CustomTask {{ {} }}", value),
+      ImportTask::Custom(value) => write!(f, "CustomTask {{ {} }}", value),
     }
   }
 }

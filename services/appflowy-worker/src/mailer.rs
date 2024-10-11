@@ -36,7 +36,7 @@ impl AFWorkerMailer {
     email: &str,
     param: ImportNotionReportMailerParam,
   ) -> Result<(), anyhow::Error> {
-    let subject = "Notification: Import Notion report";
+    let subject = "Notification: Import Notion";
     self
       .0
       .send_email_template(
@@ -59,4 +59,39 @@ pub struct ImportNotionReportMailerParam {
   pub open_workspace: bool,
   pub error: Option<String>,
   pub error_detail: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::mailer::{AFWorkerMailer, ImportNotionReportMailerParam, IMPORT_NOTION_TEMPLATE_NAME};
+  use mailer::sender::Mailer;
+
+  #[tokio::test]
+  async fn render_import_report() {
+    let mailer = Mailer::new(
+      "test mailer".to_string(),
+      "123".to_string(),
+      "localhost",
+      465,
+    )
+    .await
+    .unwrap();
+    let worker_mailer = AFWorkerMailer::new(mailer).await.unwrap();
+    let s = worker_mailer
+      .render(
+        IMPORT_NOTION_TEMPLATE_NAME,
+        &ImportNotionReportMailerParam {
+          user_name: "nathan".to_string(),
+          file_name: "working".to_string(),
+          workspace_id: "1".to_string(),
+          workspace_name: "working".to_string(),
+          open_workspace: true,
+          error: None,
+          error_detail: None,
+        },
+      )
+      .unwrap();
+
+    println!("{}", s);
+  }
 }

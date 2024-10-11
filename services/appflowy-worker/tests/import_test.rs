@@ -41,9 +41,7 @@ async fn create_custom_task_test(pg_pool: PgPool) {
     let workspace_id = uuid::Uuid::new_v4().to_string();
     task_workspace_ids.push(workspace_id.clone());
     task_provider
-      .create_task(ImportTask::Custom {
-        value: json!({"workspace_id": workspace_id}),
-      })
+      .create_task(ImportTask::Custom(json!({"workspace_id": workspace_id})))
       .await;
   }
 

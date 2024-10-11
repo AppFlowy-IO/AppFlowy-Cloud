@@ -2239,11 +2239,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-<<<<<<< HEAD
 source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e77fd84e0e32b4dc1dcfa271547517e5b0d8e987#e77fd84e0e32b4dc1dcfa271547517e5b0d8e987"
-=======
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=67d9eeb7a96bff3ec545298f10b1533b49efd767#67d9eeb7a96bff3ec545298f10b1533b49efd767"
->>>>>>> 1456b520 (chore: basics of snapshots (unoptimized))
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2268,11 +2264,7 @@ dependencies = [
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-<<<<<<< HEAD
 source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e77fd84e0e32b4dc1dcfa271547517e5b0d8e987#e77fd84e0e32b4dc1dcfa271547517e5b0d8e987"
-=======
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=67d9eeb7a96bff3ec545298f10b1533b49efd767#67d9eeb7a96bff3ec545298f10b1533b49efd767"
->>>>>>> 1456b520 (chore: basics of snapshots (unoptimized))
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2311,11 +2303,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-<<<<<<< HEAD
 source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e77fd84e0e32b4dc1dcfa271547517e5b0d8e987#e77fd84e0e32b4dc1dcfa271547517e5b0d8e987"
-=======
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=67d9eeb7a96bff3ec545298f10b1533b49efd767#67d9eeb7a96bff3ec545298f10b1533b49efd767"
->>>>>>> 1456b520 (chore: basics of snapshots (unoptimized))
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2336,11 +2324,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-<<<<<<< HEAD
 source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e77fd84e0e32b4dc1dcfa271547517e5b0d8e987#e77fd84e0e32b4dc1dcfa271547517e5b0d8e987"
-=======
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=67d9eeb7a96bff3ec545298f10b1533b49efd767#67d9eeb7a96bff3ec545298f10b1533b49efd767"
->>>>>>> 1456b520 (chore: basics of snapshots (unoptimized))
 dependencies = [
  "anyhow",
  "bytes",
@@ -2360,11 +2344,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-<<<<<<< HEAD
 source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e77fd84e0e32b4dc1dcfa271547517e5b0d8e987#e77fd84e0e32b4dc1dcfa271547517e5b0d8e987"
-=======
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=67d9eeb7a96bff3ec545298f10b1533b49efd767#67d9eeb7a96bff3ec545298f10b1533b49efd767"
->>>>>>> 1456b520 (chore: basics of snapshots (unoptimized))
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2384,7 +2364,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "collab-importer"
 version = "0.1.0"
 source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e77fd84e0e32b4dc1dcfa271547517e5b0d8e987#e77fd84e0e32b4dc1dcfa271547517e5b0d8e987"
@@ -2423,8 +2402,6 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> 1456b520 (chore: basics of snapshots (unoptimized))
 name = "collab-rt-entity"
 version = "0.1.0"
 dependencies = [
@@ -2489,17 +2466,13 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tracing",
- "zstd",
+ "zstd 0.13.2",
 ]
 
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-<<<<<<< HEAD
 source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e77fd84e0e32b4dc1dcfa271547517e5b0d8e987#e77fd84e0e32b4dc1dcfa271547517e5b0d8e987"
-=======
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=67d9eeb7a96bff3ec545298f10b1533b49efd767#67d9eeb7a96bff3ec545298f10b1533b49efd767"
->>>>>>> 1456b520 (chore: basics of snapshots (unoptimized))
 dependencies = [
  "anyhow",
  "collab",
@@ -4480,6 +4453,17 @@ name = "mac"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
+
+[[package]]
+name = "mailer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "handlebars",
+ "lettre",
+ "secrecy",
+ "serde",
+]
 
 [[package]]
 name = "markdown"

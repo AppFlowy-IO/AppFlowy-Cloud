@@ -52,7 +52,7 @@ use tokio::task::spawn_local;
 use tokio::time::interval;
 
 use crate::error::ImportError;
-use crate::mailer::ImportNotionReportMailerParam;
+use crate::mailer::ImportNotionMailerParam;
 use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
@@ -281,6 +281,7 @@ async fn process_task(
       let result = ImportResult {
         user_name: "".to_string(),
         user_email: "".to_string(),
+        is_success: true,
         value: Default::default(),
       };
       notifier
@@ -660,7 +661,9 @@ async fn notify_user(
     },
   };
 
-  let value = ImportNotionReportMailerParam {
+  let is_success = error.is_none();
+
+  let value = serde_json::to_value(ImportNotionMailerParam {
     user_name: import_task.user_name.clone(),
     file_name: import_task.workspace_name.clone(),
     workspace_id: import_task.workspace_id.clone(),
@@ -668,13 +671,15 @@ async fn notify_user(
     open_workspace: false,
     error,
     error_detail,
-  };
+  })
+  .unwrap();
 
   notifier
     .notify_progress(ImportProgress::Finished(ImportResult {
       user_name: import_task.user_name.clone(),
       user_email: import_task.user_email.clone(),
-      value: Some(value),
+      is_success,
+      value,
     }))
     .await;
   Ok(())

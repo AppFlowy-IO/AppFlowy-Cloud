@@ -1,7 +1,8 @@
 use mailer::sender::Mailer;
 use std::ops::Deref;
 
-pub const IMPORT_NOTION_TEMPLATE_NAME: &str = "import_notion_report";
+pub const IMPORT_SUCCESS_TEMPLATE: &str = "import_notion_success";
+pub const IMPORT_FAIL_TEMPLATE: &str = "import_notion_fail";
 #[derive(Clone)]
 pub struct AFWorkerMailer(Mailer);
 
@@ -15,10 +16,16 @@ impl Deref for AFWorkerMailer {
 
 impl AFWorkerMailer {
   pub async fn new(mut mailer: Mailer) -> Result<Self, anyhow::Error> {
-    let import_notion_report =
-      include_str!("../../../assets/mailer_templates/build_production/import_notion.html");
+    let import_data_success =
+      include_str!("../../../assets/mailer_templates/build_production/import_data_success.html");
 
-    for (name, template) in [(IMPORT_NOTION_TEMPLATE_NAME, import_notion_report)] {
+    let import_data_fail =
+      include_str!("../../../assets/mailer_templates/build_production/import_data_fail.html");
+
+    for (name, template) in [
+      (IMPORT_SUCCESS_TEMPLATE, import_data_success),
+      (IMPORT_FAIL_TEMPLATE, import_data_fail),
+    ] {
       mailer
         .register_template(name, template)
         .await
@@ -29,29 +36,10 @@ impl AFWorkerMailer {
 
     Ok(Self(mailer))
   }
-
-  pub async fn send_import_notion_report(
-    &self,
-    recipient_name: &str,
-    email: &str,
-    param: ImportNotionReportMailerParam,
-  ) -> Result<(), anyhow::Error> {
-    let subject = "Notification: Import Notion";
-    self
-      .0
-      .send_email_template(
-        Some(recipient_name.to_string()),
-        email,
-        IMPORT_NOTION_TEMPLATE_NAME,
-        param,
-        subject,
-      )
-      .await
-  }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ImportNotionReportMailerParam {
+pub struct ImportNotionMailerParam {
   pub user_name: String,
   pub file_name: String,
   pub workspace_id: String,
@@ -63,7 +51,7 @@ pub struct ImportNotionReportMailerParam {
 
 #[cfg(test)]
 mod tests {
-  use crate::mailer::{AFWorkerMailer, ImportNotionReportMailerParam, IMPORT_NOTION_TEMPLATE_NAME};
+  use crate::mailer::{AFWorkerMailer, ImportNotionMailerParam, IMPORT_SUCCESS_TEMPLATE};
   use mailer::sender::Mailer;
 
   #[tokio::test]
@@ -77,19 +65,18 @@ mod tests {
     .await
     .unwrap();
     let worker_mailer = AFWorkerMailer::new(mailer).await.unwrap();
+    let value = serde_json::to_value(ImportNotionMailerParam {
+      user_name: "nathan".to_string(),
+      file_name: "working".to_string(),
+      workspace_id: "1".to_string(),
+      workspace_name: "working".to_string(),
+      open_workspace: true,
+      error: None,
+      error_detail: None,
+    })
+    .unwrap();
     let s = worker_mailer
-      .render(
-        IMPORT_NOTION_TEMPLATE_NAME,
-        &ImportNotionReportMailerParam {
-          user_name: "nathan".to_string(),
-          file_name: "working".to_string(),
-          workspace_id: "1".to_string(),
-          workspace_name: "working".to_string(),
-          open_workspace: true,
-          error: None,
-          error_detail: None,
-        },
-      )
+      .render(IMPORT_SUCCESS_TEMPLATE, &value)
       .unwrap();
 
     println!("{}", s);

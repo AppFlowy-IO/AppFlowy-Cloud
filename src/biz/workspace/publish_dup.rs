@@ -14,7 +14,7 @@ use collab_database::rows::RowMetaKey;
 use collab_database::rows::CELL_FIELD_TYPE;
 use collab_database::rows::ROW_CELLS;
 use collab_database::template::entity::CELL_DATA;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
@@ -210,7 +210,7 @@ impl PublishCollabDuplicator {
         collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid)?
       };
 
-      let mut ws_db_body = WorkspaceDatabaseBody::open(ws_db_collab).map_err(|err| {
+      let mut ws_db = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
         AppError::Unhandled(format!("failed to open workspace database: {}", err))
       })?;
       let (ws_db_updates, updated_ws_w_db_collab) = tokio::task::spawn_blocking(move || {
@@ -220,12 +220,12 @@ impl PublishCollabDuplicator {
             .map(|(database_id, view_ids)| (database_id, view_ids.into_iter().collect()))
             .collect::<HashMap<_, _>>();
 
-          ws_db_body
+          ws_db
             .batch_add_database(view_ids_by_database_id)
             .encode_update_v1()
         };
 
-        let updated_ws_w_db_collab = ws_db_body
+        let updated_ws_w_db_collab = ws_db
           .encode_collab_v1()
           .map(|encoded_collab| encoded_collab.encode_to_bytes().unwrap())
           .map_err(|err| {

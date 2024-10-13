@@ -3,9 +3,8 @@ use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
 use collab::core::collab::Collab;
-use collab_database::{
-  database::DatabaseBody, rows::RowId, workspace_database::WorkspaceDatabaseBody,
-};
+use collab_database::workspace_database::WorkspaceDatabase;
+use collab_database::{database::DatabaseBody, rows::RowId};
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::CollabOrigin;
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
@@ -132,7 +131,7 @@ async fn get_page_collab_data_for_database(
   )
   .await?;
   let ws_db_collab = collab_from_doc_state(ws_db.doc_state.to_vec(), &ws_db_oid)?;
-  let ws_db_body = WorkspaceDatabaseBody::open(ws_db_collab).map_err(|err| {
+  let ws_db_body = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
     AppError::Internal(anyhow!("Failed to open workspace database body: {}", err))
   })?;
   let db_oid = {

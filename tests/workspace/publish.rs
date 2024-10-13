@@ -9,7 +9,7 @@ use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::RowDetail;
 use collab_database::views::DatabaseViews;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, UserId};
@@ -893,7 +893,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
       let ws_db_collab = client_2
         .get_workspace_database_collab(&workspace_id_2)
         .await;
-      let ws_db_body = WorkspaceDatabaseBody::open(ws_db_collab).unwrap();
+      let ws_db_body = WorkspaceDatabase::open(ws_db_collab).unwrap();
       let dup_grid1_db_id = ws_db_body
         .get_all_database_meta()
         .into_iter()

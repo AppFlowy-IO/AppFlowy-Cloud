@@ -1,4 +1,4 @@
-use crate::mailer::ImportNotionMailerParam;
+
 use axum::async_trait;
 
 #[async_trait]

@@ -646,6 +646,7 @@ async fn notify_user(
   result: Result<(), ImportError>,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
+  let task_id = import_task.task_id.to_string();
   let (error, error_detail) = match result {
     Ok(_) => {
       info!("[Import]: successfully imported:{}", import_task);
@@ -656,7 +657,7 @@ async fn notify_user(
         "[Import]: failed to import:{}: error:{:?}",
         import_task, err
       );
-      let (error, error_detail) = err.report();
+      let (error, error_detail) = err.report(&task_id);
       (Some(error), Some(error_detail))
     },
   };
@@ -664,8 +665,9 @@ async fn notify_user(
   let is_success = error.is_none();
 
   let value = serde_json::to_value(ImportNotionMailerParam {
+    import_task_id: task_id,
     user_name: import_task.user_name.clone(),
-    file_name: import_task.workspace_name.clone(),
+    import_file_name: import_task.workspace_name.clone(),
     workspace_id: import_task.workspace_id.clone(),
     workspace_name: import_task.workspace_name.clone(),
     open_workspace: false,
@@ -847,8 +849,8 @@ impl Display for NotionImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      "NotionImportTask {{ workspace_id: {}, workspace_name: {}, user_name: {}, user_email: {} }}",
-      self.workspace_id, self.workspace_name, self.user_name, self.user_email
+      "NotionImportTask {{ task_id: {}, workspace_id: {}, workspace_name: {}, user_name: {}, user_email: {} }}",
+      self.task_id, self.workspace_id, self.workspace_name, self.user_name, self.user_email
     )
   }
 }

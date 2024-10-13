@@ -30,65 +30,100 @@ pub enum ImportError {
 }
 
 impl ImportError {
-  pub fn report(&self) -> (String, String) {
+  pub fn report(&self, task_id: &str) -> (String, String) {
     match self {
       ImportError::ImportCollabError(error) => match error {
         CollabImporterError::InvalidPath(s) => (
-          "The provided file path is invalid. Please check the path and try again.".to_string(),
-          format!("Invalid path: {}", s),
+          format!(
+            "Task ID: {} - The provided file path is invalid. Please check the path and try again.",
+            task_id
+          ),
+          format!("Task ID: {} - Invalid path: {}", task_id, s),
         ),
         CollabImporterError::InvalidPathFormat => (
-          "The file path format is incorrect. Please ensure it is in the correct format."
-            .to_string(),
-          "Invalid path format".to_string(),
+          format!(
+            "Task ID: {} - The file path format is incorrect. Please ensure it is in the correct format.",
+            task_id
+          ),
+          format!("Task ID: {} - Invalid path format", task_id),
         ),
         CollabImporterError::InvalidFileType(file_type) => (
-          "The file type is unsupported. Please use a supported file type.".to_string(),
-          format!("Invalid file type: {}", file_type),
+          format!(
+            "Task ID: {} - The file type is unsupported. Please use a supported file type.",
+            task_id
+          ),
+          format!("Task ID: {} - Invalid file type: {}", task_id, file_type),
         ),
         CollabImporterError::ImportMarkdownError(_) => (
-          "There was an issue importing the markdown file. Please verify the file contents."
-            .to_string(),
-          "Import markdown error".to_string(),
+          format!(
+            "Task ID: {} - There was an issue importing the markdown file. Please verify the file contents.",
+            task_id
+          ),
+          format!("Task ID: {} - Import markdown error", task_id),
         ),
         CollabImporterError::ImportCsvError(_) => (
-          "There was an issue importing the CSV file. Please ensure it is correctly formatted."
-            .to_string(),
-          "Import CSV error".to_string(),
+          format!(
+            "Task ID: {} - There was an issue importing the CSV file. Please ensure it is correctly formatted.",
+            task_id
+          ),
+          format!("Task ID: {} - Import CSV error", task_id),
         ),
         CollabImporterError::ParseMarkdownError(_) => (
-          "Failed to parse the markdown file. Please check for any formatting issues.".to_string(),
-          "Parse markdown error".to_string(),
+          format!(
+            "Task ID: {} - Failed to parse the markdown file. Please check for any formatting issues.",
+            task_id
+          ),
+          format!("Task ID: {} - Parse markdown error", task_id),
         ),
         CollabImporterError::Utf8Error(_) => (
-          "There was a character encoding issue. Ensure your file is in UTF-8 format.".to_string(),
-          "UTF-8 error".to_string(),
+          format!(
+            "Task ID: {} - There was a character encoding issue. Ensure your file is in UTF-8 format.",
+            task_id
+          ),
+          format!("Task ID: {} - UTF-8 error", task_id),
         ),
         CollabImporterError::IOError(_) => (
-          "An input/output error occurred. Please check your file and try again.".to_string(),
-          "IO error".to_string(),
+          format!(
+            "Task ID: {} - An input/output error occurred. Please check your file and try again.",
+            task_id
+          ),
+          format!("Task ID: {} - IO error", task_id),
         ),
         CollabImporterError::FileNotFound => (
-          "The specified file could not be found. Please check the file path.".to_string(),
-          "File not found".to_string(),
+          format!(
+            "Task ID: {} - The specified file could not be found. Please check the file path.",
+            task_id
+          ),
+          format!("Task ID: {} - File not found", task_id),
         ),
         CollabImporterError::CannotImport => (
-          "The file could not be imported. Please ensure it is in a valid format.".to_string(),
-          "Cannot import file".to_string(),
+          format!(
+            "Task ID: {} - The file could not be imported. Please ensure it is in a valid format.",
+            task_id
+          ),
+          format!("Task ID: {} - Cannot import file", task_id),
         ),
         CollabImporterError::Internal(_) => (
-          "An internal error occurred during the import process. Please try again later."
-            .to_string(),
-          "Internal error".to_string(),
+          format!(
+            "Task ID: {} - An internal error occurred during the import process. Please try again later.",
+            task_id
+          ),
+          format!("Task ID: {} - Internal error", task_id),
         ),
       },
       ImportError::CannotOpenWorkspace(err) => (
-        "Unable to open the workspace. Please verify the workspace and try again.".to_string(),
-        format!("Cannot open workspace: {}", err),
+        format!(
+          "Task ID: {} - Unable to open the workspace. Please verify the workspace and try again.",
+          task_id
+        ),
+        format!("Task ID: {} - Cannot open workspace: {}", task_id, err),
       ),
       ImportError::Internal(err) => (
-        "An internal error occurred. Please try again or contact support.".to_string(),
-        format!("Internal error: {}", err),
+        format!(
+          "Task ID: {} - An internal error occurred. Please try again or contact support.",
+          task_id
+        ),
+        format!("Task ID: {} - Internal error: {}", task_id, err),
       ),
     }
   }

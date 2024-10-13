@@ -40,8 +40,9 @@ impl AFWorkerMailer {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ImportNotionMailerParam {
+  pub import_task_id: String,
   pub user_name: String,
-  pub file_name: String,
+  pub import_file_name: String,
   pub workspace_id: String,
   pub workspace_name: String,
   pub open_workspace: bool,
@@ -66,8 +67,9 @@ mod tests {
     .unwrap();
     let worker_mailer = AFWorkerMailer::new(mailer).await.unwrap();
     let value = serde_json::to_value(ImportNotionMailerParam {
+      import_task_id: "test_task_id".to_string(),
       user_name: "nathan".to_string(),
-      file_name: "working".to_string(),
+      import_file_name: "working".to_string(),
       workspace_id: "1".to_string(),
       workspace_name: "working".to_string(),
       open_workspace: true,

@@ -13,25 +13,12 @@ bodyClass: bg-purple-50
                 <td class="w-[552px] max-w-full">
                     <!-- Display Error Message -->
                     <p
-                            class="w-full text-center break-words whitespace-normal text-2xl text-red-600"
+                            class="w-full text-center break-words whitespace-normal text-lg text-red-600"
                     >
-                        <span class="text-3xl font-bold">Error:</span>
+                        <span class=class="mx-2">Failed to import your notion file {{ importFileName }}</span>
+                        <br>
                         <span class="mx-2">{{ error }}</span>
                     </p>
-
-                    <!-- Show the button to copy error details only if detail_error is set -->
-                    <div class="w-full text-center mt-4">
-                        <button
-                                id="copyErrorDetails"
-                                class="bg-[#9327ff] text-white py-2 px-4 rounded-2xl hover:opacity-90"
-                        >
-                            Copy Error Details
-                        </button>
-                    </div>
-
-                    <!-- Hidden element containing detailed error -->
-                    <textarea id="errorDetails" class="hidden">{{ detail_error }}</textarea>
-                    <x-divider space-x="20%"/>
                 </td>
             </tr>
             <tr>
@@ -52,12 +39,12 @@ bodyClass: bg-purple-50
 
 <!-- JavaScript to handle copying error details to clipboard -->
 <script>
-    document
-        .getElementById("copyErrorDetails")
-        .addEventListener("click", function () {
-            const errorDetails = document.getElementById("errorDetails");
-            errorDetails.select();
-            document.execCommand("copy");
-            alert("Error details copied to clipboard!");
-        });
+  document
+      .getElementById("copyErrorDetails")
+      .addEventListener("click", function () {
+        const errorDetails = document.getElementById("errorDetails");
+        errorDetails.select();
+        document.execCommand("copy");
+        alert("Error details copied to clipboard!");
+      });
 </script>

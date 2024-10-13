@@ -8,7 +8,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use collab_importer::imported_collab::ImportType;
@@ -449,7 +449,7 @@ async fn process_unzip_file(
   if !database_view_ids_by_database_id.is_empty() {
     let w_db_collab =
       get_encode_collab_from_bytes(&w_database_id, &CollabType::WorkspaceDatabase, pg_pool).await?;
-    let mut w_database = WorkspaceDatabaseBody::from_collab_doc_state(
+    let mut w_database = WorkspaceDatabase::from_collab_doc_state(
       &w_database_id,
       CollabOrigin::Server,
       w_db_collab.into(),

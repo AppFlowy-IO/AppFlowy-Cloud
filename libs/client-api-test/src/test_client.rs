@@ -14,7 +14,7 @@ use collab::entity::EncodedCollab;
 use collab::lock::{Mutex, RwLock};
 use collab::preclude::{Collab, Prelim};
 use collab_database::database::{Database, DatabaseContext};
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::Folder;
@@ -168,7 +168,7 @@ impl TestClient {
     Document::open(collab).unwrap()
   }
 
-  pub async fn get_workspace_database(&self, workspace_id: &str) -> WorkspaceDatabaseBody {
+  pub async fn get_workspace_database(&self, workspace_id: &str) -> WorkspaceDatabase {
     let workspaces = self.api_client.get_workspaces().await.unwrap();
     let workspace_database_id = workspaces
       .iter()
@@ -187,7 +187,7 @@ impl TestClient {
       .await
       .unwrap();
 
-    WorkspaceDatabaseBody::from_collab_doc_state(
+    WorkspaceDatabase::from_collab_doc_state(
       &workspace_database_id,
       CollabOrigin::Empty,
       collab.encode_collab.into(),
@@ -287,7 +287,7 @@ impl TestClient {
 
   pub async fn get_db_collab_from_view(&mut self, workspace_id: &str, view_id: &str) -> Collab {
     let ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
-    let ws_db_body = WorkspaceDatabaseBody::open(ws_db_collab).unwrap();
+    let ws_db_body = WorkspaceDatabase::open(ws_db_collab).unwrap();
     let db_id = ws_db_body
       .get_all_database_meta()
       .into_iter()

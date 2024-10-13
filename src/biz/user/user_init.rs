@@ -4,7 +4,7 @@ use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_entity::CollabType;
 use collab_folder::{Folder, FolderData, Workspace};
 use collab_user::core::UserAwareness;
@@ -197,11 +197,11 @@ pub(crate) async fn create_workspace_database_collab(
 ) -> Result<(), AppError> {
   let collab_type = CollabType::WorkspaceDatabase;
   let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
-  let mut workspace_database_body = WorkspaceDatabaseBody::create(collab);
+  let mut workspace_database = WorkspaceDatabase::create(collab);
   for (object_id, database_id) in initial_database_records {
-    workspace_database_body.add_database(&database_id, vec![object_id]);
+    workspace_database.add_database(&database_id, vec![object_id]);
   }
-  let encode_collab = workspace_database_body
+  let encode_collab = workspace_database
     .encode_collab_v1()
     .map_err(|err| AppError::Internal(err.into()))?;
 

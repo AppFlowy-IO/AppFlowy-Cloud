@@ -1,4 +1,4 @@
-use collab_importer::error::ImporterError as CollabImporterError;
+pub use collab_importer::error::ImporterError as CollabImporterError;
 #[derive(thiserror::Error, Debug)]
 pub enum WorkerError {
   #[error(transparent)]

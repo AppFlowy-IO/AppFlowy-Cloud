@@ -8,6 +8,7 @@ use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
 use infra::env_util::{get_env_var, get_env_var_opt};
+use mailer::config::MailerSetting;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -29,16 +30,9 @@ pub struct Config {
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
+
 pub struct AccessControlSetting {
   pub is_enabled: bool,
-}
-
-#[derive(serde::Deserialize, Clone, Debug)]
-pub struct MailerSetting {
-  pub smtp_host: String,
-  pub smtp_port: u16,
-  pub smtp_username: String,
-  pub smtp_password: Secret<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]

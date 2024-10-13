@@ -21,8 +21,12 @@ module.exports = {
   },
   locals: {
     cdnBaseUrl:
-      "https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/",
+        "https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/",
+    error: "{{ error }}",
+    detailError: "{{ error_detail }}",
     userIconUrl: "{{ user_icon_url }}",
+    importFileName: "{{ import_file_name }}",
+    importTaskId: "{{ import_task_id }}",
     userName: "{{ username }}",
     acceptUrl: "{{ accept_url }}",
     approveUrl: "{{ approve_url }}",

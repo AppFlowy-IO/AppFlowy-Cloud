@@ -1,4 +1,4 @@
-use authentication::jwt::{OptionalUserUuid, UserUuid};
+use authentication::jwt::OptionalUserUuid;
 use database_entity::dto::AFWorkspaceSettingsChange;
 use std::collections::HashMap;
 
@@ -26,6 +26,7 @@ use database_entity::dto::{
   AFWorkspaceSettings, GlobalComment, Reaction, WorkspaceUsage,
 };
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
+
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
 };
@@ -36,7 +37,7 @@ use crate::biz::user::user_init::{
   create_user_awareness, create_workspace_collab, create_workspace_database_collab,
   initialize_workspace_for_user,
 };
-use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
+use crate::mailer::{AFCloudMailer, WorkspaceInviteMailerParam};
 use crate::state::{GoTrueAdmin, RedisConnectionManager};
 
 const MAX_COMMENT_LENGTH: usize = 5000;
@@ -330,7 +331,7 @@ pub async fn accept_workspace_invite(
 #[instrument(level = "debug", skip_all, err)]
 #[allow(clippy::too_many_arguments)]
 pub async fn invite_workspace_members(
-  mailer: &Mailer,
+  mailer: &AFCloudMailer,
   gotrue_admin: &GoTrueAdmin,
   pg_pool: &PgPool,
   gotrue_client: &gotrue::api::Client,
@@ -697,7 +698,8 @@ async fn check_if_user_is_allowed_to_delete_comment(
 #[allow(clippy::too_many_arguments)]
 pub async fn create_upload_task(
   uid: i64,
-  user_uuid: &UserUuid,
+  user_name: &str,
+  user_email: &str,
   workspace_id: &str,
   workspace_name: &str,
   file_size: usize,
@@ -722,7 +724,8 @@ pub async fn create_upload_task(
   let task = json!({
       "notion": {
          "uid": uid,
-         "user_uuid": user_uuid,
+         "user_name": user_name,
+         "user_email": user_email,
          "task_id": task_id,
          "workspace_id": workspace_id,
          "s3_key": workspace_id,

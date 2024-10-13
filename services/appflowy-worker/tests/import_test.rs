@@ -48,11 +48,9 @@ async fn create_custom_task_test(pg_pool: PgPool) {
   let mut rx = notifier.subscribe();
   timeout(Duration::from_secs(30), async {
     while let Ok(task) = rx.recv().await {
-      task_workspace_ids.retain(|id| {
-        if let ImportProgress::Finished(result) = &task {
-          if result.workspace_id == *id {
-            return false;
-          }
+      task_workspace_ids.retain(|_id| {
+        if let ImportProgress::Finished(_result) = &task {
+          return false;
         }
         true
       });

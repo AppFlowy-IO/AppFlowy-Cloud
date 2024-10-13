@@ -1,3 +1,4 @@
+
 use axum::async_trait;
 
 #[async_trait]
@@ -13,21 +14,8 @@ pub enum ImportProgress {
 
 #[derive(Debug, Clone)]
 pub struct ImportResult {
-  pub workspace_id: String,
-}
-
-pub struct ImportResultBuilder {
-  workspace_id: String,
-}
-
-impl ImportResultBuilder {
-  pub fn new(workspace_id: String) -> Self {
-    Self { workspace_id }
-  }
-
-  pub fn build(self) -> ImportResult {
-    ImportResult {
-      workspace_id: self.workspace_id,
-    }
-  }
+  pub user_name: String,
+  pub user_email: String,
+  pub is_success: bool,
+  pub value: serde_json::Value,
 }

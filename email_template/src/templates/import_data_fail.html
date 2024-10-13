@@ -1,0 +1,50 @@
+---
+title: "Workspace Import Failed"
+preheader: "There was an issue with your workspace import"
+bodyClass: bg-purple-50
+---
+
+<x-main>
+    <div
+            class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black"
+    >
+        <table align="center">
+            <tr>
+                <td class="w-[552px] max-w-full">
+                    <!-- Display Error Message -->
+                    <p
+                            class="w-full text-center break-words whitespace-normal text-lg text-red-600"
+                    >
+                        <span class=class="mx-2">Failed to import your notion file {{ importFileName }}</span>
+                        <br>
+                        <span class="mx-2">{{ error }}</span>
+                    </p>
+                </td>
+            </tr>
+            <tr>
+                <td class="text-center text-slate-600 text-xs px-6">
+                    <p class="m-0 mb-4 uppercase cursor-pointer">
+                        <a href="https://appflowy.io">
+                            <img
+                                    src="{{ cdnBaseUrl }}images/appflowy-logo.png"
+                                    width="150px"
+                            />
+                        </a>
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </div>
+</x-main>
+
+<!-- JavaScript to handle copying error details to clipboard -->
+<script>
+  document
+      .getElementById("copyErrorDetails")
+      .addEventListener("click", function () {
+        const errorDetails = document.getElementById("errorDetails");
+        errorDetails.select();
+        document.execCommand("copy");
+        alert("Error details copied to clipboard!");
+      });
+</script>

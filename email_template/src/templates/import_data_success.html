@@ -1,0 +1,39 @@
+---
+title: "Workspace Import Success"
+preheader: "Your workspace import was successful"
+bodyClass: bg-purple-50
+---
+
+<x-main>
+    <div
+            class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black"
+    >
+        <table align="center">
+            <tr>
+                <td class="w-[552px] max-w-full">
+                    <!-- Display Success Message -->
+                    <p class="w-full text-center break-words whitespace-normal text-lg">
+                        <span class="mx-2">
+                            Your Notion files has been successfully imported. Please open AppFlowy and switch to the new workspace
+                        </span>
+                        <br>
+                        <span class="text-2xl font-bold">
+                            {{ workspaceName }}
+                        </span>
+                    </p>
+                    <x-divider space-x="20%" />
+                </td>
+            </tr>
+            <tr>
+                <td class="text-center text-slate-600 text-xs px-6">
+                    <p class="m-0 mb-4 uppercase cursor-pointer">
+                        <a href="https://appflowy.io">
+                            <img
+                                    src="{{ cdnBaseUrl }}images/appflowy-logo.png"
+                                    width="150px"
+                            />
+                        </a>
+                    </p>
+                </td>
+            </tr>
+

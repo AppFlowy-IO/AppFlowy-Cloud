@@ -27,6 +27,8 @@ module.exports = {
   locals: {
     cdnBaseUrl: "",
     userIconUrl: "https://cdn-icons-png.flaticon.com/512/1077/1077012.png",
+    error: "Test error message",
+    detailError: "Test detail error message",
     userName: "John Doe",
     acceptUrl: "https://appflowy.io",
     approveUrl: "https://appflowy.io",

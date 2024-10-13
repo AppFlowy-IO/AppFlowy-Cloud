@@ -1,5 +1,13 @@
 use std::{ops::DerefMut, sync::Arc};
 
+use crate::mailer::AFCloudMailer;
+use crate::{
+  biz::collab::{
+    folder_view::{to_dto_view_icon, to_view_layout},
+    ops::get_latest_collab_folder,
+  },
+  mailer::{WorkspaceAccessRequestApprovedMailerParam, WorkspaceAccessRequestMailerParam},
+};
 use anyhow::Context;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
@@ -16,17 +24,9 @@ use shared_entity::dto::access_request_dto::{AccessRequest, AccessRequestView};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{
-  biz::collab::{
-    folder_view::{to_dto_view_icon, to_view_layout},
-    ops::get_latest_collab_folder,
-  },
-  mailer::{Mailer, WorkspaceAccessRequestApprovedMailerParam, WorkspaceAccessRequestMailerParam},
-};
-
 pub async fn create_access_request(
   pg_pool: &PgPool,
-  mailer: Mailer,
+  mailer: AFCloudMailer,
   appflowy_web_url: &str,
   workspace_id: Uuid,
   view_id: Uuid,
@@ -118,7 +118,7 @@ pub async fn get_access_request(
 
 pub async fn approve_or_reject_access_request(
   pg_pool: &PgPool,
-  mailer: Mailer,
+  mailer: AFCloudMailer,
   appflowy_web_url: &str,
   request_id: Uuid,
   uid: i64,

@@ -1,11 +1,8 @@
-use crate::client::CollabRedisStream;
 use crate::error::StreamError;
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime};
 use redis::aio::ConnectionManager;
-use redis::{RedisResult, Value};
-use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use redis::Value;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const RELEASE_SCRIPT: &str = r#"
 if redis.call("GET", KEYS[1]) == ARGV[1] then

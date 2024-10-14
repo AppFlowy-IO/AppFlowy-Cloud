@@ -1,11 +1,9 @@
 use crate::error::RealtimeError;
-use crate::indexer::{Indexer, IndexerProvider};
+use crate::indexer::Indexer;
 use crate::metrics::CollabRealtimeMetrics;
-use crate::state::RedisConnectionManager;
 use anyhow::anyhow;
 use app_error::AppError;
-use arc_swap::{ArcSwap, ArcSwapAny, ArcSwapOption};
-use bytes::Bytes;
+use arc_swap::ArcSwap;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
@@ -17,7 +15,7 @@ use collab_rt_entity::{
   AckCode, AwarenessSync, BroadcastSync, CollabAck, MessageByObjectId, MsgId,
 };
 use collab_rt_entity::{ClientCollabMessage, CollabMessage};
-use collab_rt_protocol::{decode_update, Message, MessageReader, RTProtocolError, SyncMessage};
+use collab_rt_protocol::{Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
 use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
 use collab_stream::error::StreamError;
@@ -29,24 +27,19 @@ use collab_stream::stream_group::StreamGroup;
 use dashmap::DashMap;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::{
-  AFCollabEmbeddings, CollabParams, InsertSnapshotParams, QueryCollabParams, SnapshotData,
+  AFCollabEmbeddings, CollabParams, InsertSnapshotParams, QueryCollabParams,
 };
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
 use std::collections::VecDeque;
-use std::fmt::{Display, Formatter};
-use std::os::linux::raw::stat;
-use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, Mutex};
-use tokio::time::{interval, MissedTickBehavior};
-use tokio_util::sync::{CancellationToken, DropGuard};
-use tracing::{error, event, info, trace};
-use yrs::encoding::read::Error;
-use yrs::sync::AwarenessUpdate;
-use yrs::updates::decoder::{Decode, DecoderV1, DecoderV2};
+use tokio::sync::mpsc;
+use tokio::time::MissedTickBehavior;
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, trace};
+use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Update};
 
@@ -100,6 +93,7 @@ impl CollabGroup {
     S: CollabStorage,
   {
     let persister = CollabPersister::new(
+      uid,
       workspace_id.clone(),
       object_id.clone(),
       collab_type.clone(),
@@ -174,7 +168,7 @@ impl CollabGroup {
 
   /// Task used to receive collab updates from Redis.
   async fn inbound_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
-    let mut updates = state.persister.collab_redis_stream.collab_updates(
+    let updates = state.persister.collab_redis_stream.collab_updates(
       &state.workspace_id,
       &state.object_id,
       None,
@@ -233,7 +227,7 @@ impl CollabGroup {
 
   /// Task used to receive awareness updates from Redis.
   async fn inbound_awareness_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
-    let mut updates = state.persister.collab_redis_stream.awareness_updates(
+    let updates = state.persister.collab_redis_stream.awareness_updates(
       &state.workspace_id,
       &state.object_id,
       None,
@@ -852,6 +846,7 @@ impl Drop for Subscription {
 }
 
 struct CollabPersister {
+  uid: i64,
   workspace_id: String,
   object_id: String,
   collab_type: CollabType,
@@ -868,6 +863,7 @@ impl CollabPersister {
   pub const GRACE_PERIOD_MS: u64 = 1000 * 60; // 5min
 
   pub fn new(
+    uid: i64,
     workspace_id: String,
     object_id: String,
     collab_type: CollabType,
@@ -878,6 +874,7 @@ impl CollabPersister {
     let update_sink = collab_redis_stream.collab_update_sink(&workspace_id, &object_id);
     let awareness_sink = collab_redis_stream.awareness_update_sink(&workspace_id, &object_id);
     Self {
+      uid,
       workspace_id,
       object_id,
       collab_type,
@@ -936,7 +933,7 @@ impl CollabPersister {
     // 2. consume all Redis updates on top of it (keep redis msg id)
     let mut last_message_id = None;
     let mut tx = collab.transact_mut();
-    let mut stream = self.collab_redis_stream.collab_updates(
+    let stream = self.collab_redis_stream.collab_updates(
       &self.workspace_id,
       &self.object_id,
       None, //TODO: store Redis last msg id somewhere in doc state snapshot and replay from there
@@ -1038,10 +1035,9 @@ impl CollabPersister {
         Err(err) => tracing::warn!("failed to fetch embeddings `{}`: {}", self.object_id, err),
       }
 
-      let uid = 0; //FIXME: what UID should go there?
       self
         .storage
-        .insert_or_update_collab(&self.workspace_id, &uid, params, true)
+        .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, true)
         .await
         .map_err(|err| RealtimeError::Internal(err.into()))?;
 

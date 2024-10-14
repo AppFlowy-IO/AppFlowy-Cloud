@@ -4,7 +4,7 @@ use std::time::Duration;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::lock::{Mutex, RwLock};
+use collab::lock::Mutex;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use tracing::{error, instrument, trace};
@@ -34,8 +34,6 @@ pub struct GroupManager<S> {
   collab_redis_stream: Arc<CollabRedisStream>,
   control_event_stream: Arc<Mutex<StreamGroup>>,
   persistence_interval: Duration,
-  edit_state_max_count: u32,
-  edit_state_max_secs: i64,
   indexer_provider: Arc<IndexerProvider>,
 }
 
@@ -50,8 +48,6 @@ where
     metrics_calculate: Arc<CollabRealtimeMetrics>,
     collab_stream: CollabRedisStream,
     persistence_interval: Duration,
-    edit_state_max_count: u32,
-    edit_state_max_secs: i64,
     indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
     let collab_stream = Arc::new(collab_stream);
@@ -68,8 +64,6 @@ where
       collab_redis_stream: collab_stream,
       control_event_stream,
       persistence_interval,
-      edit_state_max_count,
-      edit_state_max_secs,
       indexer_provider,
     })
   }
@@ -107,17 +101,18 @@ where
     client_msg_router: &mut ClientMessageRouter,
   ) -> Result<(), RealtimeError> {
     // Lock the group and subscribe the user to the group.
-    if let Some(group) = self.state.get_mut_group(object_id).await {
+    if let Some(mut e) = self.state.get_mut_group(object_id).await {
+      let group = e.value_mut();
       trace!("[realtime]: {} subscribe group:{}", user, object_id,);
       let (sink, stream) = client_msg_router.init_client_communication::<CollabMessage>(
-        &group.workspace_id,
+        group.workspace_id(),
         user,
         object_id,
         self.access_control.clone(),
       );
       group.subscribe(user, message_origin.clone(), sink, stream);
       // explicitly drop the group to release the lock.
-      drop(group);
+      drop(e);
 
       self.state.insert_user(user, object_id).await?;
     } else {
@@ -160,7 +155,7 @@ where
     }
 
     let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
-    let (collab, encode_collab) = {
+    let encode_collab = {
       let (mut collab, encode_collab) = match result {
         Ok(value) => value,
         Err(err) => {
@@ -178,8 +173,7 @@ where
       };
 
       collab.initialize();
-      let collab = Arc::new(RwLock::from(collab));
-      (collab, encode_collab)
+      encode_collab
     };
 
     let cloned_control_event_stream = self.control_event_stream.clone();

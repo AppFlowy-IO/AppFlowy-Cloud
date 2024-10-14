@@ -12,7 +12,7 @@ thiserror = "1.0.56"
 serde_repr = "0.1.18"
 serde.workspace = true
 anyhow = "1.0.79"
-uuid = { version = "1.6.1", features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 sqlx = { workspace = true, default-features = false, features = [
   "postgres",
   "json",

@@ -13,14 +13,14 @@ database-entity = { path = "../libs/database-entity" }
 shared-entity = { path = "../libs/shared-entity" }
 
 anyhow = "1.0.79"
-axum = {version = "0.7", features = ["json"]}
+axum = { version = "0.7", features = ["json"] }
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros"] }
 askama = "0.12"
 axum-extra = { version = "0.9", features = ["cookie"] }
 serde.workspace = true
 serde_json.workspace = true
-redis = { version = "0.25.2", features = [ "aio", "tokio-comp", "connection-manager"] }
-uuid = { version = "1.6", features = ["v4"] }
+redis = { version = "0.25.2", features = ["aio", "tokio-comp", "connection-manager"] }
+uuid = { workspace = true, features = ["v4"] }
 dotenvy = "0.15"
 reqwest = "0.11.27"
 tower-service = "0.3"

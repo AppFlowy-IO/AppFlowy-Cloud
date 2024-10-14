@@ -28,7 +28,7 @@ collab-entity.workspace = true
 shared-entity.workspace = true
 collab-database.workspace = true
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json"] }
-uuid = "1.6.1"
+uuid.workspace = true
 lazy_static = "1.4.0"
 dotenvy = "0.15.7"
 reqwest.workspace = true
@@ -38,7 +38,7 @@ futures = "0.3.30"
 anyhow = "1.0.80"
 serde = { version = "1.0.199", features = ["derive"] }
 hex = "0.4.3"
-async-trait = "0.1.83"
+async-trait.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["console"] }

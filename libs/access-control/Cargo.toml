@@ -9,9 +9,9 @@ app-error.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 casbin = { version = "2.2.0", features = [
-    "cached",
-    "runtime-tokio",
-    "incremental",
+  "cached",
+  "runtime-tokio",
+  "incremental",
 ], optional = true }
 database.workspace = true
 database-entity.workspace = true
@@ -23,7 +23,7 @@ sqlx = { workspace = true, default-features = false, features = ["postgres"] }
 tracing.workspace = true
 tokio = { workspace = true, features = ["macros", "time"] }
 tokio-stream.workspace = true
-uuid = { version = "1.8.0", features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 serde = { version = "1.0.200", features = ["derive"] }
 
 [features]

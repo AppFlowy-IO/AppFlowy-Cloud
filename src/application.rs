@@ -398,7 +398,7 @@ async fn setup_admin_account(
     Err(err) => {
       if let app_error::gotrue::GoTrueError::Internal(err) = err {
         match (err.code, err.msg.as_str()) {
-          (400, "User already registered") => {
+          (400..=499, "User already registered") => {
             info!("Admin user already registered");
             Ok(gotrue_admin)
           },

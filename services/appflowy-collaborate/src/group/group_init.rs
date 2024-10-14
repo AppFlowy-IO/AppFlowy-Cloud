@@ -19,11 +19,7 @@ use collab_rt_protocol::{Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
 use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
 use collab_stream::error::StreamError;
-use collab_stream::model::{
-  AwarenessStreamUpdate, CollabStreamUpdate, CollabUpdateEvent, MessageId, StreamBinary,
-  UpdateFlags,
-};
-use collab_stream::stream_group::StreamGroup;
+use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::{
@@ -31,11 +27,9 @@ use database_entity::dto::{
 };
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
-use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace};
@@ -162,6 +156,7 @@ impl CollabGroup {
   }
 
   #[inline]
+  #[allow(dead_code)]
   pub fn object_id(&self) -> &str {
     &self.state.object_id
   }
@@ -751,60 +746,6 @@ impl CollabGroup {
         10 * 60 // 10 minutes
       },
     }
-  }
-}
-
-struct CollabUpdateStreamingImpl {
-  sender: mpsc::UnboundedSender<Vec<u8>>,
-}
-
-impl CollabUpdateStreamingImpl {
-  async fn new(
-    workspace_id: &str,
-    object_id: &str,
-    collab_redis_stream: &CollabRedisStream,
-  ) -> Result<Self, StreamError> {
-    let stream = collab_redis_stream
-      .collab_update_stream_group(workspace_id, object_id, "collaborate_update_producer")
-      .await?;
-    let (sender, receiver) = mpsc::unbounded_channel();
-    tokio::spawn(async move {
-      if let Err(err) = Self::consume_messages(receiver, stream).await {
-        error!("Failed to consume incoming updates: {}", err);
-      }
-    });
-    Ok(Self { sender })
-  }
-
-  async fn consume_messages(
-    mut receiver: mpsc::UnboundedReceiver<Vec<u8>>,
-    mut stream: StreamGroup,
-  ) -> Result<(), RealtimeError> {
-    while let Some(update) = receiver.recv().await {
-      let mut update_count = 1;
-      let update = {
-        let mut updates = VecDeque::new();
-        // there may be already more messages inside waiting, try to read them all right away
-        while let Ok(update) = receiver.try_recv() {
-          updates.push_back(Update::decode_v1(&update)?);
-        }
-        if updates.is_empty() {
-          update // no following messages
-        } else {
-          update_count += updates.len();
-          // prepend first update and merge them all together
-          updates.push_front(Update::decode_v1(&update)?);
-          Update::merge_updates(updates).encode_v1()
-        }
-      };
-
-      let msg = StreamBinary::try_from(CollabUpdateEvent::UpdateV1 {
-        encode_update: update,
-      })?;
-      stream.insert_messages(vec![msg]).await?;
-      trace!("Sent cumulative ({}) collab update to redis", update_count);
-    }
-    Ok(())
   }
 }
 

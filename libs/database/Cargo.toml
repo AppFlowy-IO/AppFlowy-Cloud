@@ -32,7 +32,11 @@ pgvector = { workspace = true, features = ["sqlx"] }
 tracing = { version = "0.1.40" }
 uuid = { version = "1.6.1", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-redis.workspace = true
+redis = { workspace = true, features = [
+  "aio",
+  "tokio-comp",
+  "connection-manager",
+] }
 futures-util = "0.3.30"
 bytes = "1.5"
 aws-sdk-s3 = { version = "1.36.0", features = [

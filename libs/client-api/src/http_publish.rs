@@ -12,6 +12,26 @@ use crate::Client;
 
 // Publisher API
 impl Client {
+  #[instrument(level = "debug", skip_all)]
+  pub async fn list_published_collab_info(
+    &self,
+    workspace_id: &str,
+  ) -> Result<Vec<PublishInfo>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/published-info",
+      self.base_url, workspace_id,
+    );
+
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<Vec<PublishInfo>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn set_workspace_publish_namespace(
     &self,
     workspace_id: &str,

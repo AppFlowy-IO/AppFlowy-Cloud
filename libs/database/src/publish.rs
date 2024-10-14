@@ -314,6 +314,30 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
   Ok(res)
 }
 
+pub async fn select_all_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Vec<PublishInfo>, AppError> {
+  let res = sqlx::query_as!(
+    PublishInfo,
+    r#"
+      SELECT
+        aw.publish_namespace AS namespace,
+        apc.publish_name,
+        apc.view_id
+      FROM af_published_collab apc
+      LEFT JOIN af_workspace aw
+        ON apc.workspace_id = aw.workspace_id
+      WHERE apc.workspace_id = $1;
+    "#,
+    workspace_id,
+  )
+  .fetch_all(executor)
+  .await?;
+
+  Ok(res)
+}
+
 pub async fn select_workspace_id_for_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   publish_namespace: &str,

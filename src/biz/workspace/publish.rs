@@ -1,3 +1,4 @@
+use database::publish::select_all_published_collab_info;
 use std::sync::Arc;
 
 use app_error::AppError;
@@ -141,6 +142,11 @@ pub trait PublishedCollabStore: Sync + Send + 'static {
     publish_name: &str,
   ) -> Result<serde_json::Value, AppError>;
 
+  async fn list_collab_publish_info(
+    &self,
+    workspace_id: &Uuid,
+  ) -> Result<Vec<PublishInfo>, AppError>;
+
   async fn get_collab_publish_info(&self, view_id: &Uuid) -> Result<PublishInfo, AppError>;
 
   async fn get_collab_blob_by_publish_namespace(
@@ -222,6 +228,13 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
       self.metrics.incr_success_read_count(1);
     }
     result
+  }
+
+  async fn list_collab_publish_info(
+    &self,
+    workspace_id: &Uuid,
+  ) -> Result<Vec<PublishInfo>, AppError> {
+    select_all_published_collab_info(&self.pg_pool, workspace_id).await
   }
 
   async fn get_collab_publish_info(&self, view_id: &Uuid) -> Result<PublishInfo, AppError> {
@@ -369,6 +382,13 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
 
   async fn get_collab_publish_info(&self, view_id: &Uuid) -> Result<PublishInfo, AppError> {
     select_published_collab_info(&self.pg_pool, view_id).await
+  }
+
+  async fn list_collab_publish_info(
+    &self,
+    workspace_id: &Uuid,
+  ) -> Result<Vec<PublishInfo>, AppError> {
+    select_all_published_collab_info(&self.pg_pool, workspace_id).await
   }
 
   async fn get_collab_blob_by_publish_namespace(

@@ -158,6 +158,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::post().to(post_published_duplicate_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/published-info")
+        .route(web::get().to(list_published_collab_info_handler)),
+    )
+    .service(
       web::resource("/published-info/{view_id}")
         .route(web::get().to(get_published_collab_info_handler)),
     )
@@ -1115,6 +1119,17 @@ async fn post_published_duplicate_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn list_published_collab_info_handler(
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<Vec<PublishInfo>>>> {
+  let publish_infos = state
+    .published_collab_store
+    .list_collab_publish_info(&workspace_id.into_inner())
+    .await?;
+  Ok(Json(AppResponse::Ok().with_data(publish_infos)))
 }
 
 async fn get_published_collab_info_handler(

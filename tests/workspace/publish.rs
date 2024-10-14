@@ -126,6 +126,20 @@ async fn test_publish_doc() {
   .unwrap();
 
   {
+    // Check that the published collabs are listed
+    let published_infos = c.list_published_collab_info(&workspace_id).await.unwrap();
+    assert_eq!(published_infos.len(), 2);
+    let _ = published_infos
+      .iter()
+      .find(|info| info.publish_name == publish_name_1)
+      .unwrap();
+    let _ = published_infos
+      .iter()
+      .find(|info| info.publish_name == publish_name_2)
+      .unwrap();
+  }
+
+  {
     // Non login user should be able to view the published collab
     let guest_client = localhost_client();
     let published_collab = guest_client
@@ -208,7 +222,7 @@ async fn test_publish_doc() {
     assert_eq!(blob, "yrs_encoded_data_4");
   }
 
-  c.unpublish_collabs(&workspace_id, &[view_id_1])
+  c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])
     .await
     .unwrap();
 
@@ -229,6 +243,13 @@ async fn test_publish_doc() {
       .err()
       .unwrap();
     assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+  }
+
+  {
+    // check that the published collabs are removed
+    // listing published collab should return empty
+    let published_infos = c.list_published_collab_info(&workspace_id).await.unwrap();
+    assert_eq!(published_infos.len(), 0);
   }
 }
 

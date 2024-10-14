@@ -22,6 +22,7 @@ use appflowy_collaborate::CollabRealtimeMetrics;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
+
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
 
@@ -29,7 +30,7 @@ use crate::api::metrics::{PublishedCollabMetrics, RequestMetrics};
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::workspace::publish::PublishedCollabStore;
 use crate::config::config::Config;
-use crate::mailer::Mailer;
+use crate::mailer::AFCloudMailer;
 
 pub type RedisConnectionManager = redis::aio::ConnectionManager;
 #[derive(Clone)]
@@ -51,7 +52,7 @@ pub struct AppState {
   pub pg_listeners: Arc<PgListeners>,
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
-  pub mailer: Mailer,
+  pub mailer: AFCloudMailer,
   pub ai_client: AppFlowyAIClient,
   pub realtime_shared_state: RealtimeSharedState,
   pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,

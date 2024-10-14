@@ -45,6 +45,7 @@ use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use gotrue::grant::{Grant, PasswordGrant};
+use mailer::sender::Mailer;
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
 
@@ -70,7 +71,7 @@ use crate::biz::workspace::publish::{
 use crate::config::config::{
   Config, DatabaseSetting, GoTrueSetting, PublishedCollabStorageBackend, S3Setting,
 };
-use crate::mailer::Mailer;
+use crate::mailer::AFCloudMailer;
 use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
 use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
@@ -335,13 +336,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     .connect_lazy();
 
   let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
-  let mailer = Mailer::new(
-    config.mailer.smtp_username.clone(),
-    config.mailer.smtp_password.expose_secret().clone(),
-    &config.mailer.smtp_host,
-    config.mailer.smtp_port,
-  )
-  .await?;
+  let mailer = get_mailer(config).await?;
   let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
   if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
     warn!("Failed to remove all connected users: {:?}", err);
@@ -539,6 +534,18 @@ async fn create_bucket_if_not_exists(
       }
     },
   }
+}
+
+async fn get_mailer(config: &Config) -> Result<AFCloudMailer, Error> {
+  let mailer = Mailer::new(
+    config.mailer.smtp_username.clone(),
+    config.mailer.smtp_password.expose_secret().clone(),
+    &config.mailer.smtp_host,
+    config.mailer.smtp_port,
+  )
+  .await?;
+
+  AFCloudMailer::new(mailer).await
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {

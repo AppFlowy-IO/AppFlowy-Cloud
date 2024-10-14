@@ -148,6 +148,7 @@ pin-project = "1.1.5"
 byteorder = "1.5.0"
 sha2 = "0.10.8"
 rayon.workspace = true
+mailer.workspace = true
 
 
 [dev-dependencies]
@@ -213,6 +214,7 @@ members = [
   # xtask
   "xtask",
   "libs/tonic-proto",
+  "libs/mailer",
 ]
 
 [workspace.dependencies]
@@ -224,6 +226,7 @@ shared-entity = { path = "libs/shared-entity" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 authentication = { path = "libs/authentication" }
 access-control = { path = "libs/access-control" }
+mailer = { path = "libs/mailer" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
 prometheus-client = "0.22.0"
@@ -269,7 +272,7 @@ pgvector = { version = "0.4", features = ["sqlx"] }
 client-api-entity = { path = "libs/client-api-entity" }
 
 # collaboration
-yrs = { version = "0.21.0", features = ["sync"] }
+yrs = { version = "0.21.2", features = ["sync"] }
 collab = { version = "0.2.0" }
 collab-entity = { version = "0.2.0" }
 collab-folder = { version = "0.2.0" }
@@ -290,13 +293,13 @@ debug = true
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "83c85320f74de9694f4f520580261c41e8b012a1" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "83c85320f74de9694f4f520580261c41e8b012a1" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "83c85320f74de9694f4f520580261c41e8b012a1" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "83c85320f74de9694f4f520580261c41e8b012a1" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "83c85320f74de9694f4f520580261c41e8b012a1" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "83c85320f74de9694f4f520580261c41e8b012a1" }
-collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "83c85320f74de9694f4f520580261c41e8b012a1" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8987e035accc81bd5ca0acc9812da8e4c6023eba" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8987e035accc81bd5ca0acc9812da8e4c6023eba" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8987e035accc81bd5ca0acc9812da8e4c6023eba" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8987e035accc81bd5ca0acc9812da8e4c6023eba" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8987e035accc81bd5ca0acc9812da8e4c6023eba" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8987e035accc81bd5ca0acc9812da8e4c6023eba" }
+collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8987e035accc81bd5ca0acc9812da8e4c6023eba" }
 
 [features]
 history = []

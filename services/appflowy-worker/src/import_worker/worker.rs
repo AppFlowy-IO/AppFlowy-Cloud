@@ -1,4 +1,4 @@
-use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResultBuilder};
+use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResult};
 use crate::import_worker::unzip::unzip_async;
 use crate::s3_client::S3StreamResponse;
 use anyhow::anyhow;
@@ -8,7 +8,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use collab_importer::imported_collab::ImportType;
@@ -52,6 +52,7 @@ use tokio::task::spawn_local;
 use tokio::time::interval;
 
 use crate::error::ImportError;
+use crate::mailer::ImportNotionMailerParam;
 use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
@@ -277,17 +278,15 @@ async fn process_task(
     },
     ImportTask::Custom(value) => {
       trace!("Custom task: {:?}", value);
-      match value.get("workspace_id").and_then(|v| v.as_str()) {
-        None => {
-          warn!("Missing workspace_id in custom task");
-        },
-        Some(workspace_id) => {
-          let result = ImportResultBuilder::new(workspace_id.to_string()).build();
-          notifier
-            .notify_progress(ImportProgress::Finished(result))
-            .await;
-        },
-      }
+      let result = ImportResult {
+        user_name: "".to_string(),
+        user_email: "".to_string(),
+        is_success: true,
+        value: Default::default(),
+      };
+      notifier
+        .notify_progress(ImportProgress::Finished(result))
+        .await;
       Ok(())
     },
   }
@@ -450,7 +449,7 @@ async fn process_unzip_file(
   if !database_view_ids_by_database_id.is_empty() {
     let w_db_collab =
       get_encode_collab_from_bytes(&w_database_id, &CollabType::WorkspaceDatabase, pg_pool).await?;
-    let mut w_database = WorkspaceDatabaseBody::from_collab_doc_state(
+    let mut w_database = WorkspaceDatabase::from_collab_doc_state(
       &w_database_id,
       CollabOrigin::Server,
       w_db_collab.into(),
@@ -645,20 +644,46 @@ async fn remove_workspace(workspace_id: &str, pg_pool: &PgPool) {
 async fn notify_user(
   import_task: &NotionImportTask,
   result: Result<(), ImportError>,
-  _notifier: Arc<dyn ImportNotifier>,
+  notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
-  match result {
+  let task_id = import_task.task_id.to_string();
+  let (error, error_detail) = match result {
     Ok(_) => {
       info!("[Import]: successfully imported:{}", import_task);
+      (None, None)
     },
     Err(err) => {
       error!(
         "[Import]: failed to import:{}: error:{:?}",
         import_task, err
       );
+      let (error, error_detail) = err.report(&task_id);
+      (Some(error), Some(error_detail))
     },
-  }
-  // send email
+  };
+
+  let is_success = error.is_none();
+
+  let value = serde_json::to_value(ImportNotionMailerParam {
+    import_task_id: task_id,
+    user_name: import_task.user_name.clone(),
+    import_file_name: import_task.workspace_name.clone(),
+    workspace_id: import_task.workspace_id.clone(),
+    workspace_name: import_task.workspace_name.clone(),
+    open_workspace: false,
+    error,
+    error_detail,
+  })
+  .unwrap();
+
+  notifier
+    .notify_progress(ImportProgress::Finished(ImportResult {
+      user_name: import_task.user_name.clone(),
+      user_email: import_task.user_email.clone(),
+      is_success,
+      value,
+    }))
+    .await;
   Ok(())
 }
 
@@ -812,8 +837,9 @@ async fn get_un_ack_tasks(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotionImportTask {
   pub uid: i64,
+  pub user_name: String,
+  pub user_email: String,
   pub task_id: Uuid,
-  pub user_uuid: String,
   pub workspace_id: String,
   pub workspace_name: String,
   pub s3_key: String,
@@ -823,8 +849,8 @@ impl Display for NotionImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      "NotionImportTask {{ workspace_id: {}, workspace_name: {} }}",
-      self.workspace_id, self.workspace_name
+      "NotionImportTask {{ task_id: {}, workspace_id: {}, workspace_name: {}, user_name: {}, user_email: {} }}",
+      self.task_id, self.workspace_id, self.workspace_name, self.user_name, self.user_email
     )
   }
 }

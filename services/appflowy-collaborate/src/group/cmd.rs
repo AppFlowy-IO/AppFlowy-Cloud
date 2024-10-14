@@ -2,7 +2,6 @@ use async_stream::stream;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use dashmap::DashMap;
-use futures::channel::mpsc::{SendError, Sender};
 use futures::Sink;
 use futures_util::StreamExt;
 use std::collections::HashMap;
@@ -333,22 +332,22 @@ impl<T> Sink<T> for NullSender<T> {
   type Error = RealtimeError;
 
   #[inline]
-  fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+  fn poll_ready(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
     Poll::Ready(Ok(()))
   }
 
   #[inline]
-  fn start_send(self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
+  fn start_send(self: Pin<&mut Self>, _: T) -> Result<(), Self::Error> {
     Ok(())
   }
 
   #[inline]
-  fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+  fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
     Poll::Ready(Ok(()))
   }
 
   #[inline]
-  fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+  fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
     Poll::Ready(Ok(()))
   }
 }

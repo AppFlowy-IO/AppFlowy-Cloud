@@ -3,13 +3,12 @@ use crate::error::StreamError;
 use crate::lease::{Lease, LeaseAcquisition};
 use crate::model::{
   AwarenessStreamUpdate, AwarenessStreamUpdateBatch, CollabStreamUpdate, CollabStreamUpdateBatch,
-  CollabUpdateEvent, MessageId,
+  MessageId,
 };
-use crate::pubsub::{CollabStreamPub, CollabStreamSub};
 use crate::stream_group::{StreamConfig, StreamGroup};
 use futures::Stream;
 use redis::aio::ConnectionManager;
-use redis::streams::{StreamRangeReply, StreamReadOptions, StreamReadReply};
+use redis::streams::{StreamRangeReply, StreamReadOptions};
 use redis::{AsyncCommands, FromRedisValue};
 use std::time::Duration;
 use tracing::error;

@@ -244,7 +244,7 @@ mod tests {
     entity::ObjectType,
   };
   use async_trait::async_trait;
-  use casbin::{prelude::*, rhai::ImmutableString};
+  use casbin::{function_map::OperatorFunction, prelude::*};
   use database_entity::dto::{AFAccessLevel, AFRole};
 
   use super::{AFEnforcer, EnforcerGroup};
@@ -268,10 +268,7 @@ mod tests {
       .await
       .unwrap();
 
-    enforcer.add_function(
-      "cmpRoleOrLevel",
-      |r: ImmutableString, p: ImmutableString| cmp_role_or_level(r.as_str(), p.as_str()),
-    );
+    enforcer.add_function("cmpRoleOrLevel", OperatorFunction::Arg2(cmp_role_or_level));
     AFEnforcer::new(enforcer, enforce_group).await.unwrap()
   }
   #[tokio::test]

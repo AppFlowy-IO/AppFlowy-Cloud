@@ -91,7 +91,7 @@ sqlx = { workspace = true, default-features = false, features = [
 async-trait.workspace = true
 prometheus-client.workspace = true
 itertools = "0.11"
-uuid = "1.6.1"
+uuid.workspace = true
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 dotenvy.workspace = true
 url = "2.5.0"

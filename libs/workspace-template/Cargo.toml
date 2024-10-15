@@ -14,7 +14,7 @@ collab-folder = { workspace = true }
 collab-document = { workspace = true }
 collab-database = { workspace = true }
 collab-entity = { workspace = true }
-async-trait = "0.1.77"
+async-trait.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 uuid.workspace = true

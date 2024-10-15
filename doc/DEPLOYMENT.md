@@ -168,7 +168,7 @@ docker logs <NAME>
 
 ## 5. FAQ
 
-- How do I use a different `postgres`?
+### How do I use a different `postgres`?
   The default url is using the postgres in docker compose, in service `appflowy_cloud` and `gotrue` respectively.
   However it is possible to change the database storage for it. The following steps are listed below.
 
@@ -189,3 +189,15 @@ GOTRUE_DATABASE_URL=postgres://supabase_auth_admin:root@<host>:<port>/<dbname>
 - `dbname` for `appflowy_cloud` and `gotrue` must be the same.
 
 3. You would need to run the initialization sql file from `migrations/before` in your hosted postgres.
+
+### How do I disable signups?
+
+The reason why you might want to disable signups is because your deployed AppFlowy-Cloud is publicly available and you do not want any other users to access it. We strongly recommend that you consider using VPN, IP whitelisting or other way to disallow public access to your AppFlowy-Cloud instance. Use the following steps to disable signups as a last resort.
+
+1. All your services need to be running properly. This step is important to ensure that the admin user is created properly. Run `docker ps -a` to check that all services are running without restarts.
+2. Edit the `docker-compose.yml` file and add the following environment variable to the `gotrue` service:
+```yaml
+    environment:
+      - GOTRUE_DISABLE_SIGNUP=true
+```
+3. Re run the services by running `docker compose up -d` again. Only the `gotrue` service will be restarted. Run `docker ps -a` to check that the `gotrue` service is running without restarts.

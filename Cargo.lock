@@ -1914,21 +1914,22 @@ dependencies = [
 
 [[package]]
 name = "casbin"
-version = "2.2.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b71063d3ee2f5ecc89229ccade0f3f8fb413b5e3978124a38b611216f91dd7c9"
+checksum = "66e141a8db13c2e8bf3fdd6ac2b48ace7e70d2e4a66c329a4bb759e1368f22dc"
 dependencies = [
  "async-trait",
  "fixedbitset",
  "getrandom 0.2.15",
+ "hashlink",
  "mini-moka",
  "once_cell",
  "parking_lot 0.12.3",
  "petgraph",
  "regex",
  "rhai",
- "ritelinked",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
@@ -3718,15 +3719,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
-dependencies = [
- "ahash 0.7.8",
 ]
 
 [[package]]
@@ -6032,16 +6024,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ritelinked"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98f2771d255fd99f0294f13249fecd0cae6e074f86b4197ec1f1689d537b44d3"
-dependencies = [
- "ahash 0.7.8",
- "hashbrown 0.11.2",
-]
-
-[[package]]
 name = "rkyv"
 version = "0.7.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6478,9 +6460,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.122"
+version = "1.0.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "784b6203951c57ff748476b126ccb5e8e2959a5c19e5c617ab1956be3dbc68da"
+checksum = "6ff5456707a1de34e7e37f2a6fd3d3f808c318259cbd01ab6377795054b483d8"
 dependencies = [
  "itoa",
  "memchr",

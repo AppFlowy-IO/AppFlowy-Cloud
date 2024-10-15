@@ -47,7 +47,7 @@ use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
-use crate::biz::workspace::page_view::get_page_view_collab;
+use crate::biz::workspace::page_view::{get_page_view_collab, update_page_collab_data};
 use crate::domain::compression::{
   blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
 };
@@ -117,6 +117,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}")
         .route(web::get().to(v1_get_collab_handler)),
+    )
+    .service(
+      web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
+        .route(web::post().to(post_web_update_handler)),
     )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}")
@@ -792,6 +796,32 @@ async fn v1_get_collab_handler(
   };
 
   Ok(Json(AppResponse::Ok().with_data(resp)))
+}
+
+async fn post_web_update_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, Uuid)>,
+  payload: Json<UpdateCollabWebParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, object_id) = path.into_inner();
+  let collab_type = payload.collab_type.clone();
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  update_page_collab_data(
+    state.collab_access_control_storage.clone(),
+    state.metrics.appflowy_web_metrics.clone(),
+    uid,
+    workspace_id,
+    object_id,
+    collab_type,
+    &payload.doc_state,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn get_page_view_handler(

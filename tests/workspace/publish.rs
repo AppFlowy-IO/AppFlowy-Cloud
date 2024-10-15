@@ -227,6 +227,27 @@ async fn test_publish_doc() {
     .unwrap();
 
   {
+    // Try to get default publish view info but not set
+    let err = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+
+    // Set publish view as default workspace view
+    c.set_default_publish_view(&workspace_id, (&view_id_1).to_owned())
+      .await
+      .unwrap();
+
+    // Get default publish view
+    let publish_info = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap();
+    assert_eq!(publish_info.view_id, view_id_1);
+  }
+
+  {
     // Deleted collab should not be accessible
     let guest_client = localhost_client();
     let err = guest_client
@@ -234,7 +255,7 @@ async fn test_publish_doc() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
 
     let guest_client = localhost_client();
     let err = guest_client
@@ -242,7 +263,14 @@ async fn test_publish_doc() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+
+    // default publish view should not be accessible
+    let err = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
   }
 
   {

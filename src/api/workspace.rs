@@ -183,6 +183,11 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_publish_namespace_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/publish-default")
+        .route(web::put().to(put_workspace_default_published_view_handler))
+        .route(web::get().to(get_workspace_published_default_info_handler)),
+    )
+    .service(
       web::resource("/{workspace_id}/publish")
         .route(web::post().to(post_publish_collabs_handler))
         .route(web::delete().to(delete_published_collabs_handler)),
@@ -1046,6 +1051,34 @@ async fn remove_collab_member_handler(
   .await?;
 
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn put_workspace_default_published_view_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  payload: Json<UpdateDefaultPublishView>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let new_default_pub_view_id = payload.into_inner().view_id;
+  biz::workspace::publish::set_workspace_default_publish_view(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+    &new_default_pub_view_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_workspace_published_default_info_handler(
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishInfo>>> {
+  let workspace_id = workspace_id.into_inner();
+  let info =
+    biz::workspace::publish::get_workspace_default_publish_view_info(&state.pg_pool, &workspace_id)
+      .await?;
+  Ok(Json(AppResponse::Ok().with_data(info)))
 }
 
 async fn put_publish_namespace_handler(

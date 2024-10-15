@@ -1,4 +1,7 @@
-use database::publish::select_all_published_collab_info;
+use database::publish::{
+  select_all_published_collab_info, select_default_published_view_id,
+  update_workspace_default_publish_view,
+};
 use std::sync::Arc;
 
 use app_error::AppError;
@@ -85,6 +88,61 @@ pub async fn set_workspace_namespace(
   };
   update_workspace_publish_namespace(pg_pool, workspace_id, new_namespace).await?;
   Ok(())
+}
+
+pub async fn set_workspace_default_publish_view(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+  new_view_id: &Uuid,
+) -> Result<(), AppError> {
+  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  update_workspace_default_publish_view(pg_pool, workspace_id, new_view_id).await?;
+  Ok(())
+}
+
+pub async fn get_workspace_default_publish_view_info(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<PublishInfo, AppError> {
+  let view_id = select_default_published_view_id(pg_pool, workspace_id)
+    .await?
+    .ok_or_else(|| {
+      AppError::RecordNotFound(format!(
+        "Default published view not found for workspace_id: {}",
+        workspace_id
+      ))
+    })?;
+
+  let pub_info = select_published_collab_info(pg_pool, &view_id).await?;
+  Ok(pub_info)
+}
+
+pub async fn get_workspace_default_publish_view_info_meta(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<(PublishInfo, serde_json::Value), AppError> {
+  let view_id = select_default_published_view_id(pg_pool, workspace_id)
+    .await?
+    .ok_or_else(|| {
+      AppError::RecordNotFound(format!(
+        "Default published view not found for workspace_id: {}",
+        workspace_id
+      ))
+    })?;
+
+  let (pub_info, meta) = tokio::try_join!(
+    select_published_collab_info(pg_pool, &view_id),
+    select_published_metadata_for_view_id(pg_pool, &view_id)
+  )?;
+  let meta = meta.ok_or_else(|| {
+    AppError::RecordNotFound(format!(
+      "Published metadata not found for view_id: {}",
+      view_id
+    ))
+  })?;
+
+  Ok((pub_info, meta.1))
 }
 
 pub async fn get_workspace_publish_namespace(

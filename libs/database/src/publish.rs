@@ -83,6 +83,34 @@ pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = P
 }
 
 #[inline]
+pub async fn update_workspace_default_publish_view<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  new_view_id: &Uuid,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_workspace
+      SET default_view_id = $1
+      WHERE workspace_id = $2
+    "#,
+    new_view_id,
+    workspace_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+        "Failed to update workspace default publish view, workspace_id: {}, new_view_id: {}, rows_affected: {}",
+        workspace_id, new_view_id, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
 pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
@@ -283,6 +311,24 @@ pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgre
     "#,
     publish_namespace,
     publish_name,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn select_default_published_view_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Option<Uuid>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT default_view_id
+      FROM af_workspace
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
   )
   .fetch_one(executor)
   .await?;

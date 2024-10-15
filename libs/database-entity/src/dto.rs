@@ -396,6 +396,8 @@ pub struct PublishInfo {
   pub namespace: Option<String>,
   pub publish_name: String,
   pub view_id: Uuid,
+  pub publisher_email: String,
+  pub publish_timestamp_sec: DateTime<Utc>,
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]

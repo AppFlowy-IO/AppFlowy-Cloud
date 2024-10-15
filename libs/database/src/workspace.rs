@@ -1,6 +1,6 @@
 use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
-  PublishInfo, Reaction,
+  Reaction,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -1155,28 +1155,6 @@ pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgre
     "#,
     publish_namespace,
     publish_name,
-  )
-  .fetch_one(executor)
-  .await?;
-
-  Ok(res)
-}
-
-pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  view_id: &Uuid,
-) -> Result<PublishInfo, AppError> {
-  let res = sqlx::query_as!(
-    PublishInfo,
-    r#"
-      SELECT
-        (SELECT publish_namespace FROM af_workspace aw WHERE aw.workspace_id = apc.workspace_id) AS namespace,
-        publish_name,
-        view_id
-      FROM af_published_collab apc
-      WHERE view_id = $1
-    "#,
-    view_id,
   )
   .fetch_one(executor)
   .await?;

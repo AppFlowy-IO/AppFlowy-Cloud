@@ -300,10 +300,12 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
       SELECT
         aw.publish_namespace AS namespace,
         apc.publish_name,
-        apc.view_id
+        apc.view_id,
+        au.email AS publisher_email,
+        apc.created_at AS publish_timestamp_sec
       FROM af_published_collab apc
-      LEFT JOIN af_workspace aw
-        ON apc.workspace_id = aw.workspace_id
+      JOIN af_user au ON apc.published_by = au.uid
+      JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
       WHERE apc.view_id = $1;
     "#,
     view_id,
@@ -324,10 +326,12 @@ pub async fn select_all_published_collab_info<'a, E: Executor<'a, Database = Pos
       SELECT
         aw.publish_namespace AS namespace,
         apc.publish_name,
-        apc.view_id
+        apc.view_id,
+        au.email AS publisher_email,
+        apc.created_at AS publish_timestamp_sec
       FROM af_published_collab apc
-      LEFT JOIN af_workspace aw
-        ON apc.workspace_id = aw.workspace_id
+      JOIN af_user au ON apc.published_by = au.uid
+      JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
       WHERE apc.workspace_id = $1;
     "#,
     workspace_id,

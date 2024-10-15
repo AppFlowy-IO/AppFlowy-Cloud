@@ -61,6 +61,7 @@ thiserror = "1.0.56"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 anyhow = "1"
 bytes.workspace = true
+arc-swap.workspace = true
 
 collab = { workspace = true }
 collab-entity = { workspace = true }

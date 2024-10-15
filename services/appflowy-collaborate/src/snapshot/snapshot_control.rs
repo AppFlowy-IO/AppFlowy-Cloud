@@ -10,13 +10,14 @@ use futures_util::StreamExt;
 use sqlx::PgPool;
 use tokio::time::interval;
 use tracing::{debug, error, trace, warn};
+use uuid::Uuid;
 use validator::Validate;
 
 use app_error::AppError;
 use collab_rt_protocol::spawn_blocking_validate_encode_collab;
 use database::collab::{
   create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, latest_snapshot_time,
-  select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
+  select_latest_snapshot, select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
 };
 use database_entity::dto::{AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData};
 
@@ -178,6 +179,33 @@ impl SnapshotControl {
         workspace_id: workspace_id.to_string(),
         object_id: object_id.to_string(),
       }),
+    }
+  }
+
+  pub async fn get_latest_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> Result<Option<SnapshotData>, AppError> {
+    let key = SnapshotKey::from_object_id(object_id);
+    match self.cache.try_get(&key.0).await.unwrap_or(None) {
+      None => {
+        let wid = Uuid::parse_str(workspace_id)?;
+        let snapshot = select_latest_snapshot(&self.pg_pool, &wid, object_id).await?;
+        match snapshot {
+          None => Ok(None),
+          Some(row) => Ok(Some(SnapshotData {
+            object_id: row.oid,
+            encoded_collab_v1: row.blob,
+            workspace_id: row.workspace_id.to_string(),
+          })),
+        }
+      },
+      Some(snapshot) => Ok(Some(SnapshotData {
+        encoded_collab_v1: snapshot,
+        workspace_id: workspace_id.to_string(),
+        object_id: object_id.to_string(),
+      })),
     }
   }
 

@@ -6,11 +6,11 @@ use crate::ext::api::{
   get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
   verify_token_cloud,
 };
-use crate::models::{OAuthLoginAction, WebAppOAuthLoginRequest};
+use crate::models::{LoginParams, OAuthLoginAction, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
-use axum::response::Result;
+use axum::response::{IntoResponse, Result};
 use axum::{response::Html, routing::get, Router};
 use axum_extra::extract::CookieJar;
 use gotrue_entity::dto::User;
@@ -77,7 +77,7 @@ async fn login_callback_query_handler(
   session: Option<UserSession>,
   Query(query): Query<WebAppOAuthLoginRequest>,
   mut jar: CookieJar,
-) -> Result<(CookieJar, Html<String>), WebAppError> {
+) -> Result<axum::response::Response, WebAppError> {
   let refresh_token = {
     match query.refresh_token {
       Some(refresh_token) => refresh_token,
@@ -91,19 +91,16 @@ async fn login_callback_query_handler(
               query.error_code,
               query.error_description
             );
-            let expired_url = format!(
+            let redirect_url = format!(
                 "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
                 query.workspace_name.unwrap_or_default(),
                 query.workspace_icon.unwrap_or_default(),
                 query.user_name.unwrap_or_default(),
                 query.user_icon.unwrap_or_default(),
                 query.workspace_member_count.unwrap_or_default());
-            return Ok((
-              jar,
-              render_template(templates::Redirect {
-                redirect_url: expired_url,
-              })?,
-            ));
+
+            let expired_html = render_template(templates::Redirect { redirect_url })?;
+            return Ok(expired_html.into_response());
           },
           None => {
             return Err(WebAppError::BadRequest(
@@ -129,7 +126,10 @@ async fn login_callback_query_handler(
   .await?;
 
   let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(new_session_id.to_string(), token);
+  let new_session = session::UserSession {
+    session_id: new_session_id.to_string(),
+    token,
+  };
   state.session_store.put_user_session(&new_session).await?;
   jar = jar.add(new_session_cookie(new_session_id));
 
@@ -153,7 +153,8 @@ async fn login_callback_query_handler(
             .iter()
             .find(|w| w.invite_id.to_string() == invite_id);
           if found.is_some() {
-            return Ok((jar, render_template(templates::OpenAppFlowyOrDownload {})?));
+            let open_or_dl_html = render_template(templates::OpenAppFlowyOrDownload {})?;
+            return Ok((jar, open_or_dl_html).into_response());
           }
         }
 
@@ -165,24 +166,33 @@ async fn login_callback_query_handler(
         .await
         {
           tracing::error!("accepting workspace invitation: {:?}", err);
-          let expired_url = format!(
+          let redirect_url = format!(
             "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
             query.workspace_name.unwrap_or_default(),
             query.workspace_icon.unwrap_or_default(),
             query.user_name.unwrap_or_default(),
             query.user_icon.unwrap_or_default(),
             query.workspace_member_count.unwrap_or_default());
-          return Ok((
-            jar,
-            render_template(templates::Redirect {
-              redirect_url: expired_url,
-            })?,
-          ));
+          let redirect_html = render_template(templates::Redirect { redirect_url })?;
+          return Ok(redirect_html.into_response());
         };
-        Ok((jar, render_template(templates::OpenAppFlowyOrDownload {})?))
+        let open_or_dl_html = render_template(templates::OpenAppFlowyOrDownload {})?;
+        Ok((jar, open_or_dl_html).into_response())
       },
     },
-    None => Ok((jar, home_handler(State(state), new_session).await?)),
+    None => match query.redirect_to {
+      Some(redirect_url) => match urlencoding::decode(&redirect_url).map(String::from) {
+        Ok(redirect_url) => {
+          let redirect_html = render_template(templates::Redirect { redirect_url })?;
+          Ok((jar, redirect_html).into_response())
+        },
+        Err(err) => {
+          tracing::error!("Error decoding redirect_url: {:?}", err);
+          home_handler(State(state), new_session, jar).await
+        },
+      },
+      None => home_handler(State(state), new_session, jar).await,
+    },
   }
 }
 
@@ -347,28 +357,49 @@ async fn user_user_handler(
   render_template(templates::UserDetails { user: &user })
 }
 
-async fn login_handler(State(state): State<AppState>) -> Result<Html<String>, WebAppError> {
+async fn login_handler(
+  State(state): State<AppState>,
+  Query(login): Query<LoginParams>,
+) -> Result<Html<String>, WebAppError> {
+  let redirect_to = login
+    .redirect_to
+    .as_ref()
+    .map(|r| urlencoding::encode(r).to_string());
+  let oauth_redirect_to = login.redirect_to.as_ref().map(|r| {
+    urlencoding::encode(&format!(
+      "/web/login-callback?redirect_to={}",
+      urlencoding::encode(r)
+    ))
+    .to_string()
+  });
+
   let external = state.gotrue_client.settings().await?.external;
   let oauth_providers = external.oauth_providers();
-  render_template(templates::Login { oauth_providers })
+  render_template(templates::Login {
+    oauth_providers: &oauth_providers,
+    redirect_to: redirect_to.as_deref(),
+    oauth_redirect_to: oauth_redirect_to.as_deref(),
+  })
 }
 
 async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::ChangePassword)
 }
 
-async fn home_handler(
+pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
-) -> Result<Html<String>, WebAppError> {
+  jar: CookieJar,
+) -> Result<axum::response::Response, WebAppError> {
   let user = state
     .gotrue_client
     .user_info(&session.token.access_token)
     .await?;
-  render_template(templates::Home {
+  let home_html_str = render_template(templates::Home {
     user: &user,
     is_admin: is_admin(&user),
-  })
+  })?;
+  Ok((jar, home_html_str).into_response())
 }
 
 async fn admin_home_handler(

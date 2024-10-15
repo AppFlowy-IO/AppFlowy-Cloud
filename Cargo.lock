@@ -830,15 +830,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arbitrary"
-version = "1.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5a26814d8dcb93b0e5a0ff3c6d80a8843bafb21b39e8e18a6f05471870e110"
-dependencies = [
- "derive_arbitrary",
-]
-
-[[package]]
 name = "arc-swap"
 version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2236,7 +2227,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8987e035accc81bd5ca0acc9812da8e4c6023eba#8987e035accc81bd5ca0acc9812da8e4c6023eba"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=270cd376ee4bfbedd9146105dea4e9e8dabc9359#270cd376ee4bfbedd9146105dea4e9e8dabc9359"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2261,7 +2252,7 @@ dependencies = [
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8987e035accc81bd5ca0acc9812da8e4c6023eba#8987e035accc81bd5ca0acc9812da8e4c6023eba"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=270cd376ee4bfbedd9146105dea4e9e8dabc9359#270cd376ee4bfbedd9146105dea4e9e8dabc9359"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2300,7 +2291,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8987e035accc81bd5ca0acc9812da8e4c6023eba#8987e035accc81bd5ca0acc9812da8e4c6023eba"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=270cd376ee4bfbedd9146105dea4e9e8dabc9359#270cd376ee4bfbedd9146105dea4e9e8dabc9359"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2321,7 +2312,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8987e035accc81bd5ca0acc9812da8e4c6023eba#8987e035accc81bd5ca0acc9812da8e4c6023eba"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=270cd376ee4bfbedd9146105dea4e9e8dabc9359#270cd376ee4bfbedd9146105dea4e9e8dabc9359"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2341,7 +2332,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8987e035accc81bd5ca0acc9812da8e4c6023eba#8987e035accc81bd5ca0acc9812da8e4c6023eba"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=270cd376ee4bfbedd9146105dea4e9e8dabc9359#270cd376ee4bfbedd9146105dea4e9e8dabc9359"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2363,11 +2354,12 @@ dependencies = [
 [[package]]
 name = "collab-importer"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8987e035accc81bd5ca0acc9812da8e4c6023eba#8987e035accc81bd5ca0acc9812da8e4c6023eba"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=270cd376ee4bfbedd9146105dea4e9e8dabc9359#270cd376ee4bfbedd9146105dea4e9e8dabc9359"
 dependencies = [
  "anyhow",
  "async-recursion",
  "async-trait",
+ "async_zip",
  "base64 0.22.1",
  "chrono",
  "collab",
@@ -2377,21 +2369,23 @@ dependencies = [
  "collab-folder",
  "fancy-regex 0.13.0",
  "futures",
+ "futures-lite",
  "futures-util",
  "fxhash",
  "hex",
  "markdown",
  "percent-encoding",
  "rayon",
+ "sanitize-filename",
  "serde",
  "serde_json",
  "sha2",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
  "uuid",
  "walkdir",
- "zip",
 ]
 
 [[package]]
@@ -2461,7 +2455,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8987e035accc81bd5ca0acc9812da8e4c6023eba#8987e035accc81bd5ca0acc9812da8e4c6023eba"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=270cd376ee4bfbedd9146105dea4e9e8dabc9359#270cd376ee4bfbedd9146105dea4e9e8dabc9359"
 dependencies = [
  "anyhow",
  "collab",
@@ -2538,12 +2532,6 @@ dependencies = [
  "once_cell",
  "tiny-keccak",
 ]
-
-[[package]]
-name = "constant_time_eq"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
 name = "convert_case"
@@ -3059,17 +3047,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
 dependencies = [
  "powerfmt",
-]
-
-[[package]]
-name = "derive_arbitrary"
-version = "1.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67e77553c4162a157adbf834ebae5b415acbecbeafc7a74b0e886657506a7611"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.72",
 ]
 
 [[package]]
@@ -4432,12 +4409,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lockfree-object-pool"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9374ef4228402d4b7e403e5838cb880d9ee663314b0a900d5a6aabf0c213552e"
-
-[[package]]
 name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4450,16 +4421,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ee39891760e7d94734f6f63fedc29a2e4a152f836120753a72503f09fcf904"
 dependencies = [
  "hashbrown 0.14.5",
-]
-
-[[package]]
-name = "lzma-rs"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
-dependencies = [
- "byteorder",
- "crc",
 ]
 
 [[package]]
@@ -5007,16 +4968,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pbkdf2"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
-dependencies = [
- "digest",
- "hmac",
-]
 
 [[package]]
 name = "pem"
@@ -6324,6 +6275,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sanitize-filename"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ed72fbaf78e6f2d41744923916966c4fbe3d7c74e3037a8ee482f1115572603"
+dependencies = [
+ "lazy_static",
+ "regex",
+]
+
+[[package]]
 name = "scc"
 version = "2.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6694,12 +6655,6 @@ dependencies = [
  "digest",
  "rand_core 0.6.4",
 ]
-
-[[package]]
-name = "simd-adler32"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
 name = "simdutf8"
@@ -8620,49 +8575,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.72",
-]
-
-[[package]]
-name = "zip"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc5e4288ea4057ae23afc69a4472434a87a2495cafce6632fd1c4ec9f5cf3494"
-dependencies = [
- "aes",
- "arbitrary",
- "bzip2",
- "constant_time_eq",
- "crc32fast",
- "crossbeam-utils",
- "deflate64",
- "displaydoc",
- "flate2",
- "hmac",
- "indexmap 2.3.0",
- "lzma-rs",
- "memchr",
- "pbkdf2",
- "rand 0.8.5",
- "sha1",
- "thiserror",
- "time",
- "zeroize",
- "zopfli",
- "zstd",
-]
-
-[[package]]
-name = "zopfli"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5019f391bac5cf252e93bbcc53d039ffd62c7bfb7c150414d61369afe57e946"
-dependencies = [
- "bumpalo",
- "crc32fast",
- "lockfree-object-pool",
- "log",
- "once_cell",
- "simd-adler32",
 ]
 
 [[package]]

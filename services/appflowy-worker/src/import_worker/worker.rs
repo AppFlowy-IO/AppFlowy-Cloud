@@ -1,5 +1,4 @@
 use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResult};
-use crate::import_worker::unzip::unzip_async;
 use crate::s3_client::S3StreamResponse;
 use anyhow::anyhow;
 use async_zip::base::read::stream::ZipFileReader;
@@ -15,6 +14,7 @@ use collab_importer::imported_collab::ImportType;
 use collab_importer::notion::page::CollabResource;
 use collab_importer::notion::NotionImporter;
 use collab_importer::util::FileId;
+use collab_importer::zip_tool::unzip_stream;
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
 use database::workspace::{
   delete_from_workspace, select_workspace_database_storage_id, update_import_task_status,
@@ -320,7 +320,7 @@ async fn download_and_unzip_file(
       ImportError::Internal(anyhow!("Failed to set permissions for temp dir: {:?}", err))
     })?;
 
-  let unzip_file = unzip_async(zip_reader, output_file_path)
+  let unzip_file = unzip_stream(zip_reader, output_file_path)
     .await
     .map_err(ImportError::Internal)?;
   Ok(unzip_file.unzip_dir_path)

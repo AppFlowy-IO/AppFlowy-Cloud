@@ -1397,6 +1397,7 @@ pub struct AccessRequestWithViewId {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AccessRequesterInfo {
+  pub uid: i64,
   pub uuid: Uuid,
   pub email: String,
   pub name: String,

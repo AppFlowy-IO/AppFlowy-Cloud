@@ -8,6 +8,7 @@ use crate::{
   },
   mailer::{WorkspaceAccessRequestApprovedMailerParam, WorkspaceAccessRequestMailerParam},
 };
+use access_control::workspace::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
@@ -116,8 +117,10 @@ pub async fn get_access_request(
   Ok(access_request)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn approve_or_reject_access_request(
   pg_pool: &PgPool,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   mailer: AFCloudMailer,
   appflowy_web_url: &str,
   request_id: Uuid,
@@ -126,7 +129,14 @@ pub async fn approve_or_reject_access_request(
   is_approved: bool,
 ) -> Result<(), AppError> {
   let access_request = select_access_request_by_request_id(pg_pool, request_id).await?;
-  if access_request.workspace.owner_uid != uid {
+  let has_access = workspace_access_control
+    .enforce_role(
+      &uid,
+      &access_request.workspace.workspace_id.to_string(),
+      AFRole::Owner,
+    )
+    .await?;
+  if !has_access {
     return Err(AppError::NotEnoughPermissions {
       user: user_uuid.to_string(),
       action: "approve access request".to_string(),
@@ -140,9 +150,16 @@ pub async fn approve_or_reject_access_request(
       &mut txn,
       &access_request.workspace.workspace_id,
       &access_request.requester.email,
-      role,
+      role.clone(),
     )
     .await?;
+    workspace_access_control
+      .insert_role(
+        &access_request.requester.uid,
+        &access_request.workspace.workspace_id,
+        role.clone(),
+      )
+      .await?;
     let cloned_mailer = mailer.clone();
     let launch_workspace_url = format!(
       "{}/app/{}",

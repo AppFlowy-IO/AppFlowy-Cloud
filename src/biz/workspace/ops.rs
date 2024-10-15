@@ -13,7 +13,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use access_control::workspace::WorkspaceAccessControl;
-use app_error::{AppError, ErrorCode};
+use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::collab::upsert_collab_member_with_txn;
 use database::file::s3_client_impl::S3BucketStorage;
@@ -611,43 +611,17 @@ pub async fn get_workspace_document_total_bytes(
 
 pub async fn get_workspace_settings(
   pg_pool: &PgPool,
-  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   workspace_id: &Uuid,
-  owner_uid: &i64,
 ) -> Result<AFWorkspaceSettings, AppResponseError> {
-  let has_access = workspace_access_control
-    .enforce_role(owner_uid, &workspace_id.to_string(), AFRole::Owner)
-    .await?;
-
-  if !has_access {
-    return Err(AppResponseError::new(
-      ErrorCode::UserUnAuthorized,
-      "Only workspace owner can access workspace settings",
-    ));
-  }
-
   let settings = select_workspace_settings(pg_pool, workspace_id).await?;
   Ok(settings.unwrap_or_default())
 }
 
 pub async fn update_workspace_settings(
   pg_pool: &PgPool,
-  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   workspace_id: &Uuid,
-  owner_uid: &i64,
   change: AFWorkspaceSettingsChange,
 ) -> Result<AFWorkspaceSettings, AppResponseError> {
-  let has_access = workspace_access_control
-    .enforce_role(owner_uid, &workspace_id.to_string(), AFRole::Owner)
-    .await?;
-
-  if !has_access {
-    return Err(AppResponseError::new(
-      ErrorCode::UserUnAuthorized,
-      "Only workspace owner can edit workspace settings",
-    ));
-  }
-
   let mut tx = pg_pool.begin().await?;
   let mut setting = select_workspace_settings(tx.deref_mut(), workspace_id)
     .await?

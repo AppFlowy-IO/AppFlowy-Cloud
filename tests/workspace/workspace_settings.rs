@@ -1,4 +1,3 @@
-use app_error::ErrorCode;
 use client_api::Client;
 use client_api_test::generate_unique_registered_user_client;
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus, AFWorkspaceSettingsChange};
@@ -31,6 +30,9 @@ async fn get_and_set_workspace_by_owner() {
 
 #[tokio::test]
 async fn get_and_set_workspace_by_non_owner() {
+  // TODO: currently, workspace settings contains only AI preference, which is
+  // better suited as a user setting. Meanwhile, we can permit workspace members
+  // to view the settings.
   let (alice_client, _alice) = generate_unique_registered_user_client().await;
   let workspaces = alice_client.get_workspaces().await.unwrap();
   let alice_workspace_id = workspaces.first().unwrap().workspace_id;
@@ -39,26 +41,18 @@ async fn get_and_set_workspace_by_non_owner() {
 
   invite_user_to_workspace(&alice_workspace_id, &alice_client, &bob_client, &bob.email).await;
 
-  let resp = bob_client
+  bob_client
     .get_workspace_settings(&alice_workspace_id.to_string())
-    .await;
-  assert!(
-    resp.is_err(),
-    "non-owner should not have access to workspace settings"
-  );
-  assert_eq!(resp.err().unwrap().code, ErrorCode::UserUnAuthorized);
+    .await
+    .unwrap();
 
-  let resp = bob_client
+  bob_client
     .update_workspace_settings(
       &alice_workspace_id.to_string(),
       &AFWorkspaceSettingsChange::new().disable_search_indexing(true),
     )
-    .await;
-  assert!(
-    resp.is_err(),
-    "non-owner should not be able to edit workspace settings"
-  );
-  assert_eq!(resp.err().unwrap().code, ErrorCode::UserUnAuthorized);
+    .await
+    .unwrap();
 }
 
 async fn invite_user_to_workspace(

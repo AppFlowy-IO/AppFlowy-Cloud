@@ -8,7 +8,7 @@ actix-http.workspace = true
 app-error.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
-casbin = { version = "2.2.0", features = [
+casbin = { version = "2.5.0", features = [
   "cached",
   "runtime-tokio",
   "incremental",

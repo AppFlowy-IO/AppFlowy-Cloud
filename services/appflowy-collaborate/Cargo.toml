@@ -16,17 +16,17 @@ access-control.workspace = true
 actix.workspace = true
 actix-web.workspace = true
 actix-http = { workspace = true, default-features = false, features = [
-    "openssl",
-    "compress-brotli",
-    "compress-gzip",
+  "openssl",
+  "compress-brotli",
+  "compress-gzip",
 ] }
 actix-web-actors = { version = "4.3" }
 app-error = { workspace = true, features = [
-    "sqlx_error",
-    "actix_web_error",
-    "tokio_error",
-    "bincode_error",
-    "appflowy_ai_error",
+  "sqlx_error",
+  "actix_web_error",
+  "tokio_error",
+  "bincode_error",
+  "appflowy_ai_error",
 ] }
 authentication.workspace = true
 brotli.workspace = true
@@ -40,22 +40,22 @@ futures-util = "0.3.30"
 tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
 tokio = { workspace = true, features = [
-    "net",
-    "sync",
-    "macros",
-    "rt-multi-thread",
+  "net",
+  "sync",
+  "macros",
+  "rt-multi-thread",
 ] }
-async-trait = "0.1.77"
+async-trait.workspace = true
 prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_repr.workspace = true
 sqlx = { workspace = true, default-features = false, features = [
-    "runtime-tokio-rustls",
-    "macros",
-    "postgres",
-    "uuid",
-    "chrono",
+  "runtime-tokio-rustls",
+  "macros",
+  "postgres",
+  "uuid",
+  "chrono",
 ] }
 thiserror = "1.0.56"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

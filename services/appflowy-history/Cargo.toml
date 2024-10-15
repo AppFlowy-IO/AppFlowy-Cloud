@@ -31,7 +31,7 @@ tower = "0.4"
 serde_repr = "0.1.18"
 collab-stream.workspace = true
 chrono = "0.4.37"
-uuid = { version = "1.6.1", features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 dashmap = "5.5.3"
 infra.workspace = true

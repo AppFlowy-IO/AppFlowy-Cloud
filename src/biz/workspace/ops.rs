@@ -1,4 +1,9 @@
 use authentication::jwt::OptionalUserUuid;
+use collab::core::collab::DataSource;
+use collab::preclude::Collab;
+use collab_folder::CollabOrigin;
+use collab_rt_entity::{ClientCollabMessage, UpdateSync};
+use collab_rt_protocol::{Message, SyncMessage};
 use database_entity::dto::AFWorkspaceSettingsChange;
 use std::collections::HashMap;
 
@@ -11,11 +16,12 @@ use serde_json::json;
 use sqlx::{types::uuid, PgPool};
 use tracing::instrument;
 use uuid::Uuid;
+use yrs::updates::encoder::Encode;
 
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use database::collab::upsert_collab_member_with_txn;
+use database::collab::{upsert_collab_member_with_txn, CollabStorage};
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
 
@@ -740,4 +746,40 @@ pub async fn create_upload_task(
     .map_err(|err| AppError::Internal(anyhow!("Failed to push task to Redis stream: {}", err)))?;
 
   Ok(())
+}
+
+/// broadcast updates to collab group if exists
+pub async fn broadcast_update(
+  collab_storage: &Arc<CollabAccessControlStorage>,
+  oid: &str,
+  encoded_update: Vec<u8>,
+) -> Result<(), AppError> {
+  tracing::info!("broadcasting update to group: {}", oid);
+  let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
+  let msg = ClientCollabMessage::ClientUpdateSync {
+    data: UpdateSync {
+      origin: CollabOrigin::Server,
+      object_id: oid.to_string(),
+      msg_id: chrono::Utc::now().timestamp_millis() as u64,
+      payload: payload.into(),
+    },
+  };
+
+  collab_storage
+    .broadcast_encode_collab(oid.to_string(), vec![msg])
+    .await?;
+
+  Ok(())
+}
+
+pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
+  let collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    object_id,
+    DataSource::DocStateV1(doc_state),
+    vec![],
+    false,
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok(collab)
 }

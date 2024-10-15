@@ -1,6 +1,6 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::DataSource;
+
 use collab::preclude::Collab;
 
 use anyhow::anyhow;
@@ -19,8 +19,6 @@ use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View};
-use collab_rt_entity::{ClientCollabMessage, UpdateSync};
-use collab_rt_protocol::{Message, SyncMessage};
 use database::collab::GetCollabOrigin;
 use database::collab::{select_workspace_database_oid, CollabStorage};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
@@ -39,7 +37,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use tracing::error;
 use workspace_template::gen_view_id;
-use yrs::updates::encoder::Encode;
 use yrs::Any;
 use yrs::Array;
 use yrs::ArrayRef;
@@ -47,6 +44,9 @@ use yrs::Out;
 use yrs::{Map, MapRef};
 
 use crate::biz::collab::ops::get_latest_collab_encoded;
+
+use super::ops::broadcast_update;
+use super::ops::collab_from_doc_state;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
@@ -1152,31 +1152,6 @@ impl PublishCollabDuplicator {
   }
 }
 
-/// broadcast updates to collab group if exists
-async fn broadcast_update(
-  collab_storage: &Arc<CollabAccessControlStorage>,
-  oid: &str,
-  encoded_update: Vec<u8>,
-) -> Result<(), AppError> {
-  tracing::info!("broadcasting update to group: {}", oid);
-
-  let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
-  let msg = ClientCollabMessage::ClientUpdateSync {
-    data: UpdateSync {
-      origin: CollabOrigin::Server,
-      object_id: oid.to_string(),
-      msg_id: chrono::Utc::now().timestamp_millis() as u64,
-      payload: payload.into(),
-    },
-  };
-
-  collab_storage
-    .broadcast_encode_collab(oid.to_string(), vec![msg])
-    .await?;
-
-  Ok(())
-}
-
 fn view_info_by_view_id(meta: &PublishViewMetaData) -> HashMap<String, PublishViewInfo> {
   let mut acc = HashMap::new();
   acc.insert(meta.view.view_id.clone(), meta.view.clone());
@@ -1192,18 +1167,6 @@ fn add_to_view_info(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[Pu
       add_to_view_info(acc, child_views);
     }
   }
-}
-
-pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
-  let collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    object_id,
-    DataSource::DocStateV1(doc_state),
-    vec![],
-    false,
-  )
-  .map_err(|e| AppError::Unhandled(e.to_string()))?;
-  Ok(collab)
 }
 
 fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {

@@ -191,6 +191,12 @@ impl BatchCreateCollabParams {
   }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateCollabWebParams {
+  pub doc_state: Vec<u8>,
+  pub collab_type: CollabType,
+}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct DeleteCollabParams {
   #[validate(custom = "validate_not_empty_str")]

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        aw.publish_namespace AS namespace,\n        apc.publish_name,\n        apc.view_id,\n        au.email AS publisher_email,\n        apc.created_at AS publish_timestamp_sec\n      FROM af_published_collab apc\n      JOIN af_user au ON apc.published_by = au.uid\n      JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id\n      WHERE apc.view_id = $1;\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "publish_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "view_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "publisher_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "publish_timestamp_sec",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c6c9d2f3f1902e2b3b287bae9e0233c20648113fafef936c9393bfee00908300"
+}

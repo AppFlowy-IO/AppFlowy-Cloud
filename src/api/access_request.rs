@@ -100,6 +100,7 @@ async fn post_approve_access_request_handler(
     )))?;
   approve_or_reject_access_request(
     &state.pg_pool,
+    state.workspace_access_control.clone(),
     state.mailer.clone(),
     &appflowy_web_url,
     access_request_id,

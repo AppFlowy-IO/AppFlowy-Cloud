@@ -5,31 +5,87 @@ bodyClass: bg-purple-50
 ---
 
 <x-main>
-    <div
-            class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black"
-    >
-        <table align="center">
-            <tr>
-                <td class="w-[552px] max-w-full">
-                    <!-- Display Success Message -->
-                    <p class="w-full text-center break-words whitespace-normal text-lg">
-                        <span class="mx-2">
-                            Notion import complete. Please open AppFlowy and switch to <strong>{{ workspaceName }}</strong> to access your imported data.
-                        </span>
-                    </p>
-                    <x-divider space-x="20%" />
-                </td>
-            </tr>
-            <tr>
-                <td class="text-center text-slate-600 text-xs px-6">
-                    <p class="m-0 mb-4 uppercase cursor-pointer">
-                        <a href="https://appflowy.io">
-                            <img
-                                    src="{{ cdnBaseUrl }}images/appflowy-logo.png"
-                                    width="150px"
-                            />
-                        </a>
-                    </p>
-                </td>
-            </tr>
+  <div class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black">
+    <table align="center">
+      <tr>
+        <td class="w-[582px] max-w-full">
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="text-3xl font-bold">Notion Import Complete</span>
 
+          </p>
+
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="mx-2=1">Your Notion data has been successfully imported into</span>
+          </p>
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="text-3xl font-bold">{{ workspaceName }}</span>
+          </p>
+          <x-divider space-x="20%"/>
+          <table align="center">
+            <tr>
+              <td class="w-[60px]">
+                <div
+                  style="border: 2px solid black;"
+                  class="rounded-2xl mr-2 w-[60px] p-2 h-[60px] bg-white overflow-hidden">
+                  <img src="https://appflowy.io/appflowy.svg"
+                       class="overflow-hidden object-cover"
+                       width="100%" height="100%"
+                       alt="{{ workspaceName }}">
+                </div>
+
+              </td>
+              <td>
+                <div class="font-bold mb-2">
+                  {{ workspaceName }}
+                </div>
+                <div class="text-sm text-slate-500"> 1 member</div>
+
+              </td>
+            </tr>
+          </table>
+          <x-button align="center"
+                    target="_blank"
+                    class="hover:opacity-90 cursor-pointer !text-xl !leading-[20px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
+                    href="https://appflowy.io/download">
+
+            <div class="font-medium text-[24px]">
+              Download
+            </div>
+          </x-button>
+          <x-divider space-x="20%"/>
+        </td>
+      </tr>
+      <tr>
+        <td class="text-center text-slate-600 text-xs px-6">
+          <p class="m-0 mb-4 uppercase cursor-pointer">
+            <a href="https://appflowy.io">
+              <img src="{{ cdnBaseUrl }}images/appflowy-logo.png" width="150px">
+            </a>
+          </p>
+          <p class="m-0 text-sm text-black font-medium">
+            Bring projects, knowledge, and teams together with the power of AI.
+          </p>
+
+          <p class="cursor-default">
+            <a href="https://twitter.com/appflowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/twitter.png" width="20" alt="Maizzle">
+            </a>
+            <a href="https://www.reddit.com/r/AppFlowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/reddit.png" width="20" alt="Maizzle">
+            </a>
+            <a href="https://github.com/AppFlowy-IO/AppFlowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/github.png" width="20" alt="Maizzle">
+            </a>
+            <a href="https://discord.gg/9Q2xaN37tV"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/discord.png" width="20" alt="Maizzle">
+            </a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</x-main>

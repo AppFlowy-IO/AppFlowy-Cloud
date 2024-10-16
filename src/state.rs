@@ -26,7 +26,7 @@ use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
 
-use crate::api::metrics::{PublishedCollabMetrics, RequestMetrics};
+use crate::api::metrics::{AppFlowyWebMetrics, PublishedCollabMetrics, RequestMetrics};
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::workspace::publish::PublishedCollabStore;
 use crate::config::config::Config;
@@ -126,6 +126,7 @@ pub struct AppMetrics {
   pub access_control_metrics: Arc<AccessControlMetrics>,
   pub collab_metrics: Arc<CollabMetrics>,
   pub published_collab_metrics: Arc<PublishedCollabMetrics>,
+  pub appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
 }
 
 impl Default for AppMetrics {
@@ -142,6 +143,7 @@ impl AppMetrics {
     let access_control_metrics = Arc::new(AccessControlMetrics::register(&mut registry));
     let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
     let published_collab_metrics = Arc::new(PublishedCollabMetrics::register(&mut registry));
+    let appflowy_web_metrics = Arc::new(AppFlowyWebMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       request_metrics,
@@ -149,6 +151,7 @@ impl AppMetrics {
       access_control_metrics,
       collab_metrics,
       published_collab_metrics,
+      appflowy_web_metrics,
     }
   }
 }

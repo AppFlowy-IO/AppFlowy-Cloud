@@ -15,7 +15,7 @@ collab = { workspace = true }
 bincode.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
-async-trait = "0.1.77"
+async-trait.workspace = true
 tokio = "1.36.0"
 collab-entity.workspace = true
 

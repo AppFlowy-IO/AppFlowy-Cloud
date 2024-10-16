@@ -6,7 +6,8 @@ use crate::metrics::{tick_metric, AccessControlMetrics};
 
 use anyhow::anyhow;
 use app_error::AppError;
-use casbin::rhai::ImmutableString;
+use casbin::function_map::OperatorFunction;
+use casbin::rhai::{Dynamic, ImmutableString};
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
 
@@ -52,10 +53,7 @@ impl AccessControl {
     let mut enforcer = casbin::Enforcer::new(model, adapter).await.map_err(|e| {
       AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
     })?;
-    enforcer.add_function(
-      "cmpRoleOrLevel",
-      |r: ImmutableString, p: ImmutableString| cmp_role_or_level(r.as_str(), p.as_str()),
-    );
+    enforcer.add_function("cmpRoleOrLevel", OperatorFunction::Arg2(cmp_role_or_level));
 
     let enforcer = Arc::new(AFEnforcer::new(enforcer, NoEnforceGroup).await?);
     tick_metric(
@@ -198,29 +196,29 @@ pub async fn casbin_model() -> Result<DefaultModel, AppError> {
 /// * `r_act` - The role or access level from the request, prefixed with "r:" for roles or "l:" for levels.
 /// * `p_act` - The role or access level from the policy, prefixed with "r:" for roles or "l:" for levels.
 ///
-pub fn cmp_role_or_level(r_act: &str, p_act: &str) -> bool {
+pub fn cmp_role_or_level(r_act: ImmutableString, p_act: ImmutableString) -> Dynamic {
   trace!("cmp_role_or_level: r: {} p: {}", r_act, p_act);
 
   if r_act.starts_with("r:") && p_act.starts_with("r:") {
-    let r = AFRole::from_enforce_act(r_act);
-    let p = AFRole::from_enforce_act(p_act);
-    return p >= r;
+    let r = AFRole::from_enforce_act(r_act.as_str());
+    let p = AFRole::from_enforce_act(p_act.as_str());
+    return Dynamic::from_bool(p >= r);
   }
 
   if r_act.starts_with("l:") && p_act.starts_with("l:") {
-    let r = AFAccessLevel::from_enforce_act(r_act);
-    let p = AFAccessLevel::from_enforce_act(p_act);
-    return p >= r;
+    let r = AFAccessLevel::from_enforce_act(r_act.as_str());
+    let p = AFAccessLevel::from_enforce_act(p_act.as_str());
+    return Dynamic::from_bool(p >= r);
   }
 
   if r_act.starts_with("l:") && p_act.starts_with("r:") {
-    let r = AFAccessLevel::from_enforce_act(r_act);
-    let role = AFRole::from_enforce_act(p_act);
+    let r = AFAccessLevel::from_enforce_act(r_act.as_str());
+    let role = AFRole::from_enforce_act(p_act.as_str());
     let p = AFAccessLevel::from(&role);
-    return p >= r;
+    return Dynamic::from_bool(p >= r);
   }
 
-  false
+  Dynamic::from_bool(false)
 }
 
 /// Represents the entity stored at the index of the access control policy.

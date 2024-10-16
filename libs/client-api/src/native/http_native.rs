@@ -27,18 +27,20 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+pub use infra::file_util::ChunkedBytes;
 use rayon::prelude::IntoParallelIterator;
+use shared_entity::dto::ai_dto::CompleteTextParams;
+use shared_entity::dto::import_dto::UserImportTask;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Condition, RetryIf};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::{debug, event, info, instrument, trace};
-
-pub use infra::file_util::ChunkedBytes;
-use shared_entity::dto::ai_dto::CompleteTextParams;
-use shared_entity::dto::import_dto::UserImportTask;
 
 impl Client {
   pub async fn stream_completion_text(
@@ -326,6 +328,7 @@ impl Client {
   /// - The MIME type is automatically determined based on the file extension using `mime_guess`.
   ///
   pub async fn import_file(&self, file_path: &Path) -> Result<(), AppResponseError> {
+    let md5_base64 = calculate_md5(file_path).await?;
     let file = File::open(&file_path).await?;
     let metadata = file.metadata().await?;
     let file_name = file_path
@@ -352,6 +355,7 @@ impl Client {
     // set the host header
     builder = builder
       .header("X-Host", self.base_url.clone())
+      .header("X-Content-MD5", md5_base64)
       .header("X-Content-Length", metadata.len());
     let resp = builder.send().await?;
 
@@ -475,4 +479,39 @@ impl Condition<AppResponseError> for RetryGetCollabCondition {
   fn should_retry(&mut self, error: &AppResponseError) -> bool {
     !error.is_record_not_found()
   }
+}
+
+/// Calculates the MD5 hash of a file and returns the base64-encoded MD5 digest.
+///
+/// # Arguments
+/// * `file_path` - The path of the file for which the MD5 hash is to be calculated.
+///
+/// # Returns
+/// A `Result` containing the base64-encoded MD5 hash on success, or an error if the file cannot be read.
+
+/// Asynchronously calculates the MD5 hash of a file using efficient buffer handling and returns it as a base64-encoded string.
+///
+/// # Arguments
+/// * `file_path` - The path to the file to be hashed.
+///
+/// # Returns
+/// Returns a `Result` containing the base64-encoded MD5 hash on success, or an error if the file cannot be read.
+pub async fn calculate_md5(file_path: &Path) -> Result<String, anyhow::Error> {
+  let file = File::open(file_path).await?;
+  let mut reader = BufReader::with_capacity(1_000_000, file);
+  let mut context = md5::Context::new();
+  loop {
+    let part = reader.fill_buf().await?;
+    if part.is_empty() {
+      break;
+    }
+
+    context.consume(part);
+    let part_len = part.len();
+    reader.consume(part_len);
+  }
+
+  let md5_hash = context.compute();
+  let md5_base64 = STANDARD.encode(md5_hash.as_ref());
+  Ok(md5_base64)
 }

@@ -1,5 +1,5 @@
 use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResult};
-use crate::s3_client::{download_file, S3StreamResponse};
+use crate::s3_client::{download_file, AutoRemoveDownloadedFile, S3StreamResponse};
 use anyhow::anyhow;
 use aws_sdk_s3::primitives::ByteStream;
 
@@ -269,11 +269,18 @@ async fn process_task(
   pg_pool: &PgPool,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
-  trace!("[Import]: Processing task: {}", import_task);
-
   let retry_interval: u64 = get_env_var("APPFLOWY_WORKER_IMPORT_NOTION_RETRY_INTERVAL", "10")
     .parse()
     .unwrap_or(10);
+
+  let streaming = get_env_var("APPFLOWY_WORKER_IMPORT_NOTION_STREAMING", "false")
+    .parse()
+    .unwrap_or(false);
+
+  info!(
+    "[Import]: Processing task: {}, retry interval: {}, streaming: {}",
+    import_task, retry_interval, streaming
+  );
 
   match import_task {
     ImportTask::Notion(task) => {
@@ -284,6 +291,7 @@ async fn process_task(
         s3_client,
         3,
         Duration::from_secs(retry_interval),
+        streaming,
       )
       .await;
       match unzip_result {
@@ -343,13 +351,14 @@ pub async fn download_and_unzip_file_retry(
   s3_client: &Arc<dyn S3Client>,
   max_retries: usize,
   interval: Duration,
+  streaming: bool,
 ) -> Result<PathBuf, ImportError> {
   let mut attempt = 0;
   loop {
     attempt += 1;
-    match download_and_unzip_file(storage_dir, import_task, s3_client).await {
+    match download_and_unzip_file(storage_dir, import_task, s3_client, streaming).await {
       Ok(result) => return Ok(result),
-      Err(err) if attempt <= max_retries => {
+      Err(err) if attempt <= max_retries && !err.is_file_not_found() => {
         warn!(
           "Attempt {} failed: {}. Retrying in {:?}...",
           attempt, err, interval
@@ -375,6 +384,7 @@ async fn download_and_unzip_file(
   storage_dir: &Path,
   import_task: &NotionImportTask,
   s3_client: &Arc<dyn S3Client>,
+  streaming: bool,
 ) -> Result<PathBuf, ImportError> {
   let S3StreamResponse {
     stream,
@@ -386,7 +396,7 @@ async fn download_and_unzip_file(
     .map_err(|err| ImportError::Internal(err.into()))?;
   let buffer_size = buffer_size_from_content_length(content_length);
 
-  let zip_reader = get_zip_reader(storage_dir, stream, buffer_size).await?;
+  let zip_reader = get_zip_reader(storage_dir, stream, buffer_size, streaming).await?;
   let unique_file_name = Uuid::new_v4().to_string();
   let output_file_path = storage_dir.join(unique_file_name);
   fs::create_dir_all(&output_file_path)
@@ -399,11 +409,14 @@ async fn download_and_unzip_file(
       ImportError::Internal(anyhow!("Failed to set permissions for temp dir: {:?}", err))
     })?;
 
-  let unzip_file = unzip_stream(zip_reader, output_file_path)
-    .await
-    .map_err(ImportError::Internal)?;
-
+  let unzip_file = unzip_stream(zip_reader.inner, output_file_path).await?;
   Ok(unzip_file.unzip_dir_path)
+}
+
+struct ZipReader {
+  inner: ZipFileReader<Ready<Pin<Box<dyn AsyncBufRead + Unpin + Send>>>>,
+  #[allow(dead_code)]
+  file: Option<AutoRemoveDownloadedFile>,
 }
 
 /// Asynchronously returns a `ZipFileReader` that can read from a stream or a downloaded file, based on the environment setting.
@@ -416,21 +429,31 @@ async fn get_zip_reader(
   storage_dir: &Path,
   stream: Box<dyn AsyncBufRead + Unpin + Send>,
   buffer_size: usize,
-) -> Result<ZipFileReader<Ready<Pin<Box<dyn AsyncBufRead + Unpin + Send>>>>, ImportError> {
-  let streaming = get_env_var("APPFLOWY_WORKER_IMPORT_NOTION_STREAMING", "true")
-    .parse()
-    .unwrap_or(true);
-
+  streaming: bool,
+) -> Result<ZipReader, ImportError> {
   let zip_reader = if streaming {
+    // Occasionally, we encounter the error 'unable to locate the end of central directory record'
+    // when streaming a ZIP file to async-zip. This indicates that the ZIP reader couldn't find
+    // the necessary end-of-file marker. The issue might occur if the entire ZIP file has not been
+    // fully downloaded or buffered before the reader attempts to process the end-of-file information.
     let reader = futures::io::BufReader::with_capacity(buffer_size, stream);
     let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
-    async_zip::base::read::stream::ZipFileReader::new(boxed_reader)
+    ZipReader {
+      inner: async_zip::base::read::stream::ZipFileReader::new(boxed_reader),
+      file: None,
+    }
   } else {
-    let zip_file_path = download_file(storage_dir, stream).await?;
-    let file = fs::File::open(&zip_file_path).await.unwrap();
-    let reader = tokio::io::BufReader::with_capacity(buffer_size, file).compat();
+    let file = download_file(storage_dir, stream).await?;
+    let handle = fs::File::open(&file)
+      .await
+      .map_err(|err| ImportError::Internal(err.into()))?;
+    let reader = tokio::io::BufReader::with_capacity(buffer_size, handle).compat();
     let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
-    async_zip::base::read::stream::ZipFileReader::new(boxed_reader)
+    ZipReader {
+      inner: async_zip::base::read::stream::ZipFileReader::new(boxed_reader),
+      // Make sure the lifetime of file is the same as zip reader.
+      file: Some(file),
+    }
   };
   Ok(zip_reader)
 }

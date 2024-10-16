@@ -660,7 +660,8 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
         icon
       FROM public.af_workspace
       JOIN public.af_user owner_profile ON af_workspace.owner_uid = owner_profile.uid
-      WHERE workspace_id = $1
+      WHERE af_workspace.workspace_id = $1
+        AND COALESCE(af_workspace.is_initialized, true) = true;
     "#,
     workspace_id
   )

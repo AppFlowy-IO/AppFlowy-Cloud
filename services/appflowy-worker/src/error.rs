@@ -25,6 +25,9 @@ pub enum ImportError {
   #[error("Can not open the workspace:{0}")]
   CannotOpenWorkspace(String),
 
+  #[error("Failed to unzip file: {0}")]
+  UnZipFileError(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }
@@ -125,6 +128,15 @@ impl ImportError {
         ),
         format!("Task ID: {} - Internal error: {}", task_id, err),
       ),
+      ImportError::UnZipFileError(_) => {
+        (
+          format!(
+            "Task ID: {} - There was an issue unzipping the file. Please check the file and try again.",
+            task_id
+          ),
+          format!("Task ID: {} - Unzip file error", task_id),
+        )
+      }
     }
   }
 }

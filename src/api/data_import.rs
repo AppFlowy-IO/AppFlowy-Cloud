@@ -15,6 +15,7 @@ use futures_util::StreamExt;
 use shared_entity::dto::import_dto::{ImportTaskDetail, ImportTaskStatus, UserImportTask};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
+use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info, trace};
@@ -73,45 +74,20 @@ async fn import_data_handler(
     .and_then(|s| s.parse::<usize>().ok())
     .unwrap_or(0);
 
-  let mut workspace_name = "".to_string();
+  let file_path = temp_dir().join(format!("import_data_{}.zip", Uuid::new_v4()));
+  let file = write_multiple_part(&mut payload, file_path).await?;
 
-  // file_name must be unique
-  let file_name = format!("{}.zip", Uuid::new_v4());
-  let file_path = temp_dir().join(&file_name);
-
-  let mut file_size = 0;
-  let mut file = File::create(&file_path).await?;
-  while let Some(item) = payload.next().await {
-    let mut field = item?;
-    workspace_name = field
-      .content_disposition()
-      .and_then(|c| c.get_name().map(|f| f.to_string()))
-      .unwrap_or_else(|| format!("import-{}", chrono::Local::now().format("%d/%m/%Y %H:%M")));
-
-    while let Some(chunk) = field.next().await {
-      let data = chunk?;
-      file_size += data.len();
-      file.write_all(&data).await?;
-    }
-  }
-  file.shutdown().await?;
-  drop(file);
-
-  if workspace_name.is_empty() {
-    return Err(AppError::InvalidRequest("Invalid file".to_string()).into());
-  }
-
-  if content_length != file_size {
+  if content_length != file.size {
     trace!(
       "Import file fail. The Content-Length:{} doesn't match file size:{}",
       content_length,
-      file_size
+      file.size
     );
 
     return Err(
       AppError::InvalidRequest(format!(
         "Content-Length:{} doesn't match file size:{}",
-        content_length, file_size
+        content_length, file.size
       ))
       .into(),
     );
@@ -123,16 +99,16 @@ async fn import_data_handler(
     &state.collab_access_control_storage,
     &user_uuid,
     uid,
-    &workspace_name,
+    &file.name,
   )
   .await?;
 
   let workspace_id = workspace.workspace_id.to_string();
   info!(
     "User:{} import data:{} to new workspace:{}, name:{}",
-    uid, file_size, workspace_id, workspace_name,
+    uid, file.size, workspace_id, file.name,
   );
-  let stream = ByteStream::from_path(&file_path).await.map_err(|e| {
+  let stream = ByteStream::from_path(&file.file_path).await.map_err(|e| {
     AppError::Internal(anyhow!("Failed to create ByteStream from file path: {}", e))
   })?;
   state
@@ -140,20 +116,13 @@ async fn import_data_handler(
     .put_blob_as_content_type(&workspace_id, stream, "zip")
     .await?;
 
-  // delete the file after uploading
-  tokio::spawn(async move {
-    if let Err(err) = tokio::fs::remove_file(file_path).await {
-      error!("Failed to delete file after uploading: {}", err);
-    }
-  });
-
   create_upload_task(
     uid,
     &user_name,
     &user_email,
     &workspace_id,
-    &workspace_name,
-    file_size,
+    &file.name,
+    file.size,
     &host,
     &state.redis_connection_manager,
     &state.pg_pool,
@@ -161,6 +130,61 @@ async fn import_data_handler(
   .await?;
 
   Ok(AppResponse::Ok().into())
+}
+
+struct AutoDeletedFile {
+  name: String,
+  file_path: PathBuf,
+  size: usize,
+}
+
+impl Drop for AutoDeletedFile {
+  fn drop(&mut self) {
+    let path = self.file_path.clone();
+    tokio::spawn(async move {
+      trace!("[AutoDeletedFile]: delete file: {:?}", path);
+      if let Err(err) = tokio::fs::remove_file(&path).await {
+        error!(
+          "Failed to delete the auto deleted file: {:?}, error: {}",
+          path, err
+        )
+      }
+    });
+  }
+}
+
+async fn write_multiple_part(
+  payload: &mut Multipart,
+  file_path: PathBuf,
+) -> Result<AutoDeletedFile, AppError> {
+  let mut file_name = "".to_string();
+  let mut file_size = 0;
+  let mut file = File::create(&file_path).await?;
+  while let Some(Ok(mut field)) = payload.next().await {
+    file_name = field
+      .content_disposition()
+      .and_then(|c| c.get_name().map(|f| f.to_string()))
+      .unwrap_or_else(|| format!("import-{}", chrono::Local::now().format("%d/%m/%Y %H:%M")));
+
+    while let Some(Ok(data)) = field.next().await {
+      file_size += data.len();
+      file.write_all(&data).await?;
+    }
+  }
+  file.shutdown().await?;
+  drop(file);
+
+  if file_name.is_empty() {
+    return Err(AppError::InvalidRequest(
+      "Can not get the file name".to_string(),
+    ));
+  }
+
+  Ok(AutoDeletedFile {
+    name: file_name,
+    file_path,
+    size: file_size,
+  })
 }
 
 fn get_host_from_request(req: &HttpRequest) -> String {

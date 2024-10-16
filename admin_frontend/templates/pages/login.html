@@ -94,17 +94,25 @@
 
     <h3>OAuth Login</h3>
     <div id="oauth-container">
-      {% for provider in oauth_providers %}
-      <div class="oauth-icon">
-        <a href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|default("/web/login-callback")|escape }}">
-          <div
-            hx-get="../assets/{{ provider|escape }}/logo.html"
-            hx-trigger="load"
-            hx-swap="outerHTML"
-          ></div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center">
+        {% for provider in oauth_providers %}
+        <a
+          href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|default("/web/login-callback")|escape }}"
+          style="text-decoration: none"
+        >
+          <div style="display: flex; align-items: center; border: 1px solid; margin: 4px; border-radius: 4px; height: 64px">
+            <div> &nbsp&nbsp{{ provider }} </div>
+            <div class="oauth-icon">
+              <div
+                hx-get="../assets/{{ provider|escape }}/logo.html"
+                hx-trigger="load"
+                hx-swap="outerHTML"
+              ></div>
+            </div>
+          </div>
         </a>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
     {% endif %}
 

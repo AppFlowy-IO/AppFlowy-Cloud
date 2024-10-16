@@ -647,6 +647,8 @@ async fn process_unzip_file(
   );
   collab_params_list.push(folder_collab_params);
 
+  let upload_resources = process_resources(resources).await;
+
   // 6. Start a transaction to insert all collabs
   let mut transaction = pg_pool.begin().await.map_err(|err| {
     ImportError::Internal(anyhow!(
@@ -720,8 +722,6 @@ async fn process_unzip_file(
     ))
   })?;
 
-  let upload_resources = process_resources(resources).await;
-
   // insert metadata into database
   let metas = upload_resources
     .iter()
@@ -767,7 +767,7 @@ async fn process_unzip_file(
     .await
     .map_err(|err| ImportError::Internal(anyhow!("Failed to upload files to S3: {:?}", err)))?;
 
-  // 3. delete zip file regardless of success or failure
+  // 8. delete zip file regardless of success or failure
   match fs::remove_dir_all(unzip_dir_path).await {
     Ok(_) => trace!("[Import]: {} deleted unzip file", import_task.workspace_id),
     Err(err) => error!("Failed to delete unzip file: {:?}", err),

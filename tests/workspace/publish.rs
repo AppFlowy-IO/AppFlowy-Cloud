@@ -222,10 +222,6 @@ async fn test_publish_doc() {
     assert_eq!(blob, "yrs_encoded_data_4");
   }
 
-  c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])
-    .await
-    .unwrap();
-
   {
     // Try to get default publish view info but not set
     let err = c
@@ -246,6 +242,10 @@ async fn test_publish_doc() {
       .unwrap();
     assert_eq!(publish_info.view_id, view_id_1);
   }
+
+  c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])
+    .await
+    .unwrap();
 
   {
     // Deleted collab should not be accessible

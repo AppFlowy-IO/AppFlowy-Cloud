@@ -91,7 +91,7 @@ pub async fn update_workspace_default_publish_view<'a, E: Executor<'a, Database 
   let res = sqlx::query!(
     r#"
       UPDATE af_workspace
-      SET default_view_id = $1
+      SET default_published_view_id = $1
       WHERE workspace_id = $2
     "#,
     new_view_id,
@@ -324,7 +324,7 @@ pub async fn select_default_published_view_id<'a, E: Executor<'a, Database = Pos
 ) -> Result<Option<Uuid>, AppError> {
   let res = sqlx::query_scalar!(
     r#"
-      SELECT default_view_id
+      SELECT default_published_view_id
       FROM af_workspace
       WHERE workspace_id = $1
     "#,

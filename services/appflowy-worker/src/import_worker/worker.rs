@@ -22,8 +22,7 @@ use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCach
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
 use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use database::workspace::{
-  delete_from_workspace, select_workspace_database_storage_id, update_import_task_status,
-  update_updated_at_of_workspace, update_updated_at_of_workspace_with_uid, update_workspace_status,
+  delete_from_workspace, select_workspace_database_storage_id, update_import_task_status, update_updated_at_of_workspace_with_uid, update_workspace_status,
 };
 use database_entity::dto::CollabParams;
 
@@ -41,7 +40,7 @@ use redis::{AsyncCommands, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use sqlx::types::chrono;
-use sqlx::types::chrono::{DateTime, NaiveDateTime, Utc};
+use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{PgPool, Pool, Postgres};
 use std::collections::HashMap;
 use std::env::temp_dir;
@@ -707,7 +706,7 @@ async fn process_unzip_file(
   // Set the workspace's updated_at to the earliest possible timestamp, as it is created by an import task
   // and not actively updated by a user. This ensures that when sorting workspaces by updated_at to find
   // the most recent, the imported workspace doesn't appear as the most recently visited workspace.
-  let updated_at = DateTime::from_timestamp(0, 0).unwrap_or_else(|| Utc::now());
+  let updated_at = DateTime::from_timestamp(0, 0).unwrap_or_else(Utc::now);
   update_updated_at_of_workspace_with_uid(
     transaction.deref_mut(),
     import_task.uid,

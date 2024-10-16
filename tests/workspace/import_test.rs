@@ -152,13 +152,13 @@ async fn import_project_and_task_zip_test() {
 #[tokio::test]
 async fn imported_workspace_do_not_become_latest_visit_workspace_test() {
   let client = TestClient::new_user().await;
-  let file_path = PathBuf::from(format!("tests/workspace/asset/blog_post.zip"));
+  let file_path = PathBuf::from("tests/workspace/asset/blog_post.zip".to_string());
   client.api_client.import_file(&file_path).await.unwrap();
 
   // When importing a Notion file, a new task is spawned to create a workspace for the imported data.
   // However, the workspace should remain hidden until the import is completed successfully.
   let user_workspace = client.get_user_workspace_info().await;
-  let visiting_workspace_id = user_workspace.visiting_workspace.workspace_id.clone();
+  let visiting_workspace_id = user_workspace.visiting_workspace.workspace_id;
   assert_eq!(user_workspace.workspaces.len(), 1);
   assert_eq!(
     user_workspace.visiting_workspace.workspace_id,

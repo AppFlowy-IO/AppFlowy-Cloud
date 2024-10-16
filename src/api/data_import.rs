@@ -81,8 +81,7 @@ async fn import_data_handler(
 
   let mut file_size = 0;
   let mut file = File::create(&file_path).await?;
-  while let Some(item) = payload.next().await {
-    let mut field = item?;
+  while let Some(Ok(mut field)) = payload.next().await {
     workspace_name = field
       .content_disposition()
       .and_then(|c| c.get_name().map(|f| f.to_string()))

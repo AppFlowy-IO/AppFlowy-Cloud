@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n        workspace_id,\n        database_storage_id,\n        owner_uid,\n        owner_profile.name as owner_name,\n        owner_profile.email as owner_email,\n        af_workspace.created_at,\n        workspace_type,\n        af_workspace.deleted_at,\n        workspace_name,\n        icon\n      FROM public.af_workspace\n      JOIN public.af_user owner_profile ON af_workspace.owner_uid = owner_profile.uid\n      WHERE workspace_id = $1\n    ",
+  "query": "\n      SELECT\n        workspace_id,\n        database_storage_id,\n        owner_uid,\n        owner_profile.name as owner_name,\n        owner_profile.email as owner_email,\n        af_workspace.created_at,\n        workspace_type,\n        af_workspace.deleted_at,\n        workspace_name,\n        icon\n      FROM public.af_workspace\n      JOIN public.af_user owner_profile ON af_workspace.owner_uid = owner_profile.uid\n      WHERE af_workspace.workspace_id = $1\n        AND COALESCE(af_workspace.is_initialized, true) = true;\n    ",
   "describe": {
     "columns": [
       {
@@ -72,5 +72,5 @@
       false
     ]
   },
-  "hash": "f448ae1b28ef69f884040016072b12694e530b64a105e03a040c65b779c9d91e"
+  "hash": "c360ec37792d567535ccd2a5011d92c7a201f516e92e204db855167f381c58b1"
 }

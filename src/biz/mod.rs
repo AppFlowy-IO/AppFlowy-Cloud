@@ -1,6 +1,7 @@
 pub mod access_request;
 pub mod chat;
 pub mod collab;
+pub mod data_import;
 pub mod pg_listener;
 pub mod search;
 pub mod template;

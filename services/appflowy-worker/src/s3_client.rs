@@ -2,11 +2,19 @@ use crate::error::WorkerError;
 use anyhow::anyhow;
 use aws_sdk_s3::error::SdkError;
 
+use anyhow::Result;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
+use futures::AsyncReadExt;
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use tokio::fs;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 use tokio_util::compat::TokioAsyncReadCompatExt;
+use tracing::error;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait S3Client: Send + Sync {
@@ -121,4 +129,67 @@ pub struct S3StreamResponse {
   pub stream: Box<dyn futures::AsyncBufRead + Unpin + Send>,
   pub content_type: Option<String>,
   pub content_length: Option<i64>,
+}
+
+pub struct AutoRemoveDownloadedFile(PathBuf);
+
+impl AsRef<Path> for AutoRemoveDownloadedFile {
+  fn as_ref(&self) -> &Path {
+    &self.0
+  }
+}
+
+impl AsRef<PathBuf> for AutoRemoveDownloadedFile {
+  fn as_ref(&self) -> &PathBuf {
+    &self.0
+  }
+}
+
+impl Deref for AutoRemoveDownloadedFile {
+  type Target = PathBuf;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl Drop for AutoRemoveDownloadedFile {
+  fn drop(&mut self) {
+    let path = self.0.clone();
+    tokio::spawn(async move {
+      if let Err(err) = fs::remove_file(&path).await {
+        error!(
+          "Failed to delete the auto remove downloaded file: {:?}, error: {}",
+          path, err
+        )
+      }
+    });
+  }
+}
+
+pub async fn download_file(
+  storage_dir: &Path,
+  stream: Box<dyn futures::AsyncBufRead + Unpin + Send>,
+) -> Result<AutoRemoveDownloadedFile, anyhow::Error> {
+  let zip_file_path = storage_dir.join(format!("{}.zip", Uuid::new_v4()));
+  write_stream_to_file(&zip_file_path, stream).await?;
+  Ok(AutoRemoveDownloadedFile(zip_file_path))
+}
+
+pub async fn write_stream_to_file(
+  file_path: &PathBuf,
+  mut stream: Box<dyn futures::AsyncBufRead + Unpin + Send>,
+) -> Result<(), anyhow::Error> {
+  let mut file = File::create(file_path).await?;
+  let mut buffer = vec![0u8; 1_048_576];
+  loop {
+    let bytes_read = stream.read(&mut buffer).await?;
+    if bytes_read == 0 {
+      break;
+    }
+    file.write_all(&buffer[..bytes_read]).await?;
+  }
+  file.flush().await?;
+
+  Ok(())
 }

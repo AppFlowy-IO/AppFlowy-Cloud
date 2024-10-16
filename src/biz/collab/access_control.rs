@@ -119,15 +119,7 @@ impl MiddlewareAccessControl for CollabMiddlewareAccessControl {
     if result {
       Ok(())
     } else {
-      Err(AppError::NotEnoughPermissions {
-        user: uid.to_string(),
-        action: format!(
-          "access collab:{} with url:{}, method:{}",
-          oid,
-          path.as_str(),
-          method
-        ),
-      })
+      Err(AppError::NotEnoughPermissions)
     }
   }
 }

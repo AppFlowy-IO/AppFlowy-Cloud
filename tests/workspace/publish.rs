@@ -235,7 +235,7 @@ async fn test_publish_doc() {
     assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
 
     // Set publish view as default workspace view
-    c.set_default_publish_view(&workspace_id, (&view_id_1).to_owned())
+    c.set_default_publish_view(&workspace_id, view_id_1.to_owned())
       .await
       .unwrap();
 

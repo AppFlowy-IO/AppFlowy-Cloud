@@ -1,8 +1,11 @@
 use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResult};
-use crate::s3_client::S3StreamResponse;
+use crate::s3_client::{download_file, S3StreamResponse};
 use anyhow::anyhow;
-use async_zip::base::read::stream::ZipFileReader;
 use aws_sdk_s3::primitives::ByteStream;
+
+use crate::error::ImportError;
+use crate::mailer::ImportNotionMailerParam;
+use crate::s3_client::S3Client;
 
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
@@ -15,15 +18,20 @@ use collab_importer::notion::page::CollabResource;
 use collab_importer::notion::NotionImporter;
 use collab_importer::util::FileId;
 use collab_importer::zip_tool::unzip_stream;
+use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
+use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use database::workspace::{
   delete_from_workspace, select_workspace_database_storage_id, update_import_task_status,
   update_workspace_status,
 };
 use database_entity::dto::CollabParams;
-use futures::io::BufReader;
+
+use async_zip::base::read::stream::{Ready, ZipFileReader};
+
 use futures::stream::FuturesUnordered;
-use futures::{stream, StreamExt};
+use futures::{stream, AsyncBufRead, StreamExt};
+use infra::env_util::get_env_var;
 use redis::aio::ConnectionManager;
 use redis::streams::{
   StreamClaimOptions, StreamClaimReply, StreamId, StreamPendingReply, StreamReadOptions,
@@ -41,19 +49,14 @@ use std::fs::Permissions;
 use std::ops::DerefMut;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
-
-use crate::s3_client::S3Client;
-use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use tokio::task::spawn_local;
 use tokio::time::interval;
-
-use crate::error::ImportError;
-use crate::mailer::ImportNotionMailerParam;
-use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
+use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
@@ -75,7 +78,16 @@ pub async fn run_import_worker(
     error!("Failed to ensure consumer group: {:?}", err);
   }
 
+  let mut storage_dir = temp_dir().join("import_worker_temp_dir");
+  if !storage_dir.exists() {
+    if let Err(err) = fs::create_dir(&storage_dir).await {
+      error!("Failed to create importer temp dir: {:?}", err);
+      storage_dir = temp_dir();
+    }
+  }
+
   process_un_acked_tasks(
+    &storage_dir,
     &mut redis_client,
     &s3_client,
     &pg_pool,
@@ -87,6 +99,7 @@ pub async fn run_import_worker(
   .await;
 
   process_upcoming_tasks(
+    &storage_dir,
     &mut redis_client,
     &s3_client,
     pg_pool,
@@ -101,7 +114,9 @@ pub async fn run_import_worker(
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_un_acked_tasks(
+  storage_dir: &Path,
   redis_client: &mut ConnectionManager,
   s3_client: &Arc<dyn S3Client>,
   pg_pool: &PgPool,
@@ -117,6 +132,7 @@ async fn process_un_acked_tasks(
       for un_ack_task in un_ack_tasks {
         // Ignore the error here since the consume task will handle the error
         let _ = consume_task(
+          storage_dir,
           stream_name,
           group_name,
           un_ack_task.task,
@@ -135,6 +151,7 @@ async fn process_un_acked_tasks(
 
 #[allow(clippy::too_many_arguments)]
 async fn process_upcoming_tasks(
+  storage_dir: &Path,
   redis_client: &mut ConnectionManager,
   s3_client: &Arc<dyn S3Client>,
   pg_pool: PgPool,
@@ -176,8 +193,10 @@ async fn process_upcoming_tasks(
             let notifier = notifier.clone();
             let stream_name = stream_name.to_string();
             let group_name = group_name.to_string();
+            let storage_dir = storage_dir.to_path_buf();
             task_handlers.push(spawn_local(async move {
               consume_task(
+                &storage_dir,
                 &stream_name,
                 &group_name,
                 import_task,
@@ -210,6 +229,7 @@ async fn process_upcoming_tasks(
 
 #[allow(clippy::too_many_arguments)]
 async fn consume_task(
+  storage_dir: &Path,
   stream_name: &str,
   group_name: &str,
   import_task: ImportTask,
@@ -219,7 +239,15 @@ async fn consume_task(
   pg_pool: &Pool<Postgres>,
   notifier: Arc<dyn ImportNotifier>,
 ) -> Result<(), ImportError> {
-  let result = process_task(import_task, s3_client, redis_client, pg_pool, notifier).await;
+  let result = process_task(
+    storage_dir,
+    import_task,
+    s3_client,
+    redis_client,
+    pg_pool,
+    notifier,
+  )
+  .await;
 
   // Each task will be consumed only once, regardless of success or failure.
   let _: () = redis_client
@@ -234,6 +262,7 @@ async fn consume_task(
 }
 
 async fn process_task(
+  storage_dir: &Path,
   import_task: ImportTask,
   s3_client: &Arc<dyn S3Client>,
   redis_client: &mut ConnectionManager,
@@ -242,10 +271,22 @@ async fn process_task(
 ) -> Result<(), ImportError> {
   trace!("[Import]: Processing task: {}", import_task);
 
+  let retry_interval: u64 = get_env_var("APPFLOWY_WORKER_IMPORT_NOTION_RETRY_INTERVAL", "10")
+    .parse()
+    .unwrap_or(10);
+
   match import_task {
     ImportTask::Notion(task) => {
       // 1. download zip file
-      match download_and_unzip_file(&task, s3_client).await {
+      let unzip_result = download_and_unzip_file_retry(
+        storage_dir,
+        &task,
+        s3_client,
+        3,
+        Duration::from_secs(retry_interval),
+      )
+      .await;
+      match unzip_result {
         Ok(unzip_dir_path) => {
           // 2. process unzip file
           let result =
@@ -291,8 +332,47 @@ async fn process_task(
     },
   }
 }
-
+/// Retries the download and unzipping of a file from an S3 source.
+///
+/// This function attempts to download a zip file from an S3 bucket and unzip it to a local directory.
+/// If the operation fails, it will retry up to `max_retries` times, waiting for `interval` between each attempt.
+///
+pub async fn download_and_unzip_file_retry(
+  storage_dir: &Path,
+  import_task: &NotionImportTask,
+  s3_client: &Arc<dyn S3Client>,
+  max_retries: usize,
+  interval: Duration,
+) -> Result<PathBuf, ImportError> {
+  let mut attempt = 0;
+  loop {
+    attempt += 1;
+    match download_and_unzip_file(storage_dir, import_task, s3_client).await {
+      Ok(result) => return Ok(result),
+      Err(err) if attempt <= max_retries => {
+        warn!(
+          "Attempt {} failed: {}. Retrying in {:?}...",
+          attempt, err, interval
+        );
+        tokio::time::sleep(interval).await;
+      },
+      Err(err) => {
+        return Err(ImportError::Internal(anyhow!(
+          "Failed after {} attempts: {}",
+          attempt,
+          err
+        )));
+      },
+    }
+  }
+}
+/// Downloads a zip file from S3 and unzips it to the local directory.
+///
+/// This function fetches a zip file from an S3 source using the provided S3 client,
+/// downloads it (if needed), and unzips the contents to the specified local directory.
+///
 async fn download_and_unzip_file(
+  storage_dir: &Path,
   import_task: &NotionImportTask,
   s3_client: &Arc<dyn S3Client>,
 ) -> Result<PathBuf, ImportError> {
@@ -305,11 +385,10 @@ async fn download_and_unzip_file(
     .await
     .map_err(|err| ImportError::Internal(err.into()))?;
   let buffer_size = buffer_size_from_content_length(content_length);
-  let reader = BufReader::with_capacity(buffer_size, stream);
-  let zip_reader = ZipFileReader::new(reader);
 
+  let zip_reader = get_zip_reader(storage_dir, stream, buffer_size).await?;
   let unique_file_name = Uuid::new_v4().to_string();
-  let output_file_path = temp_dir().join(unique_file_name);
+  let output_file_path = storage_dir.join(unique_file_name);
   fs::create_dir_all(&output_file_path)
     .await
     .map_err(|err| ImportError::Internal(err.into()))?;
@@ -323,7 +402,37 @@ async fn download_and_unzip_file(
   let unzip_file = unzip_stream(zip_reader, output_file_path)
     .await
     .map_err(ImportError::Internal)?;
+
   Ok(unzip_file.unzip_dir_path)
+}
+
+/// Asynchronously returns a `ZipFileReader` that can read from a stream or a downloaded file, based on the environment setting.
+///
+/// This function checks whether streaming is enabled via the `APPFLOWY_WORKER_IMPORT_NOTION_STREAMING` environment variable.
+/// If streaming is enabled, it reads the zip file directly from the provided stream.
+/// Otherwise, it first downloads the zip file to a local file and then reads from it.
+///
+async fn get_zip_reader(
+  storage_dir: &Path,
+  stream: Box<dyn AsyncBufRead + Unpin + Send>,
+  buffer_size: usize,
+) -> Result<ZipFileReader<Ready<Pin<Box<dyn AsyncBufRead + Unpin + Send>>>>, ImportError> {
+  let streaming = get_env_var("APPFLOWY_WORKER_IMPORT_NOTION_STREAMING", "true")
+    .parse()
+    .unwrap_or(true);
+
+  let zip_reader = if streaming {
+    let reader = futures::io::BufReader::with_capacity(buffer_size, stream);
+    let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
+    async_zip::base::read::stream::ZipFileReader::new(boxed_reader)
+  } else {
+    let zip_file_path = download_file(storage_dir, stream).await?;
+    let file = fs::File::open(&zip_file_path).await.unwrap();
+    let reader = tokio::io::BufReader::with_capacity(buffer_size, file).compat();
+    let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
+    async_zip::base::read::stream::ZipFileReader::new(boxed_reader)
+  };
+  Ok(zip_reader)
 }
 
 /// Determines the buffer size based on the content length of the file.

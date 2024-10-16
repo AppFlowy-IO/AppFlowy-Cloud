@@ -42,12 +42,19 @@
     <div class="sm-px-4 sm-py-12" style="background-color: #faf5ff; padding: 96px 48px; font-family: Helvetica, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; color: #000">
       <table align="center" cellpadding="0" cellspacing="0" role="none">
         <tr>
-          <td style="width: 552px; max-width: 100%">
-            <p style="width: 100%; white-space: normal; overflow-wrap: break-word; text-align: center; font-size: 18px; color: #dc2626">
-              <span>Failed to import your notion file {{ import_file_name }}</span>
-              <br>
-              <span style="margin-left: 8px; margin-right: 8px">{{ error }}</span>
+          <td style="width: 622px; max-width: 100%; text-align: center">
+            <p style="width: 100%; white-space: normal; overflow-wrap: break-word; text-align: center; font-size: 24px">
+              <span style="font-size: 30px; font-weight: 700">Notion Import Failed</span>
             </p>
+            <p style="width: 100%; white-space: normal; overflow-wrap: break-word; text-align: center; font-size: 24px;">
+              <span style="color: #fb006d">{{ error }}</span>
+            </p>
+            <div style="margin-left: auto; margin-right: auto; width: 70%; text-align: center; font-size: 14px; line-height: 18px; color: #64748b">
+              Join our Discord <a href="https://discord.gg/9Q2xaN37tV" style="color: #9327ff">server</a> to get quick help
+              or <a href="https://github.com/AppFlowy-IO/AppFlowy/issues/new/choose" style="color: #9327ff;">
+                report</a> the issue on GitHub
+            </div>
+            <div role="separator" style="background-color: #cbd5e1; height: 1px; line-height: 1px; margin: 24px 20%">&zwj;</div>
           </td>
         </tr>
         <tr>
@@ -57,6 +64,23 @@
                 <img src="https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/images/appflowy-logo.png" width="150px" style="max-width: 100%; vertical-align: middle; line-height: 1" alt="">
               </a>
             </p>
+            <p style="margin: 0; font-size: 14px; font-weight: 500; color: #000">
+              Bring projects, knowledge, and teams together with the power of AI.
+            </p>
+            <p style="cursor: default">
+              <a href="https://twitter.com/appflowy" style="margin-right: 16px; color: #4338ca; text-decoration: none">
+                <img src="https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/images/twitter.png" width="20" alt="Maizzle" style="max-width: 100%; vertical-align: middle; line-height: 1;">
+              </a>
+              <a href="https://www.reddit.com/r/AppFlowy" style="margin-right: 16px; color: #4338ca; text-decoration: none;">
+                <img src="https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/images/reddit.png" width="20" alt="Maizzle" style="max-width: 100%; vertical-align: middle; line-height: 1;">
+              </a>
+              <a href="https://github.com/AppFlowy-IO/AppFlowy" style="margin-right: 16px; color: #4338ca; text-decoration: none;">
+                <img src="https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/images/github.png" width="20" alt="Maizzle" style="max-width: 100%; vertical-align: middle; line-height: 1;">
+              </a>
+              <a href="https://discord.gg/9Q2xaN37tV" style="margin-right: 16px; color: #4338ca; text-decoration: none;">
+                <img src="https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/images/discord.png" width="20" alt="Maizzle" style="max-width: 100%; vertical-align: middle; line-height: 1;">
+              </a>
+            </p>
           </td>
         </tr>
       </table>
@@ -64,13 +88,3 @@
   </div>
 </body>
 </html>
-<script>
-  document
-    .getElementById("copyErrorDetails")
-    .addEventListener("click", function() {
-      const errorDetails = document.getElementById("errorDetails");
-      errorDetails.select();
-      document.execCommand("copy");
-      alert("Error details copied to clipboard!");
-    });
-</script>

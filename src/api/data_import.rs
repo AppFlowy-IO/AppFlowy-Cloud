@@ -175,6 +175,13 @@ async fn write_multiple_part(
   drop(file);
 
   if file_name.is_empty() {
+    if let Err(err) = tokio::fs::remove_file(&file_path).await {
+      error!(
+        "Failed to delete the file: {:?} when importing data, error: {}",
+        file_path, err
+      )
+    }
+
     return Err(AppError::InvalidRequest(
       "Can not get the file name".to_string(),
     ));

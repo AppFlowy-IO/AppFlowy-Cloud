@@ -435,6 +435,10 @@ async fn get_zip_reader(
   streaming: bool,
 ) -> Result<ZipReader, ImportError> {
   let zip_reader = if streaming {
+    // Occasionally, we encounter the error 'unable to locate the end of central directory record'
+    // when streaming a ZIP file to async-zip. This indicates that the ZIP reader couldn't find
+    // the necessary end-of-file marker. The issue might occur if the entire ZIP file has not been
+    // fully downloaded or buffered before the reader attempts to process the end-of-file information.
     let reader = futures::io::BufReader::with_capacity(buffer_size, stream);
     let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
     ZipReader {

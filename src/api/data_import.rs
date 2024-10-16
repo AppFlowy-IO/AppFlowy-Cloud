@@ -113,7 +113,7 @@ async fn import_data_handler(
   })?;
   state
     .bucket_client
-    .put_blob_as_content_type(&workspace_id, stream, "zip")
+    .put_blob_as_content_type(&workspace_id, stream, "application/zip")
     .await?;
 
   create_upload_task(

@@ -129,16 +129,19 @@ async fn test_publish_doc() {
 
   {
     // Check that the published collabs are listed
-    let published_infos = c.list_published_collab_info(&workspace_id).await.unwrap();
-    assert_eq!(published_infos.len(), 2);
-    let _ = published_infos
+    let published_view_infos = c.list_published_views(&workspace_id).await.unwrap();
+    assert_eq!(published_view_infos.len(), 2);
+    let view_info_1 = published_view_infos
       .iter()
-      .find(|info| info.publish_name == publish_name_1)
+      .find(|view_info| view_info.info.publish_name == publish_name_1)
       .unwrap();
-    let _ = published_infos
+    assert_eq!(view_info_1.info.view_id, view_id_1);
+
+    let view_info_2 = published_view_infos
       .iter()
-      .find(|info| info.publish_name == publish_name_2)
+      .find(|view_info| view_info.info.publish_name == publish_name_2)
       .unwrap();
+    assert_eq!(view_info_2.info.view_id, view_id_2);
   }
 
   {
@@ -286,7 +289,7 @@ async fn test_publish_doc() {
   {
     // check that the published collabs are removed
     // listing published collab should return empty
-    let published_infos = c.list_published_collab_info(&workspace_id).await.unwrap();
+    let published_infos = c.list_published_views(&workspace_id).await.unwrap();
     assert_eq!(published_infos.len(), 0);
   }
 }

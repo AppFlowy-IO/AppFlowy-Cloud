@@ -1204,11 +1204,14 @@ async fn post_published_duplicate_handler(
 async fn list_published_collab_info_handler(
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<Vec<PublishInfo>>>> {
-  let publish_infos = state
-    .published_collab_store
-    .list_collab_publish_info(&workspace_id.into_inner())
-    .await?;
+) -> Result<Json<AppResponse<Vec<PublishInfoView>>>> {
+  let publish_infos = biz::workspace::publish::list_collab_publish_info(
+    state.published_collab_store.as_ref(),
+    &state.collab_access_control_storage,
+    &workspace_id.into_inner(),
+  )
+  .await?;
+
   Ok(Json(AppResponse::Ok().with_data(publish_infos)))
 }
 
@@ -1474,7 +1477,7 @@ async fn get_workspace_folder_handler(
     workspace_id.to_string()
   };
   let folder_view = biz::collab::ops::get_user_workspace_structure(
-    state.collab_access_control_storage.clone(),
+    &state.collab_access_control_storage,
     &state.pg_pool,
     uid,
     workspace_id,
@@ -1493,7 +1496,7 @@ async fn get_recent_views_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
   let folder_views = get_user_recent_folder_views(
-    state.collab_access_control_storage.clone(),
+    &state.collab_access_control_storage,
     &state.pg_pool,
     uid,
     workspace_id,
@@ -1513,7 +1516,7 @@ async fn get_favorite_views_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
   let folder_views = get_user_favorite_folder_views(
-    state.collab_access_control_storage.clone(),
+    &state.collab_access_control_storage,
     &state.pg_pool,
     uid,
     workspace_id,
@@ -1532,12 +1535,8 @@ async fn get_trash_views_handler(
 ) -> Result<Json<AppResponse<SectionItems>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
-  let folder_views = get_user_trash_folder_views(
-    state.collab_access_control_storage.clone(),
-    uid,
-    workspace_id,
-  )
-  .await?;
+  let folder_views =
+    get_user_trash_folder_views(&state.collab_access_control_storage, uid, workspace_id).await?;
   let section_items = SectionItems {
     views: folder_views,
   };
@@ -1549,7 +1548,7 @@ async fn get_workspace_publish_outline_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PublishedView>>> {
   let published_view = biz::collab::ops::get_published_view(
-    state.collab_access_control_storage.clone(),
+    &state.collab_access_control_storage,
     publish_namespace.into_inner(),
     &state.pg_pool,
   )

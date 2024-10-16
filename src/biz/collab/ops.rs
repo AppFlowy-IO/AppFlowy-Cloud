@@ -159,7 +159,7 @@ pub async fn get_collab_member_list(
 }
 
 pub async fn get_user_favorite_folder_views(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -193,7 +193,7 @@ pub async fn get_user_favorite_folder_views(
 }
 
 pub async fn get_user_recent_folder_views(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -227,7 +227,7 @@ pub async fn get_user_recent_folder_views(
 }
 
 pub async fn get_user_trash_folder_views(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
 ) -> Result<Vec<FolderView>, AppError> {
@@ -246,7 +246,7 @@ pub async fn get_user_trash_folder_views(
 }
 
 pub async fn get_user_workspace_structure(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -275,7 +275,7 @@ pub async fn get_user_workspace_structure(
 }
 
 pub async fn get_latest_collab_folder(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
   workspace_id: &str,
 ) -> Result<Folder, AppError> {
@@ -305,7 +305,7 @@ pub async fn get_latest_collab_folder(
 }
 
 pub async fn get_latest_collab_encoded(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
   workspace_id: &str,
   oid: &str,
@@ -327,7 +327,7 @@ pub async fn get_latest_collab_encoded(
 }
 
 pub async fn get_published_view(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   publish_namespace: String,
   pg_pool: &PgPool,
 ) -> Result<PublishedView, AppError> {

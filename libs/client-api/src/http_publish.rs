@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use client_api_entity::workspace_dto::PublishInfoView;
 use client_api_entity::{workspace_dto::PublishedDuplicate, PublishInfo, UpdatePublishNamespace};
 use client_api_entity::{
   CreateGlobalCommentParams, CreateReactionParams, DeleteGlobalCommentParams, DeleteReactionParams,
@@ -13,10 +14,10 @@ use crate::Client;
 // Publisher API
 impl Client {
   #[instrument(level = "debug", skip_all)]
-  pub async fn list_published_collab_info(
+  pub async fn list_published_views(
     &self,
     workspace_id: &str,
-  ) -> Result<Vec<PublishInfo>, AppResponseError> {
+  ) -> Result<Vec<PublishInfoView>, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/published-info",
       self.base_url, workspace_id,
@@ -27,7 +28,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<Vec<PublishInfo>>::from_response(resp)
+    AppResponse::<Vec<PublishInfoView>>::from_response(resp)
       .await?
       .into_data()
   }

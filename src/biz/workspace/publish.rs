@@ -1,13 +1,20 @@
-use database::publish::{
-  select_all_published_collab_info, select_default_published_view_id,
-  select_default_published_view_id_for_namespace, update_workspace_default_publish_view,
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use database::{
+  collab::GetCollabOrigin,
+  publish::{
+    select_all_published_collab_info, select_default_published_view_id,
+    select_default_published_view_id_for_namespace, update_workspace_default_publish_view,
+  },
 };
 use std::sync::Arc;
 
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::{PublishCollabItem, PublishInfo};
-use shared_entity::dto::publish_dto::PublishViewMetaData;
+use shared_entity::dto::{
+  publish_dto::PublishViewMetaData,
+  workspace_dto::{FolderViewMinimal, PublishInfoView},
+};
 use sqlx::PgPool;
 use tracing::debug;
 use uuid::Uuid;
@@ -25,7 +32,10 @@ use database::{
   workspace::select_user_is_workspace_owner,
 };
 
-use crate::api::metrics::PublishedCollabMetrics;
+use crate::{
+  api::metrics::PublishedCollabMetrics,
+  biz::collab::{folder_view::to_dto_folder_view_miminal, ops::get_latest_collab_folder},
+};
 
 use super::ops::check_workspace_owner;
 
@@ -150,6 +160,49 @@ pub async fn get_workspace_publish_namespace(
   workspace_id: &Uuid,
 ) -> Result<String, AppError> {
   select_workspace_publish_namespace(pg_pool, workspace_id).await
+}
+
+pub async fn list_collab_publish_info(
+  publish_collab_store: &dyn PublishedCollabStore,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: &Uuid,
+) -> Result<Vec<PublishInfoView>, AppError> {
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::Server,
+    &workspace_id.to_string(),
+  )
+  .await?;
+
+  let publish_infos = publish_collab_store
+    .list_collab_publish_info(workspace_id)
+    .await?;
+
+  let mut publish_info_views: Vec<PublishInfoView> = Vec::with_capacity(publish_infos.len());
+  for publish_info in publish_infos {
+    let view_id = publish_info.view_id.to_string();
+    match folder.get_view(&view_id) {
+      Some(view) => {
+        publish_info_views.push(PublishInfoView {
+          view: to_dto_folder_view_miminal(&view),
+          info: publish_info,
+        });
+      },
+      None => {
+        tracing::error!("View {} not found in folder but is published", view_id);
+        publish_info_views.push(PublishInfoView {
+          view: FolderViewMinimal {
+            view_id,
+            name: publish_info.publish_name.clone(),
+            ..Default::default()
+          },
+          info: publish_info,
+        });
+      },
+    };
+  }
+
+  Ok(publish_info_views)
 }
 
 async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> {

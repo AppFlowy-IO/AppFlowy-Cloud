@@ -273,13 +273,7 @@ async fn delete_workspace_handler(
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   if !has_access {
-    return Err(
-      AppError::NotEnoughPermissions {
-        user: user_uuid.to_string(),
-        action: "delete workspace".to_string(),
-      }
-      .into(),
-    );
+    return Err(AppError::NotEnoughPermissions.into());
   }
   workspace::ops::delete_workspace_for_user(
     state.pg_pool.clone(),
@@ -319,13 +313,7 @@ async fn post_workspace_invite_handler(
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   if !has_access {
-    return Err(
-      AppError::NotEnoughPermissions {
-        user: user_uuid.to_string(),
-        action: "invite workspace member".to_string(),
-      }
-      .into(),
-    );
+    return Err(AppError::NotEnoughPermissions.into());
   }
 
   let invited_members = payload.into_inner();
@@ -401,13 +389,7 @@ async fn get_workspace_settings_handler(
     .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
     .await?;
   if !has_access {
-    return Err(
-      AppError::NotEnoughPermissions {
-        user: user_uuid.to_string(),
-        action: "read workspace setting".to_string(),
-      }
-      .into(),
-    );
+    return Err(AppError::NotEnoughPermissions.into());
   }
   let settings = workspace::ops::get_workspace_settings(&state.pg_pool, &workspace_id).await?;
   Ok(AppResponse::Ok().with_data(settings).into())
@@ -428,13 +410,7 @@ async fn post_workspace_settings_handler(
     .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
     .await?;
   if !has_access {
-    return Err(
-      AppError::NotEnoughPermissions {
-        user: user_uuid.to_string(),
-        action: "update workspace setting".to_string(),
-      }
-      .into(),
-    );
+    return Err(AppError::NotEnoughPermissions.into());
   }
   let settings =
     workspace::ops::update_workspace_settings(&state.pg_pool, &workspace_id, data).await?;
@@ -453,13 +429,7 @@ async fn get_workspace_members_handler(
     .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
     .await?;
   if !has_access {
-    return Err(
-      AppError::NotEnoughPermissions {
-        user: user_uuid.to_string(),
-        action: "get workspace members".to_string(),
-      }
-      .into(),
-    );
+    return Err(AppError::NotEnoughPermissions.into());
   }
   let members = workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
     .await?
@@ -488,13 +458,7 @@ async fn remove_workspace_member_handler(
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   if !has_access {
-    return Err(
-      AppError::NotEnoughPermissions {
-        user: user_uuid.to_string(),
-        action: "remove workspace member".to_string(),
-      }
-      .into(),
-    );
+    return Err(AppError::NotEnoughPermissions.into());
   }
 
   let member_emails = payload
@@ -527,13 +491,7 @@ async fn get_workspace_member_handler(
     .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
     .await?;
   if !has_access {
-    return Err(
-      AppError::NotEnoughPermissions {
-        user: user_uuid.to_string(),
-        action: "get workspace member".to_string(),
-      }
-      .into(),
-    );
+    return Err(AppError::NotEnoughPermissions.into());
   }
   let member_row =
     workspace::ops::get_workspace_member(&user_uuid_to_retrieved, &state.pg_pool, &workspace_id)
@@ -590,13 +548,7 @@ async fn update_workspace_member_handler(
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   if !has_access {
-    return Err(
-      AppError::NotEnoughPermissions {
-        user: user_uuid.to_string(),
-        action: "update workspace member".to_string(),
-      }
-      .into(),
-    );
+    return Err(AppError::NotEnoughPermissions.into());
   }
 
   let changeset = payload.into_inner();

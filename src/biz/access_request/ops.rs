@@ -74,16 +74,12 @@ pub async fn get_access_request(
   pg_pool: &PgPool,
   collab_storage: Arc<CollabAccessControlStorage>,
   access_request_id: Uuid,
-  user_uuid: Uuid,
   user_uid: i64,
 ) -> Result<AccessRequest, AppError> {
   let access_request_with_view_id =
     select_access_request_by_request_id(pg_pool, access_request_id).await?;
   if access_request_with_view_id.workspace.owner_uid != user_uid {
-    return Err(AppError::NotEnoughPermissions {
-      user: user_uuid.to_string(),
-      action: "get access request".to_string(),
-    });
+    return Err(AppError::NotEnoughPermissions);
   }
   let folder = get_latest_collab_folder(
     collab_storage,
@@ -125,7 +121,6 @@ pub async fn approve_or_reject_access_request(
   appflowy_web_url: &str,
   request_id: Uuid,
   uid: i64,
-  user_uuid: Uuid,
   is_approved: bool,
 ) -> Result<(), AppError> {
   let access_request = select_access_request_by_request_id(pg_pool, request_id).await?;
@@ -137,10 +132,7 @@ pub async fn approve_or_reject_access_request(
     )
     .await?;
   if !has_access {
-    return Err(AppError::NotEnoughPermissions {
-      user: user_uuid.to_string(),
-      action: "approve access request".to_string(),
-    });
+    return Err(AppError::NotEnoughPermissions);
   }
 
   let mut txn = pg_pool.begin().await.context("approving request")?;

@@ -64,8 +64,8 @@ pub enum AppError {
   #[error("Not Logged In:{0}")]
   NotLoggedIn(String),
 
-  #[error("{user}: do not have permissions to {action}")]
-  NotEnoughPermissions { user: String, action: String },
+  #[error("User does not have permissions to execute this action")]
+  NotEnoughPermissions,
 
   #[error("s3 response error:{0}")]
   S3ResponseError(String),

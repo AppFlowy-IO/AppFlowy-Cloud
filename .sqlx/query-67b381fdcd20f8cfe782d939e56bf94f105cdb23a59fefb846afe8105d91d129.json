@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      WITH request_id_workspace_member_count AS (\n        SELECT\n          request_id,\n          COUNT(*) AS member_count\n        FROM af_access_request\n        JOIN af_workspace_member USING (workspace_id)\n        WHERE request_id = $1\n        GROUP BY request_id\n      )\n      SELECT\n      request_id,\n      view_id,\n      (\n        workspace_id,\n        af_workspace.database_storage_id,\n        af_workspace.owner_uid,\n        owner_profile.name,\n        owner_profile.email,\n        af_workspace.created_at,\n        af_workspace.workspace_type,\n        af_workspace.deleted_at,\n        af_workspace.workspace_name,\n        af_workspace.icon,\n        request_id_workspace_member_count.member_count\n      ) AS \"workspace!: AFWorkspaceWithMemberCountRow\",\n      (\n        af_user.uid,\n        af_user.uuid,\n        af_user.name,\n        af_user.email,\n        af_user.metadata ->> 'icon_url'\n      ) AS \"requester!: AFAccessRequesterColumn\",\n      status AS \"status: AFAccessRequestStatusColumn\",\n      af_access_request.created_at AS created_at\n      FROM af_access_request\n      JOIN af_user USING (uid)\n      JOIN af_workspace USING (workspace_id)\n      JOIN af_user AS owner_profile ON af_workspace.owner_uid = owner_profile.uid\n      JOIN request_id_workspace_member_count USING (request_id)\n      WHERE request_id = $1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "view_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "workspace!: AFWorkspaceWithMemberCountRow",
+        "type_info": "Record"
+      },
+      {
+        "ordinal": 3,
+        "name": "requester!: AFAccessRequesterColumn",
+        "type_info": "Record"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: AFAccessRequestStatusColumn",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "67b381fdcd20f8cfe782d939e56bf94f105cdb23a59fefb846afe8105d91d129"
+}

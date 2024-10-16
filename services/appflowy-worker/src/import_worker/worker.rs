@@ -358,7 +358,7 @@ pub async fn download_and_unzip_file_retry(
     attempt += 1;
     match download_and_unzip_file(storage_dir, import_task, s3_client, streaming).await {
       Ok(result) => return Ok(result),
-      Err(err) if attempt <= max_retries => {
+      Err(err) if attempt <= max_retries && !err.is_file_not_found() => {
         warn!(
           "Attempt {} failed: {}. Retrying in {:?}...",
           attempt, err, interval
@@ -409,10 +409,7 @@ async fn download_and_unzip_file(
       ImportError::Internal(anyhow!("Failed to set permissions for temp dir: {:?}", err))
     })?;
 
-  let unzip_file = unzip_stream(zip_reader.inner, output_file_path)
-    .await
-    .map_err(ImportError::Internal)?;
-
+  let unzip_file = unzip_stream(zip_reader.inner, output_file_path).await?;
   Ok(unzip_file.unzip_dir_path)
 }
 

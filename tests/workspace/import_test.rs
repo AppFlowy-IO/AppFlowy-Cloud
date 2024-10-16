@@ -4,10 +4,11 @@ use collab_folder::ViewLayout;
 use shared_entity::dto::import_dto::ImportTaskStatus;
 use std::path::PathBuf;
 use std::time::Duration;
+
 #[tokio::test]
 async fn import_blog_post_test() {
   // Step 1: Import the blog post zip
-  let (client, imported_workspace_id) = import_zip("blog_post.zip").await;
+  let (client, imported_workspace_id) = import_notion_zip_until_complete("blog_post.zip").await;
 
   // Step 2: Fetch the folder and views
   let folder = client.get_folder(&imported_workspace_id).await;
@@ -77,7 +78,7 @@ async fn import_blog_post_test() {
 
 #[tokio::test]
 async fn import_project_and_task_zip_test() {
-  let (client, imported_workspace_id) = import_zip("project&task.zip").await;
+  let (client, imported_workspace_id) = import_notion_zip_until_complete("project&task.zip").await;
   let folder = client.get_folder(&imported_workspace_id).await;
   let workspace_database = client.get_workspace_database(&imported_workspace_id).await;
   let space_views = folder.get_views_belong_to(&imported_workspace_id);
@@ -148,9 +149,35 @@ async fn import_project_and_task_zip_test() {
   }
 }
 
-async fn import_zip(name: &str) -> (TestClient, String) {
+#[tokio::test]
+async fn imported_workspace_do_not_become_latest_visit_workspace_test() {
   let client = TestClient::new_user().await;
+  let file_path = PathBuf::from(format!("tests/workspace/asset/blog_post.zip"));
+  client.api_client.import_file(&file_path).await.unwrap();
 
+  // When importing a Notion file, a new task is spawned to create a workspace for the imported data.
+  // However, the workspace should remain hidden until the import is completed successfully.
+  let user_workspace = client.get_user_workspace_info().await;
+  let visiting_workspace_id = user_workspace.visiting_workspace.workspace_id.clone();
+  assert_eq!(user_workspace.workspaces.len(), 1);
+  assert_eq!(
+    user_workspace.visiting_workspace.workspace_id,
+    user_workspace.workspaces[0].workspace_id
+  );
+
+  wait_until_import_complete(&client).await;
+
+  // after the workspace was imported, then the workspace should be visible
+  let user_workspace = client.get_user_workspace_info().await;
+  assert_eq!(user_workspace.workspaces.len(), 2);
+  assert_eq!(
+    user_workspace.visiting_workspace.workspace_id,
+    visiting_workspace_id,
+  );
+}
+
+async fn import_notion_zip_until_complete(name: &str) -> (TestClient, String) {
+  let client = TestClient::new_user().await;
   let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
   client.api_client.import_file(&file_path).await.unwrap();
   let default_workspace_id = client.workspace_id().await;
@@ -164,6 +191,22 @@ async fn import_zip(name: &str) -> (TestClient, String) {
   assert_eq!(tasks.len(), 1);
   assert_eq!(tasks[0].status, ImportTaskStatus::Pending);
 
+  wait_until_import_complete(&client).await;
+
+  // after the import task is completed, the new workspace should be visible
+  let workspaces = client.api_client.get_workspaces().await.unwrap();
+  assert_eq!(workspaces.len(), 2);
+
+  let imported_workspace = workspaces
+    .into_iter()
+    .find(|workspace| workspace.workspace_id.to_string() != default_workspace_id)
+    .expect("Failed to find imported workspace");
+
+  let imported_workspace_id = imported_workspace.workspace_id.to_string();
+  (client, imported_workspace_id)
+}
+
+async fn wait_until_import_complete(client: &TestClient) {
   let mut task_completed = false;
   let max_retries = 12;
   let mut retries = 0;
@@ -182,16 +225,4 @@ async fn import_zip(name: &str) -> (TestClient, String) {
     task_completed,
     "The import task was not completed within the expected time."
   );
-
-  // after the import task is completed, the new workspace should be visible
-  let workspaces = client.api_client.get_workspaces().await.unwrap();
-  assert_eq!(workspaces.len(), 2);
-
-  let imported_workspace = workspaces
-    .into_iter()
-    .find(|workspace| workspace.workspace_id.to_string() != default_workspace_id)
-    .expect("Failed to find imported workspace");
-
-  let imported_workspace_id = imported_workspace.workspace_id.to_string();
-  (client, imported_workspace_id)
 }

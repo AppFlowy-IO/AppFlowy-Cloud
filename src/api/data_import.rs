@@ -19,7 +19,7 @@ use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
 use std::path::PathBuf;
 use tokio::fs::File;
-use tokio::io::{AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tracing::{error, info, trace};
 use uuid::Uuid;
 
@@ -85,6 +85,11 @@ async fn import_data_handler(
   let file_path = temp_dir().join(format!("import_data_{}.zip", Uuid::new_v4()));
   let file = write_multiple_part(&mut payload, file_path).await?;
 
+  trace!(
+    "[Import] content length: {}, content md5: {}",
+    content_length,
+    md5
+  );
   if file.md5_base64 != md5 {
     trace!(
       "Import file fail. The Content-MD5:{} doesn't match file md5:{}",

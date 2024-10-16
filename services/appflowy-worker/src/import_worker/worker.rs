@@ -23,7 +23,7 @@ use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_
 use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use database::workspace::{
   delete_from_workspace, select_workspace_database_storage_id, update_import_task_status,
-  update_workspace_status,
+  update_updated_at_of_workspace_with_uid, update_workspace_status,
 };
 use database_entity::dto::CollabParams;
 
@@ -41,6 +41,7 @@ use redis::{AsyncCommands, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use sqlx::types::chrono;
+use sqlx::types::chrono::{DateTime, Utc};
 use sqlx::{PgPool, Pool, Postgres};
 use std::collections::HashMap;
 use std::env::temp_dir;
@@ -646,6 +647,8 @@ async fn process_unzip_file(
   );
   collab_params_list.push(folder_collab_params);
 
+  let upload_resources = process_resources(resources).await;
+
   // 6. Start a transaction to insert all collabs
   let mut transaction = pg_pool.begin().await.map_err(|err| {
     ImportError::Internal(anyhow!(
@@ -700,7 +703,24 @@ async fn process_unzip_file(
         err
       ))
     })?;
-  let upload_resources = process_resources(resources).await;
+
+  // Set the workspace's updated_at to the earliest possible timestamp, as it is created by an import task
+  // and not actively updated by a user. This ensures that when sorting workspaces by updated_at to find
+  // the most recent, the imported workspace doesn't appear as the most recently visited workspace.
+  let updated_at = DateTime::from_timestamp(0, 0).unwrap_or_else(Utc::now);
+  update_updated_at_of_workspace_with_uid(
+    transaction.deref_mut(),
+    import_task.uid,
+    &workspace_id,
+    updated_at,
+  )
+  .await
+  .map_err(|err| {
+    ImportError::Internal(anyhow!(
+      "Failed to update workspace updated_at when importing data: {:?}",
+      err
+    ))
+  })?;
 
   // insert metadata into database
   let metas = upload_resources
@@ -747,7 +767,7 @@ async fn process_unzip_file(
     .await
     .map_err(|err| ImportError::Internal(anyhow!("Failed to upload files to S3: {:?}", err)))?;
 
-  // 3. delete zip file regardless of success or failure
+  // 8. delete zip file regardless of success or failure
   match fs::remove_dir_all(unzip_dir_path).await {
     Ok(_) => trace!("[Import]: {} deleted unzip file", import_task.workspace_id),
     Err(err) => error!("Failed to delete unzip file: {:?}", err),

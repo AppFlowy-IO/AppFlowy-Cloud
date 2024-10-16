@@ -55,6 +55,8 @@ tokio-retry = "0.3"
 tokio-util = "0.7"
 rayon = "1.10.0"
 infra = { workspace = true, features = ["file_util"] }
+base64 = "0.22"
+md5 = "0.7"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio]
 workspace = true

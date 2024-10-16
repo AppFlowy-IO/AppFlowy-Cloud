@@ -153,6 +153,9 @@ async_zip.workspace = true
 sanitize-filename.workspace = true
 futures-lite = "2.3.0"
 
+base64.workspace = true
+md5.workspace = true
+
 
 [dev-dependencies]
 once_cell = "1.19.0"
@@ -276,6 +279,8 @@ pgvector = { version = "0.4", features = ["sqlx"] }
 client-api-entity = { path = "libs/client-api-entity" }
 async_zip = { version = "0.0.17", features = ["full"] }
 sanitize-filename = "0.5.0"
+base64 = "0.22"
+md5 = "0.7.0"
 
 # collaboration
 yrs = { version = "0.21.2", features = ["sync"] }

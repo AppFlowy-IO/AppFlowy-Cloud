@@ -1,3 +1,4 @@
+use access_control::act::Action;
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
@@ -266,11 +267,18 @@ async fn patch_workspace_handler(
 }
 
 async fn delete_workspace_handler(
-  _user_id: UserUuid,
+  user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  // TODO: add permission for workspace deletion
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
   workspace::ops::delete_workspace_for_user(
     state.pg_pool.clone(),
     *workspace_id,
@@ -303,6 +311,15 @@ async fn post_workspace_invite_handler(
   payload: Json<Vec<WorkspaceMemberInvitation>>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
+
   let invited_members = payload.into_inner();
   workspace::ops::invite_workspace_members(
     &state.mailer,
@@ -371,13 +388,14 @@ async fn get_workspace_settings_handler(
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<AFWorkspaceSettings>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let settings = workspace::ops::get_workspace_settings(
-    &state.pg_pool,
-    state.workspace_access_control.clone(),
-    &workspace_id,
-    &uid,
-  )
-  .await?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
+  let settings = workspace::ops::get_workspace_settings(&state.pg_pool, &workspace_id).await?;
   Ok(AppResponse::Ok().with_data(settings).into())
 }
 
@@ -391,23 +409,32 @@ async fn post_workspace_settings_handler(
   let data = data.into_inner();
   trace!("workspace settings: {:?}", data);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let settings = workspace::ops::update_workspace_settings(
-    &state.pg_pool,
-    state.workspace_access_control.clone(),
-    &workspace_id,
-    &uid,
-    data,
-  )
-  .await?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
+  let settings =
+    workspace::ops::update_workspace_settings(&state.pg_pool, &workspace_id, data).await?;
   Ok(AppResponse::Ok().with_data(settings).into())
 }
 
 #[instrument(skip_all, err)]
 async fn get_workspace_members_handler(
-  _user_uuid: UserUuid,
+  user_uuid: UserUuid,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<Vec<AFWorkspaceMember>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
   let members = workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
     .await?
     .into_iter()
@@ -424,11 +451,20 @@ async fn get_workspace_members_handler(
 
 #[instrument(skip_all, err)]
 async fn remove_workspace_member_handler(
-  _user_uuid: UserUuid,
+  user_uuid: UserUuid,
   payload: Json<WorkspaceMembers>,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
+
   let member_emails = payload
     .into_inner()
     .0
@@ -448,12 +484,22 @@ async fn remove_workspace_member_handler(
 
 #[instrument(skip_all, err)]
 async fn get_workspace_member_handler(
+  user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<(Uuid, i64)>,
 ) -> Result<JsonAppResponse<AFWorkspaceMember>> {
-  let (workspace_id, user_id) = path.into_inner();
+  let (workspace_id, user_uuid_to_retrieved) = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
   let member_row =
-    workspace::ops::get_workspace_member(&user_id, &state.pg_pool, &workspace_id).await?;
+    workspace::ops::get_workspace_member(&user_uuid_to_retrieved, &state.pg_pool, &workspace_id)
+      .await?;
   let member = AFWorkspaceMember {
     name: member_row.name,
     email: member_row.email,
@@ -494,21 +540,29 @@ async fn leave_workspace_handler(
 
 #[instrument(level = "debug", skip_all, err)]
 async fn update_workspace_member_handler(
+  user_uuid: UserUuid,
   payload: Json<WorkspaceMemberChangeset>,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
-  // TODO: only owner is allowed to update member role
-
   let workspace_id = workspace_id.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
+
   let changeset = payload.into_inner();
 
   if changeset.role.is_some() {
-    let uid = select_uid_from_email(&state.pg_pool, &changeset.email)
+    let changeset_uid = select_uid_from_email(&state.pg_pool, &changeset.email)
       .await
       .map_err(AppResponseError::from)?;
     workspace::ops::update_workspace_member(
-      &uid,
+      &changeset_uid,
       &state.pg_pool,
       &workspace_id,
       &changeset,

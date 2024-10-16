@@ -165,8 +165,10 @@ pub async fn run_actix_server(
         SessionMiddleware::builder(redis_store.clone(), key.clone())
           .build(),
       )
-      // .wrap(DecryptPayloadMiddleware)
-      .wrap(Condition::new(config.access_control.is_enabled, access_control.clone()))
+      .wrap(Condition::new(
+        config.access_control.is_enabled && config.access_control.enable_middleware,
+        access_control.clone())
+      )
       .wrap(RequestIdMiddleware)
       .service(server_info_scope())
       .service(user_scope())
@@ -270,7 +272,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   info!("Setting up Pg listeners...");
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
   // let collab_member_listener = pg_listeners.subscribe_collab_member_change();
-  // let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
   info!(
     "Setting up access controls, is_enable: {}",
@@ -279,31 +280,25 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let access_control =
     AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
 
-  // spawn_listen_on_workspace_member_change(workspace_member_listener, access_control.clone());
-  // spawn_listen_on_collab_member_change(
-  //   pg_pool.clone(),
-  //   collab_member_listener,
-  //   access_control.clone(),
-  // );
-
   let user_cache = UserCache::new(pg_pool.clone()).await;
-  let collab_access_control: Arc<dyn CollabAccessControl> = if config.access_control.is_enabled {
-    Arc::new(CollabAccessControlImpl::new(access_control.clone()))
-  } else {
-    Arc::new(NoOpsCollabAccessControlImpl::new())
-  };
+  let collab_access_control: Arc<dyn CollabAccessControl> =
+    if config.access_control.is_enabled && config.access_control.enable_collab_access_control {
+      Arc::new(CollabAccessControlImpl::new(access_control.clone()))
+    } else {
+      Arc::new(NoOpsCollabAccessControlImpl::new())
+    };
   let workspace_access_control: Arc<dyn WorkspaceAccessControl> =
-    if config.access_control.is_enabled {
+    if config.access_control.is_enabled && config.access_control.enable_workspace_access_control {
       Arc::new(WorkspaceAccessControlImpl::new(access_control.clone()))
     } else {
       Arc::new(NoOpsWorkspaceAccessControlImpl::new())
     };
-  let realtime_access_control: Arc<dyn RealtimeAccessControl> = if config.access_control.is_enabled
-  {
-    Arc::new(RealtimeCollabAccessControlImpl::new(access_control))
-  } else {
-    Arc::new(NoOpsRealtimeCollabAccessControlImpl::new())
-  };
+  let realtime_access_control: Arc<dyn RealtimeAccessControl> =
+    if config.access_control.is_enabled && config.access_control.enable_realtime_access_control {
+      Arc::new(RealtimeCollabAccessControlImpl::new(access_control))
+    } else {
+      Arc::new(NoOpsRealtimeCollabAccessControlImpl::new())
+    };
   let collab_cache = CollabCache::new(redis_conn_manager.clone(), pg_pool.clone());
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {

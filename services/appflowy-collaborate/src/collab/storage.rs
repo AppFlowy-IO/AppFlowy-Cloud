@@ -92,10 +92,7 @@ where
       .await?;
 
     if !can_write_workspace {
-      return Err(AppError::NotEnoughPermissions {
-        user: uid.to_string(),
-        action: format!("write workspace:{}", workspace_id),
-      });
+      return Err(AppError::NotEnoughPermissions);
     }
     Ok(())
   }
@@ -113,10 +110,7 @@ where
       .await?;
 
     if !can_write {
-      return Err(AppError::NotEnoughPermissions {
-        user: uid.to_string(),
-        action: format!("update collab:{}", object_id),
-      });
+      return Err(AppError::NotEnoughPermissions);
     }
     Ok(())
   }
@@ -375,10 +369,7 @@ where
           .await?;
 
         if !can_read {
-          return Err(AppError::NotEnoughPermissions {
-            user: uid.to_string(),
-            action: format!("read collab:{}", params.object_id),
-          });
+          return Err(AppError::NotEnoughPermissions);
         }
       },
       GetCollabOrigin::Server => {},
@@ -470,10 +461,7 @@ where
       .enforce_delete(workspace_id, uid, object_id)
       .await?
     {
-      return Err(AppError::NotEnoughPermissions {
-        user: uid.to_string(),
-        action: format!("delete collab:{}", object_id),
-      });
+      return Err(AppError::NotEnoughPermissions);
     }
     self.cache.delete_collab(object_id).await?;
     Ok(())

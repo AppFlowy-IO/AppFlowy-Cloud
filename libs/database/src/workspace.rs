@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
   PublishInfo, Reaction,
@@ -622,11 +623,16 @@ pub async fn select_user_profile<'a, E: Executor<'a, Database = Postgres>>(
         af_user_row.deleted_at,
         af_user_row.updated_at,
         af_user_row.created_at,
-        (SELECT workspace_id
+       (
+         SELECT af_workspace_member.workspace_id
          FROM af_workspace_member
-         WHERE uid = af_user_row.uid
-         ORDER BY updated_at DESC
-         LIMIT 1) as latest_workspace_id
+         JOIN af_workspace
+           ON af_workspace_member.workspace_id = af_workspace.workspace_id
+         WHERE af_workspace_member.uid = af_user_row.uid
+           AND COALESCE(af_workspace.is_initialized, true) = true
+         ORDER BY af_workspace_member.updated_at DESC
+         LIMIT 1
+       ) AS latest_workspace_id
       FROM af_user_row
     "#,
     user_uuid
@@ -705,6 +711,30 @@ pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postg
   )
   .execute(executor)
   .await?;
+  Ok(())
+}
+
+#[inline]
+pub async fn update_updated_at_of_workspace_with_uid<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  uid: i64,
+  workspace_id: &Uuid,
+  current_timestamp: DateTime<Utc>,
+) -> Result<(), AppError> {
+  sqlx::query!(
+    r#"
+        UPDATE af_workspace_member
+        SET updated_at = $3
+        WHERE uid = $1
+        AND workspace_id = $2;
+        "#,
+    uid,
+    workspace_id,
+    current_timestamp
+  )
+  .execute(executor)
+  .await?;
+
   Ok(())
 }
 

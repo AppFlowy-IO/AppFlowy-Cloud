@@ -1,6 +1,6 @@
 use database::publish::{
   select_all_published_collab_info, select_default_published_view_id,
-  update_workspace_default_publish_view,
+  select_default_published_view_id_for_namespace, update_workspace_default_publish_view,
 };
 use std::sync::Arc;
 
@@ -120,14 +120,14 @@ pub async fn get_workspace_default_publish_view_info(
 
 pub async fn get_workspace_default_publish_view_info_meta(
   pg_pool: &PgPool,
-  workspace_id: &Uuid,
+  namespace: &str,
 ) -> Result<(PublishInfo, serde_json::Value), AppError> {
-  let view_id = select_default_published_view_id(pg_pool, workspace_id)
+  let view_id = select_default_published_view_id_for_namespace(pg_pool, namespace)
     .await?
     .ok_or_else(|| {
       AppError::RecordNotFound(format!(
-        "Default published view not found for workspace_id: {}",
-        workspace_id
+        "Default published view not found for namespace: {}",
+        namespace
       ))
     })?;
 

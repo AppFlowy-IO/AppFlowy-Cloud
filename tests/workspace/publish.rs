@@ -1,7 +1,9 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
 use appflowy_cloud::biz::workspace::ops::collab_from_doc_state;
-use client_api::entity::{AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata};
+use client_api::entity::{
+  AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, PublishInfoMeta,
+};
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use collab::util::MapExt;
@@ -241,6 +243,14 @@ async fn test_publish_doc() {
       .await
       .unwrap();
     assert_eq!(publish_info.view_id, view_id_1);
+
+    // Public can use namespace to get default publish view info and view metadata
+    let default_info_meta: PublishInfoMeta<MyCustomMetadata> = localhost_client()
+      .get_default_published_collab(&my_namespace)
+      .await
+      .unwrap();
+    assert_eq!(default_info_meta.info.view_id, view_id_1);
+    assert_eq!(default_info_meta.meta.title, "my_title_1");
   }
 
   c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])

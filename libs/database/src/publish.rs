@@ -318,6 +318,27 @@ pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgre
   Ok(res)
 }
 
+pub async fn select_default_published_view_id_for_namespace<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  namespace: &str,
+) -> Result<Option<Uuid>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT default_published_view_id
+      FROM af_workspace
+      WHERE publish_namespace = $1
+    "#,
+    namespace,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
 pub async fn select_default_published_view_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,

@@ -2,7 +2,7 @@ use bytes::Bytes;
 use client_api_entity::{workspace_dto::PublishedDuplicate, PublishInfo, UpdatePublishNamespace};
 use client_api_entity::{
   CreateGlobalCommentParams, CreateReactionParams, DeleteGlobalCommentParams, DeleteReactionParams,
-  GetReactionQueryParams, GlobalComments, Reactions, UpdateDefaultPublishView,
+  GetReactionQueryParams, GlobalComments, PublishInfoMeta, Reactions, UpdateDefaultPublishView,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -244,6 +244,31 @@ impl Client {
 
     let resp = self.cloud_client.get(&url).send().await?;
     AppResponse::<PublishInfo>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all)]
+  pub async fn get_default_published_collab<T>(
+    &self,
+    publish_namespace: &str,
+  ) -> Result<PublishInfoMeta<T>, AppResponseError>
+  where
+    T: serde::de::DeserializeOwned + 'static,
+  {
+    let url = format!(
+      "{}/api/workspace/published/{}",
+      self.base_url, publish_namespace,
+    );
+
+    let resp = self
+      .cloud_client
+      .get(&url)
+      .send()
+      .await?
+      .error_for_status()?;
+
+    AppResponse::<PublishInfoMeta<T>>::from_response(resp)
       .await?
       .into_data()
   }

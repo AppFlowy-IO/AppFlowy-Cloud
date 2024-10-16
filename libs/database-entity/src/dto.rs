@@ -417,6 +417,12 @@ pub struct PublishInfo {
   pub publish_timestamp_sec: DateTime<Utc>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublishInfoMeta<Meta> {
+  pub info: PublishInfo,
+  pub meta: Meta,
+}
+
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 #[repr(i32)]
 pub enum AFRole {

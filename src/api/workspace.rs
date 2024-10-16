@@ -48,6 +48,7 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{get_page_view_collab, update_page_collab_data};
+use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::domain::compression::{
   blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
 };
@@ -148,6 +149,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_collab_member_handler))
         .route(web::put().to(update_collab_member_handler))
         .route(web::delete().to(remove_collab_member_handler)),
+    )
+    .service(
+      web::resource("/published/{publish_namespace}")
+        .route(web::get().to(get_default_published_collab_info_meta_handler)),
     )
     .service(
       web::resource("/published/{publish_namespace}/{publish_name}")
@@ -1137,6 +1142,18 @@ async fn get_publish_namespace_handler(
   let namespace =
     biz::workspace::publish::get_workspace_publish_namespace(&state.pg_pool, &workspace_id).await?;
   Ok(Json(AppResponse::Ok().with_data(namespace)))
+}
+
+async fn get_default_published_collab_info_meta_handler(
+  publish_namespace: web::Path<String>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishInfoMeta<serde_json::Value>>>> {
+  let publish_namespace = publish_namespace.into_inner();
+  let (info, meta) =
+    get_workspace_default_publish_view_info_meta(&state.pg_pool, &publish_namespace).await?;
+  Ok(Json(
+    AppResponse::Ok().with_data(PublishInfoMeta { info, meta }),
+  ))
 }
 
 async fn get_published_collab_handler(

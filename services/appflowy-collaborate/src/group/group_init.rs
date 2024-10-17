@@ -523,7 +523,6 @@ impl CollabGroup {
     message_origin: &CollabOrigin,
     msg_id: MsgId,
   ) -> Result<Option<CollabAck>, RealtimeError> {
-    tracing::trace!("handling collab message: {}", msg_id);
     let mut decoder = DecoderV1::from(payload);
     let reader = MessageReader::new(&mut decoder);
     let mut ack_response = None;

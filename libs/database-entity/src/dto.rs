@@ -413,7 +413,9 @@ pub struct PublishInfo {
   pub namespace: Option<String>,
   pub publish_name: String,
   pub view_id: Uuid,
+  #[serde(default)]
   pub publisher_email: String,
+  #[serde(default)]
   pub publish_timestamp: DateTime<Utc>,
 }
 

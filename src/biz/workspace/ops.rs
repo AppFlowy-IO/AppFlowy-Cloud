@@ -678,17 +678,14 @@ async fn check_if_user_is_allowed_to_delete_comment(
 #[allow(clippy::too_many_arguments)]
 pub async fn create_upload_task(
   uid: i64,
-  user_name: &str,
-  user_email: &str,
-  workspace_id: &str,
-  workspace_name: &str,
-  file_size: usize,
+  task_id: Uuid,
+  task: serde_json::Value,
   host: &str,
+  workspace_id: &str,
+  file_size: usize,
   redis_client: &RedisConnectionManager,
   pg_pool: &PgPool,
 ) -> Result<(), AppError> {
-  let task_id = Uuid::new_v4();
-
   // Insert the task into the database
   insert_import_task(
     task_id,
@@ -700,19 +697,6 @@ pub async fn create_upload_task(
   )
   .await?;
 
-  // This task will be deserialized into ImportTask
-  let task = json!({
-      "notion": {
-         "uid": uid,
-         "user_name": user_name,
-         "user_email": user_email,
-         "task_id": task_id,
-         "workspace_id": workspace_id,
-         "s3_key": workspace_id,
-         "host": host,
-         "workspace_name": workspace_name,
-      }
-  });
   let _: () = redis_client
     .clone()
     .xadd("import_task_stream", "*", &[("task", task.to_string())])

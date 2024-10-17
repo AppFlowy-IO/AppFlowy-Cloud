@@ -116,7 +116,7 @@ impl CollabRedisStream {
           Some(id) => Some(MessageId::try_from(id)?),
         }
       };
-      while Some(since) < until {
+      while until.is_none() || since < until.unwrap() {
         let last_id = since.to_string();
         let batch: CollabStreamUpdateBatch = conn
           .xread_options(&[&stream_key], &[&last_id], &read_options)

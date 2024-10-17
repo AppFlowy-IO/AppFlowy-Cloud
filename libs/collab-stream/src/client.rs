@@ -167,14 +167,18 @@ impl CollabRedisStream {
       .into_iter()
       .map(|stream_id| stream_id.id)
       .collect();
-    let count: usize = conn.xdel(stream_key, &msg_ids).await?;
-    drop(conn);
-    tracing::debug!(
-      "Pruned redis stream `{}` <= `{}` ({} objects)",
-      stream_key,
-      message_id,
-      count
-    );
-    Ok(count)
+    if !msg_ids.is_empty() {
+      let count: usize = conn.xdel(stream_key, &msg_ids).await?;
+      drop(conn);
+      tracing::debug!(
+        "Pruned redis stream `{}` <= `{}` ({} objects)",
+        stream_key,
+        message_id,
+        count
+      );
+      Ok(count)
+    } else {
+      Ok(0)
+    }
   }
 }

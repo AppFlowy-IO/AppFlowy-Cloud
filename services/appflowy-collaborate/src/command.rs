@@ -37,6 +37,8 @@ pub enum CollaborationCommand {
   },
 }
 
+const BATCH_GET_ENCODE_COLLAB_CONCURRENCY: usize = 10;
+
 pub(crate) fn spawn_collaboration_command<S>(
   mut command_recv: CLCommandReceiver,
   group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
@@ -80,13 +82,13 @@ pub(crate) fn spawn_collaboration_command<S>(
                   }
                 })
               })
+              .buffer_unordered(BATCH_GET_ENCODE_COLLAB_CONCURRENCY)
               .collect::<Vec<_>>()
               .await;
 
             let mut outputs: HashMap<String, EncodedCollab> = HashMap::new();
-            for task in tasks {
-              let result = task.await;
-              if let Ok((object_id, Some(encoded_collab))) = result {
+            for (object_id, encoded_collab) in tasks.into_iter().flatten() {
+              if let Some(encoded_collab) = encoded_collab {
                 outputs.insert(object_id, encoded_collab);
               }
             }

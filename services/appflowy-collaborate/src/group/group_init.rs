@@ -167,6 +167,7 @@ impl CollabGroup {
       &state.workspace_id,
       &state.object_id,
       None,
+      true,
     );
     pin_mut!(updates);
     loop {
@@ -550,6 +551,7 @@ impl CollabGroup {
               }
             },
             Err(err) => {
+              tracing::warn!("[realtime]: failed to handled message: {}", msg_id);
               state.metrics.apply_update_failed_count.inc();
 
               let code = Self::ack_code_from_error(&err);
@@ -902,6 +904,7 @@ impl CollabPersister {
       &self.workspace_id,
       &self.object_id,
       None, //TODO: store Redis last msg id somewhere in doc state snapshot and replay from there
+      false, // read only data currently existing in the stream
     );
     pin_mut!(stream);
     let mut i = 0;

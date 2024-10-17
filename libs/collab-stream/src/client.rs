@@ -100,14 +100,23 @@ impl CollabRedisStream {
     workspace_id: &str,
     object_id: &str,
     since: Option<MessageId>,
+    live: bool,
   ) -> impl Stream<Item = Result<(MessageId, CollabStreamUpdate), StreamError>> {
-    // use `:` separator as it adheres to Redis naming conventions
     let mut conn = self.connection_manager.clone();
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
     let read_options = StreamReadOptions::default().count(100);
     let mut since = since.unwrap_or_default();
     async_stream::try_stream! {
-      loop {
+      let until = if live {
+        None
+      } else {
+        let mut reply: StreamRangeReply = conn.xrevrange_count(&stream_key, "+", "-", 1).await?;
+        match reply.ids.pop().map(|stream_id| stream_id.id) {
+          None => Some(MessageId::default()),
+          Some(id) => Some(MessageId::try_from(id)?),
+        }
+      };
+      while Some(since) < until {
         let last_id = since.to_string();
         let batch: CollabStreamUpdateBatch = conn
           .xread_options(&[&stream_key], &[&last_id], &read_options)

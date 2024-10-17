@@ -414,7 +414,7 @@ pub struct PublishInfo {
   pub publish_name: String,
   pub view_id: Uuid,
   pub publisher_email: String,
-  pub publish_timestamp_sec: DateTime<Utc>,
+  pub publish_timestamp: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1422,6 +1422,7 @@ pub struct AccessRequestWithViewId {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AccessRequesterInfo {
+  pub uid: i64,
   pub uuid: Uuid,
   pub email: String,
   pub name: String,

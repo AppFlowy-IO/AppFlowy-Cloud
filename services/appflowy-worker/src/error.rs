@@ -33,6 +33,14 @@ pub enum ImportError {
 }
 
 impl ImportError {
+  pub fn is_file_not_found(&self) -> bool {
+    match self {
+      ImportError::ImportCollabError(err) => {
+        matches!(err, CollabImporterError::FileNotFound)
+      },
+      _ => false,
+    }
+  }
   pub fn report(&self, task_id: &str) -> (String, String) {
     match self {
       ImportError::ImportCollabError(error) => match error {

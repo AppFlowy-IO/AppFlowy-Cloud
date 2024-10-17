@@ -1,4 +1,5 @@
 use std::ops::DerefMut;
+use std::sync::Arc;
 
 use crate::mailer::AFCloudMailer;
 use crate::{
@@ -8,6 +9,7 @@ use crate::{
   },
   mailer::{WorkspaceAccessRequestApprovedMailerParam, WorkspaceAccessRequestMailerParam},
 };
+use access_control::workspace::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
@@ -73,16 +75,12 @@ pub async fn get_access_request(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   access_request_id: Uuid,
-  user_uuid: Uuid,
   user_uid: i64,
 ) -> Result<AccessRequest, AppError> {
   let access_request_with_view_id =
     select_access_request_by_request_id(pg_pool, access_request_id).await?;
   if access_request_with_view_id.workspace.owner_uid != user_uid {
-    return Err(AppError::NotEnoughPermissions {
-      user: user_uuid.to_string(),
-      action: "get access request".to_string(),
-    });
+    return Err(AppError::NotEnoughPermissions);
   }
   let folder = get_latest_collab_folder(
     collab_storage,
@@ -116,21 +114,26 @@ pub async fn get_access_request(
   Ok(access_request)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn approve_or_reject_access_request(
   pg_pool: &PgPool,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   mailer: AFCloudMailer,
   appflowy_web_url: &str,
   request_id: Uuid,
   uid: i64,
-  user_uuid: Uuid,
   is_approved: bool,
 ) -> Result<(), AppError> {
   let access_request = select_access_request_by_request_id(pg_pool, request_id).await?;
-  if access_request.workspace.owner_uid != uid {
-    return Err(AppError::NotEnoughPermissions {
-      user: user_uuid.to_string(),
-      action: "approve access request".to_string(),
-    });
+  let has_access = workspace_access_control
+    .enforce_role(
+      &uid,
+      &access_request.workspace.workspace_id.to_string(),
+      AFRole::Owner,
+    )
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions);
   }
 
   let mut txn = pg_pool.begin().await.context("approving request")?;
@@ -140,9 +143,16 @@ pub async fn approve_or_reject_access_request(
       &mut txn,
       &access_request.workspace.workspace_id,
       &access_request.requester.email,
-      role,
+      role.clone(),
     )
     .await?;
+    workspace_access_control
+      .insert_role(
+        &access_request.requester.uid,
+        &access_request.workspace.workspace_id,
+        role.clone(),
+      )
+      .await?;
     let cloned_mailer = mailer.clone();
     let launch_workspace_url = format!(
       "{}/app/{}",

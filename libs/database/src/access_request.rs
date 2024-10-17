@@ -80,6 +80,7 @@ pub async fn select_access_request_by_request_id<'a, E: Executor<'a, Database = 
         request_id_workspace_member_count.member_count
       ) AS "workspace!: AFWorkspaceWithMemberCountRow",
       (
+        af_user.uid,
         af_user.uuid,
         af_user.name,
         af_user.email,

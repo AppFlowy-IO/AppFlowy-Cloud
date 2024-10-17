@@ -369,7 +369,7 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
         apc.publish_name,
         apc.view_id,
         au.email AS publisher_email,
-        apc.created_at AS publish_timestamp_sec
+        apc.created_at AS publish_timestamp
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
@@ -395,7 +395,7 @@ pub async fn select_all_published_collab_info<'a, E: Executor<'a, Database = Pos
         apc.publish_name,
         apc.view_id,
         au.email AS publisher_email,
-        apc.created_at AS publish_timestamp_sec
+        apc.created_at AS publish_timestamp
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id

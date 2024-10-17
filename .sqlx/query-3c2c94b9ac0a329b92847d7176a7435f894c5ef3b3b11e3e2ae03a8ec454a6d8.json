@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      WITH af_user_row AS (\n        SELECT * FROM af_user WHERE uuid = $1\n      )\n      SELECT\n        af_user_row.uid,\n        af_user_row.uuid,\n        af_user_row.email,\n        af_user_row.password,\n        af_user_row.name,\n        af_user_row.metadata,\n        af_user_row.encryption_sign,\n        af_user_row.deleted_at,\n        af_user_row.updated_at,\n        af_user_row.created_at,\n        (SELECT workspace_id\n         FROM af_workspace_member\n         WHERE uid = af_user_row.uid\n         ORDER BY updated_at DESC\n         LIMIT 1) as latest_workspace_id\n      FROM af_user_row\n    ",
+  "query": "\n      WITH af_user_row AS (\n        SELECT * FROM af_user WHERE uuid = $1\n      )\n      SELECT\n        af_user_row.uid,\n        af_user_row.uuid,\n        af_user_row.email,\n        af_user_row.password,\n        af_user_row.name,\n        af_user_row.metadata,\n        af_user_row.encryption_sign,\n        af_user_row.deleted_at,\n        af_user_row.updated_at,\n        af_user_row.created_at,\n       (\n         SELECT af_workspace_member.workspace_id\n         FROM af_workspace_member\n         JOIN af_workspace\n           ON af_workspace_member.workspace_id = af_workspace.workspace_id\n         WHERE af_workspace_member.uid = af_user_row.uid\n           AND COALESCE(af_workspace.is_initialized, true) = true\n         ORDER BY af_workspace_member.updated_at DESC\n         LIMIT 1\n       ) AS latest_workspace_id\n      FROM af_user_row\n    ",
   "describe": {
     "columns": [
       {
@@ -78,5 +78,5 @@
       null
     ]
   },
-  "hash": "a8443c8307a099fbfa3e04232fdc7719c28dc5acac088686e86980544fe4bbc9"
+  "hash": "3c2c94b9ac0a329b92847d7176a7435f894c5ef3b3b11e3e2ae03a8ec454a6d8"
 }

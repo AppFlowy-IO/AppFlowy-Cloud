@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE af_workspace_member\n        SET updated_at = $3\n        WHERE uid = $1\n        AND workspace_id = $2;\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "29279a0a97beb08aea84d588374c7534c28bd9c4da24b1ee20245109f5c33880"
+}

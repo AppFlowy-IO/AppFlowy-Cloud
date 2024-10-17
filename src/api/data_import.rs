@@ -9,6 +9,8 @@ use aws_sdk_s3::primitives::ByteStream;
 use database::file::BucketClient;
 
 use crate::biz::workspace::ops::{create_empty_workspace, create_upload_task};
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use database::user::select_name_and_email_from_uuid;
 use database::workspace::select_import_task;
 use futures_util::StreamExt;
@@ -74,8 +76,35 @@ async fn import_data_handler(
     .and_then(|s| s.parse::<usize>().ok())
     .unwrap_or(0);
 
+  let md5 = req
+    .headers()
+    .get("X-Content-MD5")
+    .and_then(|h| h.to_str().ok())
+    .unwrap_or("");
+
   let file_path = temp_dir().join(format!("import_data_{}.zip", Uuid::new_v4()));
   let file = write_multiple_part(&mut payload, file_path).await?;
+
+  trace!(
+    "[Import] content length: {}, content md5: {}",
+    content_length,
+    md5
+  );
+  if file.md5_base64 != md5 {
+    trace!(
+      "Import file fail. The Content-MD5:{} doesn't match file md5:{}",
+      md5,
+      file.md5_base64
+    );
+
+    return Err(
+      AppError::InvalidRequest(format!(
+        "Content-MD5:{} doesn't match file md5:{}",
+        md5, file.md5_base64
+      ))
+      .into(),
+    );
+  }
 
   if content_length != file.size {
     trace!(
@@ -113,7 +142,7 @@ async fn import_data_handler(
   })?;
   state
     .bucket_client
-    .put_blob_as_content_type(&workspace_id, stream, "zip")
+    .put_blob_as_content_type(&workspace_id, stream, "application/zip")
     .await?;
 
   create_upload_task(
@@ -132,10 +161,11 @@ async fn import_data_handler(
   Ok(AppResponse::Ok().into())
 }
 
-struct AutoDeletedFile {
+pub struct AutoDeletedFile {
   name: String,
   file_path: PathBuf,
   size: usize,
+  md5_base64: String,
 }
 
 impl Drop for AutoDeletedFile {
@@ -152,38 +182,60 @@ impl Drop for AutoDeletedFile {
     });
   }
 }
-
-async fn write_multiple_part(
+pub async fn write_multiple_part(
   payload: &mut Multipart,
   file_path: PathBuf,
 ) -> Result<AutoDeletedFile, AppError> {
   let mut file_name = "".to_string();
   let mut file_size = 0;
+
+  // Create the file to write to
   let mut file = File::create(&file_path).await?;
+  let mut context = md5::Context::new();
+
+  // Process the multipart form fields
   while let Some(Ok(mut field)) = payload.next().await {
+    // Extract the file name from the content disposition
     file_name = field
       .content_disposition()
       .and_then(|c| c.get_name().map(|f| f.to_string()))
       .unwrap_or_else(|| format!("import-{}", chrono::Local::now().format("%d/%m/%Y %H:%M")));
 
+    // Write data chunks to the file and update the MD5 context
     while let Some(Ok(data)) = field.next().await {
       file_size += data.len();
       file.write_all(&data).await?;
+      context.consume(&data);
     }
   }
+
+  // Flush and close the file
   file.shutdown().await?;
   drop(file);
 
+  // If file_name is empty, remove the file and return an error
   if file_name.is_empty() {
+    if let Err(err) = tokio::fs::remove_file(&file_path).await {
+      error!(
+        "Failed to delete the file: {:?} when importing data, error: {}",
+        file_path, err
+      );
+    }
     return Err(AppError::InvalidRequest(
-      "Can not get the file name".to_string(),
+      "Cannot get the file name".to_string(),
     ));
   }
 
+  // Finalize the MD5 hash and encode it in base64
+  let digest = context.compute();
+  let md5_base64 = STANDARD.encode(digest.as_ref());
+
+  // Return the file metadata and the calculated MD5 hash
   Ok(AutoDeletedFile {
     name: file_name,
     file_path,
     size: file_size,
+    md5_base64,
   })
 }
 

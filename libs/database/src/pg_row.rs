@@ -581,6 +581,7 @@ impl From<AFAccessRequestStatusColumn> for AccessRequestStatus {
 
 #[derive(sqlx::Type, Serialize, Debug)]
 pub struct AFAccessRequesterColumn {
+  pub uid: i64,
   pub uuid: Uuid,
   pub name: String,
   pub email: String,
@@ -590,6 +591,7 @@ pub struct AFAccessRequesterColumn {
 impl From<AFAccessRequesterColumn> for AccessRequesterInfo {
   fn from(value: AFAccessRequesterColumn) -> Self {
     Self {
+      uid: value.uid,
       uuid: value.uuid,
       name: value.name,
       email: value.email,

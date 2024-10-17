@@ -142,15 +142,7 @@ impl MiddlewareAccessControl for WorkspaceMiddlewareAccessControl {
     if result {
       Ok(())
     } else {
-      Err(AppError::NotEnoughPermissions {
-        user: uid.to_string(),
-        action: format!(
-          "access workspace:{} with given url:{}, method: {}",
-          resource_id,
-          path.as_str(),
-          method,
-        ),
-      })
+      Err(AppError::NotEnoughPermissions)
     }
   }
 }

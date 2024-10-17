@@ -5,46 +5,60 @@ bodyClass: bg-purple-50
 ---
 
 <x-main>
-    <div
-            class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black"
-    >
-        <table align="center">
-            <tr>
-                <td class="w-[552px] max-w-full">
-                    <!-- Display Error Message -->
-                    <p
-                            class="w-full text-center break-words whitespace-normal text-lg text-red-600"
-                    >
-                        <span class=class="mx-2">Failed to import your notion file {{ importFileName }}</span>
-                        <br>
-                        <span class="mx-2">{{ error }}</span>
-                    </p>
-                </td>
-            </tr>
-            <tr>
-                <td class="text-center text-slate-600 text-xs px-6">
-                    <p class="m-0 mb-4 uppercase cursor-pointer">
-                        <a href="https://appflowy.io">
-                            <img
-                                    src="{{ cdnBaseUrl }}images/appflowy-logo.png"
-                                    width="150px"
-                            />
-                        </a>
-                    </p>
-                </td>
-            </tr>
-        </table>
-    </div>
+  <div class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black">
+    <table align="center">
+      <tr>
+        <td class="w-[622px] max-w-full text-center">
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="text-3xl font-bold">Notion Import Failed</span>
+
+          </p>
+
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="mx-2=1 text-[#fb006d]">{{ error }}</span>
+          </p>
+
+          <div class="mx-auto  leading-4.5 text-sm text-slate-500 text-center w-[70%]">
+            Join our Discord <a href="https://discord.gg/9Q2xaN37tV" class="text-[#9327ff]">server</a> to get quick help
+            or <a href="https://github.com/AppFlowy-IO/AppFlowy/issues/new/choose" class="text-[#9327ff]">
+            report</a> the issue on GitHub
+          </div>
+
+          <x-divider space-x="20%"/>
+        </td>
+      </tr>
+      <tr>
+        <td class="text-center text-slate-600 text-xs px-6">
+          <p class="m-0 mb-4 uppercase cursor-pointer">
+            <a href="https://appflowy.io">
+              <img src="{{ cdnBaseUrl }}images/appflowy-logo.png" width="150px">
+            </a>
+          </p>
+          <p class="m-0 text-sm text-black font-medium">
+            Bring projects, knowledge, and teams together with the power of AI.
+          </p>
+
+          <p class="cursor-default">
+            <a href="https://twitter.com/appflowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/twitter.png" width="20" alt="Maizzle">
+            </a>
+            <a href="https://www.reddit.com/r/AppFlowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/reddit.png" width="20" alt="Maizzle">
+            </a>
+            <a href="https://github.com/AppFlowy-IO/AppFlowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/github.png" width="20" alt="Maizzle">
+            </a>
+            <a href="https://discord.gg/9Q2xaN37tV"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/discord.png" width="20" alt="Maizzle">
+            </a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
 </x-main>
 
-<!-- JavaScript to handle copying error details to clipboard -->
-<script>
-  document
-      .getElementById("copyErrorDetails")
-      .addEventListener("click", function () {
-        const errorDetails = document.getElementById("errorDetails");
-        errorDetails.select();
-        document.execCommand("copy");
-        alert("Error details copied to clipboard!");
-      });
-</script>

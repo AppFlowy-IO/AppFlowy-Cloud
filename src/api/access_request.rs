@@ -42,7 +42,6 @@ async fn get_access_request_handler(
     &state.pg_pool,
     &state.collab_access_control_storage,
     access_request_id,
-    *uuid,
     uid,
   )
   .await?;
@@ -100,11 +99,11 @@ async fn post_approve_access_request_handler(
     )))?;
   approve_or_reject_access_request(
     &state.pg_pool,
+    state.workspace_access_control.clone(),
     state.mailer.clone(),
     &appflowy_web_url,
     access_request_id,
     uid,
-    *uuid,
     is_approved,
   )
   .await?;

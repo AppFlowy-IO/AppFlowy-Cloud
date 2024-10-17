@@ -417,7 +417,12 @@ async fn download_and_unzip_file(
       ImportError::Internal(anyhow!("Failed to set permissions for temp dir: {:?}", err))
     })?;
 
-  let unzip_file = unzip_stream(zip_reader.inner, output_file_path).await?;
+  let unzip_file = unzip_stream(
+    zip_reader.inner,
+    output_file_path,
+    Some(import_task.workspace_name.clone()),
+  )
+  .await?;
   Ok(unzip_file.unzip_dir_path)
 }
 

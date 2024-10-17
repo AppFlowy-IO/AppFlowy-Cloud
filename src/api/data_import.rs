@@ -14,6 +14,7 @@ use base64::Engine;
 use database::user::select_name_and_email_from_uuid;
 use database::workspace::select_import_task;
 use futures_util::StreamExt;
+use serde_json::json;
 use shared_entity::dto::import_dto::{ImportTaskDetail, ImportTaskStatus, UserImportTask};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
@@ -76,7 +77,7 @@ async fn import_data_handler(
     .and_then(|s| s.parse::<usize>().ok())
     .unwrap_or(0);
 
-  let md5 = req
+  let md5_base64 = req
     .headers()
     .get("X-Content-MD5")
     .and_then(|h| h.to_str().ok())
@@ -88,19 +89,19 @@ async fn import_data_handler(
   trace!(
     "[Import] content length: {}, content md5: {}",
     content_length,
-    md5
+    md5_base64
   );
-  if file.md5_base64 != md5 {
+  if file.md5_base64 != md5_base64 {
     trace!(
       "Import file fail. The Content-MD5:{} doesn't match file md5:{}",
-      md5,
+      md5_base64,
       file.md5_base64
     );
 
     return Err(
       AppError::InvalidRequest(format!(
         "Content-MD5:{} doesn't match file md5:{}",
-        md5, file.md5_base64
+        md5_base64, file.md5_base64
       ))
       .into(),
     );
@@ -145,14 +146,29 @@ async fn import_data_handler(
     .put_blob_as_content_type(&workspace_id, stream, "application/zip")
     .await?;
 
+  // This task will be deserialized into ImportTask
+  let task_id = Uuid::new_v4();
+  let task = json!({
+      "notion": {
+         "uid": uid,
+         "user_name": user_name,
+         "user_email": user_email,
+         "task_id": task_id.to_string(),
+         "workspace_id": workspace_id,
+         "s3_key": workspace_id,
+         "host": host,
+         "workspace_name": &file.name,
+         "md5_base64": md5_base64,
+      }
+  });
+
   create_upload_task(
     uid,
-    &user_name,
-    &user_email,
-    &workspace_id,
-    &file.name,
-    file.size,
+    task_id,
+    task,
     &host,
+    &workspace_id,
+    file.size,
     &state.redis_connection_manager,
     &state.pg_pool,
   )

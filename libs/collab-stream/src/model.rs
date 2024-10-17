@@ -390,6 +390,7 @@ impl CollabStreamUpdate {
 
   /// Returns Redis stream key, that's storing entries mapped to/from [CollabStreamUpdate].
   pub fn stream_key(workspace_id: &str, object_id: &str) -> String {
+    // use `:` separator as it adheres to Redis naming conventions
     format!("af:{}:{}:updates", workspace_id, object_id)
   }
 

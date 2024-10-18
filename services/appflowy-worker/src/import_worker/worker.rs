@@ -397,7 +397,14 @@ async fn download_and_unzip_file(
     .map_err(|err| ImportError::Internal(err.into()))?;
   let buffer_size = buffer_size_from_content_length(content_length);
 
-  let zip_reader = get_zip_reader(storage_dir, stream, buffer_size, streaming).await?;
+  let zip_reader = get_zip_reader(
+    storage_dir,
+    stream,
+    buffer_size,
+    streaming,
+    &import_task.md5_base64,
+  )
+  .await?;
   let unique_file_name = Uuid::new_v4().to_string();
   let output_file_path = storage_dir.join(unique_file_name);
   fs::create_dir_all(&output_file_path)
@@ -410,7 +417,12 @@ async fn download_and_unzip_file(
       ImportError::Internal(anyhow!("Failed to set permissions for temp dir: {:?}", err))
     })?;
 
-  let unzip_file = unzip_stream(zip_reader.inner, output_file_path).await?;
+  let unzip_file = unzip_stream(
+    zip_reader.inner,
+    output_file_path,
+    Some(import_task.workspace_name.clone()),
+  )
+  .await?;
   Ok(unzip_file.unzip_dir_path)
 }
 
@@ -431,6 +443,7 @@ async fn get_zip_reader(
   stream: Box<dyn AsyncBufRead + Unpin + Send>,
   buffer_size: usize,
   streaming: bool,
+  file_md5_base64: &Option<String>,
 ) -> Result<ZipReader, ImportError> {
   let zip_reader = if streaming {
     // Occasionally, we encounter the error 'unable to locate the end of central directory record'
@@ -444,7 +457,7 @@ async fn get_zip_reader(
       file: None,
     }
   } else {
-    let file = download_file(storage_dir, stream).await?;
+    let file = download_file(storage_dir, stream, file_md5_base64).await?;
     let handle = fs::File::open(&file)
       .await
       .map_err(|err| ImportError::Internal(err.into()))?;
@@ -996,6 +1009,8 @@ pub struct NotionImportTask {
   pub workspace_name: String,
   pub s3_key: String,
   pub host: String,
+  #[serde(default)]
+  pub md5_base64: Option<String>,
 }
 impl Display for NotionImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

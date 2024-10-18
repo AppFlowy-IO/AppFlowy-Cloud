@@ -6,6 +6,8 @@ use anyhow::Result;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use futures::AsyncReadExt;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -170,16 +172,19 @@ impl Drop for AutoRemoveDownloadedFile {
 pub async fn download_file(
   storage_dir: &Path,
   stream: Box<dyn futures::AsyncBufRead + Unpin + Send>,
+  expected_md5_base64: &Option<String>,
 ) -> Result<AutoRemoveDownloadedFile, anyhow::Error> {
   let zip_file_path = storage_dir.join(format!("{}.zip", Uuid::new_v4()));
-  write_stream_to_file(&zip_file_path, stream).await?;
+  write_stream_to_file(&zip_file_path, expected_md5_base64, stream).await?;
   Ok(AutoRemoveDownloadedFile(zip_file_path))
 }
 
 pub async fn write_stream_to_file(
   file_path: &PathBuf,
+  expected_md5_base64: &Option<String>,
   mut stream: Box<dyn futures::AsyncBufRead + Unpin + Send>,
 ) -> Result<(), anyhow::Error> {
+  let mut context = md5::Context::new();
   let mut file = File::create(file_path).await?;
   let mut buffer = vec![0u8; 1_048_576];
   loop {
@@ -187,9 +192,22 @@ pub async fn write_stream_to_file(
     if bytes_read == 0 {
       break;
     }
+    context.consume(&buffer[..bytes_read]);
     file.write_all(&buffer[..bytes_read]).await?;
   }
-  file.flush().await?;
 
+  let digest = context.compute();
+  let md5_base64 = STANDARD.encode(digest.as_ref());
+  if let Some(expected_md5) = expected_md5_base64 {
+    if md5_base64 != *expected_md5 {
+      error!(
+        "[Import]: MD5 mismatch, expected: {}, current: {}",
+        expected_md5, md5_base64
+      );
+      return Err(anyhow!("MD5 mismatch"));
+    }
+  }
+
+  file.flush().await?;
   Ok(())
 }

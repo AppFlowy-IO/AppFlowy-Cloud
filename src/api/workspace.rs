@@ -894,6 +894,14 @@ async fn get_page_view_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
+  let has_access = state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_uuid.to_string(), Action::Read)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
+
   let page_collab = get_page_view_collab(
     &state.pg_pool,
     state.collab_access_control_storage.clone(),
@@ -1525,6 +1533,13 @@ async fn get_workspace_folder_handler(
   let depth = query.depth.unwrap_or(1);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
+  let has_access = state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
+  if !has_access {
+    return Err(AppError::NotEnoughPermissions.into());
+  }
   let root_view_id = if let Some(root_view_id) = query.root_view_id.as_ref() {
     root_view_id.to_string()
   } else {

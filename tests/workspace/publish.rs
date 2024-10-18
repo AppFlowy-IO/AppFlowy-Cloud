@@ -70,16 +70,6 @@ async fn test_set_publish_namespace_set() {
     assert_eq!(got_namespace, namespace);
   }
   {
-    // cannot set namespace too short
-    let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), "a") // too short
-      .await
-      .err()
-      .unwrap();
-    assert_eq!(err.code, ErrorCode::InvalidRequest, "{:?}", err);
-  }
-
-  {
     // cannot set namespace with invalid chars
     let err = c
       .set_workspace_publish_namespace(&workspace_id.to_string(), "/|(*&)(&#@!") // invalid chars

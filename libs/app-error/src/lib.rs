@@ -350,6 +350,8 @@ pub enum ErrorCode {
   NotInviteeOfWorkspaceInvitation = 1041,
   MissingView = 1042,
   AccessRequestAlreadyExists = 1043,
+  CustomNamespaceDisabled = 1044,
+  CustomNamespaceDisallowed = 1045,
 }
 
 impl ErrorCode {

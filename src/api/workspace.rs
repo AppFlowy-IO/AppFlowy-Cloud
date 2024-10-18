@@ -49,6 +49,7 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{get_page_view_collab, update_page_collab_data};
+use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::domain::compression::{
   blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
 };
@@ -151,6 +152,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
+      web::resource("/published/{publish_namespace}")
+        .route(web::get().to(get_default_published_collab_info_meta_handler)),
+    )
+    .service(
       web::resource("/published/{publish_namespace}/{publish_name}")
         .route(web::get().to(get_published_collab_handler)),
     )
@@ -161,6 +166,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("{workspace_id}/published-duplicate")
         .route(web::post().to(post_published_duplicate_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/published-info")
+        .route(web::get().to(list_published_collab_info_handler)),
     )
     .service(
       web::resource("/published-info/{view_id}")
@@ -182,6 +191,11 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/publish-namespace")
         .route(web::put().to(put_publish_namespace_handler))
         .route(web::get().to(get_publish_namespace_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/publish-default")
+        .route(web::put().to(put_workspace_default_published_view_handler))
+        .route(web::get().to(get_workspace_published_default_info_handler)),
     )
     .service(
       web::resource("/{workspace_id}/publish")
@@ -1136,6 +1150,34 @@ async fn remove_collab_member_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+async fn put_workspace_default_published_view_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  payload: Json<UpdateDefaultPublishView>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let new_default_pub_view_id = payload.into_inner().view_id;
+  biz::workspace::publish::set_workspace_default_publish_view(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+    &new_default_pub_view_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_workspace_published_default_info_handler(
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishInfo>>> {
+  let workspace_id = workspace_id.into_inner();
+  let info =
+    biz::workspace::publish::get_workspace_default_publish_view_info(&state.pg_pool, &workspace_id)
+      .await?;
+  Ok(Json(AppResponse::Ok().with_data(info)))
+}
+
 async fn put_publish_namespace_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
@@ -1162,6 +1204,18 @@ async fn get_publish_namespace_handler(
   let namespace =
     biz::workspace::publish::get_workspace_publish_namespace(&state.pg_pool, &workspace_id).await?;
   Ok(Json(AppResponse::Ok().with_data(namespace)))
+}
+
+async fn get_default_published_collab_info_meta_handler(
+  publish_namespace: web::Path<String>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishInfoMeta<serde_json::Value>>>> {
+  let publish_namespace = publish_namespace.into_inner();
+  let (info, meta) =
+    get_workspace_default_publish_view_info_meta(&state.pg_pool, &publish_namespace).await?;
+  Ok(Json(
+    AppResponse::Ok().with_data(PublishInfoMeta { info, meta }),
+  ))
 }
 
 async fn get_published_collab_handler(
@@ -1207,6 +1261,20 @@ async fn post_published_duplicate_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn list_published_collab_info_handler(
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<Vec<PublishInfoView>>>> {
+  let publish_infos = biz::workspace::publish::list_collab_publish_info(
+    state.published_collab_store.as_ref(),
+    &state.collab_access_control_storage,
+    &workspace_id.into_inner(),
+  )
+  .await?;
+
+  Ok(Json(AppResponse::Ok().with_data(publish_infos)))
 }
 
 async fn get_published_collab_info_handler(
@@ -1478,7 +1546,7 @@ async fn get_workspace_folder_handler(
     workspace_id.to_string()
   };
   let folder_view = biz::collab::ops::get_user_workspace_structure(
-    state.collab_access_control_storage.clone(),
+    &state.collab_access_control_storage,
     &state.pg_pool,
     uid,
     workspace_id,
@@ -1497,7 +1565,7 @@ async fn get_recent_views_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
   let folder_views = get_user_recent_folder_views(
-    state.collab_access_control_storage.clone(),
+    &state.collab_access_control_storage,
     &state.pg_pool,
     uid,
     workspace_id,
@@ -1517,7 +1585,7 @@ async fn get_favorite_views_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
   let folder_views = get_user_favorite_folder_views(
-    state.collab_access_control_storage.clone(),
+    &state.collab_access_control_storage,
     &state.pg_pool,
     uid,
     workspace_id,
@@ -1536,12 +1604,8 @@ async fn get_trash_views_handler(
 ) -> Result<Json<AppResponse<SectionItems>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
-  let folder_views = get_user_trash_folder_views(
-    state.collab_access_control_storage.clone(),
-    uid,
-    workspace_id,
-  )
-  .await?;
+  let folder_views =
+    get_user_trash_folder_views(&state.collab_access_control_storage, uid, workspace_id).await?;
   let section_items = SectionItems {
     views: folder_views,
   };
@@ -1553,7 +1617,7 @@ async fn get_workspace_publish_outline_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PublishedView>>> {
   let published_view = biz::collab::ops::get_published_view(
-    state.collab_access_control_storage.clone(),
+    &state.collab_access_control_storage,
     publish_namespace.into_inner(),
     &state.pg_pool,
   )

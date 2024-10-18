@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
-use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus};
+use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus, PublishInfo};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{collections::HashMap, ops::Deref};
@@ -164,6 +164,13 @@ pub struct FolderViewMinimal {
   pub name: String,
   pub icon: Option<ViewIcon>,
   pub layout: ViewLayout,
+}
+
+/// Publish info with actual view info
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublishInfoView {
+  pub view: FolderViewMinimal,
+  pub info: PublishInfo,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

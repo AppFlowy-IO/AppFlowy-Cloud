@@ -374,6 +374,17 @@ pub struct UpdatePublishNamespace {
   pub new_namespace: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct UpdateDefaultPublishView {
+  pub view_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DefaultPublishViewInfoMeta {
+  pub info: PublishInfo,
+  pub meta: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabMembers {
   #[validate(custom = "validate_not_empty_str")]
@@ -397,11 +408,21 @@ pub struct AFCollabMember {
   pub permission: AFPermission,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PublishInfo {
   pub namespace: Option<String>,
   pub publish_name: String,
   pub view_id: Uuid,
+  #[serde(default)]
+  pub publisher_email: String,
+  #[serde(default)]
+  pub publish_timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublishInfoMeta<Meta> {
+  pub info: PublishInfo,
+  pub meta: Meta,
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]

@@ -1,9 +1,20 @@
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use database::{
+  collab::GetCollabOrigin,
+  publish::{
+    select_all_published_collab_info, select_default_published_view_id,
+    select_default_published_view_id_for_namespace, update_workspace_default_publish_view,
+  },
+};
 use std::sync::Arc;
 
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::{PublishCollabItem, PublishInfo};
-use shared_entity::dto::publish_dto::PublishViewMetaData;
+use shared_entity::dto::{
+  publish_dto::PublishViewMetaData,
+  workspace_dto::{FolderViewMinimal, PublishInfoView},
+};
 use sqlx::PgPool;
 use tracing::debug;
 use uuid::Uuid;
@@ -21,7 +32,10 @@ use database::{
   workspace::select_user_is_workspace_owner,
 };
 
-use crate::api::metrics::PublishedCollabMetrics;
+use crate::{
+  api::metrics::PublishedCollabMetrics,
+  biz::collab::{folder_view::to_dto_folder_view_miminal, ops::get_latest_collab_folder},
+};
 
 use super::ops::check_workspace_owner;
 
@@ -86,6 +100,61 @@ pub async fn set_workspace_namespace(
   Ok(())
 }
 
+pub async fn set_workspace_default_publish_view(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+  new_view_id: &Uuid,
+) -> Result<(), AppError> {
+  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  update_workspace_default_publish_view(pg_pool, workspace_id, new_view_id).await?;
+  Ok(())
+}
+
+pub async fn get_workspace_default_publish_view_info(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<PublishInfo, AppError> {
+  let view_id = select_default_published_view_id(pg_pool, workspace_id)
+    .await?
+    .ok_or_else(|| {
+      AppError::RecordNotFound(format!(
+        "Default published view not found for workspace_id: {}",
+        workspace_id
+      ))
+    })?;
+
+  let pub_info = select_published_collab_info(pg_pool, &view_id).await?;
+  Ok(pub_info)
+}
+
+pub async fn get_workspace_default_publish_view_info_meta(
+  pg_pool: &PgPool,
+  namespace: &str,
+) -> Result<(PublishInfo, serde_json::Value), AppError> {
+  let view_id = select_default_published_view_id_for_namespace(pg_pool, namespace)
+    .await?
+    .ok_or_else(|| {
+      AppError::RecordNotFound(format!(
+        "Default published view not found for namespace: {}",
+        namespace
+      ))
+    })?;
+
+  let (pub_info, meta) = tokio::try_join!(
+    select_published_collab_info(pg_pool, &view_id),
+    select_published_metadata_for_view_id(pg_pool, &view_id)
+  )?;
+  let meta = meta.ok_or_else(|| {
+    AppError::RecordNotFound(format!(
+      "Published metadata not found for view_id: {}",
+      view_id
+    ))
+  })?;
+
+  Ok((pub_info, meta.1))
+}
+
 pub async fn get_workspace_publish_namespace(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
@@ -93,20 +162,51 @@ pub async fn get_workspace_publish_namespace(
   select_workspace_publish_namespace(pg_pool, workspace_id).await
 }
 
+pub async fn list_collab_publish_info(
+  publish_collab_store: &dyn PublishedCollabStore,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: &Uuid,
+) -> Result<Vec<PublishInfoView>, AppError> {
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::Server,
+    &workspace_id.to_string(),
+  )
+  .await?;
+
+  let publish_infos = publish_collab_store
+    .list_collab_publish_info(workspace_id)
+    .await?;
+
+  let mut publish_info_views: Vec<PublishInfoView> = Vec::with_capacity(publish_infos.len());
+  for publish_info in publish_infos {
+    let view_id = publish_info.view_id.to_string();
+    match folder.get_view(&view_id) {
+      Some(view) => {
+        publish_info_views.push(PublishInfoView {
+          view: to_dto_folder_view_miminal(&view),
+          info: publish_info,
+        });
+      },
+      None => {
+        tracing::error!("View {} not found in folder but is published", view_id);
+        publish_info_views.push(PublishInfoView {
+          view: FolderViewMinimal {
+            view_id,
+            name: publish_info.publish_name.clone(),
+            ..Default::default()
+          },
+          info: publish_info,
+        });
+      },
+    };
+  }
+
+  Ok(publish_info_views)
+}
+
 async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> {
-  // Check len
-  if new_namespace.len() < 8 {
-    return Err(AppError::InvalidRequest(
-      "Namespace must be at least 8 characters long".to_string(),
-    ));
-  }
-
-  if new_namespace.len() > 64 {
-    return Err(AppError::InvalidRequest(
-      "Namespace must be at most 32 characters long".to_string(),
-    ));
-  }
-
+  // Must be url safe
   // Only contain alphanumeric characters and hyphens
   for c in new_namespace.chars() {
     if !c.is_alphanumeric() && c != '-' {
@@ -115,9 +215,6 @@ async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> 
       ));
     }
   }
-
-  // TODO: add more checks for reserved words
-
   Ok(())
 }
 
@@ -140,6 +237,11 @@ pub trait PublishedCollabStore: Sync + Send + 'static {
     publish_namespace: &str,
     publish_name: &str,
   ) -> Result<serde_json::Value, AppError>;
+
+  async fn list_collab_publish_info(
+    &self,
+    workspace_id: &Uuid,
+  ) -> Result<Vec<PublishInfo>, AppError>;
 
   async fn get_collab_publish_info(&self, view_id: &Uuid) -> Result<PublishInfo, AppError>;
 
@@ -222,6 +324,13 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
       self.metrics.incr_success_read_count(1);
     }
     result
+  }
+
+  async fn list_collab_publish_info(
+    &self,
+    workspace_id: &Uuid,
+  ) -> Result<Vec<PublishInfo>, AppError> {
+    select_all_published_collab_info(&self.pg_pool, workspace_id).await
   }
 
   async fn get_collab_publish_info(&self, view_id: &Uuid) -> Result<PublishInfo, AppError> {
@@ -369,6 +478,13 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
 
   async fn get_collab_publish_info(&self, view_id: &Uuid) -> Result<PublishInfo, AppError> {
     select_published_collab_info(&self.pg_pool, view_id).await
+  }
+
+  async fn list_collab_publish_info(
+    &self,
+    workspace_id: &Uuid,
+  ) -> Result<Vec<PublishInfo>, AppError> {
+    select_all_published_collab_info(&self.pg_pool, workspace_id).await
   }
 
   async fn get_collab_blob_by_publish_namespace(

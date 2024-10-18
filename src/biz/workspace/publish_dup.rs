@@ -198,7 +198,7 @@ impl PublishCollabDuplicator {
       let ws_db_oid = select_workspace_database_oid(&pg_pool, &dest_workspace_id.parse()?).await?;
       let ws_db_collab = {
         let ws_database_ec = get_latest_collab_encoded(
-          collab_storage.clone(),
+          &collab_storage,
           GetCollabOrigin::User {
             uid: duplicator_uid,
           },
@@ -256,7 +256,7 @@ impl PublishCollabDuplicator {
     }
 
     let collab_folder_encoded = get_latest_collab_encoded(
-      collab_storage.clone(),
+      &collab_storage,
       GetCollabOrigin::User {
         uid: duplicator_uid,
       },

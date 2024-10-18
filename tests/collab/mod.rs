@@ -6,5 +6,6 @@ mod multi_devices_edit;
 mod permission_test;
 mod single_device_edit;
 mod storage_test;
+mod text_edit;
 pub mod util;
 mod web_edit;

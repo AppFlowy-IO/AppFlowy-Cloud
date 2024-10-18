@@ -158,6 +158,7 @@ md5.workspace = true
 
 
 [dev-dependencies]
+flate2 = "1.0"
 once_cell = "1.19.0"
 tempfile = "3.9.0"
 assert-json-diff = "2.0.2"

@@ -8,13 +8,13 @@ async fn improve_writing_test() {
     return;
   }
   let test_client = TestClient::new_user().await;
-  test_client.api_client.set_ai_model(AIModel::GPT4o);
+  test_client.api_client.set_ai_model(AIModel::GPT4oMini);
 
   let workspace_id = test_client.workspace_id().await;
-  let params = CompleteTextParams {
-    text: "I feel hungry".to_string(),
-    completion_type: CompletionType::ImproveWriting,
-  };
+  let params = CompleteTextParams::new_with_completion_type(
+    "I feel hungry".to_string(),
+    CompletionType::ImproveWriting,
+  );
 
   let resp = test_client
     .api_client

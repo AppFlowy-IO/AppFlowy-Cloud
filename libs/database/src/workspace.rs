@@ -332,7 +332,7 @@ pub async fn update_workspace_invitation_set_status_accepted(
     r#"
     UPDATE public.af_workspace_invitation
     SET status = 1
-    WHERE invitee_email = (SELECT email FROM public.af_user WHERE uuid = $1)
+    WHERE LOWER(invitee_email) = (SELECT LOWER(email) FROM public.af_user WHERE uuid = $1)
       AND id = $2
       AND status = 0
     "#,
@@ -367,7 +367,7 @@ pub async fn get_invitation_by_id(
     SELECT
         workspace_id,
         inviter AS inviter_uid,
-        (SELECT uid FROM public.af_user WHERE email = invitee_email) AS invitee_uid,
+        (SELECT uid FROM public.af_user WHERE LOWER(email) = LOWER(invitee_email)) AS invitee_uid,
         status,
         role_id AS role
     FROM
@@ -408,7 +408,7 @@ pub async fn select_workspace_invitations_for_user(
         JOIN public.af_user u_inviter ON i.inviter = u_inviter.uid
         JOIN public.af_user u_invitee ON u_invitee.uuid = $1
       WHERE
-        i.invitee_email = u_invitee.email
+        LOWER(i.invitee_email) = LOWER(u_invitee.email)
         AND ($2::SMALLINT IS NULL OR i.status = $2);
     "#,
     invitee_uuid,
@@ -445,7 +445,7 @@ pub async fn select_workspace_invitation_for_user(
         JOIN public.af_user u_inviter ON i.inviter = u_inviter.uid
         JOIN public.af_user u_invitee ON u_invitee.uuid = $1
       WHERE
-        i.invitee_email = u_invitee.email
+        LOWER(i.invitee_email) = LOWER(u_invitee.email)
         AND i.id = $2;
     "#,
     invitee_uuid,
@@ -1450,7 +1450,7 @@ pub async fn select_user_is_invitee_for_workspace_invitation(
       SELECT EXISTS(
         SELECT 1
         FROM af_workspace_invitation
-        WHERE id = $1 AND invitee_email = (SELECT email FROM af_user WHERE uuid = $2)
+        WHERE id = $1 AND LOWER(invitee_email) = (SELECT LOWER(email) FROM af_user WHERE uuid = $2)
       )
     "#,
     invite_id,

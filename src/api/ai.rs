@@ -36,7 +36,7 @@ async fn complete_text_handler(
   let params = payload.into_inner();
   let resp = state
     .ai_client
-    .completion_text(&params.text, params.completion_type, ai_model)
+    .completion_text(&params.text, params.completion_type, None, ai_model)
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
   Ok(AppResponse::Ok().with_data(resp).into())
@@ -51,7 +51,12 @@ async fn stream_complete_text_handler(
   let params = payload.into_inner();
   match state
     .ai_client
-    .stream_completion_text(&params.text, params.completion_type, ai_model)
+    .stream_completion_text(
+      &params.text,
+      params.completion_type,
+      params.custom_prompt,
+      ai_model,
+    )
     .await
   {
     Ok(stream) => Ok(

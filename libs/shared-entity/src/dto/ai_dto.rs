@@ -34,7 +34,18 @@ pub struct SummarizeRowResponse {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompleteTextParams {
   pub text: String,
-  pub completion_type: CompletionType,
+  pub completion_type: Option<CompletionType>,
+  pub custom_prompt: Option<String>,
+}
+
+impl CompleteTextParams {
+  pub fn new_with_completion_type(text: String, completion_type: CompletionType) -> Self {
+    Self {
+      text,
+      completion_type: Some(completion_type),
+      custom_prompt: None,
+    }
+  }
 }
 
 #[derive(Debug)]

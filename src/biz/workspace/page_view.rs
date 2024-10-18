@@ -23,7 +23,7 @@ use yrs::Update;
 
 use crate::api::metrics::AppFlowyWebMetrics;
 use crate::biz::collab::folder_view::{
-  parse_extra_field_as_json, to_dto_view_icon, to_view_layout,
+  parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
 };
 use crate::biz::collab::{
   folder_view::view_is_space,
@@ -40,7 +40,7 @@ pub async fn get_page_view_collab(
   view_id: &str,
 ) -> Result<PageCollab, AppResponseError> {
   let folder = get_latest_collab_folder(
-    collab_access_control_storage.clone(),
+    &collab_access_control_storage,
     GetCollabOrigin::User { uid },
     &workspace_id.to_string(),
   )
@@ -73,7 +73,7 @@ pub async fn get_page_view_collab(
     is_space: view_is_space(&view),
     is_private: false,
     is_published: publish_view_ids.contains(view_id),
-    layout: to_view_layout(&view.layout),
+    layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
     last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
     extra: view.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
@@ -81,13 +81,8 @@ pub async fn get_page_view_collab(
   };
   let page_collab_data = match view.layout {
     collab_folder::ViewLayout::Document => {
-      get_page_collab_data_for_document(
-        collab_access_control_storage.clone(),
-        uid,
-        workspace_id,
-        view_id,
-      )
-      .await
+      get_page_collab_data_for_document(&collab_access_control_storage, uid, workspace_id, view_id)
+        .await
     },
     collab_folder::ViewLayout::Grid
     | collab_folder::ViewLayout::Board
@@ -126,7 +121,7 @@ async fn get_page_collab_data_for_database(
 ) -> Result<PageCollabData, AppResponseError> {
   let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
   let ws_db = get_latest_collab_encoded(
-    collab_access_control_storage.clone(),
+    &collab_access_control_storage,
     GetCollabOrigin::User { uid },
     &workspace_id.to_string(),
     &ws_db_oid,
@@ -147,7 +142,7 @@ async fn get_page_collab_data_for_database(
       .database_id
   };
   let db = get_latest_collab_encoded(
-    collab_access_control_storage.clone(),
+    &collab_access_control_storage,
     GetCollabOrigin::User { uid },
     &workspace_id.to_string(),
     &db_oid,
@@ -225,13 +220,13 @@ async fn get_page_collab_data_for_database(
 }
 
 async fn get_page_collab_data_for_document(
-  collab_access_control_storage: Arc<CollabAccessControlStorage>,
+  collab_access_control_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
   view_id: &str,
 ) -> Result<PageCollabData, AppResponseError> {
   let collab = get_latest_collab_encoded(
-    collab_access_control_storage.clone(),
+    collab_access_control_storage,
     GetCollabOrigin::User { uid },
     &workspace_id.to_string(),
     view_id,

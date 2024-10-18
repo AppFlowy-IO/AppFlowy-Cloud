@@ -83,6 +83,34 @@ pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = P
 }
 
 #[inline]
+pub async fn update_workspace_default_publish_view<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  new_view_id: &Uuid,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_workspace
+      SET default_published_view_id = $1
+      WHERE workspace_id = $2
+    "#,
+    new_view_id,
+    workspace_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+        "Failed to update workspace default publish view, workspace_id: {}, new_view_id: {}, rows_affected: {}",
+        workspace_id, new_view_id, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
 pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
@@ -290,6 +318,45 @@ pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgre
   Ok(res)
 }
 
+pub async fn select_default_published_view_id_for_namespace<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  namespace: &str,
+) -> Result<Option<Uuid>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT default_published_view_id
+      FROM af_workspace
+      WHERE publish_namespace = $1
+    "#,
+    namespace,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn select_default_published_view_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Option<Uuid>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT default_published_view_id
+      FROM af_workspace
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
 pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   view_id: &Uuid,
@@ -300,15 +367,43 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
       SELECT
         aw.publish_namespace AS namespace,
         apc.publish_name,
-        apc.view_id
+        apc.view_id,
+        au.email AS publisher_email,
+        apc.created_at AS publish_timestamp
       FROM af_published_collab apc
-      LEFT JOIN af_workspace aw
-        ON apc.workspace_id = aw.workspace_id
+      JOIN af_user au ON apc.published_by = au.uid
+      JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
       WHERE apc.view_id = $1;
     "#,
     view_id,
   )
   .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn select_all_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Vec<PublishInfo>, AppError> {
+  let res = sqlx::query_as!(
+    PublishInfo,
+    r#"
+      SELECT
+        aw.publish_namespace AS namespace,
+        apc.publish_name,
+        apc.view_id,
+        au.email AS publisher_email,
+        apc.created_at AS publish_timestamp
+      FROM af_published_collab apc
+      JOIN af_user au ON apc.published_by = au.uid
+      JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
+      WHERE apc.workspace_id = $1;
+    "#,
+    workspace_id,
+  )
+  .fetch_all(executor)
   .await?;
 
   Ok(res)

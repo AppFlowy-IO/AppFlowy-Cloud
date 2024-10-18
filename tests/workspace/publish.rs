@@ -1,7 +1,9 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
 use appflowy_cloud::biz::workspace::ops::collab_from_doc_state;
-use client_api::entity::{AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata};
+use client_api::entity::{
+  AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, PublishInfoMeta,
+};
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use collab::util::MapExt;
@@ -126,6 +128,23 @@ async fn test_publish_doc() {
   .unwrap();
 
   {
+    // Check that the published collabs are listed
+    let published_view_infos = c.list_published_views(&workspace_id).await.unwrap();
+    assert_eq!(published_view_infos.len(), 2);
+    let view_info_1 = published_view_infos
+      .iter()
+      .find(|view_info| view_info.info.publish_name == publish_name_1)
+      .unwrap();
+    assert_eq!(view_info_1.info.view_id, view_id_1);
+
+    let view_info_2 = published_view_infos
+      .iter()
+      .find(|view_info| view_info.info.publish_name == publish_name_2)
+      .unwrap();
+    assert_eq!(view_info_2.info.view_id, view_id_2);
+  }
+
+  {
     // Non login user should be able to view the published collab
     let guest_client = localhost_client();
     let published_collab = guest_client
@@ -208,7 +227,36 @@ async fn test_publish_doc() {
     assert_eq!(blob, "yrs_encoded_data_4");
   }
 
-  c.unpublish_collabs(&workspace_id, &[view_id_1])
+  {
+    // Try to get default publish view info but not set
+    let err = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+
+    // Set publish view as default workspace view
+    c.set_default_publish_view(&workspace_id, view_id_1.to_owned())
+      .await
+      .unwrap();
+
+    // Get default publish view
+    let publish_info = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap();
+    assert_eq!(publish_info.view_id, view_id_1);
+
+    // Public can use namespace to get default publish view info and view metadata
+    let default_info_meta: PublishInfoMeta<MyCustomMetadata> = localhost_client()
+      .get_default_published_collab(&my_namespace)
+      .await
+      .unwrap();
+    assert_eq!(default_info_meta.info.view_id, view_id_1);
+    assert_eq!(default_info_meta.meta.title, "my_title_1");
+  }
+
+  c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])
     .await
     .unwrap();
 
@@ -220,7 +268,7 @@ async fn test_publish_doc() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
 
     let guest_client = localhost_client();
     let err = guest_client
@@ -228,7 +276,21 @@ async fn test_publish_doc() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+
+    // default publish view should not be accessible
+    let err = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+  }
+
+  {
+    // check that the published collabs are removed
+    // listing published collab should return empty
+    let published_infos = c.list_published_views(&workspace_id).await.unwrap();
+    assert_eq!(published_infos.len(), 0);
   }
 }
 

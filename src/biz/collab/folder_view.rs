@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use app_error::AppError;
 use chrono::DateTime;
 use collab_folder::{Folder, SectionItem, ViewLayout as CollabFolderViewLayout};
-use shared_entity::dto::workspace_dto::{FolderView, ViewLayout};
+use shared_entity::dto::workspace_dto::{FolderView, FolderViewMinimal, ViewLayout};
 
 /// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
 pub fn collab_folder_to_folder_view(
@@ -108,7 +108,7 @@ fn to_folder_view(
     is_space: view_is_space(&view),
     is_private,
     is_published: published_view_ids.contains(view_id),
-    layout: to_view_layout(&view.layout),
+    layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
     last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
     extra,
@@ -134,7 +134,7 @@ pub fn section_items_to_folder_view(
         is_published: published_view_ids.contains(&v.id),
         created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
         last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
-        layout: to_view_layout(&v.layout),
+        layout: to_dto_view_layout(&v.layout),
         extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
         children: vec![],
       })
@@ -186,12 +186,21 @@ pub fn to_dto_view_icon_type(
   }
 }
 
-pub fn to_view_layout(collab_folder_view_layout: &CollabFolderViewLayout) -> ViewLayout {
+pub fn to_dto_view_layout(collab_folder_view_layout: &CollabFolderViewLayout) -> ViewLayout {
   match collab_folder_view_layout {
     CollabFolderViewLayout::Document => ViewLayout::Document,
     CollabFolderViewLayout::Grid => ViewLayout::Grid,
     CollabFolderViewLayout::Board => ViewLayout::Board,
     CollabFolderViewLayout::Calendar => ViewLayout::Calendar,
     CollabFolderViewLayout::Chat => ViewLayout::Chat,
+  }
+}
+
+pub fn to_dto_folder_view_miminal(collab_folder_view: &collab_folder::View) -> FolderViewMinimal {
+  FolderViewMinimal {
+    view_id: collab_folder_view.id.clone(),
+    name: collab_folder_view.name.clone(),
+    icon: collab_folder_view.icon.clone().map(to_dto_view_icon),
+    layout: to_dto_view_layout(&collab_folder_view.layout),
   }
 }

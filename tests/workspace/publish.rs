@@ -49,7 +49,12 @@ async fn test_set_publish_namespace_set() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "PublishNamespaceAlreadyTaken");
+    assert_eq!(
+      err.code,
+      ErrorCode::PublishNamespaceAlreadyTaken,
+      "{:?}",
+      err
+    );
   }
   {
     // can replace the namespace
@@ -71,7 +76,7 @@ async fn test_set_publish_namespace_set() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "InvalidRequest");
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{:?}", err);
   }
 
   {
@@ -81,7 +86,7 @@ async fn test_set_publish_namespace_set() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "InvalidRequest");
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{:?}", err);
   }
 }
 

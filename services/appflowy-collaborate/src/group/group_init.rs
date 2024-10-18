@@ -291,6 +291,7 @@ impl CollabGroup {
 
   async fn snapshot_task(state: Arc<CollabGroupState>, interval: Duration, is_new_collab: bool) {
     if is_new_collab {
+      tracing::trace!("persisting new collab for {}", state.object_id);
       if let Err(err) = state.persister.save().await {
         tracing::warn!(
           "failed to persist new document `{}`: {}",

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n    SELECT\n        workspace_id,\n        inviter AS inviter_uid,\n        (SELECT uid FROM public.af_user WHERE email = invitee_email) AS invitee_uid,\n        status,\n        role_id AS role\n    FROM\n    public.af_workspace_invitation\n    WHERE id = $1\n    ",
+  "query": "\n    SELECT\n        workspace_id,\n        inviter AS inviter_uid,\n        (SELECT uid FROM public.af_user WHERE LOWER(email) = LOWER(invitee_email)) AS invitee_uid,\n        status,\n        role_id AS role\n    FROM\n    public.af_workspace_invitation\n    WHERE id = $1\n    ",
   "describe": {
     "columns": [
       {
@@ -42,5 +42,5 @@
       false
     ]
   },
-  "hash": "7244adcf92c93f0cb7b3311f348617e442145affb56c90e12a81563232b284b4"
+  "hash": "18207c125d5f974894576ee1dcfe406b221e9119f570403ec7a41ae1359b3f6c"
 }

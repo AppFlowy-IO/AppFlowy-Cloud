@@ -25,6 +25,7 @@ env:
   LOCALHOST_WS: ws://localhost/ws/v1
   APPFLOWY_REDIS_URI: redis://redis:6379
   LOCALHOST_GOTRUE: http://localhost/gotrue
+  POSTGRES_PASSWORD: password
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
   SQLX_OFFLINE: true
 
@@ -96,8 +97,6 @@ jobs:
           sed -i 's|APPFLOWY_AI_OPENAI_API_KEY=.*|APPFLOWY_AI_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}|' .env
           sed -i "s|LOCAL_AI_AWS_ACCESS_KEY_ID=.*|LOCAL_AI_AWS_ACCESS_KEY_ID=${{ secrets.LOCAL_AI_AWS_ACCESS_KEY_ID }}|" .env
           sed -i "s|LOCAL_AI_AWS_SECRET_ACCESS_KEY=.*|LOCAL_AI_AWS_SECRET_ACCESS_KEY=${{ secrets.LOCAL_AI_AWS_SECRET_ACCESS_KEY }}|" .env
-          sed -i 's|APPFLOWY_INDEXER_REDIS_URL=.*|APPFLOWY_INDEXER_REDIS_URL=redis://localhost:6379|' .env
-          sed -i 's|APPFLOWY_INDEXER_DATABASE_URL=.*|APPFLOWY_INDEXER_DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
           sed -i 's|APPFLOWY_WEB_URL=.*|APPFLOWY_WEB_URL=http://localhost:3000|' .env
         shell: bash
 

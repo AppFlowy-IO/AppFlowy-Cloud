@@ -1,6 +1,6 @@
 use crate::dto::{
   AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, CreateTextChatContext,
-  Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
+  CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
   RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse,
   TranslateRowData, TranslateRowResponse,
 };
@@ -53,7 +53,7 @@ impl AppFlowyAIClient {
     &self,
     text: &str,
     completion_type: T,
-    custom_prompt: Option<String>,
+    custom_prompt: Option<CustomPrompt>,
     model: AIModel,
   ) -> Result<CompleteTextResponse, AIError> {
     let completion_type = completion_type.into();
@@ -90,7 +90,7 @@ impl AppFlowyAIClient {
     &self,
     text: &str,
     completion_type: T,
-    custom_prompt: Option<String>,
+    custom_prompt: Option<CustomPrompt>,
     model: AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let completion_type = completion_type.into();

@@ -365,3 +365,9 @@ impl Display for CreateTextChatContext {
     ))
   }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CustomPrompt {
+  pub system: String,
+  pub user: Option<String>,
+}

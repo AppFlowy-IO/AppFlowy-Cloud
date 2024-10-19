@@ -35,7 +35,7 @@ pub struct SummarizeRowResponse {
 pub struct CompleteTextParams {
   pub text: String,
   pub completion_type: Option<CompletionType>,
-  pub custom_prompt: Option<String>,
+  pub custom_prompt: Option<CustomPrompt>,
 }
 
 impl CompleteTextParams {

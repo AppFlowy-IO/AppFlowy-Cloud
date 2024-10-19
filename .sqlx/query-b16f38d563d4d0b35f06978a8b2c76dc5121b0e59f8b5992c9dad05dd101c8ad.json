@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n        i.id AS invite_id,\n        i.workspace_id,\n        w.workspace_name,\n        u_inviter.email AS inviter_email,\n        u_inviter.name AS inviter_name,\n        i.status,\n        i.updated_at,\n        u_inviter.metadata->>'icon_url' AS inviter_icon,\n        w.icon AS workspace_icon,\n        (SELECT COUNT(*) FROM public.af_workspace_member m WHERE m.workspace_id = i.workspace_id) AS member_count\n      FROM\n        public.af_workspace_invitation i\n        JOIN public.af_workspace w ON i.workspace_id = w.workspace_id\n        JOIN public.af_user u_inviter ON i.inviter = u_inviter.uid\n        JOIN public.af_user u_invitee ON u_invitee.uuid = $1\n      WHERE\n        i.invitee_email = u_invitee.email\n        AND ($2::SMALLINT IS NULL OR i.status = $2);\n    ",
+  "query": "\n      SELECT\n        i.id AS invite_id,\n        i.workspace_id,\n        w.workspace_name,\n        u_inviter.email AS inviter_email,\n        u_inviter.name AS inviter_name,\n        i.status,\n        i.updated_at,\n        u_inviter.metadata->>'icon_url' AS inviter_icon,\n        w.icon AS workspace_icon,\n        (SELECT COUNT(*) FROM public.af_workspace_member m WHERE m.workspace_id = i.workspace_id) AS member_count\n      FROM\n        public.af_workspace_invitation i\n        JOIN public.af_workspace w ON i.workspace_id = w.workspace_id\n        JOIN public.af_user u_inviter ON i.inviter = u_inviter.uid\n        JOIN public.af_user u_invitee ON u_invitee.uuid = $1\n      WHERE\n        LOWER(i.invitee_email) = LOWER(u_invitee.email)\n        AND ($2::SMALLINT IS NULL OR i.status = $2);\n    ",
   "describe": {
     "columns": [
       {
@@ -73,5 +73,5 @@
       null
     ]
   },
-  "hash": "de595bd6554d8e1f58c9c4bb94ea14b5ae2fd15b3c5d2b84d5dd5a551954ecde"
+  "hash": "b16f38d563d4d0b35f06978a8b2c76dc5121b0e59f8b5992c9dad05dd101c8ad"
 }

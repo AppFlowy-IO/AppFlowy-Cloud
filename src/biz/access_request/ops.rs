@@ -1,9 +1,10 @@
-use std::{ops::DerefMut, sync::Arc};
+use std::ops::DerefMut;
+use std::sync::Arc;
 
 use crate::mailer::AFCloudMailer;
 use crate::{
   biz::collab::{
-    folder_view::{to_dto_view_icon, to_view_layout},
+    folder_view::{to_dto_view_icon, to_dto_view_layout},
     ops::get_latest_collab_folder,
   },
   mailer::{WorkspaceAccessRequestApprovedMailerParam, WorkspaceAccessRequestMailerParam},
@@ -72,7 +73,7 @@ pub async fn create_access_request(
 
 pub async fn get_access_request(
   pg_pool: &PgPool,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   access_request_id: Uuid,
   user_uid: i64,
 ) -> Result<AccessRequest, AppError> {
@@ -96,7 +97,7 @@ pub async fn get_access_request(
       view_id: v.id.clone(),
       name: v.name.clone(),
       icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
-      layout: to_view_layout(&v.layout),
+      layout: to_dto_view_layout(&v.layout),
     })
     .ok_or(AppError::MissingView(format!(
       "the view {} is missing",

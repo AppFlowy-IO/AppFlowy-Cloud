@@ -4,7 +4,7 @@ use app_error::AppError;
 use collab_folder::Folder;
 use shared_entity::dto::workspace_dto::PublishedView;
 
-use super::folder_view::{to_dto_view_icon, to_view_layout};
+use super::folder_view::{to_dto_view_icon, to_dto_view_layout};
 
 /// Returns only folders that are published, or one of the nested subfolders is published.
 /// Exclude folders that are in the trash.
@@ -90,7 +90,7 @@ fn to_publish_view(
         .as_ref()
         .map(|icon| to_dto_view_icon(icon.clone())),
       is_published,
-      layout: to_view_layout(&view.layout),
+      layout: to_dto_view_layout(&view.layout),
       extra,
       children: pruned_view,
     })

@@ -143,6 +143,7 @@ fn run_importer_worker(
     let import_worker_fut = local_set.run_until(run_import_worker(
       pg_pool,
       redis_client,
+      None,
       Arc::new(MockS3Client),
       notifier,
       &stream_name,

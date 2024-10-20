@@ -4,6 +4,8 @@ pub mod error;
 pub mod import_worker;
 pub(crate) mod s3_client;
 
+mod metric;
+
 mod mailer;
 use crate::application::run_server;
 use crate::config::Config;

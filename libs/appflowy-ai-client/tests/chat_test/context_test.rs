@@ -14,7 +14,7 @@ async fn create_chat_context_test() {
   };
   client.create_chat_text_context(context).await.unwrap();
   let resp = client
-    .send_question(&chat_id, "Where I live?", &AIModel::GPT35, None)
+    .send_question(&chat_id, "Where I live?", &AIModel::GPT4oMini, None)
     .await
     .unwrap();
   // response will be something like:

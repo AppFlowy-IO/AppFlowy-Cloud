@@ -9,7 +9,7 @@ async fn summarize_row_test() {
   let json = json!({"name": "Jack", "age": 25, "city": "New York"});
 
   let result = client
-    .summarize_row(json.as_object().unwrap(), AIModel::GPT35)
+    .summarize_row(json.as_object().unwrap(), AIModel::GPT4oMini)
     .await
     .unwrap();
   result.text.contains("Jack");

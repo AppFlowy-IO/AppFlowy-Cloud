@@ -172,7 +172,7 @@ impl Client {
       );
     }
 
-    let ai_model = Arc::new(RwLock::new(AIModel::GPT35));
+    let ai_model = Arc::new(RwLock::new(AIModel::GPT4oMini));
 
     Self {
       base_url: base_url.to_string(),

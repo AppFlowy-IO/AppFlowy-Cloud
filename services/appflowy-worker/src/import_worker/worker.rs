@@ -26,8 +26,8 @@ use database::workspace::{
 };
 use database_entity::dto::CollabParams;
 
+use crate::metric::ImportMetrics;
 use async_zip::base::read::stream::{Ready, ZipFileReader};
-
 use collab_importer::zip_tool::async_zip::async_unzip;
 use collab_importer::zip_tool::sync_zip::sync_unzip;
 use futures::stream::FuturesUnordered;
@@ -67,6 +67,7 @@ const CONSUMER_NAME: &str = "appflowy_worker";
 pub async fn run_import_worker(
   pg_pool: PgPool,
   mut redis_client: ConnectionManager,
+  metrics: Option<Arc<ImportMetrics>>,
   s3_client: Arc<dyn S3Client>,
   notifier: Arc<dyn ImportNotifier>,
   stream_name: &str,
@@ -90,6 +91,7 @@ pub async fn run_import_worker(
     GROUP_NAME,
     CONSUMER_NAME,
     notifier.clone(),
+    &metrics,
   )
   .await;
 
@@ -103,6 +105,7 @@ pub async fn run_import_worker(
     CONSUMER_NAME,
     notifier.clone(),
     tick_interval_secs,
+    &metrics,
   )
   .await?;
 
@@ -119,6 +122,7 @@ async fn process_un_acked_tasks(
   group_name: &str,
   consumer_name: &str,
   notifier: Arc<dyn ImportNotifier>,
+  metrics: &Option<Arc<ImportMetrics>>,
 ) {
   // when server restarts, we need to check if there are any unacknowledged tasks
   match get_un_ack_tasks(stream_name, group_name, consumer_name, redis_client).await {
@@ -136,6 +140,7 @@ async fn process_un_acked_tasks(
           s3_client,
           pg_pool,
           notifier.clone(),
+          metrics,
         )
         .await;
       }
@@ -155,6 +160,7 @@ async fn process_upcoming_tasks(
   consumer_name: &str,
   notifier: Arc<dyn ImportNotifier>,
   interval_secs: u64,
+  metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<(), ImportError> {
   let options = StreamReadOptions::default()
     .group(group_name, consumer_name)
@@ -189,6 +195,7 @@ async fn process_upcoming_tasks(
             let stream_name = stream_name.to_string();
             let group_name = group_name.to_string();
             let storage_dir = storage_dir.to_path_buf();
+            let metrics = metrics.clone();
             task_handlers.push(spawn_local(async move {
               consume_task(
                 &storage_dir,
@@ -200,6 +207,7 @@ async fn process_upcoming_tasks(
                 &cloned_s3_client,
                 &pg_pool,
                 notifier,
+                &metrics,
               )
               .await?;
               Ok::<(), ImportError>(())
@@ -233,6 +241,7 @@ async fn consume_task(
   s3_client: &Arc<dyn S3Client>,
   pg_pool: &Pool<Postgres>,
   notifier: Arc<dyn ImportNotifier>,
+  metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<(), ImportError> {
   let result = process_task(
     storage_dir,
@@ -241,6 +250,7 @@ async fn consume_task(
     redis_client,
     pg_pool,
     notifier,
+    metrics,
   )
   .await;
 
@@ -263,6 +273,7 @@ async fn process_task(
   redis_client: &mut ConnectionManager,
   pg_pool: &PgPool,
   notifier: Arc<dyn ImportNotifier>,
+  metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<(), ImportError> {
   let retry_interval: u64 = get_env_var("APPFLOWY_WORKER_IMPORT_NOTION_RETRY_INTERVAL", "10")
     .parse()
@@ -287,6 +298,7 @@ async fn process_task(
         3,
         Duration::from_secs(retry_interval),
         streaming,
+        metrics,
       )
       .await;
       match unzip_result {
@@ -305,7 +317,7 @@ async fn process_task(
           }
 
           clean_up(s3_client, &task).await;
-          notify_user(&task, result, notifier).await?;
+          notify_user(&task, result, notifier, metrics).await?;
         },
         Err(err) => {
           // If there is any errors when download or unzip the file, we will remove the file from S3 and notify the user.
@@ -314,7 +326,7 @@ async fn process_task(
           }
           remove_workspace(&task.workspace_id, pg_pool).await;
           clean_up(s3_client, &task).await;
-          notify_user(&task, Err(err), notifier).await?;
+          notify_user(&task, Err(err), notifier, metrics).await?;
         },
       }
 
@@ -347,14 +359,15 @@ pub async fn download_and_unzip_file_retry(
   max_retries: usize,
   interval: Duration,
   streaming: bool,
+  metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<PathBuf, ImportError> {
   let mut attempt = 0;
   loop {
     attempt += 1;
-    match download_and_unzip_file(storage_dir, import_task, s3_client, streaming).await {
+    match download_and_unzip_file(storage_dir, import_task, s3_client, streaming, metrics).await {
       Ok(result) => return Ok(result),
       Err(err) if attempt < max_retries && !err.is_file_not_found() => {
-        error!(
+        warn!(
           "{} attempt {} failed: {}. Retrying in {:?}...",
           import_task.workspace_id, attempt, err, interval
         );
@@ -380,6 +393,7 @@ async fn download_and_unzip_file(
   import_task: &NotionImportTask,
   s3_client: &Arc<dyn S3Client>,
   streaming: bool,
+  metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<PathBuf, ImportError> {
   let S3StreamResponse {
     stream,
@@ -389,7 +403,11 @@ async fn download_and_unzip_file(
     .get_blob_stream(import_task.s3_key.as_str())
     .await
     .map_err(|err| ImportError::Internal(err.into()))?;
+
   let buffer_size = buffer_size_from_content_length(content_length);
+  if let Some(metrics) = metrics {
+    metrics.record_import_size_bytes(buffer_size);
+  }
   if streaming {
     let zip_reader = get_zip_reader(buffer_size, StreamOrFile::Stream(stream)).await?;
     let unique_file_name = Uuid::new_v4().to_string();
@@ -832,11 +850,15 @@ async fn notify_user(
   import_task: &NotionImportTask,
   result: Result<(), ImportError>,
   notifier: Arc<dyn ImportNotifier>,
+  metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<(), ImportError> {
   let task_id = import_task.task_id.to_string();
   let (error, error_detail) = match result {
     Ok(_) => {
       info!("[Import]: successfully imported:{}", import_task);
+      if let Some(metrics) = metrics {
+        metrics.incr_import_success_count(1);
+      }
       (None, None)
     },
     Err(err) => {
@@ -844,6 +866,9 @@ async fn notify_user(
         "[Import]: failed to import:{}: error:{:?}",
         import_task, err
       );
+      if let Some(metrics) = metrics {
+        metrics.incr_import_fail_count(1);
+      }
       let (error, error_detail) = err.report(&task_id);
       (Some(error), Some(error_detail))
     },

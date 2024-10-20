@@ -14,6 +14,11 @@ use axum::Router;
 use secrecy::ExposeSecret;
 
 use crate::mailer::AFWorkerMailer;
+use crate::metric::ImportMetrics;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::get;
 use mailer::sender::Mailer;
 use std::sync::{Arc, Once};
 use std::time::Duration;
@@ -85,12 +90,14 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
 
   let mailer = get_worker_mailer(&config).await?;
   let s3_client = get_aws_s3_client(&config.s3_setting).await?;
+  let metrics = AppMetrics::new();
 
   let state = AppState {
     redis_client,
     pg_pool,
     s3_client,
     mailer: mailer.clone(),
+    metrics,
   };
 
   let local_set = LocalSet::new();
@@ -98,13 +105,16 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
   let import_worker_fut = local_set.run_until(run_import_worker(
     state.pg_pool.clone(),
     state.redis_client.clone(),
+    Some(state.metrics.import_metrics.clone()),
     Arc::new(state.s3_client.clone()),
     Arc::new(email_notifier),
     "import_task_stream",
     10,
   ));
 
-  let app = Router::new().with_state(state);
+  let app = Router::new()
+    .route("/metrics", get(metrics_handler))
+    .with_state(Arc::new(state));
 
   tokio::select! {
     _ = import_worker_fut => {
@@ -124,6 +134,7 @@ pub struct AppState {
   pub pg_pool: PgPool,
   pub s3_client: S3ClientImpl,
   pub mailer: AFWorkerMailer,
+  pub metrics: AppMetrics,
 }
 
 async fn get_worker_mailer(config: &Config) -> Result<AFWorkerMailer, Error> {
@@ -179,4 +190,35 @@ pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<S3ClientImpl, E
     inner: client,
     bucket: s3_setting.bucket.clone(),
   })
+}
+
+#[derive(Clone)]
+struct AppMetrics {
+  #[allow(dead_code)]
+  registry: Arc<prometheus_client::registry::Registry>,
+  import_metrics: Arc<ImportMetrics>,
+}
+
+impl AppMetrics {
+  pub fn new() -> Self {
+    let mut registry = prometheus_client::registry::Registry::default();
+    let import_metrics = Arc::new(ImportMetrics::register(&mut registry));
+    Self {
+      registry: Arc::new(registry),
+      import_metrics,
+    }
+  }
+}
+
+async fn metrics_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+  let mut buffer = String::new();
+  if let Err(err) = prometheus_client::encoding::text::encode(&mut buffer, &state.metrics.registry)
+  {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      format!("Failed to encode metrics: {:?}", err),
+    )
+      .into_response();
+  }
+  (StatusCode::OK, buffer).into_response()
 }

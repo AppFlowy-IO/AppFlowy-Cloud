@@ -17,7 +17,6 @@ use collab_importer::imported_collab::ImportType;
 use collab_importer::notion::page::CollabResource;
 use collab_importer::notion::NotionImporter;
 use collab_importer::util::FileId;
-use collab_importer::zip_tool::unzip_stream;
 use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
 use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
@@ -29,6 +28,8 @@ use database_entity::dto::CollabParams;
 
 use async_zip::base::read::stream::{Ready, ZipFileReader};
 
+use collab_importer::zip_tool::async_zip::async_unzip;
+use collab_importer::zip_tool::sync_zip::sync_unzip;
 use futures::stream::FuturesUnordered;
 use futures::{stream, AsyncBufRead, StreamExt};
 use infra::env_util::get_env_var;
@@ -79,14 +80,7 @@ pub async fn run_import_worker(
     error!("Failed to ensure consumer group: {:?}", err);
   }
 
-  let mut storage_dir = temp_dir().join("import_worker_temp_dir");
-  if !storage_dir.exists() {
-    if let Err(err) = fs::create_dir(&storage_dir).await {
-      error!("Failed to create importer temp dir: {:?}", err);
-      storage_dir = temp_dir();
-    }
-  }
-
+  let storage_dir = temp_dir();
   process_un_acked_tasks(
     &storage_dir,
     &mut redis_client,
@@ -359,10 +353,10 @@ pub async fn download_and_unzip_file_retry(
     attempt += 1;
     match download_and_unzip_file(storage_dir, import_task, s3_client, streaming).await {
       Ok(result) => return Ok(result),
-      Err(err) if attempt <= max_retries && !err.is_file_not_found() => {
-        warn!(
-          "Attempt {} failed: {}. Retrying in {:?}...",
-          attempt, err, interval
+      Err(err) if attempt < max_retries && !err.is_file_not_found() => {
+        error!(
+          "{} attempt {} failed: {}. Retrying in {:?}...",
+          import_task.workspace_id, attempt, err, interval
         );
         tokio::time::sleep(interval).await;
       },
@@ -396,40 +390,66 @@ async fn download_and_unzip_file(
     .await
     .map_err(|err| ImportError::Internal(err.into()))?;
   let buffer_size = buffer_size_from_content_length(content_length);
+  if streaming {
+    let zip_reader = get_zip_reader(buffer_size, StreamOrFile::Stream(stream)).await?;
+    let unique_file_name = Uuid::new_v4().to_string();
+    let output_file_path = storage_dir.join(unique_file_name);
+    fs::create_dir_all(&output_file_path)
+      .await
+      .map_err(|err| ImportError::Internal(err.into()))?;
+    fs::set_permissions(&output_file_path, Permissions::from_mode(0o777))
+      .await
+      .map_err(|err| {
+        ImportError::Internal(anyhow!("Failed to set permissions for temp dir: {:?}", err))
+      })?;
+    let unzip_file = async_unzip(
+      zip_reader.inner,
+      output_file_path,
+      Some(import_task.workspace_name.clone()),
+    )
+    .await?;
+    Ok(unzip_file.unzip_dir_path)
+  } else {
+    let file = download_file(
+      &import_task.workspace_id,
+      storage_dir,
+      stream,
+      &import_task.md5_base64,
+    )
+    .await?;
+    info!(
+      "[Import] {} start unzip file: {:?}",
+      import_task.workspace_id,
+      file.path_buf()
+    );
 
-  let zip_reader = get_zip_reader(
-    storage_dir,
-    stream,
-    buffer_size,
-    streaming,
-    &import_task.md5_base64,
-  )
-  .await?;
-  let unique_file_name = Uuid::new_v4().to_string();
-  let output_file_path = storage_dir.join(unique_file_name);
-  fs::create_dir_all(&output_file_path)
-    .await
-    .map_err(|err| ImportError::Internal(err.into()))?;
+    let file_path = file.path_buf().clone();
+    let storage_dir = storage_dir.to_path_buf();
+    let workspace_name = import_task.workspace_name.clone();
+    let unzip_file =
+      tokio::task::spawn_blocking(move || sync_unzip(file_path, storage_dir, Some(workspace_name)))
+        .await
+        .map_err(|err| ImportError::Internal(err.into()))??;
 
-  fs::set_permissions(&output_file_path, Permissions::from_mode(0o777))
-    .await
-    .map_err(|err| {
-      ImportError::Internal(anyhow!("Failed to set permissions for temp dir: {:?}", err))
-    })?;
-
-  let unzip_file = unzip_stream(
-    zip_reader.inner,
-    output_file_path,
-    Some(import_task.workspace_name.clone()),
-  )
-  .await?;
-  Ok(unzip_file.unzip_dir_path)
+    trace!(
+      "[Import] {} finish unzip file: {:?}",
+      import_task.workspace_id,
+      unzip_file.unzip_dir
+    );
+    Ok(unzip_file.unzip_dir)
+  }
 }
 
 struct ZipReader {
   inner: ZipFileReader<Ready<Pin<Box<dyn AsyncBufRead + Unpin + Send>>>>,
   #[allow(dead_code)]
   file: Option<AutoRemoveDownloadedFile>,
+}
+
+#[allow(dead_code)]
+enum StreamOrFile {
+  Stream(Box<dyn AsyncBufRead + Unpin + Send>),
+  File(AutoRemoveDownloadedFile),
 }
 
 /// Asynchronously returns a `ZipFileReader` that can read from a stream or a downloaded file, based on the environment setting.
@@ -439,37 +459,35 @@ struct ZipReader {
 /// Otherwise, it first downloads the zip file to a local file and then reads from it.
 ///
 async fn get_zip_reader(
-  storage_dir: &Path,
-  stream: Box<dyn AsyncBufRead + Unpin + Send>,
   buffer_size: usize,
-  streaming: bool,
-  file_md5_base64: &Option<String>,
+  stream_or_file: StreamOrFile,
 ) -> Result<ZipReader, ImportError> {
-  let zip_reader = if streaming {
-    // Occasionally, we encounter the error 'unable to locate the end of central directory record'
-    // when streaming a ZIP file to async-zip. This indicates that the ZIP reader couldn't find
-    // the necessary end-of-file marker. The issue might occur if the entire ZIP file has not been
-    // fully downloaded or buffered before the reader attempts to process the end-of-file information.
-    let reader = futures::io::BufReader::with_capacity(buffer_size, stream);
-    let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
-    ZipReader {
-      inner: async_zip::base::read::stream::ZipFileReader::new(boxed_reader),
-      file: None,
-    }
-  } else {
-    let file = download_file(storage_dir, stream, file_md5_base64).await?;
-    let handle = fs::File::open(&file)
-      .await
-      .map_err(|err| ImportError::Internal(err.into()))?;
-    let reader = tokio::io::BufReader::with_capacity(buffer_size, handle).compat();
-    let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
-    ZipReader {
-      inner: async_zip::base::read::stream::ZipFileReader::new(boxed_reader),
-      // Make sure the lifetime of file is the same as zip reader.
-      file: Some(file),
-    }
-  };
-  Ok(zip_reader)
+  match stream_or_file {
+    StreamOrFile::Stream(stream) => {
+      // Occasionally, we encounter the error 'unable to locate the end of central directory record'
+      // when streaming a ZIP file to async-zip. This indicates that the ZIP reader couldn't find
+      // the necessary end-of-file marker. The issue might occur if the entire ZIP file has not been
+      // fully downloaded or buffered before the reader attempts to process the end-of-file information.
+      let reader = futures::io::BufReader::with_capacity(buffer_size, stream);
+      let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
+      Ok(ZipReader {
+        inner: async_zip::base::read::stream::ZipFileReader::new(boxed_reader),
+        file: None,
+      })
+    },
+    StreamOrFile::File(file) => {
+      let handle = fs::File::open(&file)
+        .await
+        .map_err(|err| ImportError::Internal(err.into()))?;
+      let reader = tokio::io::BufReader::with_capacity(buffer_size, handle).compat();
+      let boxed_reader: Pin<Box<dyn AsyncBufRead + Unpin + Send>> = Box::pin(reader);
+      Ok(ZipReader {
+        inner: async_zip::base::read::stream::ZipFileReader::new(boxed_reader),
+        // Make sure the lifetime of file is the same as zip reader.
+        file: Some(file),
+      })
+    },
+  }
 }
 
 /// Determines the buffer size based on the content length of the file.
@@ -782,7 +800,11 @@ async fn process_unzip_file(
 
   // 8. delete zip file regardless of success or failure
   match fs::remove_dir_all(unzip_dir_path).await {
-    Ok(_) => trace!("[Import]: {} deleted unzip file", import_task.workspace_id),
+    Ok(_) => trace!(
+      "[Import]: {} deleted unzip file: {:?}",
+      import_task.workspace_id,
+      unzip_dir_path
+    ),
     Err(err) => error!("Failed to delete unzip file: {:?}", err),
   }
 

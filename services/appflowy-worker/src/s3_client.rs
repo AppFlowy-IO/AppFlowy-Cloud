@@ -1,6 +1,7 @@
 use crate::error::WorkerError;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use aws_sdk_s3::error::SdkError;
+use std::fs::Permissions;
 
 use anyhow::Result;
 use aws_sdk_s3::operation::get_object::GetObjectError;
@@ -10,12 +11,13 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use futures::AsyncReadExt;
 use std::ops::Deref;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use tokio::fs::File;
+use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use tracing::error;
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
 #[async_trait]
@@ -133,17 +135,26 @@ pub struct S3StreamResponse {
   pub content_length: Option<i64>,
 }
 
-pub struct AutoRemoveDownloadedFile(PathBuf);
+pub struct AutoRemoveDownloadedFile {
+  zip_file_path: PathBuf,
+  pub(crate) workspace_id: String,
+}
+
+impl AutoRemoveDownloadedFile {
+  pub fn path_buf(&self) -> &PathBuf {
+    &self.zip_file_path
+  }
+}
 
 impl AsRef<Path> for AutoRemoveDownloadedFile {
   fn as_ref(&self) -> &Path {
-    &self.0
+    &self.zip_file_path
   }
 }
 
 impl AsRef<PathBuf> for AutoRemoveDownloadedFile {
   fn as_ref(&self) -> &PathBuf {
-    &self.0
+    &self.zip_file_path
   }
 }
 
@@ -151,32 +162,55 @@ impl Deref for AutoRemoveDownloadedFile {
   type Target = PathBuf;
 
   fn deref(&self) -> &Self::Target {
-    &self.0
+    &self.zip_file_path
   }
 }
 
 impl Drop for AutoRemoveDownloadedFile {
   fn drop(&mut self) {
-    let path = self.0.clone();
+    let path = self.zip_file_path.clone();
+    let _workspace_id = self.workspace_id.clone();
     tokio::spawn(async move {
-      if let Err(err) = fs::remove_file(&path).await {
-        error!(
-          "Failed to delete the auto remove downloaded file: {:?}, error: {}",
-          path, err
-        )
+      if path.exists() {
+        if let Err(err) = fs::remove_file(&path).await {
+          error!(
+            "Failed to delete the auto remove downloaded file: {:?}, error: {}",
+            path, err
+          )
+        }
       }
     });
   }
 }
 
 pub async fn download_file(
+  workspace_id: &str,
   storage_dir: &Path,
   stream: Box<dyn futures::AsyncBufRead + Unpin + Send>,
   expected_md5_base64: &Option<String>,
 ) -> Result<AutoRemoveDownloadedFile, anyhow::Error> {
-  let zip_file_path = storage_dir.join(format!("{}.zip", Uuid::new_v4()));
+  let zip_file_dir = storage_dir.join(format!("{}", Uuid::new_v4()));
+  if !zip_file_dir.exists() {
+    fs::create_dir_all(&zip_file_dir).await?;
+    let file_permissions = Permissions::from_mode(0o777);
+    fs::set_permissions(&zip_file_dir, file_permissions).await?;
+  }
+
+  let zip_file_path = zip_file_dir.join("file.zip");
+  trace!(
+    "[Import] {} start to write stream to file: {:?}",
+    workspace_id,
+    zip_file_path
+  );
   write_stream_to_file(&zip_file_path, expected_md5_base64, stream).await?;
-  Ok(AutoRemoveDownloadedFile(zip_file_path))
+  info!(
+    "[Import] {} finish writing stream to file: {:?}",
+    workspace_id, zip_file_path
+  );
+  Ok(AutoRemoveDownloadedFile {
+    zip_file_path,
+    workspace_id: workspace_id.to_string(),
+  })
 }
 
 pub async fn write_stream_to_file(
@@ -185,7 +219,14 @@ pub async fn write_stream_to_file(
   mut stream: Box<dyn futures::AsyncBufRead + Unpin + Send>,
 ) -> Result<(), anyhow::Error> {
   let mut context = md5::Context::new();
-  let mut file = File::create(file_path).await?;
+  let mut file = OpenOptions::new()
+    .write(true)
+    .create(true)
+    .truncate(true)
+    .mode(0o644)
+    .open(file_path)
+    .await
+    .map_err(|err| anyhow!("Failed to create file with permissions: {:?}", err))?;
   let mut buffer = vec![0u8; 1_048_576];
   loop {
     let bytes_read = stream.read(&mut buffer).await?;
@@ -193,7 +234,10 @@ pub async fn write_stream_to_file(
       break;
     }
     context.consume(&buffer[..bytes_read]);
-    file.write_all(&buffer[..bytes_read]).await?;
+    file
+      .write_all(&buffer[..bytes_read])
+      .await
+      .with_context(|| format!("Failed to write data to file: {:?}", file_path.as_os_str()))?;
   }
 
   let digest = context.compute();
@@ -208,6 +252,9 @@ pub async fn write_stream_to_file(
     }
   }
 
-  file.flush().await?;
+  file
+    .flush()
+    .await
+    .with_context(|| format!("Failed to flush data to file: {:?}", file_path.as_os_str()))?;
   Ok(())
 }

@@ -193,7 +193,7 @@ pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<S3ClientImpl, E
 }
 
 #[derive(Clone)]
-struct AppMetrics {
+pub struct AppMetrics {
   #[allow(dead_code)]
   registry: Arc<prometheus_client::registry::Registry>,
   import_metrics: Arc<ImportMetrics>,

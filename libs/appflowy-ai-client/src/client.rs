@@ -1,6 +1,6 @@
 use crate::dto::{
   AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, CreateTextChatContext,
-  Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
+  CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
   RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse,
   TranslateRowData, TranslateRowResponse,
 };
@@ -49,19 +49,29 @@ impl AppFlowyAIClient {
     Ok(())
   }
 
-  pub async fn completion_text(
+  pub async fn completion_text<T: Into<Option<CompletionType>>>(
     &self,
     text: &str,
-    completion_type: CompletionType,
+    completion_type: T,
+    custom_prompt: Option<CustomPrompt>,
     model: AIModel,
   ) -> Result<CompleteTextResponse, AIError> {
+    let completion_type = completion_type.into();
+
+    if completion_type.is_some() && custom_prompt.is_some() {
+      return Err(AIError::InvalidRequest(
+        "Cannot specify both completion_type and custom_prompt".to_string(),
+      ));
+    }
+
     if text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
     }
 
     let params = json!({
       "text": text,
-      "type": completion_type as u8,
+      "type": completion_type.map(|t| t as u8),
+      "custom_prompt": custom_prompt,
     });
 
     let url = format!("{}/completion", self.url);
@@ -76,19 +86,22 @@ impl AppFlowyAIClient {
       .into_data()
   }
 
-  pub async fn stream_completion_text(
+  pub async fn stream_completion_text<T: Into<Option<CompletionType>>>(
     &self,
     text: &str,
-    completion_type: CompletionType,
+    completion_type: T,
+    custom_prompt: Option<CustomPrompt>,
     model: AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+    let completion_type = completion_type.into();
     if text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
     }
 
     let params = json!({
       "text": text,
-      "type": completion_type as u8,
+      "type": completion_type.map(|t| t as u8),
+      "custom_prompt": custom_prompt,
     });
 
     let url = format!("{}/completion/stream", self.url);
@@ -201,7 +214,7 @@ impl AppFlowyAIClient {
     chat_id: &str,
     content: &str,
     model: &AIModel,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<Value>,
   ) -> Result<ChatAnswer, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
@@ -226,7 +239,7 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     content: &str,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<Value>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -251,7 +264,7 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     content: &str,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<Value>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -337,7 +350,7 @@ pub struct AIResponse<T> {
 
 impl<T> AIResponse<T>
 where
-  T: serde::de::DeserializeOwned + 'static,
+  T: DeserializeOwned + 'static,
 {
   pub async fn from_response(resp: reqwest::Response) -> Result<Self, anyhow::Error> {
     let status_code = resp.status();

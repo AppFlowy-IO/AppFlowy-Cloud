@@ -205,7 +205,7 @@ impl Display for EmbeddingsModel {
 pub enum AIModel {
   #[default]
   DefaultModel = 0,
-  GPT35 = 1,
+  GPT4oMini = 1,
   GPT4o = 2,
   Claude3Sonnet = 3,
   Claude3Opus = 4,
@@ -215,7 +215,7 @@ impl AIModel {
   pub fn to_str(&self) -> &str {
     match self {
       AIModel::DefaultModel => "default-model",
-      AIModel::GPT35 => "gpt-3.5-turbo",
+      AIModel::GPT4oMini => "gpt-4o-mini",
       AIModel::GPT4o => "gpt-4o",
       AIModel::Claude3Sonnet => "claude-3-sonnet",
       AIModel::Claude3Opus => "claude-3-opus",
@@ -228,7 +228,8 @@ impl FromStr for AIModel {
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
     match s {
-      "gpt-3.5-turbo" => Ok(AIModel::GPT35),
+      "gpt-3.5-turbo" => Ok(AIModel::GPT4oMini),
+      "gpt-4o-mini" => Ok(AIModel::GPT4oMini),
       "gpt-4o" => Ok(AIModel::GPT4o),
       "claude-3-sonnet" => Ok(AIModel::Claude3Sonnet),
       "claude-3-opus" => Ok(AIModel::Claude3Opus),
@@ -363,4 +364,10 @@ impl Display for CreateTextChatContext {
       self.metadata
     ))
   }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CustomPrompt {
+  pub system: String,
+  pub user: Option<String>,
 }

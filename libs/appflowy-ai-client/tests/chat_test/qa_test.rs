@@ -10,13 +10,13 @@ async fn qa_test() {
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
   let resp = client
-    .send_question(&chat_id, "I feel hungry", &AIModel::GPT35, None)
+    .send_question(&chat_id, "I feel hungry", &AIModel::GPT4o, None)
     .await
     .unwrap();
   assert!(!resp.content.is_empty());
 
   let questions = client
-    .get_related_question(&chat_id, &1, &AIModel::GPT35)
+    .get_related_question(&chat_id, &1, &AIModel::GPT4oMini)
     .await
     .unwrap()
     .items;
@@ -29,7 +29,7 @@ async fn stop_stream_test() {
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
   let mut stream = client
-    .stream_question(&chat_id, "I feel hungry", None, &AIModel::GPT35)
+    .stream_question(&chat_id, "I feel hungry", None, &AIModel::GPT4oMini)
     .await
     .unwrap();
 
@@ -51,7 +51,7 @@ async fn stream_test() {
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
   let stream = client
-    .stream_question_v2(&chat_id, "I feel hungry", None, &AIModel::GPT35)
+    .stream_question_v2(&chat_id, "I feel hungry", None, &AIModel::GPT4oMini)
     .await
     .unwrap();
   let json_stream = JsonStream::<serde_json::Value>::new(stream);

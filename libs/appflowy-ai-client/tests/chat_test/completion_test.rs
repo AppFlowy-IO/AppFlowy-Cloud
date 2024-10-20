@@ -8,6 +8,7 @@ async fn continue_writing_test() {
     .completion_text(
       "I feel hungry",
       CompletionType::ContinueWriting,
+      None,
       AIModel::Claude3Sonnet,
     )
     .await
@@ -23,7 +24,8 @@ async fn improve_writing_test() {
     .completion_text(
       "I fell tired because i sleep not very well last night",
       CompletionType::ImproveWriting,
-      AIModel::GPT35,
+      None,
+      AIModel::GPT4oMini,
     )
     .await
     .unwrap();
@@ -39,7 +41,8 @@ async fn make_text_shorter_text() {
     .stream_completion_text(
       "I have an immense passion and deep-seated affection for Rust, a modern, multi-paradigm, high-performance programming language that I find incredibly satisfying to use due to its focus on safety, speed, and concurrency",
       CompletionType::MakeShorter,
-      AIModel::GPT35
+      None,
+      AIModel::GPT4oMini
     )
     .await
     .unwrap();

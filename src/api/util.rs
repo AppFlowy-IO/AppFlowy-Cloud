@@ -179,5 +179,5 @@ pub(crate) fn ai_model_from_header(req: &HttpRequest) -> AIModel {
       let header = header.to_str().ok()?;
       AIModel::from_str(header).ok()
     })
-    .unwrap_or(AIModel::GPT35)
+    .unwrap_or(AIModel::GPT4oMini)
 }

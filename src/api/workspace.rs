@@ -156,8 +156,12 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_default_published_collab_info_meta_handler)),
     )
     .service(
-      web::resource("/published/{publish_namespace}/{publish_name}")
+      web::resource("/published/{publish_namespace}/{publish_name}") // Deprecated
         .route(web::get().to(get_published_collab_handler)),
+    )
+    .service(
+      web::resource("/v1/published/{publish_namespace}/{publish_name}")
+        .route(web::get().to(get_v1_published_collab_handler)),
     )
     .service(
       web::resource("/published/{publish_namespace}/{publish_name}/blob")
@@ -1218,6 +1222,7 @@ async fn get_default_published_collab_info_meta_handler(
   ))
 }
 
+/// Deprecated
 async fn get_published_collab_handler(
   path_param: web::Path<(String, String)>,
   state: Data<AppState>,
@@ -1228,6 +1233,18 @@ async fn get_published_collab_handler(
     .get_collab_metadata(&workspace_namespace, &publish_name)
     .await?;
   Ok(Json(metadata))
+}
+
+async fn get_v1_published_collab_handler(
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<serde_json::Value>>> {
+  let (workspace_namespace, publish_name) = path_param.into_inner();
+  let metadata = state
+    .published_collab_store
+    .get_collab_metadata(&workspace_namespace, &publish_name)
+    .await?;
+  Ok(Json(AppResponse::Ok().with_data(metadata)))
 }
 
 async fn get_published_collab_blob_handler(

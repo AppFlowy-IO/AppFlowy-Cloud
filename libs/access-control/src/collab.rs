@@ -5,21 +5,25 @@ use database_entity::dto::AFAccessLevel;
 
 #[async_trait]
 pub trait CollabAccessControl: Sync + Send + 'static {
+  /// Check if the user can perform the action on the collab.
+  /// Returns AppError::NotEnoughPermission if the user does not have the permission.
   async fn enforce_action(
     &self,
     workspace_id: &str,
     uid: &i64,
     oid: &str,
     action: Action,
-  ) -> Result<bool, AppError>;
+  ) -> Result<(), AppError>;
 
+  /// Check if the user has the access level in the collab.
+  /// Returns AppError::NotEnoughPermission if the user does not have the access level.
   async fn enforce_access_level(
     &self,
     workspace_id: &str,
     uid: &i64,
     oid: &str,
     access_level: AFAccessLevel,
-  ) -> Result<bool, AppError>;
+  ) -> Result<(), AppError>;
 
   /// Return the access level of the user in the collab
   async fn update_access_level_policy(

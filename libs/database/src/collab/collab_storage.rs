@@ -32,7 +32,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     oid: &str,
-  ) -> Result<bool, AppError>;
+  ) -> Result<(), AppError>;
 
   /// Enforce the user's permission to write to the collab object.
   async fn enforce_write_collab(
@@ -40,18 +40,13 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     oid: &str,
-  ) -> Result<bool, AppError>;
+  ) -> Result<(), AppError>;
 
   /// Enforce the user's permission to write to the workspace.
-  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<(), AppError>;
 
   /// Enforce the user's permission to delete the collab object.
-  async fn enforce_delete(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    oid: &str,
-  ) -> Result<bool, AppError>;
+  async fn enforce_delete(&self, workspace_id: &str, uid: &i64, oid: &str) -> Result<(), AppError>;
 }
 
 pub enum GetCollabOrigin {

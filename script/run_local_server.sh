@@ -53,7 +53,7 @@ then
   cargo sqlx prepare --workspace
 fi
 
-cargo run --package xtask
+cargo run --release --package xtask
 
 # revert to require signup email verification
 export GOTRUE_MAILER_AUTOCONFIRM=false

@@ -903,7 +903,15 @@ impl CollabPersister {
 
   async fn load_internal(&self, skip_gc: bool) -> Result<CollabSnapshot, RealtimeError> {
     // 1. Try to load the latest snapshot from storage
-    let mut collab = self.load_collab_full(skip_gc).await?;
+    let mut collab = match self.load_collab_full(skip_gc).await? {
+      Some(collab) => collab,
+      None => Collab::new_with_origin(
+        CollabOrigin::Server,
+        self.object_id.clone(),
+        vec![],
+        skip_gc,
+      ),
+    };
 
     // 2. consume all Redis updates on top of it (keep redis msg id)
     let mut last_message_id = None;
@@ -1062,7 +1070,7 @@ impl CollabPersister {
     }
   }
 
-  async fn load_collab_full(&self, keep_history: bool) -> Result<Collab, RealtimeError> {
+  async fn load_collab_full(&self, keep_history: bool) -> Result<Option<Collab>, RealtimeError> {
     let doc_state = if keep_history {
       // if we want history-keeping variant, we need to get a snapshot
       let snapshot = self
@@ -1090,12 +1098,15 @@ impl CollabPersister {
           self.collab_type.clone(),
           self.workspace_id.clone(),
         );
-        self
+        let result = self
           .storage
           .get_encode_collab(GetCollabOrigin::Server, params, false)
-          .await
-          .map_err(|err| RealtimeError::Internal(err.into()))?
-          .doc_state
+          .await;
+        match result {
+          Ok(encoded_collab) => encoded_collab.doc_state,
+          Err(AppError::RecordNotFound(_)) => return Ok(None),
+          Err(err) => return Err(RealtimeError::Internal(err.into())),
+        }
       },
     };
 
@@ -1106,7 +1117,7 @@ impl CollabPersister {
       vec![],
       keep_history, // should we use history-remembering version (true) or lightweight one (false)?
     )?;
-    Ok(collab)
+    Ok(Some(collab))
   }
 }
 

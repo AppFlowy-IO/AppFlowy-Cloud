@@ -125,16 +125,13 @@ pub async fn approve_or_reject_access_request(
   is_approved: bool,
 ) -> Result<(), AppError> {
   let access_request = select_access_request_by_request_id(pg_pool, request_id).await?;
-  let has_access = workspace_access_control
+  workspace_access_control
     .enforce_role(
       &uid,
       &access_request.workspace.workspace_id.to_string(),
       AFRole::Owner,
     )
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions);
-  }
 
   let mut txn = pg_pool.begin().await.context("approving request")?;
   let role = AFRole::Member;

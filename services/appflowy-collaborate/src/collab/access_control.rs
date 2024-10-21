@@ -35,12 +35,12 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
     workspace_id: &str,
     uid: &i64,
     oid: &str,
-  ) -> Result<bool, AppError> {
+  ) -> Result<(), AppError> {
     let collab_exists = self.cache.is_exist(oid).await?;
     if !collab_exists {
       // If the collab does not exist, we should not enforce the access control. We consider the user
       // has the permission to read the collab
-      return Ok(true);
+      return Ok(());
     }
     self
       .collab_access_control
@@ -53,12 +53,12 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
     workspace_id: &str,
     uid: &i64,
     oid: &str,
-  ) -> Result<bool, AppError> {
+  ) -> Result<(), AppError> {
     let collab_exists = self.cache.is_exist(oid).await?;
     if !collab_exists {
       // If the collab does not exist, we should not enforce the access control. we consider the user
       // has the permission to write the collab
-      return Ok(true);
+      return Ok(());
     }
     self
       .collab_access_control
@@ -66,19 +66,14 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
       .await
   }
 
-  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<(), AppError> {
     self
       .workspace_access_control
       .enforce_action(uid, workspace_id, Action::Write)
       .await
   }
 
-  async fn enforce_delete(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    oid: &str,
-  ) -> Result<bool, AppError> {
+  async fn enforce_delete(&self, workspace_id: &str, uid: &i64, oid: &str) -> Result<(), AppError> {
     self
       .collab_access_control
       .enforce_access_level(workspace_id, uid, oid, AFAccessLevel::FullAccess)

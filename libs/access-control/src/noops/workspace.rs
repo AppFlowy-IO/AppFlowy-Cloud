@@ -28,8 +28,8 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     _uid: &i64,
     _workspace_id: &str,
     _role: AFRole,
-  ) -> Result<bool, AppError> {
-    Ok(true)
+  ) -> Result<(), AppError> {
+    Ok(())
   }
 
   async fn enforce_action(
@@ -37,8 +37,8 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     _uid: &i64,
     _workspace_id: &str,
     _action: Action,
-  ) -> Result<bool, AppError> {
-    Ok(true)
+  ) -> Result<(), AppError> {
+    Ok(())
   }
 
   async fn insert_role(

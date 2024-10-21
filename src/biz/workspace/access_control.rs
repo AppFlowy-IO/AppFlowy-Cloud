@@ -122,7 +122,7 @@ impl MiddlewareAccessControl for WorkspaceMiddlewareAccessControl {
     // For example, Both AFRole::Owner and AFRole::Member have the write permission to the workspace,
     // but only the Owner can manage the workspace members.
     let require_role = self.require_role(&method, path);
-    let result = match require_role {
+    match require_role {
       Some(role) => {
         self
           .access_control
@@ -137,12 +137,6 @@ impl MiddlewareAccessControl for WorkspaceMiddlewareAccessControl {
           .enforce_action(uid, resource_id, action)
           .await
       },
-    }?;
-
-    if result {
-      Ok(())
-    } else {
-      Err(AppError::NotEnoughPermissions)
     }
   }
 }

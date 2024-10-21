@@ -86,14 +86,10 @@ where
   ) -> Result<(), AppError> {
     // If the collab doesn't exist, check if the user has enough permissions to create collab.
     // If the user is the owner or member of the workspace, the user can create collab.
-    let can_write_workspace = self
+    self
       .access_control
       .enforce_write_workspace(uid, workspace_id)
       .await?;
-
-    if !can_write_workspace {
-      return Err(AppError::NotEnoughPermissions);
-    }
     Ok(())
   }
 
@@ -104,14 +100,10 @@ where
     object_id: &str,
   ) -> Result<(), AppError> {
     // If the collab already exists, check if the user has enough permissions to update collab
-    let can_write = self
+    self
       .access_control
       .enforce_write_collab(workspace_id, uid, object_id)
       .await?;
-
-    if !can_write {
-      return Err(AppError::NotEnoughPermissions);
-    }
     Ok(())
   }
 
@@ -363,14 +355,10 @@ where
     match origin {
       GetCollabOrigin::User { uid } => {
         // Check if the user has enough permissions to access the collab
-        let can_read = self
+        self
           .access_control
           .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)
           .await?;
-
-        if !can_read {
-          return Err(AppError::NotEnoughPermissions);
-        }
       },
       GetCollabOrigin::Server => {},
     }
@@ -456,13 +444,10 @@ where
   }
 
   async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()> {
-    if !self
+    self
       .access_control
       .enforce_delete(workspace_id, uid, object_id)
-      .await?
-    {
-      return Err(AppError::NotEnoughPermissions);
-    }
+      .await?;
     self.cache.delete_collab(object_id).await?;
     Ok(())
   }

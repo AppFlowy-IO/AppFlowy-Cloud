@@ -99,7 +99,7 @@ impl AccessControl {
     uid: &i64,
     obj: ObjectType<'_>,
     act: ActionVariant<'_>,
-  ) -> Result<bool, AppError> {
+  ) -> Result<(), AppError> {
     self
       .enforcer
       .enforce_policy(workspace_id, uid, obj, act)

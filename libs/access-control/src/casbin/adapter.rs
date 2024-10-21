@@ -136,7 +136,7 @@ impl Adapter for PgAdapter {
 
     self
       .access_control_metrics
-      .record_load_all_policies_in_secs(start.elapsed().as_millis() as u64);
+      .record_load_all_policies_in_ms(start.elapsed().as_millis() as u64);
 
     Ok(())
   }

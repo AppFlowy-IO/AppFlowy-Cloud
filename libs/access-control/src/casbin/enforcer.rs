@@ -118,7 +118,7 @@ where
     uid: &i64,
     obj: ObjectType<'_>,
     act: ActionVariant<'_>,
-  ) -> Result<bool, AppError> {
+  ) -> Result<(), AppError> {
     self
       .metrics_state
       .total_read_enforce_result
@@ -159,7 +159,11 @@ where
         .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
     }
 
-    Ok(result)
+    if result {
+      Ok(())
+    } else {
+      Err(AppError::NotEnoughPermissions)
+    }
   }
 
   #[inline]
@@ -243,6 +247,7 @@ mod tests {
     },
     entity::ObjectType,
   };
+  use app_error::ErrorCode;
   use async_trait::async_trait;
   use casbin::{function_map::OperatorFunction, prelude::*};
   use database_entity::dto::{AFAccessLevel, AFRole};
@@ -298,9 +303,8 @@ mod tests {
           ObjectType::Collab(object_1),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(result);
+        .await;
+      assert!(result.is_ok());
     }
   }
 
@@ -329,9 +333,8 @@ mod tests {
           ObjectType::Workspace(workspace_id),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(result, "action={:?}", action);
+        .await;
+      assert!(result.is_ok(), "action={:?}", action);
     }
   }
 
@@ -361,9 +364,8 @@ mod tests {
           ObjectType::Collab(object_1),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(result, "action={:?}", action);
+        .await;
+      assert!(result.is_ok(), "action={:?}", action);
     }
   }
 
@@ -402,9 +404,8 @@ mod tests {
           ObjectType::Collab(object_1),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(result, "action={:?}", action);
+        .await;
+      assert!(result.is_ok(), "action={:?}", action);
     }
   }
 
@@ -443,9 +444,8 @@ mod tests {
           ObjectType::Collab(object_1),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(result, "action={:?}", action);
+        .await;
+      assert!(result.is_ok(), "action={:?}", action);
     }
   }
 
@@ -484,9 +484,8 @@ mod tests {
           ObjectType::Collab(object_1),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(result, "action={:?}", action);
+        .await;
+      assert!(result.is_ok(), "action={:?}", action);
     }
 
     let result = enforcer
@@ -496,9 +495,10 @@ mod tests {
         ObjectType::Collab(object_1),
         ActionVariant::FromAction(&Action::Delete),
       )
-      .await
-      .unwrap();
-    assert!(!result, "only the owner can perform delete")
+      .await;
+    assert!(result.is_err(), "only the owner can perform delete");
+    let error_code = result.unwrap_err().code();
+    assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
   }
 
   #[tokio::test]
@@ -530,9 +530,8 @@ mod tests {
           ObjectType::Collab(object_1),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(result, "action={:?}", action);
+        .await;
+      assert!(result.is_ok(), "action={:?}", action);
     }
 
     let result = enforcer
@@ -542,9 +541,10 @@ mod tests {
         ObjectType::Collab(object_1),
         ActionVariant::FromAction(&Action::Delete),
       )
-      .await
-      .unwrap();
-    assert!(!result, "only the owner can perform delete")
+      .await;
+    assert!(result.is_err(), "only the owner can perform delete");
+    let error_code = result.unwrap_err().code();
+    assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
   }
 
   #[tokio::test]
@@ -571,9 +571,8 @@ mod tests {
           ObjectType::Collab(object_1),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(result, "action={:?}", action);
+        .await;
+      assert!(result.is_ok(), "action={:?}", action);
     }
   }
 
@@ -598,9 +597,10 @@ mod tests {
           ObjectType::Collab(object_1),
           ActionVariant::FromAction(&action),
         )
-        .await
-        .unwrap();
-      assert!(!result, "action={:?}", action);
+        .await;
+      assert!(result.is_err(), "action={:?}", action);
+      let error_code = result.unwrap_err().code();
+      assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
     }
   }
 
@@ -630,7 +630,7 @@ mod tests {
           ActionVariant::FromRole(&role),
         )
         .await
-        .unwrap());
+        .is_ok());
       assert!(enforcer
         .enforce_policy(
           workspace_id,
@@ -639,7 +639,7 @@ mod tests {
           ActionVariant::FromRole(&role),
         )
         .await
-        .unwrap());
+        .is_ok());
     }
   }
 
@@ -662,25 +662,29 @@ mod tests {
 
     for role in [AFRole::Owner, AFRole::Member, AFRole::Guest] {
       if role == AFRole::Owner {
-        assert!(!enforcer
+        let result = enforcer
           .enforce_policy(
             workspace_id,
             &uid,
             ObjectType::Workspace(workspace_id),
             ActionVariant::FromRole(&role),
           )
-          .await
-          .unwrap());
+          .await;
+        assert!(result.is_err());
+        let error_code = result.unwrap_err().code();
+        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
 
-        assert!(!enforcer
+        let result = enforcer
           .enforce_policy(
             workspace_id,
             &uid,
             ObjectType::Collab(object_1),
             ActionVariant::FromRole(&role),
           )
-          .await
-          .unwrap());
+          .await;
+        assert!(result.is_err());
+        let error_code = result.unwrap_err().code();
+        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
       } else {
         assert!(enforcer
           .enforce_policy(
@@ -690,7 +694,7 @@ mod tests {
             ActionVariant::FromRole(&role),
           )
           .await
-          .unwrap());
+          .is_ok());
         assert!(enforcer
           .enforce_policy(
             workspace_id,
@@ -699,7 +703,7 @@ mod tests {
             ActionVariant::FromRole(&role),
           )
           .await
-          .unwrap());
+          .is_ok());
       }
     }
   }
@@ -723,15 +727,17 @@ mod tests {
 
     for role in [AFRole::Owner, AFRole::Member, AFRole::Guest] {
       if role == AFRole::Owner || role == AFRole::Member {
-        assert!(!enforcer
+        let result = enforcer
           .enforce_policy(
             workspace_id,
             &uid,
             ObjectType::Collab(object_1),
             ActionVariant::FromRole(&role),
           )
-          .await
-          .unwrap());
+          .await;
+        assert!(result.is_err());
+        let error_code = result.unwrap_err().code();
+        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
       } else {
         assert!(enforcer
           .enforce_policy(
@@ -741,7 +747,7 @@ mod tests {
             ActionVariant::FromRole(&role),
           )
           .await
-          .unwrap());
+          .is_ok());
       }
     }
   }
@@ -775,7 +781,7 @@ mod tests {
           ActionVariant::FromAccessLevel(&level),
         )
         .await
-        .unwrap());
+        .is_ok());
     }
   }
 
@@ -809,17 +815,30 @@ mod tests {
             ActionVariant::FromAccessLevel(&level),
           )
           .await
-          .unwrap());
+          .is_ok());
       } else {
-        assert!(!enforcer
+        let result = enforcer
           .enforce_policy(
             workspace_id,
             &uid,
             ObjectType::Collab(object_1),
             ActionVariant::FromAccessLevel(&level),
           )
-          .await
-          .unwrap());
+          .await;
+        assert!(result.is_err());
+        let error_code = result.unwrap_err().code();
+        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
+        let result = enforcer
+          .enforce_policy(
+            workspace_id,
+            &uid,
+            ObjectType::Collab(object_1),
+            ActionVariant::FromAccessLevel(&level),
+          )
+          .await;
+        assert!(result.is_err());
+        let error_code = result.unwrap_err().code();
+        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
       }
     }
   }

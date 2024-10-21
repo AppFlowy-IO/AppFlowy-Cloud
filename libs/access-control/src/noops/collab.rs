@@ -30,8 +30,8 @@ impl CollabAccessControl for CollabAccessControlImpl {
     _uid: &i64,
     _oid: &str,
     _action: Action,
-  ) -> Result<bool, AppError> {
-    Ok(true)
+  ) -> Result<(), AppError> {
+    Ok(())
   }
 
   async fn enforce_access_level(
@@ -40,8 +40,8 @@ impl CollabAccessControl for CollabAccessControlImpl {
     _uid: &i64,
     _oid: &str,
     _access_level: AFAccessLevel,
-  ) -> Result<bool, AppError> {
-    Ok(true)
+  ) -> Result<(), AppError> {
+    Ok(())
   }
 
   async fn update_access_level_policy(

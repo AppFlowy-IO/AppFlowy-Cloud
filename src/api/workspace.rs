@@ -290,13 +290,10 @@ async fn delete_workspace_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
   workspace::ops::delete_workspace_for_user(
     state.pg_pool.clone(),
     *workspace_id,
@@ -330,13 +327,10 @@ async fn post_workspace_invite_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
 
   let invited_members = payload.into_inner();
   workspace::ops::invite_workspace_members(
@@ -406,13 +400,10 @@ async fn get_workspace_settings_handler(
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<AFWorkspaceSettings>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
   let settings = workspace::ops::get_workspace_settings(&state.pg_pool, &workspace_id).await?;
   Ok(AppResponse::Ok().with_data(settings).into())
 }
@@ -427,13 +418,10 @@ async fn post_workspace_settings_handler(
   let data = data.into_inner();
   trace!("workspace settings: {:?}", data);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
   let settings =
     workspace::ops::update_workspace_settings(&state.pg_pool, &workspace_id, data).await?;
   Ok(AppResponse::Ok().with_data(settings).into())
@@ -446,13 +434,10 @@ async fn get_workspace_members_handler(
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<Vec<AFWorkspaceMember>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
   let members = workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
     .await?
     .into_iter()
@@ -475,13 +460,10 @@ async fn remove_workspace_member_handler(
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
 
   let member_emails = payload
     .into_inner()
@@ -508,13 +490,10 @@ async fn get_workspace_member_handler(
 ) -> Result<JsonAppResponse<AFWorkspaceMember>> {
   let (workspace_id, user_uuid_to_retrieved) = path.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
   let member_row =
     workspace::ops::get_workspace_member(&user_uuid_to_retrieved, &state.pg_pool, &workspace_id)
       .await?;
@@ -565,13 +544,10 @@ async fn update_workspace_member_handler(
 ) -> Result<JsonAppResponse<()>> {
   let workspace_id = workspace_id.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
 
   let changeset = payload.into_inner();
 
@@ -898,13 +874,10 @@ async fn get_page_view_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_action(&uid, &workspace_uuid.to_string(), Action::Read)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
 
   let page_collab = get_page_view_collab(
     &state.pg_pool,
@@ -1550,13 +1523,10 @@ async fn get_workspace_folder_handler(
   let depth = query.depth.unwrap_or(1);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
-  let has_access = state
+  state
     .workspace_access_control
     .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
     .await?;
-  if !has_access {
-    return Err(AppError::NotEnoughPermissions.into());
-  }
   let root_view_id = if let Some(root_view_id) = query.root_view_id.as_ref() {
     root_view_id.to_string()
   } else {

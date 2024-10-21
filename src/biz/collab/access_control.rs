@@ -101,25 +101,19 @@ impl MiddlewareAccessControl for CollabMiddlewareAccessControl {
     }
 
     let access_level = self.require_access_level(&method, path);
-    let result = match access_level {
+    match access_level {
       None => {
         self
           .access_control
           .enforce_action(workspace_id, uid, oid, Action::from(&method))
-          .await?
+          .await
       },
       Some(access_level) => {
         self
           .access_control
           .enforce_access_level(workspace_id, uid, oid, access_level)
-          .await?
+          .await
       },
-    };
-
-    if result {
-      Ok(())
-    } else {
-      Err(AppError::NotEnoughPermissions)
     }
   }
 }

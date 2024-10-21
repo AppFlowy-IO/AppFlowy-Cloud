@@ -27,7 +27,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     uid: &i64,
     workspace_id: &str,
     role: AFRole,
-  ) -> Result<bool, AppError> {
+  ) -> Result<(), AppError> {
     self
       .access_control
       .enforce(
@@ -44,7 +44,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     uid: &i64,
     workspace_id: &str,
     action: Action,
-  ) -> Result<bool, AppError> {
+  ) -> Result<(), AppError> {
     self
       .access_control
       .enforce(

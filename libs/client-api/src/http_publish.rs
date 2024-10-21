@@ -292,7 +292,7 @@ impl Client {
     publish_name: &str,
   ) -> Result<T, AppResponseError>
   where
-    T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned + 'static,
   {
     tracing::debug!(
       "get_published_collab: {} {}",
@@ -300,7 +300,7 @@ impl Client {
       publish_name
     );
     let url = format!(
-      "{}/api/workspace/published/{}/{}",
+      "{}/api/workspace/v1/published/{}/{}",
       self.base_url, publish_namespace, publish_name
     );
 
@@ -312,15 +312,7 @@ impl Client {
       .error_for_status()?;
     log_request_id(&resp);
 
-    let txt = resp.text().await?;
-
-    if let Ok(app_err) = serde_json::from_str::<AppResponseError>(&txt) {
-      return Err(app_err);
-    }
-
-    let meta = serde_json::from_str::<T>(&txt)?;
-
-    Ok(meta)
+    AppResponse::<T>::from_response(resp).await?.into_data()
   }
 
   #[instrument(level = "debug", skip_all)]

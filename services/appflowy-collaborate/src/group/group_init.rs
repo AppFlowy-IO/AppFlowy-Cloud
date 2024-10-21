@@ -316,6 +316,7 @@ impl CollabGroup {
           if let Err(err) = state.persister.save().await {
             tracing::warn!("failed to persist document on shutdown `{}`: {}", state.object_id, err);
           }
+          break;
         }
       }
     }

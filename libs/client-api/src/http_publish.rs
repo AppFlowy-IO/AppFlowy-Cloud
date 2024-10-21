@@ -300,7 +300,7 @@ impl Client {
       publish_name
     );
     let url = format!(
-      "{}/v1/api/workspace/published/{}/{}",
+      "{}/api/workspace/v1/published/{}/{}",
       self.base_url, publish_namespace, publish_name
     );
 

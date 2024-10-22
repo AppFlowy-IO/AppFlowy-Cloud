@@ -7,6 +7,7 @@ mod search;
 mod server_info;
 mod sql_test;
 mod user;
+mod util;
 mod websocket;
 mod workspace;
 mod yrs_version;

@@ -392,6 +392,10 @@ async fn test_template_crud() {
   assert_eq!(template.categories[0].id, category_2.id);
   assert_eq!(template.related_templates.len(), 1);
   assert_eq!(template.related_templates[0].view_id, published_view_ids[0]);
+  assert_eq!(
+    template.publish_info.namespace.unwrap(),
+    published_view_namespace.clone()
+  );
 
   let params = UpdateTemplateParams {
     name: format!("{}-{}", template_name_prefix, published_view_ids[3]),

@@ -8,8 +8,8 @@ use database_entity::dto::{
   AvatarImageSource, CreateTemplateCategoryParams, CreateTemplateCreatorParams,
   CreateTemplateParams, GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams,
   GetTemplatesQueryParams, Template, TemplateCategories, TemplateCategory, TemplateCreator,
-  TemplateCreators, TemplateHomePage, TemplateHomePageQueryParams, Templates,
-  UpdateTemplateCategoryParams, UpdateTemplateCreatorParams, UpdateTemplateParams,
+  TemplateCreators, TemplateHomePage, TemplateHomePageQueryParams, TemplateWithPublishInfo,
+  Templates, UpdateTemplateCategoryParams, UpdateTemplateCreatorParams, UpdateTemplateParams,
 };
 use reqwest::StatusCode;
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -235,10 +235,10 @@ async fn list_templates_handler(
 async fn get_template_handler(
   view_id: web::Path<Uuid>,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<Template>> {
+) -> Result<JsonAppResponse<TemplateWithPublishInfo>> {
   let view_id = view_id.into_inner();
-  let template = get_template(&state.pg_pool, view_id).await?;
-  Ok(Json(AppResponse::Ok().with_data(template)))
+  let template_with_pub_info = get_template_with_publish_info(&state.pg_pool, view_id).await?;
+  Ok(Json(AppResponse::Ok().with_data(template_with_pub_info)))
 }
 
 async fn update_template_handler(

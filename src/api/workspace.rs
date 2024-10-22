@@ -266,13 +266,18 @@ async fn create_workspace_handler(
   Ok(AppResponse::Ok().with_data(new_workspace).into())
 }
 
-// Adds a workspace for user, if success, return the workspace id
+// Edit existing workspace
 #[instrument(skip_all, err)]
 async fn patch_workspace_handler(
-  _uuid: UserUuid,
+  uuid: UserUuid,
   state: Data<AppState>,
   params: Json<PatchWorkspaceParam>,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &params.workspace_id.to_string(), Action::Write)
+    .await?;
   let params = params.into_inner();
   workspace::ops::patch_workspace(
     &state.pg_pool,
@@ -292,7 +297,7 @@ async fn delete_workspace_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Delete)
     .await?;
   workspace::ops::delete_workspace_for_user(
     state.pg_pool.clone(),
@@ -380,8 +385,6 @@ async fn post_accept_workspace_invite_handler(
   let user_uuid = auth.uuid()?;
   let user_uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let invite_id = invite_id.into_inner();
-  // TODO(zack): insert a workspace member in the af_workspace_member by calling  workspace::ops::add_workspace_members.
-  // Currently, when the server get restarted, the policy in access control will be lost.
   workspace::ops::accept_workspace_invite(
     &state.pg_pool,
     state.workspace_access_control.clone(),
@@ -514,6 +517,11 @@ async fn open_workspace_handler(
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<AFWorkspace>> {
   let workspace_id = workspace_id.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let workspace = workspace::ops::open_workspace(&state.pg_pool, &user_uuid, &workspace_id).await?;
   Ok(AppResponse::Ok().with_data(workspace).into())
 }
@@ -1133,6 +1141,11 @@ async fn put_workspace_default_published_view_handler(
   payload: Json<UpdateDefaultPublishView>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
   let new_default_pub_view_id = payload.into_inner().view_id;
   biz::workspace::publish::set_workspace_default_publish_view(
     &state.pg_pool,
@@ -1162,6 +1175,11 @@ async fn put_publish_namespace_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let workspace_id = workspace_id.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
   let new_namespace = payload.into_inner().new_namespace;
   biz::workspace::publish::set_workspace_namespace(
     &state.pg_pool,
@@ -1239,6 +1257,10 @@ async fn post_published_duplicate_handler(
   params: Json<PublishedDuplicate>,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let params = params.into_inner();
   biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
     &state.pg_pool,
@@ -1505,6 +1527,11 @@ async fn get_workspace_usage_handler(
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<WorkspaceUsage>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let res = biz::workspace::ops::get_workspace_document_total_bytes(
     &state.pg_pool,
     &user_uuid,
@@ -1551,6 +1578,10 @@ async fn get_recent_views_handler(
 ) -> Result<Json<AppResponse<SectionItems>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let folder_views = get_user_recent_folder_views(
     &state.collab_access_control_storage,
     &state.pg_pool,
@@ -1571,6 +1602,10 @@ async fn get_favorite_views_handler(
 ) -> Result<Json<AppResponse<SectionItems>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let folder_views = get_user_favorite_folder_views(
     &state.collab_access_control_storage,
     &state.pg_pool,
@@ -1591,6 +1626,10 @@ async fn get_trash_views_handler(
 ) -> Result<Json<AppResponse<SectionItems>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let folder_views =
     get_user_trash_folder_views(&state.collab_access_control_storage, uid, workspace_id).await?;
   let section_items = SectionItems {

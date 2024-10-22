@@ -21,8 +21,7 @@ use tracing::{error, event, instrument};
 use uuid::Uuid;
 
 /// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
-/// provided `object_id`.Additionally, if the row is being inserted for the first time, a corresponding
-/// entry will be added to the `af_collab_member` table.
+/// provided `object_id`.
 ///
 /// # Arguments
 ///
@@ -100,43 +99,7 @@ pub async fn insert_into_af_collab(
       }
     },
     None => {
-      // If the collab doesn't exist, insert a new row into the `af_collab` table and add a corresponding
-      // entry to the `af_collab_member` table.
-      let permission_id: i32 = sqlx::query_scalar!(
-        r#"
-          SELECT rp.permission_id
-          FROM af_role_permissions rp
-          JOIN af_roles ON rp.role_id = af_roles.id
-          WHERE af_roles.name = 'Owner';
-        "#
-      )
-      .fetch_one(tx.deref_mut())
-      .await?;
-
-      sqlx::query!(
-        r#"
-        INSERT INTO af_collab_member (uid, oid, permission_id)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (uid, oid)
-        DO UPDATE
-          SET permission_id = excluded.permission_id;
-        "#,
-        uid,
-        params.object_id,
-        permission_id
-      )
-      .execute(tx.deref_mut())
-      .await
-      .map_err(|err| {
-        AppError::Internal(anyhow!(
-          "Insert af_collab_member failed: {}:{}:{}. error details:{:?}",
-          uid,
-          params.object_id,
-          permission_id,
-          err
-        ))
-      })?;
-
+      // If the collab doesn't exist, insert a new row into the `af_collab` table.
       sqlx::query!(
         "INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)\
           VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -165,8 +128,8 @@ pub async fn insert_into_af_collab(
 /// owner of the workspace.
 ///
 /// This function performs a bulk insert or update operation for collaboration records (`af_collab`)
-/// and corresponding member records (`af_collab_member`) for a given user and workspace. It processes a
-/// list of collaboration parameters (`CollabParams`) and ensures that the data is inserted efficiently.
+/// for a given user and workspace. It processes a list of collaboration parameters (`CollabParams`) and
+/// ensures that the data is inserted efficiently.
 ///
 /// It will return error: ON CONFLICT DO UPDATE command cannot affect row a second time, when you're
 /// trying to insert duplicate rows with the same constrained values in a single INSERT statement.
@@ -236,20 +199,8 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(len);
   let mut lengths: Vec<i32> = Vec::with_capacity(len);
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
-  let mut permission_ids: Vec<i32> = Vec::with_capacity(len);
   let uids: Vec<i64> = vec![*uid; collab_params_list.len()];
   let workspace_ids: Vec<Uuid> = vec![workspace_uuid; collab_params_list.len()];
-
-  let permission_id: i32 = sqlx::query_scalar!(
-    r#"
-      SELECT rp.permission_id
-      FROM af_role_permissions rp
-      JOIN af_roles ON rp.role_id = af_roles.id
-      WHERE af_roles.name = 'Owner';
-    "#
-  )
-  .fetch_one(tx.deref_mut())
-  .await?;
 
   for params in collab_params_list {
     let partition_key = partition_key_from_collab_type(&params.collab_type);
@@ -257,30 +208,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
     blobs.push(params.encoded_collab_v1.to_vec());
     lengths.push(params.encoded_collab_v1.len() as i32);
     partition_keys.push(partition_key);
-    permission_ids.push(permission_id);
   }
-
-  // Bulk insert into `af_collab_member` for the user and provided collab params
-  sqlx::query!(
-    r#"
-      INSERT INTO af_collab_member (uid, oid, permission_id)
-      SELECT * FROM UNNEST($1::bigint[], $2::uuid[], $3::int[])
-      ON CONFLICT (uid, oid)
-      DO NOTHING;
-    "#,
-    &uids,
-    &object_ids,
-    &permission_ids
-  )
-  .execute(tx.deref_mut())
-  .await
-  .map_err(|err| {
-    AppError::Internal(anyhow!(
-      "Bulk insert/update into af_collab_member failed for uid: {}, error details: {:?}",
-      uid,
-      err
-    ))
-  })?;
 
   // Bulk insert into `af_collab` for the provided collab params
   sqlx::query!(

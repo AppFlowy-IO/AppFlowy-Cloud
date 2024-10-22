@@ -1,3 +1,4 @@
+use access_control::act::Action;
 use actix_web::web::{Data, Query};
 use actix_web::{web, Scope};
 use uuid::Uuid;
@@ -24,6 +25,10 @@ async fn document_search(
   let request = payload.into_inner();
   let user_uuid = auth.uuid()?;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let metrics = &*state.metrics.request_metrics;
   let resp = search_document(
     &state.pg_pool,

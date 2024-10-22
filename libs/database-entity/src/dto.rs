@@ -408,7 +408,7 @@ pub struct AFCollabMember {
   pub permission: AFPermission,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PublishInfo {
   pub namespace: Option<String>,
   pub publish_name: String,
@@ -1220,7 +1220,7 @@ pub enum TemplateCategoryType {
   Feature = 1,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TemplateCategory {
   pub id: Uuid,
   pub name: String,
@@ -1231,7 +1231,7 @@ pub struct TemplateCategory {
   pub priority: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TemplateCategoryMinimal {
   pub id: Uuid,
   pub name: String,
@@ -1270,13 +1270,13 @@ pub struct TemplateCreators {
   pub creators: Vec<TemplateCreator>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AccountLink {
   pub link_type: String,
   pub url: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TemplateCreator {
   pub id: Uuid,
   pub name: String,
@@ -1285,7 +1285,7 @@ pub struct TemplateCreator {
   pub number_of_templates: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TemplateCreatorMinimal {
   pub id: Uuid,
   pub name: String,
@@ -1328,6 +1328,43 @@ pub struct Template {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateWithPublishInfo {
+  pub view_id: Uuid,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+  pub name: String,
+  pub description: String,
+  pub about: String,
+  pub view_url: String,
+  pub categories: Vec<TemplateCategory>,
+  pub creator: TemplateCreator,
+  pub is_new_template: bool,
+  pub is_featured: bool,
+  pub related_templates: Vec<TemplateMinimal>,
+  pub publish_info: PublishInfo,
+}
+
+impl TemplateWithPublishInfo {
+  pub fn from_template_and_publish_info(template: &Template, publish_info: &PublishInfo) -> Self {
+    Self {
+      view_id: template.view_id,
+      created_at: template.created_at,
+      last_updated_at: template.last_updated_at,
+      name: template.name.clone(),
+      description: template.description.clone(),
+      about: template.about.clone(),
+      view_url: template.view_url.clone(),
+      categories: template.categories.clone(),
+      creator: template.creator.clone(),
+      is_new_template: template.is_new_template,
+      is_featured: template.is_featured,
+      related_templates: template.related_templates.clone(),
+      publish_info: publish_info.clone(),
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TemplateMinimal {
   pub view_id: Uuid,
   pub created_at: DateTime<Utc>,

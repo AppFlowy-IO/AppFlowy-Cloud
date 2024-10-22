@@ -6,11 +6,12 @@ use app_error::ErrorCode;
 use aws_sdk_s3::primitives::ByteStream;
 use database::{
   file::{s3_client_impl::AwsS3BucketClientImpl, BucketClient, ResponseBlob},
+  publish::select_published_collab_info,
   template::*,
 };
 use database_entity::dto::{
   AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateHomePage,
-  TemplateMinimal,
+  TemplateMinimal, TemplateWithPublishInfo,
 };
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
@@ -247,9 +248,15 @@ pub async fn get_templates(
   Ok(templates)
 }
 
-pub async fn get_template(pg_pool: &PgPool, view_id: Uuid) -> Result<Template, AppResponseError> {
+pub async fn get_template_with_publish_info(
+  pg_pool: &PgPool,
+  view_id: Uuid,
+) -> Result<TemplateWithPublishInfo, AppResponseError> {
   let template = select_template_view_by_id(pg_pool, view_id).await?;
-  Ok(template)
+  let pub_info = select_published_collab_info(pg_pool, &view_id).await?;
+  let template_with_pub_info =
+    TemplateWithPublishInfo::from_template_and_publish_info(&template, &pub_info);
+  Ok(template_with_pub_info)
 }
 
 pub async fn delete_template(pg_pool: &PgPool, view_id: Uuid) -> Result<(), AppResponseError> {

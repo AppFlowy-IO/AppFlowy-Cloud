@@ -195,18 +195,20 @@ impl CollabGroup {
   }
 
   async fn handle_inbound_update(state: &CollabGroupState, update: CollabStreamUpdate) {
-    tracing::trace!(
-      "broadcasting collab update from {} ({} bytes)",
-      update.sender,
-      update.data.len()
-    );
     // update state vector based on incoming message
     let mut sv = state.state_vector.write().await;
     sv.merge(update.state_vector);
     drop(sv);
 
     let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst);
-    let message = BroadcastSync::new(update.sender, state.object_id.clone(), update.data, seq_num);
+    tracing::trace!(
+      "broadcasting collab update from {} ({} bytes) - seq_num: {}",
+      update.sender,
+      update.data.len(),
+      seq_num
+    );
+    let payload = Message::Sync(SyncMessage::Update(update.data)).encode_v1();
+    let message = BroadcastSync::new(update.sender, state.object_id.clone(), payload, seq_num);
     for mut e in state.subscribers.iter_mut() {
       let subscription = e.value_mut();
       if message.origin == subscription.collab_origin {
@@ -625,6 +627,7 @@ impl CollabGroup {
     }
 
     // we need to reconstruct document state on the server side
+    tracing::debug!("loading collab {}", state.object_id);
     let snapshot = state
       .persister
       .load()
@@ -890,7 +893,7 @@ impl CollabPersister {
     };
     let msg_id = self.awareness_sink.send(&update).await?;
     tracing::trace!(
-      "persisted update from {} ({} bytes) - msg id: {}",
+      "persisted awareness from {} ({} bytes) - msg id: {}",
       update.sender,
       len,
       msg_id
@@ -961,6 +964,7 @@ impl CollabPersister {
   }
 
   async fn save(&self) -> Result<(), RealtimeError> {
+    tracing::debug!("requesting save for collab {}", self.object_id);
     let mut snapshot = self.load_internal(true).await?;
     if let Some(message_id) = &snapshot.last_message_id {
       // non-nil message_id means that we had to update the most recent collab state snapshot

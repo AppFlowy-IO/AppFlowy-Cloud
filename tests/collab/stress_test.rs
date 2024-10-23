@@ -6,59 +6,76 @@ use serde_json::json;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use client_api_test::{assert_server_collab, TestClient};
-
 use super::util::TestScenario;
+use client_api_test::{assert_server_collab, TestClient};
+use database_entity::dto::AFRole;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn run_multiple_text_edits() {
+  const READER_COUNT: usize = 1;
   let test_scenario = Arc::new(TestScenario::open(
     "./tests/collab/asset/automerge-paper.json.gz",
   ));
-  let mut tasks = Vec::new();
-  for _i in 0..1 {
-    let test_scenario = test_scenario.clone();
-    let task = tokio::spawn(async move {
-      let mut new_user = TestClient::new_user().await;
-      // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
-      sleep(Duration::from_secs(2)).await;
+  // create writer
+  let mut writer = TestClient::new_user().await;
+  sleep(Duration::from_secs(2)).await; // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
 
-      let object_id = Uuid::new_v4().to_string();
-      let workspace_id = new_user.workspace_id().await;
-      // the big doc_state will force the init_sync using the http request.
-      // It will trigger the POST_REALTIME_MESSAGE_STREAM_HANDLER to handle the request.
-      new_user
-        .open_collab(&workspace_id, &object_id, CollabType::Unknown)
-        .await;
+  let object_id = Uuid::new_v4().to_string();
+  let workspace_id = writer.workspace_id().await;
 
-      let collab = new_user.collabs.get(&object_id).unwrap().collab.clone();
-      test_scenario.execute(collab).await;
+  writer
+    .open_collab(&workspace_id, &object_id, CollabType::Unknown)
+    .await;
 
-      new_user
-        .wait_object_sync_complete(&object_id)
-        .await
-        .unwrap();
-      (new_user, object_id, workspace_id)
-    });
-    tasks.push(task);
+  // create readers and invite them into the same workspace
+  let mut readers = Vec::with_capacity(READER_COUNT);
+  for _ in 0..READER_COUNT {
+    let mut reader = TestClient::new_user().await;
+    sleep(Duration::from_secs(2)).await; // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
+    writer
+      .invite_and_accepted_workspace_member(&workspace_id, &reader, AFRole::Member)
+      .await
+      .unwrap();
+
+    reader
+      .open_collab(&workspace_id, &object_id, CollabType::Unknown)
+      .await;
+
+    readers.push(reader);
   }
 
+  // run test scenario
+  let collab = writer.collabs.get(&object_id).unwrap().collab.clone();
+  let expected = test_scenario.execute(collab).await;
+
+  // wait for the writer to complete sync
+  writer.wait_object_sync_complete(&object_id).await.unwrap();
+
+  // wait for the readers to complete sync
+  let mut tasks = Vec::with_capacity(READER_COUNT);
+  for reader in readers.iter() {
+    let fut = reader.wait_object_sync_complete(&object_id);
+    tasks.push(fut);
+  }
   let results = futures::future::join_all(tasks).await;
-  for result in results.into_iter() {
-    let (mut client, object_id, workspace_id) = result.unwrap();
+
+  // make sure that the readers are in correct state
+  for res in results {
+    res.unwrap();
+  }
+
+  for mut reader in readers.drain(..) {
     assert_server_collab(
       &workspace_id,
-      &mut client.api_client,
+      &mut reader.api_client,
       &object_id,
-      &CollabType::Document,
+      &CollabType::Unknown,
       10,
       json!({
-        "text-id": &test_scenario.end_content,
+        "text-id": &expected,
       }),
     )
     .await
     .unwrap();
-
-    drop(client);
   }
 }

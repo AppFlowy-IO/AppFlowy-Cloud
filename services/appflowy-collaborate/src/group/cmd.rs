@@ -323,7 +323,7 @@ struct NullSender<T> {
 impl<T> Default for NullSender<T> {
   fn default() -> Self {
     NullSender {
-      _marker: PhantomData::default(),
+      _marker: PhantomData,
     }
   }
 }

@@ -41,7 +41,7 @@ jobs:
       - name: Build and Push GoTrue
         run: |
           export TAG=${GITHUB_REF#refs/*/}
-          docker buildx build --platform linux/amd64,linux/arm64 -t appflowyinc/gotrue:${TAG} -t appflowyinc/gotrue:latest -f gotrue/Dockerfile --push docker/gotrue
+          docker buildx build --platform linux/amd64,linux/arm64 -t appflowyinc/gotrue:${TAG} -t appflowyinc/gotrue:latest -f docker/gotrue/Dockerfile --push docker/gotrue
 
   appflowy_cloud_image:
     runs-on: ubuntu-22.04

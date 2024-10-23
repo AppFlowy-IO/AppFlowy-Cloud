@@ -43,7 +43,7 @@ impl Encode for Message {
       },
       Message::Awareness(update) => {
         encoder.write_var(MSG_AWARENESS);
-        encoder.write_buf(&update)
+        encoder.write_buf(update)
       },
       Message::Custom(msg) => {
         encoder.write_var(MSG_CUSTOM);

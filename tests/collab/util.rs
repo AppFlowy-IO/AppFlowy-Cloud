@@ -136,9 +136,9 @@ impl TestScenario {
   pub async fn execute(&self, collab: CollabRef) -> String {
     let len = self.txns.len();
     let start = Instant::now();
-    for (i, t) in self.txns.iter().take(50_000).enumerate() {
+    for (i, t) in self.txns.iter().enumerate() {
       if i % 10_000 == 0 {
-        tracing::trace!("step #{}/{} - {:?}", i + 1, len, start.elapsed());
+        tracing::info!("step #{}/{} - {:?}", i + 1, len, start.elapsed());
       }
       let mut lock = collab.write().await;
       let collab = lock.borrow_mut();

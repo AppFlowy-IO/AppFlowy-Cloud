@@ -216,7 +216,6 @@ members = [
     "libs/appflowy-ai-client",
     "libs/client-api-entity",
     # services
-    "services/appflowy-history",
     "services/appflowy-collaborate",
     "services/appflowy-worker",
     # xtask

@@ -12,11 +12,9 @@ use tokio::select;
 #[tokio::main]
 async fn main() -> Result<()> {
   let appflowy_cloud_bin_name = "appflowy_cloud";
-  let history = "appflowy_history";
   let worker = "appflowy_worker";
 
   kill_existing_process(appflowy_cloud_bin_name).await?;
-  kill_existing_process(history).await?;
   kill_existing_process(worker).await?;
 
   let mut appflowy_cloud_cmd = Command::new("cargo")

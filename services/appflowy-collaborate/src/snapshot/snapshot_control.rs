@@ -37,7 +37,6 @@ pub enum SnapshotCommand {
 }
 
 #[derive(Clone)]
-// #[deprecated(note = "snapshot is implemented in the appflowy-history")]
 pub struct SnapshotControl {
   cache: SnapshotCache,
   command_sender: SnapshotCommandSender,

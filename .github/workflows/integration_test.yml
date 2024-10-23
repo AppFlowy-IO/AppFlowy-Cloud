@@ -43,18 +43,15 @@ jobs:
 
       - name: Build Docker Images
         run: |
-          docker compose build appflowy_cloud appflowy_history appflowy_worker
+          docker compose build appflowy_cloud appflowy_worker
 
       - name: Push docker images to docker hub
         run: |
           docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
-          docker tag appflowyinc/appflowy_history appflowyinc/appflowy_history:${GITHUB_SHA}
           docker tag appflowyinc/appflowy_worker appflowyinc/appflowy_worker:${GITHUB_SHA}
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
-          docker push appflowyinc/appflowy_history:${GITHUB_SHA}
           docker push appflowyinc/appflowy_worker:${GITHUB_SHA}
-          APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
           APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           APPFLOWY_CLOUD_VERSION=0.1.1
 
@@ -66,9 +63,7 @@ jobs:
       matrix:
         include:
           - test_service: "appflowy_cloud"
-            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --features ai-test-enabled"
-          - test_service: "appflowy_history"
-            test_cmd: "-p appflowy-history"
+            test_cmd: "--workspace --exclude appflowy-ai-client --features ai-test-enabled"
           - test_service: "appflowy_worker"
             test_cmd: "-p appflowy-worker"
     steps:
@@ -106,7 +101,6 @@ jobs:
 
       - name: Run Docker-Compose
         run: |
-          export APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
           export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           export APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
           export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}

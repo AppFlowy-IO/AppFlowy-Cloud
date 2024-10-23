@@ -361,6 +361,15 @@ async fn test_template_crud() {
   assert_eq!(templates.len(), 2);
   assert!(view_ids.contains(&published_view_ids[2]));
   assert!(view_ids.contains(&published_view_ids[3]));
+  assert_eq!(
+    templates[0]
+      .publish_info
+      .namespace
+      .as_ref()
+      .unwrap()
+      .to_string(),
+    published_view_namespace.clone()
+  );
 
   let featured_templates = guest_client
     .get_templates(None, Some(true), None, Some(template_name_prefix.clone()))

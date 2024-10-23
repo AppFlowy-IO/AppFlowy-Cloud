@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use redis::aio::ConnectionManager;
 use redis::Value;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tracing::log;
 
 const RELEASE_SCRIPT: &str = r#"
 if redis.call("GET", KEYS[1]) == ARGV[1] then
@@ -45,11 +46,11 @@ impl LeaseAcquisition {
 impl Drop for LeaseAcquisition {
   fn drop(&mut self) {
     if let Some(conn) = self.conn.take() {
-      tokio::spawn(Self::release_internal(
-        conn,
-        self.stream_key.clone(),
-        self.token,
-      ));
+      tokio::spawn(async move {
+        if let Err(err) = Self::release_internal(conn, self.stream_key.clone(), self.token).await {
+          log::error!("error while releasing lease (drop): {}", err);
+        }
+      });
     }
   }
 }

@@ -133,7 +133,7 @@ impl TestScenario {
     data
   }
 
-  pub async fn execute(&self, collab: CollabRef) {
+  pub async fn execute(&self, collab: CollabRef) -> String {
     for t in self.txns.iter() {
       let mut lock = collab.write().await;
       let collab = lock.borrow_mut();
@@ -161,5 +161,6 @@ impl TestScenario {
     let txt: TextRef = collab.data.get_with_txn(&txn, "text-id").unwrap();
     let actual = txt.get_string(&txn);
     assert_eq!(actual, expected);
+    actual
   }
 }

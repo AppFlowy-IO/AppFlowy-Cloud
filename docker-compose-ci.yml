@@ -146,20 +146,6 @@ services:
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
       - APPFLOWY_AI_DATABASE_URL=${APPFLOWY_AI_DATABASE_URL}
 
-  appflowy_history:
-    restart: on-failure
-    build:
-      context: .
-      dockerfile: ./services/appflowy-history/Dockerfile
-    image: appflowyinc/appflowy_history:${APPFLOWY_HISTORY_VERSION:-latest}
-    ports:
-      - "50051:50051"
-    environment:
-      - RUST_LOG=${RUST_LOG:-info}
-      - APPFLOWY_HISTORY_REDIS_URL=redis://redis:6379
-      - APPFLOWY_HISTORY_ENVIRONMENT=production
-      - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
-
   appflowy_worker:
     restart: on-failure
     image: appflowyinc/appflowy_worker:${APPFLOWY_WORKER_VERSION:-latest}

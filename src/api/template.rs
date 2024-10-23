@@ -219,7 +219,7 @@ async fn list_templates_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<Templates>> {
   let data = data.into_inner();
-  let template_summary_list = get_templates(
+  let template_summary_list = get_templates_with_publish_info(
     &state.pg_pool,
     data.category_id,
     data.is_featured,

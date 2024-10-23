@@ -357,6 +357,32 @@ pub async fn select_default_published_view_id<'a, E: Executor<'a, Database = Pos
   Ok(res)
 }
 
+pub async fn select_published_collab_info_for_view_ids<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_ids: &[Uuid],
+) -> Result<Vec<PublishInfo>, AppError> {
+  let res = sqlx::query_as!(
+    PublishInfo,
+    r#"
+      SELECT
+        aw.publish_namespace AS namespace,
+        apc.publish_name,
+        apc.view_id,
+        au.email AS publisher_email,
+        apc.created_at AS publish_timestamp
+      FROM af_published_collab apc
+      JOIN af_user au ON apc.published_by = au.uid
+      JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
+      WHERE apc.view_id = ANY($1);
+    "#,
+    view_ids,
+  )
+  .fetch_all(executor)
+  .await?;
+
+  Ok(res)
+}
+
 pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   view_id: &Uuid,

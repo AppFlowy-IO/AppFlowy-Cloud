@@ -427,8 +427,7 @@ impl FromRedisValue for CollabStreamUpdateBatch {
               None => CollabOrigin::Empty,
               Some(sender) => {
                 let raw_origin = String::from_redis_value(sender)?;
-                let collab_origin = collab_origin_from_str(&raw_origin)?;
-                collab_origin
+                collab_origin_from_str(&raw_origin)?
               },
             };
             let state_vector = match fields.get("sv") {
@@ -495,8 +494,7 @@ impl FromRedisValue for AwarenessStreamUpdateBatch {
               None => CollabOrigin::Empty,
               Some(sender) => {
                 let raw_origin = String::from_redis_value(sender)?;
-                let collab_origin = collab_origin_from_str(&raw_origin)?;
-                collab_origin
+                collab_origin_from_str(&raw_origin)?
               },
             };
             let data_raw = fields

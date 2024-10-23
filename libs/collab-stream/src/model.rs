@@ -583,7 +583,7 @@ impl From<u8> for UpdateFlags {
 
 impl Display for UpdateFlags {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    if self.is_v2_encoded() {
+    if !self.is_v2_encoded() {
       write!(f, ".v1")?;
     } else {
       write!(f, ".v2")?;

@@ -1,4 +1,4 @@
-use std::{ops::DerefMut, path::Path};
+use std::{collections::HashMap, ops::DerefMut, path::Path};
 
 use actix_multipart::form::bytes::Bytes as MPBytes;
 use anyhow::Context;
@@ -6,12 +6,12 @@ use app_error::ErrorCode;
 use aws_sdk_s3::primitives::ByteStream;
 use database::{
   file::{s3_client_impl::AwsS3BucketClientImpl, BucketClient, ResponseBlob},
-  publish::select_published_collab_info,
+  publish::{select_published_collab_info, select_published_collab_info_for_view_ids},
   template::*,
 };
 use database_entity::dto::{
-  AccountLink, Template, TemplateCategory, TemplateCategoryType, TemplateCreator, TemplateHomePage,
-  TemplateMinimal, TemplateWithPublishInfo,
+  AccountLink, PublishInfo, Template, TemplateCategory, TemplateCategoryType, TemplateCreator,
+  TemplateHomePage, TemplateMinimalWithPublishInfo, TemplateWithPublishInfo,
 };
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
@@ -229,13 +229,13 @@ pub async fn update_template(
   Ok(updated_template)
 }
 
-pub async fn get_templates(
+pub async fn get_templates_with_publish_info(
   pg_pool: &PgPool,
   category_id: Option<Uuid>,
   is_featured: Option<bool>,
   is_new_template: Option<bool>,
   name_contains: Option<&str>,
-) -> Result<Vec<TemplateMinimal>, AppResponseError> {
+) -> Result<Vec<TemplateMinimalWithPublishInfo>, AppResponseError> {
   let templates = select_templates(
     pg_pool,
     category_id,
@@ -245,7 +245,28 @@ pub async fn get_templates(
     None,
   )
   .await?;
-  Ok(templates)
+  let view_ids = templates.iter().map(|t| t.view_id).collect::<Vec<Uuid>>();
+  let publish_info_for_views =
+    select_published_collab_info_for_view_ids(pg_pool, &view_ids).await?;
+  let mut publish_info_map = publish_info_for_views
+    .into_iter()
+    .map(|info| (info.view_id, info))
+    .collect::<HashMap<Uuid, PublishInfo>>();
+  let templates_with_publish_info: Vec<TemplateMinimalWithPublishInfo> = templates
+    .into_iter()
+    .filter_map(|template| {
+      publish_info_map
+        .remove(&template.view_id)
+        .map(|pub_info| TemplateMinimalWithPublishInfo::from((template, pub_info)))
+    })
+    .collect();
+  if templates_with_publish_info.len() != view_ids.len() {
+    return Err(AppResponseError::new(
+      ErrorCode::Internal,
+      "one or more templates does not have a publish info",
+    ));
+  }
+  Ok(templates_with_publish_info)
 }
 
 pub async fn get_template_with_publish_info(
@@ -254,8 +275,7 @@ pub async fn get_template_with_publish_info(
 ) -> Result<TemplateWithPublishInfo, AppResponseError> {
   let template = select_template_view_by_id(pg_pool, view_id).await?;
   let pub_info = select_published_collab_info(pg_pool, &view_id).await?;
-  let template_with_pub_info =
-    TemplateWithPublishInfo::from_template_and_publish_info(&template, &pub_info);
+  let template_with_pub_info = TemplateWithPublishInfo::from((template, pub_info));
   Ok(template_with_pub_info)
 }
 

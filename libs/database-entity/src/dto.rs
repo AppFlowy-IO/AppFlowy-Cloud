@@ -1344,22 +1344,22 @@ pub struct TemplateWithPublishInfo {
   pub publish_info: PublishInfo,
 }
 
-impl TemplateWithPublishInfo {
-  pub fn from_template_and_publish_info(template: &Template, publish_info: &PublishInfo) -> Self {
+impl From<(Template, PublishInfo)> for TemplateWithPublishInfo {
+  fn from((template, publish_info): (Template, PublishInfo)) -> Self {
     Self {
       view_id: template.view_id,
       created_at: template.created_at,
       last_updated_at: template.last_updated_at,
-      name: template.name.clone(),
-      description: template.description.clone(),
-      about: template.about.clone(),
-      view_url: template.view_url.clone(),
-      categories: template.categories.clone(),
-      creator: template.creator.clone(),
+      name: template.name,
+      description: template.description,
+      about: template.about,
+      view_url: template.view_url,
+      categories: template.categories,
+      creator: template.creator,
       is_new_template: template.is_new_template,
       is_featured: template.is_featured,
-      related_templates: template.related_templates.clone(),
-      publish_info: publish_info.clone(),
+      related_templates: template.related_templates,
+      publish_info,
     }
   }
 }
@@ -1378,9 +1378,42 @@ pub struct TemplateMinimal {
   pub is_featured: bool,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TemplateMinimalWithPublishInfo {
+  pub view_id: Uuid,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+  pub name: String,
+  pub description: String,
+  pub view_url: String,
+  pub creator: TemplateCreatorMinimal,
+  pub categories: Vec<TemplateCategoryMinimal>,
+  pub is_new_template: bool,
+  pub is_featured: bool,
+  pub publish_info: PublishInfo,
+}
+
+impl From<(TemplateMinimal, PublishInfo)> for TemplateMinimalWithPublishInfo {
+  fn from((template, publish_info): (TemplateMinimal, PublishInfo)) -> Self {
+    Self {
+      view_id: template.view_id,
+      created_at: template.created_at,
+      last_updated_at: template.last_updated_at,
+      name: template.name,
+      description: template.description,
+      view_url: template.view_url,
+      creator: template.creator,
+      categories: template.categories,
+      is_new_template: template.is_new_template,
+      is_featured: template.is_featured,
+      publish_info,
+    }
+  }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Templates {
-  pub templates: Vec<TemplateMinimal>,
+  pub templates: Vec<TemplateMinimalWithPublishInfo>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

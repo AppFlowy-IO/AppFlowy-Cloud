@@ -341,7 +341,7 @@ impl CollabGroup {
   }
 
   pub async fn remove_user(&self, user: &RealtimeUser) {
-    if let Some(_) = self.state.subscribers.remove(user) {
+    if self.state.subscribers.remove(user).is_some() {
       trace!(
         "{} remove subscriber from group: {}",
         self.state.object_id,
@@ -381,7 +381,12 @@ impl CollabGroup {
     ));
 
     let sub = Subscription::new(sink, subscriber_origin, subscriber_shutdown);
-    if let Some(_) = self.state.subscribers.insert((*user).clone(), sub) {
+    if self
+      .state
+      .subscribers
+      .insert((*user).clone(), sub)
+      .is_some()
+    {
       tracing::warn!("{}: remove old subscriber: {}", &self.state.object_id, user);
     }
 
@@ -507,7 +512,7 @@ impl CollabGroup {
     state.metrics.acquire_collab_lock_count.inc();
 
     // Spawn a blocking task to handle the message
-    let result = Self::handle_message(state, &payload, &message_origin, msg_id).await;
+    let result = Self::handle_message(state, payload, &message_origin, msg_id).await;
 
     match result {
       Ok(inner_result) => match inner_result {
@@ -530,11 +535,9 @@ impl CollabGroup {
     let mut decoder = DecoderV1::from(payload);
     let reader = MessageReader::new(&mut decoder);
     let mut ack_response = None;
-    let mut is_sync_step2 = false;
     for msg in reader {
       match msg {
         Ok(msg) => {
-          is_sync_step2 = matches!(msg, Message::Sync(SyncMessage::SyncStep2(_)));
           match Self::handle_protocol_message(state, message_origin, msg).await {
             Ok(payload) => {
               state.metrics.apply_update_count.inc();
@@ -615,7 +618,7 @@ impl CollabGroup {
     if let Ok(sv) = state.state_vector.try_read() {
       // we optimistically try to obtain state vector lock for a fast track:
       // if we remote sv is up-to-date with current one, we don't need to do anything
-      match sv.partial_cmp(&remote_sv) {
+      match sv.partial_cmp(remote_sv) {
         Some(std::cmp::Ordering::Equal) => return Ok(None), // client and server are in sync
         Some(std::cmp::Ordering::Less) => {
           // server is behind client
@@ -1067,7 +1070,7 @@ impl CollabPersister {
 
   async fn embeddings(&self, collab: &Collab) -> Result<Option<AFCollabEmbeddings>, AppError> {
     if let Some(indexer) = self.indexer.clone() {
-      let params = indexer.embedding_params(&collab)?;
+      let params = indexer.embedding_params(collab)?;
       let embeddings = indexer.embeddings(params).await?;
       Ok(embeddings)
     } else {

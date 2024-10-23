@@ -200,7 +200,7 @@ impl CollabGroup {
     sv.merge(update.state_vector);
     drop(sv);
 
-    let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst);
+    let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
     tracing::trace!(
       "broadcasting collab update from {} ({} bytes) - seq_num: {}",
       update.sender,
@@ -493,7 +493,7 @@ impl CollabGroup {
         message_origin,
         state.object_id.to_string(),
         msg_id,
-        state.seq_no.fetch_add(1, Ordering::SeqCst),
+        state.seq_no.load(Ordering::SeqCst),
       ));
     }
 
@@ -547,7 +547,7 @@ impl CollabGroup {
                     message_origin.clone(),
                     state.object_id.to_string(),
                     msg_id,
-                    state.seq_no.fetch_add(1, Ordering::SeqCst),
+                    state.seq_no.load(Ordering::SeqCst),
                   )
                   .with_payload(payload.unwrap_or_default()),
                 );
@@ -571,7 +571,7 @@ impl CollabGroup {
                   message_origin.clone(),
                   state.object_id.to_string(),
                   msg_id,
-                  state.seq_no.fetch_add(1, Ordering::SeqCst),
+                  state.seq_no.load(Ordering::SeqCst),
                 )
                 .with_code(code)
                 .with_payload(payload),

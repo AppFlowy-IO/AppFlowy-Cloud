@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use collab::core::origin::CollabOrigin;
@@ -134,7 +134,12 @@ impl TestScenario {
   }
 
   pub async fn execute(&self, collab: CollabRef) -> String {
-    for t in self.txns.iter() {
+    let len = self.txns.len();
+    let start = Instant::now();
+    for (i, t) in self.txns.iter().take(50_000).enumerate() {
+      if i % 10_000 == 0 {
+        tracing::trace!("step #{}/{} - {:?}", i + 1, len, start.elapsed());
+      }
       let mut lock = collab.write().await;
       let collab = lock.borrow_mut();
       let mut txn = collab.context.transact_mut();

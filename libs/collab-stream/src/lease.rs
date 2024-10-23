@@ -46,8 +46,10 @@ impl LeaseAcquisition {
 impl Drop for LeaseAcquisition {
   fn drop(&mut self) {
     if let Some(conn) = self.conn.take() {
+      let stream_key = self.stream_key.clone();
+      let token = self.token;
       tokio::spawn(async move {
-        if let Err(err) = Self::release_internal(conn, self.stream_key.clone(), self.token).await {
+        if let Err(err) = Self::release_internal(conn, stream_key, token).await {
           log::error!("error while releasing lease (drop): {}", err);
         }
       });
@@ -113,7 +115,7 @@ mod test {
   #[tokio::test]
   async fn lease_acquisition() {
     let redis_client = Client::open("redis://localhost:6379").unwrap();
-    let mut conn = redis_client.get_connection_manager().await.unwrap();
+    let conn = redis_client.get_connection_manager().await.unwrap();
 
     let l1 = conn
       .lease("stream1".into(), std::time::Duration::from_secs(1))

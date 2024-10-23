@@ -384,19 +384,6 @@ where
       .map(|item| item.map_err(|err| AIError::Internal(err.into())));
     Ok(stream)
   }
-
-  pub async fn json_stream_response(
-    resp: reqwest::Response,
-  ) -> Result<impl Stream<Item = Result<T, AIError>>, AIError> {
-    let status_code = resp.status();
-    if !status_code.is_success() {
-      let body = resp.text().await?;
-      return Err(AIError::Internal(anyhow!(body)));
-    }
-
-    let stream = resp.bytes_stream().map_err(AIError::from);
-    Ok(JsonStream::new(stream))
-  }
 }
 impl From<reqwest::Error> for AIError {
   fn from(error: reqwest::Error) -> Self {
@@ -412,64 +399,5 @@ impl From<reqwest::Error> for AIError {
       };
     }
     AIError::Internal(error.into())
-  }
-}
-
-#[pin_project]
-pub struct JsonStream<T> {
-  stream: Pin<Box<dyn Stream<Item = Result<Bytes, AIError>> + Send>>,
-  buffer: Vec<u8>,
-  _marker: PhantomData<T>,
-}
-
-impl<T> JsonStream<T> {
-  pub fn new<S>(stream: S) -> Self
-  where
-    S: Stream<Item = Result<Bytes, AIError>> + Send + 'static,
-  {
-    JsonStream {
-      stream: Box::pin(stream),
-      buffer: Vec::new(),
-      _marker: PhantomData,
-    }
-  }
-}
-
-impl<T> Stream for JsonStream<T>
-where
-  T: DeserializeOwned,
-{
-  type Item = Result<T, AIError>;
-
-  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    let this = self.project();
-
-    match ready!(this.stream.as_mut().poll_next(cx)) {
-      Some(Ok(bytes)) => {
-        this.buffer.extend_from_slice(&bytes);
-        let de = StreamDeserializer::new(SliceRead::new(this.buffer));
-        let mut iter = de.into_iter();
-        if let Some(result) = iter.next() {
-          match result {
-            Ok(value) => {
-              let remaining = iter.byte_offset();
-              this.buffer.drain(0..remaining);
-              Poll::Ready(Some(Ok(value)))
-            },
-            Err(err) => {
-              if err.is_eof() {
-                Poll::Pending
-              } else {
-                Poll::Ready(Some(Err(AIError::Internal(err.into()))))
-              }
-            },
-          }
-        } else {
-          Poll::Pending
-        }
-      },
-      Some(Err(err)) => Poll::Ready(Some(Err(err))),
-      None => Poll::Ready(None),
-    }
   }
 }

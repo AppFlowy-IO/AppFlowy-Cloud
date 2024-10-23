@@ -81,6 +81,7 @@ impl<T> JsonStream<T> {
     }
   }
 }
+
 impl<T> Stream for JsonStream<T>
 where
   T: DeserializeOwned,

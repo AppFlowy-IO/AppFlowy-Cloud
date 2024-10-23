@@ -1,7 +1,7 @@
 use crate::ai_test::util::read_text_from_asset;
 use appflowy_ai_client::dto::{ChatContextLoader, CreateTextChatContext};
 use assert_json_diff::assert_json_eq;
-use client_api::entity::QuestionStreamValue;
+use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{local_ai_test_enabled, TestClient};
 use database_entity::dto::{
   ChatMessage, ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams,
@@ -35,16 +35,12 @@ async fn create_chat_and_create_messages_test() {
   let mut messages = vec![];
   for i in 0..10 {
     let params = CreateChatMessageParams::new_system(format!("hello world {}", i));
-    let message = test_client
+    let question = test_client
       .api_client
-      .create_question_answer(&workspace_id, &chat_id, params)
+      .create_question(&workspace_id, &chat_id, params)
       .await
-      .unwrap()
-      .next()
-      .await
-      .unwrap()
       .unwrap();
-    messages.push(message);
+    messages.push(question);
   }
   // DESC is the default order
   messages.reverse();
@@ -199,87 +195,18 @@ async fn generate_chat_message_answer_test() {
     .await
     .unwrap();
   let params = CreateChatMessageParams::new_user("where is singapore?");
-  let stream = test_client
-    .api_client
-    .create_question_answer(&workspace_id, &chat_id, params)
-    .await
-    .unwrap();
-  let messages: Vec<ChatMessage> = stream.map(|message| message.unwrap()).collect().await;
-  assert_eq!(messages.len(), 2);
-
-  let answer = test_client
-    .api_client
-    .get_answer(&workspace_id, &chat_id, messages[0].message_id)
-    .await
-    .unwrap();
-
-  let remote_messages = test_client
-    .api_client
-    .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 2)
-    .await
-    .unwrap()
-    .messages;
-
-  assert_eq!(remote_messages.len(), 2);
-  assert_eq!(remote_messages[0].message_id, answer.message_id);
-}
-
-#[tokio::test]
-async fn generate_stream_answer_test() {
-  if !local_ai_test_enabled() {
-    return;
-  }
-  let test_client = TestClient::new_user_without_ws_conn().await;
-  let workspace_id = test_client.workspace_id().await;
-  let chat_id = uuid::Uuid::new_v4().to_string();
-  let params = CreateChatParams {
-    chat_id: chat_id.clone(),
-    name: "my second chat".to_string(),
-    rag_ids: vec![],
-  };
-
-  test_client
-    .api_client
-    .create_chat(&workspace_id, params)
-    .await
-    .unwrap();
-  let params = CreateChatMessageParams::new_user("Teach me how to write a article?");
   let question = test_client
     .api_client
     .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
-
-  // test v1 api endpoint
-  let mut answer_stream = test_client
-    .api_client
-    .stream_answer(&workspace_id, &chat_id, question.message_id)
-    .await
-    .unwrap();
-  let mut answer_v1 = String::new();
-  while let Some(message) = answer_stream.next().await {
-    let message = message.unwrap();
-    let s = String::from_utf8(message.to_vec()).unwrap();
-    answer_v1.push_str(&s);
-  }
-  assert!(!answer_v1.is_empty());
-
-  // test v2 api endpoint
-  let mut answer_stream = test_client
+  let answer_stream = test_client
     .api_client
     .stream_answer_v2(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
-  let mut answer_v2 = String::new();
-  while let Some(value) = answer_stream.next().await {
-    match value.unwrap() {
-      QuestionStreamValue::Answer { value } => {
-        answer_v2.push_str(&value);
-      },
-      QuestionStreamValue::Metadata { .. } => {},
-    }
-  }
-  assert!(!answer_v2.is_empty());
+  let answer = collect_answer(answer_stream).await;
+  assert!(!answer.is_empty());
 }
 
 #[tokio::test]
@@ -385,3 +312,16 @@ async fn create_chat_context_test() {
 //   // when the question was updated, the answer should be different
 //   assert_ne!(remote_messages[1].content, messages[1].content);
 // }
+
+async fn collect_answer(mut stream: QuestionStream) -> String {
+  let mut answer = String::new();
+  while let Some(value) = stream.next().await {
+    match value.unwrap() {
+      QuestionStreamValue::Answer { value } => {
+        answer.push_str(&value);
+      },
+      QuestionStreamValue::Metadata { .. } => {},
+    }
+  }
+  answer
+}

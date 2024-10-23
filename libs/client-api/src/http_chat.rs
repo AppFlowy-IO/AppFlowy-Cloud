@@ -98,27 +98,6 @@ impl Client {
       .into_data()
   }
 
-  /// Ask AI with a question for given question's message_id
-  pub async fn stream_answer(
-    &self,
-    workspace_id: &str,
-    chat_id: &str,
-    question_message_id: i64,
-  ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/{question_message_id}/answer/stream",
-      self.base_url
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .timeout(Duration::from_secs(30))
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::answer_response_stream(resp).await
-  }
-
   pub async fn stream_answer_v2(
     &self,
     workspace_id: &str,
@@ -140,8 +119,6 @@ impl Client {
     Ok(QuestionStream::new(stream))
   }
 
-  /// Generate an answer for given question's message_id. The same as ask_question but return ChatMessage
-  /// instead of stream of Bytes
   pub async fn get_answer(
     &self,
     workspace_id: &str,
@@ -239,27 +216,6 @@ impl Client {
     AppResponse::<RepeatedChatMessage>::from_response(resp)
       .await?
       .into_data()
-  }
-
-  /// It's no longer used in the frontend application since 0.6.0 version.
-  pub async fn create_question_answer(
-    &self,
-    workspace_id: &str,
-    chat_id: &str,
-    params: CreateChatMessageParams,
-  ) -> Result<impl Stream<Item = Result<ChatMessage, AppResponseError>>, AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/message",
-      self.base_url
-    );
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatMessage>::json_response_stream(resp).await
   }
 
   pub async fn create_chat_context(

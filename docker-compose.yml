@@ -43,8 +43,8 @@ services:
   gotrue:
     restart: on-failure
     build:
-      context: .
-      dockerfile: docker/gotrue.Dockerfile
+      context: docker/gotrue
+      dockerfile: docker/gotrue/Dockerfile
     image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     environment:
       # There are a lot of options to configure GoTrue. You can reference the example config:

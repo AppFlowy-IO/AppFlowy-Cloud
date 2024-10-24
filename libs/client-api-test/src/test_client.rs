@@ -40,8 +40,8 @@ use database_entity::dto::{
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use shared_entity::dto::workspace_dto::{
-  BlobMetadata, CollabResponse, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
-  WorkspaceSpaceUsage,
+  BlobMetadata, CollabResponse, PublishedDuplicate, WorkspaceMemberChangeset,
+  WorkspaceMemberInvitation, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
 
@@ -927,6 +927,28 @@ impl TestClient {
       .publish_collabs(workspace_id, pub_items)
       .await
       .unwrap();
+  }
+
+  pub async fn duplicate_published_to_workspace(
+    &self,
+    dest_workspace_id: &str,
+    src_view_id: &str,
+    dest_view_id: &str,
+  ) {
+    self
+      .api_client
+      .duplicate_published_to_workspace(
+        &dest_workspace_id,
+        &PublishedDuplicate {
+          published_view_id: src_view_id.to_string(),
+          dest_view_id: dest_view_id.to_string(),
+        },
+      )
+      .await
+      .unwrap();
+
+    // wait a while for folder collab to be synced
+    tokio::time::sleep(Duration::from_secs(1)).await;
   }
 }
 

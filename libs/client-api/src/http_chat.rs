@@ -10,7 +10,7 @@ use pin_project::pin_project;
 use reqwest::Method;
 use serde_json::Value;
 use shared_entity::dto::ai_dto::{
-  CreateTextChatContext, RepeatedRelatedQuestion, STEAM_ANSWER_KEY, STEAM_METADATA_KEY,
+  CreateTextChatContext, RepeatedRelatedQuestion, STREAM_ANSWER_KEY, STREAM_METADATA_KEY,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::pin::Pin;
@@ -278,12 +278,12 @@ impl Stream for QuestionStream {
     return match ready!(this.stream.as_mut().poll_next(cx)) {
       Some(Ok(value)) => match value {
         Value::Object(mut value) => {
-          if let Some(metadata) = value.remove(STEAM_METADATA_KEY) {
+          if let Some(metadata) = value.remove(STREAM_METADATA_KEY) {
             return Poll::Ready(Some(Ok(QuestionStreamValue::Metadata { value: metadata })));
           }
 
           if let Some(answer) = value
-            .remove(STEAM_ANSWER_KEY)
+            .remove(STREAM_ANSWER_KEY)
             .and_then(|s| s.as_str().map(ToString::to_string))
           {
             return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: answer })));

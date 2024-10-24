@@ -6,22 +6,15 @@ use crate::dto::{
 };
 use crate::error::AIError;
 
-use futures::{ready, Stream, StreamExt, TryStreamExt};
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
 use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, StreamDeserializer, Value};
-
-use anyhow::anyhow;
-use pin_project::pin_project;
 use serde::de::DeserializeOwned;
-use serde_json::de::SliceRead;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
 use std::borrow::Cow;
-use std::marker::PhantomData;
-use std::pin::Pin;
 
-use bytes::Bytes;
-use std::task::{Context, Poll};
 use std::time::Duration;
 use tracing::{info, trace};
 

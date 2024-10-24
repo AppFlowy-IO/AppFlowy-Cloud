@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-pub const STEAM_METADATA_KEY: &str = "0";
-pub const STEAM_ANSWER_KEY: &str = "1";
+pub const STREAM_METADATA_KEY: &str = "0";
+pub const STREAM_ANSWER_KEY: &str = "1";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
   pub text: String,

@@ -10,6 +10,9 @@ use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
+use shared_entity::dto::workspace_dto::FavoriteFolderView;
+use shared_entity::dto::workspace_dto::RecentFolderView;
+use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
 use std::ops::DerefMut;
 
@@ -28,7 +31,9 @@ use database_entity::dto::{
 };
 
 use super::folder_view::collab_folder_to_folder_view;
-use super::folder_view::section_items_to_folder_view;
+use super::folder_view::section_items_to_favorite_folder_view;
+use super::folder_view::section_items_to_recent_folder_view;
+use super::folder_view::section_items_to_trash_folder_view;
 use super::publish_outline::collab_folder_to_published_outline;
 
 /// Create a new collab member
@@ -163,7 +168,7 @@ pub async fn get_user_favorite_folder_views(
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
-) -> Result<Vec<FolderView>, AppError> {
+) -> Result<Vec<FavoriteFolderView>, AppError> {
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
@@ -185,7 +190,7 @@ pub async fn get_user_favorite_folder_views(
     .into_iter()
     .filter(|s| !deleted_section_item_ids.contains(&s.id))
     .collect();
-  Ok(section_items_to_folder_view(
+  Ok(section_items_to_favorite_folder_view(
     &favorite_section_items,
     &folder,
     &publish_view_ids,
@@ -197,7 +202,7 @@ pub async fn get_user_recent_folder_views(
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
-) -> Result<Vec<FolderView>, AppError> {
+) -> Result<Vec<RecentFolderView>, AppError> {
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
@@ -219,7 +224,7 @@ pub async fn get_user_recent_folder_views(
     .into_iter()
     .map(|id| id.to_string())
     .collect();
-  Ok(section_items_to_folder_view(
+  Ok(section_items_to_recent_folder_view(
     &recent_section_items,
     &folder,
     &publish_view_ids,
@@ -230,7 +235,7 @@ pub async fn get_user_trash_folder_views(
   collab_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
-) -> Result<Vec<FolderView>, AppError> {
+) -> Result<Vec<TrashFolderView>, AppError> {
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
@@ -238,11 +243,7 @@ pub async fn get_user_trash_folder_views(
   )
   .await?;
   let section_items = folder.get_my_trash_sections();
-  Ok(section_items_to_folder_view(
-    &section_items,
-    &folder,
-    &HashSet::default(),
-  ))
+  Ok(section_items_to_trash_folder_view(&section_items, &folder))
 }
 
 pub async fn get_user_workspace_structure(

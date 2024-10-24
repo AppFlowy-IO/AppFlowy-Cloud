@@ -1575,7 +1575,7 @@ async fn get_recent_views_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<SectionItems>>> {
+) -> Result<Json<AppResponse<RecentSectionItems>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
   state
@@ -1589,7 +1589,7 @@ async fn get_recent_views_handler(
     workspace_id,
   )
   .await?;
-  let section_items = SectionItems {
+  let section_items = RecentSectionItems {
     views: folder_views,
   };
   Ok(Json(AppResponse::Ok().with_data(section_items)))
@@ -1599,7 +1599,7 @@ async fn get_favorite_views_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<SectionItems>>> {
+) -> Result<Json<AppResponse<FavoriteSectionItems>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
   state
@@ -1613,7 +1613,7 @@ async fn get_favorite_views_handler(
     workspace_id,
   )
   .await?;
-  let section_items = SectionItems {
+  let section_items = FavoriteSectionItems {
     views: folder_views,
   };
   Ok(Json(AppResponse::Ok().with_data(section_items)))
@@ -1623,7 +1623,7 @@ async fn get_trash_views_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<SectionItems>>> {
+) -> Result<Json<AppResponse<TrashSectionItems>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
   state
@@ -1632,7 +1632,7 @@ async fn get_trash_views_handler(
     .await?;
   let folder_views =
     get_user_trash_folder_views(&state.collab_access_control_storage, uid, workspace_id).await?;
-  let section_items = SectionItems {
+  let section_items = TrashSectionItems {
     views: folder_views,
   };
   Ok(Json(AppResponse::Ok().with_data(section_items)))

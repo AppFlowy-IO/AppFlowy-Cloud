@@ -18,7 +18,7 @@ CREATE OR REPLACE FUNCTION update_updated_at_column_func() RETURNS TRIGGER AS $$
 RETURN NEW;
 END;
 $$ language 'plpgsql';
-CREATE TRIGGER update_af_user_modtime BEFORE
+CREATE OR REPLACE TRIGGER update_af_user_modtime BEFORE
 UPDATE ON af_user FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column_func();
 CREATE OR REPLACE FUNCTION prevent_reset_encryption_sign_func() RETURNS TRIGGER AS $$ BEGIN IF OLD.encryption_sign IS NOT NULL
     AND NEW.encryption_sign IS DISTINCT
@@ -27,20 +27,5 @@ END IF;
 RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-CREATE TRIGGER trigger_prevent_reset_encryption_sign BEFORE
+CREATE OR REPLACE TRIGGER trigger_prevent_reset_encryption_sign BEFORE
 UPDATE ON af_user FOR EACH ROW EXECUTE FUNCTION prevent_reset_encryption_sign_func();
-
--- Enable RLS on the af_user table
--- Policy for INSERT
-ALTER TABLE af_user ENABLE ROW LEVEL SECURITY;
-CREATE POLICY af_user_insert_policy ON public.af_user FOR
-INSERT TO anon,
-    authenticated WITH CHECK (true);
--- Policy for UPDATE
-CREATE POLICY af_user_update_policy ON public.af_user FOR
-UPDATE USING (true) WITH CHECK (true);
--- Policy for SELECT
-CREATE POLICY af_user_select_policy ON public.af_user FOR
-SELECT TO anon,
-    authenticated USING (true);
-ALTER TABLE af_user FORCE ROW LEVEL SECURITY;

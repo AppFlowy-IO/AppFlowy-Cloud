@@ -237,7 +237,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .await
     .unwrap_err();
 
-  assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
+  assert_eq!(error.code, ErrorCode::RecordNotFound);
 }
 
 #[tokio::test]

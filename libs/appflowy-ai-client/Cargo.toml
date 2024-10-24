@@ -22,6 +22,7 @@ appflowy-ai-client = { path = ".", features = ["dto", "client-api"] }
 tokio = { version = "1.37.0", features = ["macros", "test-util"] }
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json"] }
 uuid = { workspace = true, features = ["v4"] }
+infra.workspace = true
 
 [features]
 default = ["client-api"]

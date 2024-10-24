@@ -938,7 +938,7 @@ impl TestClient {
     self
       .api_client
       .duplicate_published_to_workspace(
-        &dest_workspace_id,
+        dest_workspace_id,
         &PublishedDuplicate {
           published_view_id: src_view_id.to_string(),
           dest_view_id: dest_view_id.to_string(),

@@ -85,14 +85,17 @@ async fn get_section_items() {
   .unwrap();
   let favorite_section_items = c.get_workspace_favorite(&workspace_id).await.unwrap();
   assert_eq!(favorite_section_items.views.len(), 1);
-  assert_eq!(favorite_section_items.views[0].view_id, new_favorite_id);
+  assert_eq!(
+    favorite_section_items.views[0].view.view_id,
+    new_favorite_id
+  );
   let trash_section_items = c.get_workspace_trash(&workspace_id).await.unwrap();
   assert_eq!(trash_section_items.views.len(), 1);
   assert_eq!(
-    trash_section_items.views[0].view_id,
+    trash_section_items.views[0].view.view_id,
     to_be_deleted_favorite_id
   );
   let recent_section_items = c.get_workspace_recent(&workspace_id).await.unwrap();
   assert_eq!(recent_section_items.views.len(), 1);
-  assert_eq!(recent_section_items.views[0].view_id, recent_id);
+  assert_eq!(recent_section_items.views[0].view.view_id, recent_id);
 }

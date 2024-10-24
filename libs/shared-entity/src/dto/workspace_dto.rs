@@ -143,6 +143,42 @@ pub struct PublishedDuplicate {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct RecentFolderView {
+  #[serde(flatten)]
+  pub view: FolderView,
+  pub last_viewed_at: DateTime<Utc>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct FavoriteFolderView {
+  #[serde(flatten)]
+  pub view: FolderView,
+  pub favorited_at: DateTime<Utc>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct TrashFolderView {
+  #[serde(flatten)]
+  pub view: FolderView,
+  pub deleted_at: DateTime<Utc>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct RecentSectionItems {
+  pub views: Vec<RecentFolderView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct FavoriteSectionItems {
+  pub views: Vec<FavoriteFolderView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct TrashSectionItems {
+  pub views: Vec<TrashFolderView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FolderView {
   pub view_id: String,
   pub name: String,
@@ -171,11 +207,6 @@ pub struct FolderViewMinimal {
 pub struct PublishInfoView {
   pub view: FolderViewMinimal,
   pub info: PublishInfo,
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct SectionItems {
-  pub views: Vec<FolderView>,
 }
 
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]

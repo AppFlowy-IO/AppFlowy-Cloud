@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use app_error::AppError;
 use chrono::DateTime;
 use collab_folder::{Folder, SectionItem, ViewLayout as CollabFolderViewLayout};
-use shared_entity::dto::workspace_dto::{FolderView, FolderViewMinimal, ViewLayout};
+use shared_entity::dto::workspace_dto::{
+  FavoriteFolderView, FolderView, FolderViewMinimal, RecentFolderView, TrashFolderView, ViewLayout,
+};
 
 /// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
 pub fn collab_folder_to_folder_view(
@@ -116,27 +118,96 @@ fn to_folder_view(
   })
 }
 
-pub fn section_items_to_folder_view(
+pub fn section_items_to_favorite_folder_view(
   section_items: &[SectionItem],
   folder: &Folder,
   published_view_ids: &HashSet<String>,
-) -> Vec<FolderView> {
+) -> Vec<FavoriteFolderView> {
   section_items
     .iter()
     .filter_map(|section_item| {
       let view = folder.get_view(&section_item.id);
-      view.map(|v| FolderView {
-        view_id: v.id.clone(),
-        name: v.name.clone(),
-        icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
-        is_space: false,
-        is_private: false,
-        is_published: published_view_ids.contains(&v.id),
-        created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
-        last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
-        layout: to_dto_view_layout(&v.layout),
-        extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
-        children: vec![],
+      view.map(|v| {
+        let folder_view = FolderView {
+          view_id: v.id.clone(),
+          name: v.name.clone(),
+          icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
+          is_space: false,
+          is_private: false,
+          is_published: published_view_ids.contains(&v.id),
+          created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
+          layout: to_dto_view_layout(&v.layout),
+          extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+          children: vec![],
+        };
+        FavoriteFolderView {
+          view: folder_view,
+          favorited_at: DateTime::from_timestamp(section_item.timestamp, 0).unwrap_or_default(),
+        }
+      })
+    })
+    .collect()
+}
+
+pub fn section_items_to_recent_folder_view(
+  section_items: &[SectionItem],
+  folder: &Folder,
+  published_view_ids: &HashSet<String>,
+) -> Vec<RecentFolderView> {
+  section_items
+    .iter()
+    .filter_map(|section_item| {
+      let view = folder.get_view(&section_item.id);
+      view.map(|v| {
+        let folder_view = FolderView {
+          view_id: v.id.clone(),
+          name: v.name.clone(),
+          icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
+          is_space: false,
+          is_private: false,
+          is_published: published_view_ids.contains(&v.id),
+          created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
+          layout: to_dto_view_layout(&v.layout),
+          extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+          children: vec![],
+        };
+        RecentFolderView {
+          view: folder_view,
+          last_viewed_at: DateTime::from_timestamp(section_item.timestamp, 0).unwrap_or_default(),
+        }
+      })
+    })
+    .collect()
+}
+
+pub fn section_items_to_trash_folder_view(
+  section_items: &[SectionItem],
+  folder: &Folder,
+) -> Vec<TrashFolderView> {
+  section_items
+    .iter()
+    .filter_map(|section_item| {
+      let view = folder.get_view(&section_item.id);
+      view.map(|v| {
+        let folder_view = FolderView {
+          view_id: v.id.clone(),
+          name: v.name.clone(),
+          icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
+          is_space: false,
+          is_private: false,
+          is_published: false,
+          created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
+          layout: to_dto_view_layout(&v.layout),
+          extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+          children: vec![],
+        };
+        TrashFolderView {
+          view: folder_view,
+          deleted_at: DateTime::from_timestamp(section_item.timestamp, 0).unwrap_or_default(),
+        }
       })
     })
     .collect()

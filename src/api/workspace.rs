@@ -493,9 +493,10 @@ async fn get_workspace_member_handler(
 ) -> Result<JsonAppResponse<AFWorkspaceMember>> {
   let (workspace_id, user_uuid_to_retrieved) = path.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  // Guest users can not get workspace members
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
     .await?;
   let member_row =
     workspace::ops::get_workspace_member(&user_uuid_to_retrieved, &state.pg_pool, &workspace_id)
@@ -605,6 +606,11 @@ async fn create_collab_handler(
   };
 
   let (mut params, workspace_id) = params.split();
+  // TODO: replace this with collab access control
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
 
   if params.object_id == workspace_id {
     // Only the object with [CollabType::Folder] can have the same object_id as workspace_id. But
@@ -675,6 +681,11 @@ async fn batch_create_collab_handler(
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner().to_string();
+  // TODO: replace this with collab access control
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
   let compress_type = compress_type_from_header_value(req.headers())?;
   event!(tracing::Level::DEBUG, "start decompressing collab list");
 
@@ -794,6 +805,12 @@ async fn get_collab_handler(
     .await
     .map_err(AppResponseError::from)?;
   let params = payload.into_inner();
+  // TODO: replace this with collab access control
+  let workspace_id = params.workspace_id.clone();
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let object_id = params.object_id.clone();
   let encode_collab = state
     .collab_access_control_storage
@@ -822,6 +839,11 @@ async fn v1_get_collab_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
+  // TODO: replace this with collab access control
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
 
   let param = QueryCollabParams {
     workspace_id,
@@ -900,11 +922,21 @@ async fn get_page_view_handler(
 
 #[instrument(level = "trace", skip_all, err)]
 async fn get_collab_snapshot_handler(
+  user_uuid: UserUuid,
   payload: Json<QuerySnapshotParams>,
   path: web::Path<(String, String)>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<SnapshotData>>> {
   let (workspace_id, object_id) = path.into_inner();
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .await?;
   let data = state
     .collab_access_control_storage
     .get_collab_snapshot(&workspace_id.to_string(), &object_id, &payload.snapshot_id)
@@ -928,6 +960,11 @@ async fn create_collab_snapshot_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
+
   let encoded_collab_v1 = state
     .collab_access_control_storage
     .get_encode_collab(
@@ -1178,7 +1215,7 @@ async fn put_publish_namespace_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   let new_namespace = payload.into_inner().new_namespace;
   biz::workspace::publish::set_workspace_namespace(

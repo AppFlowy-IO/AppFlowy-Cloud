@@ -33,7 +33,6 @@ pub struct Config {
 
 pub struct AccessControlSetting {
   pub is_enabled: bool,
-  pub enable_middleware: bool,
   pub enable_workspace_access_control: bool,
   pub enable_collab_access_control: bool,
   pub enable_realtime_access_control: bool,
@@ -181,9 +180,6 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       is_enabled: get_env_var("APPFLOWY_ACCESS_CONTROL", "false")
         .parse()
         .context("fail to get APPFLOWY_ACCESS_CONTROL")?,
-      enable_middleware: get_env_var("APPFLOWY_ACCESS_CONTROL_MIDDLEWARE", "true")
-        .parse()
-        .context("fail to get APPFLOWY_ACCESS_CONTROL_MIDDLEWARE")?,
       enable_workspace_access_control: get_env_var("APPFLOWY_ACCESS_CONTROL_WORKSPACE", "true")
         .parse()
         .context("fail to get APPFLOWY_ACCESS_CONTROL_WORKSPACE")?,

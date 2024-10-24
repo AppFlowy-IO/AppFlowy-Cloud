@@ -1,8 +1,9 @@
 use crate::appflowy_ai_client;
 
-use appflowy_ai_client::client::JsonStream;
-use appflowy_ai_client::dto::{AIModel, STEAM_ANSWER_KEY};
+use appflowy_ai_client::dto::{AIModel, STREAM_ANSWER_KEY};
+use appflowy_ai_client::error::AIError;
 use futures::stream::StreamExt;
+use infra::reqwest::JsonStream;
 
 #[tokio::test]
 async fn qa_test() {
@@ -48,21 +49,27 @@ async fn stop_stream_test() {
 #[tokio::test]
 async fn stream_test() {
   let client = appflowy_ai_client();
-  client.health_check().await.unwrap();
+  client.health_check().await.expect("Health check failed");
   let chat_id = uuid::Uuid::new_v4().to_string();
   let stream = client
     .stream_question_v2(&chat_id, "I feel hungry", None, &AIModel::GPT4oMini)
     .await
-    .unwrap();
-  let json_stream = JsonStream::<serde_json::Value>::new(stream);
+    .expect("Failed to initiate question stream");
 
+  // Wrap the stream in JsonStream with appropriate type parameters
+  let json_stream = JsonStream::<serde_json::Value, _, AIError>::new(stream);
+
+  // Collect messages from the stream
   let messages: Vec<String> = json_stream
     .filter_map(|item| async {
       match item {
         Ok(value) => value
-          .get(STEAM_ANSWER_KEY)
+          .get(STREAM_ANSWER_KEY)
           .and_then(|s| s.as_str().map(ToString::to_string)),
-        Err(_) => None,
+        Err(err) => {
+          eprintln!("Error during streaming: {:?}", err); // Log the error for better debugging
+          None
+        },
       }
     })
     .collect()
@@ -70,7 +77,6 @@ async fn stream_test() {
 
   println!("final answer: {}", messages.join(""));
 }
-
 #[tokio::test]
 async fn download_package_test() {
   let client = appflowy_ai_client();

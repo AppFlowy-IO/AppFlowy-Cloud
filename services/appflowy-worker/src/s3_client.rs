@@ -17,7 +17,7 @@ use tokio::fs;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use tracing::{error, info, trace};
+use tracing::{error, trace};
 use uuid::Uuid;
 
 #[async_trait]
@@ -203,9 +203,10 @@ pub async fn download_file(
     zip_file_path
   );
   write_stream_to_file(&zip_file_path, expected_md5_base64, stream).await?;
-  info!(
+  trace!(
     "[Import] {} finish writing stream to file: {:?}",
-    workspace_id, zip_file_path
+    workspace_id,
+    zip_file_path
   );
   Ok(AutoRemoveDownloadedFile {
     zip_file_path,

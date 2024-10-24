@@ -3,7 +3,8 @@ use client_api_entity::workspace_dto::PublishInfoView;
 use client_api_entity::{workspace_dto::PublishedDuplicate, PublishInfo, UpdatePublishNamespace};
 use client_api_entity::{
   CreateGlobalCommentParams, CreateReactionParams, DeleteGlobalCommentParams, DeleteReactionParams,
-  GetReactionQueryParams, GlobalComments, PublishInfoMeta, Reactions, UpdateDefaultPublishView,
+  GetReactionQueryParams, GlobalComments, PatchPublishedCollab, PublishInfoMeta, Reactions,
+  UpdateDefaultPublishView,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -73,6 +74,22 @@ impl Client {
     AppResponse::<String>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  pub async fn patch_published_collabs(
+    &self,
+    workspace_id: &str,
+    patches: &[PatchPublishedCollab],
+  ) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/publish", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(patches)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   pub async fn unpublish_collabs(
@@ -251,7 +268,7 @@ impl Client {
     &self,
     view_id: &uuid::Uuid,
   ) -> Result<PublishInfo, AppResponseError> {
-    let url = format!("{}/api/workspace/published-info/{}", self.base_url, view_id,);
+    let url = format!("{}/api/workspace/published-info/{}", self.base_url, view_id);
 
     let resp = self.cloud_client.get(&url).send().await?;
     AppResponse::<PublishInfo>::from_response(resp)

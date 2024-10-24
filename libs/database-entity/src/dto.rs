@@ -1133,6 +1133,12 @@ pub struct PublishCollabItem<Meta, Data> {
   pub data: Data,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatchPublishedCollab {
+  pub view_id: Uuid,
+  pub publish_name: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalComments {
   pub comments: Vec<GlobalComment>,

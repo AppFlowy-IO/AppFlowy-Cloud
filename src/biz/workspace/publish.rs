@@ -3,9 +3,11 @@ use database::{
   collab::GetCollabOrigin,
   publish::{
     select_all_published_collab_info, select_default_published_view_id,
-    select_default_published_view_id_for_namespace, update_workspace_default_publish_view,
+    select_default_published_view_id_for_namespace, update_published_collabs,
+    update_workspace_default_publish_view,
   },
 };
+use database_entity::dto::PatchPublishedCollab;
 use std::sync::Arc;
 
 use app_error::AppError;
@@ -251,11 +253,18 @@ pub trait PublishedCollabStore: Sync + Send + 'static {
     publish_name: &str,
   ) -> Result<Vec<u8>, AppError>;
 
-  async fn delete_collab(
+  async fn delete_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],
     user_uuid: &Uuid,
+  ) -> Result<(), AppError>;
+
+  async fn patch_collabs(
+    &self,
+    workspace_id: &Uuid,
+    user_uuid: &Uuid,
+    patches: &[PatchPublishedCollab],
   ) -> Result<(), AppError>;
 }
 
@@ -351,7 +360,7 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
     result
   }
 
-  async fn delete_collab(
+  async fn delete_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],
@@ -360,6 +369,15 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
     check_workspace_owner_or_publisher(&self.pg_pool, user_uuid, workspace_id, view_ids).await?;
     delete_published_collabs(&self.pg_pool, workspace_id, view_ids).await?;
     Ok(())
+  }
+
+  async fn patch_collabs(
+    &self,
+    workspace_id: &Uuid,
+    user_uuid: &Uuid,
+    patches: &[PatchPublishedCollab],
+  ) -> Result<(), AppError> {
+    patch_collabs(&self.pg_pool, workspace_id, user_uuid, patches).await
   }
 }
 
@@ -519,7 +537,7 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
     }
   }
 
-  async fn delete_collab(
+  async fn delete_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],
@@ -534,4 +552,36 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
     delete_published_collabs(&self.pg_pool, workspace_id, view_ids).await?;
     Ok(())
   }
+
+  async fn patch_collabs(
+    &self,
+    workspace_id: &Uuid,
+    user_uuid: &Uuid,
+    patches: &[PatchPublishedCollab],
+  ) -> Result<(), AppError> {
+    patch_collabs(&self.pg_pool, workspace_id, user_uuid, patches).await
+  }
+}
+
+async fn patch_collabs(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  user_uuid: &Uuid,
+  patches: &[PatchPublishedCollab],
+) -> Result<(), AppError> {
+  let view_ids = patches
+    .iter()
+    .map(|patch| patch.view_id)
+    .collect::<Vec<Uuid>>();
+  for patch in patches {
+    if let Some(new_publish_name) = patch.publish_name.as_deref() {
+      check_collab_publish_name(new_publish_name)?;
+    }
+  }
+  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, &view_ids).await?;
+
+  let mut txn = pg_pool.begin().await?;
+  update_published_collabs(&mut txn, workspace_id, patches).await?;
+  txn.commit().await?;
+  Ok(())
 }

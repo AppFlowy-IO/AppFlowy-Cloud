@@ -2,7 +2,8 @@ use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
 use appflowy_cloud::biz::workspace::ops::collab_from_doc_state;
 use client_api::entity::{
-  AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata, PublishInfoMeta,
+  AFRole, GlobalComment, PatchPublishedCollab, PublishCollabItem, PublishCollabMetadata,
+  PublishInfoMeta,
 };
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
@@ -254,6 +255,55 @@ async fn test_publish_doc() {
   c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])
     .await
     .unwrap();
+
+  {
+    let new_publish_name_1 = "new-publish-name-1".to_string();
+
+    // User change publish name
+    c.patch_published_collabs(
+      &workspace_id,
+      &[PatchPublishedCollab {
+        view_id: view_id_1,
+        publish_name: Some(new_publish_name_1.to_string()),
+      }],
+    )
+    .await
+    .unwrap();
+
+    // Guest now cannot access the collab using old publish name
+    let guest_client = localhost_client();
+    let err = guest_client
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, publish_name_1)
+      .await
+      .err()
+      .unwrap();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+
+    // Guest now access the collab using new publish name
+    let guest_client = localhost_client();
+    let _ = guest_client
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, &new_publish_name_1)
+      .await
+      .unwrap();
+
+    // Switch back to old publish name
+    c.patch_published_collabs(
+      &workspace_id,
+      &[PatchPublishedCollab {
+        view_id: view_id_1,
+        publish_name: Some(publish_name_1.to_string()),
+      }],
+    )
+    .await
+    .unwrap();
+
+    // Guest can access the collab using the orginal publish name
+    let guest_client = localhost_client();
+    let _ = guest_client
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, publish_name_1)
+      .await
+      .unwrap();
+  }
 
   {
     // Deleted collab should not be accessible

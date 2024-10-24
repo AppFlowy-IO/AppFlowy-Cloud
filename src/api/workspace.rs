@@ -204,7 +204,8 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/publish")
         .route(web::post().to(post_publish_collabs_handler))
-        .route(web::delete().to(delete_published_collabs_handler)),
+        .route(web::delete().to(delete_published_collabs_handler))
+        .route(web::patch().to(patch_published_collabs_handler)),
     )
     .service(
       web::resource("/{workspace_id}/folder").route(web::get().to(get_workspace_folder_handler)),
@@ -1440,6 +1441,23 @@ async fn post_publish_collabs_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+async fn patch_published_collabs_handler(
+  workspace_id: web::Path<Uuid>,
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  patches: Json<Vec<PatchPublishedCollab>>,
+) -> Result<Json<AppResponse<()>>> {
+  let workspace_id = workspace_id.into_inner();
+  if patches.is_empty() {
+    return Err(AppError::InvalidRequest("No patches provided".to_string()).into());
+  }
+  state
+    .published_collab_store
+    .patch_collabs(&workspace_id, &user_uuid, &patches)
+    .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
 async fn delete_published_collabs_handler(
   workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
@@ -1449,11 +1467,11 @@ async fn delete_published_collabs_handler(
   let workspace_id = workspace_id.into_inner();
   let view_ids = view_ids.into_inner();
   if view_ids.is_empty() {
-    return Ok(Json(AppResponse::Ok()));
+    return Err(AppError::InvalidRequest("No view_ids provided".to_string()).into());
   }
   state
     .published_collab_store
-    .delete_collab(&workspace_id, &view_ids, &user_uuid)
+    .delete_collabs(&workspace_id, &view_ids, &user_uuid)
     .await?;
   Ok(Json(AppResponse::Ok()))
 }

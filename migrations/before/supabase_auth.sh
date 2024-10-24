@@ -14,16 +14,6 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     END LOOP;
     END;
     \$\$;
-    SELECT create_roles(ARRAY ['anon', 'authenticated']);
-
-    -- Create supabase_admin user if it does not exist
-    DO \$\$ BEGIN IF NOT EXISTS (
-        SELECT
-        FROM pg_catalog.pg_roles
-        WHERE rolname = 'supabase_admin'
-    ) THEN CREATE USER supabase_admin LOGIN CREATEROLE CREATEDB REPLICATION BYPASSRLS;
-    END IF;
-    END \$\$;
 
     -- Create supabase_auth_admin user if it does not exist
     DO \$\$ BEGIN IF NOT EXISTS (

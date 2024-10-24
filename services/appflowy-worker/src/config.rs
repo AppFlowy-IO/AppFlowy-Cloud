@@ -4,7 +4,7 @@ use mailer::config::MailerSetting;
 use secrecy::Secret;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -76,6 +76,17 @@ impl DatabaseSetting {
 
   pub fn with_db(&self) -> PgConnectOptions {
     self.without_db().database(&self.database_name)
+  }
+}
+
+impl Display for DatabaseSetting {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let masked_pg_conn_opts = self.pg_conn_opts.clone().password("********");
+    write!(
+      f,
+      "DatabaseSetting {{ pg_conn_opts: {:?}, require_ssl: {}, max_connections: {} }}",
+      masked_pg_conn_opts, self.require_ssl, self.max_connections
+    )
   }
 }
 

@@ -115,10 +115,11 @@ pub struct DatabaseSetting {
 
 impl Display for DatabaseSetting {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let masked_pg_conn_opts = self.pg_conn_opts.clone().password("********");
     write!(
       f,
       "DatabaseSetting {{ pg_conn_opts: {:?}, require_ssl: {}, max_connections: {} }}",
-      self.pg_conn_opts, self.require_ssl, self.max_connections
+      masked_pg_conn_opts, self.require_ssl, self.max_connections
     )
   }
 }

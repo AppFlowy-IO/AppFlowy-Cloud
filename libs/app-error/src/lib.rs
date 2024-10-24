@@ -394,6 +394,7 @@ impl From<AIError> for AppError {
       AIError::RequestTimeout(err) => AppError::RequestTimeout(err),
       AIError::PayloadTooLarge(err) => AppError::PayloadTooLarge(err),
       AIError::InvalidRequest(err) => AppError::InvalidRequest(err),
+      AIError::SerdeError(err) => AppError::SerdeError(err),
     }
   }
 }

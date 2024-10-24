@@ -29,7 +29,7 @@ where
 
     let stream = resp.bytes_stream().map_err(AppResponseError::from);
     let stream = check_first_item_response_error(stream).await?;
-    Ok(JsonStream::new(stream))
+    Ok(JsonStream::<T, _, AppResponseError>::new(stream))
   }
 
   pub async fn new_line_response_stream(

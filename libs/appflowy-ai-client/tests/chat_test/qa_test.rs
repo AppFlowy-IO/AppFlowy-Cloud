@@ -58,14 +58,16 @@ async fn stream_test() {
 
   // Wrap the stream in JsonStream with appropriate type parameters
   let json_stream = JsonStream::<serde_json::Value, _, AIError>::new(stream);
+
+  // Collect messages from the stream
   let messages: Vec<String> = json_stream
-    .filter_map(|item| async move {
+    .filter_map(|item| async {
       match item {
         Ok(value) => value
           .get(STREAM_ANSWER_KEY)
           .and_then(|s| s.as_str().map(ToString::to_string)),
         Err(err) => {
-          eprintln!("Error during streaming: {:?}", err);
+          eprintln!("Error during streaming: {:?}", err); // Log the error for better debugging
           None
         },
       }

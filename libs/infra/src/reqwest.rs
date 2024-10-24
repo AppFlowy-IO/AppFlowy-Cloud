@@ -49,12 +49,9 @@ where
     )
   })
 }
+
 #[pin_project]
-pub struct JsonStream<T, E, SE>
-where
-  E: StdError + Send + Sync + 'static,
-  SE: StdError + Send + Sync + 'static,
-{
+pub struct JsonStream<T, E, SE> {
   #[pin]
   stream: Pin<Box<dyn Stream<Item = Result<Bytes, E>> + Send>>,
   buffer: Vec<u8>,
@@ -64,8 +61,8 @@ where
 
 impl<T, E, SE> JsonStream<T, E, SE>
 where
-  E: StdError + Send + Sync + 'static,
-  SE: StdError + Send + Sync + 'static,
+  E: From<SE> + From<serde_json::Error> + std::error::Error + Send + Sync + 'static,
+  SE: std::error::Error + Send + Sync + 'static,
 {
   pub fn new<S>(stream: S) -> Self
   where
@@ -83,10 +80,10 @@ where
 impl<T, E, SE> Stream for JsonStream<T, E, SE>
 where
   T: DeserializeOwned,
-  E: StdError + Send + Sync + 'static,
-  SE: StdError + Send + Sync + From<E> + From<serde_json::Error> + 'static,
+  E: From<SE> + From<serde_json::Error> + std::error::Error + Send + Sync + 'static,
+  SE: std::error::Error + Send + Sync + 'static,
 {
-  type Item = Result<T, SE>;
+  type Item = Result<T, E>;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
@@ -126,7 +123,7 @@ where
         },
         Some(Err(err)) => {
           // Convert the error to SE
-          return Poll::Ready(Some(Err(err.into())));
+          return Poll::Ready(Some(Err(err)));
         },
         None => {
           // Stream has ended; handle any remaining data in the buffer

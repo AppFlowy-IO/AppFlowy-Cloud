@@ -1,6 +1,6 @@
 use crate::http::log_request_id;
 use crate::Client;
-use bytes::Bytes;
+
 use client_api_entity::{
   ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
   RepeatedChatMessage, UpdateChatMessageContentParams,

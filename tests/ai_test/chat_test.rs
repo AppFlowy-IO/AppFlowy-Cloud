@@ -4,8 +4,7 @@ use assert_json_diff::assert_json_eq;
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{local_ai_test_enabled, TestClient};
 use database_entity::dto::{
-  ChatMessage, ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams,
-  MessageCursor,
+  ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams, MessageCursor,
 };
 use futures_util::StreamExt;
 use serde_json::json;

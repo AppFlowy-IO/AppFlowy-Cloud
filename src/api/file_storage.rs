@@ -1,3 +1,4 @@
+use access_control::act::Action;
 use actix_http::body::BoxBody;
 use actix_web::http::header::{
   ContentLength, ContentType, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_MODIFIED_SINCE,
@@ -10,6 +11,7 @@ use actix_web::{
 };
 use actix_web::{HttpResponse, Result};
 use app_error::AppError;
+use authentication::jwt::UserUuid;
 use chrono::DateTime;
 use database::file::BlobKey;
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
@@ -71,6 +73,7 @@ pub fn file_storage_scope() -> Scope {
 
 #[instrument(skip_all, err)]
 async fn create_upload(
+  user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: web::Data<AppState>,
   req: web::Json<CreateUploadRequest>,
@@ -83,9 +86,15 @@ async fn create_upload(
   if req.file_id.is_empty() {
     return Err(AppError::InvalidRequest("file_id is empty".to_string()).into());
   }
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = workspace_id.into_inner();
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
 
   let key = BlobPathV1 {
-    workspace_id: workspace_id.into_inner(),
+    workspace_id,
     parent_dir: req.parent_dir.clone(),
     file_id: req.file_id.clone(),
   };
@@ -109,6 +118,7 @@ struct UploadPartPath {
 
 #[instrument(level = "debug", skip_all, err)]
 async fn upload_part_handler(
+  user_uuid: UserUuid,
   path: web::Path<UploadPartPath>,
   state: web::Data<AppState>,
   content_length: web::Header<ContentLength>,
@@ -123,6 +133,12 @@ async fn upload_part_handler(
     path_params.upload_id,
     path_params.part_num
   );
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = path_params.workspace_id;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
 
   let content_length = content_length.into_inner().into_inner();
   let mut content = Vec::with_capacity(content_length);
@@ -148,7 +164,7 @@ async fn upload_part_handler(
   };
 
   let key = BlobPathV1 {
-    workspace_id: path_params.workspace_id,
+    workspace_id,
     parent_dir: path_params.parent_dir,
     file_id: path_params.file_id,
   };
@@ -162,14 +178,21 @@ async fn upload_part_handler(
 }
 
 async fn complete_upload_handler(
+  user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: web::Data<AppState>,
   req: web::Json<CompleteUploadRequest>,
 ) -> Result<JsonAppResponse<()>> {
   let req = req.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = workspace_id.into_inner();
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
 
   let key = BlobPathV1 {
-    workspace_id: workspace_id.into_inner(),
+    workspace_id,
     parent_dir: req.parent_dir.clone(),
     file_id: req.file_id.clone(),
   };
@@ -184,6 +207,7 @@ async fn complete_upload_handler(
 
 #[instrument(skip(state, payload), err)]
 async fn put_blob_handler(
+  user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<BlobPathV0>,
   content_type: web::Header<ContentType>,
@@ -191,6 +215,13 @@ async fn put_blob_handler(
   payload: Payload,
 ) -> Result<JsonAppResponse<()>> {
   let path = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = path.workspace_id;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
+
   let content_length = content_length.into_inner().into_inner();
   let content_type = content_type.into_inner().to_string();
   let content = {
@@ -224,7 +255,7 @@ async fn put_blob_handler(
   event!(
     tracing::Level::TRACE,
     "start put blob. workspace_id: {}, file_id: {}, content_length: {}",
-    path.workspace_id,
+    workspace_id,
     path.file_id,
     content_length
   );
@@ -240,10 +271,17 @@ async fn put_blob_handler(
 
 #[instrument(level = "debug", skip(state), err)]
 async fn delete_blob_handler(
+  user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<BlobPathV0>,
 ) -> Result<JsonAppResponse<()>> {
   let path = path.into_inner();
+  let workspace_id = path.workspace_id;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
   state
     .bucket_storage
     .delete_blob(path)
@@ -265,10 +303,17 @@ async fn get_blob_v1_handler(
 
 #[instrument(level = "debug", skip(state), err)]
 async fn delete_blob_v1_handler(
+  user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<BlobPathV1>,
 ) -> Result<JsonAppResponse<()>> {
   let path = path.into_inner();
+  let workspace_id = path.workspace_id;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
   state
     .bucket_storage
     .delete_blob(path)

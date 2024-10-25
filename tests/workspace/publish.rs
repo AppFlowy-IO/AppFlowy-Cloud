@@ -18,7 +18,6 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, UserId};
 use itertools::Itertools;
 use shared_entity::dto::publish_dto::PublishDatabaseData;
-use shared_entity::dto::workspace_dto::PublishedDuplicate;
 use std::collections::{HashMap, HashSet};
 use std::thread::sleep;
 use std::time::Duration;
@@ -835,16 +834,12 @@ async fn duplicate_to_workspace_references() {
     //     └── doc1
     //         └── grid1
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: doc_2_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &doc_2_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     let fv = client_2
       .api_client
@@ -925,16 +920,12 @@ async fn duplicate_to_workspace_doc_inline_database() {
     //     └── grid1
     //         └── View of grid1
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: doc_3_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &doc_3_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     {
       let fv = client_2
@@ -1087,16 +1078,12 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
     // ├── Getting Started (existing)
     // └── db_with_embedded_db (inside should contain the database)
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: doc_with_embedded_db_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &doc_with_embedded_db_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     {
       let fv = client_2
@@ -1192,16 +1179,12 @@ async fn duplicate_to_workspace_db_with_relation() {
     // related-db cannot be child of db_with_rel_col because they dont share the same field
     // and are 2 different databases, so we just put them in the root (dest_id)
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: db_with_rel_col_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &db_with_rel_col_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     {
       let fv = client_2
@@ -1281,16 +1264,12 @@ async fn duplicate_to_workspace_db_row_with_doc() {
     // ├── Getting Started (existing)
     // └── db_with_row_doc
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: db_with_row_doc_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &db_with_row_doc_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     {
       let fv = client_2
@@ -1364,16 +1343,12 @@ async fn duplicate_to_workspace_db_rel_self() {
       .unwrap();
 
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: db_rel_self_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &db_rel_self_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     let fv = client_2
       .api_client
@@ -1459,16 +1434,12 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
       .unwrap();
 
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: doc_4_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &doc_4_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     let fv = client_2
       .api_client

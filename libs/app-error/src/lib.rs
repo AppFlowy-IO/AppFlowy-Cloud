@@ -352,6 +352,9 @@ pub enum ErrorCode {
   AccessRequestAlreadyExists = 1043,
   CustomNamespaceDisabled = 1044,
   CustomNamespaceDisallowed = 1045,
+  CustomNamespaceTooShort = 1046,
+  CustomNamespaceTooLong = 1047,
+  CustomNamespaceReserved = 1048,
 }
 
 impl ErrorCode {

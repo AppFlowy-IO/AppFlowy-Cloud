@@ -301,6 +301,12 @@ async fn process_task(
         metrics,
       )
       .await;
+
+      trace!(
+        "[Import]: {} download and unzip file result: {:?}",
+        task.workspace_id,
+        unzip_result
+      );
       match unzip_result {
         Ok(unzip_dir_path) => {
           // 2. process unzip file
@@ -545,6 +551,10 @@ async fn process_unzip_file(
   )
   .map_err(ImportError::ImportCollabError)?;
 
+  trace!(
+    "[Import]: {} start import notion data",
+    import_task.workspace_id
+  );
   let imported = notion_importer
     .import()
     .await

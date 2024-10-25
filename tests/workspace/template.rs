@@ -357,7 +357,7 @@ async fn test_template_crud() {
     .await
     .unwrap()
     .templates;
-  let view_ids: HashSet<Uuid> = templates.iter().map(|t| t.view_id).collect();
+  let view_ids: HashSet<Uuid> = templates.iter().map(|t| t.template.view_id).collect();
   assert_eq!(templates.len(), 2);
   assert!(view_ids.contains(&published_view_ids[2]));
   assert!(view_ids.contains(&published_view_ids[3]));
@@ -376,7 +376,10 @@ async fn test_template_crud() {
     .await
     .unwrap()
     .templates;
-  let featured_view_ids: HashSet<Uuid> = featured_templates.iter().map(|t| t.view_id).collect();
+  let featured_view_ids: HashSet<Uuid> = featured_templates
+    .iter()
+    .map(|t| t.template.view_id)
+    .collect();
   assert_eq!(featured_templates.len(), 2);
   assert!(featured_view_ids.contains(&published_view_ids[0]));
   assert!(featured_view_ids.contains(&published_view_ids[1]));
@@ -386,7 +389,7 @@ async fn test_template_crud() {
     .await
     .unwrap()
     .templates;
-  let new_view_ids: HashSet<Uuid> = new_templates.iter().map(|t| t.view_id).collect();
+  let new_view_ids: HashSet<Uuid> = new_templates.iter().map(|t| t.template.view_id).collect();
   assert_eq!(new_templates.len(), 2);
   assert!(new_view_ids.contains(&published_view_ids[0]));
   assert!(new_view_ids.contains(&published_view_ids[2]));
@@ -395,12 +398,15 @@ async fn test_template_crud() {
     .get_template(published_view_ids[3])
     .await
     .unwrap();
-  assert_eq!(template.view_id, published_view_ids[3]);
-  assert_eq!(template.creator.id, creator_2.id);
-  assert_eq!(template.categories.len(), 1);
-  assert_eq!(template.categories[0].id, category_2.id);
-  assert_eq!(template.related_templates.len(), 1);
-  assert_eq!(template.related_templates[0].view_id, published_view_ids[0]);
+  assert_eq!(template.template.view_id, published_view_ids[3]);
+  assert_eq!(template.template.creator.id, creator_2.id);
+  assert_eq!(template.template.categories.len(), 1);
+  assert_eq!(template.template.categories[0].id, category_2.id);
+  assert_eq!(template.template.related_templates.len(), 1);
+  assert_eq!(
+    template.template.related_templates[0].view_id,
+    published_view_ids[0]
+  );
   assert_eq!(
     template.publish_info.namespace.unwrap(),
     published_view_namespace.clone()

@@ -1329,39 +1329,9 @@ pub struct Template {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TemplateWithPublishInfo {
-  pub view_id: Uuid,
-  pub created_at: DateTime<Utc>,
-  pub last_updated_at: DateTime<Utc>,
-  pub name: String,
-  pub description: String,
-  pub about: String,
-  pub view_url: String,
-  pub categories: Vec<TemplateCategory>,
-  pub creator: TemplateCreator,
-  pub is_new_template: bool,
-  pub is_featured: bool,
-  pub related_templates: Vec<TemplateMinimal>,
+  #[serde(flatten)]
+  pub template: Template,
   pub publish_info: PublishInfo,
-}
-
-impl From<(Template, PublishInfo)> for TemplateWithPublishInfo {
-  fn from((template, publish_info): (Template, PublishInfo)) -> Self {
-    Self {
-      view_id: template.view_id,
-      created_at: template.created_at,
-      last_updated_at: template.last_updated_at,
-      name: template.name,
-      description: template.description,
-      about: template.about,
-      view_url: template.view_url,
-      categories: template.categories,
-      creator: template.creator,
-      is_new_template: template.is_new_template,
-      is_featured: template.is_featured,
-      related_templates: template.related_templates,
-      publish_info,
-    }
-  }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1380,35 +1350,9 @@ pub struct TemplateMinimal {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TemplateMinimalWithPublishInfo {
-  pub view_id: Uuid,
-  pub created_at: DateTime<Utc>,
-  pub last_updated_at: DateTime<Utc>,
-  pub name: String,
-  pub description: String,
-  pub view_url: String,
-  pub creator: TemplateCreatorMinimal,
-  pub categories: Vec<TemplateCategoryMinimal>,
-  pub is_new_template: bool,
-  pub is_featured: bool,
+  #[serde(flatten)]
+  pub template: TemplateMinimal,
   pub publish_info: PublishInfo,
-}
-
-impl From<(TemplateMinimal, PublishInfo)> for TemplateMinimalWithPublishInfo {
-  fn from((template, publish_info): (TemplateMinimal, PublishInfo)) -> Self {
-    Self {
-      view_id: template.view_id,
-      created_at: template.created_at,
-      last_updated_at: template.last_updated_at,
-      name: template.name,
-      description: template.description,
-      view_url: template.view_url,
-      creator: template.creator,
-      categories: template.categories,
-      is_new_template: template.is_new_template,
-      is_featured: template.is_featured,
-      publish_info,
-    }
-  }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1458,10 +1402,16 @@ pub struct TemplateGroup {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateGroupWithPublishInfo {
+  pub category: TemplateCategoryMinimal,
+  pub templates: Vec<TemplateMinimalWithPublishInfo>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TemplateHomePage {
-  pub featured_templates: Vec<TemplateMinimal>,
-  pub new_templates: Vec<TemplateMinimal>,
-  pub template_groups: Vec<TemplateGroup>,
+  pub featured_templates: Vec<TemplateMinimalWithPublishInfo>,
+  pub new_templates: Vec<TemplateMinimalWithPublishInfo>,
+  pub template_groups: Vec<TemplateGroupWithPublishInfo>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

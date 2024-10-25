@@ -3,25 +3,7 @@
 FROM lukemathwalker/cargo-chef:latest-rust-1.77 as chef
 
 WORKDIR /app
-RUN apt update && apt install lld clang protobuf-compiler -y
 
-# FROM chef as planner
-# COPY . .
-# # Compute a lock-like file for our project
-# WORKDIR /app/admin_frontend
-# RUN cargo chef prepare --recipe-path recipe.json
-#
-# FROM chef as builder
-# COPY . .
-# WORKDIR /app/admin_frontend
-# COPY --from=planner /app/admin_frontend/recipe.json recipe.json
-# # Build our project dependencies
-# RUN cargo chef cook --release --recipe-path recipe.json
-#
-# # Build the project
-# RUN cargo build --release --bin admin_frontend
-
-# Chef failed to build, so we're using the following instead
 FROM chef as builder
 COPY . .
 WORKDIR /app/admin_frontend

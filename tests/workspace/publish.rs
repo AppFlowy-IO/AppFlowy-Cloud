@@ -252,10 +252,6 @@ async fn test_publish_doc() {
     assert_eq!(default_info_meta.meta.title, "my_title_1");
   }
 
-  c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])
-    .await
-    .unwrap();
-
   {
     let new_publish_name_1 = "new-publish-name-1".to_string();
 
@@ -304,6 +300,11 @@ async fn test_publish_doc() {
       .await
       .unwrap();
   }
+
+  // user unpublish collabs
+  c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])
+    .await
+    .unwrap();
 
   {
     // Deleted collab should not be accessible

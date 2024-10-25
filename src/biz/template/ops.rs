@@ -1,4 +1,8 @@
-use std::{collections::HashMap, ops::DerefMut, path::Path};
+use std::{
+  collections::{HashMap, HashSet},
+  ops::DerefMut,
+  path::Path,
+};
 
 use actix_multipart::form::bytes::Bytes as MPBytes;
 use anyhow::Context;
@@ -11,7 +15,8 @@ use database::{
 };
 use database_entity::dto::{
   AccountLink, PublishInfo, Template, TemplateCategory, TemplateCategoryType, TemplateCreator,
-  TemplateHomePage, TemplateMinimalWithPublishInfo, TemplateWithPublishInfo,
+  TemplateGroupWithPublishInfo, TemplateHomePage, TemplateMinimalWithPublishInfo,
+  TemplateWithPublishInfo,
 };
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
@@ -257,7 +262,10 @@ pub async fn get_templates_with_publish_info(
     .filter_map(|template| {
       publish_info_map
         .remove(&template.view_id)
-        .map(|pub_info| TemplateMinimalWithPublishInfo::from((template, pub_info)))
+        .map(|publish_info| TemplateMinimalWithPublishInfo {
+          template,
+          publish_info,
+        })
     })
     .collect();
   if templates_with_publish_info.len() != view_ids.len() {
@@ -274,9 +282,12 @@ pub async fn get_template_with_publish_info(
   view_id: Uuid,
 ) -> Result<TemplateWithPublishInfo, AppResponseError> {
   let template = select_template_view_by_id(pg_pool, view_id).await?;
-  let pub_info = select_published_collab_info(pg_pool, &view_id).await?;
-  let template_with_pub_info = TemplateWithPublishInfo::from((template, pub_info));
-  Ok(template_with_pub_info)
+  let publish_info = select_published_collab_info(pg_pool, &view_id).await?;
+  let template_with_publish_info = TemplateWithPublishInfo {
+    template,
+    publish_info,
+  };
+  Ok(template_with_publish_info)
 }
 
 pub async fn delete_template(pg_pool: &PgPool, view_id: Uuid) -> Result<(), AppResponseError> {
@@ -296,10 +307,81 @@ pub async fn get_template_homepage(
     select_templates(pg_pool, None, Some(true), None, None, Some(per_count)).await?;
   let new_templates =
     select_templates(pg_pool, None, None, Some(true), None, Some(per_count)).await?;
+  let template_groups_view_ids = template_groups
+    .iter()
+    .flat_map(|group| group.templates.iter().map(|t| t.view_id))
+    .collect::<HashSet<Uuid>>();
+  let feature_templates_view_ids = featured_templates
+    .iter()
+    .map(|t| t.view_id)
+    .collect::<HashSet<Uuid>>();
+  let new_templates_view_ids = new_templates
+    .iter()
+    .map(|t| t.view_id)
+    .collect::<HashSet<Uuid>>();
+  let mut all_view_ids: HashSet<Uuid> = HashSet::new();
+  all_view_ids.extend(&template_groups_view_ids);
+  all_view_ids.extend(&feature_templates_view_ids);
+  all_view_ids.extend(&new_templates_view_ids);
+  let all_view_ids: Vec<Uuid> = all_view_ids.into_iter().collect();
+
+  let publish_info_for_views: Vec<PublishInfo> =
+    select_published_collab_info_for_view_ids(pg_pool, &all_view_ids).await?;
+  let publish_info_map = publish_info_for_views
+    .into_iter()
+    .map(|info| (info.view_id, info))
+    .collect::<HashMap<Uuid, PublishInfo>>();
+
+  let template_groups_with_publish_info = template_groups
+    .into_iter()
+    .map(|group| {
+      let templates_with_publish_info = group
+        .templates
+        .into_iter()
+        .filter_map(|template| {
+          publish_info_map.get(&template.view_id).map(|publish_info| {
+            TemplateMinimalWithPublishInfo {
+              template,
+              publish_info: publish_info.clone(),
+            }
+          })
+        })
+        .collect();
+      TemplateGroupWithPublishInfo {
+        category: group.category.clone(),
+        templates: templates_with_publish_info,
+      }
+    })
+    .collect();
+
+  let featured_templates_with_publish_info = featured_templates
+    .into_iter()
+    .filter_map(|template| {
+      publish_info_map
+        .get(&template.view_id)
+        .map(|publish_info| TemplateMinimalWithPublishInfo {
+          template,
+          publish_info: publish_info.clone(),
+        })
+    })
+    .collect();
+
+  let new_templates_with_publish_info = new_templates
+    .into_iter()
+    .filter_map(|template| {
+      publish_info_map
+        .get(&template.view_id)
+        .map(|publish_info| TemplateMinimalWithPublishInfo {
+          template,
+          publish_info: publish_info.clone(),
+        })
+    })
+    .collect();
+
   let homepage = TemplateHomePage {
-    template_groups,
-    featured_templates,
-    new_templates,
+    template_groups: template_groups_with_publish_info,
+    featured_templates: featured_templates_with_publish_info,
+    new_templates: new_templates_with_publish_info,
   };
   Ok(homepage)
 }

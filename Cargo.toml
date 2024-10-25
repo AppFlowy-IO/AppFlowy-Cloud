@@ -144,7 +144,7 @@ tonic-build = "0.11.0"
 log = "0.4.20"
 lettre = { version = "0.11.7", features = ["tokio1", "tokio1-native-tls"] }
 handlebars = "5.1.2"
-pin-project = "1.1.5"
+pin-project.workspace = true
 byteorder = "1.5.0"
 sha2 = "0.10.8"
 rayon.workspace = true
@@ -281,6 +281,7 @@ async_zip = { version = "0.0.17", features = ["full"] }
 sanitize-filename = "0.5.0"
 base64 = "0.22"
 md5 = "0.7.0"
+pin-project = "1.1.5"
 
 # collaboration
 yrs = { version = "0.21.2", features = ["sync"] }

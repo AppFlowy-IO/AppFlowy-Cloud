@@ -36,7 +36,6 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - SUPABASE_USER=${SUPABASE_USER:-supabase_auth_admin}
       - SUPABASE_PASSWORD=${SUPABASE_PASSWORD:-root}
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d

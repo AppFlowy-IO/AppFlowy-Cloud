@@ -8,12 +8,13 @@ use authentication::jwt::UserUuid;
 use aws_sdk_s3::primitives::ByteStream;
 use database::file::BucketClient;
 
-use crate::biz::workspace::ops::{create_empty_workspace, create_upload_task};
+use crate::biz::workspace::ops::{create_empty_workspace, create_upload_task, num_pending_task};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use database::user::select_name_and_email_from_uuid;
 use database::workspace::select_import_task;
 use futures_util::StreamExt;
+use infra::env_util::get_env_var;
 use serde_json::json;
 use shared_entity::dto::import_dto::{ImportTaskDetail, ImportTaskStatus, UserImportTask};
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -68,6 +69,21 @@ async fn import_data_handler(
   req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let count = num_pending_task(uid, &state.pg_pool).await?;
+  let maximum_pending_task = get_env_var("MAXIMUM_IMPORT_PENDING_TASK", "3")
+    .parse::<i64>()
+    .unwrap_or(3);
+
+  if count >= maximum_pending_task {
+    return Err(
+      AppError::TooManyImportTask(format!(
+        "{} tasks are pending. Please wait until they are completed",
+        count
+      ))
+      .into(),
+    );
+  }
+
   let (user_name, user_email) = select_name_and_email_from_uuid(&state.pg_pool, &user_uuid).await?;
   let host = get_host_from_request(&req);
   let content_length = req

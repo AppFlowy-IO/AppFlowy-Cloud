@@ -1495,6 +1495,7 @@ pub async fn update_import_task_status<'a, E: Executor<'a, Database = Postgres>>
 }
 
 pub async fn insert_import_task(
+  uid: i64,
   task_id: Uuid,
   file_size: i64,
   workspace_id: String,
@@ -1503,8 +1504,8 @@ pub async fn insert_import_task(
   pg_pool: &PgPool,
 ) -> Result<(), AppError> {
   let query = r#"
-        INSERT INTO af_import_task (task_id, file_size, workspace_id, created_by, status, metadata)
-        VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'))
+        INSERT INTO af_import_task (task_id, file_size, workspace_id, created_by, status, metadata, uid)
+        VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'), $7)
     "#;
 
   sqlx::query(query)
@@ -1514,6 +1515,7 @@ pub async fn insert_import_task(
     .bind(created_by)
     .bind(0)
     .bind(metadata)
+    .bind(uid)
     .execute(pg_pool)
     .await
     .map_err(|err| {

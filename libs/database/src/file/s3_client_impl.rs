@@ -44,6 +44,7 @@ impl AwsS3BucketClientImpl {
   pub async fn gen_presigned_url(
     &self,
     s3_key: &str,
+    content_length: u64,
     expires_in_secs: u64,
   ) -> Result<String, AppError> {
     let expires_in = Duration::from_secs(expires_in_secs);
@@ -64,6 +65,7 @@ impl AwsS3BucketClientImpl {
       .bucket(&self.bucket)
       .key(s3_key)
       .content_type("application/zip")
+      .content_length(content_length as i64)
       .presigned(config)
       .await
       .map_err(|err| AppError::Internal(anyhow!("Generate presigned url failed: {:?}", err)))?;

@@ -2,23 +2,35 @@ use anyhow::Error;
 use client_api_test::TestClient;
 use collab_document::importer::define::{BlockType, URL_FIELD};
 use collab_folder::ViewLayout;
+use futures_util::future::join_all;
 use std::path::PathBuf;
 use std::time::Duration;
 
 #[tokio::test]
 async fn import_blog_post_four_times_test() {
-  let client = TestClient::new_user().await;
-  for _ in 0..3 {
-    let _ = upload_file(&client, "blog_post.zip", None).await.unwrap();
+  let mut handles = vec![];
+  // Simulate 4 clients, each uploading 3 files concurrently.
+  for _ in 0..4 {
+    let handle = tokio::spawn(async {
+      let client = TestClient::new_user().await;
+      for _ in 0..3 {
+        let _ = upload_file(&client, "blog_post.zip", None).await.unwrap();
+      }
+
+      // the default concurrency limit is 3, so the fourth import should fail
+      let result = upload_file(&client, "blog_post.zip", None).await;
+      assert!(result.is_err());
+      wait_until_num_import_task_complete(&client, 3).await;
+    });
+    handles.push(handle);
   }
 
-  // the default concurrency limit is 3, so the fourth import should fail
-  let result = upload_file(&client, "blog_post.zip", None).await;
-  assert!(result.is_err());
-  wait_until_num_import_task_complete(&client, 3).await;
+  for result in join_all(handles).await {
+    result.unwrap();
+  }
 }
 
-// #[tokio::test]
+#[tokio::test]
 async fn import_blog_post_test() {
   // Step 1: Import the blog post zip
   let (client, imported_workspace_id) =
@@ -90,7 +102,7 @@ async fn import_blog_post_test() {
   assert!(expected_urls.is_empty());
 }
 
-// #[tokio::test]
+#[tokio::test]
 async fn import_project_and_task_zip_test() {
   let (client, imported_workspace_id) =
     import_notion_zip_until_complete("project&task.zip", None).await;
@@ -164,7 +176,7 @@ async fn import_project_and_task_zip_test() {
   }
 }
 
-// #[tokio::test]
+#[tokio::test]
 async fn imported_workspace_do_not_become_latest_visit_workspace_test() {
   let client = TestClient::new_user().await;
   let file_path = PathBuf::from("tests/workspace/asset/blog_post.zip".to_string());

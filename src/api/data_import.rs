@@ -51,7 +51,10 @@ async fn create_import_handler(
   let s3_key = format!("import_presigned_url_{}", Uuid::new_v4());
 
   // Generate presigned url with 10 minutes expiration
-  let presigned_url = state.bucket_client.gen_presigned_url(&s3_key, 600).await?;
+  let presigned_url = state
+    .bucket_client
+    .gen_presigned_url(&s3_key, params.content_length, 600)
+    .await?;
   trace!("[Import] Presigned url: {}", presigned_url);
 
   let (user_name, user_email) = select_name_and_email_from_uuid(&state.pg_pool, &user_uuid).await?;

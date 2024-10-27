@@ -1474,6 +1474,7 @@ pub struct ApproveAccessRequestParams {
 pub struct CreateImportTask {
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_name: String,
+  pub content_length: u64,
 }
 
 /// Create a import task

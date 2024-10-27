@@ -385,8 +385,10 @@ impl Client {
       .map(|s| s.to_string_lossy().to_string())
       .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
+    let content_length = tokio::fs::metadata(file_path).await?.len();
     let params = CreateImportTask {
       workspace_name: file_name.clone(),
+      content_length,
     };
     let resp = self
       .http_client_with_auth(Method::POST, &url)

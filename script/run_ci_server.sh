@@ -27,7 +27,7 @@ docker compose -f docker-compose-ci.yml pull
 # SKIP_BUILD_APPFLOWY_CLOUD=true.
 if [[ -z "${SKIP_BUILD_APPFLOWY_CLOUD+x}" ]]
 then
-  docker build -t appflowy_cloud .
+  docker build -t appflowy_cloud . && docker build -t appflowy_worker .
 fi
 
 docker compose -f docker-compose-ci.yml up -d

@@ -67,7 +67,7 @@ use uuid::Uuid;
 
 const GROUP_NAME: &str = "import_task_group";
 const CONSUMER_NAME: &str = "appflowy_worker";
-const MAXIMUM_CONTENT_LENGTH: &'static str = "3221225472";
+const MAXIMUM_CONTENT_LENGTH: &str = "3221225472";
 
 pub async fn run_import_worker(
   pg_pool: PgPool,
@@ -246,14 +246,14 @@ struct TaskContext {
 #[allow(clippy::too_many_arguments)]
 async fn consume_task(
   mut context: TaskContext,
-  import_task: ImportTask,
+  mut import_task: ImportTask,
   stream_name: &str,
   group_name: &str,
   entry_id: String,
 ) -> Result<(), ImportError> {
-  if let ImportTask::Notion(task) = &import_task {
+  if let ImportTask::Notion(task) = &mut import_task {
     if let Some(created_at_timestamp) = task.created_at {
-      if is_record_expired(created_at_timestamp) {
+      if is_task_expired(created_at_timestamp, task.last_process_at) {
         if let Ok(import_record) = select_import_task(&context.pg_pool, &task.task_id).await {
           handle_expired_task(
             &mut context,
@@ -268,6 +268,7 @@ async fn consume_task(
 
         return Ok(());
       } else if !check_blob_existence(&context.s3_client, &task.s3_key).await? {
+        task.last_process_at = Some(Utc::now().timestamp());
         trace!("[Import] {} file not found, re-add task", task.workspace_id);
         re_add_task(
           &mut context.redis_client,
@@ -342,7 +343,11 @@ async fn process_and_ack_task(
   result
 }
 
-fn is_record_expired(timestamp: i64) -> bool {
+fn is_task_expired(timestamp: i64, last_process_at: Option<i64>) -> bool {
+  if last_process_at.is_none() {
+    return false;
+  }
+
   match DateTime::<Utc>::from_timestamp(timestamp, 0) {
     None => {
       info!("[Import] failed to parse timestamp: {}", timestamp);
@@ -1269,6 +1274,8 @@ pub struct NotionImportTask {
   pub created_at: Option<i64>,
   #[serde(default)]
   pub md5_base64: Option<String>,
+  #[serde(default)]
+  pub last_process_at: Option<i64>,
 }
 
 impl Display for NotionImportTask {

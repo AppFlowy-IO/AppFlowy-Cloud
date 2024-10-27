@@ -683,6 +683,7 @@ pub async fn create_upload_task(
   host: &str,
   workspace_id: &str,
   file_size: usize,
+  presigned_url: Option<String>,
   redis_client: &RedisConnectionManager,
   pg_pool: &PgPool,
 ) -> Result<(), AppError> {
@@ -694,6 +695,7 @@ pub async fn create_upload_task(
     workspace_id.to_string(),
     uid,
     Some(json!({"host": host})),
+    presigned_url,
     pg_pool,
   )
   .await?;

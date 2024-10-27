@@ -21,8 +21,8 @@ use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCach
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
 use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use database::workspace::{
-  delete_from_workspace, select_workspace_database_storage_id, update_import_task_status,
-  update_updated_at_of_workspace_with_uid, update_workspace_status,
+  delete_from_workspace, select_import_task, select_workspace_database_storage_id,
+  update_import_task_status, update_updated_at_of_workspace_with_uid, update_workspace_status,
 };
 use database_entity::dto::CollabParams;
 
@@ -30,6 +30,7 @@ use crate::metric::ImportMetrics;
 use async_zip::base::read::stream::{Ready, ZipFileReader};
 use collab_importer::zip_tool::async_zip::async_unzip;
 use collab_importer::zip_tool::sync_zip::sync_unzip;
+
 use futures::stream::FuturesUnordered;
 use futures::{stream, AsyncBufRead, StreamExt};
 use infra::env_util::get_env_var;
@@ -39,11 +40,13 @@ use redis::streams::{
   StreamReadReply,
 };
 use redis::{AsyncCommands, RedisResult, Value};
+
+use database::pg_row::AFImportTask;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use sqlx::types::chrono;
 use sqlx::types::chrono::{DateTime, Utc};
-use sqlx::{PgPool, Pool, Postgres};
+use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 use std::env::temp_dir;
 use std::fmt::Display;
@@ -129,18 +132,21 @@ async fn process_un_acked_tasks(
     Ok(un_ack_tasks) => {
       info!("Found {} unacknowledged tasks", un_ack_tasks.len());
       for un_ack_task in un_ack_tasks {
+        let context = TaskContext {
+          storage_dir: storage_dir.to_path_buf(),
+          redis_client: redis_client.clone(),
+          s3_client: s3_client.clone(),
+          pg_pool: pg_pool.clone(),
+          notifier: notifier.clone(),
+          metrics: metrics.clone(),
+        };
         // Ignore the error here since the consume task will handle the error
         let _ = consume_task(
-          storage_dir,
+          context,
+          un_ack_task.task,
           stream_name,
           group_name,
-          un_ack_task.task,
-          &un_ack_task.stream_id.id,
-          redis_client,
-          s3_client,
-          pg_pool,
-          notifier.clone(),
-          metrics,
+          un_ack_task.stream_id.id,
         )
         .await;
       }
@@ -187,27 +193,23 @@ async fn process_upcoming_tasks(
       for stream_id in stream_key.ids {
         match ImportTask::try_from(&stream_id) {
           Ok(import_task) => {
-            let entry_id = stream_id.id.clone();
-            let mut cloned_redis_client = redis_client.clone();
-            let cloned_s3_client = s3_client.clone();
-            let pg_pool = pg_pool.clone();
-            let notifier = notifier.clone();
             let stream_name = stream_name.to_string();
             let group_name = group_name.to_string();
-            let storage_dir = storage_dir.to_path_buf();
-            let metrics = metrics.clone();
+            let context = TaskContext {
+              storage_dir: storage_dir.to_path_buf(),
+              redis_client: redis_client.clone(),
+              s3_client: s3_client.clone(),
+              pg_pool: pg_pool.clone(),
+              notifier: notifier.clone(),
+              metrics: metrics.clone(),
+            };
             task_handlers.push(spawn_local(async move {
               consume_task(
-                &storage_dir,
+                context,
+                import_task,
                 &stream_name,
                 &group_name,
-                import_task,
-                &entry_id,
-                &mut cloned_redis_client,
-                &cloned_s3_client,
-                &pg_pool,
-                notifier,
-                &metrics,
+                stream_id.id,
               )
               .await?;
               Ok::<(), ImportError>(())
@@ -229,57 +231,161 @@ async fn process_upcoming_tasks(
     }
   }
 }
+#[derive(Clone)]
+struct TaskContext {
+  storage_dir: PathBuf,
+  redis_client: ConnectionManager,
+  s3_client: Arc<dyn S3Client>,
+  pg_pool: PgPool,
+  notifier: Arc<dyn ImportNotifier>,
+  metrics: Option<Arc<ImportMetrics>>,
+}
 
 #[allow(clippy::too_many_arguments)]
 async fn consume_task(
-  storage_dir: &Path,
+  mut context: TaskContext,
+  import_task: ImportTask,
   stream_name: &str,
   group_name: &str,
-  import_task: ImportTask,
-  entry_id: &String,
-  redis_client: &mut ConnectionManager,
-  s3_client: &Arc<dyn S3Client>,
-  pg_pool: &Pool<Postgres>,
-  notifier: Arc<dyn ImportNotifier>,
-  metrics: &Option<Arc<ImportMetrics>>,
+  entry_id: String,
 ) -> Result<(), ImportError> {
-  let result = process_task(
-    storage_dir,
-    import_task,
-    s3_client,
-    redis_client,
-    pg_pool,
-    notifier,
-    metrics,
-  )
-  .await;
+  if let ImportTask::Notion(task) = &import_task {
+    if let Ok(import_record) = select_import_task(&context.pg_pool, &task.task_id).await {
+      if is_record_expired(&import_record) {
+        handle_expired_task(
+          &mut context,
+          &import_record,
+          task,
+          stream_name,
+          group_name,
+          &entry_id,
+        )
+        .await?;
+        return Ok(());
+      } else if !check_blob_existence(&context.s3_client, &task.s3_key).await? {
+        re_add_task(&mut context.redis_client, stream_name, import_task).await?;
+        return Ok(());
+      }
+    }
+  }
 
-  // Each task will be consumed only once, regardless of success or failure.
-  let _: () = redis_client
+  process_and_ack_task(context, import_task, stream_name, group_name, &entry_id).await
+}
+
+async fn handle_expired_task(
+  context: &mut TaskContext,
+  import_record: &AFImportTask,
+  task: &NotionImportTask,
+  stream_name: &str,
+  group_name: &str,
+  entry_id: &str,
+) -> Result<(), ImportError> {
+  info!(
+    "[Import]: {} import is expired, delete workspace",
+    task.workspace_id
+  );
+  if let Err(err) = update_import_task_status(&import_record.task_id, 3, &context.pg_pool).await {
+    error!("Failed to update import task status: {:?}", err);
+  }
+  let _ = xack_task(&mut context.redis_client, stream_name, group_name, entry_id).await;
+  remove_workspace(&import_record.workspace_id, &context.pg_pool).await;
+  notify_user(
+    task,
+    Err(ImportError::UploadFileExpire),
+    context.notifier.clone(),
+    &context.metrics,
+  )
+  .await?;
+  Ok(())
+}
+
+async fn check_blob_existence(
+  s3_client: &Arc<dyn S3Client>,
+  s3_key: &str,
+) -> Result<bool, ImportError> {
+  s3_client.is_blob_exist(s3_key).await.map_err(|e| {
+    error!("Failed to check blob existence: {:?}", e);
+    ImportError::Internal(e.into())
+  })
+}
+
+async fn re_add_task(
+  redis_client: &mut ConnectionManager,
+  stream_name: &str,
+  task: ImportTask,
+) -> Result<(), ImportError> {
+  if let Err(err) = xadd_task(redis_client, stream_name, task).await {
+    error!("Failed to re-add task to Redis stream: {:?}", err);
+  }
+  Ok(())
+}
+
+async fn process_and_ack_task(
+  mut context: TaskContext,
+  import_task: ImportTask,
+  stream_name: &str,
+  group_name: &str,
+  entry_id: &str,
+) -> Result<(), ImportError> {
+  let result = process_task(context.clone(), import_task).await;
+  xack_task(&mut context.redis_client, stream_name, group_name, entry_id)
+    .await
+    .ok();
+  result
+}
+
+fn is_record_expired(import_record: &AFImportTask) -> bool {
+  let elapsed = Utc::now() - import_record.created_at;
+  let hours = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_HOURS", "6")
+    .parse::<i64>()
+    .unwrap_or(6);
+  elapsed.num_hours() >= hours
+}
+
+async fn xadd_task(
+  redis_client: &mut ConnectionManager,
+  stream_name: &str,
+  task: ImportTask,
+) -> Result<(), ImportError> {
+  let task_str = serde_json::to_string(&task).map_err(|e| {
+    error!("Failed to serialize task: {:?}", e);
+    ImportError::Internal(e.into())
+  })?;
+  redis_client
+    .xadd(stream_name, "*", &[("task", task_str)])
+    .await
+    .map_err(|e| {
+      error!("Failed to add task to Redis stream: {:?}", e);
+      ImportError::Internal(e.into())
+    })?;
+  Ok(())
+}
+
+async fn xack_task(
+  redis_client: &mut ConnectionManager,
+  stream_name: &str,
+  group_name: &str,
+  entry_id: &str,
+) -> Result<(), ImportError> {
+  redis_client
     .xack(stream_name, group_name, &[entry_id])
     .await
     .map_err(|e| {
       error!("Failed to acknowledge task: {:?}", e);
       ImportError::Internal(e.into())
     })?;
-
-  result
+  Ok(())
 }
 
 async fn process_task(
-  storage_dir: &Path,
+  mut context: TaskContext,
   import_task: ImportTask,
-  s3_client: &Arc<dyn S3Client>,
-  redis_client: &mut ConnectionManager,
-  pg_pool: &PgPool,
-  notifier: Arc<dyn ImportNotifier>,
-  metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<(), ImportError> {
-  let retry_interval: u64 = get_env_var("APPFLOWY_WORKER_IMPORT_NOTION_RETRY_INTERVAL", "10")
+  let retry_interval: u64 = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_RETRY_INTERVAL", "10")
     .parse()
     .unwrap_or(10);
 
-  let streaming = get_env_var("APPFLOWY_WORKER_IMPORT_NOTION_STREAMING", "false")
+  let streaming = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_STREAMING", "false")
     .parse()
     .unwrap_or(false);
 
@@ -292,13 +398,13 @@ async fn process_task(
     ImportTask::Notion(task) => {
       // 1. download zip file
       let unzip_result = download_and_unzip_file_retry(
-        storage_dir,
+        &context.storage_dir,
         &task,
-        s3_client,
+        &context.s3_client,
         3,
         Duration::from_secs(retry_interval),
         streaming,
-        metrics,
+        &context.metrics,
       )
       .await;
 
@@ -310,8 +416,14 @@ async fn process_task(
       match unzip_result {
         Ok(unzip_dir_path) => {
           // 2. process unzip file
-          let result =
-            process_unzip_file(&task, &unzip_dir_path, pg_pool, redis_client, s3_client).await;
+          let result = process_unzip_file(
+            &task,
+            &unzip_dir_path,
+            &context.pg_pool,
+            &mut context.redis_client,
+            &context.s3_client,
+          )
+          .await;
 
           // If there is any errors when processing the unzip file, we will remove the workspace and notify the user.
           if result.is_err() {
@@ -319,20 +431,20 @@ async fn process_task(
               "[Import]: failed to import notion file, delete workspace:{}",
               task.workspace_id
             );
-            remove_workspace(&task.workspace_id, pg_pool).await;
+            remove_workspace(&task.workspace_id, &context.pg_pool).await;
           }
 
-          clean_up(s3_client, &task).await;
-          notify_user(&task, result, notifier, metrics).await?;
+          clean_up(&context.s3_client, &task).await;
+          notify_user(&task, result, context.notifier, &context.metrics).await?;
         },
         Err(err) => {
           // If there is any errors when download or unzip the file, we will remove the file from S3 and notify the user.
-          if let Err(err) = s3_client.delete_blob(task.s3_key.as_str()).await {
+          if let Err(err) = &context.s3_client.delete_blob(task.s3_key.as_str()).await {
             error!("Failed to delete zip file from S3: {:?}", err);
           }
-          remove_workspace(&task.workspace_id, pg_pool).await;
-          clean_up(s3_client, &task).await;
-          notify_user(&task, Err(err), notifier, metrics).await?;
+          remove_workspace(&task.workspace_id, &context.pg_pool).await;
+          clean_up(&context.s3_client, &task).await;
+          notify_user(&task, Err(err), context.notifier, &context.metrics).await?;
         },
       }
 
@@ -346,7 +458,8 @@ async fn process_task(
         is_success: true,
         value: Default::default(),
       };
-      notifier
+      context
+        .notifier
         .notify_progress(ImportProgress::Finished(result))
         .await;
       Ok(())
@@ -372,19 +485,25 @@ pub async fn download_and_unzip_file_retry(
     attempt += 1;
     match download_and_unzip_file(storage_dir, import_task, s3_client, streaming, metrics).await {
       Ok(result) => return Ok(result),
-      Err(err) if attempt < max_retries && !err.is_file_not_found() => {
-        warn!(
-          "{} attempt {} failed: {}. Retrying in {:?}...",
-          import_task.workspace_id, attempt, err, interval
-        );
-        tokio::time::sleep(interval).await;
-      },
       Err(err) => {
-        return Err(ImportError::Internal(anyhow!(
-          "Failed after {} attempts: {}",
-          attempt,
-          err
-        )));
+        // If the Upload file not found error occurs, we will not retry.
+        if matches!(err, ImportError::UploadFileNotFound) {
+          return Err(err);
+        }
+
+        if attempt < max_retries && !err.is_file_not_found() {
+          warn!(
+            "{} attempt {} failed: {}. Retrying in {:?}...",
+            import_task.workspace_id, attempt, err, interval
+          );
+          tokio::time::sleep(interval).await;
+        } else {
+          return Err(ImportError::Internal(anyhow!(
+            "Failed after {} attempts: {}",
+            attempt,
+            err
+          )));
+        }
       },
     }
   }
@@ -478,7 +597,7 @@ enum StreamOrFile {
 
 /// Asynchronously returns a `ZipFileReader` that can read from a stream or a downloaded file, based on the environment setting.
 ///
-/// This function checks whether streaming is enabled via the `APPFLOWY_WORKER_IMPORT_NOTION_STREAMING` environment variable.
+/// This function checks whether streaming is enabled via the `APPFLOWY_WORKER_IMPORT_TASK_STREAMING` environment variable.
 /// If streaming is enabled, it reads the zip file directly from the provided stream.
 /// Otherwise, it first downloads the zip file to a local file and then reads from it.
 ///
@@ -1083,6 +1202,7 @@ pub struct NotionImportTask {
   #[serde(default)]
   pub md5_base64: Option<String>,
 }
+
 impl Display for NotionImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(

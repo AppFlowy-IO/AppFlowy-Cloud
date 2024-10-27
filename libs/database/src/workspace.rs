@@ -1439,9 +1439,21 @@ pub async fn select_user_is_invitee_for_workspace_invitation(
   res.map_or(Ok(false), Ok)
 }
 
+pub async fn select_import_task(
+  pg_pool: &PgPool,
+  task_id: &Uuid,
+) -> Result<AFImportTask, AppError> {
+  let query = String::from("SELECT * FROM af_import_task WHERE task_id = $1");
+  let import_task = sqlx::query_as::<_, AFImportTask>(&query)
+    .bind(task_id)
+    .fetch_one(pg_pool)
+    .await?;
+  Ok(import_task)
+}
+
 /// Get the import task for the user
 /// Status of the file import (e.g., 0 for pending, 1 for completed, 2 for failed)
-pub async fn select_import_task(
+pub async fn select_import_task_by_stattus(
   user_id: i64,
   pg_pool: &PgPool,
   filter_by_status: Option<i32>,
@@ -1472,6 +1484,7 @@ pub async fn select_import_task(
 ///  0 => Pending,
 ///   1 => Completed,
 ///   2 => Failed,
+///   3 => Expire,
 pub async fn update_import_task_status<'a, E: Executor<'a, Database = Postgres>>(
   task_id: &Uuid,
   new_status: i32,
@@ -1501,11 +1514,12 @@ pub async fn insert_import_task(
   workspace_id: String,
   created_by: i64,
   metadata: Option<serde_json::Value>,
+  presigned_url: Option<String>,
   pg_pool: &PgPool,
 ) -> Result<(), AppError> {
   let query = r#"
-        INSERT INTO af_import_task (task_id, file_size, workspace_id, created_by, status, metadata, uid)
-        VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'), $7)
+        INSERT INTO af_import_task (task_id, file_size, workspace_id, created_by, status, metadata, uid, file_url)
+        VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'), $7, $8)
     "#;
 
   sqlx::query(query)
@@ -1516,6 +1530,7 @@ pub async fn insert_import_task(
     .bind(0)
     .bind(metadata)
     .bind(uid)
+    .bind(presigned_url)
     .execute(pg_pool)
     .await
     .map_err(|err| {

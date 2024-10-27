@@ -4,14 +4,17 @@ use app_error::AppError;
 use async_trait::async_trait;
 use aws_sdk_s3::operation::delete_object::DeleteObjectOutput;
 
-use std::ops::Deref;
-
 use aws_sdk_s3::error::SdkError;
+use std::ops::Deref;
+use std::time::Duration;
 
 use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
+use aws_sdk_s3::types::{
+  CompletedMultipartUpload, CompletedPart, Delete, ObjectCannedAcl, ObjectIdentifier,
+};
 use aws_sdk_s3::Client;
 use database_entity::file_dto::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartData,
@@ -38,6 +41,25 @@ impl AwsS3BucketClientImpl {
   pub fn new(client: Client, bucket: String) -> Self {
     debug_assert!(!bucket.is_empty());
     AwsS3BucketClientImpl { client, bucket }
+  }
+
+  pub async fn gen_presigned_url(&self, s3_key: &str) -> Result<String, AppError> {
+    let expires_in = Duration::from_secs(3600);
+    let config = PresigningConfig::builder()
+      .expires_in(expires_in)
+      .build()
+      .map_err(|e| AppError::S3ResponseError(e.to_string()))?;
+
+    let put_object_req = self
+      .client
+      .put_object()
+      .acl(ObjectCannedAcl::Private)
+      .key(s3_key)
+      .presigned(config)
+      .await
+      .map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
+    let url = put_object_req.uri().to_string();
+    Ok(url)
   }
 
   async fn complete_upload_and_get_metadata(

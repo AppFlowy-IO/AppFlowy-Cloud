@@ -28,6 +28,12 @@ pub enum ImportError {
   #[error("Failed to unzip file: {0}")]
   UnZipFileError(String),
 
+  #[error("Upload file not found")]
+  UploadFileNotFound,
+
+  #[error("Upload file expired")]
+  UploadFileExpire,
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }
@@ -143,6 +149,24 @@ impl ImportError {
             task_id
           ),
           format!("Task ID: {} - Unzip file error", task_id),
+        )
+      }
+      ImportError::UploadFileNotFound => {
+        (
+          format!(
+            "Task ID: {} - The upload file could not be found. Please check the file and try again.",
+            task_id
+          ),
+          format!("Task ID: {} - Upload file not found", task_id),
+        )
+      }
+      ImportError::UploadFileExpire => {
+        (
+          format!(
+            "Task ID: {} - The upload file has expired. Please upload the file again.",
+            task_id
+          ),
+          format!("Task ID: {} - Upload file expired", task_id),
         )
       }
     }

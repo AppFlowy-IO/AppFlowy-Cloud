@@ -218,6 +218,10 @@ impl S3Client for MockS3Client {
   async fn delete_blob(&self, _object_key: &str) -> Result<(), WorkerError> {
     Ok(())
   }
+
+  async fn is_blob_exist(&self, _object_key: &str) -> Result<bool, WorkerError> {
+    Ok(false)
+  }
 }
 
 pub fn setup_log() {

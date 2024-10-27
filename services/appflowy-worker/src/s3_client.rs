@@ -5,6 +5,7 @@ use std::fs::Permissions;
 
 use anyhow::Result;
 use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::operation::head_object::HeadObjectError;
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
 use base64::engine::general_purpose::STANDARD;
@@ -30,6 +31,8 @@ pub trait S3Client: Send + Sync {
     content_type: Option<&str>,
   ) -> Result<(), WorkerError>;
   async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError>;
+
+  async fn is_blob_exist(&self, object_key: &str) -> Result<bool, WorkerError>;
 }
 
 #[derive(Clone, Debug)]
@@ -126,6 +129,30 @@ impl S3Client for S3ClientImpl {
         err
       ))),
     }
+  }
+
+  async fn is_blob_exist(&self, object_key: &str) -> Result<bool, WorkerError> {
+    self
+      .inner
+      .head_object()
+      .bucket(&self.bucket)
+      .key(object_key)
+      .send()
+      .await
+      .map(|_| true)
+      .or_else(|err| match err {
+        SdkError::ServiceError(service_err) => match service_err.err() {
+          HeadObjectError::NotFound(_) => Ok(false),
+          _ => Err(WorkerError::from(anyhow!(
+            "Failed to head object from S3: {:?}",
+            service_err
+          ))),
+        },
+        _ => Err(WorkerError::from(anyhow!(
+          "Failed to head object from S3: {}",
+          err
+        ))),
+      })
   }
 }
 

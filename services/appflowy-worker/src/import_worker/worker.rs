@@ -342,18 +342,25 @@ async fn process_and_ack_task(
 
 fn is_record_expired(timestamp: i64) -> bool {
   match DateTime::<Utc>::from_timestamp(timestamp, 0) {
-    None => false,
+    None => {
+      info!("[Import] failed to parse timestamp: {}", timestamp);
+      true
+    },
     Some(created_at) => {
       let now = Utc::now();
       if created_at > now {
+        error!(
+          "[Import] created_at is in the future: {} > {}",
+          created_at, now
+        );
         return false;
       }
 
       let elapsed = now - created_at;
-      let hours = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_HOURS", "3")
+      let minutes = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_MINUTES", "30")
         .parse::<i64>()
-        .unwrap_or(3);
-      elapsed.num_hours() >= hours
+        .unwrap_or(30);
+      elapsed.num_minutes() >= minutes
     },
   }
 }

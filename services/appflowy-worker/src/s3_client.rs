@@ -5,7 +5,7 @@ use std::fs::Permissions;
 
 use anyhow::Result;
 use aws_sdk_s3::operation::get_object::GetObjectError;
-use aws_sdk_s3::operation::head_object::HeadObjectError;
+use aws_sdk_s3::operation::head_object::{HeadObjectError, HeadObjectOutput};
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
 use base64::engine::general_purpose::STANDARD;
@@ -33,12 +33,32 @@ pub trait S3Client: Send + Sync {
   async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError>;
 
   async fn is_blob_exist(&self, object_key: &str) -> Result<bool, WorkerError>;
+  async fn get_blob_size(&self, object_key: &str) -> Result<i64, WorkerError>;
 }
 
 #[derive(Clone, Debug)]
 pub struct S3ClientImpl {
   pub inner: aws_sdk_s3::Client,
   pub bucket: String,
+}
+
+impl S3ClientImpl {
+  async fn get_head_object(&self, object_key: &str) -> Result<HeadObjectOutput, WorkerError> {
+    self
+      .inner
+      .head_object()
+      .bucket(&self.bucket)
+      .key(object_key)
+      .send()
+      .await
+      .map_err(|err| match err {
+        SdkError::ServiceError(service_err) => match service_err.err() {
+          HeadObjectError::NotFound(_) => WorkerError::RecordNotFound("blob not found".to_string()),
+          _ => WorkerError::from(anyhow!("Failed to head object from S3: {:?}", service_err)),
+        },
+        _ => WorkerError::from(anyhow!("Failed to head object from S3: {}", err)),
+      })
+  }
 }
 
 impl Deref for S3ClientImpl {
@@ -133,27 +153,19 @@ impl S3Client for S3ClientImpl {
   }
 
   async fn is_blob_exist(&self, object_key: &str) -> Result<bool, WorkerError> {
-    self
-      .inner
-      .head_object()
-      .bucket(&self.bucket)
-      .key(object_key)
-      .send()
-      .await
-      .map(|_| true)
-      .or_else(|err| match err {
-        SdkError::ServiceError(service_err) => match service_err.err() {
-          HeadObjectError::NotFound(_) => Ok(false),
-          _ => Err(WorkerError::from(anyhow!(
-            "Failed to head object from S3: {:?}",
-            service_err
-          ))),
-        },
-        _ => Err(WorkerError::from(anyhow!(
-          "Failed to head object from S3: {}",
-          err
-        ))),
-      })
+    let result = self.get_head_object(object_key).await;
+    match result {
+      Ok(_) => Ok(true),
+      Err(err) => match err {
+        WorkerError::RecordNotFound(_) => Ok(false),
+        _ => Err(err),
+      },
+    }
+  }
+
+  async fn get_blob_size(&self, object_key: &str) -> Result<i64, WorkerError> {
+    let output = self.get_head_object(object_key).await?;
+    Ok(output.content_length.unwrap_or(0))
   }
 }
 

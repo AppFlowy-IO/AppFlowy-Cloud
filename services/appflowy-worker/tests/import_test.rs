@@ -222,6 +222,10 @@ impl S3Client for MockS3Client {
   async fn is_blob_exist(&self, _object_key: &str) -> Result<bool, WorkerError> {
     Ok(false)
   }
+
+  async fn get_blob_size(&self, _object_key: &str) -> Result<i64, WorkerError> {
+    Ok(0)
+  }
 }
 
 pub fn setup_log() {

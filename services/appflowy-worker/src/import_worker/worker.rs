@@ -67,6 +67,8 @@ use uuid::Uuid;
 
 const GROUP_NAME: &str = "import_task_group";
 const CONSUMER_NAME: &str = "appflowy_worker";
+const MAXIMUM_CONTENT_LENGTH: &'static str = "3221225472";
+
 pub async fn run_import_worker(
   pg_pool: PgPool,
   mut redis_client: ConnectionManager,
@@ -563,6 +565,28 @@ async fn download_and_unzip_file(
   streaming: bool,
   metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<PathBuf, ImportError> {
+  let content_length = s3_client.get_blob_size(import_task.s3_key.as_str()).await?;
+  let max_content_length = get_env_var(
+    "APPFLOWY_WORKER_IMPORT_TASK_MAX_FILE_SIZE_BYTES",
+    MAXIMUM_CONTENT_LENGTH,
+  )
+  .parse::<i64>()
+  .unwrap();
+  if content_length > max_content_length {
+    return Err(ImportError::Internal(anyhow!(
+      "File size is too large: {} bytes, max allowed: {} bytes",
+      content_length,
+      max_content_length
+    )));
+  }
+
+  trace!(
+    "[Import] {} start download file: {:?}, size: {}",
+    import_task.workspace_id,
+    import_task.s3_key,
+    content_length
+  );
+
   let S3StreamResponse {
     stream,
     content_type: _,

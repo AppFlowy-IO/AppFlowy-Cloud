@@ -23,6 +23,7 @@ use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use database::workspace::{
   delete_from_workspace, select_import_task, select_workspace_database_storage_id,
   update_import_task_status, update_updated_at_of_workspace_with_uid, update_workspace_status,
+  ImportTaskState,
 };
 use database_entity::dto::CollabParams;
 
@@ -298,16 +299,25 @@ async fn handle_expired_task(
     "[Import]: {} import is expired, delete workspace",
     task.workspace_id
   );
-  if let Err(err) = update_import_task_status(&import_record.task_id, 3, &context.pg_pool).await {
-    error!("Failed to update import task status: {:?}", err);
-  }
+
+  update_import_task_status(
+    &import_record.task_id,
+    ImportTaskState::Expire,
+    &context.pg_pool,
+  )
+  .await
+  .map_err(|e| {
+    error!("Failed to update import task status: {:?}", e);
+    ImportError::Internal(e.into())
+  })?;
+  remove_workspace(&import_record.workspace_id, &context.pg_pool).await;
+
   if let Err(err) = context.s3_client.delete_blob(task.s3_key.as_str()).await {
     error!(
       "[Import]: {} failed to delete zip file from S3: {:?}",
       task.workspace_id, err
     );
   }
-  remove_workspace(&import_record.workspace_id, &context.pg_pool).await;
   let _ = xack_task(&mut context.redis_client, stream_name, group_name, entry_id).await;
   notify_user(
     task,
@@ -364,9 +374,9 @@ fn is_task_expired(timestamp: i64, last_process_at: Option<i64>) -> bool {
       }
 
       let elapsed = now - created_at;
-      let minutes = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_MINUTES", "30")
+      let minutes = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_MINUTES", "10")
         .parse::<i64>()
-        .unwrap_or(30);
+        .unwrap_or(10);
       elapsed.num_minutes() >= minutes
     },
   }
@@ -969,14 +979,18 @@ async fn process_unzip_file(
     import_task.workspace_id,
     import_task.task_id,
   );
-  update_import_task_status(&import_task.task_id, 1, transaction.deref_mut())
-    .await
-    .map_err(|err| {
-      ImportError::Internal(anyhow!(
-        "Failed to update import task status when importing data: {:?}",
-        err
-      ))
-    })?;
+  update_import_task_status(
+    &import_task.task_id,
+    ImportTaskState::Completed,
+    transaction.deref_mut(),
+  )
+  .await
+  .map_err(|err| {
+    ImportError::Internal(anyhow!(
+      "Failed to update import task status when importing data: {:?}",
+      err
+    ))
+  })?;
 
   trace!(
     "[Import]: {} set is_initialized to true",

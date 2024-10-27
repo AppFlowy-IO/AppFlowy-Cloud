@@ -1,7 +1,6 @@
 use client_api_test::TestClient;
 use collab_document::importer::define::{BlockType, URL_FIELD};
 use collab_folder::ViewLayout;
-use shared_entity::dto::import_dto::ImportTaskStatus;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -9,7 +8,7 @@ use std::time::Duration;
 async fn import_blog_post_test() {
   // Step 1: Import the blog post zip
   let (client, imported_workspace_id) =
-    import_notion_zip_until_complete("blog_post.zip", Some(20)).await;
+    import_notion_zip_until_complete("blog_post.zip", Some(10)).await;
 
   // Step 2: Fetch the folder and views
   let folder = client.get_folder(&imported_workspace_id).await;
@@ -184,12 +183,16 @@ async fn import_notion_zip_until_complete(
 ) -> (TestClient, String) {
   let client = TestClient::new_user().await;
   let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
-  let url = client
+  let mut url = client
     .api_client
     .create_import(&file_path)
     .await
     .unwrap()
     .presigned_url;
+
+  if url.contains("http://minio:9000") {
+    url = url.replace("http://minio:9000", "http://localhost/minio");
+  }
 
   if let Some(secs) = upload_after_secs {
     tokio::time::sleep(Duration::from_secs(secs)).await;
@@ -210,7 +213,7 @@ async fn import_notion_zip_until_complete(
 
   let tasks = client.api_client.get_import_list().await.unwrap().tasks;
   assert_eq!(tasks.len(), 1);
-  assert_eq!(tasks[0].status, ImportTaskStatus::Pending);
+  assert_eq!(tasks[0].status, 0);
 
   wait_until_import_complete(&client).await;
 
@@ -236,7 +239,7 @@ async fn wait_until_import_complete(client: &TestClient) {
     let tasks = client.api_client.get_import_list().await.unwrap().tasks;
     assert_eq!(tasks.len(), 1);
 
-    if tasks[0].status == ImportTaskStatus::Completed {
+    if tasks[0].status == 1 {
       task_completed = true;
     }
     retries += 1;

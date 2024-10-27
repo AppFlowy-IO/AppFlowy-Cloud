@@ -711,15 +711,17 @@ pub async fn create_upload_task(
 
 pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppError> {
   // Query to check for pending tasks for the given user ID
+  let pending = ImportTaskState::Pending as i16;
   let query = "
         SELECT COUNT(*)
         FROM af_import_task
-        WHERE uid = $1 AND status = 0
+        WHERE uid = $1 AND status = $2
     ";
 
   // Execute the query and fetch the count
   let (count,): (i64,) = sqlx::query_as(query)
     .bind(uid)
+    .bind(pending)
     .fetch_one(pg_pool)
     .await
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to query pending tasks: {:?}", e)))?;

@@ -1453,10 +1453,10 @@ pub async fn select_import_task(
 
 /// Get the import task for the user
 /// Status of the file import (e.g., 0 for pending, 1 for completed, 2 for failed)
-pub async fn select_import_task_by_stattus(
+pub async fn select_import_task_by_state(
   user_id: i64,
   pg_pool: &PgPool,
-  filter_by_status: Option<i32>,
+  filter_by_status: Option<ImportTaskState>,
 ) -> Result<Vec<AFImportTask>, AppError> {
   let mut query = String::from("SELECT * FROM af_import_task WHERE created_by = $1");
   if filter_by_status.is_some() {
@@ -1467,7 +1467,7 @@ pub async fn select_import_task_by_stattus(
   let import_tasks = if let Some(status) = filter_by_status {
     sqlx::query_as::<_, AFImportTask>(&query)
       .bind(user_id)
-      .bind(status)
+      .bind(status as i32)
       .fetch_all(pg_pool)
       .await?
   } else {
@@ -1480,6 +1480,27 @@ pub async fn select_import_task_by_stattus(
   Ok(import_tasks)
 }
 
+#[derive(Clone, Debug)]
+pub enum ImportTaskState {
+  Pending = 0,
+  Completed = 1,
+  Failed = 2,
+  Expire = 3,
+  Cancel = 4,
+}
+
+impl From<i16> for ImportTaskState {
+  fn from(val: i16) -> Self {
+    match val {
+      0 => ImportTaskState::Pending,
+      1 => ImportTaskState::Completed,
+      2 => ImportTaskState::Failed,
+      4 => ImportTaskState::Cancel,
+      _ => ImportTaskState::Pending,
+    }
+  }
+}
+
 /// Update import task status
 ///  0 => Pending,
 ///   1 => Completed,
@@ -1487,12 +1508,12 @@ pub async fn select_import_task_by_stattus(
 ///   3 => Expire,
 pub async fn update_import_task_status<'a, E: Executor<'a, Database = Postgres>>(
   task_id: &Uuid,
-  new_status: i32,
+  new_status: ImportTaskState,
   executor: E,
 ) -> Result<(), AppError> {
   let query = "UPDATE af_import_task SET status = $1 WHERE task_id = $2";
   sqlx::query(query)
-    .bind(new_status)
+    .bind(new_status as i16)
     .bind(task_id)
     .execute(executor)
     .await
@@ -1528,7 +1549,7 @@ pub async fn insert_import_task(
     .bind(file_size)
     .bind(workspace_id)
     .bind(created_by)
-    .bind(0)
+    .bind(ImportTaskState::Pending as i32)
     .bind(metadata)
     .bind(uid)
     .bind(presigned_url)

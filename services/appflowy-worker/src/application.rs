@@ -19,6 +19,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
+use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
 use std::sync::{Arc, Once};
 use std::time::Duration;
@@ -102,6 +103,10 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
 
   let local_set = LocalSet::new();
   let email_notifier = EmailNotifier::new(mailer);
+  let tick_interval = get_env_var("APPFLOWY_WORKER_IMPORT_TICK_INTERVAL", "10")
+    .parse::<u64>()
+    .unwrap_or(10);
+
   let import_worker_fut = local_set.run_until(run_import_worker(
     state.pg_pool.clone(),
     state.redis_client.clone(),
@@ -109,7 +114,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     Arc::new(state.s3_client.clone()),
     Arc::new(email_notifier),
     "import_task_stream",
-    30,
+    tick_interval,
   ));
 
   let app = Router::new()

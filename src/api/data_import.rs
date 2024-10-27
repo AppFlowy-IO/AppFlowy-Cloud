@@ -12,12 +12,12 @@ use crate::biz::workspace::ops::{create_empty_workspace, create_upload_task, num
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use database::user::select_name_and_email_from_uuid;
-use database::workspace::select_import_task_by_stattus;
+use database::workspace::select_import_task_by_state;
 use database_entity::dto::{CreateImportTask, CreateImportTaskResponse};
 use futures_util::StreamExt;
 use infra::env_util::get_env_var;
 use serde_json::json;
-use shared_entity::dto::import_dto::{ImportTaskDetail, ImportTaskStatus, UserImportTask};
+use shared_entity::dto::import_dto::{ImportTaskDetail, UserImportTask};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
 use std::path::PathBuf;
@@ -113,7 +113,7 @@ async fn get_import_detail_handler(
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<UserImportTask>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let tasks = select_import_task_by_stattus(uid, &state.pg_pool, None)
+  let tasks = select_import_task_by_state(uid, &state.pg_pool, None)
     .await
     .map(|tasks| {
       tasks
@@ -122,7 +122,7 @@ async fn get_import_detail_handler(
           task_id: task.task_id.to_string(),
           file_size: task.file_size as u64,
           created_at: task.created_at.timestamp(),
-          status: ImportTaskStatus::from(task.status),
+          status: task.status,
         })
         .collect::<Vec<_>>()
     })?;

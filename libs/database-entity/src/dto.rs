@@ -1476,8 +1476,11 @@ pub struct CreateImportTask {
   pub workspace_name: String,
 }
 
+/// Create a import task
+/// Upload the import zip file to the presigned url
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateImportTaskResponse {
+  pub task_id: String,
   pub presigned_url: String,
 }
 

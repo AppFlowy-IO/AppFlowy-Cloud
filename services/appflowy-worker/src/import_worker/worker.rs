@@ -562,8 +562,7 @@ async fn download_and_unzip_file(
     content_length,
   } = s3_client
     .get_blob_stream(import_task.s3_key.as_str())
-    .await
-    .map_err(|err| ImportError::Internal(err.into()))?;
+    .await?;
 
   let buffer_size = buffer_size_from_content_length(content_length);
   if let Some(metrics) = metrics {

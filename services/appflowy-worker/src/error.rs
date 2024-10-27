@@ -38,6 +38,15 @@ pub enum ImportError {
   Internal(#[from] anyhow::Error),
 }
 
+impl From<WorkerError> for ImportError {
+  fn from(err: WorkerError) -> ImportError {
+    match err {
+      WorkerError::RecordNotFound(_) => ImportError::UploadFileNotFound,
+      _ => ImportError::Internal(err.into()),
+    }
+  }
+}
+
 impl ImportError {
   pub fn is_file_not_found(&self) -> bool {
     match self {

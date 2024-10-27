@@ -87,6 +87,11 @@ async fn create_import_handler(
       }
   });
 
+  let data = CreateImportTaskResponse {
+    task_id: task_id.to_string(),
+    presigned_url: presigned_url.clone(),
+  };
+
   create_upload_task(
     uid,
     task_id,
@@ -94,17 +99,13 @@ async fn create_import_handler(
     &host,
     &workspace_id,
     0,
-    Some(presigned_url.clone()),
+    Some(presigned_url),
     &state.redis_connection_manager,
     &state.pg_pool,
   )
   .await?;
 
-  Ok(
-    AppResponse::Ok()
-      .with_data(CreateImportTaskResponse { presigned_url })
-      .into(),
-  )
+  Ok(AppResponse::Ok().with_data(data).into())
 }
 
 async fn get_import_detail_handler(

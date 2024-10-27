@@ -28,7 +28,7 @@ pub async fn delete_from_workspace(pg_pool: &PgPool, workspace_id: &Uuid) -> Res
   .execute(pg_pool)
   .await?;
 
-  assert!(pg_row.rows_affected() == 1);
+  debug_assert!(pg_row.rows_affected() == 1);
   Ok(())
 }
 

@@ -366,6 +366,15 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  /// Creates an import task for a file and returns the import task response.
+  ///
+  /// This function initiates an import task by sending a POST request to the
+  /// `/api/import/create` endpoint. The request includes the `workspace_name` derived
+  /// from the provided file's name (or a generated UUID if the file name cannot be determined).
+  ///
+  /// After creating the import task, you should use [Self::upload_import_file] to upload
+  /// the actual file to the presigned URL obtained from the [CreateImportTaskResponse].
+  ///
   pub async fn create_import(
     &self,
     file_path: &Path,
@@ -393,6 +402,13 @@ impl Client {
       .into_data()
   }
 
+  /// Uploads a file to a specified presigned URL obtained from the import task response.
+  ///
+  /// This function uploads a file to the given presigned URL using an HTTP PUT request.
+  /// The file's metadata is read to determine its size, and the upload stream is created
+  /// and sent to the provided URL. It is recommended to call this function after successfully
+  /// creating an import task using [Self::create_import].
+  ///
   pub async fn upload_import_file(
     &self,
     file_path: &Path,

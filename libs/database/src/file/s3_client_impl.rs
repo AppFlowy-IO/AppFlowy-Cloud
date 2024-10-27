@@ -43,8 +43,12 @@ impl AwsS3BucketClientImpl {
     AwsS3BucketClientImpl { client, bucket }
   }
 
-  pub async fn gen_presigned_url(&self, s3_key: &str) -> Result<String, AppError> {
-    let expires_in = Duration::from_secs(3600);
+  pub async fn gen_presigned_url(
+    &self,
+    s3_key: &str,
+    expires_in_secs: u64,
+  ) -> Result<String, AppError> {
+    let expires_in = Duration::from_secs(expires_in_secs);
     let config = PresigningConfig::builder()
       .expires_in(expires_in)
       .build()

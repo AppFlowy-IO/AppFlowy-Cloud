@@ -287,8 +287,14 @@ async fn handle_expired_task(
   if let Err(err) = update_import_task_status(&import_record.task_id, 3, &context.pg_pool).await {
     error!("Failed to update import task status: {:?}", err);
   }
-  let _ = xack_task(&mut context.redis_client, stream_name, group_name, entry_id).await;
+  if let Err(err) = context.s3_client.delete_blob(task.s3_key.as_str()).await {
+    error!(
+      "[Import]: {} failed to delete zip file from S3: {:?}",
+      task.workspace_id, err
+    );
+  }
   remove_workspace(&import_record.workspace_id, &context.pg_pool).await;
+  let _ = xack_task(&mut context.redis_client, stream_name, group_name, entry_id).await;
   notify_user(
     task,
     Err(ImportError::UploadFileExpire),

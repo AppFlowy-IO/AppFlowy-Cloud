@@ -1507,6 +1507,7 @@ pub async fn update_import_task_status<'a, E: Executor<'a, Database = Postgres>>
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_import_task(
   uid: i64,
   task_id: Uuid,

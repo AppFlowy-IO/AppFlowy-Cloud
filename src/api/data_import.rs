@@ -13,7 +13,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use database::user::select_name_and_email_from_uuid;
 use database::workspace::select_import_task_by_stattus;
-use database_entity::dto::{CreateChatParams, CreateImportTask, CreateImportTaskResponse};
+use database_entity::dto::{CreateImportTask, CreateImportTaskResponse};
 use futures_util::StreamExt;
 use infra::env_util::get_env_var;
 use serde_json::json;
@@ -30,7 +30,7 @@ use validator::Validate;
 pub fn data_import_scope() -> Scope {
   web::scope("/api/import")
     .service(
-      web::resource("/")
+      web::resource("")
         .route(web::post().to(import_data_handler))
         .route(web::get().to(get_import_detail_handler)),
     )
@@ -47,9 +47,10 @@ async fn import_data_handler_v1(
   params.validate().map_err(AppError::from)?;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   check_maximum_task(&state, uid).await?;
-
   let s3_key = Uuid::new_v4().to_string();
-  let presigned_url = state.bucket_client.gen_presigned_url(&s3_key).await?;
+
+  // Generate presigned url with 10 minutes expiration
+  let presigned_url = state.bucket_client.gen_presigned_url(&s3_key, 600).await?;
   trace!("[Import] Presigned url: {}", presigned_url);
 
   let (user_name, user_email) = select_name_and_email_from_uuid(&state.pg_pool, &user_uuid).await?;
@@ -258,13 +259,10 @@ async fn check_maximum_task(state: &Data<AppState>, uid: i64) -> Result<(), AppE
     .unwrap_or(3);
 
   if count >= maximum_pending_task {
-    return Err(
-      AppError::TooManyImportTask(format!(
-        "{} tasks are pending. Please wait until they are completed",
-        count
-      ))
-      .into(),
-    );
+    return Err(AppError::TooManyImportTask(format!(
+      "{} tasks are pending. Please wait until they are completed",
+      count
+    )));
   }
   Ok(())
 }

@@ -9,7 +9,9 @@ use async_trait::async_trait;
 use rayon::iter::ParallelIterator;
 
 use bytes::Bytes;
-use client_api_entity::{CollabParams, PublishCollabItem, QueryCollabParams};
+use client_api_entity::{
+  CollabParams, CreateImportTask, CreateImportTaskResponse, PublishCollabItem, QueryCollabParams,
+};
 use client_api_entity::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartResponse,
 };
@@ -40,7 +42,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Condition, RetryIf};
 use tokio_util::codec::{BytesCodec, FramedRead};
-use tracing::{debug, event, info, instrument, trace};
+use tokio_util::io::ReaderStream;
+use tracing::{debug, error, event, info, instrument, trace};
 
 impl Client {
   pub async fn stream_completion_text(
@@ -360,6 +363,49 @@ impl Client {
     let resp = builder.send().await?;
 
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn import_file_v1(&self, file_path: &Path) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/import/v1", self.base_url);
+    let file_name = file_path
+      .file_stem()
+      .map(|s| s.to_string_lossy().to_string())
+      .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let params = CreateImportTask {
+      workspace_name: file_name.clone(),
+    };
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .header("X-Host", self.base_url.clone())
+      .send()
+      .await?;
+
+    let presigned_url = AppResponse::<CreateImportTaskResponse>::from_response(resp)
+      .await?
+      .into_data()?
+      .presigned_url;
+
+    let file = File::open(file_path).await?;
+    let file_stream = ReaderStream::new(file);
+    let stream_body = Body::wrap_stream(file_stream);
+
+    trace!("start upload file to s3: {}", presigned_url);
+    let client = reqwest::Client::new();
+    let upload_resp = client
+      .put(&presigned_url)
+      .header("Content-Type", "application/octet-stream")
+      .body(stream_body)
+      .send()
+      .await?;
+
+    if !upload_resp.status().is_success() {
+      error!("File upload failed: {:?}", upload_resp);
+      return Err(AppError::S3ResponseError("Can not upload file to s3".to_string()).into());
+    }
+
+    Ok(())
   }
 
   pub async fn get_import_list(&self) -> Result<UserImportTask, AppResponseError> {

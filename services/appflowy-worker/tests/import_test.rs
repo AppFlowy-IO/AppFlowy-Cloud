@@ -2,7 +2,7 @@ use anyhow::Result;
 use appflowy_worker::error::WorkerError;
 use appflowy_worker::import_worker::report::{ImportNotifier, ImportProgress};
 use appflowy_worker::import_worker::worker::{run_import_worker, ImportTask};
-use appflowy_worker::s3_client::{S3Client, S3StreamResponse};
+use appflowy_worker::s3_client::{BlobMeta, S3Client, S3StreamResponse};
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
 
@@ -223,8 +223,8 @@ impl S3Client for MockS3Client {
     Ok(false)
   }
 
-  async fn get_blob_size(&self, _object_key: &str) -> Result<i64, WorkerError> {
-    Ok(0)
+  async fn get_blob_meta(&self, _object_key: &str) -> Result<BlobMeta, WorkerError> {
+    todo!()
   }
 }
 

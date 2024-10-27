@@ -570,17 +570,41 @@ async fn download_and_unzip_file(
   streaming: bool,
   metrics: &Option<Arc<ImportMetrics>>,
 ) -> Result<PathBuf, ImportError> {
-  let content_length = s3_client.get_blob_size(import_task.s3_key.as_str()).await?;
+  let blob_meta = s3_client.get_blob_meta(import_task.s3_key.as_str()).await?;
+  match blob_meta.content_type {
+    None => {
+      error!(
+        "[Import] {} failed to get content type for file: {:?}",
+        import_task.workspace_id, import_task.s3_key
+      );
+    },
+    Some(content_type) => {
+      let valid_zip_types = [
+        "application/zip",
+        "application/x-zip-compressed",
+        "multipart/x-zip",
+        "application/x-compressed",
+      ];
+
+      if !valid_zip_types.contains(&content_type.as_str()) {
+        return Err(ImportError::Internal(anyhow!(
+          "Invalid content type: {}",
+          content_type
+        )));
+      }
+    },
+  }
+
   let max_content_length = get_env_var(
     "APPFLOWY_WORKER_IMPORT_TASK_MAX_FILE_SIZE_BYTES",
     MAXIMUM_CONTENT_LENGTH,
   )
   .parse::<i64>()
   .unwrap();
-  if content_length > max_content_length {
+  if blob_meta.content_length > max_content_length {
     return Err(ImportError::Internal(anyhow!(
       "File size is too large: {} bytes, max allowed: {} bytes",
-      content_length,
+      blob_meta.content_length,
       max_content_length
     )));
   }
@@ -589,7 +613,7 @@ async fn download_and_unzip_file(
     "[Import] {} start download file: {:?}, size: {}",
     import_task.workspace_id,
     import_task.s3_key,
-    content_length
+    blob_meta.content_length
   );
 
   let S3StreamResponse {

@@ -33,7 +33,12 @@ pub trait S3Client: Send + Sync {
   async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError>;
 
   async fn is_blob_exist(&self, object_key: &str) -> Result<bool, WorkerError>;
-  async fn get_blob_size(&self, object_key: &str) -> Result<i64, WorkerError>;
+  async fn get_blob_meta(&self, object_key: &str) -> Result<BlobMeta, WorkerError>;
+}
+
+pub struct BlobMeta {
+  pub content_length: i64,
+  pub content_type: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -163,9 +168,14 @@ impl S3Client for S3ClientImpl {
     }
   }
 
-  async fn get_blob_size(&self, object_key: &str) -> Result<i64, WorkerError> {
+  async fn get_blob_meta(&self, object_key: &str) -> Result<BlobMeta, WorkerError> {
     let output = self.get_head_object(object_key).await?;
-    Ok(output.content_length.unwrap_or(0))
+    let content_length = output.content_length.unwrap_or(0);
+    let content_type = output.content_type;
+    Ok(BlobMeta {
+      content_length,
+      content_type,
+    })
   }
 }
 

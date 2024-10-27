@@ -427,6 +427,7 @@ impl Client {
       .put(url)
       .header("Content-Type", "application/octet-stream")
       .header("Content-Length", file_size)
+      .header("Content-Type", "application/zip")
       .body(stream_body)
       .send()
       .await?;

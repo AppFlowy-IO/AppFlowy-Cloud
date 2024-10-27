@@ -6,7 +6,7 @@ use aws_sdk_s3::operation::delete_object::DeleteObjectOutput;
 
 use aws_sdk_s3::error::SdkError;
 use std::ops::Deref;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
@@ -48,16 +48,22 @@ impl AwsS3BucketClientImpl {
   ) -> Result<String, AppError> {
     let expires_in = Duration::from_secs(expires_in_secs);
     let config = PresigningConfig::builder()
+      .start_time(SystemTime::now())
       .expires_in(expires_in)
       .build()
       .map_err(|e| AppError::S3ResponseError(e.to_string()))?;
 
+    // There is no easy way to restrict file size of the upload (default limit max 5GB using PUT or other upload methods)
+    // https://github.com/aws/aws-sdk-net/issues/424
+    //
+    // consider using POST:
+    // https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
     let put_object_req = self
       .client
       .put_object()
-      // .acl(ObjectCannedAcl::Private)
       .bucket(&self.bucket)
       .key(s3_key)
+      .content_type("application/zip")
       .presigned(config)
       .await
       .map_err(|err| AppError::Internal(anyhow!("Generate presigned url failed: {:?}", err)))?;

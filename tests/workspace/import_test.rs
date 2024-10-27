@@ -8,7 +8,8 @@ use std::time::Duration;
 #[tokio::test]
 async fn import_blog_post_test() {
   // Step 1: Import the blog post zip
-  let (client, imported_workspace_id) = import_notion_zip_until_complete("blog_post.zip").await;
+  let (client, imported_workspace_id) =
+    import_notion_zip_until_complete("blog_post.zip", Some(20)).await;
 
   // Step 2: Fetch the folder and views
   let folder = client.get_folder(&imported_workspace_id).await;
@@ -78,7 +79,8 @@ async fn import_blog_post_test() {
 
 #[tokio::test]
 async fn import_project_and_task_zip_test() {
-  let (client, imported_workspace_id) = import_notion_zip_until_complete("project&task.zip").await;
+  let (client, imported_workspace_id) =
+    import_notion_zip_until_complete("project&task.zip", None).await;
   let folder = client.get_folder(&imported_workspace_id).await;
   let workspace_database = client.get_workspace_database(&imported_workspace_id).await;
   let space_views = folder.get_views_belong_to(&imported_workspace_id);
@@ -176,10 +178,29 @@ async fn imported_workspace_do_not_become_latest_visit_workspace_test() {
   );
 }
 
-async fn import_notion_zip_until_complete(name: &str) -> (TestClient, String) {
+async fn import_notion_zip_until_complete(
+  name: &str,
+  upload_after_secs: Option<u64>,
+) -> (TestClient, String) {
   let client = TestClient::new_user().await;
   let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
-  client.api_client.import_file(&file_path).await.unwrap();
+  let url = client
+    .api_client
+    .create_import(&file_path)
+    .await
+    .unwrap()
+    .presigned_url;
+
+  if let Some(secs) = upload_after_secs {
+    tokio::time::sleep(Duration::from_secs(secs)).await;
+  }
+
+  client
+    .api_client
+    .upload_import_file(&file_path, &url)
+    .await
+    .unwrap();
+
   let default_workspace_id = client.workspace_id().await;
 
   // when importing a file, the workspace for the file should be created and it's

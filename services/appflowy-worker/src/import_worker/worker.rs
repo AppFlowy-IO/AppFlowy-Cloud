@@ -170,7 +170,7 @@ async fn process_upcoming_tasks(
 ) -> Result<(), ImportError> {
   let options = StreamReadOptions::default()
     .group(group_name, consumer_name)
-    .count(3);
+    .count(10);
   let mut interval = interval(Duration::from_secs(interval_secs));
   interval.tick().await;
 
@@ -224,7 +224,7 @@ async fn process_upcoming_tasks(
 
     while let Some(result) = task_handlers.next().await {
       match result {
-        Ok(Ok(())) => trace!("Task completed successfully"),
+        Ok(Ok(())) => {},
         Ok(Err(e)) => error!("Task failed: {:?}", e),
         Err(e) => error!("Runtime error: {:?}", e),
       }
@@ -250,20 +250,31 @@ async fn consume_task(
   entry_id: String,
 ) -> Result<(), ImportError> {
   if let ImportTask::Notion(task) = &import_task {
-    if let Ok(import_record) = select_import_task(&context.pg_pool, &task.task_id).await {
-      if is_record_expired(&import_record) {
-        handle_expired_task(
-          &mut context,
-          &import_record,
-          task,
+    if let Some(created_at_timestamp) = task.created_at {
+      if is_record_expired(created_at_timestamp) {
+        if let Ok(import_record) = select_import_task(&context.pg_pool, &task.task_id).await {
+          handle_expired_task(
+            &mut context,
+            &import_record,
+            task,
+            stream_name,
+            group_name,
+            &entry_id,
+          )
+          .await?;
+        }
+
+        return Ok(());
+      } else if !check_blob_existence(&context.s3_client, &task.s3_key).await? {
+        trace!("[Import] {} file not found, re-add task", task.workspace_id);
+        re_add_task(
+          &mut context.redis_client,
           stream_name,
           group_name,
+          import_task,
           &entry_id,
         )
         .await?;
-        return Ok(());
-      } else if !check_blob_existence(&context.s3_client, &task.s3_key).await? {
-        re_add_task(&mut context.redis_client, stream_name, import_task).await?;
         return Ok(());
       }
     }
@@ -315,17 +326,6 @@ async fn check_blob_existence(
   })
 }
 
-async fn re_add_task(
-  redis_client: &mut ConnectionManager,
-  stream_name: &str,
-  task: ImportTask,
-) -> Result<(), ImportError> {
-  if let Err(err) = xadd_task(redis_client, stream_name, task).await {
-    error!("Failed to re-add task to Redis stream: {:?}", err);
-  }
-  Ok(())
-}
-
 async fn process_and_ack_task(
   mut context: TaskContext,
   import_task: ImportTask,
@@ -340,31 +340,61 @@ async fn process_and_ack_task(
   result
 }
 
-fn is_record_expired(import_record: &AFImportTask) -> bool {
-  let elapsed = Utc::now() - import_record.created_at;
-  let hours = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_HOURS", "6")
-    .parse::<i64>()
-    .unwrap_or(6);
-  elapsed.num_hours() >= hours
+fn is_record_expired(timestamp: i64) -> bool {
+  match DateTime::<Utc>::from_timestamp(timestamp, 0) {
+    None => false,
+    Some(created_at) => {
+      let now = Utc::now();
+      if created_at > now {
+        return false;
+      }
+
+      let elapsed = now - created_at;
+      let hours = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_HOURS", "3")
+        .parse::<i64>()
+        .unwrap_or(3);
+      elapsed.num_hours() >= hours
+    },
+  }
 }
 
-async fn xadd_task(
+async fn re_add_task(
   redis_client: &mut ConnectionManager,
   stream_name: &str,
+  group_name: &str,
   task: ImportTask,
+  entry_id: &str,
 ) -> Result<(), ImportError> {
   let task_str = serde_json::to_string(&task).map_err(|e| {
     error!("Failed to serialize task: {:?}", e);
     ImportError::Internal(e.into())
   })?;
-  redis_client
-    .xadd(stream_name, "*", &[("task", task_str)])
-    .await
-    .map_err(|e| {
-      error!("Failed to add task to Redis stream: {:?}", e);
-      ImportError::Internal(e.into())
-    })?;
-  Ok(())
+
+  let mut pipeline = redis::pipe();
+  pipeline
+      .atomic() // Ensures the commands are executed atomically
+      .cmd("XACK") // Acknowledge the task
+      .arg(stream_name)
+      .arg(group_name)
+      .arg(entry_id)
+      .ignore() // Ignore the result of XACK
+      .cmd("XADD") // Re-add the task to the stream
+      .arg(stream_name)
+      .arg("*")
+      .arg("task")
+      .arg(task_str);
+
+  let result: Result<(), redis::RedisError> = pipeline.query_async(redis_client).await;
+  match result {
+    Ok(_) => Ok(()),
+    Err(err) => {
+      error!(
+        "Failed to execute transaction for re-adding task: {:?}",
+        err
+      );
+      Err(ImportError::Internal(err.into()))
+    },
+  }
 }
 
 async fn xack_task(
@@ -1206,6 +1236,8 @@ pub struct NotionImportTask {
   pub s3_key: String,
   pub host: String,
   #[serde(default)]
+  pub created_at: Option<i64>,
+  #[serde(default)]
   pub md5_base64: Option<String>,
 }
 
@@ -1222,7 +1254,8 @@ impl Display for NotionImportTask {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ImportTask {
-  Notion(NotionImportTask),
+  // boxing the large fields to reduce the total size of the enum
+  Notion(Box<NotionImportTask>),
   Custom(serde_json::Value),
 }
 

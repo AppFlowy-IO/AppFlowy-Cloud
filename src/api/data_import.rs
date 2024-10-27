@@ -23,7 +23,7 @@ use std::env::temp_dir;
 use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tracing::{error, info, trace};
+use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -34,20 +34,21 @@ pub fn data_import_scope() -> Scope {
         .route(web::post().to(import_data_handler))
         .route(web::get().to(get_import_detail_handler)),
     )
-    .service(web::resource("/v1").route(web::post().to(import_data_handler_v1)))
+    .service(web::resource("/create").route(web::post().to(create_import_handler)))
 }
 
-async fn import_data_handler_v1(
+#[instrument(level = "debug", skip_all)]
+async fn create_import_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
-  req: HttpRequest,
   payload: Json<CreateImportTask>,
+  req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<CreateImportTaskResponse>> {
   let params = payload.into_inner();
   params.validate().map_err(AppError::from)?;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   check_maximum_task(&state, uid).await?;
-  let s3_key = Uuid::new_v4().to_string();
+  let s3_key = format!("import_presigned_url_{}", Uuid::new_v4());
 
   // Generate presigned url with 10 minutes expiration
   let presigned_url = state.bucket_client.gen_presigned_url(&s3_key, 600).await?;
@@ -70,6 +71,7 @@ async fn import_data_handler_v1(
     "User:{} import new workspace:{}, name:{}",
     uid, workspace_id, params.workspace_name,
   );
+  let timestamp = chrono::Utc::now().timestamp();
   let task_id = Uuid::new_v4();
   let task = json!({
       "notion": {
@@ -78,6 +80,7 @@ async fn import_data_handler_v1(
          "user_email": user_email,
          "task_id": task_id.to_string(),
          "workspace_id": workspace_id,
+         "created_at": timestamp,
          "s3_key": s3_key,
          "host": host,
          "workspace_name": &params.workspace_name,

@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
 use rayon::iter::ParallelIterator;
+use std::fs::metadata;
 
 use bytes::Bytes;
 use client_api_entity::{
@@ -42,7 +43,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Condition, RetryIf};
 use tokio_util::codec::{BytesCodec, FramedRead};
-use tokio_util::io::ReaderStream;
+
 use tracing::{debug, error, event, info, instrument, trace};
 
 impl Client {
@@ -365,44 +366,58 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn import_file_v1(&self, file_path: &Path) -> Result<(), AppResponseError> {
-    let url = format!("{}/api/import/v1", self.base_url);
+  pub async fn create_import(
+    &self,
+    file_path: &Path,
+  ) -> Result<CreateImportTaskResponse, AppResponseError> {
+    let url = format!("{}/api/import/create", self.base_url);
     let file_name = file_path
       .file_stem()
       .map(|s| s.to_string_lossy().to_string())
       .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
     let params = CreateImportTask {
       workspace_name: file_name.clone(),
     };
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&params)
       .header("X-Host", self.base_url.clone())
+      .json(&params)
       .send()
       .await?;
 
-    let presigned_url = AppResponse::<CreateImportTaskResponse>::from_response(resp)
+    log_request_id(&resp);
+    AppResponse::<CreateImportTaskResponse>::from_response(resp)
       .await?
-      .into_data()?
-      .presigned_url;
+      .into_data()
+  }
 
+  pub async fn upload_import_file(
+    &self,
+    file_path: &Path,
+    url: &str,
+  ) -> Result<(), AppResponseError> {
+    let file_metadata = metadata(file_path)?;
+    let file_size = file_metadata.len();
+    // Open the file
     let file = File::open(file_path).await?;
-    let file_stream = ReaderStream::new(file);
+    let file_stream = FramedRead::new(file, BytesCodec::new());
     let stream_body = Body::wrap_stream(file_stream);
+    trace!("start upload file to s3: {}", url);
 
-    trace!("start upload file to s3: {}", presigned_url);
     let client = reqwest::Client::new();
     let upload_resp = client
-      .put(&presigned_url)
+      .put(url)
       .header("Content-Type", "application/octet-stream")
+      .header("Content-Length", file_size)
       .body(stream_body)
       .send()
       .await?;
 
     if !upload_resp.status().is_success() {
       error!("File upload failed: {:?}", upload_resp);
-      return Err(AppError::S3ResponseError("Can not upload file to s3".to_string()).into());
+      return Err(AppError::S3ResponseError("Cannot upload file to S3".to_string()).into());
     }
 
     Ok(())

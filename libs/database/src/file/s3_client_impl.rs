@@ -12,9 +12,7 @@ use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::types::{
-  CompletedMultipartUpload, CompletedPart, Delete, ObjectCannedAcl, ObjectIdentifier,
-};
+use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
 use aws_sdk_s3::Client;
 use database_entity::file_dto::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartData,
@@ -57,11 +55,12 @@ impl AwsS3BucketClientImpl {
     let put_object_req = self
       .client
       .put_object()
-      .acl(ObjectCannedAcl::Private)
+      // .acl(ObjectCannedAcl::Private)
+      .bucket(&self.bucket)
       .key(s3_key)
       .presigned(config)
       .await
-      .map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
+      .map_err(|err| AppError::Internal(anyhow!("Generate presigned url failed: {:?}", err)))?;
     let url = put_object_req.uri().to_string();
     Ok(url)
   }

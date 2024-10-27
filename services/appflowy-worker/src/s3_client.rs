@@ -111,6 +111,7 @@ impl S3Client for S3ClientImpl {
   }
 
   async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError> {
+    trace!("Deleting object from S3: {}", object_key);
     match self
       .inner
       .delete_object()

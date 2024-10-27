@@ -19,16 +19,24 @@ use app_error::AppError;
 
 #[inline]
 pub async fn delete_from_workspace(pg_pool: &PgPool, workspace_id: &Uuid) -> Result<(), AppError> {
-  let pg_row = sqlx::query!(
+  let res = sqlx::query!(
     r#"
-    DELETE FROM public.af_workspace where workspace_id = $1
+      DELETE FROM public.af_workspace
+      WHERE workspace_id = $1
     "#,
     workspace_id
   )
   .execute(pg_pool)
   .await?;
 
-  assert!(pg_row.rows_affected() == 1);
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to delete workspace, workspace_id: {}, rows_affected: {}",
+      workspace_id,
+      res.rows_affected()
+    );
+  }
+
   Ok(())
 }
 

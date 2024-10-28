@@ -7,9 +7,12 @@ use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
 use rayon::iter::ParallelIterator;
+use std::fs::metadata;
 
 use bytes::Bytes;
-use client_api_entity::{CollabParams, PublishCollabItem, QueryCollabParams};
+use client_api_entity::{
+  CollabParams, CreateImportTask, CreateImportTaskResponse, PublishCollabItem, QueryCollabParams,
+};
 use client_api_entity::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartResponse,
 };
@@ -40,7 +43,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Condition, RetryIf};
 use tokio_util::codec::{BytesCodec, FramedRead};
-use tracing::{debug, event, info, instrument, trace};
+
+use tracing::{debug, error, event, info, instrument, trace};
 
 impl Client {
   pub async fn stream_completion_text(
@@ -360,6 +364,81 @@ impl Client {
     let resp = builder.send().await?;
 
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  /// Creates an import task for a file and returns the import task response.
+  ///
+  /// This function initiates an import task by sending a POST request to the
+  /// `/api/import/create` endpoint. The request includes the `workspace_name` derived
+  /// from the provided file's name (or a generated UUID if the file name cannot be determined).
+  ///
+  /// After creating the import task, you should use [Self::upload_import_file] to upload
+  /// the actual file to the presigned URL obtained from the [CreateImportTaskResponse].
+  ///
+  pub async fn create_import(
+    &self,
+    file_path: &Path,
+  ) -> Result<CreateImportTaskResponse, AppResponseError> {
+    let url = format!("{}/api/import/create", self.base_url);
+    let file_name = file_path
+      .file_stem()
+      .map(|s| s.to_string_lossy().to_string())
+      .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    let content_length = tokio::fs::metadata(file_path).await?.len();
+    let params = CreateImportTask {
+      workspace_name: file_name.clone(),
+      content_length,
+    };
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .header("X-Host", self.base_url.clone())
+      .json(&params)
+      .send()
+      .await?;
+
+    log_request_id(&resp);
+    AppResponse::<CreateImportTaskResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  /// Uploads a file to a specified presigned URL obtained from the import task response.
+  ///
+  /// This function uploads a file to the given presigned URL using an HTTP PUT request.
+  /// The file's metadata is read to determine its size, and the upload stream is created
+  /// and sent to the provided URL. It is recommended to call this function after successfully
+  /// creating an import task using [Self::create_import].
+  ///
+  pub async fn upload_import_file(
+    &self,
+    file_path: &Path,
+    url: &str,
+  ) -> Result<(), AppResponseError> {
+    let file_metadata = metadata(file_path)?;
+    let file_size = file_metadata.len();
+    // Open the file
+    let file = File::open(file_path).await?;
+    let file_stream = FramedRead::new(file, BytesCodec::new());
+    let stream_body = Body::wrap_stream(file_stream);
+    trace!("start upload file to s3: {}", url);
+
+    let client = reqwest::Client::new();
+    let upload_resp = client
+      .put(url)
+      .header("Content-Length", file_size)
+      .header("Content-Type", "application/zip")
+      .body(stream_body)
+      .send()
+      .await?;
+
+    if !upload_resp.status().is_success() {
+      error!("File upload failed: {:?}", upload_resp);
+      return Err(AppError::S3ResponseError("Cannot upload file to S3".to_string()).into());
+    }
+
+    Ok(())
   }
 
   pub async fn get_import_list(&self) -> Result<UserImportTask, AppResponseError> {

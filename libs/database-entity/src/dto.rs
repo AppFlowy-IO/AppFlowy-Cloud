@@ -1476,6 +1476,21 @@ pub struct ApproveAccessRequestParams {
   pub is_approved: bool,
 }
 
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct CreateImportTask {
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_name: String,
+  pub content_length: u64,
+}
+
+/// Create a import task
+/// Upload the import zip file to the presigned url
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateImportTaskResponse {
+  pub task_id: String,
+  pub presigned_url: String,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{

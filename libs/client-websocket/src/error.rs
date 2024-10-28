@@ -59,7 +59,7 @@ pub enum Error {
   #[error("URL error: {0}")]
   Url(#[from] UrlError),
   #[error("HTTP error: {}", .0.status())]
-  Http(Response<Option<Vec<u8>>>),
+  Http(Box<Response<Option<Vec<u8>>>>),
   #[error("HTTP format error: {0}")]
   HttpFormat(#[from] http::Error),
   #[error("Parsing blobs is unsupported")]

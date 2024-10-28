@@ -854,6 +854,7 @@ struct CollabPersister {
 }
 
 impl CollabPersister {
+  #[allow(clippy::too_many_arguments)]
   pub fn new(
     uid: i64,
     workspace_id: String,

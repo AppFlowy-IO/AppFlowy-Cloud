@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::Context;
 use collab::core::origin::CollabOrigin;
@@ -158,7 +158,6 @@ impl TestScenario {
     let collab = lock.borrow();
     let txn = collab.context.transact();
     let txt: TextRef = collab.data.get_with_txn(&txn, "text-id").unwrap();
-    let actual = txt.get_string(&txn);
-    actual
+    txt.get_string(&txn)
   }
 }

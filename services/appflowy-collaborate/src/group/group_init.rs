@@ -81,6 +81,7 @@ impl CollabGroup {
     is_new_collab: bool,
     collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
+    prune_grace_period: Duration,
     indexer: Option<Arc<dyn Indexer>>,
   ) -> Result<Self, StreamError>
   where
@@ -94,6 +95,7 @@ impl CollabGroup {
       storage,
       collab_redis_stream,
       indexer,
+      prune_grace_period,
     );
 
     let state = Arc::new(CollabGroupState {
@@ -846,13 +848,12 @@ struct CollabPersister {
   indexer: Option<Arc<dyn Indexer>>,
   update_sink: CollabUpdateSink,
   awareness_sink: AwarenessUpdateSink,
+  /// A grace period for prunning Redis collab updates. Instead of deleting all messages we
+  /// read right away, we give 1min for other potential client to catch up.
+  prune_grace_period: Duration,
 }
 
 impl CollabPersister {
-  /// A grace period for prunning Redis collab updates. Instead of deleting all messages we
-  /// read right away, we give 1min for other potential client to catch up.
-  pub const GRACE_PERIOD_MS: u64 = 1000 * 60; // 5min
-
   pub fn new(
     uid: i64,
     workspace_id: String,
@@ -861,6 +862,7 @@ impl CollabPersister {
     storage: Arc<dyn CollabStorage>,
     collab_redis_stream: Arc<CollabRedisStream>,
     indexer: Option<Arc<dyn Indexer>>,
+    prune_grace_period: Duration,
   ) -> Self {
     let update_sink = collab_redis_stream.collab_update_sink(&workspace_id, &object_id);
     let awareness_sink = collab_redis_stream.awareness_update_sink(&workspace_id, &object_id);
@@ -874,6 +876,7 @@ impl CollabPersister {
       indexer,
       update_sink,
       awareness_sink,
+      prune_grace_period,
     }
   }
 
@@ -1067,7 +1070,7 @@ impl CollabPersister {
 
       // 3. finally we can drop Redis messages
       let msg_id = MessageId {
-        timestamp_ms: message_id.timestamp_ms - Self::GRACE_PERIOD_MS,
+        timestamp_ms: message_id.timestamp_ms - self.prune_grace_period.as_millis() as u64,
         sequence_number: 0,
       };
       let stream_key = CollabStreamUpdate::stream_key(&self.workspace_id, &self.object_id);

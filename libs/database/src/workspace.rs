@@ -1599,3 +1599,49 @@ pub async fn update_import_task_metadata(
 
   Ok(())
 }
+
+#[inline]
+pub async fn select_publish_name_exists(
+  pg_pool: &PgPool,
+  workspace_uuid: &Uuid,
+  publish_name: &str,
+) -> Result<bool, AppError> {
+  let exists = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_published_collab
+        WHERE workspace_id = $1
+        AND publish_name = $2
+      )
+    "#,
+    workspace_uuid,
+    publish_name
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}
+
+#[inline]
+pub async fn select_view_id_from_publish_name(
+  pg_pool: &PgPool,
+  workspace_uuid: &Uuid,
+  publish_name: &str,
+) -> Result<Option<Uuid>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT view_id
+      FROM af_published_collab
+      WHERE workspace_id = $1
+      AND publish_name = $2
+    "#,
+    workspace_uuid,
+    publish_name
+  )
+  .fetch_optional(pg_pool)
+  .await?;
+
+  Ok(res)
+}

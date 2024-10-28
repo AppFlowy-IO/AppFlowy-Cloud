@@ -95,6 +95,7 @@ async fn test_publish_doc() {
   let publish_name_2 = "publish-name-2";
   let view_id_2 = uuid::Uuid::new_v4();
 
+  // User publishes two collabs
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
     &workspace_id,
     vec![
@@ -122,6 +123,25 @@ async fn test_publish_doc() {
   )
   .await
   .unwrap();
+
+  // User cannot publish another view_id with the same publish name
+  let err = c
+    .publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: uuid::Uuid::new_v4(),
+          publish_name: publish_name_1.to_string(),
+          metadata: MyCustomMetadata {
+            title: "some_other_title".to_string(),
+          },
+        },
+        data: "some_other_yrs_data".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap_err();
+  assert_eq!(err.code, ErrorCode::PublishNameAlreadyExists, "{:?}", err);
 
   {
     // Check that the published collabs are listed
@@ -263,6 +283,21 @@ async fn test_publish_doc() {
   }
 
   {
+    // User cannot change `publish_name` if the `publish_name` already exists
+    // for the same workspace
+    let err = c
+      .patch_published_collabs(
+        &workspace_id,
+        &[PatchPublishedCollab {
+          view_id: view_id_1,
+          // publish_name_2 already exists
+          publish_name: Some(publish_name_2.to_string()),
+        }],
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::PublishNameAlreadyExists, "{:?}", err);
+
     let new_publish_name_1 = "new-publish-name-1".to_string();
 
     // User change publish name

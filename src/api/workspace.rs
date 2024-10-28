@@ -199,6 +199,7 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/publish-default")
         .route(web::put().to(put_workspace_default_published_view_handler))
+        .route(web::delete().to(delete_workspace_default_published_view_handler))
         .route(web::get().to(get_workspace_published_default_info_handler)),
     )
     .service(
@@ -1148,11 +1149,25 @@ async fn put_workspace_default_published_view_handler(
   let new_default_pub_view_id = payload.into_inner().view_id;
   biz::workspace::publish::set_workspace_default_publish_view(
     &state.pg_pool,
-    &user_uuid,
     &workspace_id,
     &new_default_pub_view_id,
   )
   .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_workspace_default_published_view_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .await?;
+  biz::workspace::publish::unset_workspace_default_publish_view(&state.pg_pool, &workspace_id)
+    .await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1180,13 +1195,8 @@ async fn put_publish_namespace_handler(
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   let new_namespace = payload.into_inner().new_namespace;
-  biz::workspace::publish::set_workspace_namespace(
-    &state.pg_pool,
-    &user_uuid,
-    &workspace_id,
-    &new_namespace,
-  )
-  .await?;
+  biz::workspace::publish::set_workspace_namespace(&state.pg_pool, &workspace_id, &new_namespace)
+    .await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1546,14 +1556,10 @@ async fn get_workspace_usage_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
-  let res = biz::workspace::ops::get_workspace_document_total_bytes(
-    &state.pg_pool,
-    &user_uuid,
-    &workspace_id,
-  )
-  .await?;
+  let res =
+    biz::workspace::ops::get_workspace_document_total_bytes(&state.pg_pool, &workspace_id).await?;
   Ok(Json(AppResponse::Ok().with_data(res)))
 }
 

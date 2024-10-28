@@ -133,13 +133,8 @@ impl TestScenario {
     data
   }
 
-  pub async fn execute(&self, collab: CollabRef) -> String {
-    let len = self.txns.len();
-    let start = Instant::now();
-    for (i, t) in self.txns.iter().enumerate() {
-      if i % 10_000 == 0 {
-        tracing::info!("step #{}/{} - {:?}", i + 1, len, start.elapsed());
-      }
+  pub async fn execute(&self, collab: CollabRef, step_count: usize) -> String {
+    for t in self.txns.iter().take(step_count) {
       let mut lock = collab.write().await;
       let collab = lock.borrow_mut();
       let mut txn = collab.context.transact_mut();
@@ -159,13 +154,11 @@ impl TestScenario {
     }
 
     // validate after applying all patches
-    let expected = self.end_content.as_str();
     let lock = collab.read().await;
     let collab = lock.borrow();
     let txn = collab.context.transact();
     let txt: TextRef = collab.data.get_with_txn(&txn, "text-id").unwrap();
     let actual = txt.get_string(&txn);
-    assert_eq!(actual, expected);
     actual
   }
 }

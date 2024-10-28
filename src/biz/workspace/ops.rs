@@ -683,16 +683,19 @@ pub async fn create_upload_task(
   host: &str,
   workspace_id: &str,
   file_size: usize,
+  presigned_url: Option<String>,
   redis_client: &RedisConnectionManager,
   pg_pool: &PgPool,
 ) -> Result<(), AppError> {
   // Insert the task into the database
   insert_import_task(
+    uid,
     task_id,
     file_size as i64,
     workspace_id.to_string(),
     uid,
     Some(json!({"host": host})),
+    presigned_url,
     pg_pool,
   )
   .await?;
@@ -704,6 +707,26 @@ pub async fn create_upload_task(
     .map_err(|err| AppError::Internal(anyhow!("Failed to push task to Redis stream: {}", err)))?;
 
   Ok(())
+}
+
+pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppError> {
+  // Query to check for pending tasks for the given user ID
+  let pending = ImportTaskState::Pending as i16;
+  let query = "
+        SELECT COUNT(*)
+        FROM af_import_task
+        WHERE uid = $1 AND status = $2
+    ";
+
+  // Execute the query and fetch the count
+  let (count,): (i64,) = sqlx::query_as(query)
+    .bind(uid)
+    .bind(pending)
+    .fetch_one(pg_pool)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to query pending tasks: {:?}", e)))?;
+
+  Ok(count)
 }
 
 /// broadcast updates to collab group if exists

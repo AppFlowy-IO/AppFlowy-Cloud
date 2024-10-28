@@ -4,7 +4,7 @@ use database::{
   publish::{
     select_all_published_collab_info, select_default_published_view_id,
     select_default_published_view_id_for_namespace, update_published_collabs,
-    update_workspace_default_publish_view,
+    update_workspace_default_publish_view, update_workspace_default_publish_view_set_null,
   },
 };
 use database_entity::dto::PatchPublishedCollab;
@@ -110,6 +110,16 @@ pub async fn set_workspace_default_publish_view(
 ) -> Result<(), AppError> {
   check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   update_workspace_default_publish_view(pg_pool, workspace_id, new_view_id).await?;
+  Ok(())
+}
+
+pub async fn unset_workspace_default_publish_view(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  update_workspace_default_publish_view_set_null(pg_pool, workspace_id).await?;
   Ok(())
 }
 

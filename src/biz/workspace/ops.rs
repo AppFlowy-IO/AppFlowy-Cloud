@@ -604,11 +604,8 @@ pub async fn update_workspace_member(
 
 pub async fn get_workspace_document_total_bytes(
   pg_pool: &PgPool,
-  user_uuid: &Uuid,
   workspace_id: &Uuid,
 ) -> Result<WorkspaceUsage, AppError> {
-  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
-
   let byte_count = select_workspace_total_collab_bytes(pg_pool, workspace_id).await?;
   Ok(WorkspaceUsage {
     total_document_size: byte_count,
@@ -644,19 +641,6 @@ pub async fn update_workspace_settings(
   upsert_workspace_settings(&mut tx, workspace_id, &setting).await?;
   tx.commit().await?;
   Ok(setting)
-}
-
-pub async fn check_workspace_owner(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_id: &Uuid,
-) -> Result<(), AppError> {
-  match select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await? {
-    true => Ok(()),
-    false => Err(AppError::UserUnAuthorized(
-      "User is not the owner of the workspace".to_string(),
-    )),
-  }
 }
 
 async fn check_if_user_is_allowed_to_delete_comment(

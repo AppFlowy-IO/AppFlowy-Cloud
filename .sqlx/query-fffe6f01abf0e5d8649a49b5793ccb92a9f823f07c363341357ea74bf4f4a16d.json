@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE af_workspace\n      SET default_published_view_id = NULL\n      WHERE workspace_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fffe6f01abf0e5d8649a49b5793ccb92a9f823f07c363341357ea74bf4f4a16d"
+}

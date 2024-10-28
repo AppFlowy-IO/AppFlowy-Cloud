@@ -17,6 +17,7 @@ use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, UserId};
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use shared_entity::dto::publish_dto::PublishDatabaseData;
 use std::collections::{HashMap, HashSet};
 use std::thread::sleep;
@@ -249,6 +250,16 @@ async fn test_publish_doc() {
       .unwrap();
     assert_eq!(default_info_meta.info.view_id, view_id_1);
     assert_eq!(default_info_meta.meta.title, "my_title_1");
+
+    // Owner of workspace unset the default publish view
+    c.delete_default_publish_view(&workspace_id).await.unwrap();
+
+    // Public can no longer get default publish view info
+    let err = localhost_client()
+      .get_default_published_collab::<PublishInfoMeta<MyCustomMetadata>>(&my_namespace)
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
   }
 
   {
@@ -778,7 +789,7 @@ async fn workspace_member_publish_unpublish() {
     .unwrap();
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct MyCustomMetadata {
   title: String,
 }

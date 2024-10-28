@@ -440,7 +440,7 @@ async fn get_workspace_members_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
     .await?;
   let members = workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
     .await?
@@ -494,9 +494,10 @@ async fn get_workspace_member_handler(
 ) -> Result<JsonAppResponse<AFWorkspaceMember>> {
   let (workspace_id, user_uuid_to_retrieved) = path.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  // Guest users can not get workspace members
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
     .await?;
   let member_row =
     workspace::ops::get_workspace_member(&user_uuid_to_retrieved, &state.pg_pool, &workspace_id)
@@ -883,10 +884,6 @@ async fn get_page_view_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
-  state
-    .workspace_access_control
-    .enforce_action(&uid, &workspace_uuid.to_string(), Action::Read)
-    .await?;
 
   let page_collab = get_page_view_collab(
     &state.pg_pool,
@@ -955,6 +952,7 @@ async fn create_collab_snapshot_handler(
 
 #[instrument(level = "trace", skip(path, state), err)]
 async fn get_all_collab_snapshot_list_handler(
+  _user_uuid: UserUuid,
   path: web::Path<(String, String)>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
@@ -1145,7 +1143,7 @@ async fn put_workspace_default_published_view_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   let new_default_pub_view_id = payload.into_inner().view_id;
   biz::workspace::publish::set_workspace_default_publish_view(
@@ -1179,7 +1177,7 @@ async fn put_publish_namespace_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   let new_namespace = payload.into_inner().new_namespace;
   biz::workspace::publish::set_workspace_namespace(
@@ -1260,7 +1258,7 @@ async fn post_published_duplicate_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
     .await?;
   let params = params.into_inner();
   biz::workspace::publish_dup::duplicate_published_collab_to_workspace(

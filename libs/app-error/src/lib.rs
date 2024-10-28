@@ -357,6 +357,9 @@ pub enum ErrorCode {
   CustomNamespaceDisabled = 1044,
   CustomNamespaceDisallowed = 1045,
   TooManyImportTask = 1046,
+  CustomNamespaceTooShort = 1047,
+  CustomNamespaceTooLong = 1048,
+  CustomNamespaceReserved = 1049,
 }
 
 impl ErrorCode {

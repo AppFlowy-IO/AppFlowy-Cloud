@@ -13,7 +13,7 @@ serde_json.workspace = true
 tracing.workspace = true
 bytes = { workspace = true }
 tokio = { workspace = true, optional = true }
-pin-project = "1.1.6"
+pin-project.workspace = true
 futures = "0.3.30"
 
 [features]

@@ -113,6 +113,36 @@ pub async fn update_workspace_default_publish_view<'a, E: Executor<'a, Database 
 }
 
 #[inline]
+pub async fn update_workspace_default_publish_view_set_null<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_workspace
+      SET default_published_view_id = NULL
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to unset workspace default publish view, workspace_id: {}, rows_affected: {}",
+      workspace_id,
+      res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
 pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,

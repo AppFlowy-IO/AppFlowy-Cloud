@@ -4,7 +4,7 @@ use database::{
   publish::{
     select_all_published_collab_info, select_default_published_view_id,
     select_default_published_view_id_for_namespace, update_published_collabs,
-    update_workspace_default_publish_view,
+    update_workspace_default_publish_view, update_workspace_default_publish_view_set_null,
   },
 };
 use database_entity::dto::PatchPublishedCollab;
@@ -38,8 +38,6 @@ use crate::{
   api::metrics::PublishedCollabMetrics,
   biz::collab::{folder_view::to_dto_folder_view_miminal, ops::get_latest_collab_folder},
 };
-
-use super::ops::check_workspace_owner;
 
 async fn check_workspace_owner_or_publisher(
   pg_pool: &PgPool,
@@ -87,11 +85,9 @@ fn get_collab_s3_key(workspace_id: &Uuid, view_id: &Uuid) -> String {
 
 pub async fn set_workspace_namespace(
   pg_pool: &PgPool,
-  user_uuid: &Uuid,
   workspace_id: &Uuid,
   new_namespace: &str,
 ) -> Result<(), AppError> {
-  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   check_workspace_namespace(new_namespace).await?;
   if select_workspace_publish_namespace_exists(pg_pool, workspace_id, new_namespace).await? {
     return Err(AppError::PublishNamespaceAlreadyTaken(
@@ -104,12 +100,18 @@ pub async fn set_workspace_namespace(
 
 pub async fn set_workspace_default_publish_view(
   pg_pool: &PgPool,
-  user_uuid: &Uuid,
   workspace_id: &Uuid,
   new_view_id: &Uuid,
 ) -> Result<(), AppError> {
-  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   update_workspace_default_publish_view(pg_pool, workspace_id, new_view_id).await?;
+  Ok(())
+}
+
+pub async fn unset_workspace_default_publish_view(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  update_workspace_default_publish_view_set_null(pg_pool, workspace_id).await?;
   Ok(())
 }
 

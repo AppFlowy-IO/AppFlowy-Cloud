@@ -560,6 +560,8 @@ pub struct AFImportTask {
   pub status: i16,
   pub metadata: serde_json::Value,
   pub created_at: DateTime<Utc>,
+  #[serde(default)]
+  pub file_url: Option<String>,
 }
 #[derive(sqlx::Type, Serialize, Deserialize, Debug)]
 #[repr(i32)]

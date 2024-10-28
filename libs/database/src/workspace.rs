@@ -1447,12 +1447,24 @@ pub async fn select_user_is_invitee_for_workspace_invitation(
   res.map_or(Ok(false), Ok)
 }
 
+pub async fn select_import_task(
+  pg_pool: &PgPool,
+  task_id: &Uuid,
+) -> Result<AFImportTask, AppError> {
+  let query = String::from("SELECT * FROM af_import_task WHERE task_id = $1");
+  let import_task = sqlx::query_as::<_, AFImportTask>(&query)
+    .bind(task_id)
+    .fetch_one(pg_pool)
+    .await?;
+  Ok(import_task)
+}
+
 /// Get the import task for the user
 /// Status of the file import (e.g., 0 for pending, 1 for completed, 2 for failed)
-pub async fn select_import_task(
+pub async fn select_import_task_by_state(
   user_id: i64,
   pg_pool: &PgPool,
-  filter_by_status: Option<i32>,
+  filter_by_status: Option<ImportTaskState>,
 ) -> Result<Vec<AFImportTask>, AppError> {
   let mut query = String::from("SELECT * FROM af_import_task WHERE created_by = $1");
   if filter_by_status.is_some() {
@@ -1463,7 +1475,7 @@ pub async fn select_import_task(
   let import_tasks = if let Some(status) = filter_by_status {
     sqlx::query_as::<_, AFImportTask>(&query)
       .bind(user_id)
-      .bind(status)
+      .bind(status as i32)
       .fetch_all(pg_pool)
       .await?
   } else {
@@ -1476,18 +1488,40 @@ pub async fn select_import_task(
   Ok(import_tasks)
 }
 
+#[derive(Clone, Debug)]
+pub enum ImportTaskState {
+  Pending = 0,
+  Completed = 1,
+  Failed = 2,
+  Expire = 3,
+  Cancel = 4,
+}
+
+impl From<i16> for ImportTaskState {
+  fn from(val: i16) -> Self {
+    match val {
+      0 => ImportTaskState::Pending,
+      1 => ImportTaskState::Completed,
+      2 => ImportTaskState::Failed,
+      4 => ImportTaskState::Cancel,
+      _ => ImportTaskState::Pending,
+    }
+  }
+}
+
 /// Update import task status
 ///  0 => Pending,
 ///   1 => Completed,
 ///   2 => Failed,
+///   3 => Expire,
 pub async fn update_import_task_status<'a, E: Executor<'a, Database = Postgres>>(
   task_id: &Uuid,
-  new_status: i32,
+  new_status: ImportTaskState,
   executor: E,
 ) -> Result<(), AppError> {
   let query = "UPDATE af_import_task SET status = $1 WHERE task_id = $2";
   sqlx::query(query)
-    .bind(new_status)
+    .bind(new_status as i16)
     .bind(task_id)
     .execute(executor)
     .await
@@ -1502,17 +1536,20 @@ pub async fn update_import_task_status<'a, E: Executor<'a, Database = Postgres>>
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_import_task(
+  uid: i64,
   task_id: Uuid,
   file_size: i64,
   workspace_id: String,
   created_by: i64,
   metadata: Option<serde_json::Value>,
+  presigned_url: Option<String>,
   pg_pool: &PgPool,
 ) -> Result<(), AppError> {
   let query = r#"
-        INSERT INTO af_import_task (task_id, file_size, workspace_id, created_by, status, metadata)
-        VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'))
+        INSERT INTO af_import_task (task_id, file_size, workspace_id, created_by, status, metadata, uid, file_url)
+        VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'), $7, $8)
     "#;
 
   sqlx::query(query)
@@ -1520,8 +1557,10 @@ pub async fn insert_import_task(
     .bind(file_size)
     .bind(workspace_id)
     .bind(created_by)
-    .bind(0)
+    .bind(ImportTaskState::Pending as i32)
     .bind(metadata)
+    .bind(uid)
+    .bind(presigned_url)
     .execute(pg_pool)
     .await
     .map_err(|err| {

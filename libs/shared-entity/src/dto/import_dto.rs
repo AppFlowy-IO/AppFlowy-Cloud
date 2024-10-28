@@ -11,23 +11,5 @@ pub struct ImportTaskDetail {
   pub task_id: String,
   pub file_size: u64,
   pub created_at: i64,
-  pub status: ImportTaskStatus,
-}
-
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub enum ImportTaskStatus {
-  Pending,
-  Completed,
-  Failed,
-}
-
-impl From<i16> for ImportTaskStatus {
-  fn from(status: i16) -> Self {
-    match status {
-      0 => ImportTaskStatus::Pending,
-      1 => ImportTaskStatus::Completed,
-      2 => ImportTaskStatus::Failed,
-      _ => ImportTaskStatus::Pending,
-    }
-  }
+  pub status: i16,
 }

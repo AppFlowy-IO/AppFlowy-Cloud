@@ -150,6 +150,9 @@ pub enum AppError {
   #[error("{0}")]
   MissingView(String),
 
+  #[error("{0}")]
+  TooManyImportTask(String),
+
   #[error("There is existing access request for workspace {workspace_id} and view {view_id}")]
   AccessRequestAlreadyExists { workspace_id: Uuid, view_id: Uuid },
 }
@@ -221,6 +224,7 @@ impl AppError {
       AppError::NotInviteeOfWorkspaceInvitation(_) => ErrorCode::NotInviteeOfWorkspaceInvitation,
       AppError::MissingView(_) => ErrorCode::MissingView,
       AppError::AccessRequestAlreadyExists { .. } => ErrorCode::AccessRequestAlreadyExists,
+      AppError::TooManyImportTask(_) => ErrorCode::TooManyImportTask,
     }
   }
 }
@@ -352,9 +356,10 @@ pub enum ErrorCode {
   AccessRequestAlreadyExists = 1043,
   CustomNamespaceDisabled = 1044,
   CustomNamespaceDisallowed = 1045,
-  CustomNamespaceTooShort = 1046,
-  CustomNamespaceTooLong = 1047,
-  CustomNamespaceReserved = 1048,
+  TooManyImportTask = 1046,
+  CustomNamespaceTooShort = 1047,
+  CustomNamespaceTooLong = 1048,
+  CustomNamespaceReserved = 1049,
 }
 
 impl ErrorCode {

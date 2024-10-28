@@ -45,7 +45,7 @@ collab-rt-entity = { workspace = true }
 client-api-entity.workspace = true
 serde_urlencoded = "0.7.1"
 futures.workspace = true
-pin-project = "1.1.5"
+pin-project.workspace = true
 percent-encoding = "2.3.1"
 lazy_static = { workspace = true }
 mime_guess = "2.0.5"

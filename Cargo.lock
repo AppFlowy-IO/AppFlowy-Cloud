@@ -824,6 +824,7 @@ dependencies = [
  "mime_guess",
  "prometheus-client",
  "redis 0.25.4",
+ "reqwest 0.12.5",
  "secrecy",
  "serde",
  "serde_json",

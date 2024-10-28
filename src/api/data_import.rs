@@ -1,6 +1,6 @@
 use crate::state::AppState;
 use actix_multipart::Multipart;
-use actix_web::web::Data;
+use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, Scope};
 use anyhow::anyhow;
 use app_error::AppError;
@@ -8,28 +8,107 @@ use authentication::jwt::UserUuid;
 use aws_sdk_s3::primitives::ByteStream;
 use database::file::BucketClient;
 
-use crate::biz::workspace::ops::{create_empty_workspace, create_upload_task};
+use crate::biz::workspace::ops::{create_empty_workspace, create_upload_task, num_pending_task};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use database::user::select_name_and_email_from_uuid;
-use database::workspace::select_import_task;
+use database::workspace::select_import_task_by_state;
+use database_entity::dto::{CreateImportTask, CreateImportTaskResponse};
 use futures_util::StreamExt;
+use infra::env_util::get_env_var;
 use serde_json::json;
-use shared_entity::dto::import_dto::{ImportTaskDetail, ImportTaskStatus, UserImportTask};
+use shared_entity::dto::import_dto::{ImportTaskDetail, UserImportTask};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::env::temp_dir;
 use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tracing::{error, info, trace};
+use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
+use validator::Validate;
 
 pub fn data_import_scope() -> Scope {
-  web::scope("/api/import").service(
-    web::resource("")
-      .route(web::post().to(import_data_handler))
-      .route(web::get().to(get_import_detail_handler)),
+  web::scope("/api/import")
+    .service(
+      web::resource("")
+        .route(web::post().to(import_data_handler))
+        .route(web::get().to(get_import_detail_handler)),
+    )
+    .service(web::resource("/create").route(web::post().to(create_import_handler)))
+}
+
+#[instrument(level = "debug", skip_all)]
+async fn create_import_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  payload: Json<CreateImportTask>,
+  req: HttpRequest,
+) -> actix_web::Result<JsonAppResponse<CreateImportTaskResponse>> {
+  let params = payload.into_inner();
+  params.validate().map_err(AppError::from)?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  check_maximum_task(&state, uid).await?;
+  let s3_key = format!("import_presigned_url_{}", Uuid::new_v4());
+
+  // Generate presigned url with 10 minutes expiration
+  let presigned_url = state
+    .bucket_client
+    .gen_presigned_url(&s3_key, params.content_length, 600)
+    .await?;
+  trace!("[Import] Presigned url: {}", presigned_url);
+
+  let (user_name, user_email) = select_name_and_email_from_uuid(&state.pg_pool, &user_uuid).await?;
+  let host = get_host_from_request(&req);
+  let workspace = create_empty_workspace(
+    &state.pg_pool,
+    state.workspace_access_control.clone(),
+    &state.collab_access_control_storage,
+    &user_uuid,
+    uid,
+    &params.workspace_name,
   )
+  .await?;
+
+  let workspace_id = workspace.workspace_id.to_string();
+  info!(
+    "User:{} import new workspace:{}, name:{}",
+    uid, workspace_id, params.workspace_name,
+  );
+  let timestamp = chrono::Utc::now().timestamp();
+  let task_id = Uuid::new_v4();
+  let task = json!({
+      "notion": {
+         "uid": uid,
+         "user_name": user_name,
+         "user_email": user_email,
+         "task_id": task_id.to_string(),
+         "workspace_id": workspace_id,
+         "created_at": timestamp,
+         "s3_key": s3_key,
+         "host": host,
+         "workspace_name": &params.workspace_name,
+      }
+  });
+
+  let data = CreateImportTaskResponse {
+    task_id: task_id.to_string(),
+    presigned_url: presigned_url.clone(),
+  };
+
+  create_upload_task(
+    uid,
+    task_id,
+    task,
+    &host,
+    &workspace_id,
+    0,
+    Some(presigned_url),
+    &state.redis_connection_manager,
+    &state.pg_pool,
+  )
+  .await?;
+
+  Ok(AppResponse::Ok().with_data(data).into())
 }
 
 async fn get_import_detail_handler(
@@ -37,7 +116,7 @@ async fn get_import_detail_handler(
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<UserImportTask>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let tasks = select_import_task(uid, &state.pg_pool, None)
+  let tasks = select_import_task_by_state(uid, &state.pg_pool, None)
     .await
     .map(|tasks| {
       tasks
@@ -46,7 +125,7 @@ async fn get_import_detail_handler(
           task_id: task.task_id.to_string(),
           file_size: task.file_size as u64,
           created_at: task.created_at.timestamp(),
-          status: ImportTaskStatus::from(task.status),
+          status: task.status,
         })
         .collect::<Vec<_>>()
     })?;
@@ -68,6 +147,8 @@ async fn import_data_handler(
   req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  check_maximum_task(&state, uid).await?;
+
   let (user_name, user_email) = select_name_and_email_from_uuid(&state.pg_pool, &user_uuid).await?;
   let host = get_host_from_request(&req);
   let content_length = req
@@ -169,12 +250,28 @@ async fn import_data_handler(
     &host,
     &workspace_id,
     file.size,
+    None,
     &state.redis_connection_manager,
     &state.pg_pool,
   )
   .await?;
 
   Ok(AppResponse::Ok().into())
+}
+
+async fn check_maximum_task(state: &Data<AppState>, uid: i64) -> Result<(), AppError> {
+  let count = num_pending_task(uid, &state.pg_pool).await?;
+  let maximum_pending_task = get_env_var("MAXIMUM_IMPORT_PENDING_TASK", "3")
+    .parse::<i64>()
+    .unwrap_or(3);
+
+  if count >= maximum_pending_task {
+    return Err(AppError::TooManyImportTask(format!(
+      "{} tasks are pending. Please wait until they are completed",
+      count
+    )));
+  }
+  Ok(())
 }
 
 pub struct AutoDeletedFile {

@@ -1,14 +1,40 @@
+use anyhow::Error;
 use client_api_test::TestClient;
 use collab_document::importer::define::{BlockType, URL_FIELD};
 use collab_folder::ViewLayout;
-use shared_entity::dto::import_dto::ImportTaskStatus;
+use futures_util::future::join_all;
 use std::path::PathBuf;
 use std::time::Duration;
 
 #[tokio::test]
+async fn import_blog_post_four_times_test() {
+  let mut handles = vec![];
+  // Simulate 4 clients, each uploading 3 files concurrently.
+  for _ in 0..4 {
+    let handle = tokio::spawn(async {
+      let client = TestClient::new_user().await;
+      for _ in 0..3 {
+        let _ = upload_file(&client, "blog_post.zip", None).await.unwrap();
+      }
+
+      // the default concurrency limit is 3, so the fourth import should fail
+      let result = upload_file(&client, "blog_post.zip", None).await;
+      assert!(result.is_err());
+      wait_until_num_import_task_complete(&client, 3).await;
+    });
+    handles.push(handle);
+  }
+
+  for result in join_all(handles).await {
+    result.unwrap();
+  }
+}
+
+#[tokio::test]
 async fn import_blog_post_test() {
   // Step 1: Import the blog post zip
-  let (client, imported_workspace_id) = import_notion_zip_until_complete("blog_post.zip").await;
+  let (client, imported_workspace_id) =
+    import_notion_zip_until_complete("blog_post.zip", Some(10)).await;
 
   // Step 2: Fetch the folder and views
   let folder = client.get_folder(&imported_workspace_id).await;
@@ -78,7 +104,8 @@ async fn import_blog_post_test() {
 
 #[tokio::test]
 async fn import_project_and_task_zip_test() {
-  let (client, imported_workspace_id) = import_notion_zip_until_complete("project&task.zip").await;
+  let (client, imported_workspace_id) =
+    import_notion_zip_until_complete("project&task.zip", None).await;
   let folder = client.get_folder(&imported_workspace_id).await;
   let workspace_database = client.get_workspace_database(&imported_workspace_id).await;
   let space_views = folder.get_views_belong_to(&imported_workspace_id);
@@ -165,7 +192,7 @@ async fn imported_workspace_do_not_become_latest_visit_workspace_test() {
     user_workspace.workspaces[0].workspace_id
   );
 
-  wait_until_import_complete(&client).await;
+  wait_until_num_import_task_complete(&client, 1).await;
 
   // after the workspace was imported, then the workspace should be visible
   let user_workspace = client.get_user_workspace_info().await;
@@ -176,22 +203,51 @@ async fn imported_workspace_do_not_become_latest_visit_workspace_test() {
   );
 }
 
-async fn import_notion_zip_until_complete(name: &str) -> (TestClient, String) {
-  let client = TestClient::new_user().await;
+async fn upload_file(
+  client: &TestClient,
+  name: &str,
+  upload_after_secs: Option<u64>,
+) -> Result<(), Error> {
   let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
-  client.api_client.import_file(&file_path).await.unwrap();
+  let mut url = client
+    .api_client
+    .create_import(&file_path)
+    .await?
+    .presigned_url;
+
+  if url.contains("http://minio:9000") {
+    url = url.replace("http://minio:9000", "http://localhost/minio");
+  }
+
+  if let Some(secs) = upload_after_secs {
+    tokio::time::sleep(Duration::from_secs(secs)).await;
+  }
+
+  client
+    .api_client
+    .upload_import_file(&file_path, &url)
+    .await?;
+  Ok(())
+}
+
+// upload_after_secs: simulate the delay of uploading the file
+async fn import_notion_zip_until_complete(
+  name: &str,
+  upload_after_secs: Option<u64>,
+) -> (TestClient, String) {
+  let client = TestClient::new_user().await;
+  upload_file(&client, name, upload_after_secs).await.unwrap();
   let default_workspace_id = client.workspace_id().await;
 
   // when importing a file, the workspace for the file should be created and it's
   // not visible until the import task is completed
   let workspaces = client.api_client.get_workspaces().await.unwrap();
   assert_eq!(workspaces.len(), 1);
-
   let tasks = client.api_client.get_import_list().await.unwrap().tasks;
   assert_eq!(tasks.len(), 1);
-  assert_eq!(tasks[0].status, ImportTaskStatus::Pending);
+  assert_eq!(tasks[0].status, 0);
 
-  wait_until_import_complete(&client).await;
+  wait_until_num_import_task_complete(&client, 1).await;
 
   // after the import task is completed, the new workspace should be visible
   let workspaces = client.api_client.get_workspaces().await.unwrap();
@@ -206,16 +262,15 @@ async fn import_notion_zip_until_complete(name: &str) -> (TestClient, String) {
   (client, imported_workspace_id)
 }
 
-async fn wait_until_import_complete(client: &TestClient) {
+async fn wait_until_num_import_task_complete(client: &TestClient, num: usize) {
   let mut task_completed = false;
   let max_retries = 12;
   let mut retries = 0;
   while !task_completed && retries < max_retries {
     tokio::time::sleep(Duration::from_secs(10)).await;
     let tasks = client.api_client.get_import_list().await.unwrap().tasks;
-    assert_eq!(tasks.len(), 1);
-
-    if tasks[0].status == ImportTaskStatus::Completed {
+    assert_eq!(tasks.len(), num);
+    if tasks[0].status == 1 {
       task_completed = true;
     }
     retries += 1;

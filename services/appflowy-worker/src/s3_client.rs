@@ -5,6 +5,7 @@ use std::fs::Permissions;
 
 use anyhow::Result;
 use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::operation::head_object::{HeadObjectError, HeadObjectOutput};
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
 use base64::engine::general_purpose::STANDARD;
@@ -30,12 +31,39 @@ pub trait S3Client: Send + Sync {
     content_type: Option<&str>,
   ) -> Result<(), WorkerError>;
   async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError>;
+
+  async fn is_blob_exist(&self, object_key: &str) -> Result<bool, WorkerError>;
+  async fn get_blob_meta(&self, object_key: &str) -> Result<BlobMeta, WorkerError>;
+}
+
+pub struct BlobMeta {
+  pub content_length: i64,
+  pub content_type: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct S3ClientImpl {
   pub inner: aws_sdk_s3::Client,
   pub bucket: String,
+}
+
+impl S3ClientImpl {
+  async fn get_head_object(&self, object_key: &str) -> Result<HeadObjectOutput, WorkerError> {
+    self
+      .inner
+      .head_object()
+      .bucket(&self.bucket)
+      .key(object_key)
+      .send()
+      .await
+      .map_err(|err| match err {
+        SdkError::ServiceError(service_err) => match service_err.err() {
+          HeadObjectError::NotFound(_) => WorkerError::RecordNotFound("blob not found".to_string()),
+          _ => WorkerError::from(anyhow!("Failed to head object from S3: {:?}", service_err)),
+        },
+        _ => WorkerError::from(anyhow!("Failed to head object from S3: {}", err)),
+      })
+  }
 }
 
 impl Deref for S3ClientImpl {
@@ -108,6 +136,7 @@ impl S3Client for S3ClientImpl {
   }
 
   async fn delete_blob(&self, object_key: &str) -> Result<(), WorkerError> {
+    trace!("Deleting object from S3: {}", object_key);
     match self
       .inner
       .delete_object()
@@ -126,6 +155,27 @@ impl S3Client for S3ClientImpl {
         err
       ))),
     }
+  }
+
+  async fn is_blob_exist(&self, object_key: &str) -> Result<bool, WorkerError> {
+    let result = self.get_head_object(object_key).await;
+    match result {
+      Ok(_) => Ok(true),
+      Err(err) => match err {
+        WorkerError::RecordNotFound(_) => Ok(false),
+        _ => Err(err),
+      },
+    }
+  }
+
+  async fn get_blob_meta(&self, object_key: &str) -> Result<BlobMeta, WorkerError> {
+    let output = self.get_head_object(object_key).await?;
+    let content_length = output.content_length.unwrap_or(0);
+    let content_type = output.content_type;
+    Ok(BlobMeta {
+      content_length,
+      content_type,
+    })
   }
 }
 

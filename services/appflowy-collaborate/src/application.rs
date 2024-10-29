@@ -118,14 +118,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
   let access_control =
     AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
-  // let collab_member_listener = pg_listeners.subscribe_collab_member_change();
-  // let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
-  // spawn_listen_on_workspace_member_change(workspace_member_listener, access_control.clone());
-  // spawn_listen_on_collab_member_change(
-  //   pg_pool.clone(),
-  //   collab_member_listener,
-  //   access_control.clone(),
-  // );
 
   let collab_access_control = CollabAccessControlImpl::new(access_control.clone());
   let workspace_access_control = WorkspaceAccessControlImpl::new(access_control.clone());

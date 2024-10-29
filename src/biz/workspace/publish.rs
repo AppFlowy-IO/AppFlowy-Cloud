@@ -6,6 +6,7 @@ use database::{
     select_default_published_view_id_for_namespace, update_published_collabs,
     update_workspace_default_publish_view, update_workspace_default_publish_view_set_null,
   },
+  workspace::{select_publish_name_exists, select_view_id_from_publish_name},
 };
 use database_entity::dto::PatchPublishedCollab;
 use std::sync::Arc;
@@ -291,6 +292,13 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
   ) -> Result<(), AppError> {
     for publish_item in &publish_items {
       check_collab_publish_name(publish_item.meta.publish_name.as_str())?;
+      check_view_id_publish_name_conflict(
+        &self.pg_pool,
+        workspace_id,
+        &publish_item.meta.view_id,
+        publish_item.meta.publish_name.as_str(),
+      )
+      .await?;
     }
     let publish_items_batch_size = publish_items.len() as i64;
     let result =
@@ -415,6 +423,14 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
     let mut handles: Vec<tokio::task::JoinHandle<()>> = vec![];
     for publish_item in &publish_items {
       check_collab_publish_name(publish_item.meta.publish_name.as_str())?;
+      check_view_id_publish_name_conflict(
+        &self.pg_pool,
+        workspace_id,
+        &publish_item.meta.view_id,
+        publish_item.meta.publish_name.as_str(),
+      )
+      .await?;
+
       let object_key = get_collab_s3_key(workspace_id, &publish_item.meta.view_id);
       let data = publish_item.data.clone();
       let bucket_client = self.bucket_client.clone();
@@ -578,6 +594,7 @@ async fn patch_collabs(
   for patch in patches {
     if let Some(new_publish_name) = patch.publish_name.as_deref() {
       check_collab_publish_name(new_publish_name)?;
+      check_publish_name_already_exists(pg_pool, workspace_id, new_publish_name).await?;
     }
   }
   check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, &view_ids).await?;
@@ -586,4 +603,42 @@ async fn patch_collabs(
   update_published_collabs(&mut txn, workspace_id, patches).await?;
   txn.commit().await?;
   Ok(())
+}
+
+/// Checks if the `publish_name` already exists for the workspace
+async fn check_publish_name_already_exists(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  publish_name: &str,
+) -> Result<(), AppError> {
+  let publish_name_exists = select_publish_name_exists(pg_pool, workspace_id, publish_name).await?;
+  if publish_name_exists {
+    return Err(AppError::PublishNameAlreadyExists {
+      workspace_id: *workspace_id,
+      publish_name: publish_name.to_string(),
+    });
+  }
+  Ok(())
+}
+
+/// Check if the `publish_name` already exists on another view
+async fn check_view_id_publish_name_conflict(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  view_id: &Uuid,
+  publish_name: &str,
+) -> Result<(), AppError> {
+  match select_view_id_from_publish_name(pg_pool, workspace_id, publish_name).await? {
+    Some(published_view_id) => {
+      if published_view_id != *view_id {
+        Err(AppError::PublishNameAlreadyExists {
+          workspace_id: *workspace_id,
+          publish_name: publish_name.to_string(),
+        })
+      } else {
+        Ok(())
+      }
+    },
+    None => Ok(()),
+  }
 }

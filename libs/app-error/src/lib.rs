@@ -170,6 +170,9 @@ pub enum AppError {
     given_length: usize,
     max_length: usize,
   },
+
+  #[error("There is an invalid character in the publish namespace: {character}")]
+  CustomNamespaceInvalidCharacter { character: char },
 }
 
 impl AppError {
@@ -243,6 +246,9 @@ impl AppError {
       AppError::PublishNameAlreadyExists { .. } => ErrorCode::PublishNameAlreadyExists,
       AppError::PublishNameInvalidCharacter { .. } => ErrorCode::PublishNameInvalidCharacter,
       AppError::PublishNameTooLong { .. } => ErrorCode::PublishNameTooLong,
+      AppError::CustomNamespaceInvalidCharacter { .. } => {
+        ErrorCode::CustomNamespaceInvalidCharacter
+      },
     }
   }
 }
@@ -381,6 +387,7 @@ pub enum ErrorCode {
   PublishNameAlreadyExists = 1050,
   PublishNameInvalidCharacter = 1051,
   PublishNameTooLong = 1052,
+  CustomNamespaceInvalidCharacter = 1053,
 }
 
 impl ErrorCode {

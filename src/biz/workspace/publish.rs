@@ -216,9 +216,7 @@ async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> 
   // Only contain alphanumeric characters and hyphens
   for c in new_namespace.chars() {
     if !c.is_alphanumeric() && c != '-' {
-      return Err(AppError::InvalidRequest(
-        "Namespace must only contain alphanumeric characters and hyphens".to_string(),
-      ));
+      return Err(AppError::CustomNamespaceInvalidCharacter { character: c });
     }
   }
   Ok(())

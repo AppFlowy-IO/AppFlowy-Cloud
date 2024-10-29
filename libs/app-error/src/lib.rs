@@ -161,6 +161,15 @@ pub enum AppError {
     workspace_id: Uuid,
     publish_name: String,
   },
+
+  #[error("There is an invalid character in the publish name: {character}")]
+  PublishNameInvalidCharacter { character: char },
+
+  #[error("The publish name is too long, given length: {given_length}, max length: {max_length}")]
+  PublishNameTooLong {
+    given_length: usize,
+    max_length: usize,
+  },
 }
 
 impl AppError {
@@ -232,6 +241,8 @@ impl AppError {
       AppError::AccessRequestAlreadyExists { .. } => ErrorCode::AccessRequestAlreadyExists,
       AppError::TooManyImportTask(_) => ErrorCode::TooManyImportTask,
       AppError::PublishNameAlreadyExists { .. } => ErrorCode::PublishNameAlreadyExists,
+      AppError::PublishNameInvalidCharacter { .. } => ErrorCode::PublishNameInvalidCharacter,
+      AppError::PublishNameTooLong { .. } => ErrorCode::PublishNameTooLong,
     }
   }
 }
@@ -368,6 +379,8 @@ pub enum ErrorCode {
   CustomNamespaceTooLong = 1048,
   CustomNamespaceReserved = 1049,
   PublishNameAlreadyExists = 1050,
+  PublishNameInvalidCharacter = 1051,
+  PublishNameTooLong = 1052,
 }
 
 impl ErrorCode {

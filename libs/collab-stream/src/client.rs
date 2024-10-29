@@ -121,9 +121,14 @@ impl CollabRedisStream {
         let batch: CollabStreamUpdateBatch = conn
           .xread_options(&[&stream_key], &[&last_id], &read_options)
           .await?;
-        for (message_id, update) in batch.updates {
-          since = since.max(message_id);
-          yield (message_id, update);
+
+        if batch.updates.is_empty() {
+          tokio::time::sleep(Duration::from_millis(1000)).await;
+        } else {
+          for (message_id, update) in batch.updates {
+            since = since.max(message_id);
+            yield (message_id, update);
+          }
         }
       }
     }
@@ -146,9 +151,13 @@ impl CollabRedisStream {
         let batch: AwarenessStreamUpdateBatch = conn
           .xread_options(&[&stream_key], &[&last_id], &read_options)
           .await?;
-        for (message_id, update) in batch.updates {
-          since = since.max(message_id);
-          yield update;
+        if batch.updates.is_empty() {
+          tokio::time::sleep(Duration::from_millis(1000)).await;
+        } else {
+          for (message_id, update) in batch.updates {
+            since = since.max(message_id);
+            yield update;
+          }
         }
       }
     }
@@ -157,28 +166,27 @@ impl CollabRedisStream {
   pub async fn prune_stream(
     &self,
     stream_key: &str,
-    message_id: MessageId,
+    mut message_id: MessageId,
   ) -> Result<usize, StreamError> {
     let mut conn = self.connection_manager.clone();
-    let value = conn.xrange(stream_key, "-", message_id.to_string()).await?;
-    let value = StreamRangeReply::from_owned_redis_value(value)?;
-    let msg_ids: Vec<_> = value
-      .ids
-      .into_iter()
-      .map(|stream_id| stream_id.id)
-      .collect();
-    if !msg_ids.is_empty() {
-      let count: usize = conn.xdel(stream_key, &msg_ids).await?;
-      drop(conn);
-      tracing::debug!(
-        "Pruned redis stream `{}` <= `{}` ({} objects)",
-        stream_key,
-        message_id,
-        count
-      );
-      Ok(count)
-    } else {
-      Ok(0)
-    }
+    // we want to delete everything <= message_id
+    message_id.sequence_number += 1;
+    let value = conn
+      .send_packed_command(
+        redis::cmd("XTRIM")
+          .arg(stream_key)
+          .arg("MINID")
+          .arg(format!("{}", message_id)),
+      )
+      .await?;
+    let count = usize::from_redis_value(&value)?;
+    drop(conn);
+    tracing::info!(
+      "pruned redis stream `{}` <= `{}` ({} objects)",
+      stream_key,
+      message_id,
+      count
+    );
+    Ok(count)
   }
 }

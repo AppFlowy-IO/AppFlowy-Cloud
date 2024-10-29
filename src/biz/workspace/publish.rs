@@ -61,19 +61,20 @@ async fn check_workspace_owner_or_publisher(
 }
 
 fn check_collab_publish_name(publish_name: &str) -> Result<(), AppError> {
+  const MAX_PUBLISH_NAME_LENGTH: usize = 128;
+
   // Check len
-  if publish_name.len() > 128 {
-    return Err(AppError::InvalidRequest(
-      "Publish name must be at most 128 characters long".to_string(),
-    ));
+  if publish_name.len() > MAX_PUBLISH_NAME_LENGTH {
+    return Err(AppError::PublishNameTooLong {
+      given_length: publish_name.len(),
+      max_length: MAX_PUBLISH_NAME_LENGTH,
+    });
   }
 
   // Only contain alphanumeric characters and hyphens
   for c in publish_name.chars() {
     if !c.is_alphanumeric() && c != '-' {
-      return Err(AppError::InvalidRequest(
-        "Publish name must only contain alphanumeric characters and hyphens".to_string(),
-      ));
+      return Err(AppError::PublishNameInvalidCharacter { character: c });
     }
   }
 

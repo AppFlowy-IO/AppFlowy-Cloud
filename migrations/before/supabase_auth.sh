@@ -28,7 +28,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
 
     -- Grant permissions
-    GRANT CREATE ON DATABASE postgres TO supabase_auth_admin;
+    GRANT CREATE ON DATABASE $POSTGRES_DB TO supabase_auth_admin;
 
     -- Set search_path for supabase_auth_admin
     ALTER USER supabase_auth_admin SET search_path = 'auth';

@@ -77,7 +77,12 @@ async fn test_set_publish_namespace_set() {
       .await
       .err()
       .unwrap();
-    assert_eq!(err.code, ErrorCode::InvalidRequest, "{:?}", err);
+    assert_eq!(
+      err.code,
+      ErrorCode::CustomNamespaceInvalidCharacter,
+      "{:?}",
+      err
+    );
   }
 }
 

@@ -12,7 +12,7 @@ use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::RowDetail;
 use collab_database::views::DatabaseViews;
-use collab_database::workspace_database::WorkspaceDatabase;
+use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, UserId};
@@ -20,6 +20,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use shared_entity::dto::publish_dto::PublishDatabaseData;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -1225,7 +1226,11 @@ async fn duplicate_to_workspace_db_with_relation() {
         .get_with_path(&related_db_collab.transact(), ["database", "id"])
         .unwrap();
 
-      let rel_col_db_body = DatabaseBody::from_collab(&db_with_rel_col_collab).unwrap();
+      let rel_col_db_body = DatabaseBody::from_collab(
+        &db_with_rel_col_collab,
+        Arc::new(NoPersistenceDatabaseCollabService),
+      )
+      .unwrap();
       let txn = db_with_rel_col_collab.transact();
       let all_fields = rel_col_db_body.fields.get_all_fields(&txn);
       all_fields
@@ -1298,7 +1303,9 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         .get_db_collab_from_view(&workspace_id_2, &db_with_row_doc.view_id)
         .await;
 
-      let db_body = DatabaseBody::from_collab(&db_collab).unwrap();
+      let db_body =
+        DatabaseBody::from_collab(&db_collab, Arc::new(NoPersistenceDatabaseCollabService))
+          .unwrap();
 
       // check that doc exists and can be fetched
       let first_row_id = &db_body.views.get_all_views(&db_collab.transact())[0].row_orders[0].id;
@@ -1378,7 +1385,11 @@ async fn duplicate_to_workspace_db_rel_self() {
       .get_db_collab_from_view(&workspace_id_2, &db_rel_self.view_id)
       .await;
     let txn = db_rel_self_collab.transact();
-    let db_rel_self_body = DatabaseBody::from_collab(&db_rel_self_collab).unwrap();
+    let db_rel_self_body = DatabaseBody::from_collab(
+      &db_rel_self_collab,
+      Arc::new(NoPersistenceDatabaseCollabService),
+    )
+    .unwrap();
     let database_id = db_rel_self_body.get_database_id(&txn);
     let all_fields = db_rel_self_body.fields.get_all_fields(&txn);
     let rel_fields = all_fields

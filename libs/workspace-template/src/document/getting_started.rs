@@ -156,7 +156,9 @@ impl GettingStartedTemplate {
 
     let todos_json = include_str!("../../assets/to-dos.json");
     let database_data = serde_json::from_str::<DatabaseData>(todos_json)?;
-    let create_database_params = CreateDatabaseParams::from_database_data(database_data);
+    let database_view_id = database_data.views[0].id.clone();
+    let create_database_params =
+      CreateDatabaseParams::from_database_data(database_data, &database_view_id, &todos_view_uuid);
     let todos_data = self
       .create_database_from_params(todos_view_uuid.clone(), create_database_params.clone())
       .await?;

@@ -155,6 +155,12 @@ pub enum AppError {
 
   #[error("There is existing access request for workspace {workspace_id} and view {view_id}")]
   AccessRequestAlreadyExists { workspace_id: Uuid, view_id: Uuid },
+
+  #[error("There is existing published view for workspace {workspace_id} with publish_name {publish_name}")]
+  PublishNameAlreadyExists {
+    workspace_id: Uuid,
+    publish_name: String,
+  },
 }
 
 impl AppError {
@@ -225,6 +231,7 @@ impl AppError {
       AppError::MissingView(_) => ErrorCode::MissingView,
       AppError::AccessRequestAlreadyExists { .. } => ErrorCode::AccessRequestAlreadyExists,
       AppError::TooManyImportTask(_) => ErrorCode::TooManyImportTask,
+      AppError::PublishNameAlreadyExists { .. } => ErrorCode::PublishNameAlreadyExists,
     }
   }
 }
@@ -360,6 +367,7 @@ pub enum ErrorCode {
   CustomNamespaceTooShort = 1047,
   CustomNamespaceTooLong = 1048,
   CustomNamespaceReserved = 1049,
+  PublishNameAlreadyExists = 1050,
 }
 
 impl ErrorCode {

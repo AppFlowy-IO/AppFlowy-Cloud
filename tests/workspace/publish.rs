@@ -90,6 +90,50 @@ async fn test_publish_doc() {
     .await
     .unwrap();
 
+  {
+    // Invalid publish name
+    let err = c
+      .publish_collabs::<MyCustomMetadata, &[u8]>(
+        &workspace_id,
+        vec![PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: uuid::Uuid::new_v4(),
+            publish_name: "(*&^%$#!".to_string(), // invalid chars
+            metadata: MyCustomMetadata {
+              title: "my_title_1".to_string(),
+            },
+          },
+          data: "yrs_encoded_data_1".as_bytes(),
+        }],
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(
+      err.code,
+      ErrorCode::PublishNameInvalidCharacter,
+      "{:?}",
+      err
+    );
+    // Publish name too long
+    let err = c
+      .publish_collabs::<MyCustomMetadata, &[u8]>(
+        &workspace_id,
+        vec![PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: uuid::Uuid::new_v4(),
+            publish_name: "a".repeat(1001), // too long
+            metadata: MyCustomMetadata {
+              title: "my_title_1".to_string(),
+            },
+          },
+          data: "yrs_encoded_data_1".as_bytes(),
+        }],
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::PublishNameTooLong, "{:?}", err);
+  }
+
   let publish_name_1 = "publish-name-1";
   let view_id_1 = uuid::Uuid::new_v4();
   let publish_name_2 = "publish-name-2";

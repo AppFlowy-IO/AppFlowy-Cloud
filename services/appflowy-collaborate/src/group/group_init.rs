@@ -29,7 +29,7 @@ use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace};
@@ -1070,8 +1070,9 @@ impl CollabPersister {
       );
 
       // 3. finally we can drop Redis messages
+      let now = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis();
       let msg_id = MessageId {
-        timestamp_ms: message_id.timestamp_ms - self.prune_grace_period.as_millis() as u64,
+        timestamp_ms: (now - self.prune_grace_period.as_millis()) as u64,
         sequence_number: 0,
       };
       let stream_key = CollabStreamUpdate::stream_key(&self.workspace_id, &self.object_id);

@@ -100,7 +100,7 @@ impl CollabRedisStream {
     workspace_id: &str,
     object_id: &str,
     since: Option<MessageId>,
-    live: bool,
+    keep_alive: bool,
   ) -> impl Stream<Item = Result<(MessageId, CollabStreamUpdate), StreamError>> {
     let mut conn = self.connection_manager.clone();
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
@@ -112,22 +112,17 @@ impl CollabRedisStream {
     // reset once we get new data onboard
     let mut backoff = ExponentialBackoff::new(Duration::from_millis(100), Duration::from_secs(10));
     async_stream::try_stream! {
-      let until = if live {
-        None
-      } else {
-        let mut reply: StreamRangeReply = conn.xrevrange_count(&stream_key, "+", "-", 1).await?;
-        match reply.ids.pop().map(|stream_id| stream_id.id) {
-          None => Some(MessageId::default()),
-          Some(id) => Some(MessageId::try_from(id)?),
-        }
-      };
-      while until.is_none() || since < until.unwrap() {
+      loop {
         let last_id = since.to_string();
         let batch: CollabStreamUpdateBatch = conn
           .xread_options(&[&stream_key], &[&last_id], &read_options)
           .await?;
 
         if batch.updates.is_empty() {
+          if !keep_alive {
+            // if stream is not set to keep alive, we finish it once we get all current messages
+            return;
+          }
           backoff.sleep().await; // stream has no new messages, phase out
         } else {
           backoff.reset();

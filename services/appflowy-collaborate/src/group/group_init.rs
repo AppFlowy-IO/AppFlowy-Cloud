@@ -273,7 +273,7 @@ impl CollabGroup {
     let message = AwarenessSync::new(
       state.object_id.clone(),
       Message::Awareness(update.data).encode_v1(),
-      sender.clone(),
+      CollabOrigin::Empty,
     );
     for mut e in state.subscribers.iter_mut() {
       let subscription = e.value_mut();

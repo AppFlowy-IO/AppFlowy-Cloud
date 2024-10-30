@@ -19,16 +19,24 @@ use app_error::AppError;
 
 #[inline]
 pub async fn delete_from_workspace(pg_pool: &PgPool, workspace_id: &Uuid) -> Result<(), AppError> {
-  let pg_row = sqlx::query!(
+  let res = sqlx::query!(
     r#"
-    DELETE FROM public.af_workspace where workspace_id = $1
+      DELETE FROM public.af_workspace
+      WHERE workspace_id = $1
     "#,
     workspace_id
   )
   .execute(pg_pool)
   .await?;
 
-  debug_assert!(pg_row.rows_affected() == 1);
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to delete workspace, workspace_id: {}, rows_affected: {}",
+      workspace_id,
+      res.rows_affected()
+    );
+  }
+
   Ok(())
 }
 
@@ -1590,4 +1598,50 @@ pub async fn update_import_task_metadata(
     })?;
 
   Ok(())
+}
+
+#[inline]
+pub async fn select_publish_name_exists(
+  pg_pool: &PgPool,
+  workspace_uuid: &Uuid,
+  publish_name: &str,
+) -> Result<bool, AppError> {
+  let exists = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_published_collab
+        WHERE workspace_id = $1
+        AND publish_name = $2
+      )
+    "#,
+    workspace_uuid,
+    publish_name
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}
+
+#[inline]
+pub async fn select_view_id_from_publish_name(
+  pg_pool: &PgPool,
+  workspace_uuid: &Uuid,
+  publish_name: &str,
+) -> Result<Option<Uuid>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT view_id
+      FROM af_published_collab
+      WHERE workspace_id = $1
+      AND publish_name = $2
+    "#,
+    workspace_uuid,
+    publish_name
+  )
+  .fetch_optional(pg_pool)
+  .await?;
+
+  Ok(res)
 }

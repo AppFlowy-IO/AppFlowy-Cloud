@@ -3,7 +3,7 @@ use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
 use collab::core::collab::Collab;
-use collab_database::workspace_database::WorkspaceDatabase;
+use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
 use collab_database::{database::DatabaseBody, rows::RowId};
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::CollabOrigin;
@@ -165,7 +165,8 @@ async fn get_page_collab_data_for_database(
       ),
     )
   })?;
-  let db_body = DatabaseBody::from_collab(&db_collab).unwrap();
+  let db_body = DatabaseBody::from_collab(&db_collab, Arc::new(NoPersistenceDatabaseCollabService))
+    .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
   let inline_view_id = {
     let txn = db_collab.transact();
     db_body.get_inline_view_id(&txn)

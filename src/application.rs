@@ -17,7 +17,7 @@ use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
-use actix_web::middleware::{Condition, NormalizePath};
+use actix_web::middleware::NormalizePath;
 use actix_web::{dev::Server, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_collaborate::collab::access_control::CollabStorageAccessControlImpl;
@@ -62,9 +62,7 @@ use crate::api::template::template_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
-use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
 use crate::biz::pg_listener::PgListeners;
-use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
 use crate::biz::workspace::publish::{
   PublishedCollabPostgresStore, PublishedCollabS3StoreWithPostgresFallback, PublishedCollabStore,
 };
@@ -72,7 +70,6 @@ use crate::config::config::{
   Config, DatabaseSetting, GoTrueSetting, PublishedCollabStorageBackend, S3Setting,
 };
 use crate::mailer::AFCloudMailer;
-use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
 use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
@@ -129,15 +126,6 @@ pub async fn run_actix_server(
     .unwrap_or_else(Key::generate);
 
   let storage = state.collab_access_control_storage.clone();
-  let access_control = MiddlewareAccessControlTransform::new()
-    .with_acs(WorkspaceMiddlewareAccessControl::new(
-      state.pg_pool.clone(),
-      state.workspace_access_control.clone(),
-    ))
-    .with_acs(CollabMiddlewareAccessControl::new(
-      state.collab_access_control.clone(),
-      state.collab_cache.clone(),
-    ));
 
   // Initialize metrics that which are registered in the registry.
   let realtime_server = CollaborationServer::<_>::new(
@@ -164,10 +152,6 @@ pub async fn run_actix_server(
       .wrap(
         SessionMiddleware::builder(redis_store.clone(), key.clone())
           .build(),
-      )
-      .wrap(Condition::new(
-        config.access_control.is_enabled && config.access_control.enable_middleware,
-        access_control.clone())
       )
       .wrap(RequestIdMiddleware)
       .service(server_info_scope())

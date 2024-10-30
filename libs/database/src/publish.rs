@@ -1,5 +1,7 @@
 use app_error::AppError;
-use database_entity::dto::{PublishCollabItem, PublishCollabKey, PublishInfo};
+use database_entity::dto::{
+  PatchPublishedCollab, PublishCollabItem, PublishCollabKey, PublishInfo,
+};
 use sqlx::{Executor, PgPool, Postgres};
 use uuid::Uuid;
 
@@ -104,6 +106,36 @@ pub async fn update_workspace_default_publish_view<'a, E: Executor<'a, Database 
     tracing::error!(
         "Failed to update workspace default publish view, workspace_id: {}, new_view_id: {}, rows_affected: {}",
         workspace_id, new_view_id, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn update_workspace_default_publish_view_set_null<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_workspace
+      SET default_published_view_id = NULL
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to unset workspace default publish view, workspace_id: {}, rows_affected: {}",
+      workspace_id,
+      res.rows_affected()
     );
   }
 
@@ -233,6 +265,46 @@ pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
       view_ids,
       res.rows_affected()
     );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn update_published_collabs(
+  txn: &mut sqlx::Transaction<'_, Postgres>,
+  workspace_id: &Uuid,
+  patches: &[PatchPublishedCollab],
+) -> Result<(), AppError> {
+  for patch in patches {
+    let new_publish_name = match &patch.publish_name {
+      Some(new_publish_name) => new_publish_name,
+      None => continue,
+    };
+
+    let res = sqlx::query!(
+      r#"
+        UPDATE af_published_collab
+        SET publish_name = $1
+        WHERE workspace_id = $2
+            AND view_id = $3
+      "#,
+      patch.publish_name,
+      workspace_id,
+      patch.view_id,
+    )
+    .execute(txn.as_mut())
+    .await?;
+
+    if res.rows_affected() != 1 {
+      tracing::error!(
+          "Failed to update published collab publish name, workspace_id: {}, view_id: {}, new_publish_name: {}, rows_affected: {}",
+          workspace_id,
+          patch.view_id,
+          new_publish_name,
+          res.rows_affected()
+        );
+    }
   }
 
   Ok(())

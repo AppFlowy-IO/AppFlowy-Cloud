@@ -3,9 +3,12 @@ use database::{
   collab::GetCollabOrigin,
   publish::{
     select_all_published_collab_info, select_default_published_view_id,
-    select_default_published_view_id_for_namespace, update_workspace_default_publish_view,
+    select_default_published_view_id_for_namespace, update_published_collabs,
+    update_workspace_default_publish_view, update_workspace_default_publish_view_set_null,
   },
+  workspace::{select_publish_name_exists, select_view_id_from_publish_name},
 };
+use database_entity::dto::PatchPublishedCollab;
 use std::sync::Arc;
 
 use app_error::AppError;
@@ -37,8 +40,6 @@ use crate::{
   biz::collab::{folder_view::to_dto_folder_view_miminal, ops::get_latest_collab_folder},
 };
 
-use super::ops::check_workspace_owner;
-
 async fn check_workspace_owner_or_publisher(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
@@ -60,19 +61,20 @@ async fn check_workspace_owner_or_publisher(
 }
 
 fn check_collab_publish_name(publish_name: &str) -> Result<(), AppError> {
+  const MAX_PUBLISH_NAME_LENGTH: usize = 128;
+
   // Check len
-  if publish_name.len() > 128 {
-    return Err(AppError::InvalidRequest(
-      "Publish name must be at most 128 characters long".to_string(),
-    ));
+  if publish_name.len() > MAX_PUBLISH_NAME_LENGTH {
+    return Err(AppError::PublishNameTooLong {
+      given_length: publish_name.len(),
+      max_length: MAX_PUBLISH_NAME_LENGTH,
+    });
   }
 
   // Only contain alphanumeric characters and hyphens
   for c in publish_name.chars() {
     if !c.is_alphanumeric() && c != '-' {
-      return Err(AppError::InvalidRequest(
-        "Publish name must only contain alphanumeric characters and hyphens".to_string(),
-      ));
+      return Err(AppError::PublishNameInvalidCharacter { character: c });
     }
   }
 
@@ -85,11 +87,9 @@ fn get_collab_s3_key(workspace_id: &Uuid, view_id: &Uuid) -> String {
 
 pub async fn set_workspace_namespace(
   pg_pool: &PgPool,
-  user_uuid: &Uuid,
   workspace_id: &Uuid,
   new_namespace: &str,
 ) -> Result<(), AppError> {
-  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   check_workspace_namespace(new_namespace).await?;
   if select_workspace_publish_namespace_exists(pg_pool, workspace_id, new_namespace).await? {
     return Err(AppError::PublishNamespaceAlreadyTaken(
@@ -102,12 +102,18 @@ pub async fn set_workspace_namespace(
 
 pub async fn set_workspace_default_publish_view(
   pg_pool: &PgPool,
-  user_uuid: &Uuid,
   workspace_id: &Uuid,
   new_view_id: &Uuid,
 ) -> Result<(), AppError> {
-  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   update_workspace_default_publish_view(pg_pool, workspace_id, new_view_id).await?;
+  Ok(())
+}
+
+pub async fn unset_workspace_default_publish_view(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  update_workspace_default_publish_view_set_null(pg_pool, workspace_id).await?;
   Ok(())
 }
 
@@ -210,9 +216,7 @@ async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> 
   // Only contain alphanumeric characters and hyphens
   for c in new_namespace.chars() {
     if !c.is_alphanumeric() && c != '-' {
-      return Err(AppError::InvalidRequest(
-        "Namespace must only contain alphanumeric characters and hyphens".to_string(),
-      ));
+      return Err(AppError::CustomNamespaceInvalidCharacter { character: c });
     }
   }
   Ok(())
@@ -251,11 +255,18 @@ pub trait PublishedCollabStore: Sync + Send + 'static {
     publish_name: &str,
   ) -> Result<Vec<u8>, AppError>;
 
-  async fn delete_collab(
+  async fn delete_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],
     user_uuid: &Uuid,
+  ) -> Result<(), AppError>;
+
+  async fn patch_collabs(
+    &self,
+    workspace_id: &Uuid,
+    user_uuid: &Uuid,
+    patches: &[PatchPublishedCollab],
   ) -> Result<(), AppError>;
 }
 
@@ -280,6 +291,13 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
   ) -> Result<(), AppError> {
     for publish_item in &publish_items {
       check_collab_publish_name(publish_item.meta.publish_name.as_str())?;
+      check_view_id_publish_name_conflict(
+        &self.pg_pool,
+        workspace_id,
+        &publish_item.meta.view_id,
+        publish_item.meta.publish_name.as_str(),
+      )
+      .await?;
     }
     let publish_items_batch_size = publish_items.len() as i64;
     let result =
@@ -351,7 +369,7 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
     result
   }
 
-  async fn delete_collab(
+  async fn delete_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],
@@ -360,6 +378,15 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
     check_workspace_owner_or_publisher(&self.pg_pool, user_uuid, workspace_id, view_ids).await?;
     delete_published_collabs(&self.pg_pool, workspace_id, view_ids).await?;
     Ok(())
+  }
+
+  async fn patch_collabs(
+    &self,
+    workspace_id: &Uuid,
+    user_uuid: &Uuid,
+    patches: &[PatchPublishedCollab],
+  ) -> Result<(), AppError> {
+    patch_collabs(&self.pg_pool, workspace_id, user_uuid, patches).await
   }
 }
 
@@ -395,6 +422,14 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
     let mut handles: Vec<tokio::task::JoinHandle<()>> = vec![];
     for publish_item in &publish_items {
       check_collab_publish_name(publish_item.meta.publish_name.as_str())?;
+      check_view_id_publish_name_conflict(
+        &self.pg_pool,
+        workspace_id,
+        &publish_item.meta.view_id,
+        publish_item.meta.publish_name.as_str(),
+      )
+      .await?;
+
       let object_key = get_collab_s3_key(workspace_id, &publish_item.meta.view_id);
       let data = publish_item.data.clone();
       let bucket_client = self.bucket_client.clone();
@@ -519,7 +554,7 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
     }
   }
 
-  async fn delete_collab(
+  async fn delete_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],
@@ -533,5 +568,76 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
     self.bucket_client.delete_blobs(object_keys).await?;
     delete_published_collabs(&self.pg_pool, workspace_id, view_ids).await?;
     Ok(())
+  }
+
+  async fn patch_collabs(
+    &self,
+    workspace_id: &Uuid,
+    user_uuid: &Uuid,
+    patches: &[PatchPublishedCollab],
+  ) -> Result<(), AppError> {
+    patch_collabs(&self.pg_pool, workspace_id, user_uuid, patches).await
+  }
+}
+
+async fn patch_collabs(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  user_uuid: &Uuid,
+  patches: &[PatchPublishedCollab],
+) -> Result<(), AppError> {
+  let view_ids = patches
+    .iter()
+    .map(|patch| patch.view_id)
+    .collect::<Vec<Uuid>>();
+  for patch in patches {
+    if let Some(new_publish_name) = patch.publish_name.as_deref() {
+      check_collab_publish_name(new_publish_name)?;
+      check_publish_name_already_exists(pg_pool, workspace_id, new_publish_name).await?;
+    }
+  }
+  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, &view_ids).await?;
+
+  let mut txn = pg_pool.begin().await?;
+  update_published_collabs(&mut txn, workspace_id, patches).await?;
+  txn.commit().await?;
+  Ok(())
+}
+
+/// Checks if the `publish_name` already exists for the workspace
+async fn check_publish_name_already_exists(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  publish_name: &str,
+) -> Result<(), AppError> {
+  let publish_name_exists = select_publish_name_exists(pg_pool, workspace_id, publish_name).await?;
+  if publish_name_exists {
+    return Err(AppError::PublishNameAlreadyExists {
+      workspace_id: *workspace_id,
+      publish_name: publish_name.to_string(),
+    });
+  }
+  Ok(())
+}
+
+/// Check if the `publish_name` already exists on another view
+async fn check_view_id_publish_name_conflict(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  view_id: &Uuid,
+  publish_name: &str,
+) -> Result<(), AppError> {
+  match select_view_id_from_publish_name(pg_pool, workspace_id, publish_name).await? {
+    Some(published_view_id) => {
+      if published_view_id != *view_id {
+        Err(AppError::PublishNameAlreadyExists {
+          workspace_id: *workspace_id,
+          publish_name: publish_name.to_string(),
+        })
+      } else {
+        Ok(())
+      }
+    },
+    None => Ok(()),
   }
 }

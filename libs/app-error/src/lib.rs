@@ -155,6 +155,24 @@ pub enum AppError {
 
   #[error("There is existing access request for workspace {workspace_id} and view {view_id}")]
   AccessRequestAlreadyExists { workspace_id: Uuid, view_id: Uuid },
+
+  #[error("There is existing published view for workspace {workspace_id} with publish_name {publish_name}")]
+  PublishNameAlreadyExists {
+    workspace_id: Uuid,
+    publish_name: String,
+  },
+
+  #[error("There is an invalid character in the publish name: {character}")]
+  PublishNameInvalidCharacter { character: char },
+
+  #[error("The publish name is too long, given length: {given_length}, max length: {max_length}")]
+  PublishNameTooLong {
+    given_length: usize,
+    max_length: usize,
+  },
+
+  #[error("There is an invalid character in the publish namespace: {character}")]
+  CustomNamespaceInvalidCharacter { character: char },
 }
 
 impl AppError {
@@ -225,6 +243,12 @@ impl AppError {
       AppError::MissingView(_) => ErrorCode::MissingView,
       AppError::AccessRequestAlreadyExists { .. } => ErrorCode::AccessRequestAlreadyExists,
       AppError::TooManyImportTask(_) => ErrorCode::TooManyImportTask,
+      AppError::PublishNameAlreadyExists { .. } => ErrorCode::PublishNameAlreadyExists,
+      AppError::PublishNameInvalidCharacter { .. } => ErrorCode::PublishNameInvalidCharacter,
+      AppError::PublishNameTooLong { .. } => ErrorCode::PublishNameTooLong,
+      AppError::CustomNamespaceInvalidCharacter { .. } => {
+        ErrorCode::CustomNamespaceInvalidCharacter
+      },
     }
   }
 }
@@ -357,6 +381,13 @@ pub enum ErrorCode {
   CustomNamespaceDisabled = 1044,
   CustomNamespaceDisallowed = 1045,
   TooManyImportTask = 1046,
+  CustomNamespaceTooShort = 1047,
+  CustomNamespaceTooLong = 1048,
+  CustomNamespaceReserved = 1049,
+  PublishNameAlreadyExists = 1050,
+  PublishNameInvalidCharacter = 1051,
+  PublishNameTooLong = 1052,
+  CustomNamespaceInvalidCharacter = 1053,
 }
 
 impl ErrorCode {

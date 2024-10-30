@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE af_published_collab\n        SET publish_name = $1\n        WHERE workspace_id = $2\n            AND view_id = $3\n      ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2ba7fdabdd71d2e3ac6dc1b67af17e8dcb59d13b644bc336da5351184ec4c9e1"
+}

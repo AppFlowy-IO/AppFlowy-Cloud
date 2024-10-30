@@ -19,17 +19,17 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     DO \$\$ BEGIN IF NOT EXISTS (
         SELECT
         FROM pg_catalog.pg_roles
-        WHERE rolname = '$SUPABASE_USER'
-    ) THEN CREATE USER "$SUPABASE_USER" BYPASSRLS NOINHERIT CREATEROLE LOGIN NOREPLICATION PASSWORD '$SUPABASE_PASSWORD';
+        WHERE rolname = 'supabase_auth_admin'
+    ) THEN CREATE USER "supabase_auth_admin" BYPASSRLS NOINHERIT CREATEROLE LOGIN NOREPLICATION PASSWORD '$SUPABASE_PASSWORD';
     END IF;
     END \$\$;
 
     -- Create auth schema if it does not exist
-    CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION $SUPABASE_USER;
+    CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
 
     -- Grant permissions
-    GRANT CREATE ON DATABASE postgres TO $SUPABASE_USER;
+    GRANT CREATE ON DATABASE $POSTGRES_DB TO supabase_auth_admin;
 
     -- Set search_path for supabase_auth_admin
-    ALTER USER $SUPABASE_USER SET search_path = 'auth';
+    ALTER USER supabase_auth_admin SET search_path = 'auth';
 EOSQL

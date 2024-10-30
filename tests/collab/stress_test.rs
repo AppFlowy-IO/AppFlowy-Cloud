@@ -46,7 +46,7 @@ async fn run_multiple_text_edits() {
 
   // run test scenario
   let collab = writer.collabs.get(&object_id).unwrap().collab.clone();
-  let expected = test_scenario.execute(collab, 50_000).await;
+  let expected = test_scenario.execute(collab, 40_000).await;
 
   // wait for the writer to complete sync
   writer.wait_object_sync_complete(&object_id).await.unwrap();

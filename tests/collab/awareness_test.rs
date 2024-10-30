@@ -24,7 +24,7 @@ async fn viewing_document_editing_users_test() {
 
   let owner_uid = owner.uid().await;
   let clients = owner.get_connect_users(&object_id).await;
-  assert_eq!(clients.len(), 1);
+  assert_eq!(clients.len(), 1, "guest shouldn't be connected yet");
   assert_eq!(clients[0], owner_uid);
 
   owner
@@ -39,6 +39,7 @@ async fn viewing_document_editing_users_test() {
     .open_collab(&workspace_id, &object_id, collab_type)
     .await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();
+  sleep(Duration::from_secs(1)).await;
 
   // after guest open the collab, it will emit an awareness that contains the user id of guest.
   // This awareness will be sent to the server. Server will broadcast the awareness to all the clients
@@ -50,7 +51,7 @@ async fn viewing_document_editing_users_test() {
   let mut expected_clients = [owner_uid, guest_uid];
   expected_clients.sort();
 
-  assert_eq!(clients.len(), 2);
+  assert_eq!(clients.len(), 2, "expected owner and member connected");
   assert_eq!(clients, expected_clients);
   // simulate the guest close the collab
   guest.clean_awareness_state(&object_id).await;
@@ -58,7 +59,7 @@ async fn viewing_document_editing_users_test() {
   sleep(Duration::from_secs(5)).await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();
   let clients = owner.get_connect_users(&object_id).await;
-  assert_eq!(clients.len(), 1);
+  assert_eq!(clients.len(), 1, "expected only owner connected");
   assert_eq!(clients[0], owner_uid);
 
   // simulate the guest open the collab again

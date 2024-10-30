@@ -134,7 +134,12 @@ impl TestScenario {
   }
 
   pub async fn execute(&self, collab: CollabRef, step_count: usize) -> String {
+    let mut i = 0;
     for t in self.txns.iter().take(step_count) {
+      i += 1;
+      if i % 10_000 == 0 {
+        tracing::trace!("Executed {}/{} steps", i, step_count);
+      }
       let mut lock = collab.write().await;
       let collab = lock.borrow_mut();
       let mut txn = collab.context.transact_mut();

@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use redis::aio::ConnectionManager;
 use redis::Value;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::log;
 
 const RELEASE_SCRIPT: &str = r#"
 if redis.call("GET", KEYS[1]) == ARGV[1] then

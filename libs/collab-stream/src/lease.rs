@@ -50,7 +50,7 @@ impl Drop for LeaseAcquisition {
       let token = self.token;
       tokio::spawn(async move {
         if let Err(err) = Self::release_internal(conn, stream_key, token).await {
-          log::error!("error while releasing lease (drop): {}", err);
+          tracing::error!("error while releasing lease (drop): {}", err);
         }
       });
     }

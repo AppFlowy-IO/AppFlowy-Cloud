@@ -95,6 +95,7 @@ impl CollabGroup {
       storage,
       collab_redis_stream,
       indexer,
+      metrics.clone(),
       prune_grace_period,
     );
 
@@ -511,7 +512,6 @@ impl CollabGroup {
     );
 
     let payload = collab_msg.payload();
-    state.metrics.acquire_collab_lock_count.inc();
 
     // Spawn a blocking task to handle the message
     let result = Self::handle_message(state, payload, &message_origin, msg_id).await;
@@ -542,8 +542,6 @@ impl CollabGroup {
         Ok(msg) => {
           match Self::handle_protocol_message(state, message_origin, msg).await {
             Ok(payload) => {
-              state.metrics.apply_update_count.inc();
-
               // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
               // send one ack back to the client.
               if ack_response.is_none() {
@@ -660,7 +658,7 @@ impl CollabGroup {
     origin: &CollabOrigin,
     update: Vec<u8>,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
-    state.metrics.apply_update_size.observe(update.len() as f64);
+    state.metrics.collab_size.observe(update.len() as f64);
 
     let start = tokio::time::Instant::now();
     // we try to decode update to make sure it's not malformed and to extract state vector
@@ -698,7 +696,7 @@ impl CollabGroup {
 
       state
         .metrics
-        .apply_update_time
+        .load_collab_time
         .observe(elapsed.as_millis() as f64);
 
       Ok(None)
@@ -846,6 +844,7 @@ struct CollabPersister {
   storage: Arc<dyn CollabStorage>,
   collab_redis_stream: Arc<CollabRedisStream>,
   indexer: Option<Arc<dyn Indexer>>,
+  metrics: Arc<CollabRealtimeMetrics>,
   update_sink: CollabUpdateSink,
   awareness_sink: AwarenessUpdateSink,
   /// A grace period for prunning Redis collab updates. Instead of deleting all messages we
@@ -863,6 +862,7 @@ impl CollabPersister {
     storage: Arc<dyn CollabStorage>,
     collab_redis_stream: Arc<CollabRedisStream>,
     indexer: Option<Arc<dyn Indexer>>,
+    metrics: Arc<CollabRealtimeMetrics>,
     prune_grace_period: Duration,
   ) -> Self {
     let update_sink = collab_redis_stream.collab_update_sink(&workspace_id, &object_id);
@@ -875,6 +875,7 @@ impl CollabPersister {
       storage,
       collab_redis_stream,
       indexer,
+      metrics,
       update_sink,
       awareness_sink,
       prune_grace_period,
@@ -925,10 +926,12 @@ impl CollabPersister {
   /// Loads collab without its history. Used for handling y-sync protocol messages.
   async fn load_compact(&self) -> Result<CollabSnapshot, RealtimeError> {
     // 1. Try to load the latest snapshot from storage
+    let start = Instant::now();
     let mut collab = match self.load_collab_full(false).await? {
       Some(collab) => collab,
       None => Collab::new_with_origin(CollabOrigin::Server, self.object_id.clone(), vec![], false),
     };
+    self.metrics.load_collab_count.inc();
 
     // 2. consume all Redis updates on top of it (keep redis msg id)
     let mut last_message_id = None;
@@ -949,8 +952,10 @@ impl CollabPersister {
           tx.apply_update(update)
             .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
           last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
+          self.metrics.apply_update_count.inc();
         },
         Err(err) => {
+          self.metrics.apply_update_failed_count.inc();
           tracing::error!(
             "`{}` failed to resolve collab update: {}",
             self.object_id,
@@ -966,6 +971,10 @@ impl CollabPersister {
       self.object_id,
       i
     );
+    self
+      .metrics
+      .load_collab_time
+      .observe(start.elapsed().as_millis() as f64);
 
     // now we have the most recent version of the document
     let snapshot = CollabSnapshot {
@@ -987,6 +996,7 @@ impl CollabPersister {
     );
     pin_mut!(stream);
 
+    let start = Instant::now();
     let mut i = 0;
     let mut collab = None;
     let mut last_message_id = None;
@@ -1009,8 +1019,10 @@ impl CollabPersister {
             .apply_update(update)
             .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
           last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
+          self.metrics.apply_update_count.inc();
         },
         Err(err) => {
+          self.metrics.apply_update_failed_count.inc();
           tracing::error!(
             "`{}` failed to resolve collab update: {}",
             self.object_id,
@@ -1024,10 +1036,17 @@ impl CollabPersister {
     // if there were no Redis updates, collab is still not initialized
     match collab {
       Some(collab) => {
+        self.metrics.load_full_collab_count.inc();
+        let elapsed = start.elapsed();
+        self
+          .metrics
+          .load_collab_time
+          .observe(elapsed.as_millis() as f64);
         tracing::trace!(
-          "loaded collab full state: {} replaying {} updates",
+          "loaded collab full state: {} replaying {} updates in {:?}",
           self.object_id,
-          i
+          i,
+          elapsed
         );
         {
           let tx = collab.transact();
@@ -1092,6 +1111,10 @@ impl CollabPersister {
       let encoded_collab = EncodedCollab::new_v1(sv.clone(), doc_state_full)
         .encode_to_bytes()
         .map_err(|err| RealtimeError::Internal(err.into()))?;
+      self
+        .metrics
+        .full_collab_size
+        .observe(encoded_collab.len() as f64);
       let params = InsertSnapshotParams {
         object_id: self.object_id.clone(),
         encoded_collab_v1: encoded_collab,
@@ -1115,6 +1138,10 @@ impl CollabPersister {
       let encoded_collab = EncodedCollab::new_v1(sv, doc_state_light)
         .encode_to_bytes()
         .map_err(|err| RealtimeError::Internal(err.into()))?;
+      self
+        .metrics
+        .collab_size
+        .observe(encoded_collab.len() as f64);
       let mut params = CollabParams::new(&self.object_id, self.collab_type.clone(), encoded_collab);
 
       match self.embeddings(collab).await {

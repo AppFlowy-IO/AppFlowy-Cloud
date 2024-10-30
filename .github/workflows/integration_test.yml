@@ -112,6 +112,14 @@ jobs:
           export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
+          
+          container_id=$(docker ps --filter name=appflowy-cloud-ai-1 -q)
+          if [ -n "$container_id" ]; then
+          echo "Displaying logs for the AppFlowy-AI container..."
+            docker logs "$container_id"
+          else
+            echo "No running container found to display logs."
+          fi
 
       - name: install prerequisites
         run: |

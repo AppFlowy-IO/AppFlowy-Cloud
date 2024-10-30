@@ -68,8 +68,10 @@ mod tests {
     let template = GettingStartedTemplate;
     let object_id = gen_database_view_id().to_string();
     let database_data = serde_json::from_str::<DatabaseData>(json_str).unwrap();
+
+    let database_view_id = database_data.views[0].id.clone();
     let create_database_params =
-      CreateDatabaseParams::from_database_data(database_data, Some(object_id.clone()));
+      CreateDatabaseParams::from_database_data(database_data, &database_view_id, &object_id);
     let result = template
       .create_database_from_params(object_id.clone(), create_database_params)
       .await;

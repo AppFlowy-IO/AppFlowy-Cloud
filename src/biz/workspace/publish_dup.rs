@@ -14,7 +14,7 @@ use collab_database::rows::RowMetaKey;
 use collab_database::rows::CELL_FIELD_TYPE;
 use collab_database::rows::ROW_CELLS;
 use collab_database::template::entity::CELL_DATA;
-use collab_database::workspace_database::WorkspaceDatabase;
+use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
@@ -726,8 +726,9 @@ impl PublishCollabDuplicator {
   ) -> Result<(String, String, bool), AppError> {
     // collab of database
     let mut db_collab = collab_from_doc_state(published_db.database_collab.clone(), "")?;
-    let db_body = DatabaseBody::from_collab(&db_collab)
-      .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
+    let db_body =
+      DatabaseBody::from_collab(&db_collab, Arc::new(NoPersistenceDatabaseCollabService))
+        .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
     let pub_db_id = db_body.get_database_id(&db_collab.context.transact());
 
     // check if the database is already duplicated

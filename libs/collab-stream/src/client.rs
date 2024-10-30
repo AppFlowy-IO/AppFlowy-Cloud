@@ -8,7 +8,7 @@ use crate::model::{
 use crate::stream_group::{StreamConfig, StreamGroup};
 use futures::Stream;
 use redis::aio::ConnectionManager;
-use redis::streams::{StreamRangeReply, StreamReadOptions};
+use redis::streams::StreamReadOptions;
 use redis::{AsyncCommands, FromRedisValue};
 use std::time::Duration;
 use tracing::error;

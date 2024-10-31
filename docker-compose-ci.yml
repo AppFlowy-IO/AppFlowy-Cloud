@@ -13,11 +13,13 @@ services:
       - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
 
   # You do not need this if you have configured to use your own s3 file storage
+  # You can try to access http://localhost/minio/browser/appflowy in your browser
   minio:
     restart: on-failure
     image: minio/minio
     ports:
-      - "9000:9000"
+      - 9000:9000
+      - 9001:9001
     environment:
       - MINIO_BROWSER_REDIRECT_URL=http://localhost/minio
       - MINIO_ROOT_USER=${APPFLOWY_S3_ACCESS_KEY:-minioadmin}

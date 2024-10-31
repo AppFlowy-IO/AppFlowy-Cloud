@@ -1,5 +1,5 @@
 use crate::ai_test::util::read_text_from_asset;
-use appflowy_ai_client::dto::{ChatContextLoader, CreateTextChatContext};
+
 use assert_json_diff::assert_json_eq;
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{local_ai_test_enabled, TestClient};
@@ -228,22 +228,16 @@ async fn create_chat_context_test() {
     .await
     .unwrap();
 
-  let context = CreateTextChatContext {
-    chat_id: chat_id.clone(),
-    context_loader: ChatContextLoader::Txt,
-    content: "Lacus have lived in the US for five years".to_string(),
-    chunk_size: 1000,
-    chunk_overlap: 20,
-    metadata: Default::default(),
+  let content = "Lacus have lived in the US for five years".to_string();
+  let metadata = ChatMessageMetadata {
+    data: ChatMetadataData::from_text(content),
+    id: chat_id.clone(),
+    name: "".to_string(),
+    source: "appflowy".to_string(),
+    extract: None,
   };
 
-  test_client
-    .api_client
-    .create_chat_context(&workspace_id, context)
-    .await
-    .unwrap();
-
-  let params = CreateChatMessageParams::new_user("Where Lacus live?");
+  let params = CreateChatMessageParams::new_user("Where Lacus live?").with_metadata(metadata);
   let question = test_client
     .api_client
     .create_question(&workspace_id, &chat_id, params)

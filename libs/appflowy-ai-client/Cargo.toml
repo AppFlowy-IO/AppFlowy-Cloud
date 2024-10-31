@@ -26,5 +26,5 @@ infra.workspace = true
 
 [features]
 default = ["client-api"]
-client-api = ["dto", "reqwest", "serde", "serde_json", "tracing", "serde_repr"]
+client-api = ["dto", "reqwest", "serde", "serde_json", "tracing", "serde_repr", "infra/request_util"]
 dto = ["serde", "serde_json", "serde_repr"]

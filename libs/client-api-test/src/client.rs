@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::env;
 use tracing::warn;
 use uuid::Uuid;
-//
+
 #[cfg(not(target_arch = "wasm32"))]
 lazy_static! {
   pub static ref LOCALHOST_URL: Cow<'static, str> =

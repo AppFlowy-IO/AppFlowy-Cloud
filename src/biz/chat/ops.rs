@@ -11,13 +11,13 @@ use database::chat::chat_ops::{
   insert_answer_message_with_transaction, insert_chat, insert_question_message,
   select_chat_messages,
 };
-use database_entity::dto::{
+use futures::stream::Stream;
+use serde_json::Value;
+use shared_entity::dto::chat_dto::{
   ChatAuthor, ChatAuthorType, ChatMessage, ChatMessageType, ChatMetadataData,
   CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
   UpdateChatMessageContentParams,
 };
-use futures::stream::Stream;
-use serde_json::Value;
 use sqlx::PgPool;
 use tracing::{error, info, trace};
 
@@ -135,9 +135,8 @@ pub async fn create_chat_message(
 
 /// Extracts the chat context from the metadata. Currently, we only support text as a context. In
 /// the future, we will support other types of context.
-pub(crate) struct ExtractChatMetadata {
-  pub(crate) content: String,
-  pub(crate) content_type: String,
+pub(crate) struct ExtractChatContext {
+  pub(crate) data: ChatMetadataData,
   pub(crate) metadata: HashMap<String, Value>,
 }
 
@@ -156,7 +155,7 @@ pub(crate) struct ExtractChatMetadata {
 /// the root json is point to the struct [database_entity::dto::ChatMessageMetadata]
 fn extract_message_metadata(
   message_metadata: &mut serde_json::Value,
-) -> Option<ExtractChatMetadata> {
+) -> Option<ExtractChatContext> {
   trace!("Extracting metadata: {:?}", message_metadata);
 
   if let Value::Object(message_metadata) = message_metadata {
@@ -166,9 +165,8 @@ fn extract_message_metadata(
       .and_then(|value| serde_json::from_value::<ChatMetadataData>(value.clone()).ok())
     {
       if data.validate().is_ok() {
-        return Some(ExtractChatMetadata {
-          content: data.content,
-          content_type: data.content_type.to_string(),
+        return Some(ExtractChatContext {
+          data,
           metadata: message_metadata.clone().into_iter().collect(),
         });
       }
@@ -178,9 +176,9 @@ fn extract_message_metadata(
   None
 }
 
-pub(crate) fn extract_chat_message_metadata(
+pub(crate) fn extract_chat_context(
   params: &mut CreateChatMessageParams,
-) -> Vec<ExtractChatMetadata> {
+) -> Vec<ExtractChatContext> {
   let mut extract_metadatas = vec![];
   trace!("chat metadata: {:?}", params.metadata);
   if let Some(Value::Array(ref mut list)) = params.metadata {

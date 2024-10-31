@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -274,16 +274,17 @@ pub struct LocalAIConfig {
   pub plugin: AppFlowyOfflineAI,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ChatContextLoader {
-  Txt,
+  Text,
   Markdown,
 }
 
 impl Display for ChatContextLoader {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      ChatContextLoader::Txt => write!(f, "text"),
+      ChatContextLoader::Text => write!(f, "text"),
       ChatContextLoader::Markdown => write!(f, "markdown"),
     }
   }
@@ -294,38 +295,12 @@ impl FromStr for ChatContextLoader {
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
     match s {
-      "text" => Ok(ChatContextLoader::Txt),
+      "text" => Ok(ChatContextLoader::Text),
       "markdown" => Ok(ChatContextLoader::Markdown),
       _ => Err(anyhow::anyhow!("unknown context loader type")),
     }
   }
 }
-impl Serialize for ChatContextLoader {
-  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-  where
-    S: Serializer,
-  {
-    match self {
-      ChatContextLoader::Txt => serializer.serialize_str("text"),
-      ChatContextLoader::Markdown => serializer.serialize_str("markdown"),
-    }
-  }
-}
-
-impl<'de> Deserialize<'de> for ChatContextLoader {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    let s = String::deserialize(deserializer)?;
-    match s.as_str() {
-      "text" => Ok(ChatContextLoader::Txt),
-      "markdown" => Ok(ChatContextLoader::Markdown),
-      _ => Err(serde::de::Error::custom("unknown value")),
-    }
-  }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateTextChatContext {
   pub chat_id: String,

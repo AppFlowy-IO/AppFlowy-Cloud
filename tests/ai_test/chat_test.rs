@@ -3,11 +3,11 @@ use crate::ai_test::util::read_text_from_asset;
 use assert_json_diff::assert_json_eq;
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{local_ai_test_enabled, TestClient};
-use database_entity::dto::{
-  ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams, MessageCursor,
-};
 use futures_util::StreamExt;
 use serde_json::json;
+use shared_entity::dto::chat_dto::{
+  ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams, MessageCursor,
+};
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
@@ -124,7 +124,7 @@ async fn chat_qa_test() {
     id: "123".to_string(),
     name: "test context".to_string(),
     source: "user added".to_string(),
-    extract: Some(json!({"created_at": 123})),
+    extra: Some(json!({"created_at": 123})),
   };
 
   let params =
@@ -234,7 +234,7 @@ async fn create_chat_context_test() {
     id: chat_id.clone(),
     name: "".to_string(),
     source: "appflowy".to_string(),
-    extract: None,
+    extra: None,
   };
 
   let params = CreateChatMessageParams::new_user("Where Lacus live?").with_metadata(metadata);

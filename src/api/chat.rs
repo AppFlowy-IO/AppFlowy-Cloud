@@ -1,7 +1,6 @@
 use crate::biz::chat::ops::{
-  create_chat, create_chat_message, create_chat_message_stream, delete_chat,
-  extract_chat_message_metadata, generate_chat_message_answer, get_chat_messages,
-  update_chat_message,
+  create_chat, create_chat_message, create_chat_message_stream, delete_chat, extract_chat_context,
+  generate_chat_message_answer, get_chat_messages, update_chat_message,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -11,14 +10,14 @@ use app_error::AppError;
 use appflowy_ai_client::dto::{ChatContextLoader, CreateTextChatContext, RepeatedRelatedQuestion};
 use authentication::jwt::UserUuid;
 use bytes::Bytes;
-use database_entity::dto::{
-  ChatAuthor, ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams,
-  GetChatMessageParams, MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
-};
 use futures::Stream;
 use futures_util::stream;
 use futures_util::{FutureExt, TryStreamExt};
 use pin_project::pin_project;
+use shared_entity::dto::chat_dto::{
+  ChatAuthor, ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams,
+  GetChatMessageParams, MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
+};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -189,12 +188,15 @@ async fn create_question_handler(
 
   // When create a question, we will extract the metadata from the question content.
   // metadata might include user mention file,page,or user. For example, @Get started.
-  for extract_context in extract_chat_message_metadata(&mut params) {
-    match ChatContextLoader::from_str(&extract_context.content_type) {
+  for extract_context in extract_chat_context(&mut params) {
+    match ChatContextLoader::from_str(&extract_context.data.content_type.to_string()) {
       Ok(context_loader) => {
-        let context =
-          CreateTextChatContext::new(chat_id.clone(), context_loader, extract_context.content)
-            .with_metadata(extract_context.metadata);
+        let context = CreateTextChatContext::new(
+          chat_id.clone(),
+          context_loader,
+          extract_context.data.content,
+        )
+        .with_metadata(extract_context.metadata);
         trace!("create context for question: {}", context);
         state
           .ai_client

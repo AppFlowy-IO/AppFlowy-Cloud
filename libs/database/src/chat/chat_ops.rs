@@ -3,7 +3,7 @@ use crate::workspace::is_workspace_exist;
 use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
-use database_entity::dto::{
+use shared_entity::dto::chat_dto::{
   ChatAuthor, ChatMessage, CreateChatParams, GetChatMessageParams, MessageCursor,
   RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatMessageMetaParams,
   UpdateChatParams,

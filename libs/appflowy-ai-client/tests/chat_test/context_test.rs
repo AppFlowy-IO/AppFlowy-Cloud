@@ -6,7 +6,7 @@ async fn create_chat_context_test() {
   let chat_id = uuid::Uuid::new_v4().to_string();
   let context = CreateTextChatContext {
     chat_id: chat_id.clone(),
-    context_loader: ChatContextLoader::Txt,
+    context_loader: ChatContextLoader::Text,
     content: "I have lived in the US for five years".to_string(),
     chunk_size: 1000,
     chunk_overlap: 20,

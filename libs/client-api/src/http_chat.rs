@@ -9,9 +9,7 @@ use futures_core::{ready, Stream};
 use pin_project::pin_project;
 use reqwest::Method;
 use serde_json::Value;
-use shared_entity::dto::ai_dto::{
-  CreateTextChatContext, RepeatedRelatedQuestion, STREAM_ANSWER_KEY, STREAM_METADATA_KEY,
-};
+use shared_entity::dto::ai_dto::{RepeatedRelatedQuestion, STREAM_ANSWER_KEY, STREAM_METADATA_KEY};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -216,25 +214,6 @@ impl Client {
     AppResponse::<RepeatedChatMessage>::from_response(resp)
       .await?
       .into_data()
-  }
-
-  pub async fn create_chat_context(
-    &self,
-    workspace_id: &str,
-    params: CreateTextChatContext,
-  ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{}/context/text",
-      self.base_url, params.chat_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }
 

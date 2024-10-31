@@ -8,6 +8,7 @@ use collab_entity::proto;
 use collab_entity::CollabType;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -778,6 +779,17 @@ pub struct ChatMetadataData {
 }
 
 impl ChatMetadataData {
+  pub fn from_text(text: String) -> Self {
+    let size = text.len() as i64;
+    Self {
+      content: text,
+      content_type: ChatMetadataContentType::Text,
+      size,
+    }
+  }
+}
+
+impl ChatMetadataData {
   /// Validates the `ChatMetadataData` instance.
   ///
   /// This method checks the validity of the data based on the content type and the presence of content or URL.
@@ -885,8 +897,14 @@ impl CreateChatMessageParams {
     }
   }
 
-  pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
-    self.metadata = Some(metadata);
+  pub fn with_metadata<T: Serialize>(mut self, metadata: T) -> Self {
+    if let Ok(metadata) = serde_json::to_value(&metadata) {
+      if !matches!(metadata, Value::Array(_)) {
+        self.metadata = Some(json!([metadata]));
+      } else {
+        self.metadata = Some(metadata);
+      }
+    }
     self
   }
 }

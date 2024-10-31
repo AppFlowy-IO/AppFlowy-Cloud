@@ -2,7 +2,7 @@ use anyhow::Error;
 use client_api_test::TestClient;
 use collab_document::importer::define::{BlockType, URL_FIELD};
 use collab_folder::ViewLayout;
-use futures_util::future::join_all;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -200,6 +200,7 @@ async fn imported_workspace_do_not_become_latest_visit_workspace_test() {
   );
 }
 
+#[allow(dead_code)]
 async fn upload_file(
   client: &TestClient,
   name: &str,

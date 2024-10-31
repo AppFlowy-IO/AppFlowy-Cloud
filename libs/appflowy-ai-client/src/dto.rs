@@ -274,37 +274,10 @@ pub struct LocalAIConfig {
   pub plugin: AppFlowyOfflineAI,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ChatContextLoader {
-  Text,
-  Markdown,
-}
-
-impl Display for ChatContextLoader {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    match self {
-      ChatContextLoader::Text => write!(f, "text"),
-      ChatContextLoader::Markdown => write!(f, "markdown"),
-    }
-  }
-}
-
-impl FromStr for ChatContextLoader {
-  type Err = anyhow::Error;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "text" => Ok(ChatContextLoader::Text),
-      "markdown" => Ok(ChatContextLoader::Markdown),
-      _ => Err(anyhow::anyhow!("unknown context loader type")),
-    }
-  }
-}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateTextChatContext {
   pub chat_id: String,
-  pub context_loader: ChatContextLoader,
+  pub context_loader: String,
   pub content: String,
   pub chunk_size: i32,
   pub chunk_overlap: i32,
@@ -312,7 +285,7 @@ pub struct CreateTextChatContext {
 }
 
 impl CreateTextChatContext {
-  pub fn new(chat_id: String, context_loader: ChatContextLoader, text: String) -> Self {
+  pub fn new(chat_id: String, context_loader: String, text: String) -> Self {
     CreateTextChatContext {
       chat_id,
       context_loader,

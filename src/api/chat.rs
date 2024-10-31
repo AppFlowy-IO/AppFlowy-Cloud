@@ -7,7 +7,7 @@ use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 
 use app_error::AppError;
-use appflowy_ai_client::dto::{ChatContextLoader, CreateTextChatContext, RepeatedRelatedQuestion};
+use appflowy_ai_client::dto::{CreateTextChatContext, RepeatedRelatedQuestion};
 use authentication::jwt::UserUuid;
 use bytes::Bytes;
 use futures::Stream;
@@ -21,7 +21,6 @@ use shared_entity::dto::chat_dto::{
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::str::FromStr;
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
 use tokio::task;
@@ -31,7 +30,7 @@ use database::chat;
 use crate::api::util::ai_model_from_header;
 
 use database::chat::chat_ops::insert_answer_message;
-use tracing::{instrument, trace, warn};
+use tracing::{instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -189,25 +188,18 @@ async fn create_question_handler(
   // When create a question, we will extract the metadata from the question content.
   // metadata might include user mention file,page,or user. For example, @Get started.
   for extract_context in extract_chat_context(&mut params) {
-    match ChatContextLoader::from_str(&extract_context.data.content_type.to_string()) {
-      Ok(context_loader) => {
-        let context = CreateTextChatContext::new(
-          chat_id.clone(),
-          context_loader,
-          extract_context.data.content,
-        )
-        .with_metadata(extract_context.metadata);
-        trace!("create context for question: {}", context);
-        state
-          .ai_client
-          .create_chat_text_context(context)
-          .await
-          .map_err(AppError::from)?;
-      },
-      Err(err) => {
-        warn!("Failed to parse chat context loader: {}", err);
-      },
-    }
+    let context = CreateTextChatContext::new(
+      chat_id.clone(),
+      extract_context.data.content_type.to_string(),
+      extract_context.data.content,
+    )
+    .with_metadata(extract_context.metadata);
+    trace!("create context for question: {}", context);
+    state
+      .ai_client
+      .create_chat_text_context(context)
+      .await
+      .map_err(AppError::from)?;
   }
 
   let uid = state.user_cache.get_user_uid(&uuid).await?;

@@ -16,9 +16,12 @@ IMAGE_VERSION="${1:-latest}"  # Default to 'latest' if no argument is provided
 
 
 # Stop and remove running containers
+docker ps -q --filter "network=appflowy-cloud_default" | xargs -r docker stop
+docker ps -aq --filter "network=appflowy-cloud_default" | xargs -r docker rm
 docker compose down
 
 # Build amd64 images with a new local tag
+# Before running following command, make sure you have the .env file with the correct values
 # For example: SKIP_BUILD=true  ./script/run_ci_server.sh 0.6.51-amd64
 if [[ -z "${SKIP_BUILD+x}" ]]; then
   docker build --platform=linux/amd64 -t appflowyinc/appflowy_cloud_local:$IMAGE_VERSION -f Dockerfile .

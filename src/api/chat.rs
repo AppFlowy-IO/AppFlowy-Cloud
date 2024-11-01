@@ -1,6 +1,6 @@
 use crate::biz::chat::ops::{
-  create_chat, create_chat_message, create_chat_message_stream, delete_chat,
-  generate_chat_message_answer, get_chat_messages, update_chat_message,
+  create_chat, create_chat_message, delete_chat, generate_chat_message_answer, get_chat_messages,
+  update_chat_message,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -15,8 +15,9 @@ use futures_util::stream;
 use futures_util::{FutureExt, TryStreamExt};
 use pin_project::pin_project;
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams,
-  GetChatMessageParams, MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
+  ChatAuthor, ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams,
+  CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams, MessageCursor,
+  RepeatedChatMessage, UpdateChatMessageContentParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
@@ -32,53 +33,61 @@ use crate::api::util::ai_model_from_header;
 use database::chat::chat_ops::insert_answer_message;
 use tracing::{error, instrument, trace};
 use validator::Validate;
-
 pub fn chat_scope() -> Scope {
   web::scope("/api/chat/{workspace_id}")
-    .service(web::resource("").route(web::post().to(create_chat_handler)))
-    .service(
-      web::resource("/{chat_id}")
-        .route(web::delete().to(delete_chat_handler))
-        .route(web::get().to(get_chat_message_handler)),
-    )
-    .service(
-      web::resource("/{chat_id}/{message_id}/related_question")
-        .route(web::get().to(get_related_message_handler)),
-    )
-    .service(
-      web::resource("/{chat_id}/message")
-        .route(web::put().to(update_question_handler)),
-    )
-    .service(
-      // Creating a [ChatMessage] for given content.
-      // When client asks a question, it will use this API to create a chat message
-      web::resource("/{chat_id}/message/question").route(web::post().to(create_question_handler)),
-    )
-      // Writing the final answer for a given chat.
-      // After the streaming is finished, the client will use this API to save the message to disk.
-    .service(web::resource("/{chat_id}/message/answer").route(web::post().to(save_answer_handler)))
-    .service(
-      // Use AI to generate a response for a specified message ID.
-      // To generate an answer for a given question, use "/answer/stream" to receive the answer in a stream.
-      web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(answer_handler)),
-    )
-      // Deprecated! use "v2/answer/stream"
-      // Use AI to generate a response for a specified message ID. This response will be return as a stream.
-    .service(
-      web::resource("/{chat_id}/{message_id}/answer/stream")
-        .route(web::get().to(answer_stream_handler)),
-    )
+      // Chat management
+      .service(
+        web::resource("")
+            .route(web::post().to(create_chat_handler))
+      )
+      .service(
+        web::resource("/{chat_id}")
+            .route(web::delete().to(delete_chat_handler))
+            .route(web::get().to(get_chat_message_handler))
+      )
+
+      // Message management
+      .service(
+        web::resource("/{chat_id}/message")
+            .route(web::put().to(update_question_handler))
+      )
+      .service(
+        web::resource("/{chat_id}/message/question")
+            .route(web::post().to(create_question_handler))
+      )
+      .service(
+        web::resource("/{chat_id}/v2/message/question")
+            .route(web::post().to(create_question_handler_v2))
+      )
+      .service(
+        web::resource("/{chat_id}/message/answer")
+            .route(web::post().to(save_answer_handler))
+      )
+
+      // AI response generation
+      .service(
+        web::resource("/{chat_id}/{message_id}/answer")
+            .route(web::get().to(answer_handler))
+      )
+      .service(
+        web::resource("/{chat_id}/{message_id}/answer/stream")
+            .route(web::get().to(answer_stream_handler)) // Deprecated
+      )
       .service(
         web::resource("/{chat_id}/{message_id}/v2/answer/stream")
-            .route(web::get().to(answer_stream_v2_handler)),
+            .route(web::get().to(answer_stream_v2_handler))
       )
-    .service(
-      // Create chat context for a given chat.
-      web::resource("/{chat_id}/context/text")
-          .route(web::post().to(create_chat_context_handler))
-    )
-}
 
+      // Additional functionality
+      .service(
+        web::resource("/{chat_id}/{message_id}/related_question")
+            .route(web::get().to(get_related_message_handler))
+      )
+      .service(
+        web::resource("/{chat_id}/context/text")
+            .route(web::post().to(create_chat_context_handler))
+      )
+}
 async fn create_chat_handler(
   path: web::Path<String>,
   state: Data<AppState>,
@@ -173,6 +182,16 @@ async fn create_question_handler(
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let resp = create_chat_message(&state.pg_pool, uid, chat_id, params).await?;
   Ok(AppResponse::Ok().with_data(resp).into())
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn create_question_handler_v2(
+  state: Data<AppState>,
+  path: web::Path<(String, String)>,
+  payload: Json<CreateChatMessageParamsV2>,
+  uuid: UserUuid,
+) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+  todo!()
 }
 
 async fn save_answer_handler(

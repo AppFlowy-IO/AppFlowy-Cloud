@@ -38,6 +38,17 @@ pub struct CreateChatMessageParams {
   pub metadata: Vec<ChatMessageMetadata>,
 }
 
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct CreateChatMessageParamsV2 {
+  #[validate(custom = "validate_not_empty_str")]
+  pub content: String,
+  pub message_type: ChatMessageType,
+  #[serde(deserialize_with = "deserialize_metadata")]
+  #[serde(default)]
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub metadata: Vec<ChatMessageMetadata>,
+}
+
 fn deserialize_metadata<'de, D>(deserializer: D) -> Result<Vec<ChatMessageMetadata>, D::Error>
 where
   D: Deserializer<'de>,

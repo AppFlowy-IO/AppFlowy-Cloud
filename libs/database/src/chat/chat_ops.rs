@@ -4,14 +4,14 @@ use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatMessage, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatMessageMetaParams,
+  ChatAuthor, ChatMessage, ChatMessageMetadata, CreateChatParams, GetChatMessageParams,
+  MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatMessageMetaParams,
   UpdateChatParams,
 };
 
 use serde_json::json;
 use sqlx::postgres::PgArguments;
-use sqlx::types::JsonValue;
+
 use sqlx::{Arguments, Executor, PgPool, Postgres, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
@@ -283,9 +283,9 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   author: ChatAuthor,
   chat_id: &str,
   content: String,
-  metadata: Option<JsonValue>,
+  metadata: Vec<ChatMessageMetadata>,
 ) -> Result<ChatMessage, AppError> {
-  let metadata = metadata.unwrap_or_else(|| json!({}));
+  let metadata = json!(metadata);
   let chat_id = Uuid::from_str(chat_id)?;
   let row = sqlx::query!(
     r#"

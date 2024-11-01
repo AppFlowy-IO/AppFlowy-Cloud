@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize, Serializer};
+use serde_json::json;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -275,34 +276,34 @@ pub struct LocalAIConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CreateTextChatContext {
+pub struct CreateChatContext {
   pub chat_id: String,
   pub context_loader: String,
   pub content: String,
   pub chunk_size: i32,
   pub chunk_overlap: i32,
-  pub metadata: HashMap<String, serde_json::Value>,
+  pub metadata: serde_json::Value,
 }
 
-impl CreateTextChatContext {
+impl CreateChatContext {
   pub fn new(chat_id: String, context_loader: String, text: String) -> Self {
-    CreateTextChatContext {
+    CreateChatContext {
       chat_id,
       context_loader,
       content: text,
       chunk_size: 2000,
       chunk_overlap: 20,
-      metadata: HashMap::new(),
+      metadata: json!({}),
     }
   }
 
-  pub fn with_metadata(mut self, metadata: HashMap<String, serde_json::Value>) -> Self {
-    self.metadata = metadata;
+  pub fn with_metadata<T: Serialize>(mut self, metadata: T) -> Self {
+    self.metadata = json!(metadata);
     self
   }
 }
 
-impl Display for CreateTextChatContext {
+impl Display for CreateChatContext {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
       "Create Chat context: {{ chat_id: {}, content_type: {}, content size: {},  metadata: {:?} }}",

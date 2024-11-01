@@ -1,8 +1,8 @@
 use appflowy_ai_client::dto::AIModel;
 use chrono::{DateTime, Utc};
 use infra::validate::validate_not_empty_str;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde::{Deserialize, Deserializer, Serialize};
+
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -32,18 +32,34 @@ pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
   pub message_type: ChatMessageType,
+  #[serde(deserialize_with = "deserialize_metadata")]
+  #[serde(default)]
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub metadata: Vec<ChatMessageMetadata>,
+}
 
-  /// metadata is json array object
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub metadata: Option<serde_json::Value>,
+fn deserialize_metadata<'de, D>(deserializer: D) -> Result<Vec<ChatMessageMetadata>, D::Error>
+where
+  D: Deserializer<'de>,
+{
+  let raw_value = Option::<serde_json::Value>::deserialize(deserializer)?;
+  match raw_value {
+    Some(serde_json::Value::Array(arr)) => {
+      serde_json::from_value(serde_json::Value::Array(arr)).map_err(serde::de::Error::custom)
+    },
+    Some(_) => Err(serde::de::Error::custom(
+      "Expected metadata to be an array of ChatMessageMetadata.",
+    )),
+    None => Ok(vec![]),
+  }
 }
 
 /// [ChatMessageMetadata] is used when creating a new question message.
-/// All the properties of [ChatMessageMetadata] except [ChatMetadataData] will be stored as a
+/// All the properties of [ChatMessageMetadata] except [ChatRAGData] will be stored as a
 /// metadata for specific [ChatMessage]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessageMetadata {
-  pub data: ChatMetadataData,
+  pub data: ChatRAGData,
   /// The id for the metadata. It can be a file_id, view_id
   pub id: String,
   /// The name for the metadata. For example, @xxx, @xx.txt
@@ -53,8 +69,30 @@ pub struct ChatMessageMetadata {
   pub extra: Option<serde_json::Value>,
 }
 
+impl ChatMessageMetadata {
+  pub fn split_data(self) -> (ChatRAGData, ChatMetadataDescription) {
+    (
+      self.data,
+      ChatMetadataDescription {
+        id: self.id,
+        name: self.name,
+        source: self.source,
+        extra: self.extra,
+      },
+    )
+  }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMetadataData {
+pub struct ChatMetadataDescription {
+  pub id: String,
+  pub name: String,
+  pub source: String,
+  pub extra: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatRAGData {
   /// The textual content of the metadata. This field can contain raw text data from a specific
   /// document or any other text content that is indexable. This content is typically used for
   /// search and indexing purposes within the chat context.
@@ -69,7 +107,7 @@ pub struct ChatMetadataData {
   pub size: i64,
 }
 
-impl ChatMetadataData {
+impl ChatRAGData {
   pub fn from_text(text: String) -> Self {
     let size = text.len() as i64;
     Self {
@@ -80,7 +118,7 @@ impl ChatMetadataData {
   }
 }
 
-impl ChatMetadataData {
+impl ChatRAGData {
   /// Validates the `ChatMetadataData` instance.
   ///
   /// This method checks the validity of the data based on the content type and the presence of content or URL.
@@ -137,7 +175,7 @@ impl Display for ContextLoader {
   }
 }
 
-impl ChatMetadataData {
+impl ChatRAGData {
   pub fn new_text(content: String) -> Self {
     let size = content.len();
     Self {
@@ -176,7 +214,7 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::System,
-      metadata: None,
+      metadata: vec![],
     }
   }
 
@@ -184,18 +222,12 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::User,
-      metadata: None,
+      metadata: vec![],
     }
   }
 
-  pub fn with_metadata<T: Serialize>(mut self, metadata: T) -> Self {
-    if let Ok(metadata) = serde_json::to_value(&metadata) {
-      if !matches!(metadata, Value::Array(_)) {
-        self.metadata = Some(json!([metadata]));
-      } else {
-        self.metadata = Some(metadata);
-      }
-    }
+  pub fn with_metadata(mut self, metadata: ChatMessageMetadata) -> Self {
+    self.metadata.push(metadata);
     self
   }
 }

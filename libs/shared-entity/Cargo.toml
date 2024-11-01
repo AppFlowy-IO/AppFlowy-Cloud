@@ -17,7 +17,7 @@ reqwest = { workspace = true, features = ["stream"] }
 uuid = { version = "1.6.1", features = ["v4"] }
 gotrue-entity = { path = "../gotrue-entity" }
 database-entity.workspace = true
-infra.workspace = true
+infra = { workspace = true, features = ["request_util"] }
 collab-entity = { workspace = true }
 app-error = { workspace = true }
 chrono = "0.4.31"

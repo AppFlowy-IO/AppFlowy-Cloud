@@ -1,5 +1,5 @@
 use crate::biz::chat::ops::{
-  create_chat, create_chat_message, create_chat_message_stream, delete_chat, extract_chat_context,
+  create_chat, create_chat_message, create_chat_message_stream, delete_chat,
   generate_chat_message_answer, get_chat_messages, update_chat_message,
 };
 use crate::state::AppState;
@@ -7,7 +7,7 @@ use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 
 use app_error::AppError;
-use appflowy_ai_client::dto::{CreateTextChatContext, RepeatedRelatedQuestion};
+use appflowy_ai_client::dto::{CreateChatContext, RepeatedRelatedQuestion};
 use authentication::jwt::UserUuid;
 use bytes::Bytes;
 use futures::Stream;
@@ -30,7 +30,7 @@ use database::chat;
 use crate::api::util::ai_model_from_header;
 
 use database::chat::chat_ops::insert_answer_message;
-use tracing::{instrument, trace};
+use tracing::{error, instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -47,9 +47,7 @@ pub fn chat_scope() -> Scope {
     )
     .service(
       web::resource("/{chat_id}/message")
-        // create_chat_message_handler is deprecated. No long used after frontend application v0.6.2
-        .route(web::post().to(create_chat_message_handler))
-        .route(web::put().to(update_chat_message_handler)),
+        .route(web::put().to(update_question_handler)),
     )
     .service(
       // Creating a [ChatMessage] for given content.
@@ -80,6 +78,7 @@ pub fn chat_scope() -> Scope {
           .route(web::post().to(create_chat_context_handler))
     )
 }
+
 async fn create_chat_handler(
   path: web::Path<String>,
   state: Data<AppState>,
@@ -101,44 +100,10 @@ async fn delete_chat_handler(
   Ok(AppResponse::Ok().into())
 }
 
-#[instrument(level = "info", skip_all, err)]
-async fn create_chat_message_handler(
-  state: Data<AppState>,
-  path: web::Path<(String, String)>,
-  payload: Json<CreateChatMessageParams>,
-  uuid: UserUuid,
-  req: HttpRequest,
-) -> actix_web::Result<HttpResponse> {
-  let (_workspace_id, chat_id) = path.into_inner();
-  let params = payload.into_inner();
-
-  if let Err(err) = params.validate() {
-    return Ok(HttpResponse::from_error(AppError::from(err)));
-  }
-
-  let ai_model = ai_model_from_header(&req);
-  let uid = state.user_cache.get_user_uid(&uuid).await?;
-  let message_stream = create_chat_message_stream(
-    &state.pg_pool,
-    uid,
-    chat_id,
-    params,
-    state.ai_client.clone(),
-    ai_model,
-  )
-  .await;
-
-  Ok(
-    HttpResponse::Ok()
-      .content_type("application/json")
-      .streaming(message_stream),
-  )
-}
-
 #[instrument(level = "debug", skip_all, err)]
 async fn create_chat_context_handler(
   state: Data<AppState>,
-  payload: Json<CreateTextChatContext>,
+  payload: Json<CreateChatContext>,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let params = payload.into_inner();
   state
@@ -149,7 +114,7 @@ async fn create_chat_context_handler(
   Ok(AppResponse::Ok().into())
 }
 
-async fn update_chat_message_handler(
+async fn update_question_handler(
   state: Data<AppState>,
   payload: Json<UpdateChatMessageContentParams>,
   req: HttpRequest,
@@ -183,17 +148,20 @@ async fn create_question_handler(
   uuid: UserUuid,
 ) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
   let (_workspace_id, chat_id) = path.into_inner();
-  let mut params = payload.into_inner();
+  let params = payload.into_inner();
 
   // When create a question, we will extract the metadata from the question content.
   // metadata might include user mention file,page,or user. For example, @Get started.
-  for extract_context in extract_chat_context(&mut params) {
-    let context = CreateTextChatContext::new(
-      chat_id.clone(),
-      extract_context.data.content_type.to_string(),
-      extract_context.data.content,
-    )
-    .with_metadata(extract_context.metadata);
+  for metadata in params.metadata.clone() {
+    let (data, desc) = metadata.split_data();
+    if let Err(err) = data.validate() {
+      error!("Failed to validate metadata: {}", err);
+      continue;
+    }
+
+    let context =
+      CreateChatContext::new(chat_id.clone(), data.content_type.to_string(), data.content)
+        .with_metadata(desc);
     trace!("create context for question: {}", context);
     state
       .ai_client

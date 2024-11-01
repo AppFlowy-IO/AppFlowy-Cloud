@@ -726,9 +726,12 @@ impl PublishCollabDuplicator {
   ) -> Result<(String, String, bool), AppError> {
     // collab of database
     let mut db_collab = collab_from_doc_state(published_db.database_collab.clone(), "")?;
-    let db_body =
-      DatabaseBody::from_collab(&db_collab, Arc::new(NoPersistenceDatabaseCollabService))
-        .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
+    let db_body = DatabaseBody::from_collab(
+      &db_collab,
+      Arc::new(NoPersistenceDatabaseCollabService),
+      None,
+    )
+    .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
     let pub_db_id = db_body.get_database_id(&db_collab.context.transact());
 
     // check if the database is already duplicated
@@ -1115,7 +1118,6 @@ impl PublishCollabDuplicator {
       id: new_view_id,
       parent_view_id: "".to_string(), // to be filled by caller
       name: view_info.name.clone(),
-      desc: "".to_string(), // unable to get from metadata
       children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
       created_at: self.ts_now,
       is_favorite: false,

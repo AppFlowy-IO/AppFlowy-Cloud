@@ -44,7 +44,6 @@ pub struct ViewBuilder {
   parent_view_id: String,
   view_id: String,
   name: String,
-  desc: String,
   layout: ViewLayout,
   child_views: Vec<ParentChildViews>,
   is_favorite: bool,
@@ -59,7 +58,6 @@ impl ViewBuilder {
       parent_view_id,
       view_id: gen_view_id().to_string(),
       name: Default::default(),
-      desc: Default::default(),
       layout: ViewLayout::Document,
       child_views: vec![],
       is_favorite: false,
@@ -84,11 +82,6 @@ impl ViewBuilder {
 
   pub fn with_name(mut self, name: &str) -> Self {
     self.name = name.to_string();
-    self
-  }
-
-  pub fn with_desc(mut self, desc: &str) -> Self {
-    self.desc = desc.to_string();
     self
   }
 
@@ -122,7 +115,6 @@ impl ViewBuilder {
       id: self.view_id,
       parent_view_id: self.parent_view_id,
       name: self.name,
-      desc: self.desc,
       created_at: timestamp(),
       is_favorite: self.is_favorite,
       layout: self.layout,

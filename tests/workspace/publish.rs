@@ -1313,6 +1313,7 @@ async fn duplicate_to_workspace_db_with_relation() {
       let rel_col_db_body = DatabaseBody::from_collab(
         &db_with_rel_col_collab,
         Arc::new(NoPersistenceDatabaseCollabService),
+        None,
       )
       .unwrap();
       let txn = db_with_rel_col_collab.transact();
@@ -1387,9 +1388,12 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         .get_db_collab_from_view(&workspace_id_2, &db_with_row_doc.view_id)
         .await;
 
-      let db_body =
-        DatabaseBody::from_collab(&db_collab, Arc::new(NoPersistenceDatabaseCollabService))
-          .unwrap();
+      let db_body = DatabaseBody::from_collab(
+        &db_collab,
+        Arc::new(NoPersistenceDatabaseCollabService),
+        None,
+      )
+      .unwrap();
 
       // check that doc exists and can be fetched
       let first_row_id = &db_body.views.get_all_views(&db_collab.transact())[0].row_orders[0].id;
@@ -1472,6 +1476,7 @@ async fn duplicate_to_workspace_db_rel_self() {
     let db_rel_self_body = DatabaseBody::from_collab(
       &db_rel_self_collab,
       Arc::new(NoPersistenceDatabaseCollabService),
+      None,
     )
     .unwrap();
     let database_id = db_rel_self_body.get_database_id(&txn);

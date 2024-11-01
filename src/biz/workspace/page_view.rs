@@ -165,8 +165,12 @@ async fn get_page_collab_data_for_database(
       ),
     )
   })?;
-  let db_body = DatabaseBody::from_collab(&db_collab, Arc::new(NoPersistenceDatabaseCollabService))
-    .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
+  let db_body = DatabaseBody::from_collab(
+    &db_collab,
+    Arc::new(NoPersistenceDatabaseCollabService),
+    None,
+  )
+  .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
   let inline_view_id = {
     let txn = db_collab.transact();
     db_body.get_inline_view_id(&txn)

@@ -374,9 +374,9 @@ fn is_task_expired(timestamp: i64, last_process_at: Option<i64>) -> bool {
       }
 
       let elapsed = now - created_at;
-      let minutes = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_MINUTES", "10")
+      let minutes = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_MINUTES", "20")
         .parse::<i64>()
-        .unwrap_or(10);
+        .unwrap_or(20);
       elapsed.num_minutes() >= minutes
     },
   }
@@ -1314,14 +1314,16 @@ pub struct NotionImportTask {
   pub md5_base64: Option<String>,
   #[serde(default)]
   pub last_process_at: Option<i64>,
+  #[serde(default)]
+  pub file_size: Option<i64>,
 }
 
 impl Display for NotionImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,
-      "NotionImportTask {{ task_id: {}, workspace_id: {}, workspace_name: {}, user_name: {}, user_email: {} }}",
-      self.task_id, self.workspace_id, self.workspace_name, self.user_name, self.user_email
+      "NotionImportTask {{ task_id: {}, workspace_id: {}, file_size:{:?}, workspace_name: {}, user_name: {}, user_email: {} }}",
+      self.task_id, self.workspace_id, self.file_size, self.workspace_name, self.user_name, self.user_email
     )
   }
 }

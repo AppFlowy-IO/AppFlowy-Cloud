@@ -83,6 +83,7 @@ async fn create_import_handler(
          "user_email": user_email,
          "task_id": task_id.to_string(),
          "workspace_id": workspace_id,
+         "file_size":params.content_length,
          "created_at": timestamp,
          "s3_key": s3_key,
          "host": host,

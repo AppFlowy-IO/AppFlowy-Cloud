@@ -91,7 +91,7 @@ pub async fn set_workspace_namespace(
   new_namespace: &str,
 ) -> Result<(), AppError> {
   check_workspace_namespace(new_namespace).await?;
-  if select_workspace_publish_namespace_exists(pg_pool, workspace_id, new_namespace).await? {
+  if select_workspace_publish_namespace_exists(pg_pool, new_namespace).await? {
     return Err(AppError::PublishNamespaceAlreadyTaken(
       "publish namespace is already taken".to_string(),
     ));

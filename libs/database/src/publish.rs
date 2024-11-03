@@ -35,7 +35,6 @@ pub async fn select_user_is_collab_publisher_for_all_views(
 #[inline]
 pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  workspace_id: &Uuid,
   namespace: &str,
 ) -> Result<bool, AppError> {
   let res = sqlx::query_scalar!(
@@ -43,11 +42,9 @@ pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Datab
       SELECT EXISTS(
         SELECT 1
         FROM af_workspace
-        WHERE workspace_id = $1
-          AND publish_namespace = $2
+        WHERE publish_namespace = $1
       )
     "#,
-    workspace_id,
     namespace,
   )
   .fetch_one(executor)

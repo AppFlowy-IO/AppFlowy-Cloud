@@ -45,6 +45,22 @@ async fn test_set_publish_namespace_set() {
     .unwrap();
 
   {
+    // another workspace cannot have the same namespace
+    let (c2, _user) = generate_unique_registered_user_client().await;
+    let workspace_id_2 = get_first_workspace_string(&c2).await;
+    let err = c2
+      .set_workspace_publish_namespace(&workspace_id_2.to_string(), &namespace)
+      .await
+      .unwrap_err();
+    assert_eq!(
+      err.code,
+      ErrorCode::PublishNamespaceAlreadyTaken,
+      "{:?}",
+      err
+    );
+  }
+
+  {
     // cannot set the same namespace
     let err = c
       .set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)

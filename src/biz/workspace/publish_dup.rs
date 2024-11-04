@@ -1,10 +1,9 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 
-use collab::preclude::Collab;
-
 use anyhow::anyhow;
 use bytes::Bytes;
+use collab::preclude::Collab;
 use collab_database::database::gen_row_id;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;

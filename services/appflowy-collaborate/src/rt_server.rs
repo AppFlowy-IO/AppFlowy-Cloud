@@ -123,7 +123,6 @@ where
     let group_manager = self.group_manager.clone();
     let connect_state = self.connect_state.clone();
     let metrics_calculate = self.metrics.clone();
-    let storage = self.storage.clone();
 
     Box::pin(async move {
       if let Some(old_user) = connect_state.handle_user_connect(connected_user, new_client_router) {
@@ -151,7 +150,6 @@ where
     let group_manager = self.group_manager.clone();
     let connect_state = self.connect_state.clone();
     let metrics_calculate = self.metrics.clone();
-    let storage = self.storage.clone();
 
     Box::pin(async move {
       trace!("[realtime]: disconnect => {}", disconnect_user);

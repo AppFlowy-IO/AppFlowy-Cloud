@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n      af.uuid\n      FROM af_published_collab apc\n      JOIN af_user af ON af.uid = apc.published_by\n      WHERE view_id = $1\n    ",
+  "query": "\n      SELECT af.uuid\n      FROM af_published_collab apc\n      JOIN af_user af ON af.uid = apc.published_by\n      WHERE view_id = $1\n    ",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "e9e22adc5a6f6daf354dc122cadab41b7cc13e0d956b3204d22f26a47ad594e3"
+  "hash": "1ae2809504bb6ea7dabcb5b5acfed09b0dd2e382e9fec3430680192df63876b8"
 }

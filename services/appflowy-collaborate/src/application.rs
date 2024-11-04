@@ -14,7 +14,7 @@ use database::collab::cache::CollabCache;
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::actix_ws::server::RealtimeServerActor;
 use crate::collab::access_control::CollabStorageAccessControlImpl;

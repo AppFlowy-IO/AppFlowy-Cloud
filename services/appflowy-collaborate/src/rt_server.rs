@@ -35,7 +35,6 @@ pub struct CollaborationServer<S> {
   group_manager: Arc<GroupManager<S>>,
   connect_state: ConnectState,
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
-  storage: Arc<S>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
   enable_custom_runtime: bool,
@@ -95,10 +94,9 @@ where
 
     spawn_metrics(metrics.clone(), storage.clone());
 
-    spawn_handle_unindexed_collabs(indexer_provider, storage.clone());
+    spawn_handle_unindexed_collabs(indexer_provider, storage);
 
     Ok(Self {
-      storage,
       group_manager,
       connect_state,
       group_sender_by_object_id,

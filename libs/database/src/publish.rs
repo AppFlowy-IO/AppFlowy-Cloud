@@ -1,6 +1,6 @@
 use app_error::AppError;
 use database_entity::dto::{
-  PatchPublishedCollab, PublishCollabItem, PublishCollabKey, PublishInfo,
+  PatchPublishedCollab, PublishCollabItem, PublishCollabKey, PublishInfo, WorkspaceNamespace,
 };
 use sqlx::{Executor, PgPool, Postgres};
 use uuid::Uuid;
@@ -41,8 +41,8 @@ pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Datab
     r#"
       SELECT EXISTS(
         SELECT 1
-        FROM af_workspace
-        WHERE publish_namespace = $1
+        FROM af_workspace_namespace
+        WHERE namespace = $1
       )
     "#,
     namespace,
@@ -54,19 +54,26 @@ pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Datab
 }
 
 #[inline]
-pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn update_non_orginal_workspace_publish_namespace<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
   executor: E,
   workspace_id: &Uuid,
+  old_namespace: &str,
   new_namespace: &str,
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
-      UPDATE af_workspace
-      SET publish_namespace = $1
+      UPDATE af_workspace_namespace
+      SET namespace = $1
       WHERE workspace_id = $2
+        AND namespace = $3
+        AND is_original = FALSE
     "#,
     new_namespace,
     workspace_id,
+    old_namespace,
   )
   .execute(executor)
   .await?;
@@ -140,19 +147,20 @@ pub async fn update_workspace_default_publish_view_set_null<
 }
 
 #[inline]
-pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn select_workspace_publish_namespaces<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-) -> Result<String, AppError> {
-  let res = sqlx::query_scalar!(
+) -> Result<Vec<WorkspaceNamespace>, AppError> {
+  let res = sqlx::query_as!(
+    WorkspaceNamespace,
     r#"
-      SELECT publish_namespace
-      FROM af_workspace
+      SELECT workspace_id, namespace, is_original
+      FROM af_workspace_namespace
       WHERE workspace_id = $1
     "#,
     workspace_id,
   )
-  .fetch_one(executor)
+  .fetch_all(executor)
   .await?;
 
   Ok(res)
@@ -225,7 +233,7 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
     r#"
     SELECT metadata
     FROM af_published_collab
-    WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+    WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
       AND publish_name = $2
     "#,
     publish_namespace,
@@ -354,7 +362,7 @@ pub async fn select_published_collab_workspace_view_id<'a, E: Executor<'a, Datab
     r#"
       SELECT workspace_id, view_id
       FROM af_published_collab
-      WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+      WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
       AND publish_name = $2
     "#,
     publish_namespace,
@@ -375,7 +383,7 @@ pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgre
     r#"
       SELECT blob
       FROM af_published_collab
-      WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+      WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
       AND publish_name = $2
     "#,
     publish_namespace,
@@ -398,7 +406,7 @@ pub async fn select_default_published_view_id_for_namespace<
     r#"
       SELECT default_published_view_id
       FROM af_workspace
-      WHERE publish_namespace = $1
+      WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
     "#,
     namespace,
   )
@@ -426,15 +434,36 @@ pub async fn select_default_published_view_id<'a, E: Executor<'a, Database = Pos
   Ok(res)
 }
 
-pub async fn select_published_collab_info_for_view_ids<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
+async fn select_first_non_original_namespace(
+  pg_pool: &PgPool,
+  namespace: &str,
+) -> Result<Option<String>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT namespace
+      FROM af_workspace_namespace
+      WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
+        AND is_original = FALSE
+      ORDER BY created_at ASC
+      LIMIT 1
+    "#,
+    namespace,
+  )
+  .fetch_optional(pg_pool)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn select_published_collab_info_for_view_ids(
+  pg_pool: &PgPool,
   view_ids: &[Uuid],
 ) -> Result<Vec<PublishInfo>, AppError> {
-  let res = sqlx::query_as!(
+  let mut res = sqlx::query_as!(
     PublishInfo,
     r#"
       SELECT
-        aw.publish_namespace AS namespace,
+        awn.namespace,
         apc.publish_name,
         apc.view_id,
         au.email AS publisher_email,
@@ -442,51 +471,47 @@ pub async fn select_published_collab_info_for_view_ids<'a, E: Executor<'a, Datab
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
+      JOIN af_workspace_namespace awn ON aw.workspace_id = awn.workspace_id AND awn.is_original = TRUE
       WHERE apc.view_id = ANY($1);
     "#,
     view_ids,
   )
-  .fetch_all(executor)
+  .fetch_all(pg_pool)
   .await?;
 
+  if res.is_empty() {
+    return Ok(res);
+  }
+  if let Some(non_original_namespace) =
+    select_first_non_original_namespace(pg_pool, &res[0].namespace).await?
+  {
+    res.iter_mut().for_each(|info| {
+      info.namespace = non_original_namespace.clone();
+    });
+  }
   Ok(res)
 }
 
-pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
+pub async fn select_published_collab_info(
+  pg_pool: &PgPool,
   view_id: &Uuid,
 ) -> Result<PublishInfo, AppError> {
-  let res = sqlx::query_as!(
-    PublishInfo,
-    r#"
-      SELECT
-        aw.publish_namespace AS namespace,
-        apc.publish_name,
-        apc.view_id,
-        au.email AS publisher_email,
-        apc.created_at AS publish_timestamp
-      FROM af_published_collab apc
-      JOIN af_user au ON apc.published_by = au.uid
-      JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
-      WHERE apc.view_id = $1;
-    "#,
-    view_id,
-  )
-  .fetch_one(executor)
-  .await?;
-
-  Ok(res)
+  select_published_collab_info_for_view_ids(pg_pool, &[*view_id])
+    .await?
+    .into_iter()
+    .next()
+    .ok_or(AppError::RecordNotFound(view_id.to_string()))
 }
 
-pub async fn select_all_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
+pub async fn select_all_published_collab_info(
+  pg_pool: &PgPool,
   workspace_id: &Uuid,
 ) -> Result<Vec<PublishInfo>, AppError> {
-  let res = sqlx::query_as!(
+  let mut res = sqlx::query_as!(
     PublishInfo,
     r#"
       SELECT
-        aw.publish_namespace AS namespace,
+        awn.namespace,
         apc.publish_name,
         apc.view_id,
         au.email AS publisher_email,
@@ -494,14 +519,34 @@ pub async fn select_all_published_collab_info<'a, E: Executor<'a, Database = Pos
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
+      JOIN af_workspace_namespace awn ON aw.workspace_id = awn.workspace_id AND awn.is_original = TRUE
       WHERE apc.workspace_id = $1;
     "#,
     workspace_id,
   )
-  .fetch_all(executor)
+  .fetch_all(pg_pool)
   .await?;
 
+  use_non_orginal_namespace_if_possible(pg_pool, &mut res).await?;
   Ok(res)
+}
+
+async fn use_non_orginal_namespace_if_possible(
+  pg_pool: &PgPool,
+  publish_infos: &mut [PublishInfo],
+) -> Result<(), AppError> {
+  if publish_infos.is_empty() {
+    return Ok(());
+  }
+
+  if let Some(non_original_namespace) =
+    select_first_non_original_namespace(pg_pool, &publish_infos[0].namespace).await?
+  {
+    publish_infos.iter_mut().for_each(|info| {
+      info.namespace = non_original_namespace.clone();
+    });
+  }
+  Ok(())
 }
 
 pub async fn select_workspace_id_for_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
@@ -511,8 +556,8 @@ pub async fn select_workspace_id_for_publish_namespace<'a, E: Executor<'a, Datab
   let res = sqlx::query!(
     r#"
       SELECT workspace_id
-      FROM af_workspace
-      WHERE publish_namespace = $1
+      FROM af_workspace_namespace
+      WHERE namespace = $1
     "#,
     publish_namespace,
   )

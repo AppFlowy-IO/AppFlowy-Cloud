@@ -3,8 +3,9 @@ use database::{
   collab::GetCollabOrigin,
   publish::{
     select_all_published_collab_info, select_default_published_view_id,
-    select_default_published_view_id_for_namespace, update_published_collabs,
-    update_workspace_default_publish_view, update_workspace_default_publish_view_set_null,
+    select_default_published_view_id_for_namespace, select_workspace_publish_namespaces,
+    update_published_collabs, update_workspace_default_publish_view,
+    update_workspace_default_publish_view_set_null,
   },
   workspace::{select_publish_name_exists, select_view_id_from_publish_name},
 };
@@ -29,8 +30,7 @@ use database::{
     select_published_collab_blob, select_published_collab_info,
     select_published_collab_workspace_view_id, select_published_data_for_view_id,
     select_published_metadata_for_view_id, select_user_is_collab_publisher_for_all_views,
-    select_workspace_publish_namespace, select_workspace_publish_namespace_exists,
-    update_workspace_publish_namespace,
+    select_workspace_publish_namespace_exists, update_non_orginal_workspace_publish_namespace,
   },
   workspace::select_user_is_workspace_owner,
 };
@@ -88,6 +88,7 @@ fn get_collab_s3_key(workspace_id: &Uuid, view_id: &Uuid) -> String {
 pub async fn set_workspace_namespace(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
+  old_namespace: &str,
   new_namespace: &str,
 ) -> Result<(), AppError> {
   check_workspace_namespace(new_namespace).await?;
@@ -96,7 +97,13 @@ pub async fn set_workspace_namespace(
       "publish namespace is already taken".to_string(),
     ));
   };
-  update_workspace_publish_namespace(pg_pool, workspace_id, new_namespace).await?;
+  update_non_orginal_workspace_publish_namespace(
+    pg_pool,
+    workspace_id,
+    old_namespace,
+    new_namespace,
+  )
+  .await?;
   Ok(())
 }
 
@@ -165,7 +172,25 @@ pub async fn get_workspace_publish_namespace(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
 ) -> Result<String, AppError> {
-  select_workspace_publish_namespace(pg_pool, workspace_id).await
+  let mut ws_namespaces = select_workspace_publish_namespaces(pg_pool, workspace_id).await?;
+  match ws_namespaces.len() {
+    0 => Err(AppError::RecordNotFound(format!(
+      "No publish namespace found for workspace_id: {}",
+      workspace_id
+    ))),
+    1 => Ok(ws_namespaces.remove(0).namespace),
+    _ => {
+      for ws_namespace in ws_namespaces {
+        if !ws_namespace.is_original {
+          return Ok(ws_namespace.namespace);
+        }
+      }
+      Err(AppError::RecordNotFound(format!(
+        "Cannot find non-original publish namespace for workspace_id: {}",
+        workspace_id
+      )))
+    },
+  }
 }
 
 pub async fn list_collab_publish_info(

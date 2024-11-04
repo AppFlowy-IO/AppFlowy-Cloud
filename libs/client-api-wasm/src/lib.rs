@@ -256,7 +256,7 @@ impl ClientAPI {
     })?;
     match self.client.get_published_collab_info(&view_id).await {
       Ok(info) => Ok(PublishInfo {
-        namespace: info.namespace,
+        namespace: Some(info.namespace),
         publish_name: info.publish_name,
       }),
       Err(err) => Err(ClientResponse::from(err)),

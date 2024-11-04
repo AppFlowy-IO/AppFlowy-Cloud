@@ -215,7 +215,7 @@ async fn test_template_crud() {
   let workspace_id = get_first_workspace_string(&authorized_client).await;
   let published_view_namespace = uuid::Uuid::new_v4().to_string();
   authorized_client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace.clone())
     .await
     .unwrap();
   let published_view_ids: Vec<Uuid> = (0..4).map(|_| Uuid::new_v4()).collect();
@@ -362,13 +362,8 @@ async fn test_template_crud() {
   assert!(view_ids.contains(&published_view_ids[2]));
   assert!(view_ids.contains(&published_view_ids[3]));
   assert_eq!(
-    templates[0]
-      .publish_info
-      .namespace
-      .as_ref()
-      .unwrap()
-      .to_string(),
-    published_view_namespace.clone()
+    templates[0].publish_info.namespace,
+    published_view_namespace
   );
 
   let featured_templates = guest_client
@@ -408,7 +403,7 @@ async fn test_template_crud() {
     published_view_ids[0]
   );
   assert_eq!(
-    template.publish_info.namespace.unwrap(),
+    template.publish_info.namespace,
     published_view_namespace.clone()
   );
 

@@ -1190,9 +1190,17 @@ async fn put_publish_namespace_handler(
     .workspace_access_control
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
-  let new_namespace = payload.into_inner().new_namespace;
-  biz::workspace::publish::set_workspace_namespace(&state.pg_pool, &workspace_id, &new_namespace)
-    .await?;
+  let UpdatePublishNamespace {
+    old_namespace,
+    new_namespace,
+  } = payload.into_inner();
+  biz::workspace::publish::set_workspace_namespace(
+    &state.pg_pool,
+    &workspace_id,
+    &old_namespace,
+    &new_namespace,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

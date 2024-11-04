@@ -126,10 +126,6 @@ where
     let storage = self.storage.clone();
 
     Box::pin(async move {
-      storage
-        .add_connected_user(connected_user.uid, &connected_user.device_id)
-        .await;
-
       if let Some(old_user) = connect_state.handle_user_connect(connected_user, new_client_router) {
         // Remove the old user from all collaboration groups.
         group_manager.remove_user(&old_user).await;
@@ -161,10 +157,6 @@ where
       trace!("[realtime]: disconnect => {}", disconnect_user);
       let was_removed = connect_state.handle_user_disconnect(&disconnect_user);
       if was_removed.is_some() {
-        storage
-          .remove_connected_user(disconnect_user.uid, &disconnect_user.device_id)
-          .await;
-
         metrics_calculate
           .connected_users
           .set(connect_state.number_of_connected_users() as i64);

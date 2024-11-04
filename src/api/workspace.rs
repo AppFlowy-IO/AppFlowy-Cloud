@@ -1517,15 +1517,6 @@ async fn post_realtime_message_stream_handler(
 
   event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
-  // Only send message to websocket server when the user is connected
-  if !state
-    .realtime_shared_state
-    .is_user_connected(&uid, &device_id)
-    .await
-    .unwrap_or(false)
-  {
-    return Ok(Json(AppResponse::Ok()));
-  }
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
   let stream_message = ClientStreamMessage {

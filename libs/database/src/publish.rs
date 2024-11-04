@@ -54,11 +54,35 @@ pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Datab
 }
 
 #[inline]
-pub async fn update_non_orginal_workspace_publish_namespace<
-  'a,
-  E: Executor<'a, Database = Postgres>,
->(
-  executor: E,
+pub async fn insert_non_orginal_workspace_publish_namespace(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  new_namespace: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_workspace_namespace
+      VALUES ($1, $2, FALSE)
+    "#,
+    new_namespace,
+    workspace_id,
+  )
+  .execute(pg_pool)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to insert workspace publish namespace, workspace_id: {}, new_namespace: {}, rows_affected: {}",
+      workspace_id, new_namespace, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn update_non_orginal_workspace_publish_namespace(
+  pg_pool: &PgPool,
   workspace_id: &Uuid,
   old_namespace: &str,
   new_namespace: &str,
@@ -75,7 +99,7 @@ pub async fn update_non_orginal_workspace_publish_namespace<
     workspace_id,
     old_namespace,
   )
-  .execute(executor)
+  .execute(pg_pool)
   .await?;
 
   if res.rows_affected() != 1 {
@@ -147,8 +171,8 @@ pub async fn update_workspace_default_publish_view_set_null<
 }
 
 #[inline]
-pub async fn select_workspace_publish_namespaces<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
+pub async fn select_workspace_publish_namespaces(
+  pg_pool: &PgPool,
   workspace_id: &Uuid,
 ) -> Result<Vec<WorkspaceNamespace>, AppError> {
   let res = sqlx::query_as!(
@@ -160,7 +184,30 @@ pub async fn select_workspace_publish_namespaces<'a, E: Executor<'a, Database = 
     "#,
     workspace_id,
   )
-  .fetch_all(executor)
+  .fetch_all(pg_pool)
+  .await?;
+
+  Ok(res)
+}
+
+#[inline]
+pub async fn select_workspace_publish_namespace(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  namespace: &str,
+) -> Result<WorkspaceNamespace, AppError> {
+  let res = sqlx::query_as!(
+    WorkspaceNamespace,
+    r#"
+      SELECT workspace_id, namespace, is_original
+      FROM af_workspace_namespace
+      WHERE workspace_id = $1
+        AND namespace = $2
+    "#,
+    workspace_id,
+    namespace,
+  )
+  .fetch_one(pg_pool)
   .await?;
 
   Ok(res)

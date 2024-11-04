@@ -7,11 +7,11 @@ ALTER TABLE af_workspace DROP CONSTRAINT af_workspace_publish_namespace_key;
 
 -- Table to store user defined namespace for workspace
 CREATE TABLE IF NOT EXISTS af_workspace_namespace (
-  namespace       TEXT NOT NULL PRIMARY KEY,
-  workspace_id    UUID NOT NULL,
-  default_view_id UUID,
-  created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  namespace    TEXT NOT NULL PRIMARY KEY,
+  workspace_id UUID NOT NULL,
+  is_original  BOOLEAN NOT NULL,
+  created_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   FOREIGN KEY (workspace_id) REFERENCES af_workspace (workspace_id) ON DELETE CASCADE
 );

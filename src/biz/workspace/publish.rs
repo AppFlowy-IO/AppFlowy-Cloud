@@ -2,8 +2,9 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::{
   collab::GetCollabOrigin,
   publish::{
-    select_all_published_collab_info, select_default_published_view_id,
-    select_default_published_view_id_for_namespace, select_workspace_publish_namespaces,
+    insert_non_orginal_workspace_publish_namespace, select_all_published_collab_info,
+    select_default_published_view_id, select_default_published_view_id_for_namespace,
+    select_workspace_publish_namespace, select_workspace_publish_namespaces,
     update_published_collabs, update_workspace_default_publish_view,
     update_workspace_default_publish_view_set_null,
   },
@@ -97,13 +98,19 @@ pub async fn set_workspace_namespace(
       "publish namespace is already taken".to_string(),
     ));
   };
-  update_non_orginal_workspace_publish_namespace(
-    pg_pool,
-    workspace_id,
-    old_namespace,
-    new_namespace,
-  )
-  .await?;
+  let ws_namespace =
+    select_workspace_publish_namespace(pg_pool, workspace_id, old_namespace).await?;
+  if ws_namespace.is_original {
+    insert_non_orginal_workspace_publish_namespace(pg_pool, workspace_id, new_namespace).await?;
+  } else {
+    update_non_orginal_workspace_publish_namespace(
+      pg_pool,
+      workspace_id,
+      old_namespace,
+      new_namespace,
+    )
+    .await?;
+  }
   Ok(())
 }
 

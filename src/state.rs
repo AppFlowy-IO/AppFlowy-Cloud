@@ -17,7 +17,6 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::metrics::CollabMetrics;
-use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
@@ -54,7 +53,6 @@ pub struct AppState {
   pub gotrue_admin: GoTrueAdmin,
   pub mailer: AFCloudMailer,
   pub ai_client: AppFlowyAIClient,
-  pub realtime_shared_state: RealtimeSharedState,
   pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
   pub indexer_provider: Arc<IndexerProvider>,
 }

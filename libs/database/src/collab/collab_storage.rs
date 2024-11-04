@@ -167,9 +167,6 @@ pub trait CollabStorage: Send + Sync + 'static {
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
   async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas>;
-
-  async fn add_connected_user(&self, uid: i64, device_id: &str);
-  async fn remove_connected_user(&self, uid: i64, device_id: &str);
 }
 
 #[async_trait]
@@ -305,14 +302,6 @@ where
 
   async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
     self.as_ref().get_collab_snapshot_list(oid).await
-  }
-
-  async fn add_connected_user(&self, uid: i64, device_id: &str) {
-    self.as_ref().add_connected_user(uid, device_id).await
-  }
-
-  async fn remove_connected_user(&self, uid: i64, device_id: &str) {
-    self.as_ref().remove_connected_user(uid, device_id).await
   }
 }
 

@@ -28,7 +28,6 @@ use crate::command::{CLCommandReceiver, CLCommandSender};
 use crate::config::{Config, DatabaseSetting};
 use crate::indexer::IndexerProvider;
 use crate::pg_listener::PgListeners;
-use crate::shared_state::RealtimeSharedState;
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
 use crate::CollaborationServer;
@@ -108,10 +107,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!("Connecting to Redis...");
   let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
-  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
-  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
-    warn!("Failed to remove all connected users: {:?}", err);
-  }
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -158,7 +153,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     access_control,
     collab_access_control_storage: collab_storage,
     metrics,
-    realtime_shared_state,
     indexer_provider,
   };
   Ok(app_state)

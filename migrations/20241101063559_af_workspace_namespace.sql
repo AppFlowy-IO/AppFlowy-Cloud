@@ -53,8 +53,8 @@ FOR EACH ROW
 EXECUTE FUNCTION create_workspace_namespace();
 
 -- Insert existing workspace records into `af_workspace_namespace`
-INSERT INTO af_workspace_namespace (namespace, workspace_id)
-SELECT publish_namespace, workspace_id
+INSERT INTO af_workspace_namespace (namespace, workspace_id, is_original)
+SELECT publish_namespace, workspace_id, TRUE
 FROM af_workspace
 ON CONFLICT (namespace) DO NOTHING; -- if there happens to be a workspace creation during migration
 

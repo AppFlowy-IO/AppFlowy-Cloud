@@ -35,11 +35,15 @@ impl Client {
       .into_data()
   }
 
+  /// Changes the namespace for the first non-original publish namespace
+  /// or the original publish namespace if not exists.
   pub async fn set_workspace_publish_namespace(
     &self,
     workspace_id: &str,
-    new_namespace: &str,
+    new_namespace: String,
   ) -> Result<(), AppResponseError> {
+    let old_namespace = self.get_workspace_publish_namespace(workspace_id).await?;
+
     let url = format!(
       "{}/api/workspace/{}/publish-namespace",
       self.base_url, workspace_id
@@ -49,7 +53,8 @@ impl Client {
       .http_client_with_auth(Method::PUT, &url)
       .await?
       .json(&UpdatePublishNamespace {
-        new_namespace: new_namespace.to_string(),
+        old_namespace,
+        new_namespace,
       })
       .send()
       .await?;

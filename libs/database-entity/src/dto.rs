@@ -372,6 +372,7 @@ pub struct CollabMemberIdentify {
 
 #[derive(Serialize, Deserialize)]
 pub struct UpdatePublishNamespace {
+  pub old_namespace: String,
   pub new_namespace: String,
 }
 
@@ -411,7 +412,7 @@ pub struct AFCollabMember {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PublishInfo {
-  pub namespace: Option<String>,
+  pub namespace: String,
   pub publish_name: String,
   pub view_id: Uuid,
   #[serde(default)]
@@ -1507,6 +1508,13 @@ pub struct CreateImportTask {
 pub struct CreateImportTaskResponse {
   pub task_id: String,
   pub presigned_url: String,
+}
+
+#[derive(Debug)]
+pub struct WorkspaceNamespace {
+  pub workspace_id: Uuid,
+  pub namespace: String,
+  pub is_original: bool,
 }
 
 #[cfg(test)]

@@ -39,8 +39,8 @@ async fn test_set_publish_namespace_set() {
       .unwrap();
   }
 
-  let namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
+  let new_namespace = uuid::Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace.clone())
     .await
     .unwrap();
 
@@ -49,7 +49,7 @@ async fn test_set_publish_namespace_set() {
     let (c2, _user) = generate_unique_registered_user_client().await;
     let workspace_id_2 = get_first_workspace_string(&c2).await;
     let err = c2
-      .set_workspace_publish_namespace(&workspace_id_2.to_string(), &namespace)
+      .set_workspace_publish_namespace(&workspace_id_2.to_string(), new_namespace.clone())
       .await
       .unwrap_err();
     assert_eq!(
@@ -63,7 +63,7 @@ async fn test_set_publish_namespace_set() {
   {
     // cannot set the same namespace
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
+      .set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace.clone())
       .await
       .err()
       .unwrap();
@@ -74,10 +74,10 @@ async fn test_set_publish_namespace_set() {
       err
     );
   }
+  let new_namespace_2 = uuid::Uuid::new_v4().to_string();
   {
     // can replace the namespace
-    let namespace = uuid::Uuid::new_v4().to_string();
-    c.set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
+    c.set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace_2.clone())
       .await
       .unwrap();
 
@@ -85,12 +85,12 @@ async fn test_set_publish_namespace_set() {
       .get_workspace_publish_namespace(&workspace_id.to_string())
       .await
       .unwrap();
-    assert_eq!(got_namespace, namespace);
+    assert_eq!(got_namespace, new_namespace_2);
   }
   {
     // cannot set namespace with invalid chars
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), "/|(*&)(&#@!") // invalid chars
+      .set_workspace_publish_namespace(&workspace_id.to_string(), "/|(*&)(&#@!".to_string()) // invalid chars
       .await
       .err()
       .unwrap();
@@ -108,7 +108,7 @@ async fn test_publish_doc() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace_string(&c).await;
   let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), &my_namespace)
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
     .await
     .unwrap();
 
@@ -239,7 +239,7 @@ async fn test_publish_doc() {
       .get_published_collab_info(&view_id_1)
       .await
       .unwrap();
-    assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
+    assert_eq!(publish_info.namespace, my_namespace.clone());
     assert_eq!(publish_info.publish_name, publish_name_1);
     assert_eq!(publish_info.view_id, view_id_1);
 
@@ -253,7 +253,7 @@ async fn test_publish_doc() {
       .get_published_collab_info(&view_id_2)
       .await
       .unwrap();
-    assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
+    assert_eq!(publish_info.namespace, my_namespace.clone());
     assert_eq!(publish_info.publish_name, publish_name_2);
     assert_eq!(publish_info.view_id, view_id_2);
 
@@ -457,7 +457,7 @@ async fn test_publish_comments() {
   let workspace_id = get_first_workspace_string(&page_owner_client).await;
   let published_view_namespace = uuid::Uuid::new_v4().to_string();
   page_owner_client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
     .await
     .unwrap();
 
@@ -653,7 +653,7 @@ async fn test_excessive_comment_length() {
   let workspace_id = get_first_workspace_string(&client).await;
   let published_view_namespace = uuid::Uuid::new_v4().to_string();
   client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
     .await
     .unwrap();
 
@@ -689,7 +689,7 @@ async fn test_publish_reactions() {
   let workspace_id = get_first_workspace_string(&page_owner_client).await;
   let published_view_namespace = uuid::Uuid::new_v4().to_string();
   page_owner_client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
     .await
     .unwrap();
 
@@ -813,7 +813,7 @@ async fn test_publish_load_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace_string(&c).await;
   let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), &my_namespace)
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace)
     .await
     .unwrap();
 

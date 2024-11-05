@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE af_workspace_namespace\n      SET namespace = $1\n      WHERE workspace_id = $2\n        AND namespace = $3\n        AND is_original = FALSE\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c43d414f6fcaed34e059f55abaaa0bd1343cacf4d04e98481a4787a4b965ce94"
+}

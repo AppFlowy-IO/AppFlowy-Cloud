@@ -15,7 +15,6 @@ use crate::config::Config;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetrics;
 use crate::pg_listener::PgListeners;
-use crate::shared_state::RealtimeSharedState;
 use crate::CollabRealtimeMetrics;
 
 pub type RedisConnectionManager = redis::aio::ConnectionManager;
@@ -29,7 +28,6 @@ pub struct AppState {
   pub access_control: AccessControl,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
   pub metrics: AppMetrics,
-  pub realtime_shared_state: RealtimeSharedState,
   pub indexer_provider: Arc<IndexerProvider>,
 }
 

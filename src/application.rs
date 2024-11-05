@@ -40,7 +40,6 @@ use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::indexer::IndexerProvider;
-use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
@@ -316,10 +315,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
   let mailer = get_mailer(config).await?;
-  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
-  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
-    warn!("Failed to remove all connected users: {:?}", err);
-  }
 
   info!("Application state initialized");
   Ok(AppState {
@@ -343,7 +338,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     mailer,
     ai_client: appflowy_ai_client,
     grpc_history_client,
-    realtime_shared_state,
     indexer_provider,
   })
 }

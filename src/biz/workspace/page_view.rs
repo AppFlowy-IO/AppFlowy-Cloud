@@ -14,6 +14,7 @@ use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOr
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
+use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use shared_entity::dto::workspace_dto::{FolderView, Page, PageCollab, PageCollabData, ViewLayout};
 use sqlx::{PgPool, Transaction};
@@ -87,6 +88,30 @@ async fn add_new_view_to_folder(
     folder.body.views.insert(&mut txn, view, None);
     txn.encode_update_v1()
   };
+  Ok(FolderUpdate {
+    updated_encoded_collab: folder_to_encoded_collab(folder)?,
+    encoded_updates: encoded_update,
+  })
+}
+
+async fn move_view_to_trash(view_id: &str, folder: &mut Folder) -> Result<FolderUpdate, AppError> {
+  let mut current_view_and_descendants = folder
+    .get_views_belong_to(view_id)
+    .iter()
+    .map(|v| v.id.clone())
+    .collect_vec();
+  current_view_and_descendants.push(view_id.to_string());
+
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    current_view_and_descendants.iter().for_each(|view_id| {
+      folder.body.views.update_view(&mut txn, view_id, |update| {
+        update.set_favorite(false).set_trash(true).done()
+      });
+    });
+    txn.encode_update_v1()
+  };
+
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
     encoded_updates: encoded_update,
@@ -172,6 +197,34 @@ async fn create_document_page(
   .await?;
   transaction.commit().await?;
   Ok(Page { view_id })
+}
+
+pub async fn move_page_to_trash(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+  view_id: &str,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let trash_info = folder.get_my_trash_info();
+  if trash_info.into_iter().any(|info| info.id == view_id) {
+    return Ok(());
+  }
+  let folder_update = move_view_to_trash(view_id, &mut folder).await?;
+  let mut transaction = pg_pool.begin().await?;
+  insert_and_broadcast_workspace_folder_update(
+    uid,
+    workspace_id,
+    folder_update,
+    collab_storage,
+    &mut transaction,
+  )
+  .await?;
+  transaction.commit().await?;
+  Ok(())
 }
 
 pub async fn get_page_view_collab(

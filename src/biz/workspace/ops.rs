@@ -715,7 +715,7 @@ pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppErro
 
 /// broadcast updates to collab group if exists
 pub async fn broadcast_update(
-  collab_storage: &Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   oid: &str,
   encoded_update: Vec<u8>,
 ) -> Result<(), AppError> {

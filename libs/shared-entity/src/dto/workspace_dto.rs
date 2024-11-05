@@ -123,6 +123,17 @@ pub struct CollabResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Page {
+  pub view_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePageParams {
+  pub parent_view_id: String,
+  pub layout: ViewLayout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageCollabData {
   pub encoded_collab: Vec<u8>,
   pub row_data: HashMap<String, Vec<u8>>,

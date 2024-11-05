@@ -1,20 +1,22 @@
 use anyhow::anyhow;
-use app_error::{AppError, ErrorCode};
+use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
 use collab::core::collab::Collab;
 use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
 use collab_database::{database::DatabaseBody, rows::RowId};
+use collab_document::document::Document;
+use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
-use collab_folder::CollabOrigin;
+use collab_folder::hierarchy_builder::NestedChildViewBuilder;
+use collab_folder::{CollabOrigin, Folder};
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use shared_entity::dto::workspace_dto::{FolderView, PageCollab, PageCollabData};
-use shared_entity::response::AppResponseError;
-use sqlx::PgPool;
+use shared_entity::dto::workspace_dto::{FolderView, Page, PageCollab, PageCollabData, ViewLayout};
+use sqlx::{PgPool, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -32,23 +34,165 @@ use crate::biz::collab::{
 
 use super::ops::{broadcast_update, collab_from_doc_state};
 
+struct FolderUpdate {
+  pub updated_encoded_collab: Vec<u8>,
+  pub encoded_updates: Vec<u8>,
+}
+
+pub async fn create_page(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+  parent_view_id: &str,
+  view_layout: &ViewLayout,
+) -> Result<Page, AppError> {
+  if *view_layout != ViewLayout::Document {
+    return Err(AppError::InvalidRequest(
+      "Only document layout is supported for page creation".to_string(),
+    ));
+  }
+  create_document_page(pg_pool, collab_storage, uid, workspace_id, parent_view_id).await
+}
+
+fn prepare_default_document_collab_param() -> Result<CollabParams, AppError> {
+  let object_id = Uuid::new_v4().to_string();
+  let document_data = default_document_data(&object_id);
+  let document = Document::create(&object_id, document_data)
+    .map_err(|err| AppError::Internal(anyhow!("Failed to create default document: {}", err)))?;
+  let encoded_collab_v1 = document
+    .encode_collab()
+    .map_err(|err| AppError::Internal(anyhow!("Failed to encode default document: {}", err)))?
+    .encode_to_bytes()?;
+  Ok(CollabParams {
+    object_id: object_id.clone(),
+    encoded_collab_v1: encoded_collab_v1.into(),
+    collab_type: CollabType::Document,
+    embeddings: None,
+  })
+}
+
+async fn add_new_view_to_folder(
+  uid: i64,
+  parent_view_id: &str,
+  view_id: &str,
+  folder: &mut Folder,
+) -> Result<FolderUpdate, AppError> {
+  let encoded_update = {
+    let view = NestedChildViewBuilder::new(uid, parent_view_id.to_string())
+      .with_view_id(view_id)
+      .build()
+      .view;
+    let mut txn = folder.collab.transact_mut();
+    folder.body.views.insert(&mut txn, view, None);
+    txn.encode_update_v1()
+  };
+  Ok(FolderUpdate {
+    updated_encoded_collab: folder_to_encoded_collab(folder)?,
+    encoded_updates: encoded_update,
+  })
+}
+
+fn folder_to_encoded_collab(folder: &Folder) -> Result<Vec<u8>, AppError> {
+  let collab_type = CollabType::Folder;
+  let encoded_folder_collab = folder
+    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+    .map_err(|err| AppError::Internal(anyhow!("Failed to encode workspace folder: {}", err)))?;
+  encoded_folder_collab.encode_to_bytes().map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Failed to encode workspace folder to bytes: {}",
+      err
+    ))
+  })
+}
+
+async fn insert_and_broadcast_workspace_folder_update(
+  uid: i64,
+  workspace_id: Uuid,
+  folder_update: FolderUpdate,
+  collab_storage: &CollabAccessControlStorage,
+  transaction: &mut Transaction<'_, sqlx::Postgres>,
+) -> Result<(), AppError> {
+  let params = CollabParams {
+    object_id: workspace_id.to_string(),
+    encoded_collab_v1: folder_update.updated_encoded_collab.into(),
+    collab_type: CollabType::Folder,
+    embeddings: None,
+  };
+  let action_description = format!("Update workspace folder: {}", workspace_id);
+  collab_storage
+    .insert_new_collab_with_transaction(
+      &workspace_id.to_string(),
+      &uid,
+      params,
+      transaction,
+      &action_description,
+    )
+    .await?;
+  broadcast_update(
+    collab_storage,
+    &workspace_id.to_string(),
+    folder_update.encoded_updates.clone(),
+  )
+  .await?;
+  Ok(())
+}
+
+async fn create_document_page(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+  parent_view_id: &str,
+) -> Result<Page, AppError> {
+  let default_document_collab_params = prepare_default_document_collab_param()?;
+  let view_id = default_document_collab_params.object_id.clone();
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = add_new_view_to_folder(uid, parent_view_id, &view_id, &mut folder).await?;
+  let mut transaction = pg_pool.begin().await?;
+  let action = format!("Create new collab: {}", view_id);
+  collab_storage
+    .insert_new_collab_with_transaction(
+      &workspace_id.to_string(),
+      &uid,
+      default_document_collab_params,
+      &mut transaction,
+      &action,
+    )
+    .await?;
+  insert_and_broadcast_workspace_folder_update(
+    uid,
+    workspace_id,
+    folder_update,
+    collab_storage,
+    &mut transaction,
+  )
+  .await?;
+  transaction.commit().await?;
+  Ok(Page { view_id })
+}
+
 pub async fn get_page_view_collab(
   pg_pool: &PgPool,
-  collab_access_control_storage: Arc<CollabAccessControlStorage>,
+  collab_access_control_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
   view_id: &str,
-) -> Result<PageCollab, AppResponseError> {
+) -> Result<PageCollab, AppError> {
   let folder = get_latest_collab_folder(
-    &collab_access_control_storage,
+    collab_access_control_storage,
     GetCollabOrigin::User { uid },
     &workspace_id.to_string(),
   )
   .await?;
-  let view = folder.get_view(view_id).ok_or(AppResponseError::new(
-    ErrorCode::InvalidFolderView,
-    format!("View {} not found", view_id),
-  ))?;
+  let view = folder
+    .get_view(view_id)
+    .ok_or(AppError::InvalidFolderView(format!(
+      "View {} not found",
+      view_id
+    )))?;
 
   let owner = match view.created_by {
     Some(uid) => Some(select_web_user_from_uid(pg_pool, uid).await?),
@@ -81,7 +225,7 @@ pub async fn get_page_view_collab(
   };
   let page_collab_data = match view.layout {
     collab_folder::ViewLayout::Document => {
-      get_page_collab_data_for_document(&collab_access_control_storage, uid, workspace_id, view_id)
+      get_page_collab_data_for_document(collab_access_control_storage, uid, workspace_id, view_id)
         .await
     },
     collab_folder::ViewLayout::Grid
@@ -89,16 +233,15 @@ pub async fn get_page_view_collab(
     | collab_folder::ViewLayout::Calendar => {
       get_page_collab_data_for_database(
         pg_pool,
-        collab_access_control_storage.clone(),
+        collab_access_control_storage,
         uid,
         workspace_id,
         view_id,
       )
       .await
     },
-    collab_folder::ViewLayout::Chat => Err(AppResponseError::new(
-      ErrorCode::InvalidRequest,
-      "Page view for AI chat is not supported at the moment",
+    collab_folder::ViewLayout::Chat => Err(AppError::InvalidRequest(
+      "Page view for AI chat is not supported at the moment".to_string(),
     )),
   }?;
 
@@ -114,14 +257,14 @@ pub async fn get_page_view_collab(
 
 async fn get_page_collab_data_for_database(
   pg_pool: &PgPool,
-  collab_access_control_storage: Arc<CollabAccessControlStorage>,
+  collab_access_control_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
   view_id: &str,
-) -> Result<PageCollabData, AppResponseError> {
+) -> Result<PageCollabData, AppError> {
   let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
   let ws_db = get_latest_collab_encoded(
-    &collab_access_control_storage,
+    collab_access_control_storage,
     GetCollabOrigin::User { uid },
     &workspace_id.to_string(),
     &ws_db_oid,
@@ -135,14 +278,14 @@ async fn get_page_collab_data_for_database(
   let db_oid = {
     ws_db_body
       .get_database_meta_with_view_id(view_id)
-      .ok_or(AppResponseError::new(
-        ErrorCode::NoRequiredData,
-        format!("Database view {} not found", view_id),
-      ))?
+      .ok_or(AppError::NoRequiredData(format!(
+        "Database view {} not found",
+        view_id
+      )))?
       .database_id
   };
   let db = get_latest_collab_encoded(
-    &collab_access_control_storage,
+    collab_access_control_storage,
     GetCollabOrigin::User { uid },
     &workspace_id.to_string(),
     &db_oid,
@@ -157,13 +300,11 @@ async fn get_page_collab_data_for_database(
     false,
   )
   .map_err(|err| {
-    AppResponseError::new(
-      ErrorCode::Internal,
-      format!(
-        "Unable to create collab from object id {}: {}",
-        &db_oid, err
-      ),
-    )
+    AppError::Internal(anyhow!(
+      "Unable to create collab from object id {}: {}",
+      &db_oid,
+      err
+    ))
   })?;
   let db_body = DatabaseBody::from_collab(
     &db_collab,
@@ -229,7 +370,7 @@ async fn get_page_collab_data_for_document(
   uid: i64,
   workspace_id: Uuid,
   view_id: &str,
-) -> Result<PageCollabData, AppResponseError> {
+) -> Result<PageCollabData, AppError> {
   let collab = get_latest_collab_encoded(
     collab_access_control_storage,
     GetCollabOrigin::User { uid },
@@ -252,7 +393,7 @@ pub async fn update_page_collab_data(
   object_id: Uuid,
   collab_type: CollabType,
   doc_state: &[u8],
-) -> Result<(), AppResponseError> {
+) -> Result<(), AppError> {
   let param = QueryCollabParams {
     workspace_id: workspace_id.to_string(),
     inner: QueryCollab {
@@ -262,32 +403,20 @@ pub async fn update_page_collab_data(
   };
   let encode_collab = collab_access_control_storage
     .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
-    .await
-    .map_err(AppResponseError::from)?;
+    .await?;
   let mut collab = collab_from_doc_state(encode_collab.doc_state.to_vec(), &object_id.to_string())?;
   appflowy_web_metrics.record_update_size_bytes(doc_state.len());
   let update = Update::decode_v1(doc_state).map_err(|e| {
     appflowy_web_metrics.incr_decoding_failure_count(1);
-    AppResponseError::new(
-      ErrorCode::InvalidRequest,
-      format!("Failed to decode update: {}", e),
-    )
+    AppError::InvalidRequest(format!("Failed to decode update: {}", e))
   })?;
   collab.apply_update(update).map_err(|e| {
     appflowy_web_metrics.incr_apply_update_failure_count(1);
-    AppResponseError::new(
-      ErrorCode::InvalidRequest,
-      format!("Failed to apply update: {}", e),
-    )
+    AppError::InvalidRequest(format!("Failed to apply update: {}", e))
   })?;
   let updated_encoded_collab = collab
     .encode_collab_v1(|c| collab_type.validate_require_data(c))
-    .map_err(|e| {
-      AppResponseError::new(
-        ErrorCode::Internal,
-        format!("Failed to encode collab: {}", e),
-      )
-    })?
+    .map_err(|e| AppError::Internal(anyhow!("Failed to encode collab: {}", e)))?
     .encode_to_bytes()?;
   let params = CollabParams {
     object_id: object_id.to_string(),

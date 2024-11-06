@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
 use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus, PublishInfo};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{collections::HashMap, ops::Deref};
 use uuid::Uuid;
@@ -131,6 +132,13 @@ pub struct Page {
 pub struct CreatePageParams {
   pub parent_view_id: String,
   pub layout: ViewLayout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePageParams {
+  pub name: String,
+  pub icon: Option<ViewIcon>,
+  pub extra: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

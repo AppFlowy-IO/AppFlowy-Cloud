@@ -4,7 +4,8 @@ use app_error::AppError;
 use chrono::DateTime;
 use collab_folder::{Folder, SectionItem, ViewLayout as CollabFolderViewLayout};
 use shared_entity::dto::workspace_dto::{
-  FavoriteFolderView, FolderView, FolderViewMinimal, RecentFolderView, TrashFolderView, ViewLayout,
+  self, FavoriteFolderView, FolderView, FolderViewMinimal, RecentFolderView, TrashFolderView,
+  ViewLayout,
 };
 
 /// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
@@ -273,5 +274,30 @@ pub fn to_dto_folder_view_miminal(collab_folder_view: &collab_folder::View) -> F
     name: collab_folder_view.name.clone(),
     icon: collab_folder_view.icon.clone().map(to_dto_view_icon),
     layout: to_dto_view_layout(&collab_folder_view.layout),
+  }
+}
+
+pub fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {
+  collab_folder::ViewIcon {
+    ty: to_folder_view_icon_type(icon.ty),
+    value: icon.value,
+  }
+}
+
+pub fn to_folder_view_icon_type(icon: workspace_dto::IconType) -> collab_folder::IconType {
+  match icon {
+    workspace_dto::IconType::Emoji => collab_folder::IconType::Emoji,
+    workspace_dto::IconType::Url => collab_folder::IconType::Url,
+    workspace_dto::IconType::Icon => collab_folder::IconType::Icon,
+  }
+}
+
+pub fn to_folder_view_layout(layout: workspace_dto::ViewLayout) -> collab_folder::ViewLayout {
+  match layout {
+    ViewLayout::Document => collab_folder::ViewLayout::Document,
+    ViewLayout::Grid => collab_folder::ViewLayout::Grid,
+    ViewLayout::Board => collab_folder::ViewLayout::Board,
+    ViewLayout::Calendar => collab_folder::ViewLayout::Calendar,
+    ViewLayout::Chat => collab_folder::ViewLayout::Chat,
   }
 }

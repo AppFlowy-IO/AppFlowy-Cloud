@@ -259,6 +259,7 @@ where
   }
 }
 
+#[allow(dead_code)]
 fn spawn_handle_unindexed_collabs(
   indexer_provider: Arc<IndexerProvider>,
   storage: Arc<dyn CollabStorage>,

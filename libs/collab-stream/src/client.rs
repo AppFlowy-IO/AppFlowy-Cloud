@@ -184,7 +184,7 @@ impl CollabRedisStream {
       .await?;
     let count = usize::from_redis_value(&value)?;
     drop(conn);
-    tracing::info!(
+    tracing::debug!(
       "pruned redis stream `{}` <= `{}` ({} objects)",
       stream_key,
       message_id,

@@ -92,7 +92,7 @@ where
 
     spawn_metrics(metrics.clone(), storage.clone());
 
-    spawn_handle_unindexed_collabs(indexer_provider, storage);
+    //spawn_handle_unindexed_collabs(indexer_provider, storage);
 
     Ok(Self {
       group_manager,

@@ -49,7 +49,7 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  create_page, get_page_view_collab, move_page_to_trash, update_page_collab_data,
+  create_page, get_page_view_collab, move_page_to_trash, update_page, update_page_collab_data,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::domain::compression::{
@@ -131,7 +131,8 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}")
-        .route(web::get().to(get_page_view_handler)),
+        .route(web::get().to(get_page_view_handler))
+        .route(web::patch().to(update_page_view_handler)),
     )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/move-to-trash")
@@ -912,6 +913,33 @@ async fn move_page_to_trash_handler(
     uid,
     workspace_uuid,
     &view_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn update_page_view_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<UpdatePageParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  let icon = payload.icon.as_ref();
+  let extra = payload
+    .extra
+    .as_ref()
+    .map(|json_value| json_value.to_string());
+  update_page(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_uuid,
+    &view_id,
+    &payload.name,
+    icon,
+    extra.as_ref(),
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

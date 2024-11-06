@@ -16,7 +16,9 @@ use database::user::select_web_user_from_uid;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use shared_entity::dto::workspace_dto::{FolderView, Page, PageCollab, PageCollabData, ViewLayout};
+use shared_entity::dto::workspace_dto::{
+  FolderView, Page, PageCollab, PageCollabData, ViewIcon, ViewLayout,
+};
 use sqlx::{PgPool, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -26,7 +28,7 @@ use yrs::Update;
 
 use crate::api::metrics::AppFlowyWebMetrics;
 use crate::biz::collab::folder_view::{
-  parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
+  parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
 };
 use crate::biz::collab::{
   folder_view::view_is_space,
@@ -86,6 +88,31 @@ async fn add_new_view_to_folder(
       .view;
     let mut txn = folder.collab.transact_mut();
     folder.body.views.insert(&mut txn, view, None);
+    txn.encode_update_v1()
+  };
+  Ok(FolderUpdate {
+    updated_encoded_collab: folder_to_encoded_collab(folder)?,
+    encoded_updates: encoded_update,
+  })
+}
+
+async fn update_view_properties(
+  view_id: &str,
+  folder: &mut Folder,
+  name: &str,
+  icon: Option<&ViewIcon>,
+  extra: Option<impl AsRef<str>>,
+) -> Result<FolderUpdate, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    let icon = icon.map(|icon| to_folder_view_icon(icon.clone()));
+    folder.body.views.update_view(&mut txn, view_id, |update| {
+      update
+        .set_name(name)
+        .set_icon(icon)
+        .set_extra_if_not_none(extra)
+        .done()
+    });
     txn.encode_update_v1()
   };
   Ok(FolderUpdate {
@@ -224,6 +251,35 @@ pub async fn move_page_to_trash(
   )
   .await?;
   transaction.commit().await?;
+  Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn update_page(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+  view_id: &str,
+  name: &str,
+  icon: Option<&ViewIcon>,
+  extra: Option<impl AsRef<str>>,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = update_view_properties(view_id, &mut folder, name, icon, extra).await?;
+  let mut transaction = pg_pool.begin().await?;
+  insert_and_broadcast_workspace_folder_update(
+    uid,
+    workspace_id,
+    folder_update,
+    collab_storage,
+    &mut transaction,
+  )
+  .await?;
+  transaction.commit().await?;
+
   Ok(())
 }
 

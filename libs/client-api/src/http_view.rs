@@ -1,4 +1,4 @@
-use client_api_entity::workspace_dto::{CreatePageParams, Page, PageCollab};
+use client_api_entity::workspace_dto::{CreatePageParams, Page, PageCollab, UpdatePageParams};
 use reqwest::Method;
 use serde_json::json;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -35,6 +35,25 @@ impl Client {
       .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&json!({}))
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn update_workspace_page_view(
+    &self,
+    workspace_id: Uuid,
+    view_id: String,
+    params: &UpdatePageParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(params)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()

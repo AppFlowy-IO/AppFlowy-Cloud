@@ -314,12 +314,12 @@ impl CollabGroup {
       tokio::select! {
         _ = snapshot_tick.tick() => {
           if let Err(err) = state.persister.save().await {
-            tracing::warn!("failed to persist document `{}`: {}", state.object_id, err);
+            tracing::warn!("failed to persist document `{}/{}`: {}", state.workspace_id, state.object_id, err);
           }
         },
         _ = state.shutdown.cancelled() => {
           if let Err(err) = state.persister.save().await {
-            tracing::warn!("failed to persist document on shutdown `{}`: {}", state.object_id, err);
+            tracing::warn!("failed to persist document on shutdown `{}/{}`: {}", state.workspace_id, state.object_id, err);
           }
           break;
         }

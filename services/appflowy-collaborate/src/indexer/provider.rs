@@ -105,9 +105,15 @@ impl IndexerProvider {
       for cid in collabs {
         match &cid.collab_type {
           CollabType::Document => {
-            let collab = storage
+            let collab = match storage
               .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
-              .await?;
+              .await {
+              Ok(collab) => collab,
+              Err(err) => {
+                tracing::error!("failed to decode collab `{}`: {}", cid.object_id, err);
+                continue;
+              }
+            };
 
             yield UnindexedCollab {
               workspace_id: cid.workspace_id,

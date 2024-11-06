@@ -12,7 +12,7 @@ use database::collab::CollabStorage;
 use database::pg_row::AFWorkspaceRow;
 use database_entity::dto::CollabParams;
 use sqlx::Transaction;
-use tracing::{error, instrument, trace};
+use tracing::{error, instrument};
 use uuid::Uuid;
 use workspace_template::{TemplateObjectId, WorkspaceTemplate, WorkspaceTemplateBuilder};
 
@@ -35,6 +35,13 @@ where
     .with_templates(templates)
     .build()
     .await?;
+  tracing::info!(
+    "Templates build: {:?}",
+    templates
+      .iter()
+      .map(|t| t.template_id.clone())
+      .collect::<Vec<_>>()
+  );
 
   let mut database_records = vec![];
   for template in templates {
@@ -68,6 +75,7 @@ where
         "initialize workspace for user",
       )
       .await?;
+    tracing::info!("Template inserted: {}", object_id);
 
     // push the database record
     if object_type == CollabType::Database {
@@ -94,9 +102,13 @@ where
       database_records,
     )
     .await?;
+    tracing::info!(
+      "Workspace database collab created: {}",
+      workspace_database_object_id
+    );
 
     match create_user_awareness(&uid, user_uuid, &workspace_id, collab_storage, txn).await {
-      Ok(object_id) => trace!("User awareness created successfully: {}", object_id),
+      Ok(object_id) => tracing::info!("User awareness created successfully: {}", object_id),
       Err(err) => {
         error!(
           "Failed to create user awareness for workspace: {}, {}",

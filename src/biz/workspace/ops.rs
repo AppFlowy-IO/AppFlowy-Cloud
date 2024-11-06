@@ -132,10 +132,12 @@ pub async fn create_workspace_for_user(
 ) -> Result<AFWorkspace, AppResponseError> {
   let mut txn = pg_pool.begin().await?;
   let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name, true).await?;
+  tracing::info!("new_workspace_row {:?}", new_workspace_row);
 
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
     .await?;
+  tracing::info!("workspace_access_control insert_role done");
 
   // add create initial collab for user
   initialize_workspace_for_user(
@@ -147,6 +149,7 @@ pub async fn create_workspace_for_user(
     collab_storage,
   )
   .await?;
+  tracing::info!("initialize_workspace_for_user done");
 
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
   txn.commit().await?;

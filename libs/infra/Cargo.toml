@@ -11,9 +11,11 @@ anyhow = "1.0.79"
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
-bytes = { workspace = true, optional = true }
+bytes = { workspace = true }
 tokio = { workspace = true, optional = true }
+pin-project.workspace = true
+futures = "0.3.30"
 
 [features]
-file_util = ["bytes", "tokio/fs"]
+file_util = ["tokio/fs"]
 request_util = ["reqwest"]

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use access_control::casbin::access::AccessControl;
 use dashmap::DashMap;
 use futures_util::StreamExt;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
@@ -15,7 +15,6 @@ use crate::config::Config;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetrics;
 use crate::pg_listener::PgListeners;
-use crate::shared_state::RealtimeSharedState;
 use crate::CollabRealtimeMetrics;
 
 pub type RedisConnectionManager = redis::aio::ConnectionManager;
@@ -29,7 +28,6 @@ pub struct AppState {
   pub access_control: AccessControl,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
   pub metrics: AppMetrics,
-  pub realtime_shared_state: RealtimeSharedState,
   pub indexer_provider: Arc<IndexerProvider>,
 }
 

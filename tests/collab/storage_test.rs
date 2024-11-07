@@ -12,11 +12,11 @@ use sqlx::PgPool;
 use tokio::time::sleep;
 
 use app_error::ErrorCode;
-use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::collab::mem_cache::CollabMemCache;
 use appflowy_collaborate::collab::queue::StorageQueue;
 use appflowy_collaborate::collab::WritePriority;
 use client_api_test::*;
+use database::collab::cache::CollabCache;
+use database::collab::mem_cache::CollabMemCache;
 use database::collab::CollabMetadata;
 use database_entity::dto::{
   CollabParams, CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams,
@@ -237,7 +237,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .await
     .unwrap_err();
 
-  assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
+  assert_eq!(error.code, ErrorCode::RecordNotFound);
 }
 
 #[tokio::test]

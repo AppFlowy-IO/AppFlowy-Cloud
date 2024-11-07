@@ -15,9 +15,19 @@ path = "src/lib.rs"
 access-control.workspace = true
 actix.workspace = true
 actix-web.workspace = true
-actix-http = { workspace = true, default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
+actix-http = { workspace = true, default-features = false, features = [
+  "openssl",
+  "compress-brotli",
+  "compress-gzip",
+] }
 actix-web-actors = { version = "4.3" }
-app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error", "bincode_error", "appflowy_ai_error"] }
+app-error = { workspace = true, features = [
+  "sqlx_error",
+  "actix_web_error",
+  "tokio_error",
+  "bincode_error",
+  "appflowy_ai_error",
+] }
 authentication.workspace = true
 brotli.workspace = true
 dashmap.workspace = true
@@ -29,13 +39,24 @@ tracing = "0.1.40"
 futures-util = "0.3.30"
 tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
-tokio = { workspace = true, features = ["net", "sync", "macros", "rt-multi-thread"] }
-async-trait = "0.1.77"
+tokio = { workspace = true, features = [
+  "net",
+  "sync",
+  "macros",
+  "rt-multi-thread",
+] }
+async-trait.workspace = true
 prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_repr.workspace = true
-sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono"] }
+sqlx = { workspace = true, default-features = false, features = [
+  "runtime-tokio-rustls",
+  "macros",
+  "postgres",
+  "uuid",
+  "chrono",
+] }
 thiserror = "1.0.56"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 anyhow = "1"
@@ -65,7 +86,7 @@ parking_lot = "0.12.1"
 lazy_static = "1.4.0"
 itertools = "0.12.0"
 validator = "0.16.1"
-workspace-access.workspace = true
+rayon.workspace = true
 
 [dev-dependencies]
 rand = "0.8.5"

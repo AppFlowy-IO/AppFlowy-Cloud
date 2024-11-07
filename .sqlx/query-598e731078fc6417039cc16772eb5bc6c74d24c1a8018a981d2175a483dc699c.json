@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_access_request (\n        workspace_id,\n        view_id,\n        uid,\n        status\n      )\n      VALUES ($1, $2, $3, $4)\n      RETURNING request_id\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "598e731078fc6417039cc16772eb5bc6c74d24c1a8018a981d2175a483dc699c"
+}

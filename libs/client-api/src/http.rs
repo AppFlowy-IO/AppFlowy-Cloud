@@ -1,16 +1,19 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
+use app_error::ErrorCode;
 use client_api_entity::auth_dto::DeleteUserQuery;
-use client_api_entity::workspace_dto::FolderView;
-use client_api_entity::workspace_dto::QueryWorkspaceFolder;
-use client_api_entity::workspace_dto::QueryWorkspaceParam;
-use client_api_entity::workspace_dto::SectionItems;
+use client_api_entity::server_info_dto::ServerInfoResponseItem;
+use client_api_entity::workspace_dto::FavoriteSectionItems;
+use client_api_entity::workspace_dto::RecentSectionItems;
+use client_api_entity::workspace_dto::TrashSectionItems;
+use client_api_entity::workspace_dto::{FolderView, QueryWorkspaceFolder, QueryWorkspaceParam};
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
+use reqwest::StatusCode;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceParam, PatchWorkspaceParam};
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "enable_brotli")]
@@ -169,7 +172,7 @@ impl Client {
       );
     }
 
-    let ai_model = Arc::new(RwLock::new(AIModel::GPT35));
+    let ai_model = Arc::new(RwLock::new(AIModel::GPT4oMini));
 
     Self {
       base_url: base_url.to_string(),
@@ -724,7 +727,7 @@ impl Client {
   pub async fn get_workspace_favorite(
     &self,
     workspace_id: &str,
-  ) -> Result<SectionItems, AppResponseError> {
+  ) -> Result<FavoriteSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/favorite", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -732,7 +735,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<SectionItems>::from_response(resp)
+    AppResponse::<FavoriteSectionItems>::from_response(resp)
       .await?
       .into_data()
   }
@@ -741,7 +744,7 @@ impl Client {
   pub async fn get_workspace_recent(
     &self,
     workspace_id: &str,
-  ) -> Result<SectionItems, AppResponseError> {
+  ) -> Result<RecentSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/recent", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -749,7 +752,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<SectionItems>::from_response(resp)
+    AppResponse::<RecentSectionItems>::from_response(resp)
       .await?
       .into_data()
   }
@@ -758,7 +761,7 @@ impl Client {
   pub async fn get_workspace_trash(
     &self,
     workspace_id: &str,
-  ) -> Result<SectionItems, AppResponseError> {
+  ) -> Result<TrashSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/trash", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -766,7 +769,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<SectionItems>::from_response(resp)
+    AppResponse::<TrashSectionItems>::from_response(resp)
       .await?
       .into_data()
   }
@@ -965,6 +968,26 @@ impl Client {
     AppResponse::<WorkspaceSpaceUsage>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn get_server_info(&self) -> Result<ServerInfoResponseItem, AppResponseError> {
+    let url = format!("{}/api/server", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    if resp.status() == StatusCode::NOT_FOUND {
+      Err(AppResponseError::new(
+        ErrorCode::Unhandled,
+        "server info not implemented",
+      ))
+    } else {
+      AppResponse::<ServerInfoResponseItem>::from_response(resp)
+        .await?
+        .into_data()
+    }
   }
 
   // Refresh token if given timestamp is close to the token expiration time

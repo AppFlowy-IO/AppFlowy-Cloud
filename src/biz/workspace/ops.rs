@@ -1,20 +1,27 @@
 use authentication::jwt::OptionalUserUuid;
+use collab::core::collab::DataSource;
+use collab::preclude::Collab;
+use collab_folder::CollabOrigin;
+use collab_rt_entity::{ClientCollabMessage, UpdateSync};
+use collab_rt_protocol::{Message, SyncMessage};
 use database_entity::dto::AFWorkspaceSettingsChange;
-use database_entity::dto::PublishInfo;
 use std::collections::HashMap;
 
 use std::ops::DerefMut;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
+use redis::AsyncCommands;
+use serde_json::json;
 use sqlx::{types::uuid, PgPool};
 use tracing::instrument;
 use uuid::Uuid;
+use yrs::updates::encoder::Encode;
 
 use access_control::workspace::WorkspaceAccessControl;
-use app_error::{AppError, ErrorCode};
+use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use database::collab::upsert_collab_member_with_txn;
+use database::collab::{upsert_collab_member_with_txn, CollabStorage};
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
 
@@ -25,15 +32,19 @@ use database_entity::dto::{
   AFWorkspaceSettings, GlobalComment, Reaction, WorkspaceUsage,
 };
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
+
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
 };
 use shared_entity::response::AppResponseError;
 use workspace_template::document::getting_started::GettingStartedTemplate;
 
-use crate::biz::user::user_init::initialize_workspace_for_user;
-use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
-use crate::state::GoTrueAdmin;
+use crate::biz::user::user_init::{
+  create_user_awareness, create_workspace_collab, create_workspace_database_collab,
+  initialize_workspace_for_user,
+};
+use crate::mailer::{AFCloudMailer, WorkspaceInviteMailerParam};
+use crate::state::{GoTrueAdmin, RedisConnectionManager};
 
 const MAX_COMMENT_LENGTH: usize = 5000;
 
@@ -56,16 +67,71 @@ pub async fn delete_workspace_for_user(
   Ok(())
 }
 
-pub async fn create_workspace_for_user(
+/// Create an empty workspace with default folder, workspace database and user awareness collab
+/// object.
+pub async fn create_empty_workspace(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   collab_storage: &Arc<CollabAccessControlStorage>,
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
   let mut txn = pg_pool.begin().await?;
-  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name).await?;
+  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name, false).await?;
+  workspace_access_control
+    .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
+    .await?;
+  let workspace_id = new_workspace_row.workspace_id.to_string();
+
+  // create CollabType::Folder
+  create_workspace_collab(
+    user_uid,
+    &workspace_id,
+    workspace_name,
+    collab_storage,
+    &mut txn,
+  )
+  .await?;
+
+  // create CollabType::WorkspaceDatabase
+  if let Some(database_storage_id) = new_workspace_row.database_storage_id.as_ref() {
+    let workspace_database_object_id = database_storage_id.to_string();
+    create_workspace_database_collab(
+      &workspace_id,
+      &user_uid,
+      &workspace_database_object_id,
+      collab_storage,
+      &mut txn,
+      vec![],
+    )
+    .await?;
+  }
+
+  // create CollabType::UserAwareness
+  create_user_awareness(
+    &user_uid,
+    user_uuid,
+    &workspace_id,
+    collab_storage,
+    &mut txn,
+  )
+  .await?;
+  let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
+  txn.commit().await?;
+  Ok(new_workspace)
+}
+
+pub async fn create_workspace_for_user(
+  pg_pool: &PgPool,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
+  collab_storage: &Arc<CollabAccessControlStorage>,
+  user_uuid: &Uuid,
+  user_uid: i64,
+  workspace_name: &str,
+) -> Result<AFWorkspace, AppResponseError> {
+  let mut txn = pg_pool.begin().await?;
+  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name, true).await?;
 
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
@@ -102,54 +168,6 @@ pub async fn patch_workspace(
   }
   tx.commit().await?;
   Ok(())
-}
-
-pub async fn set_workspace_namespace(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_id: &Uuid,
-  new_namespace: &str,
-) -> Result<(), AppError> {
-  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
-  check_workspace_namespace(new_namespace).await?;
-  if select_workspace_publish_namespace_exists(pg_pool, workspace_id, new_namespace).await? {
-    return Err(AppError::PublishNamespaceAlreadyTaken(
-      "publish namespace is already taken".to_string(),
-    ));
-  };
-  update_workspace_publish_namespace(pg_pool, workspace_id, new_namespace).await?;
-  Ok(())
-}
-
-pub async fn get_workspace_publish_namespace(
-  pg_pool: &PgPool,
-  workspace_id: &Uuid,
-) -> Result<String, AppError> {
-  select_workspace_publish_namespace(pg_pool, workspace_id).await
-}
-
-pub async fn get_published_collab(
-  pg_pool: &PgPool,
-  publish_namespace: &str,
-  publish_name: &str,
-) -> Result<serde_json::Value, AppError> {
-  let metadata = select_publish_collab_meta(pg_pool, publish_namespace, publish_name).await?;
-  Ok(metadata)
-}
-
-pub async fn get_published_collab_blob(
-  pg_pool: &PgPool,
-  publish_namespace: &str,
-  publish_name: &str,
-) -> Result<Vec<u8>, AppError> {
-  select_published_collab_blob(pg_pool, publish_namespace, publish_name).await
-}
-
-pub async fn get_published_collab_info(
-  pg_pool: &PgPool,
-  view_id: &Uuid,
-) -> Result<PublishInfo, AppError> {
-  select_published_collab_info(pg_pool, view_id).await
 }
 
 pub async fn get_comments_on_published_view(
@@ -234,17 +252,6 @@ pub async fn remove_reaction_on_comment(
   Ok(())
 }
 
-pub async fn delete_published_workspace_collab(
-  pg_pool: &PgPool,
-  workspace_id: &Uuid,
-  view_ids: &[Uuid],
-  user_uuid: &Uuid,
-) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, view_ids).await?;
-  delete_published_collabs(pg_pool, workspace_id, view_ids).await?;
-  Ok(())
-}
-
 pub async fn get_all_user_workspaces(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
@@ -301,7 +308,7 @@ pub async fn open_workspace(
 
 pub async fn accept_workspace_invite(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   user_uid: i64,
   user_uuid: &Uuid,
   invite_id: &Uuid,
@@ -330,7 +337,7 @@ pub async fn accept_workspace_invite(
 #[instrument(level = "debug", skip_all, err)]
 #[allow(clippy::too_many_arguments)]
 pub async fn invite_workspace_members(
-  mailer: &Mailer,
+  mailer: &AFCloudMailer,
   gotrue_admin: &GoTrueAdmin,
   pg_pool: &PgPool,
   gotrue_client: &gotrue::api::Client,
@@ -439,7 +446,7 @@ pub async fn invite_workspace_members(
     tokio::spawn(async move {
       if let Err(err) = cloned_mailer
         .send_workspace_invite(
-          invitation.email,
+          &invitation.email,
           WorkspaceInviteMailerParam {
             user_icon_url,
             username: inviter_name,
@@ -527,7 +534,7 @@ pub async fn leave_workspace(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   user_uuid: &Uuid,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
 ) -> Result<(), AppResponseError> {
   let email = database::user::select_email_from_user_uuid(pg_pool, user_uuid).await?;
   remove_workspace_members(pg_pool, workspace_id, &[email], workspace_access_control).await
@@ -537,7 +544,7 @@ pub async fn remove_workspace_members(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   member_emails: &[String],
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
 ) -> Result<(), AppResponseError> {
   let mut txn = pg_pool
     .begin()
@@ -583,7 +590,7 @@ pub async fn update_workspace_member(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   changeset: &WorkspaceMemberChangeset,
-  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_access_control: Arc<dyn WorkspaceAccessControl>,
 ) -> Result<(), AppError> {
   if let Some(role) = &changeset.role {
     upsert_workspace_member(pg_pool, workspace_id, &changeset.email, role.clone()).await?;
@@ -597,11 +604,8 @@ pub async fn update_workspace_member(
 
 pub async fn get_workspace_document_total_bytes(
   pg_pool: &PgPool,
-  user_uuid: &Uuid,
   workspace_id: &Uuid,
 ) -> Result<WorkspaceUsage, AppError> {
-  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
-
   let byte_count = select_workspace_total_collab_bytes(pg_pool, workspace_id).await?;
   Ok(WorkspaceUsage {
     total_document_size: byte_count,
@@ -610,43 +614,17 @@ pub async fn get_workspace_document_total_bytes(
 
 pub async fn get_workspace_settings(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
   workspace_id: &Uuid,
-  owner_uid: &i64,
 ) -> Result<AFWorkspaceSettings, AppResponseError> {
-  let has_access = workspace_access_control
-    .enforce_role(owner_uid, &workspace_id.to_string(), AFRole::Owner)
-    .await?;
-
-  if !has_access {
-    return Err(AppResponseError::new(
-      ErrorCode::UserUnAuthorized,
-      "Only workspace owner can access workspace settings",
-    ));
-  }
-
   let settings = select_workspace_settings(pg_pool, workspace_id).await?;
   Ok(settings.unwrap_or_default())
 }
 
 pub async fn update_workspace_settings(
   pg_pool: &PgPool,
-  workspace_access_control: &impl WorkspaceAccessControl,
   workspace_id: &Uuid,
-  owner_uid: &i64,
   change: AFWorkspaceSettingsChange,
 ) -> Result<AFWorkspaceSettings, AppResponseError> {
-  let has_access = workspace_access_control
-    .enforce_role(owner_uid, &workspace_id.to_string(), AFRole::Owner)
-    .await?;
-
-  if !has_access {
-    return Err(AppResponseError::new(
-      ErrorCode::UserUnAuthorized,
-      "Only workspace owner can edit workspace settings",
-    ));
-  }
-
   let mut tx = pg_pool.begin().await?;
   let mut setting = select_workspace_settings(tx.deref_mut(), workspace_id)
     .await?
@@ -665,67 +643,6 @@ pub async fn update_workspace_settings(
   Ok(setting)
 }
 
-pub async fn check_workspace_owner(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_id: &Uuid,
-) -> Result<(), AppError> {
-  match select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await? {
-    true => Ok(()),
-    false => Err(AppError::UserUnAuthorized(
-      "User is not the owner of the workspace".to_string(),
-    )),
-  }
-}
-
-async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> {
-  // Check len
-  if new_namespace.len() < 8 {
-    return Err(AppError::InvalidRequest(
-      "Namespace must be at least 8 characters long".to_string(),
-    ));
-  }
-
-  if new_namespace.len() > 64 {
-    return Err(AppError::InvalidRequest(
-      "Namespace must be at most 32 characters long".to_string(),
-    ));
-  }
-
-  // Only contain alphanumeric characters and hyphens
-  for c in new_namespace.chars() {
-    if !c.is_alphanumeric() && c != '-' {
-      return Err(AppError::InvalidRequest(
-        "Namespace must only contain alphanumeric characters and hyphens".to_string(),
-      ));
-    }
-  }
-
-  // TODO: add more checks for reserved words
-
-  Ok(())
-}
-
-async fn check_workspace_owner_or_publisher(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_id: &Uuid,
-  view_id: &[Uuid],
-) -> Result<(), AppError> {
-  let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
-  if !is_owner {
-    let is_publisher =
-      select_user_is_collab_publisher_for_all_views(pg_pool, user_uuid, workspace_id, view_id)
-        .await?;
-    if !is_publisher {
-      return Err(AppError::UserUnAuthorized(
-        "User is not the owner of the workspace or the publisher of the document".to_string(),
-      ));
-    }
-  }
-  Ok(())
-}
-
 async fn check_if_user_is_allowed_to_delete_comment(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
@@ -740,4 +657,94 @@ async fn check_if_user_is_allowed_to_delete_comment(
     ));
   }
   Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_upload_task(
+  uid: i64,
+  task_id: Uuid,
+  task: serde_json::Value,
+  host: &str,
+  workspace_id: &str,
+  file_size: usize,
+  presigned_url: Option<String>,
+  redis_client: &RedisConnectionManager,
+  pg_pool: &PgPool,
+) -> Result<(), AppError> {
+  // Insert the task into the database
+  insert_import_task(
+    uid,
+    task_id,
+    file_size as i64,
+    workspace_id.to_string(),
+    uid,
+    Some(json!({"host": host})),
+    presigned_url,
+    pg_pool,
+  )
+  .await?;
+
+  let _: () = redis_client
+    .clone()
+    .xadd("import_task_stream", "*", &[("task", task.to_string())])
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to push task to Redis stream: {}", err)))?;
+
+  Ok(())
+}
+
+pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppError> {
+  // Query to check for pending tasks for the given user ID
+  let pending = ImportTaskState::Pending as i16;
+  let query = "
+        SELECT COUNT(*)
+        FROM af_import_task
+        WHERE uid = $1 AND status = $2
+    ";
+
+  // Execute the query and fetch the count
+  let (count,): (i64,) = sqlx::query_as(query)
+    .bind(uid)
+    .bind(pending)
+    .fetch_one(pg_pool)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to query pending tasks: {:?}", e)))?;
+
+  Ok(count)
+}
+
+/// broadcast updates to collab group if exists
+pub async fn broadcast_update(
+  collab_storage: &CollabAccessControlStorage,
+  oid: &str,
+  encoded_update: Vec<u8>,
+) -> Result<(), AppError> {
+  tracing::info!("broadcasting update to group: {}", oid);
+  let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
+  let msg = ClientCollabMessage::ClientUpdateSync {
+    data: UpdateSync {
+      origin: CollabOrigin::Server,
+      object_id: oid.to_string(),
+      msg_id: chrono::Utc::now().timestamp_millis() as u64,
+      payload: payload.into(),
+    },
+  };
+
+  collab_storage
+    .broadcast_encode_collab(oid.to_string(), vec![msg])
+    .await?;
+
+  Ok(())
+}
+
+pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
+  let collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    object_id,
+    DataSource::DocStateV1(doc_state),
+    vec![],
+    false,
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok(collab)
 }

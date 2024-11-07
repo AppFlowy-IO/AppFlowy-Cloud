@@ -13,7 +13,7 @@ use tracing::{debug, error, trace, warn};
 use validator::Validate;
 
 use app_error::AppError;
-use collab_rt_protocol::validate_encode_collab;
+use collab_rt_protocol::spawn_blocking_validate_encode_collab;
 use database::collab::{
   create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, latest_snapshot_time,
   select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
@@ -271,7 +271,7 @@ impl SnapshotCommandRunner {
     };
 
     // Validate collab data before processing
-    let result = validate_encode_collab(
+    let result = spawn_blocking_validate_encode_collab(
       &next_item.object_id,
       &encoded_collab_v1,
       &next_item.collab_type,

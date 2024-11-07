@@ -9,11 +9,10 @@ use serde_json::de::SliceRead;
 use serde_json::StreamDeserializer;
 
 use crate::dto::ai_dto::StringOrMessage;
-use std::marker::PhantomData;
+use futures::stream::StreamExt;
+use infra::reqwest::{JsonStream, NewlineStream};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-
-use futures::stream::StreamExt;
 
 impl<T> AppResponse<T>
 where
@@ -30,7 +29,7 @@ where
 
     let stream = resp.bytes_stream().map_err(AppResponseError::from);
     let stream = check_first_item_response_error(stream).await?;
-    Ok(JsonStream::new(stream))
+    Ok(JsonStream::<T, _, AppResponseError>::new(stream))
   }
 
   pub async fn new_line_response_stream(
@@ -59,165 +58,6 @@ where
     let stream = resp.bytes_stream().map_err(AppResponseError::from);
     let stream = check_first_item_response_error(stream).await?;
     Ok(stream)
-  }
-}
-
-#[pin_project]
-pub struct JsonStream<T> {
-  stream: Pin<Box<dyn Stream<Item = Result<Bytes, AppResponseError>> + Send>>,
-  buffer: Vec<u8>,
-  _marker: PhantomData<T>,
-}
-
-impl<T> JsonStream<T> {
-  pub fn new<S>(stream: S) -> Self
-  where
-    S: Stream<Item = Result<Bytes, AppResponseError>> + Send + 'static,
-  {
-    JsonStream {
-      stream: Box::pin(stream),
-      buffer: Vec::new(),
-      _marker: PhantomData,
-    }
-  }
-}
-impl<T> Stream for JsonStream<T>
-where
-  T: DeserializeOwned,
-{
-  type Item = Result<T, AppResponseError>;
-
-  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    let this = self.project();
-
-    // Poll for the next chunk of data from the underlying stream
-    match ready!(this.stream.as_mut().poll_next(cx)) {
-      Some(Ok(bytes)) => {
-        // Append the new bytes to the buffer
-        this.buffer.extend_from_slice(&bytes);
-
-        // Create a StreamDeserializer to deserialize the bytes into T
-        let de = StreamDeserializer::new(SliceRead::new(this.buffer));
-        let mut iter = de.into_iter();
-
-        // Check if there's a valid deserialized object in the stream
-        if let Some(result) = iter.next() {
-          return match result {
-            Ok(value) => {
-              // Determine the offset of the successfully deserialized data
-              let remaining = iter.byte_offset();
-              // Drain the buffer up to the byte offset to remove the consumed bytes
-              this.buffer.drain(0..remaining);
-              Poll::Ready(Some(Ok(value)))
-            },
-            Err(err) => {
-              // Handle EOF gracefully by checking if the error indicates incomplete data
-              if err.is_eof() {
-                // If EOF, but not enough data to complete the object, wait for more data
-                Poll::Pending
-              } else {
-                // If the error is not EOF, return it
-                Poll::Ready(Some(Err(AppResponseError::from(err))))
-              }
-            },
-          };
-        } else {
-          // If no complete object is ready yet, wait for more data
-          Poll::Pending
-        }
-      },
-      Some(Err(err)) => Poll::Ready(Some(Err(err))),
-      None => {
-        // Handle the case when the stream has ended but the buffer still has incomplete data
-        if this.buffer.is_empty() {
-          Poll::Ready(None)
-        } else {
-          // Try to deserialize any remaining data in the buffer
-          let de = StreamDeserializer::new(SliceRead::new(this.buffer));
-          let mut iter = de.into_iter();
-
-          if let Some(result) = iter.next() {
-            match result {
-              Ok(value) => {
-                let remaining = iter.byte_offset();
-                this.buffer.drain(0..remaining);
-                Poll::Ready(Some(Ok(value)))
-              },
-              Err(err) => {
-                if err.is_eof() {
-                  // If EOF and buffer is incomplete, return None to indicate stream end
-                  Poll::Ready(None)
-                } else {
-                  // Return any other errors that occur during deserialization
-                  Poll::Ready(Some(Err(AppResponseError::from(err))))
-                }
-              },
-            }
-          } else {
-            Poll::Ready(None)
-          }
-        }
-      },
-    }
-  }
-}
-
-/// Represents a stream of text lines delimited by newlines.
-#[pin_project]
-pub struct NewlineStream {
-  #[pin]
-  stream: Pin<Box<dyn Stream<Item = Result<Bytes, AppResponseError>> + Send>>,
-  buffer: BytesMut,
-}
-
-impl NewlineStream {
-  pub fn new<S>(stream: S) -> Self
-  where
-    S: Stream<Item = Result<Bytes, AppResponseError>> + Send + 'static,
-  {
-    NewlineStream {
-      stream: Box::pin(stream),
-      buffer: BytesMut::new(),
-    }
-  }
-}
-
-impl Stream for NewlineStream {
-  type Item = Result<String, AppResponseError>;
-
-  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    let mut this = self.project();
-
-    loop {
-      match ready!(this.stream.as_mut().poll_next(cx)) {
-        Some(Ok(bytes)) => {
-          this.buffer.extend_from_slice(&bytes);
-          if let Some(pos) = this.buffer.iter().position(|&b| b == b'\n') {
-            let line = this.buffer.split_to(pos + 1);
-            let line = &line[..line.len() - 1]; // Remove the newline character
-
-            match String::from_utf8(line.to_vec()) {
-              Ok(value) => return Poll::Ready(Some(Ok(value))),
-              Err(err) => return Poll::Ready(Some(Err(AppResponseError::from(err)))),
-            }
-          }
-        },
-        Some(Err(err)) => return Poll::Ready(Some(Err(err))),
-        None => {
-          if !this.buffer.is_empty() {
-            match String::from_utf8(this.buffer.to_vec()) {
-              Ok(value) => {
-                this.buffer.clear();
-                return Poll::Ready(Some(Ok(value)));
-              },
-              Err(err) => return Poll::Ready(Some(Err(AppResponseError::from(err)))),
-            }
-          } else {
-            return Poll::Ready(None);
-          }
-        },
-      }
-    }
   }
 }
 

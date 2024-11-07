@@ -9,9 +9,9 @@ edition = "2021"
 actix.workspace = true
 actix-web.workspace = true
 actix-http = { workspace = true, default-features = false, features = [
-    "openssl",
-    "compress-brotli",
-    "compress-gzip",
+  "openssl",
+  "compress-brotli",
+  "compress-gzip",
 ] }
 actix-rt = "2.9.0"
 actix-web-actors = { version = "4.3" }
@@ -28,20 +28,20 @@ serde_repr.workspace = true
 serde.workspace = true
 
 tokio = { workspace = true, features = [
-    "macros",
-    "rt-multi-thread",
-    "sync",
-    "fs",
-    "time",
-    "full",
+  "macros",
+  "rt-multi-thread",
+  "sync",
+  "fs",
+  "time",
+  "full",
 ] }
 tokio-stream.workspace = true
 tokio-util = { version = "0.7.10", features = ["io"] }
 futures-util = { workspace = true, features = ["std", "io"] }
 once_cell = "1.19.0"
 chrono = { version = "0.4.37", features = [
-    "serde",
-    "clock",
+  "serde",
+  "clock",
 ], default-features = false }
 derive_more = { version = "0.99" }
 secrecy.workspace = true
@@ -49,10 +49,10 @@ rand = { version = "0.8", features = ["std_rng"] }
 anyhow = "1.0.79"
 thiserror = "1.0.56"
 reqwest = { workspace = true, features = [
-    "json",
-    "rustls-tls",
-    "cookies",
-    "stream",
+  "json",
+  "rustls-tls",
+  "cookies",
+  "stream",
 ] }
 unicode-segmentation = "1.10"
 lazy_static.workspace = true
@@ -62,36 +62,36 @@ bytes = "1.5.0"
 rcgen = { version = "0.10.0", features = ["pem", "x509-parser"] }
 mime = "0.3.17"
 aws-sdk-s3 = { version = "1.36.0", features = [
-    "behavior-version-latest",
-    "rt-tokio",
+  "behavior-version-latest",
+  "rt-tokio",
 ] }
 aws-config = { version = "1.5.1", features = ["behavior-version-latest"] }
 redis = { workspace = true, features = [
-    "json",
-    "tokio-comp",
-    "connection-manager",
+  "json",
+  "tokio-comp",
+  "connection-manager",
 ] }
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = { version = "0.3.18", features = [
-    "registry",
-    "env-filter",
-    "ansi",
-    "json",
-    "tracing-log",
+  "registry",
+  "env-filter",
+  "ansi",
+  "json",
+  "tracing-log",
 ] }
 tracing-bunyan-formatter = "0.3.9"
 sqlx = { workspace = true, default-features = false, features = [
-    "runtime-tokio-rustls",
-    "macros",
-    "postgres",
-    "uuid",
-    "chrono",
-    "migrate",
+  "runtime-tokio-rustls",
+  "macros",
+  "postgres",
+  "uuid",
+  "chrono",
+  "migrate",
 ] }
 async-trait.workspace = true
 prometheus-client.workspace = true
 itertools = "0.11"
-uuid = "1.6.1"
+uuid.workspace = true
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 dotenvy.workspace = true
 url = "2.5.0"
@@ -128,12 +128,11 @@ gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
 authentication.workspace = true
 access-control.workspace = true
-workspace-access.workspace = true
 app-error = { workspace = true, features = [
-    "sqlx_error",
-    "actix_web_error",
-    "tokio_error",
-    "appflowy_ai_error",
+  "sqlx_error",
+  "actix_web_error",
+  "tokio_error",
+  "appflowy_ai_error",
 ] }
 shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
@@ -145,9 +144,17 @@ tonic-build = "0.11.0"
 log = "0.4.20"
 lettre = { version = "0.11.7", features = ["tokio1", "tokio1-native-tls"] }
 handlebars = "5.1.2"
-pin-project = "1.1.5"
+pin-project.workspace = true
 byteorder = "1.5.0"
-rayon = "1.10.0"
+sha2 = "0.10.8"
+rayon.workspace = true
+mailer.workspace = true
+async_zip.workspace = true
+sanitize-filename.workspace = true
+futures-lite = "2.3.0"
+
+base64.workspace = true
+md5.workspace = true
 
 
 [dev-dependencies]
@@ -157,16 +164,18 @@ assert-json-diff = "2.0.2"
 scraper = "0.17.1"
 client-api-test = { path = "libs/client-api-test", features = ["collab-sync"] }
 client-api = { path = "libs/client-api", features = [
-    "collab-sync",
-    "test_util",
-    "sync_verbose_log",
-    "test_fast_sync",
-    "enable_brotli",
+  "collab-sync",
+  "test_util",
+  "sync_verbose_log",
+  "test_fast_sync",
+  "enable_brotli",
 ] }
 opener = "0.6.1"
 image = "0.23.14"
 collab-rt-entity.workspace = true
 hex = "0.4.3"
+unicode-normalization = "0.1.24"
+
 
 [[bin]]
 name = "appflowy_cloud"
@@ -181,37 +190,38 @@ path = "src/lib.rs"
 
 [workspace]
 members = [
-    # libs
-    "libs/snowflake",
-    "libs/collab-rt-entity",
-    "libs/database",
-    "libs/database-entity",
-    "libs/client-api",
-    "libs/infra",
-    "libs/shared-entity",
-    "libs/gotrue",
-    "libs/gotrue-entity",
-    "admin_frontend",
-    "libs/app-error",
-    "libs/workspace-access",
-    "libs/workspace-template",
-    "libs/encrypt",
-    "libs/authentication",
-    "libs/access-control",
-    "libs/collab-rt-protocol",
-    "libs/collab-stream",
-    "libs/client-websocket",
-    "libs/client-api-test",
-    "libs/wasm-test",
-    "libs/client-api-wasm",
-    "libs/appflowy-ai-client",
-    "libs/client-api-entity",
-    # services
-    "services/appflowy-history",
-    "services/appflowy-collaborate",
-    # xtask
-    "xtask",
-    "libs/tonic-proto",
+  # libs
+  "libs/snowflake",
+  "libs/collab-rt-entity",
+  "libs/database",
+  "libs/database-entity",
+  "libs/client-api",
+  "libs/infra",
+  "libs/shared-entity",
+  "libs/gotrue",
+  "libs/gotrue-entity",
+  "admin_frontend",
+  "libs/app-error",
+  "libs/workspace-template",
+  "libs/encrypt",
+  "libs/authentication",
+  "libs/access-control",
+  "libs/collab-rt-protocol",
+  "libs/collab-stream",
+  "libs/client-websocket",
+  "libs/client-api-test",
+  "libs/wasm-test",
+  "libs/client-api-wasm",
+  "libs/appflowy-ai-client",
+  "libs/client-api-entity",
+  # services
+  "services/appflowy-history",
+  "services/appflowy-collaborate",
+  "services/appflowy-worker",
+  # xtask
+  "xtask",
+  "libs/tonic-proto",
+  "libs/mailer",
 ]
 
 [workspace.dependencies]
@@ -223,7 +233,7 @@ shared-entity = { path = "libs/shared-entity" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 authentication = { path = "libs/authentication" }
 access-control = { path = "libs/access-control" }
-workspace-access = { path = "libs/workspace-access" }
+mailer = { path = "libs/mailer" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
 prometheus-client = "0.22.0"
@@ -240,13 +250,14 @@ uuid = { version = "1.6.1", features = ["v4", "v5"] }
 anyhow = "1.0.79"
 actix = "0.13.3"
 actix-web = { version = "4.5.1", default-features = false, features = [
-    "openssl",
-    "compress-brotli",
-    "compress-gzip",
+  "openssl",
+  "compress-brotli",
+  "compress-gzip",
 ] }
 actix-http = { version = "3.6.0", default-features = false }
 tokio = { version = "1.36.0", features = ["sync"] }
 tokio-stream = "0.1.14"
+rayon = "1.10.0"
 futures-util = "0.3.30"
 bincode = "1.3.3"
 client-websocket = { path = "libs/client-websocket" }
@@ -266,15 +277,21 @@ tonic-proto = { path = "libs/tonic-proto" }
 appflowy-ai-client = { path = "libs/appflowy-ai-client", default-features = false }
 pgvector = { version = "0.4", features = ["sqlx"] }
 client-api-entity = { path = "libs/client-api-entity" }
+async_zip = { version = "0.0.17", features = ["full"] }
+sanitize-filename = "0.5.0"
+base64 = "0.22"
+md5 = "0.7.0"
+pin-project = "1.1.5"
 
 # collaboration
-yrs = { version = "0.21.0", features = ["sync"] }
+yrs = { version = "0.21.3", features = ["sync"] }
 collab = { version = "0.2.0" }
 collab-entity = { version = "0.2.0" }
 collab-folder = { version = "0.2.0" }
 collab-document = { version = "0.2.0" }
 collab-database = { version = "0.2.0" }
 collab-user = { version = "0.2.0" }
+collab-importer = { version = "0.1.0" }
 
 [profile.release]
 lto = true
@@ -288,12 +305,13 @@ debug = true
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6095da99533c4547364f71dfb7c0db3a1bace562" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6095da99533c4547364f71dfb7c0db3a1bace562" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6095da99533c4547364f71dfb7c0db3a1bace562" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6095da99533c4547364f71dfb7c0db3a1bace562" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6095da99533c4547364f71dfb7c0db3a1bace562" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6095da99533c4547364f71dfb7c0db3a1bace562" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
+collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
 
 [features]
 history = []

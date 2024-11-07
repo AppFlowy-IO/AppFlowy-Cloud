@@ -5,7 +5,6 @@ use tracing::{error, info, warn};
 
 use crate::error::RealtimeError;
 use crate::CollaborationServer;
-use access_control::collab::RealtimeAccessControl;
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
 
@@ -13,27 +12,21 @@ use crate::actix_ws::client::rt_client::{RealtimeClientWebsocketSinkImpl, Realti
 use crate::actix_ws::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
 
 #[derive(Clone)]
-pub struct RealtimeServerActor<S, AC>(pub CollaborationServer<S, AC>);
+pub struct RealtimeServerActor<S>(pub CollaborationServer<S>);
 
-impl<S, AC> RealtimeServer for RealtimeServerActor<S, AC>
-where
-  S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
-{
-}
+impl<S> RealtimeServer for RealtimeServerActor<S> where S: CollabStorage + Unpin {}
 
-impl<S, AC> Deref for RealtimeServerActor<S, AC> {
-  type Target = CollaborationServer<S, AC>;
+impl<S> Deref for RealtimeServerActor<S> {
+  type Target = CollaborationServer<S>;
 
   fn deref(&self) -> &Self::Target {
     &self.0
   }
 }
 
-impl<S, AC> Actor for RealtimeServerActor<S, AC>
+impl<S> Actor for RealtimeServerActor<S>
 where
   S: 'static + Unpin,
-  AC: RealtimeAccessControl + Unpin,
 {
   type Context = Context<Self>;
 
@@ -46,12 +39,11 @@ where
     ctx.set_mailbox_capacity(mail_box_size);
   }
 }
-impl<S, AC> actix::Supervised for RealtimeServerActor<S, AC>
+impl<S> actix::Supervised for RealtimeServerActor<S>
 where
   S: 'static + Unpin,
-  AC: RealtimeAccessControl + Unpin,
 {
-  fn restarting(&mut self, ctx: &mut Context<RealtimeServerActor<S, AC>>) {
+  fn restarting(&mut self, ctx: &mut Context<RealtimeServerActor<S>>) {
     error!("realtime server is restarting");
     ctx.set_mailbox_capacity(mail_box_size());
   }
@@ -67,10 +59,9 @@ fn mail_box_size() -> usize {
   }
 }
 
-impl<S, AC> Handler<Connect> for RealtimeServerActor<S, AC>
+impl<S> Handler<Connect> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
 {
   type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
 
@@ -80,10 +71,9 @@ where
   }
 }
 
-impl<S, AC> Handler<Disconnect> for RealtimeServerActor<S, AC>
+impl<S> Handler<Disconnect> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
 {
   type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
   fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) -> Self::Result {
@@ -91,10 +81,9 @@ where
   }
 }
 
-impl<S, AC> Handler<ClientMessage> for RealtimeServerActor<S, AC>
+impl<S> Handler<ClientMessage> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
 {
   type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
 
@@ -112,10 +101,9 @@ where
   }
 }
 
-impl<S, AC> Handler<ClientStreamMessage> for RealtimeServerActor<S, AC>
+impl<S> Handler<ClientStreamMessage> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
 {
   type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
 

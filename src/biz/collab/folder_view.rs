@@ -3,7 +3,10 @@ use std::collections::HashSet;
 use app_error::AppError;
 use chrono::DateTime;
 use collab_folder::{Folder, SectionItem, ViewLayout as CollabFolderViewLayout};
-use shared_entity::dto::workspace_dto::{FolderView, ViewLayout};
+use shared_entity::dto::workspace_dto::{
+  self, FavoriteFolderView, FolderView, FolderViewMinimal, RecentFolderView, TrashFolderView,
+  ViewLayout,
+};
 
 /// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
 pub fn collab_folder_to_folder_view(
@@ -13,17 +16,19 @@ pub fn collab_folder_to_folder_view(
   pubished_view_ids: &HashSet<String>,
 ) -> Result<FolderView, AppError> {
   let mut unviewable = HashSet::new();
+  let mut my_private_view_ids = HashSet::new();
+  for private_section in folder.get_my_private_sections() {
+    my_private_view_ids.insert(private_section.id);
+  }
   for private_section in folder.get_all_private_sections() {
-    unviewable.insert(private_section.id);
+    if let Some(private_view) = folder.get_view(&private_section.id) {
+      if view_is_space(&private_view) && !my_private_view_ids.contains(&private_section.id) {
+        unviewable.insert(private_section.id);
+      }
+    }
   }
   for trash_view in folder.get_all_trash_sections() {
     unviewable.insert(trash_view.id);
-  }
-
-  let mut private_view_ids = HashSet::new();
-  for private_section in folder.get_my_private_sections() {
-    unviewable.remove(&private_section.id);
-    private_view_ids.insert(private_section.id);
   }
 
   to_folder_view(
@@ -31,7 +36,7 @@ pub fn collab_folder_to_folder_view(
     root_view_id,
     folder,
     &unviewable,
-    &private_view_ids,
+    &my_private_view_ids,
     pubished_view_ids,
     false,
     0,
@@ -106,7 +111,7 @@ fn to_folder_view(
     is_space: view_is_space(&view),
     is_private,
     is_published: published_view_ids.contains(view_id),
-    layout: to_view_layout(&view.layout),
+    layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
     last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
     extra,
@@ -114,27 +119,96 @@ fn to_folder_view(
   })
 }
 
-pub fn section_items_to_folder_view(
+pub fn section_items_to_favorite_folder_view(
   section_items: &[SectionItem],
   folder: &Folder,
   published_view_ids: &HashSet<String>,
-) -> Vec<FolderView> {
+) -> Vec<FavoriteFolderView> {
   section_items
     .iter()
     .filter_map(|section_item| {
       let view = folder.get_view(&section_item.id);
-      view.map(|v| FolderView {
-        view_id: v.id.clone(),
-        name: v.name.clone(),
-        icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
-        is_space: false,
-        is_private: false,
-        is_published: published_view_ids.contains(&v.id),
-        created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
-        last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
-        layout: to_view_layout(&v.layout),
-        extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
-        children: vec![],
+      view.map(|v| {
+        let folder_view = FolderView {
+          view_id: v.id.clone(),
+          name: v.name.clone(),
+          icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
+          is_space: false,
+          is_private: false,
+          is_published: published_view_ids.contains(&v.id),
+          created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
+          layout: to_dto_view_layout(&v.layout),
+          extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+          children: vec![],
+        };
+        FavoriteFolderView {
+          view: folder_view,
+          favorited_at: DateTime::from_timestamp(section_item.timestamp, 0).unwrap_or_default(),
+        }
+      })
+    })
+    .collect()
+}
+
+pub fn section_items_to_recent_folder_view(
+  section_items: &[SectionItem],
+  folder: &Folder,
+  published_view_ids: &HashSet<String>,
+) -> Vec<RecentFolderView> {
+  section_items
+    .iter()
+    .filter_map(|section_item| {
+      let view = folder.get_view(&section_item.id);
+      view.map(|v| {
+        let folder_view = FolderView {
+          view_id: v.id.clone(),
+          name: v.name.clone(),
+          icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
+          is_space: false,
+          is_private: false,
+          is_published: published_view_ids.contains(&v.id),
+          created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
+          layout: to_dto_view_layout(&v.layout),
+          extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+          children: vec![],
+        };
+        RecentFolderView {
+          view: folder_view,
+          last_viewed_at: DateTime::from_timestamp(section_item.timestamp, 0).unwrap_or_default(),
+        }
+      })
+    })
+    .collect()
+}
+
+pub fn section_items_to_trash_folder_view(
+  section_items: &[SectionItem],
+  folder: &Folder,
+) -> Vec<TrashFolderView> {
+  section_items
+    .iter()
+    .filter_map(|section_item| {
+      let view = folder.get_view(&section_item.id);
+      view.map(|v| {
+        let folder_view = FolderView {
+          view_id: v.id.clone(),
+          name: v.name.clone(),
+          icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
+          is_space: false,
+          is_private: false,
+          is_published: false,
+          created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
+          layout: to_dto_view_layout(&v.layout),
+          extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+          children: vec![],
+        };
+        TrashFolderView {
+          view: folder_view,
+          deleted_at: DateTime::from_timestamp(section_item.timestamp, 0).unwrap_or_default(),
+        }
       })
     })
     .collect()
@@ -184,12 +258,46 @@ pub fn to_dto_view_icon_type(
   }
 }
 
-pub fn to_view_layout(collab_folder_view_layout: &CollabFolderViewLayout) -> ViewLayout {
+pub fn to_dto_view_layout(collab_folder_view_layout: &CollabFolderViewLayout) -> ViewLayout {
   match collab_folder_view_layout {
     CollabFolderViewLayout::Document => ViewLayout::Document,
     CollabFolderViewLayout::Grid => ViewLayout::Grid,
     CollabFolderViewLayout::Board => ViewLayout::Board,
     CollabFolderViewLayout::Calendar => ViewLayout::Calendar,
     CollabFolderViewLayout::Chat => ViewLayout::Chat,
+  }
+}
+
+pub fn to_dto_folder_view_miminal(collab_folder_view: &collab_folder::View) -> FolderViewMinimal {
+  FolderViewMinimal {
+    view_id: collab_folder_view.id.clone(),
+    name: collab_folder_view.name.clone(),
+    icon: collab_folder_view.icon.clone().map(to_dto_view_icon),
+    layout: to_dto_view_layout(&collab_folder_view.layout),
+  }
+}
+
+pub fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {
+  collab_folder::ViewIcon {
+    ty: to_folder_view_icon_type(icon.ty),
+    value: icon.value,
+  }
+}
+
+pub fn to_folder_view_icon_type(icon: workspace_dto::IconType) -> collab_folder::IconType {
+  match icon {
+    workspace_dto::IconType::Emoji => collab_folder::IconType::Emoji,
+    workspace_dto::IconType::Url => collab_folder::IconType::Url,
+    workspace_dto::IconType::Icon => collab_folder::IconType::Icon,
+  }
+}
+
+pub fn to_folder_view_layout(layout: workspace_dto::ViewLayout) -> collab_folder::ViewLayout {
+  match layout {
+    ViewLayout::Document => collab_folder::ViewLayout::Document,
+    ViewLayout::Grid => collab_folder::ViewLayout::Grid,
+    ViewLayout::Board => collab_folder::ViewLayout::Board,
+    ViewLayout::Calendar => collab_folder::ViewLayout::Calendar,
+    ViewLayout::Chat => collab_folder::ViewLayout::Chat,
   }
 }

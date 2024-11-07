@@ -2,8 +2,8 @@ use client_api_entity::{
   AccountLink, CreateTemplateCategoryParams, CreateTemplateCreatorParams, CreateTemplateParams,
   GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams, GetTemplatesQueryParams,
   Template, TemplateCategories, TemplateCategory, TemplateCategoryType, TemplateCreator,
-  TemplateCreators, Templates, UpdateTemplateCategoryParams, UpdateTemplateCreatorParams,
-  UpdateTemplateParams,
+  TemplateCreators, TemplateWithPublishInfo, Templates, UpdateTemplateCategoryParams,
+  UpdateTemplateCreatorParams, UpdateTemplateParams,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -231,7 +231,10 @@ impl Client {
       .into_data()
   }
 
-  pub async fn get_template(&self, view_id: Uuid) -> Result<Template, AppResponseError> {
+  pub async fn get_template(
+    &self,
+    view_id: Uuid,
+  ) -> Result<TemplateWithPublishInfo, AppResponseError> {
     let url = template_resource_url(&self.base_url, view_id);
     let resp = self
       .http_client_without_auth(Method::GET, &url)
@@ -239,7 +242,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<Template>::from_response(resp)
+    AppResponse::<TemplateWithPublishInfo>::from_response(resp)
       .await?
       .into_data()
   }

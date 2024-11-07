@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
-use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus};
+use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus, PublishInfo};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{collections::HashMap, ops::Deref};
 use uuid::Uuid;
@@ -123,6 +124,24 @@ pub struct CollabResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Page {
+  pub view_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePageParams {
+  pub parent_view_id: String,
+  pub layout: ViewLayout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePageParams {
+  pub name: String,
+  pub icon: Option<ViewIcon>,
+  pub extra: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageCollabData {
   pub encoded_collab: Vec<u8>,
   pub row_data: HashMap<String, Vec<u8>>,
@@ -143,6 +162,42 @@ pub struct PublishedDuplicate {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct RecentFolderView {
+  #[serde(flatten)]
+  pub view: FolderView,
+  pub last_viewed_at: DateTime<Utc>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct FavoriteFolderView {
+  #[serde(flatten)]
+  pub view: FolderView,
+  pub favorited_at: DateTime<Utc>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct TrashFolderView {
+  #[serde(flatten)]
+  pub view: FolderView,
+  pub deleted_at: DateTime<Utc>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct RecentSectionItems {
+  pub views: Vec<RecentFolderView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct FavoriteSectionItems {
+  pub views: Vec<FavoriteFolderView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct TrashSectionItems {
+  pub views: Vec<TrashFolderView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FolderView {
   pub view_id: String,
   pub name: String,
@@ -159,8 +214,18 @@ pub struct FolderView {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct SectionItems {
-  pub views: Vec<FolderView>,
+pub struct FolderViewMinimal {
+  pub view_id: String,
+  pub name: String,
+  pub icon: Option<ViewIcon>,
+  pub layout: ViewLayout,
+}
+
+/// Publish info with actual view info
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublishInfoView {
+  pub view: FolderViewMinimal,
+  pub info: PublishInfo,
 }
 
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]

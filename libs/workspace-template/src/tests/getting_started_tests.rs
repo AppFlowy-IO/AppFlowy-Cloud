@@ -1,7 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use collab::lock::RwLock;
 use collab::preclude::uuid_v4;
 use collab_database::database::DatabaseData;
 use collab_database::entity::CreateDatabaseParams;
@@ -70,8 +68,10 @@ mod tests {
     let template = GettingStartedTemplate;
     let object_id = gen_database_view_id().to_string();
     let database_data = serde_json::from_str::<DatabaseData>(json_str).unwrap();
+
+    let database_view_id = database_data.views[0].id.clone();
     let create_database_params =
-      CreateDatabaseParams::from_database_data(database_data, Some(object_id.clone()));
+      CreateDatabaseParams::from_database_data(database_data, &database_view_id, &object_id);
     let result = template
       .create_database_from_params(object_id.clone(), create_database_params)
       .await;
@@ -95,18 +95,17 @@ mod tests {
   #[tokio::test]
   async fn create_workspace_view_with_getting_started_template_test() {
     let template = GettingStartedTemplate;
-    let workspace_view_builder = Arc::new(RwLock::new(WorkspaceViewBuilder::new(generate_id(), 1)));
+    let mut workspace_view_builder = WorkspaceViewBuilder::new(generate_id(), 1);
 
     let result = template
-      .create_workspace_view(1, workspace_view_builder.clone())
+      .create_workspace_view(1, &mut workspace_view_builder)
       .await
       .unwrap();
 
     // 2 spaces + 3 documents + 1 database + 5 database rows
     assert_eq!(result.len(), 11);
 
-    let mut builder = workspace_view_builder.write().await;
-    let views = builder.build();
+    let views = workspace_view_builder.build();
 
     // check the number of spaces
     assert_eq!(views.len(), 2);

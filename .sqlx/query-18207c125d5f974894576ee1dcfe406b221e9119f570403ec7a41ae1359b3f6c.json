@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT\n        workspace_id,\n        inviter AS inviter_uid,\n        (SELECT uid FROM public.af_user WHERE LOWER(email) = LOWER(invitee_email)) AS invitee_uid,\n        status,\n        role_id AS role\n    FROM\n    public.af_workspace_invitation\n    WHERE id = $1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "inviter_uid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "invitee_uid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 4,
+        "name": "role",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "18207c125d5f974894576ee1dcfe406b221e9119f570403ec7a41ae1359b3f6c"
+}

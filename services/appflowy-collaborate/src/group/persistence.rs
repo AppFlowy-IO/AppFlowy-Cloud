@@ -162,7 +162,7 @@ where
 
     self
       .storage
-      .insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
+      .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
       .await?;
     // Update the edit state on successful save
     self.edit_state.tick();

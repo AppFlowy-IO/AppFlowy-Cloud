@@ -1,27 +1,20 @@
 use crate::dto::{
   AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, CreateTextChatContext,
-  Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
+  CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
   RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse,
   TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 
-use futures::{ready, Stream, StreamExt, TryStreamExt};
+use bytes::Bytes;
+use futures::{Stream, StreamExt};
 use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, StreamDeserializer, Value};
-
-use anyhow::anyhow;
-use pin_project::pin_project;
 use serde::de::DeserializeOwned;
-use serde_json::de::SliceRead;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
 use std::borrow::Cow;
-use std::marker::PhantomData;
-use std::pin::Pin;
 
-use bytes::Bytes;
-use std::task::{Context, Poll};
 use std::time::Duration;
 use tracing::{info, trace};
 
@@ -49,19 +42,29 @@ impl AppFlowyAIClient {
     Ok(())
   }
 
-  pub async fn completion_text(
+  pub async fn completion_text<T: Into<Option<CompletionType>>>(
     &self,
     text: &str,
-    completion_type: CompletionType,
+    completion_type: T,
+    custom_prompt: Option<CustomPrompt>,
     model: AIModel,
   ) -> Result<CompleteTextResponse, AIError> {
+    let completion_type = completion_type.into();
+
+    if completion_type.is_some() && custom_prompt.is_some() {
+      return Err(AIError::InvalidRequest(
+        "Cannot specify both completion_type and custom_prompt".to_string(),
+      ));
+    }
+
     if text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
     }
 
     let params = json!({
       "text": text,
-      "type": completion_type as u8,
+      "type": completion_type.map(|t| t as u8),
+      "custom_prompt": custom_prompt,
     });
 
     let url = format!("{}/completion", self.url);
@@ -76,19 +79,22 @@ impl AppFlowyAIClient {
       .into_data()
   }
 
-  pub async fn stream_completion_text(
+  pub async fn stream_completion_text<T: Into<Option<CompletionType>>>(
     &self,
     text: &str,
-    completion_type: CompletionType,
+    completion_type: T,
+    custom_prompt: Option<CustomPrompt>,
     model: AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+    let completion_type = completion_type.into();
     if text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
     }
 
     let params = json!({
       "text": text,
-      "type": completion_type as u8,
+      "type": completion_type.map(|t| t as u8),
+      "custom_prompt": custom_prompt,
     });
 
     let url = format!("{}/completion/stream", self.url);
@@ -201,7 +207,7 @@ impl AppFlowyAIClient {
     chat_id: &str,
     content: &str,
     model: &AIModel,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<Value>,
   ) -> Result<ChatAnswer, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
@@ -226,7 +232,7 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     content: &str,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<Value>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -251,7 +257,7 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     content: &str,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<Value>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -337,7 +343,7 @@ pub struct AIResponse<T> {
 
 impl<T> AIResponse<T>
 where
-  T: serde::de::DeserializeOwned + 'static,
+  T: DeserializeOwned + 'static,
 {
   pub async fn from_response(resp: reqwest::Response) -> Result<Self, anyhow::Error> {
     let status_code = resp.status();
@@ -371,19 +377,6 @@ where
       .map(|item| item.map_err(|err| AIError::Internal(err.into())));
     Ok(stream)
   }
-
-  pub async fn json_stream_response(
-    resp: reqwest::Response,
-  ) -> Result<impl Stream<Item = Result<T, AIError>>, AIError> {
-    let status_code = resp.status();
-    if !status_code.is_success() {
-      let body = resp.text().await?;
-      return Err(AIError::Internal(anyhow!(body)));
-    }
-
-    let stream = resp.bytes_stream().map_err(AIError::from);
-    Ok(JsonStream::new(stream))
-  }
 }
 impl From<reqwest::Error> for AIError {
   fn from(error: reqwest::Error) -> Self {
@@ -399,64 +392,5 @@ impl From<reqwest::Error> for AIError {
       };
     }
     AIError::Internal(error.into())
-  }
-}
-
-#[pin_project]
-pub struct JsonStream<T> {
-  stream: Pin<Box<dyn Stream<Item = Result<Bytes, AIError>> + Send>>,
-  buffer: Vec<u8>,
-  _marker: PhantomData<T>,
-}
-
-impl<T> JsonStream<T> {
-  pub fn new<S>(stream: S) -> Self
-  where
-    S: Stream<Item = Result<Bytes, AIError>> + Send + 'static,
-  {
-    JsonStream {
-      stream: Box::pin(stream),
-      buffer: Vec::new(),
-      _marker: PhantomData,
-    }
-  }
-}
-
-impl<T> Stream for JsonStream<T>
-where
-  T: DeserializeOwned,
-{
-  type Item = Result<T, AIError>;
-
-  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    let this = self.project();
-
-    match ready!(this.stream.as_mut().poll_next(cx)) {
-      Some(Ok(bytes)) => {
-        this.buffer.extend_from_slice(&bytes);
-        let de = StreamDeserializer::new(SliceRead::new(this.buffer));
-        let mut iter = de.into_iter();
-        if let Some(result) = iter.next() {
-          match result {
-            Ok(value) => {
-              let remaining = iter.byte_offset();
-              this.buffer.drain(0..remaining);
-              Poll::Ready(Some(Ok(value)))
-            },
-            Err(err) => {
-              if err.is_eof() {
-                Poll::Pending
-              } else {
-                Poll::Ready(Some(Err(AIError::Internal(err.into()))))
-              }
-            },
-          }
-        } else {
-          Poll::Pending
-        }
-      },
-      Some(Err(err)) => Poll::Ready(Some(Err(err))),
-      None => Poll::Ready(None),
-    }
   }
 }

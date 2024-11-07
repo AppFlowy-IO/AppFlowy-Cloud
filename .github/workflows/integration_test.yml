@@ -25,6 +25,7 @@ env:
   LOCALHOST_WS: ws://localhost/ws/v1
   APPFLOWY_REDIS_URI: redis://redis:6379
   LOCALHOST_GOTRUE: http://localhost/gotrue
+  POSTGRES_PASSWORD: password
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
   SQLX_OFFLINE: true
 
@@ -42,17 +43,21 @@ jobs:
 
       - name: Build Docker Images
         run: |
-          docker compose build appflowy_cloud appflowy_history
+          export DOCKER_DEFAULT_PLATFORM=linux/amd64
+          docker compose build appflowy_cloud appflowy_history appflowy_worker
 
       - name: Push docker images to docker hub
         run: |
           docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker tag appflowyinc/appflowy_history appflowyinc/appflowy_history:${GITHUB_SHA}
+          docker tag appflowyinc/appflowy_worker appflowyinc/appflowy_worker:${GITHUB_SHA}
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker push appflowyinc/appflowy_history:${GITHUB_SHA}
-          APPFLOWY_HISTORY_VERSION=${GITHUB_SHA} 
-          APPFLOWY_CLOUD_VERSION=0.1.1
+          docker push appflowyinc/appflowy_worker:${GITHUB_SHA}
+          APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
+          APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
+          APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
 
   test:
     name: Integration Tests
@@ -65,6 +70,8 @@ jobs:
             test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --features ai-test-enabled"
           - test_service: "appflowy_history"
             test_cmd: "-p appflowy-history"
+          - test_service: "appflowy_worker"
+            test_cmd: "-p appflowy-worker"
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -91,8 +98,7 @@ jobs:
           sed -i 's|APPFLOWY_AI_OPENAI_API_KEY=.*|APPFLOWY_AI_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}|' .env
           sed -i "s|LOCAL_AI_AWS_ACCESS_KEY_ID=.*|LOCAL_AI_AWS_ACCESS_KEY_ID=${{ secrets.LOCAL_AI_AWS_ACCESS_KEY_ID }}|" .env
           sed -i "s|LOCAL_AI_AWS_SECRET_ACCESS_KEY=.*|LOCAL_AI_AWS_SECRET_ACCESS_KEY=${{ secrets.LOCAL_AI_AWS_SECRET_ACCESS_KEY }}|" .env
-          sed -i 's|APPFLOWY_INDEXER_REDIS_URL=.*|APPFLOWY_INDEXER_REDIS_URL=redis://localhost:6379|' .env
-          sed -i 's|APPFLOWY_INDEXER_DATABASE_URL=.*|APPFLOWY_INDEXER_DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
+          sed -i 's|APPFLOWY_WEB_URL=.*|APPFLOWY_WEB_URL=http://localhost:3000|' .env
         shell: bash
 
       - name: Update Nginx Configuration
@@ -102,9 +108,19 @@ jobs:
       - name: Run Docker-Compose
         run: |
           export APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
+          export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           export APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
+          export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
+          
+          container_id=$(docker ps --filter name=appflowy-cloud-ai-1 -q)
+          if [ -n "$container_id" ]; then
+          echo "Displaying logs for the AppFlowy-AI container..."
+            docker logs "$container_id"
+          else
+            echo "No running container found to display logs."
+          fi
 
       - name: install prerequisites
         run: |
@@ -115,6 +131,7 @@ jobs:
         run: |
           echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test -p admin_frontend ${{ matrix.test_cmd }}
 
   cleanup:
     name: Cleanup Docker Images

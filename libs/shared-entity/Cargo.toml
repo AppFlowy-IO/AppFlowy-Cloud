@@ -17,14 +17,22 @@ reqwest = { workspace = true, features = ["stream"] }
 uuid = { version = "1.6.1", features = ["v4"] }
 gotrue-entity = { path = "../gotrue-entity" }
 database-entity.workspace = true
+infra.workspace = true
 collab-entity = { workspace = true }
 app-error = { workspace = true }
 chrono = "0.4.31"
-appflowy-ai-client = { workspace = true, default-features = false, features = ["dto"] }
+appflowy-ai-client = { workspace = true, default-features = false, features = [
+  "dto",
+] }
 pin-project = "1.1.5"
 
-actix-web = { version = "4.4.1", default-features = false, features = ["http2"], optional = true }
-validator = { version = "0.16", features = ["validator_derive", "derive"], optional = true }
+actix-web = { version = "4.4.1", default-features = false, features = [
+  "http2",
+], optional = true }
+validator = { version = "0.16", features = [
+  "validator_derive",
+  "derive",
+], optional = true }
 futures = "0.3.30"
 bytes = "1.6.0"
 log = "0.4.21"

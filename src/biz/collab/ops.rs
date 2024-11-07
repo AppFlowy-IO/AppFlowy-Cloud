@@ -5,6 +5,7 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
+use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
@@ -18,6 +19,9 @@ use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
+use shared_entity::dto::workspace_dto::FavoriteFolderView;
+use shared_entity::dto::workspace_dto::RecentFolderView;
+use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
 use std::ops::DerefMut;
 
@@ -36,7 +40,9 @@ use database_entity::dto::{
 };
 
 use super::folder_view::collab_folder_to_folder_view;
-use super::folder_view::section_items_to_folder_view;
+use super::folder_view::section_items_to_favorite_folder_view;
+use super::folder_view::section_items_to_recent_folder_view;
+use super::folder_view::section_items_to_trash_folder_view;
 use super::publish_outline::collab_folder_to_published_outline;
 
 /// Create a new collab member
@@ -45,7 +51,7 @@ use super::publish_outline::collab_folder_to_published_outline;
 pub async fn create_collab_member(
   pg_pool: &PgPool,
   params: &InsertCollabMemberParams,
-  collab_access_control: &impl CollabAccessControl,
+  collab_access_control: Arc<dyn CollabAccessControl>,
 ) -> Result<(), AppError> {
   params.validate()?;
 
@@ -91,7 +97,7 @@ pub async fn upsert_collab_member(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,
   params: &UpdateCollabMemberParams,
-  collab_access_control: &impl CollabAccessControl,
+  collab_access_control: Arc<dyn CollabAccessControl>,
 ) -> Result<(), AppError> {
   params.validate()?;
   let mut transaction = pg_pool
@@ -131,7 +137,7 @@ pub async fn get_collab_member(
 pub async fn delete_collab_member(
   pg_pool: &PgPool,
   params: &CollabMemberIdentify,
-  collab_access_control: &impl CollabAccessControl,
+  collab_access_control: Arc<dyn CollabAccessControl>,
 ) -> Result<(), AppError> {
   params.validate()?;
   let mut transaction = pg_pool
@@ -167,11 +173,11 @@ pub async fn get_collab_member_list(
 }
 
 pub async fn get_user_favorite_folder_views(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
-) -> Result<Vec<FolderView>, AppError> {
+) -> Result<Vec<FavoriteFolderView>, AppError> {
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
@@ -193,7 +199,7 @@ pub async fn get_user_favorite_folder_views(
     .into_iter()
     .filter(|s| !deleted_section_item_ids.contains(&s.id))
     .collect();
-  Ok(section_items_to_folder_view(
+  Ok(section_items_to_favorite_folder_view(
     &favorite_section_items,
     &folder,
     &publish_view_ids,
@@ -201,11 +207,11 @@ pub async fn get_user_favorite_folder_views(
 }
 
 pub async fn get_user_recent_folder_views(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
-) -> Result<Vec<FolderView>, AppError> {
+) -> Result<Vec<RecentFolderView>, AppError> {
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
@@ -227,7 +233,7 @@ pub async fn get_user_recent_folder_views(
     .into_iter()
     .map(|id| id.to_string())
     .collect();
-  Ok(section_items_to_folder_view(
+  Ok(section_items_to_recent_folder_view(
     &recent_section_items,
     &folder,
     &publish_view_ids,
@@ -235,10 +241,10 @@ pub async fn get_user_recent_folder_views(
 }
 
 pub async fn get_user_trash_folder_views(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
-) -> Result<Vec<FolderView>, AppError> {
+) -> Result<Vec<TrashFolderView>, AppError> {
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
@@ -246,15 +252,11 @@ pub async fn get_user_trash_folder_views(
   )
   .await?;
   let section_items = folder.get_my_trash_sections();
-  Ok(section_items_to_folder_view(
-    &section_items,
-    &folder,
-    &HashSet::default(),
-  ))
+  Ok(section_items_to_trash_folder_view(&section_items, &folder))
 }
 
 pub async fn get_user_workspace_structure(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -283,7 +285,7 @@ pub async fn get_user_workspace_structure(
 }
 
 pub async fn get_latest_collab_folder(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
   workspace_id: &str,
 ) -> Result<Folder, AppError> {
@@ -313,7 +315,7 @@ pub async fn get_latest_collab_folder(
 }
 
 pub async fn get_latest_collab_encoded(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
   workspace_id: &str,
   oid: &str,
@@ -335,7 +337,7 @@ pub async fn get_latest_collab_encoded(
 }
 
 pub async fn get_published_view(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   publish_namespace: String,
   pg_pool: &PgPool,
 ) -> Result<PublishedView, AppError> {
@@ -358,7 +360,7 @@ pub async fn get_published_view(
 
 pub async fn list_database(
   pg_pool: &PgPool,
-  collab_storage: &Arc<CollabAccessControlStorage>,
+  collab_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_uuid_str: String,
 ) -> Result<Vec<AFDatabase>, AppError> {
@@ -366,7 +368,7 @@ pub async fn list_database(
   let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_uuid).await?;
 
   let ec = get_latest_collab_encoded(
-    collab_storage.clone(),
+    collab_storage,
     GetCollabOrigin::Server,
     &workspace_uuid_str,
     &ws_db_oid,
@@ -383,8 +385,13 @@ pub async fn list_database(
       },
     )?;
 
-  let ws_body = WorkspaceDatabaseBody::open(&mut collab);
-  let db_metas = ws_body.get_all_database_meta(&collab.transact());
+  let ws_body = WorkspaceDatabaseBody::open(&mut collab).map_err(|e| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to open workspace database body: {:?}",
+      e
+    ))
+  })?;
+  let db_metas = ws_body.get_all_meta(&collab.transact());
   let query_collabs: Vec<QueryCollab> = db_metas
     .into_iter()
     .map(|meta| QueryCollab {
@@ -392,7 +399,9 @@ pub async fn list_database(
       collab_type: CollabType::Database,
     })
     .collect();
-  let results = collab_storage.batch_get_collab(&uid, query_collabs).await;
+  let results = collab_storage
+    .batch_get_collab(&uid, query_collabs, true)
+    .await;
 
   let txn = collab.transact();
   let mut af_databases: Vec<AFDatabase> = Vec::with_capacity(results.len());
@@ -402,7 +411,11 @@ pub async fn list_database(
         match EncodedCollab::decode_from_bytes(&encode_collab_v1) {
           Ok(ec) => {
             match Collab::new_with_source(CollabOrigin::Server, &oid, ec.into(), vec![], false) {
-              Ok(db_collab) => match DatabaseBody::from_collab(&db_collab) {
+              Ok(db_collab) => match DatabaseBody::from_collab(
+                &db_collab,
+                Arc::new(NoPersistenceDatabaseCollabService),
+                None,
+              ) {
                 Some(db_body) => match db_body.metas.get_inline_view_id(&txn) {
                   Some(iid) => match db_body.views.get_view(&txn, &iid) {
                     Some(iview) => {

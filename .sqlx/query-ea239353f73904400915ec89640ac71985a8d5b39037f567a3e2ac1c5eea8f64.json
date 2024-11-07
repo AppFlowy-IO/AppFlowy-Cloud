@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_workspace_namespace\n      VALUES ($1, $2, FALSE)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ea239353f73904400915ec89640ac71985a8d5b39037f567a3e2ac1c5eea8f64"
+}

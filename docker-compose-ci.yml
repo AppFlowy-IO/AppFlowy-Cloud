@@ -13,11 +13,13 @@ services:
       - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
 
   # You do not need this if you have configured to use your own s3 file storage
+  # You can try to access http://localhost/minio/browser/appflowy in your browser
   minio:
     restart: on-failure
     image: minio/minio
     ports:
-      - "9000:9000"
+      - 9000:9000
+      - 9001:9001
     environment:
       - MINIO_BROWSER_REDIRECT_URL=http://localhost/minio
       - MINIO_ROOT_USER=${APPFLOWY_S3_ACCESS_KEY:-minioadmin}
@@ -28,9 +30,7 @@ services:
 
   postgres:
     restart: on-failure
-    build:
-      context: ./postgres
-      dockerfile: postgres.Dockerfile
+    image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
     environment:
@@ -38,6 +38,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - SUPABASE_PASSWORD=${SUPABASE_PASSWORD:-root}
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
 
@@ -95,7 +96,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_ENVIRONMENT=production
       - APPFLOWY_DATABASE_URL=${APPFLOWY_DATABASE_URL}
-      - APPFLOWY_REDIS_URI=redis://redis:6379
+      - APPFLOWY_REDIS_URI=${APPFLOWY_REDIS_URI}
       - APPFLOWY_GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}
       - APPFLOWY_GOTRUE_JWT_EXP=${GOTRUE_JWT_EXP}
       - APPFLOWY_GOTRUE_BASE_URL=${APPFLOWY_GOTRUE_BASE_URL}
@@ -113,6 +114,7 @@ services:
       - APPFLOWY_DATABASE_MAX_CONNECTIONS=20
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
+      - APPFLOWY_WEB_URL=${APPFLOWY_WEB_URL}
     build:
       context: .
       dockerfile: Dockerfile
@@ -126,6 +128,8 @@ services:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
     image: appflowyinc/admin_frontend:${APPFLOWY_ADMIN_FRONTEND_VERSION:-latest}
+    ports:
+      - 3000:3000
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
@@ -157,6 +161,29 @@ services:
       - APPFLOWY_HISTORY_REDIS_URL=redis://redis:6379
       - APPFLOWY_HISTORY_ENVIRONMENT=production
       - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
+
+  appflowy_worker:
+    restart: on-failure
+    image: appflowyinc/appflowy_worker:${APPFLOWY_WORKER_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: ./services/appflowy-worker/Dockerfile
+    ports:
+      - "4001:4001"
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_WORKER_REDIS_URL=redis://redis:6379
+      - APPFLOWY_WORKER_ENVIRONMENT=production
+      - APPFLOWY_WORKER_DATABASE_URL=${APPFLOWY_WORKER_DATABASE_URL}
+      - APPFLOWY_S3_USE_MINIO=${APPFLOWY_S3_USE_MINIO}
+      - APPFLOWY_S3_MINIO_URL=${APPFLOWY_S3_MINIO_URL}
+      - APPFLOWY_S3_ACCESS_KEY=${APPFLOWY_S3_ACCESS_KEY}
+      - APPFLOWY_S3_SECRET_KEY=${APPFLOWY_S3_SECRET_KEY}
+      - APPFLOWY_S3_BUCKET=${APPFLOWY_S3_BUCKET}
+      - APPFLOWY_S3_REGION=${APPFLOWY_S3_REGION}
+      - APPFLOWY_MAILER_SMTP_HOST=${APPFLOWY_MAILER_SMTP_HOST}
+      - APPFLOWY_MAILER_SMTP_USERNAME=${APPFLOWY_MAILER_SMTP_USERNAME}
+      - APPFLOWY_MAILER_SMTP_PASSWORD=${APPFLOWY_MAILER_SMTP_PASSWORD}
 
 volumes:
   postgres_data:

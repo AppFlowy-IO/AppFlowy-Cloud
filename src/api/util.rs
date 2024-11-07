@@ -7,7 +7,7 @@ use actix_web::HttpRequest;
 use appflowy_ai_client::dto::AIModel;
 use async_trait::async_trait;
 use byteorder::{ByteOrder, LittleEndian};
-use collab_rt_protocol::validate_encode_collab;
+use collab_rt_protocol::spawn_blocking_validate_encode_collab;
 use database_entity::dto::CollabParams;
 use std::str::FromStr;
 use tokio_stream::StreamExt;
@@ -74,9 +74,13 @@ pub trait CollabValidator {
 #[async_trait]
 impl CollabValidator for CollabParams {
   async fn check_encode_collab(&self) -> Result<(), AppError> {
-    validate_encode_collab(&self.object_id, &self.encoded_collab_v1, &self.collab_type)
-      .await
-      .map_err(|err| AppError::NoRequiredData(err.to_string()))
+    spawn_blocking_validate_encode_collab(
+      &self.object_id,
+      &self.encoded_collab_v1,
+      &self.collab_type,
+    )
+    .await
+    .map_err(|err| AppError::NoRequiredData(err.to_string()))
   }
 }
 
@@ -175,5 +179,5 @@ pub(crate) fn ai_model_from_header(req: &HttpRequest) -> AIModel {
       let header = header.to_str().ok()?;
       AIModel::from_str(header).ok()
     })
-    .unwrap_or(AIModel::GPT35)
+    .unwrap_or(AIModel::GPT4oMini)
 }

@@ -2,6 +2,16 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 
+use access_control::casbin::access::AccessControl;
+use access_control::casbin::collab::{CollabAccessControlImpl, RealtimeCollabAccessControlImpl};
+use access_control::casbin::workspace::WorkspaceAccessControlImpl;
+use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
+use access_control::noops::collab::{
+  CollabAccessControlImpl as NoOpsCollabAccessControlImpl,
+  RealtimeCollabAccessControlImpl as NoOpsRealtimeCollabAccessControlImpl,
+};
+use access_control::noops::workspace::WorkspaceAccessControlImpl as NoOpsWorkspaceAccessControlImpl;
+use access_control::workspace::WorkspaceAccessControl;
 use actix::Supervisor;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
@@ -10,12 +20,14 @@ use actix_web::cookie::Key;
 use actix_web::middleware::NormalizePath;
 use actix_web::{dev::Server, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
+use appflowy_collaborate::collab::access_control::CollabStorageAccessControlImpl;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
 use collab::lock::Mutex;
+use database::collab::cache::CollabCache;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -23,46 +35,40 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
-use access_control::access::{enable_access_control, AccessControl};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
-use appflowy_collaborate::collab::access_control::{
-  CollabAccessControlImpl, CollabStorageAccessControlImpl, RealtimeCollabAccessControlImpl,
-};
-use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::indexer::IndexerProvider;
-use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use gotrue::grant::{Grant, PasswordGrant};
+use mailer::sender::Mailer;
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
-use workspace_access::WorkspaceAccessControlImpl;
 
+use crate::api::access_request::access_request_scope;
 use crate::api::ai::ai_completion_scope;
 use crate::api::chat::chat_scope;
+use crate::api::data_import::data_import_scope;
 use crate::api::file_storage::file_storage_scope;
 use crate::api::history::history_scope;
 use crate::api::metrics::metrics_scope;
 use crate::api::search::search_scope;
+use crate::api::server_info::server_info_scope;
 use crate::api::template::template_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
-use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
 use crate::biz::pg_listener::PgListeners;
-use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
 use crate::biz::workspace::publish::{
   PublishedCollabPostgresStore, PublishedCollabS3StoreWithPostgresFallback, PublishedCollabStore,
 };
 use crate::config::config::{
   Config, DatabaseSetting, GoTrueSetting, PublishedCollabStorageBackend, S3Setting,
 };
-use crate::mailer::Mailer;
-use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
+use crate::mailer::AFCloudMailer;
 use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
@@ -119,20 +125,11 @@ pub async fn run_actix_server(
     .unwrap_or_else(Key::generate);
 
   let storage = state.collab_access_control_storage.clone();
-  let access_control = MiddlewareAccessControlTransform::new()
-    .with_acs(WorkspaceMiddlewareAccessControl::new(
-      state.pg_pool.clone(),
-      state.workspace_access_control.clone().into(),
-    ))
-    .with_acs(CollabMiddlewareAccessControl::new(
-      state.collab_access_control.clone().into(),
-      state.collab_cache.clone(),
-    ));
 
   // Initialize metrics that which are registered in the registry.
-  let realtime_server = CollaborationServer::<_, _>::new(
+  let realtime_server = CollaborationServer::<_>::new(
     storage.clone(),
-    RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
+    state.realtime_access_control.clone(),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
     state.redis_connection_manager.clone(),
@@ -155,9 +152,8 @@ pub async fn run_actix_server(
         SessionMiddleware::builder(redis_store.clone(), key.clone())
           .build(),
       )
-      // .wrap(DecryptPayloadMiddleware)
-      .wrap(access_control.clone())
       .wrap(RequestIdMiddleware)
+      .service(server_info_scope())
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())
@@ -169,6 +165,8 @@ pub async fn run_actix_server(
       .service(metrics_scope())
       .service(search_scope())
       .service(template_scope())
+      .service(data_import_scope())
+      .service(access_request_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
@@ -257,30 +255,38 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   info!("Setting up Pg listeners...");
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
   // let collab_member_listener = pg_listeners.subscribe_collab_member_change();
-  // let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
   info!(
     "Setting up access controls, is_enable: {}",
-    enable_access_control()
+    &config.access_control.is_enabled
   );
   let access_control =
     AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
 
-  // spawn_listen_on_workspace_member_change(workspace_member_listener, access_control.clone());
-  // spawn_listen_on_collab_member_change(
-  //   pg_pool.clone(),
-  //   collab_member_listener,
-  //   access_control.clone(),
-  // );
-
   let user_cache = UserCache::new(pg_pool.clone()).await;
-  let collab_access_control = CollabAccessControlImpl::new(access_control.clone());
-  let workspace_access_control = WorkspaceAccessControlImpl::new(access_control.clone());
+  let collab_access_control: Arc<dyn CollabAccessControl> =
+    if config.access_control.is_enabled && config.access_control.enable_collab_access_control {
+      Arc::new(CollabAccessControlImpl::new(access_control.clone()))
+    } else {
+      Arc::new(NoOpsCollabAccessControlImpl::new())
+    };
+  let workspace_access_control: Arc<dyn WorkspaceAccessControl> =
+    if config.access_control.is_enabled && config.access_control.enable_workspace_access_control {
+      Arc::new(WorkspaceAccessControlImpl::new(access_control.clone()))
+    } else {
+      Arc::new(NoOpsWorkspaceAccessControlImpl::new())
+    };
+  let realtime_access_control: Arc<dyn RealtimeAccessControl> =
+    if config.access_control.is_enabled && config.access_control.enable_realtime_access_control {
+      Arc::new(RealtimeCollabAccessControlImpl::new(access_control))
+    } else {
+      Arc::new(NoOpsRealtimeCollabAccessControlImpl::new())
+    };
   let collab_cache = CollabCache::new(redis_conn_manager.clone(), pg_pool.clone());
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {
-    collab_access_control: collab_access_control.clone().into(),
-    workspace_access_control: workspace_access_control.clone().into(),
+    collab_access_control: collab_access_control.clone(),
+    workspace_access_control: workspace_access_control.clone(),
     cache: collab_cache.clone(),
   };
   let snapshot_control = SnapshotControl::new(
@@ -308,17 +314,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     .connect_lazy();
 
   let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
-  let mailer = Mailer::new(
-    config.mailer.smtp_username.clone(),
-    config.mailer.smtp_password.expose_secret().clone(),
-    &config.mailer.smtp_host,
-    config.mailer.smtp_port,
-  )
-  .await?;
-  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
-  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
-    warn!("Failed to remove all connected users: {:?}", err);
-  }
+  let mailer = get_mailer(config).await?;
 
   info!("Application state initialized");
   Ok(AppState {
@@ -332,17 +328,16 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_access_control_storage,
     collab_access_control,
     workspace_access_control,
+    realtime_access_control,
     bucket_storage,
     published_collab_store,
     bucket_client: s3_client,
     pg_listeners,
-    access_control,
     metrics,
     gotrue_admin,
     mailer,
     ai_client: appflowy_ai_client,
     grpc_history_client,
-    realtime_shared_state,
     indexer_provider,
   })
 }
@@ -376,7 +371,7 @@ async fn setup_admin_account(
     Err(err) => {
       if let app_error::gotrue::GoTrueError::Internal(err) = err {
         match (err.code, err.msg.as_str()) {
-          (400, "User already registered") => {
+          (400..=499, "User already registered") => {
             info!("Admin user already registered");
             Ok(gotrue_admin)
           },
@@ -457,7 +452,11 @@ pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Cli
     config_builder.build()
   };
   let client = aws_sdk_s3::Client::from_conf(config);
-  create_bucket_if_not_exists(&client, s3_setting).await?;
+  if s3_setting.create_bucket {
+    create_bucket_if_not_exists(&client, s3_setting).await?;
+  } else {
+    info!("Skipping bucket creation, assumed to be created externally");
+  }
   Ok(client)
 }
 
@@ -508,6 +507,18 @@ async fn create_bucket_if_not_exists(
       }
     },
   }
+}
+
+async fn get_mailer(config: &Config) -> Result<AFCloudMailer, Error> {
+  let mailer = Mailer::new(
+    config.mailer.smtp_username.clone(),
+    config.mailer.smtp_password.expose_secret().clone(),
+    &config.mailer.smtp_host,
+    config.mailer.smtp_port,
+  )
+  .await?;
+
+  AFCloudMailer::new(mailer).await
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {

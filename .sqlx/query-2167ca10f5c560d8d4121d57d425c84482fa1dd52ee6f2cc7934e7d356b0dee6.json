@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT default_published_view_id\n      FROM af_workspace\n      WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "default_published_view_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2167ca10f5c560d8d4121d57d425c84482fa1dd52ee6f2cc7934e7d356b0dee6"
+}

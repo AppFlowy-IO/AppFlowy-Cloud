@@ -1,6 +1,7 @@
+use chrono::{DateTime, Utc};
 use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
-  PublishInfo, Reaction,
+  Reaction,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -9,24 +10,33 @@ use tracing::{event, instrument};
 use uuid::Uuid;
 
 use crate::pg_row::{
-  AFGlobalCommentRow, AFPermissionRow, AFReactionRow, AFUserProfileRow, AFWebUserColumn,
-  AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow, AFWorkspaceMemberRow, AFWorkspaceRow,
+  AFGlobalCommentRow, AFImportTask, AFPermissionRow, AFReactionRow, AFUserProfileRow,
+  AFWebUserColumn, AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow, AFWorkspaceMemberRow,
+  AFWorkspaceRow,
 };
 use crate::user::select_uid_from_email;
 use app_error::AppError;
 
 #[inline]
 pub async fn delete_from_workspace(pg_pool: &PgPool, workspace_id: &Uuid) -> Result<(), AppError> {
-  let pg_row = sqlx::query!(
+  let res = sqlx::query!(
     r#"
-    DELETE FROM public.af_workspace where workspace_id = $1
+      DELETE FROM public.af_workspace
+      WHERE workspace_id = $1
     "#,
     workspace_id
   )
   .execute(pg_pool)
   .await?;
 
-  assert!(pg_row.rows_affected() == 1);
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to delete workspace, workspace_id: {}, rows_affected: {}",
+      workspace_id,
+      res.rows_affected()
+    );
+  }
+
   Ok(())
 }
 
@@ -35,26 +45,33 @@ pub async fn insert_user_workspace(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   user_uuid: &Uuid,
   workspace_name: &str,
+  is_initialized: bool,
 ) -> Result<AFWorkspaceRow, AppError> {
   let workspace = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-    INSERT INTO public.af_workspace (owner_uid, workspace_name)
-    VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2)
-    RETURNING
+    WITH new_workspace AS (
+      INSERT INTO public.af_workspace (owner_uid, workspace_name, is_initialized)
+      VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2, $3)
+      RETURNING *
+    )
+    SELECT
       workspace_id,
       database_storage_id,
       owner_uid,
-      (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,
-      created_at,
+      owner_profile.name AS owner_name,
+      owner_profile.email AS owner_email,
+      new_workspace.created_at,
       workspace_type,
-      deleted_at,
+      new_workspace.deleted_at,
       workspace_name,
       icon
-    ;
+    FROM new_workspace
+    JOIN public.af_user AS owner_profile ON new_workspace.owner_uid = owner_profile.uid;
     "#,
     user_uuid,
     workspace_name,
+    is_initialized,
   )
   .fetch_one(tx.deref_mut())
   .await?;
@@ -141,33 +158,6 @@ pub async fn select_user_is_workspace_owner(
   .await?;
 
   Ok(exists.unwrap_or(false))
-}
-
-pub async fn select_user_is_collab_publisher_for_all_views(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_uuid: &Uuid,
-  view_ids: &[Uuid],
-) -> Result<bool, AppError> {
-  let count = sqlx::query_scalar!(
-    r#"
-      SELECT COUNT(*)
-      FROM af_published_collab
-      WHERE workspace_id = $1
-        AND view_id = ANY($2)
-        AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
-    "#,
-    workspace_uuid,
-    view_ids,
-    user_uuid,
-  )
-  .fetch_one(pg_pool)
-  .await?;
-
-  match count {
-    Some(c) => Ok(c == view_ids.len() as i64),
-    None => Ok(false),
-  }
 }
 
 pub async fn select_user_is_allowed_to_delete_comment(
@@ -350,7 +340,7 @@ pub async fn update_workspace_invitation_set_status_accepted(
     r#"
     UPDATE public.af_workspace_invitation
     SET status = 1
-    WHERE invitee_email = (SELECT email FROM public.af_user WHERE uuid = $1)
+    WHERE LOWER(invitee_email) = (SELECT LOWER(email) FROM public.af_user WHERE uuid = $1)
       AND id = $2
       AND status = 0
     "#,
@@ -385,7 +375,7 @@ pub async fn get_invitation_by_id(
     SELECT
         workspace_id,
         inviter AS inviter_uid,
-        (SELECT uid FROM public.af_user WHERE email = invitee_email) AS invitee_uid,
+        (SELECT uid FROM public.af_user WHERE LOWER(email) = LOWER(invitee_email)) AS invitee_uid,
         status,
         role_id AS role
     FROM
@@ -426,7 +416,7 @@ pub async fn select_workspace_invitations_for_user(
         JOIN public.af_user u_inviter ON i.inviter = u_inviter.uid
         JOIN public.af_user u_invitee ON u_invitee.uuid = $1
       WHERE
-        i.invitee_email = u_invitee.email
+        LOWER(i.invitee_email) = LOWER(u_invitee.email)
         AND ($2::SMALLINT IS NULL OR i.status = $2);
     "#,
     invitee_uuid,
@@ -463,7 +453,7 @@ pub async fn select_workspace_invitation_for_user(
         JOIN public.af_user u_inviter ON i.inviter = u_inviter.uid
         JOIN public.af_user u_invitee ON u_invitee.uuid = $1
       WHERE
-        i.invitee_email = u_invitee.email
+        LOWER(i.invitee_email) = LOWER(u_invitee.email)
         AND i.id = $2;
     "#,
     invitee_uuid,
@@ -536,10 +526,7 @@ pub async fn delete_workspace_members(
   .unwrap_or(false);
 
   if is_owner {
-    return Err(AppError::NotEnoughPermissions {
-      user: member_email.to_string(),
-      action: format!("delete member from workspace {}", workspace_id),
-    });
+    return Err(AppError::NotEnoughPermissions);
   }
 
   sqlx::query!(
@@ -644,11 +631,16 @@ pub async fn select_user_profile<'a, E: Executor<'a, Database = Postgres>>(
         af_user_row.deleted_at,
         af_user_row.updated_at,
         af_user_row.created_at,
-        (SELECT workspace_id
+       (
+         SELECT af_workspace_member.workspace_id
          FROM af_workspace_member
-         WHERE uid = af_user_row.uid
-         ORDER BY updated_at DESC
-         LIMIT 1) as latest_workspace_id
+         JOIN af_workspace
+           ON af_workspace_member.workspace_id = af_workspace.workspace_id
+         WHERE af_workspace_member.uid = af_user_row.uid
+           AND COALESCE(af_workspace.is_initialized, true) = true
+         ORDER BY af_workspace_member.updated_at DESC
+         LIMIT 1
+       ) AS latest_workspace_id
       FROM af_user_row
     "#,
     user_uuid
@@ -670,13 +662,17 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
         workspace_id,
         database_storage_id,
         owner_uid,
-        (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,
-        created_at,
+        owner_profile.name as owner_name,
+        owner_profile.email as owner_email,
+        af_workspace.created_at,
         workspace_type,
-        deleted_at,
+        af_workspace.deleted_at,
         workspace_name,
         icon
-      FROM public.af_workspace WHERE workspace_id = $1
+      FROM public.af_workspace
+      JOIN public.af_user owner_profile ON af_workspace.owner_uid = owner_profile.uid
+      WHERE af_workspace.workspace_id = $1
+        AND COALESCE(af_workspace.is_initialized, true) = true;
     "#,
     workspace_id
   )
@@ -684,6 +680,28 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
   .await?;
   Ok(workspace)
 }
+
+#[inline]
+pub async fn select_workspace_database_storage_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &str,
+) -> Result<Uuid, AppError> {
+  let workspace_id = Uuid::parse_str(workspace_id)?;
+  let result = sqlx::query!(
+    r#"
+        SELECT
+            database_storage_id
+        FROM public.af_workspace
+        WHERE workspace_id = $1
+        "#,
+    workspace_id
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(result.database_storage_id)
+}
+
 #[inline]
 pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
@@ -704,6 +722,30 @@ pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postg
   Ok(())
 }
 
+#[inline]
+pub async fn update_updated_at_of_workspace_with_uid<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  uid: i64,
+  workspace_id: &Uuid,
+  current_timestamp: DateTime<Utc>,
+) -> Result<(), AppError> {
+  sqlx::query!(
+    r#"
+        UPDATE af_workspace_member
+        SET updated_at = $3
+        WHERE uid = $1
+        AND workspace_id = $2;
+        "#,
+    uid,
+    workspace_id,
+    current_timestamp
+  )
+  .execute(executor)
+  .await?;
+
+  Ok(())
+}
+
 /// Returns a list of workspaces that the user is part of.
 /// User may owner or non-owner.
 #[inline]
@@ -718,7 +760,8 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
         w.workspace_id,
         w.database_storage_id,
         w.owner_uid,
-        (SELECT name FROM public.af_user WHERE uid = w.owner_uid) AS owner_name,
+        u.name AS owner_name,
+        u.email AS owner_email,
         w.created_at,
         w.workspace_type,
         w.deleted_at,
@@ -726,9 +769,11 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
         w.icon
       FROM af_workspace w
       JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
+      JOIN public.af_user u ON w.owner_uid = u.uid
       WHERE wm.uid = (
          SELECT uid FROM public.af_user WHERE uuid = $1
-      );
+      )
+      AND COALESCE(w.is_initialized, true) = true;
     "#,
     user_uuid
   )
@@ -754,6 +799,32 @@ pub async fn select_user_owned_workspaces_id<'a, E: Executor<'a, Database = Post
   .fetch_all(executor)
   .await?;
   Ok(workspace_ids)
+}
+
+pub async fn update_workspace_status<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  is_initialized: bool,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+    UPDATE public.af_workspace
+    SET is_initialized = $2
+    WHERE workspace_id = $1
+    "#,
+    workspace_id,
+    is_initialized
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to update workspace status, workspace_id: {}",
+      workspace_id
+    );
+  }
+  Ok(())
 }
 
 pub async fn select_member_count_for_workspaces<'a, E: Executor<'a, Database = Postgres>>(
@@ -982,181 +1053,13 @@ pub async fn upsert_workspace_settings(
   Ok(())
 }
 
-#[inline]
-pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  workspace_id: &Uuid,
-  namespace: &str,
-) -> Result<bool, AppError> {
-  let res = sqlx::query_scalar!(
-    r#"
-      SELECT EXISTS(
-        SELECT 1
-        FROM af_workspace
-        WHERE workspace_id = $1
-          AND publish_namespace = $2
-      )
-    "#,
-    workspace_id,
-    namespace,
-  )
-  .fetch_one(executor)
-  .await?;
-
-  Ok(res.unwrap_or(false))
-}
-
-#[inline]
-pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  workspace_id: &Uuid,
-  new_namespace: &str,
-) -> Result<(), AppError> {
-  let res = sqlx::query!(
-    r#"
-      UPDATE af_workspace
-      SET publish_namespace = $1
-      WHERE workspace_id = $2
-    "#,
-    new_namespace,
-    workspace_id,
-  )
-  .execute(executor)
-  .await?;
-
-  if res.rows_affected() != 1 {
-    tracing::error!(
-      "Failed to update workspace publish namespace, workspace_id: {}, new_namespace: {}, rows_affected: {}",
-      workspace_id, new_namespace, res.rows_affected()
-    );
-  }
-
-  Ok(())
-}
-
-#[inline]
-pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  workspace_id: &Uuid,
-) -> Result<String, AppError> {
-  let res = sqlx::query_scalar!(
-    r#"
-      SELECT publish_namespace
-      FROM af_workspace
-      WHERE workspace_id = $1
-    "#,
-    workspace_id,
-  )
-  .fetch_one(executor)
-  .await?;
-
-  Ok(res)
-}
-
-#[inline]
-pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  publish_namespace: &str,
-  publish_name: &str,
-) -> Result<serde_json::Value, AppError> {
-  let res = sqlx::query!(
-    r#"
-    SELECT metadata
-    FROM af_published_collab
-    WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
-      AND publish_name = $2
-    "#,
-    publish_namespace,
-    publish_name,
-  )
-  .fetch_one(executor)
-  .await?;
-  let metadata: serde_json::Value = res.metadata;
-  Ok(metadata)
-}
-
-#[inline]
-pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  workspace_id: &Uuid,
-  view_ids: &[Uuid],
-) -> Result<(), AppError> {
-  let res = sqlx::query!(
-    r#"
-      DELETE FROM af_published_collab
-      WHERE workspace_id = $1
-        AND view_id = ANY($2)
-    "#,
-    workspace_id,
-    view_ids,
-  )
-  .execute(executor)
-  .await?;
-
-  if res.rows_affected() != view_ids.len() as u64 {
-    tracing::error!(
-      "Failed to delete published collabs, workspace_id: {}, view_ids: {:?}, rows_affected: {}",
-      workspace_id,
-      view_ids,
-      res.rows_affected()
-    );
-  }
-
-  Ok(())
-}
-
-#[inline]
-pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  publish_namespace: &str,
-  publish_name: &str,
-) -> Result<Vec<u8>, AppError> {
-  let res = sqlx::query_scalar!(
-    r#"
-      SELECT blob
-      FROM af_published_collab
-      WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
-      AND publish_name = $2
-    "#,
-    publish_namespace,
-    publish_name,
-  )
-  .fetch_one(executor)
-  .await?;
-
-  Ok(res)
-}
-
-pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  view_id: &Uuid,
-) -> Result<PublishInfo, AppError> {
-  let res = sqlx::query_as!(
-    PublishInfo,
-    r#"
-      SELECT
-        (SELECT publish_namespace FROM af_workspace aw WHERE aw.workspace_id = apc.workspace_id) AS namespace,
-        publish_name,
-        view_id
-      FROM af_published_collab apc
-      WHERE view_id = $1
-    "#,
-    view_id,
-  )
-  .fetch_one(executor)
-  .await?;
-
-  Ok(res)
-}
-
 pub async fn select_owner_of_published_collab<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   view_id: &Uuid,
 ) -> Result<Uuid, AppError> {
   let res = sqlx::query!(
     r#"
-      SELECT
-      af.uuid
+      SELECT af.uuid
       FROM af_published_collab apc
       JOIN af_user af ON af.uid = apc.published_by
       WHERE view_id = $1
@@ -1387,7 +1290,7 @@ pub async fn select_user_is_invitee_for_workspace_invitation(
       SELECT EXISTS(
         SELECT 1
         FROM af_workspace_invitation
-        WHERE id = $1 AND invitee_email = (SELECT email FROM af_user WHERE uuid = $2)
+        WHERE id = $1 AND LOWER(invitee_email) = (SELECT LOWER(email) FROM af_user WHERE uuid = $2)
       )
     "#,
     invite_id,
@@ -1396,4 +1299,203 @@ pub async fn select_user_is_invitee_for_workspace_invitation(
   .fetch_one(pg_pool)
   .await?;
   res.map_or(Ok(false), Ok)
+}
+
+pub async fn select_import_task(
+  pg_pool: &PgPool,
+  task_id: &Uuid,
+) -> Result<AFImportTask, AppError> {
+  let query = String::from("SELECT * FROM af_import_task WHERE task_id = $1");
+  let import_task = sqlx::query_as::<_, AFImportTask>(&query)
+    .bind(task_id)
+    .fetch_one(pg_pool)
+    .await?;
+  Ok(import_task)
+}
+
+/// Get the import task for the user
+/// Status of the file import (e.g., 0 for pending, 1 for completed, 2 for failed)
+pub async fn select_import_task_by_state(
+  user_id: i64,
+  pg_pool: &PgPool,
+  filter_by_status: Option<ImportTaskState>,
+) -> Result<Vec<AFImportTask>, AppError> {
+  let mut query = String::from("SELECT * FROM af_import_task WHERE created_by = $1");
+  if filter_by_status.is_some() {
+    query.push_str(" AND status = $2");
+  }
+  query.push_str(" ORDER BY created_at DESC");
+
+  let import_tasks = if let Some(status) = filter_by_status {
+    sqlx::query_as::<_, AFImportTask>(&query)
+      .bind(user_id)
+      .bind(status as i32)
+      .fetch_all(pg_pool)
+      .await?
+  } else {
+    sqlx::query_as::<_, AFImportTask>(&query)
+      .bind(user_id)
+      .fetch_all(pg_pool)
+      .await?
+  };
+
+  Ok(import_tasks)
+}
+
+#[derive(Clone, Debug)]
+pub enum ImportTaskState {
+  Pending = 0,
+  Completed = 1,
+  Failed = 2,
+  Expire = 3,
+  Cancel = 4,
+}
+
+impl From<i16> for ImportTaskState {
+  fn from(val: i16) -> Self {
+    match val {
+      0 => ImportTaskState::Pending,
+      1 => ImportTaskState::Completed,
+      2 => ImportTaskState::Failed,
+      4 => ImportTaskState::Cancel,
+      _ => ImportTaskState::Pending,
+    }
+  }
+}
+
+/// Update import task status
+///  0 => Pending,
+///   1 => Completed,
+///   2 => Failed,
+///   3 => Expire,
+pub async fn update_import_task_status<'a, E: Executor<'a, Database = Postgres>>(
+  task_id: &Uuid,
+  new_status: ImportTaskState,
+  executor: E,
+) -> Result<(), AppError> {
+  let query = "UPDATE af_import_task SET status = $1 WHERE task_id = $2";
+  sqlx::query(query)
+    .bind(new_status as i16)
+    .bind(task_id)
+    .execute(executor)
+    .await
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to update status for task_id {}: {:?}",
+        task_id,
+        err
+      ))
+    })?;
+
+  Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_import_task(
+  uid: i64,
+  task_id: Uuid,
+  file_size: i64,
+  workspace_id: String,
+  created_by: i64,
+  metadata: Option<serde_json::Value>,
+  presigned_url: Option<String>,
+  pg_pool: &PgPool,
+) -> Result<(), AppError> {
+  let query = r#"
+        INSERT INTO af_import_task (task_id, file_size, workspace_id, created_by, status, metadata, uid, file_url)
+        VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'), $7, $8)
+    "#;
+
+  sqlx::query(query)
+    .bind(task_id)
+    .bind(file_size)
+    .bind(workspace_id)
+    .bind(created_by)
+    .bind(ImportTaskState::Pending as i32)
+    .bind(metadata)
+    .bind(uid)
+    .bind(presigned_url)
+    .execute(pg_pool)
+    .await
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to create a new import task: {:?}",
+        err
+      ))
+    })?;
+
+  Ok(())
+}
+
+pub async fn update_import_task_metadata(
+  task_id: Uuid,
+  new_metadata: serde_json::Value,
+  pg_pool: &PgPool,
+) -> Result<(), AppError> {
+  let query = r#"
+        UPDATE af_import_task
+        SET metadata = metadata || $1
+        WHERE task_id = $2
+    "#;
+
+  sqlx::query(query)
+    .bind(new_metadata)
+    .bind(task_id)
+    .execute(pg_pool)
+    .await
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to update metadata for task_id {}: {:?}",
+        task_id,
+        err
+      ))
+    })?;
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_publish_name_exists(
+  pg_pool: &PgPool,
+  workspace_uuid: &Uuid,
+  publish_name: &str,
+) -> Result<bool, AppError> {
+  let exists = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_published_collab
+        WHERE workspace_id = $1
+        AND publish_name = $2
+      )
+    "#,
+    workspace_uuid,
+    publish_name
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}
+
+#[inline]
+pub async fn select_view_id_from_publish_name(
+  pg_pool: &PgPool,
+  workspace_uuid: &Uuid,
+  publish_name: &str,
+) -> Result<Option<Uuid>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT view_id
+      FROM af_published_collab
+      WHERE workspace_id = $1
+      AND publish_name = $2
+    "#,
+    workspace_uuid,
+    publish_name
+  )
+  .fetch_optional(pg_pool)
+  .await?;
+
+  Ok(res)
 }

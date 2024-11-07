@@ -66,6 +66,7 @@ pub fn chat_scope() -> Scope {
       // To generate an answer for a given question, use "/answer/stream" to receive the answer in a stream.
       web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(answer_handler)),
     )
+      // Deprecated! use "v2/answer/stream"
       // Use AI to generate a response for a specified message ID. This response will be return as a stream.
     .service(
       web::resource("/{chat_id}/{message_id}/answer/stream")

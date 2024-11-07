@@ -17,11 +17,11 @@ use sqlx::PgPool;
 use tracing::info;
 
 use crate::actix_ws::server::RealtimeServerActor;
+use crate::api::{collab_scope, ws_scope};
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use access_control::casbin::access::AccessControl;
 use appflowy_ai_client::client::AppFlowyAIClient;
-
-use crate::api::{collab_scope, ws_scope};
+use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
@@ -74,6 +74,7 @@ pub async fn run_actix_server(
     )),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
+    state.redis_stream_router.clone(),
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     Duration::from_secs(config.collab.group_prune_grace_period_secs),
@@ -105,7 +106,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let user_cache = UserCache::new(pg_pool.clone()).await;
 
   info!("Connecting to Redis...");
-  let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
+  let (redis_conn_manager, redis_stream_router) =
+    get_redis_client(config.redis_uri.expose_secret()).await?;
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -148,6 +150,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config: Arc::new(config.clone()),
     pg_listeners,
     user_cache,
+    redis_stream_router,
     redis_connection_manager: redis_conn_manager,
     access_control,
     collab_access_control_storage: collab_storage,
@@ -157,14 +160,27 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   Ok(app_state)
 }
 
-async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManager, Error> {
+async fn get_redis_client(
+  redis_uri: &str,
+) -> Result<(redis::aio::ConnectionManager, Arc<StreamRouter>), Error> {
   info!("Connecting to redis with uri: {}", redis_uri);
-  let manager = redis::Client::open(redis_uri)
-    .context("failed to connect to redis")?
+  let client = redis::Client::open(redis_uri).context("failed to connect to redis")?;
+
+  let router = StreamRouter::with_options(
+    &client,
+    StreamRouterOptions {
+      worker_count: 10,
+      xread_streams: 100,
+      xread_block_millis: Some(100),
+      xread_count: None,
+    },
+  )?;
+
+  let manager = client
     .get_connection_manager()
     .await
     .context("failed to get the connection manager")?;
-  Ok(manager)
+  Ok((manager, router.into()))
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {

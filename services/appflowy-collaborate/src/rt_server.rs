@@ -14,6 +14,7 @@ use access_control::collab::RealtimeAccessControl;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::MessageByObjectId;
 use collab_stream::client::CollabRedisStream;
+use collab_stream::stream_router::StreamRouter;
 use database::collab::CollabStorage;
 
 use crate::client::client_msg_router::ClientMessageRouter;
@@ -50,6 +51,7 @@ where
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
+    redis_stream_router: Arc<StreamRouter>,
     redis_connection_manager: RedisConnectionManager,
     group_persistence_interval: Duration,
     prune_grace_period: Duration,
@@ -66,7 +68,8 @@ where
     }
 
     let connect_state = ConnectState::new();
-    let collab_stream = CollabRedisStream::new_with_connection_manager(redis_connection_manager);
+    let collab_stream =
+      CollabRedisStream::new_with_connection_manager(redis_connection_manager, redis_stream_router);
     let group_manager = Arc::new(
       GroupManager::new(
         storage.clone(),

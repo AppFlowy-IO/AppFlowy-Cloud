@@ -25,6 +25,7 @@ prost.workspace = true
 async-stream.workspace = true
 async-trait.workspace = true
 zstd = "0.13"
+loole = "0.4.0"
 
 [dev-dependencies]
 futures = "0.3.30"

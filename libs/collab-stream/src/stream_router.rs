@@ -24,8 +24,9 @@ pub type StreamReader = tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>
 /// fixed number of Redis connections.
 pub struct StreamRouter {
   buf: Sender<StreamHandle>,
-  workers: Vec<Worker>,
   alive: Arc<AtomicBool>,
+  #[allow(dead_code)]
+  workers: Vec<Worker>,
 }
 
 impl StreamRouter {
@@ -59,7 +60,7 @@ impl StreamRouter {
 
   pub fn observe(&self, stream_key: StreamKey, last_id: Option<String>) -> StreamReader {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    let last_id = last_id.unwrap_or_default();
+    let last_id = last_id.unwrap_or_else(|| "0".to_string());
     let h = StreamHandle::new(stream_key, last_id, tx);
     self.buf.send(h).unwrap();
     rx
@@ -106,7 +107,7 @@ impl Default for StreamRouterOptions {
 }
 
 struct Worker {
-  handle: JoinHandle<()>,
+  _handle: JoinHandle<()>,
 }
 
 impl Worker {
@@ -131,7 +132,7 @@ impl Worker {
         tracing::error!("worker {} failed: {}", worker_id, err);
       }
     });
-    Self { handle }
+    Self { _handle: handle }
   }
 
   fn process_streams(
@@ -149,7 +150,9 @@ impl Worker {
       if !Self::read_buf(&rx, &mut stream_keys, &mut message_ids, &mut senders) {
         break; // rx channel has closed
       }
-      if stream_keys.is_empty() {
+
+      let key_count = stream_keys.len();
+      if key_count == 0 {
         tracing::warn!("Bug: read empty buf");
         sleep(Duration::from_millis(100));
         continue;
@@ -157,6 +160,7 @@ impl Worker {
 
       let result: StreamReadReply = conn.xread_options(&stream_keys, &message_ids, &options)?;
 
+      let mut msgs = 0;
       for stream in result.keys {
         let mut remove_sender = false;
         if let Some((sender, idx)) = senders.get(stream.key.as_str()) {
@@ -164,6 +168,7 @@ impl Worker {
             let message_id = id.id;
             let value = id.map;
             message_ids[*idx] = message_id.clone(); //TODO: optimize
+            msgs += 1;
             if let Err(err) = sender.send((message_id, value)) {
               tracing::warn!("failed to send: {}", err);
               remove_sender = true;
@@ -176,20 +181,27 @@ impl Worker {
         }
       }
 
+      if msgs > 0 {
+        tracing::trace!(
+          "XREAD: read total of {} messages for {} streams",
+          msgs,
+          key_count
+        );
+      }
       Self::schedule_back(&tx, &mut stream_keys, &mut message_ids, &mut senders);
     }
     Ok(())
   }
 
-  fn schedule_back<'a>(
+  fn schedule_back(
     tx: &Sender<StreamHandle>,
     keys: &mut Vec<StreamKey>,
     ids: &mut Vec<String>,
-    senders: &mut HashMap<&'a str, (StreamSender, usize)>,
+    senders: &mut HashMap<&str, (StreamSender, usize)>,
   ) {
-    let mut keys = keys.drain(..);
+    let keys = keys.drain(..);
     let mut ids = ids.drain(..);
-    while let Some(key) = keys.next() {
+    for key in keys {
       if let Some(last_id) = ids.next() {
         if let Some((sender, _)) = senders.remove(key.as_str()) {
           let h = StreamHandle::new(key, last_id, sender);

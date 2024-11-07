@@ -6,7 +6,7 @@ use crate::stream_group::{StreamConfig, StreamGroup};
 use crate::stream_router::{StreamRouter, StreamRouterOptions};
 use futures::Stream;
 use redis::aio::ConnectionManager;
-use redis::streams::StreamReadOptions;
+use redis::streams::StreamReadReply;
 use redis::{AsyncCommands, FromRedisValue};
 use std::sync::Arc;
 use std::time::Duration;
@@ -111,18 +111,46 @@ impl CollabRedisStream {
     AwarenessUpdateSink::new(self.connection_manager.clone(), stream_key)
   }
 
-  pub fn collab_updates(
+  /// Reads all collab updates for a given `workspace_id`:`object_id` entry, starting
+  /// from a given message id. Once Redis stream return no more results, the stream will be closed.
+  pub async fn current_collab_updates(
     &self,
     workspace_id: &str,
     object_id: &str,
     since: Option<MessageId>,
-    keep_alive: bool,
+  ) -> Result<Vec<(MessageId, CollabStreamUpdate)>, StreamError> {
+    let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
+    let since = since.unwrap_or_default().to_string();
+    let mut conn = self.connection_manager.clone();
+    let mut result = Vec::new();
+    let mut reply: StreamReadReply = conn.xread(&[&stream_key], &[&since]).await?;
+    if let Some(key) = reply.keys.pop() {
+      if key.key == stream_key {
+        for stream_id in key.ids {
+          let message_id = MessageId::try_from(stream_id.id)?;
+          let stream_update = CollabStreamUpdate::try_from(stream_id.map)?;
+          result.push((message_id, stream_update));
+        }
+      }
+    }
+    Ok(result)
+  }
+
+  /// Reads all collab updates for a given `workspace_id`:`object_id` entry, starting
+  /// from a given message id. This stream will be kept alive and pass over all future messages
+  /// coming from corresponding Redis stream until explicitly closed.
+  pub fn live_collab_updates(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    since: Option<MessageId>,
   ) -> impl Stream<Item = Result<(MessageId, CollabStreamUpdate), StreamError>> {
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
     let since = since.map(|id| id.to_string());
     let mut reader = self.stream_router.observe(stream_key, since);
     async_stream::try_stream! {
       while let Some((message_id, fields)) = reader.recv().await {
+        tracing::trace!("incoming collab update `{}`", message_id);
         let message_id = MessageId::try_from(message_id).map_err(|e| internal(e.to_string()))?;
         let collab_update = CollabStreamUpdate::try_from(fields)?;
         yield (message_id, collab_update);
@@ -140,7 +168,8 @@ impl CollabRedisStream {
     let since = since.map(|id| id.to_string());
     let mut reader = self.stream_router.observe(stream_key, since);
     async_stream::try_stream! {
-      while let Some((_message_id, fields)) = reader.recv().await {
+      while let Some((message_id, fields)) = reader.recv().await {
+        tracing::trace!("incoming awareness update `{}`", message_id);
         let awareness_update = AwarenessStreamUpdate::try_from(fields)?;
         yield awareness_update;
       }

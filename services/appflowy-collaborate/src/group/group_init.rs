@@ -166,11 +166,10 @@ impl CollabGroup {
 
   /// Task used to receive collab updates from Redis.
   async fn inbound_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
-    let updates = state.persister.collab_redis_stream.collab_updates(
+    let updates = state.persister.collab_redis_stream.live_collab_updates(
       &state.workspace_id,
       &state.object_id,
       None,
-      true,
     );
     pin_mut!(updates);
     loop {
@@ -936,34 +935,22 @@ impl CollabPersister {
     // 2. consume all Redis updates on top of it (keep redis msg id)
     let mut last_message_id = None;
     let mut tx = collab.transact_mut();
-    let stream = self.collab_redis_stream.collab_updates(
-      &self.workspace_id,
-      &self.object_id,
-      None, //TODO: store Redis last msg id somewhere in doc state snapshot and replay from there
-      false, // read only data currently existing in the stream
-    );
-    pin_mut!(stream);
+    let updates = self
+      .collab_redis_stream
+      .current_collab_updates(
+        &self.workspace_id,
+        &self.object_id,
+        None, //TODO: store Redis last msg id somewhere in doc state snapshot and replay from there
+      )
+      .await?;
     let mut i = 0;
-    while let Some(res) = stream.next().await {
-      match res {
-        Ok((message_id, update)) => {
-          i += 1;
-          let update: Update = update.into_update()?;
-          tx.apply_update(update)
-            .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
-          last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
-          self.metrics.apply_update_count.inc();
-        },
-        Err(err) => {
-          self.metrics.apply_update_failed_count.inc();
-          tracing::error!(
-            "`{}` failed to resolve collab update: {}",
-            self.object_id,
-            err
-          );
-          break;
-        },
-      }
+    for (message_id, update) in updates {
+      i += 1;
+      let update: Update = update.into_update()?;
+      tx.apply_update(update)
+        .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
+      last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
+      self.metrics.apply_update_count.inc();
     }
     drop(tx);
     tracing::trace!(
@@ -988,49 +975,33 @@ impl CollabPersister {
   /// waiting to be merged into main document state.
   async fn load_if_changed(&self) -> Result<Option<CollabSnapshot>, RealtimeError> {
     // 1. load pending Redis updates
-    let stream = self.collab_redis_stream.collab_updates(
-      &self.workspace_id,
-      &self.object_id,
-      None, //TODO: store Redis last msg id somewhere in doc state snapshot and replay from there
-      false, // read only data currently existing in the stream
-    );
-    pin_mut!(stream);
+    let updates = self
+      .collab_redis_stream
+      .current_collab_updates(&self.workspace_id, &self.object_id, None)
+      .await?;
 
     let start = Instant::now();
     let mut i = 0;
     let mut collab = None;
     let mut last_message_id = None;
-    while let Some(res) = stream.next().await {
-      match res {
-        Ok((message_id, update)) => {
-          i += 1;
-          let update: Update = update.into_update()?;
-          if collab.is_none() {
-            collab = Some(match self.load_collab_full(true).await? {
-              Some(collab) => collab,
-              None => {
-                Collab::new_with_origin(CollabOrigin::Server, self.object_id.clone(), vec![], true)
-              },
-            })
-          };
-          let collab = collab.as_mut().unwrap();
-          collab
-            .transact_mut()
-            .apply_update(update)
-            .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
-          last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
-          self.metrics.apply_update_count.inc();
-        },
-        Err(err) => {
-          self.metrics.apply_update_failed_count.inc();
-          tracing::error!(
-            "`{}` failed to resolve collab update: {}",
-            self.object_id,
-            err
-          );
-          break;
-        },
-      }
+    for (message_id, update) in updates {
+      i += 1;
+      let update: Update = update.into_update()?;
+      if collab.is_none() {
+        collab = Some(match self.load_collab_full(true).await? {
+          Some(collab) => collab,
+          None => {
+            Collab::new_with_origin(CollabOrigin::Server, self.object_id.clone(), vec![], true)
+          },
+        })
+      };
+      let collab = collab.as_mut().unwrap();
+      collab
+        .transact_mut()
+        .apply_update(update)
+        .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
+      last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
+      self.metrics.apply_update_count.inc();
     }
 
     // if there were no Redis updates, collab is still not initialized

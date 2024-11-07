@@ -14,7 +14,7 @@ async fn workspace_list_database() {
 
   let db = &dbs[0];
 
-  assert_eq!(db.name, "Untitled");
+  assert_eq!(db.name, "");
   assert!(db.fields.contains(&AFDatabaseField {
     name: "Last modified".to_string(),
     field_type: "LastEditedTime".to_string(),

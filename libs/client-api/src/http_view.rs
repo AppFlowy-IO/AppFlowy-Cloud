@@ -1,4 +1,4 @@
-use client_api_entity::workspace_dto::{CreatePageParams, Page, PageCollab};
+use client_api_entity::workspace_dto::{CreatePageParams, Page, PageCollab, UpdatePageParams};
 use reqwest::Method;
 use serde_json::json;
 use shared_entity::response::{AppResponse, AppResponseError};

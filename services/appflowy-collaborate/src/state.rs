@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
+use collab_stream::stream_router::StreamRouter;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 
 use crate::collab::storage::CollabAccessControlStorage;
@@ -24,6 +25,7 @@ pub struct AppState {
   pub config: Arc<Config>,
   pub pg_listeners: Arc<PgListeners>,
   pub user_cache: UserCache,
+  pub redis_stream_router: Arc<StreamRouter>,
   pub redis_connection_manager: RedisConnectionManager,
   pub access_control: AccessControl,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,

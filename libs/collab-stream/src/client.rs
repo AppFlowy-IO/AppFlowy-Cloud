@@ -1,15 +1,14 @@
 use crate::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
-use crate::error::StreamError;
+use crate::error::{internal, StreamError};
 use crate::lease::{Lease, LeaseAcquisition};
-use crate::model::{
-  AwarenessStreamUpdate, AwarenessStreamUpdateBatch, CollabStreamUpdate, CollabStreamUpdateBatch,
-  MessageId,
-};
+use crate::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId};
 use crate::stream_group::{StreamConfig, StreamGroup};
+use crate::stream_router::{StreamRouter, StreamRouterOptions};
 use futures::Stream;
 use redis::aio::ConnectionManager;
 use redis::streams::StreamReadOptions;
 use redis::{AsyncCommands, FromRedisValue};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::error;
 
@@ -18,18 +17,35 @@ pub const CONTROL_STREAM_KEY: &str = "af_collab_control";
 #[derive(Clone)]
 pub struct CollabRedisStream {
   connection_manager: ConnectionManager,
+  stream_router: Arc<StreamRouter>,
 }
 
 impl CollabRedisStream {
   pub const LEASE_TTL: Duration = Duration::from_secs(60);
 
   pub async fn new(redis_client: redis::Client) -> Result<Self, redis::RedisError> {
+    let router_options = StreamRouterOptions {
+      worker_count: 10,
+      xread_streams: 100,
+      xread_block_millis: Some(100),
+      xread_count: None,
+    };
+    let stream_router = Arc::new(StreamRouter::with_options(&redis_client, router_options)?);
     let connection_manager = redis_client.get_connection_manager().await?;
-    Ok(Self::new_with_connection_manager(connection_manager))
+    Ok(Self::new_with_connection_manager(
+      connection_manager,
+      stream_router,
+    ))
   }
 
-  pub fn new_with_connection_manager(connection_manager: ConnectionManager) -> Self {
-    Self { connection_manager }
+  pub fn new_with_connection_manager(
+    connection_manager: ConnectionManager,
+    stream_router: Arc<StreamRouter>,
+  ) -> Self {
+    Self {
+      connection_manager,
+      stream_router,
+    }
   }
 
   pub async fn lease(
@@ -102,35 +118,14 @@ impl CollabRedisStream {
     since: Option<MessageId>,
     keep_alive: bool,
   ) -> impl Stream<Item = Result<(MessageId, CollabStreamUpdate), StreamError>> {
-    let mut conn = self.connection_manager.clone();
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
-    let read_options = StreamReadOptions::default().count(100);
-    let mut since = since.unwrap_or_default();
-
-    // instead of doing active blocking xread, use an exponential backoff to wait asynchronously
-    // the longer Redis stream is inactive the longer the pause will become, and it will
-    // reset once we get new data onboard
-    let mut backoff = ExponentialBackoff::new(Duration::from_millis(100), Duration::from_secs(10));
+    let since = since.map(|id| id.to_string());
+    let mut reader = self.stream_router.observe(stream_key, since);
     async_stream::try_stream! {
-      loop {
-        let last_id = since.to_string();
-        let batch: CollabStreamUpdateBatch = conn
-          .xread_options(&[&stream_key], &[&last_id], &read_options)
-          .await?;
-
-        if batch.updates.is_empty() {
-          if !keep_alive {
-            // if stream is not set to keep alive, we finish it once we get all current messages
-            return;
-          }
-          backoff.sleep().await; // stream has no new messages, phase out
-        } else {
-          backoff.reset();
-          for (message_id, update) in batch.updates {
-            since = since.max(message_id);
-            yield (message_id, update);
-          }
-        }
+      while let Some((message_id, fields)) = reader.recv().await {
+        let message_id = MessageId::try_from(message_id).map_err(|e| internal(e.to_string()))?;
+        let collab_update = CollabStreamUpdate::try_from(fields)?;
+        yield (message_id, collab_update);
       }
     }
   }
@@ -141,27 +136,13 @@ impl CollabRedisStream {
     object_id: &str,
     since: Option<MessageId>,
   ) -> impl Stream<Item = Result<AwarenessStreamUpdate, StreamError>> {
-    // use `:` separator as it adheres to Redis naming conventions
-    let mut conn = self.connection_manager.clone();
     let stream_key = AwarenessStreamUpdate::stream_key(workspace_id, object_id);
-    let read_options = StreamReadOptions::default().count(100);
-    let mut since = since.unwrap_or_default();
-    let mut backoff = ExponentialBackoff::new(Duration::from_millis(100), Duration::from_secs(5));
+    let since = since.map(|id| id.to_string());
+    let mut reader = self.stream_router.observe(stream_key, since);
     async_stream::try_stream! {
-      loop {
-        let last_id = since.to_string();
-        let batch: AwarenessStreamUpdateBatch = conn
-          .xread_options(&[&stream_key], &[&last_id], &read_options)
-          .await?;
-        if batch.updates.is_empty() {
-          backoff.sleep().await;
-        } else {
-          backoff.reset();
-          for (message_id, update) in batch.updates {
-            since = since.max(message_id);
-            yield update;
-          }
-        }
+      while let Some((_message_id, fields)) = reader.recv().await {
+        let awareness_update = AwarenessStreamUpdate::try_from(fields)?;
+        yield awareness_update;
       }
     }
   }
@@ -191,31 +172,5 @@ impl CollabRedisStream {
       count
     );
     Ok(count)
-  }
-}
-
-struct ExponentialBackoff {
-  start: Duration,
-  end: Duration,
-  current: Duration,
-}
-
-impl ExponentialBackoff {
-  pub fn new(start: Duration, end: Duration) -> Self {
-    ExponentialBackoff {
-      start,
-      end,
-      current: start,
-    }
-  }
-
-  pub fn sleep(&mut self) -> tokio::time::Sleep {
-    let t = self.current;
-    self.current = Duration::from_millis(self.current.as_millis() as u64 * 2).min(self.end);
-    tokio::time::sleep(t)
-  }
-
-  pub fn reset(&mut self) {
-    self.current = self.start;
   }
 }

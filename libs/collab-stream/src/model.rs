@@ -409,59 +409,40 @@ impl CollabStreamUpdate {
   }
 }
 
-pub(crate) struct CollabStreamUpdateBatch {
-  pub updates: BTreeMap<MessageId, CollabStreamUpdate>,
-}
-type SRRows = Vec<HashMap<String, Vec<HashMap<String, HashMap<String, Value>>>>>;
-impl FromRedisValue for CollabStreamUpdateBatch {
-  fn from_redis_value(v: &Value) -> RedisResult<Self> {
-    let sr: SRRows = SRRows::from_redis_value(v)?;
-    let mut updates = BTreeMap::new();
-    for stream in sr {
-      for (_stream_key, messages) in stream {
-        for message in messages {
-          for (message_id, fields) in message {
-            let message_id =
-              MessageId::try_from(message_id).map_err(|e| internal(e.to_string()))?;
-            let sender = match fields.get("sender") {
-              None => CollabOrigin::Empty,
-              Some(sender) => {
-                let raw_origin = String::from_redis_value(sender)?;
-                collab_origin_from_str(&raw_origin)?
-              },
-            };
-            let state_vector = match fields.get("sv") {
-              Some(value) => {
-                let bytes = Bytes::from_redis_value(value)?;
-                let state_vector =
-                  StateVector::decode_v1(&bytes).map_err(|err| internal(err.to_string()))?;
-                Ok(state_vector)
-              },
-              None => Err(internal("expecting field `sv`")),
-            }?;
-            let flags = match fields.get("flags") {
-              None => UpdateFlags::default(),
-              Some(flags) => u8::from_redis_value(flags).unwrap_or(0).into(),
-            };
-            let data_raw = fields
-              .get("data")
-              .ok_or_else(|| internal("expecting field `data`"))?;
-            let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
-            updates.insert(
-              message_id,
-              CollabStreamUpdate {
-                data,
-                sender,
-                state_vector,
-                flags,
-              },
-            );
-          }
-        }
-      }
-    }
+impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
+  type Error = StreamError;
 
-    Ok(CollabStreamUpdateBatch { updates })
+  fn try_from(fields: HashMap<String, Value>) -> Result<Self, Self::Error> {
+    let sender = match fields.get("sender") {
+      None => CollabOrigin::Empty,
+      Some(sender) => {
+        let raw_origin = String::from_redis_value(sender)?;
+        collab_origin_from_str(&raw_origin)?
+      },
+    };
+    let state_vector = match fields.get("sv") {
+      Some(value) => {
+        let bytes = Bytes::from_redis_value(value)?;
+        let state_vector =
+          StateVector::decode_v1(&bytes).map_err(|err| internal(err.to_string()))?;
+        Ok(state_vector)
+      },
+      None => Err(internal("expecting field `sv`")),
+    }?;
+    let flags = match fields.get("flags") {
+      None => UpdateFlags::default(),
+      Some(flags) => u8::from_redis_value(flags).unwrap_or(0).into(),
+    };
+    let data_raw = fields
+      .get("data")
+      .ok_or_else(|| internal("expecting field `data`"))?;
+    let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
+    Ok(CollabStreamUpdate {
+      data,
+      sender,
+      state_vector,
+      flags,
+    })
   }
 }
 
@@ -477,37 +458,22 @@ impl AwarenessStreamUpdate {
   }
 }
 
-pub(crate) struct AwarenessStreamUpdateBatch {
-  pub updates: BTreeMap<MessageId, AwarenessStreamUpdate>,
-}
-impl FromRedisValue for AwarenessStreamUpdateBatch {
-  fn from_redis_value(v: &Value) -> RedisResult<Self> {
-    let sr: SRRows = SRRows::from_redis_value(v)?;
-    let mut updates = BTreeMap::new();
-    for stream in sr {
-      for (_stream_key, messages) in stream {
-        for message in messages {
-          for (message_id, fields) in message {
-            let message_id =
-              MessageId::try_from(message_id).map_err(|e| internal(e.to_string()))?;
-            let sender = match fields.get("sender") {
-              None => CollabOrigin::Empty,
-              Some(sender) => {
-                let raw_origin = String::from_redis_value(sender)?;
-                collab_origin_from_str(&raw_origin)?
-              },
-            };
-            let data_raw = fields
-              .get("data")
-              .ok_or_else(|| internal("expecting field `data`"))?;
-            let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
-            updates.insert(message_id, AwarenessStreamUpdate { data, sender });
-          }
-        }
-      }
-    }
+impl TryFrom<HashMap<String, redis::Value>> for AwarenessStreamUpdate {
+  type Error = StreamError;
 
-    Ok(AwarenessStreamUpdateBatch { updates })
+  fn try_from(fields: HashMap<String, Value>) -> Result<Self, Self::Error> {
+    let sender = match fields.get("sender") {
+      None => CollabOrigin::Empty,
+      Some(sender) => {
+        let raw_origin = String::from_redis_value(sender)?;
+        collab_origin_from_str(&raw_origin)?
+      },
+    };
+    let data_raw = fields
+      .get("data")
+      .ok_or_else(|| internal("expecting field `data`"))?;
+    let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
+    Ok(AwarenessStreamUpdate { data, sender })
   }
 }
 

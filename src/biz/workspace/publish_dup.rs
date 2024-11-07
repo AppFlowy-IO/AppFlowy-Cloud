@@ -27,7 +27,6 @@ use database::publish::select_published_data_for_view_id;
 use database::publish::select_published_metadata_for_view_id;
 use database_entity::dto::CollabParams;
 use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, PublishViewMetaData};
-use shared_entity::dto::workspace_dto;
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
 use std::collections::HashSet;
@@ -42,6 +41,8 @@ use yrs::ArrayRef;
 use yrs::Out;
 use yrs::{Map, MapRef};
 
+use crate::biz::collab::folder_view::to_folder_view_icon;
+use crate::biz::collab::folder_view::to_folder_view_layout;
 use crate::biz::collab::ops::get_latest_collab_encoded;
 
 use super::ops::broadcast_update;
@@ -1168,31 +1169,6 @@ fn add_to_view_info(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[Pu
     if let Some(child_views) = &view_info.child_views {
       add_to_view_info(acc, child_views);
     }
-  }
-}
-
-fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {
-  collab_folder::ViewIcon {
-    ty: to_folder_view_icon_type(icon.ty),
-    value: icon.value,
-  }
-}
-
-fn to_folder_view_icon_type(icon: workspace_dto::IconType) -> collab_folder::IconType {
-  match icon {
-    workspace_dto::IconType::Emoji => collab_folder::IconType::Emoji,
-    workspace_dto::IconType::Url => collab_folder::IconType::Url,
-    workspace_dto::IconType::Icon => collab_folder::IconType::Icon,
-  }
-}
-
-fn to_folder_view_layout(layout: workspace_dto::ViewLayout) -> collab_folder::ViewLayout {
-  match layout {
-    ViewLayout::Document => collab_folder::ViewLayout::Document,
-    ViewLayout::Grid => collab_folder::ViewLayout::Grid,
-    ViewLayout::Board => collab_folder::ViewLayout::Board,
-    ViewLayout::Calendar => collab_folder::ViewLayout::Calendar,
-    ViewLayout::Chat => collab_folder::ViewLayout::Chat,
   }
 }
 

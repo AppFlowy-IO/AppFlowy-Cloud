@@ -137,6 +137,7 @@ pub async fn run_actix_server(
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     Duration::from_secs(config.collab.group_prune_grace_period_secs),
+    config.collab.save_snapshot_retries,
     state.indexer_provider.clone(),
   )
   .await

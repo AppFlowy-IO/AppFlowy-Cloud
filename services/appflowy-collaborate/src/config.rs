@@ -117,6 +117,7 @@ pub struct CollabSetting {
   pub group_prune_grace_period_secs: u64,
   pub edit_state_max_count: u32,
   pub edit_state_max_secs: i64,
+  pub save_snapshot_retries: u32,
 }
 
 pub fn get_env_var(key: &str, default: &str) -> String {
@@ -169,6 +170,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
         .parse()?,
       edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
       edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "60").parse()?,
+      save_snapshot_retries: get_env_var("APPFLOWY_COLLAB_SAVE_SNAPSHOT_RETRIES", "10").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     ai: AISettings {

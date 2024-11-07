@@ -12,8 +12,8 @@ pub async fn create_database_collab(
     collab_service,
     notifier: Default::default(),
   };
-  Database::create_with_view(params, context)
-    .await?
+  let database = Database::create_with_view(params, context).await?;
+  database
     .encode_database_collabs()
     .await
     .map_err(|e| anyhow::anyhow!("Failed to encode database collabs: {:?}", e))

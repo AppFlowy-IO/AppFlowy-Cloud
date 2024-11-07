@@ -1,8 +1,9 @@
-pub mod access;
 pub mod act;
-mod adapter;
+#[cfg(feature = "casbin")]
+pub mod casbin;
 pub mod collab;
-pub mod enforcer;
+pub mod entity;
 pub mod metrics;
+pub mod noops;
 mod request;
 pub mod workspace;

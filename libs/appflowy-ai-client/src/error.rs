@@ -11,4 +11,7 @@ pub enum AIError {
 
   #[error("Invalid request:{0}")]
   InvalidRequest(String),
+
+  #[error(transparent)]
+  SerdeError(#[from] serde_json::Error),
 }

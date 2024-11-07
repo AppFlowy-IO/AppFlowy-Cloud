@@ -8,10 +8,12 @@ use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
 use infra::env_util::{get_env_var, get_env_var_opt};
+use mailer::config::MailerSetting;
 
 #[derive(Clone, Debug)]
 pub struct Config {
   pub app_env: Environment,
+  pub access_control: AccessControlSetting,
   pub db_settings: DatabaseSetting,
   pub gotrue: GoTrueSetting,
   pub application: ApplicationSetting,
@@ -28,11 +30,12 @@ pub struct Config {
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
-pub struct MailerSetting {
-  pub smtp_host: String,
-  pub smtp_port: u16,
-  pub smtp_username: String,
-  pub smtp_password: Secret<String>,
+
+pub struct AccessControlSetting {
+  pub is_enabled: bool,
+  pub enable_workspace_access_control: bool,
+  pub enable_collab_access_control: bool,
+  pub enable_realtime_access_control: bool,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -48,6 +51,7 @@ pub struct CasbinSetting {
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct S3Setting {
+  pub create_bucket: bool,
   pub use_minio: bool,
   pub minio_url: String,
   pub access_key: String,
@@ -110,10 +114,11 @@ pub struct DatabaseSetting {
 
 impl Display for DatabaseSetting {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let masked_pg_conn_opts = self.pg_conn_opts.clone().password("********");
     write!(
       f,
       "DatabaseSetting {{ pg_conn_opts: {:?}, require_ssl: {}, max_connections: {} }}",
-      self.pg_conn_opts, self.require_ssl, self.max_connections
+      masked_pg_conn_opts, self.require_ssl, self.max_connections
     )
   }
 }
@@ -171,6 +176,20 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     app_env: get_env_var("APPFLOWY_ENVIRONMENT", "local")
       .parse()
       .context("fail to get APPFLOWY_ENVIRONMENT")?,
+    access_control: AccessControlSetting {
+      is_enabled: get_env_var("APPFLOWY_ACCESS_CONTROL", "false")
+        .parse()
+        .context("fail to get APPFLOWY_ACCESS_CONTROL")?,
+      enable_workspace_access_control: get_env_var("APPFLOWY_ACCESS_CONTROL_WORKSPACE", "true")
+        .parse()
+        .context("fail to get APPFLOWY_ACCESS_CONTROL_WORKSPACE")?,
+      enable_collab_access_control: get_env_var("APPFLOWY_ACCESS_CONTROL_COLLAB", "true")
+        .parse()
+        .context("fail to get APPFLOWY_ACCESS_CONTROL_COLLAB")?,
+      enable_realtime_access_control: get_env_var("APPFLOWY_ACCESS_CONTROL_REALTIME", "true")
+        .parse()
+        .context("fail to get APPFLOWY_ACCESS_CONTROL_REALTIME")?,
+    },
     db_settings: DatabaseSetting {
       pg_conn_opts: PgConnectOptions::from_str(&get_env_var(
         "APPFLOWY_DATABASE_URL",
@@ -205,6 +224,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     s3: S3Setting {
+      create_bucket: get_env_var("APPFLOWY_S3_CREATE_BUCKET", "true")
+        .parse()
+        .context("fail to get APPFLOWY_S3_CREATE_BUCKET")?,
       use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true")
         .parse()
         .context("fail to get APPFLOWY_S3_USE_MINIO")?,

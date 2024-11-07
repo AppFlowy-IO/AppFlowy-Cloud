@@ -1,7 +1,10 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
-use appflowy_cloud::biz::workspace::publish_dup::collab_from_doc_state;
-use client_api::entity::{AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata};
+use appflowy_cloud::biz::workspace::ops::collab_from_doc_state;
+use client_api::entity::{
+  AFRole, GlobalComment, PatchPublishedCollab, PublishCollabItem, PublishCollabMetadata,
+  PublishInfoMeta,
+};
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 use collab::util::MapExt;
@@ -9,14 +12,15 @@ use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::RowDetail;
 use collab_database::views::DatabaseViews;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, UserId};
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use shared_entity::dto::publish_dto::PublishDatabaseData;
-use shared_entity::dto::workspace_dto::PublishedDuplicate;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -35,24 +39,45 @@ async fn test_set_publish_namespace_set() {
       .unwrap();
   }
 
-  let namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
+  let new_namespace = uuid::Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace.clone())
     .await
     .unwrap();
 
   {
+    // another workspace cannot have the same namespace
+    let (c2, _user) = generate_unique_registered_user_client().await;
+    let workspace_id_2 = get_first_workspace_string(&c2).await;
+    let err = c2
+      .set_workspace_publish_namespace(&workspace_id_2.to_string(), new_namespace.clone())
+      .await
+      .unwrap_err();
+    assert_eq!(
+      err.code,
+      ErrorCode::PublishNamespaceAlreadyTaken,
+      "{:?}",
+      err
+    );
+  }
+
+  {
     // cannot set the same namespace
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
+      .set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace.clone())
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "PublishNamespaceAlreadyTaken");
+    assert_eq!(
+      err.code,
+      ErrorCode::PublishNamespaceAlreadyTaken,
+      "{:?}",
+      err
+    );
   }
+  let new_namespace_2 = uuid::Uuid::new_v4().to_string();
   {
     // can replace the namespace
-    let namespace = uuid::Uuid::new_v4().to_string();
-    c.set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
+    c.set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace_2.clone())
       .await
       .unwrap();
 
@@ -60,26 +85,21 @@ async fn test_set_publish_namespace_set() {
       .get_workspace_publish_namespace(&workspace_id.to_string())
       .await
       .unwrap();
-    assert_eq!(got_namespace, namespace);
+    assert_eq!(got_namespace, new_namespace_2);
   }
-  {
-    // cannot set namespace too short
-    let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), "a") // too short
-      .await
-      .err()
-      .unwrap();
-    assert_eq!(format!("{:?}", err.code), "InvalidRequest");
-  }
-
   {
     // cannot set namespace with invalid chars
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), "/|(*&)(&#@!") // invalid chars
+      .set_workspace_publish_namespace(&workspace_id.to_string(), "/|(*&)(&#@!".to_string()) // invalid chars
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "InvalidRequest");
+    assert_eq!(
+      err.code,
+      ErrorCode::CustomNamespaceInvalidCharacter,
+      "{:?}",
+      err
+    );
   }
 }
 
@@ -88,15 +108,60 @@ async fn test_publish_doc() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace_string(&c).await;
   let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), &my_namespace)
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
     .await
     .unwrap();
+
+  {
+    // Invalid publish name
+    let err = c
+      .publish_collabs::<MyCustomMetadata, &[u8]>(
+        &workspace_id,
+        vec![PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: uuid::Uuid::new_v4(),
+            publish_name: "(*&^%$#!".to_string(), // invalid chars
+            metadata: MyCustomMetadata {
+              title: "my_title_1".to_string(),
+            },
+          },
+          data: "yrs_encoded_data_1".as_bytes(),
+        }],
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(
+      err.code,
+      ErrorCode::PublishNameInvalidCharacter,
+      "{:?}",
+      err
+    );
+    // Publish name too long
+    let err = c
+      .publish_collabs::<MyCustomMetadata, &[u8]>(
+        &workspace_id,
+        vec![PublishCollabItem {
+          meta: PublishCollabMetadata {
+            view_id: uuid::Uuid::new_v4(),
+            publish_name: "a".repeat(1001), // too long
+            metadata: MyCustomMetadata {
+              title: "my_title_1".to_string(),
+            },
+          },
+          data: "yrs_encoded_data_1".as_bytes(),
+        }],
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::PublishNameTooLong, "{:?}", err);
+  }
 
   let publish_name_1 = "publish-name-1";
   let view_id_1 = uuid::Uuid::new_v4();
   let publish_name_2 = "publish-name-2";
   let view_id_2 = uuid::Uuid::new_v4();
 
+  // User publishes two collabs
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
     &workspace_id,
     vec![
@@ -125,6 +190,42 @@ async fn test_publish_doc() {
   .await
   .unwrap();
 
+  // User cannot publish another view_id with the same publish name
+  let err = c
+    .publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: uuid::Uuid::new_v4(),
+          publish_name: publish_name_1.to_string(),
+          metadata: MyCustomMetadata {
+            title: "some_other_title".to_string(),
+          },
+        },
+        data: "some_other_yrs_data".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap_err();
+  assert_eq!(err.code, ErrorCode::PublishNameAlreadyExists, "{:?}", err);
+
+  {
+    // Check that the published collabs are listed
+    let published_view_infos = c.list_published_views(&workspace_id).await.unwrap();
+    assert_eq!(published_view_infos.len(), 2);
+    let view_info_1 = published_view_infos
+      .iter()
+      .find(|view_info| view_info.info.publish_name == publish_name_1)
+      .unwrap();
+    assert_eq!(view_info_1.info.view_id, view_id_1);
+
+    let view_info_2 = published_view_infos
+      .iter()
+      .find(|view_info| view_info.info.publish_name == publish_name_2)
+      .unwrap();
+    assert_eq!(view_info_2.info.view_id, view_id_2);
+  }
+
   {
     // Non login user should be able to view the published collab
     let guest_client = localhost_client();
@@ -138,7 +239,7 @@ async fn test_publish_doc() {
       .get_published_collab_info(&view_id_1)
       .await
       .unwrap();
-    assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
+    assert_eq!(publish_info.namespace, my_namespace.clone());
     assert_eq!(publish_info.publish_name, publish_name_1);
     assert_eq!(publish_info.view_id, view_id_1);
 
@@ -152,7 +253,7 @@ async fn test_publish_doc() {
       .get_published_collab_info(&view_id_2)
       .await
       .unwrap();
-    assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
+    assert_eq!(publish_info.namespace, my_namespace.clone());
     assert_eq!(publish_info.publish_name, publish_name_2);
     assert_eq!(publish_info.view_id, view_id_2);
 
@@ -208,7 +309,111 @@ async fn test_publish_doc() {
     assert_eq!(blob, "yrs_encoded_data_4");
   }
 
-  c.unpublish_collabs(&workspace_id, &[view_id_1])
+  {
+    // Try to get default publish view info but not set
+    let err = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+
+    // Set publish view as default workspace view
+    c.set_default_publish_view(&workspace_id, view_id_1.to_owned())
+      .await
+      .unwrap();
+
+    // Get default publish view
+    let publish_info = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap();
+    assert_eq!(publish_info.view_id, view_id_1);
+
+    // Public can use namespace to get default publish view info and view metadata
+    let default_info_meta: PublishInfoMeta<MyCustomMetadata> = localhost_client()
+      .get_default_published_collab(&my_namespace)
+      .await
+      .unwrap();
+    assert_eq!(default_info_meta.info.view_id, view_id_1);
+    assert_eq!(default_info_meta.meta.title, "my_title_1");
+
+    // Owner of workspace unset the default publish view
+    c.delete_default_publish_view(&workspace_id).await.unwrap();
+
+    // Public can no longer get default publish view info
+    let err = localhost_client()
+      .get_default_published_collab::<PublishInfoMeta<MyCustomMetadata>>(&my_namespace)
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+  }
+
+  {
+    // User cannot change `publish_name` if the `publish_name` already exists
+    // for the same workspace
+    let err = c
+      .patch_published_collabs(
+        &workspace_id,
+        &[PatchPublishedCollab {
+          view_id: view_id_1,
+          // publish_name_2 already exists
+          publish_name: Some(publish_name_2.to_string()),
+        }],
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::PublishNameAlreadyExists, "{:?}", err);
+
+    let new_publish_name_1 = "new-publish-name-1".to_string();
+
+    // User change publish name
+    c.patch_published_collabs(
+      &workspace_id,
+      &[PatchPublishedCollab {
+        view_id: view_id_1,
+        publish_name: Some(new_publish_name_1.to_string()),
+      }],
+    )
+    .await
+    .unwrap();
+
+    // Guest now cannot access the collab using old publish name
+    let guest_client = localhost_client();
+    let err = guest_client
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, publish_name_1)
+      .await
+      .err()
+      .unwrap();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+
+    // Guest now access the collab using new publish name
+    let guest_client = localhost_client();
+    let _ = guest_client
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, &new_publish_name_1)
+      .await
+      .unwrap();
+
+    // Switch back to old publish name
+    c.patch_published_collabs(
+      &workspace_id,
+      &[PatchPublishedCollab {
+        view_id: view_id_1,
+        publish_name: Some(publish_name_1.to_string()),
+      }],
+    )
+    .await
+    .unwrap();
+
+    // Guest can access the collab using the orginal publish name
+    let guest_client = localhost_client();
+    let _ = guest_client
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, publish_name_1)
+      .await
+      .unwrap();
+  }
+
+  // user unpublish collabs
+  c.unpublish_collabs(&workspace_id, &[view_id_1, view_id_2])
     .await
     .unwrap();
 
@@ -220,7 +425,7 @@ async fn test_publish_doc() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
 
     let guest_client = localhost_client();
     let err = guest_client
@@ -228,7 +433,21 @@ async fn test_publish_doc() {
       .await
       .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+
+    // default publish view should not be accessible
+    let err = c
+      .get_default_publish_view_info(&workspace_id)
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+  }
+
+  {
+    // check that the published collabs are removed
+    // listing published collab should return empty
+    let published_infos = c.list_published_views(&workspace_id).await.unwrap();
+    assert_eq!(published_infos.len(), 0);
   }
 }
 
@@ -238,7 +457,7 @@ async fn test_publish_comments() {
   let workspace_id = get_first_workspace_string(&page_owner_client).await;
   let published_view_namespace = uuid::Uuid::new_v4().to_string();
   page_owner_client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
     .await
     .unwrap();
 
@@ -434,7 +653,7 @@ async fn test_excessive_comment_length() {
   let workspace_id = get_first_workspace_string(&client).await;
   let published_view_namespace = uuid::Uuid::new_v4().to_string();
   client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
     .await
     .unwrap();
 
@@ -470,7 +689,7 @@ async fn test_publish_reactions() {
   let workspace_id = get_first_workspace_string(&page_owner_client).await;
   let published_view_namespace = uuid::Uuid::new_v4().to_string();
   page_owner_client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
     .await
     .unwrap();
 
@@ -594,7 +813,7 @@ async fn test_publish_load_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace_string(&c).await;
   let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), &my_namespace)
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace)
     .await
     .unwrap();
 
@@ -671,7 +890,7 @@ async fn workspace_member_publish_unpublish() {
     .unwrap();
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct MyCustomMetadata {
   title: String,
 }
@@ -727,16 +946,12 @@ async fn duplicate_to_workspace_references() {
     //     └── doc1
     //         └── grid1
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: doc_2_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &doc_2_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     let fv = client_2
       .api_client
@@ -817,16 +1032,12 @@ async fn duplicate_to_workspace_doc_inline_database() {
     //     └── grid1
     //         └── View of grid1
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: doc_3_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &doc_3_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     {
       let fv = client_2
@@ -890,13 +1101,12 @@ async fn duplicate_to_workspace_doc_inline_database() {
 
     {
       // check that database_id is different
-      let mut ws_db_collab = client_2
+      let ws_db_collab = client_2
         .get_workspace_database_collab(&workspace_id_2)
         .await;
-      let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
-      let txn = ws_db_collab.transact();
+      let ws_db_body = WorkspaceDatabase::open(ws_db_collab).unwrap();
       let dup_grid1_db_id = ws_db_body
-        .get_all_database_meta(&txn)
+        .get_all_database_meta()
         .into_iter()
         .find(|db_meta| db_meta.linked_views.contains(&view_of_grid1_fv.view_id))
         .unwrap()
@@ -908,6 +1118,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
       let dup_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
       assert_ne!(dup_db_id, pub_db_id);
 
+      let txn = db_collab.transact();
       let view_map = {
         let map_ref = db_collab
           .data
@@ -979,16 +1190,12 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
     // ├── Getting Started (existing)
     // └── db_with_embedded_db (inside should contain the database)
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: doc_with_embedded_db_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &doc_with_embedded_db_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     {
       let fv = client_2
@@ -1084,16 +1291,12 @@ async fn duplicate_to_workspace_db_with_relation() {
     // related-db cannot be child of db_with_rel_col because they dont share the same field
     // and are 2 different databases, so we just put them in the root (dest_id)
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: db_with_rel_col_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &db_with_rel_col_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     {
       let fv = client_2
@@ -1123,7 +1326,12 @@ async fn duplicate_to_workspace_db_with_relation() {
         .get_with_path(&related_db_collab.transact(), ["database", "id"])
         .unwrap();
 
-      let rel_col_db_body = DatabaseBody::from_collab(&db_with_rel_col_collab).unwrap();
+      let rel_col_db_body = DatabaseBody::from_collab(
+        &db_with_rel_col_collab,
+        Arc::new(NoPersistenceDatabaseCollabService),
+        None,
+      )
+      .unwrap();
       let txn = db_with_rel_col_collab.transact();
       let all_fields = rel_col_db_body.fields.get_all_fields(&txn);
       all_fields
@@ -1173,16 +1381,12 @@ async fn duplicate_to_workspace_db_row_with_doc() {
     // ├── Getting Started (existing)
     // └── db_with_row_doc
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: db_with_row_doc_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &db_with_row_doc_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     {
       let fv = client_2
@@ -1200,7 +1404,12 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         .get_db_collab_from_view(&workspace_id_2, &db_with_row_doc.view_id)
         .await;
 
-      let db_body = DatabaseBody::from_collab(&db_collab).unwrap();
+      let db_body = DatabaseBody::from_collab(
+        &db_collab,
+        Arc::new(NoPersistenceDatabaseCollabService),
+        None,
+      )
+      .unwrap();
 
       // check that doc exists and can be fetched
       let first_row_id = &db_body.views.get_all_views(&db_collab.transact())[0].row_orders[0].id;
@@ -1256,16 +1465,12 @@ async fn duplicate_to_workspace_db_rel_self() {
       .unwrap();
 
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: db_rel_self_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &db_rel_self_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     let fv = client_2
       .api_client
@@ -1284,7 +1489,12 @@ async fn duplicate_to_workspace_db_rel_self() {
       .get_db_collab_from_view(&workspace_id_2, &db_rel_self.view_id)
       .await;
     let txn = db_rel_self_collab.transact();
-    let db_rel_self_body = DatabaseBody::from_collab(&db_rel_self_collab).unwrap();
+    let db_rel_self_body = DatabaseBody::from_collab(
+      &db_rel_self_collab,
+      Arc::new(NoPersistenceDatabaseCollabService),
+      None,
+    )
+    .unwrap();
     let database_id = db_rel_self_body.get_database_id(&txn);
     let all_fields = db_rel_self_body.fields.get_all_fields(&txn);
     let rel_fields = all_fields
@@ -1351,16 +1561,12 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
       .unwrap();
 
     client_2
-      .api_client
       .duplicate_published_to_workspace(
         &workspace_id_2,
-        &PublishedDuplicate {
-          published_view_id: doc_4_view_id.to_string(),
-          dest_view_id: fv.view_id, // use the root view
-        },
+        &doc_4_view_id.to_string(),
+        &fv.view_id, // use the root view
       )
-      .await
-      .unwrap();
+      .await;
 
     let fv = client_2
       .api_client

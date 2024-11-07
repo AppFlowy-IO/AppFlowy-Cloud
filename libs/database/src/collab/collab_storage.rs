@@ -32,7 +32,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     oid: &str,
-  ) -> Result<bool, AppError>;
+  ) -> Result<(), AppError>;
 
   /// Enforce the user's permission to write to the collab object.
   async fn enforce_write_collab(
@@ -40,18 +40,13 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     oid: &str,
-  ) -> Result<bool, AppError>;
+  ) -> Result<(), AppError>;
 
   /// Enforce the user's permission to write to the workspace.
-  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<(), AppError>;
 
   /// Enforce the user's permission to delete the collab object.
-  async fn enforce_delete(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    oid: &str,
-  ) -> Result<bool, AppError>;
+  async fn enforce_delete(&self, workspace_id: &str, uid: &i64, oid: &str) -> Result<(), AppError>;
 }
 
 pub enum GetCollabOrigin {
@@ -76,7 +71,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// if write_immediately is true, the data will be written to disk immediately. Otherwise, the data will
   /// be scheduled to be written to disk later.
   ///
-  async fn insert_or_update_collab(
+  async fn queue_insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -84,11 +79,11 @@ pub trait CollabStorage: Send + Sync + 'static {
     write_immediately: bool,
   ) -> AppResult<()>;
 
-  async fn insert_new_collab(
+  async fn batch_insert_new_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params: Vec<CollabParams>,
   ) -> AppResult<()>;
 
   /// Insert a new collaboration in the storage.
@@ -106,6 +101,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
+    action_description: &str,
   ) -> AppResult<()>;
 
   /// Retrieves a collaboration from the storage.
@@ -138,6 +134,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     &self,
     uid: &i64,
     queries: Vec<QueryCollab>,
+    from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult>;
 
   /// Deletes a collaboration from the storage.
@@ -170,9 +167,6 @@ pub trait CollabStorage: Send + Sync + 'static {
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
   async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas>;
-
-  async fn add_connected_user(&self, uid: i64, device_id: &str);
-  async fn remove_connected_user(&self, uid: i64, device_id: &str);
 }
 
 #[async_trait]
@@ -184,7 +178,7 @@ where
     self.as_ref().encode_collab_redis_query_state()
   }
 
-  async fn insert_or_update_collab(
+  async fn queue_insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -193,19 +187,19 @@ where
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_or_update_collab(workspace_id, uid, params, write_immediately)
+      .queue_insert_or_update_collab(workspace_id, uid, params, write_immediately)
       .await
   }
 
-  async fn insert_new_collab(
+  async fn batch_insert_new_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params: Vec<CollabParams>,
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_new_collab(workspace_id, uid, params)
+      .batch_insert_new_collab(workspace_id, uid, params)
       .await
   }
 
@@ -215,10 +209,17 @@ where
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
+    action_description: &str,
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_new_collab_with_transaction(workspace_id, uid, params, transaction)
+      .insert_new_collab_with_transaction(
+        workspace_id,
+        uid,
+        params,
+        transaction,
+        action_description,
+      )
       .await
   }
 
@@ -249,8 +250,12 @@ where
     &self,
     uid: &i64,
     queries: Vec<QueryCollab>,
+    from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult> {
-    self.as_ref().batch_get_collab(uid, queries).await
+    self
+      .as_ref()
+      .batch_get_collab(uid, queries, from_editing_collab)
+      .await
   }
 
   async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()> {
@@ -297,14 +302,6 @@ where
 
   async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
     self.as_ref().get_collab_snapshot_list(oid).await
-  }
-
-  async fn add_connected_user(&self, uid: i64, device_id: &str) {
-    self.as_ref().add_connected_user(uid, device_id).await
-  }
-
-  async fn remove_connected_user(&self, uid: i64, device_id: &str) {
-    self.as_ref().remove_connected_user(uid, device_id).await
   }
 }
 

@@ -1,36 +1,35 @@
 use std::sync::Arc;
 
+use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
+use access_control::workspace::WorkspaceAccessControl;
 use collab::lock::Mutex;
 use dashmap::DashMap;
+use database::collab::cache::CollabCache;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
-use appflowy_collaborate::collab::access_control::CollabAccessControlImpl;
-use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::metrics::CollabMetrics;
-use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
+
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
-use workspace_access::WorkspaceAccessControlImpl;
 
-use crate::api::metrics::{PublishedCollabMetrics, RequestMetrics};
+use crate::api::metrics::{AppFlowyWebMetrics, PublishedCollabMetrics, RequestMetrics};
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::workspace::publish::PublishedCollabStore;
 use crate::config::config::Config;
-use crate::mailer::Mailer;
+use crate::mailer::AFCloudMailer;
 
 pub type RedisConnectionManager = redis::aio::ConnectionManager;
 #[derive(Clone)]
@@ -43,18 +42,17 @@ pub struct AppState {
   pub redis_connection_manager: RedisConnectionManager,
   pub collab_cache: CollabCache,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
-  pub collab_access_control: CollabAccessControlImpl,
-  pub workspace_access_control: WorkspaceAccessControlImpl,
+  pub collab_access_control: Arc<dyn CollabAccessControl>,
+  pub workspace_access_control: Arc<dyn WorkspaceAccessControl>,
+  pub realtime_access_control: Arc<dyn RealtimeAccessControl>,
   pub bucket_storage: Arc<S3BucketStorage>,
   pub published_collab_store: Arc<dyn PublishedCollabStore>,
   pub bucket_client: AwsS3BucketClientImpl,
   pub pg_listeners: Arc<PgListeners>,
-  pub access_control: AccessControl,
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
-  pub mailer: Mailer,
+  pub mailer: AFCloudMailer,
   pub ai_client: AppFlowyAIClient,
-  pub realtime_shared_state: RealtimeSharedState,
   pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
   pub indexer_provider: Arc<IndexerProvider>,
 }
@@ -126,6 +124,7 @@ pub struct AppMetrics {
   pub access_control_metrics: Arc<AccessControlMetrics>,
   pub collab_metrics: Arc<CollabMetrics>,
   pub published_collab_metrics: Arc<PublishedCollabMetrics>,
+  pub appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
 }
 
 impl Default for AppMetrics {
@@ -142,6 +141,7 @@ impl AppMetrics {
     let access_control_metrics = Arc::new(AccessControlMetrics::register(&mut registry));
     let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
     let published_collab_metrics = Arc::new(PublishedCollabMetrics::register(&mut registry));
+    let appflowy_web_metrics = Arc::new(AppFlowyWebMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       request_metrics,
@@ -149,6 +149,7 @@ impl AppMetrics {
       access_control_metrics,
       collab_metrics,
       published_collab_metrics,
+      appflowy_web_metrics,
     }
   }
 }

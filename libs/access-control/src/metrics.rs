@@ -1,10 +1,12 @@
 use prometheus_client::metrics::gauge::Gauge;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
-use crate::enforcer::ENFORCER_METRICS_TICK_INTERVAL;
 use prometheus_client::registry::Registry;
 use tokio::time::interval;
+
+pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(120);
 
 #[derive(Clone)]
 pub struct AccessControlMetrics {
@@ -27,7 +29,7 @@ impl AccessControlMetrics {
     let realtime_registry = registry.sub_registry_with_prefix("ac");
     realtime_registry.register(
       "load_all_polices",
-      "load all polices when server start duration in seconds",
+      "load all polices when server start duration in milliseconds",
       metrics.load_all_policies.clone(),
     );
 
@@ -46,7 +48,7 @@ impl AccessControlMetrics {
     metrics
   }
 
-  pub fn record_load_all_policies_in_secs(&self, millis: u64) {
+  pub fn record_load_all_policies_in_ms(&self, millis: u64) {
     self.load_all_policies.set(millis as i64);
   }
 

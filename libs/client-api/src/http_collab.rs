@@ -4,7 +4,7 @@ use app_error::AppError;
 use client_api_entity::workspace_dto::AFDatabase;
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CreateCollabParams, DeleteCollabParams,
-  QueryCollab,
+  QueryCollab, UpdateCollabWebParams,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -51,6 +51,26 @@ impl Client {
     );
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn update_web_collab(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    params: UpdateCollabWebParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/v1/{}/collab/{}/web-update",
+      self.base_url, workspace_id, object_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&params)
       .send()

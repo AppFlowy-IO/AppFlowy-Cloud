@@ -22,6 +22,10 @@
     <h3>Email Login</h3>
     <form>
       <table style="width: 100%">
+        {% if let Some(redirect_to) = redirect_to %}
+          <input type="hidden" name="redirect_to" value="{{ redirect_to }}">
+        {% endif %}
+
         <tr>
           <td>Email</td>
           <td>
@@ -90,19 +94,25 @@
 
     <h3>OAuth Login</h3>
     <div id="oauth-container">
-      {% for provider in oauth_providers %}
-      <div class="oauth-icon">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center">
+        {% for provider in oauth_providers %}
         <a
-          href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to=/web/login"
+          href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|default("/web/login-callback")|escape }}"
+          style="text-decoration: none"
         >
-          <div
-            hx-get="../assets/{{ provider|escape }}/logo.html"
-            hx-trigger="load"
-            hx-swap="outerHTML"
-          ></div>
+          <div style="display: flex; align-items: center; border: 1px solid; margin: 4px; border-radius: 4px; height: 64px">
+            <div> &nbsp&nbsp{{ provider }} </div>
+            <div class="oauth-icon">
+              <div
+                hx-get="../assets/{{ provider|escape }}/logo.html"
+                hx-trigger="load"
+                hx-swap="outerHTML"
+              ></div>
+            </div>
+          </div>
         </a>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
     {% endif %}
 
@@ -124,48 +134,5 @@
       </i></small>
     </div>
   </div>
-
-  <script>
-    // OAuthLogin (This is done because axum doesn't support fragment in the URL)
-    // https://github.com/tokio-rs/axum/discussions/2147
-
-    // Parse the fragment and extract the parameters
-    const paramMap = {};
-    if (window.location.hash) {
-      const fragments = window.location.href.split('#').slice(1);
-      for (let i = 0; i < fragments.length; i++) {
-        const params = fragments[i].split('&');
-        for (let j = 0; j < params.length; j++) {
-          const keyValue = params[j].split('=');
-          if (keyValue.length === 2) {
-            const key = keyValue[0];
-            const value = keyValue[1];
-            paramMap[key] = value;
-          }
-        }
-      }
-
-      // Clear the fragment from the URL
-      history.replaceState("", document.title, window.location.pathname + window.location.search);
-
-      // Login in via refresh_token
-      const refreshToken = paramMap['refresh_token'];
-      fetch(`/web-api/login-refresh/${refreshToken}`, {
-        method: "POST",
-      }).then((response) => {
-        if (!response.ok) {
-          displayHttpStatusAndPayload(response);
-        } else {
-          const redirect_to = paramMap['redirect_to'];
-          if (redirect_to && redirect_to.trim() !== "") {
-            console.log("redirect_to is not empty");
-            window.location.href = "/web/home#" + redirect_to;
-          } else {
-            window.location.href = "/web/home";
-          }
-        }
-      });
-    }
-  </script>
   {% endblock %}
 </div>

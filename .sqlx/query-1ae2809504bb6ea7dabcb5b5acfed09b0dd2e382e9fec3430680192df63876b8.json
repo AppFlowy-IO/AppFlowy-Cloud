@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT af.uuid\n      FROM af_published_collab apc\n      JOIN af_user af ON af.uid = apc.published_by\n      WHERE view_id = $1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uuid",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1ae2809504bb6ea7dabcb5b5acfed09b0dd2e382e9fec3430680192df63876b8"
+}

@@ -114,8 +114,8 @@ async fn batch_insert_collab_success_test() {
       QueryCollabResult::Success { encode_collab_v1 } => {
         assert_eq!(encode_collab_v1, &params.encoded_collab_v1)
       },
-      QueryCollabResult::Failed { .. } => {
-        panic!("Failed to get collab");
+      QueryCollabResult::Failed { error } => {
+        panic!("Failed to get collab: {:?}", error);
       },
     }
   }

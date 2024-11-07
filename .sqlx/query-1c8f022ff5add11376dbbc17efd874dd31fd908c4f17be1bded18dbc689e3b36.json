@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    UPDATE public.af_workspace\n    SET is_initialized = $2\n    WHERE workspace_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1c8f022ff5add11376dbbc17efd874dd31fd908c4f17be1bded18dbc689e3b36"
+}

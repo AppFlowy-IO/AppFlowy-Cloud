@@ -1,5 +1,6 @@
-use access_control::access::{AccessControl, ObjectType};
 use access_control::act::ActionVariant;
+use access_control::casbin::access::AccessControl;
+use access_control::entity::ObjectType;
 use database::pg_row::AFCollabMemberRow;
 use database::workspace::select_permission;
 use serde::Deserialize;

@@ -8,6 +8,8 @@ use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::exemplar::CounterWithExemplar;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::gauge::Gauge;
+use prometheus_client::metrics::histogram::exponential_buckets;
+use prometheus_client::metrics::histogram::Histogram;
 use prometheus_client::registry::Registry;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -32,11 +34,13 @@ async fn metrics_handler(reg: web::Data<Arc<Registry>>) -> Result<HttpResponse> 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct PathLabel {
   pub path: String,
+  pub method: String,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct ResultLabel {
   pub path: String,
+  pub method: String,
   pub status_code: u16,
 }
 
@@ -108,18 +112,35 @@ impl RequestMetrics {
   }
 
   // app services/middleware should call this method to increase the request count for the path
-  pub fn record_request(&self, trace_id: Option<String>, path: String, ms: u64, status_code: u16) {
+  pub fn record_request(
+    &self,
+    trace_id: Option<String>,
+    path: String,
+    method: String,
+    ms: u64,
+    status_code: u16,
+  ) {
     self
       .requests_count
-      .get_or_create(&PathLabel { path: path.clone() })
+      .get_or_create(&PathLabel {
+        path: path.clone(),
+        method: method.clone(),
+      })
       .inc();
     self
       .requests_latency
-      .get_or_create(&PathLabel { path: path.clone() })
+      .get_or_create(&PathLabel {
+        path: path.clone(),
+        method: method.clone(),
+      })
       .inc_by(ms, trace_id.clone().map(|s| TraceLabel { trace_id: s }));
     self
       .requests_result
-      .get_or_create(&ResultLabel { path, status_code })
+      .get_or_create(&ResultLabel {
+        path,
+        method,
+        status_code,
+      })
       .inc_by(1, trace_id.clone().map(|s| TraceLabel { trace_id: s }));
   }
 }
@@ -205,5 +226,56 @@ impl PublishedCollabMetrics {
 
   pub fn incr_failure_read_count(&self, count: i64) {
     self.failure_read_published_collab_count.inc_by(count);
+  }
+}
+
+pub struct AppFlowyWebMetrics {
+  pub update_size_bytes: Histogram,
+  pub decoding_failure_count: Gauge,
+  pub apply_update_failure_count: Gauge,
+}
+
+impl AppFlowyWebMetrics {
+  pub fn init() -> Self {
+    let update_size_buckets = exponential_buckets(1024.0, 2.0, 10);
+
+    Self {
+      update_size_bytes: Histogram::new(update_size_buckets),
+      decoding_failure_count: Default::default(),
+      apply_update_failure_count: Default::default(),
+    }
+  }
+
+  pub fn register(registry: &mut Registry) -> Self {
+    let metrics = Self::init();
+    let web_update_registry = registry.sub_registry_with_prefix("appflowy_web");
+    web_update_registry.register(
+      "update_size_bytes",
+      "Size of the update in bytes",
+      metrics.update_size_bytes.clone(),
+    );
+    web_update_registry.register(
+      "decoding_failure_count",
+      "Number of updates that failed to decode",
+      metrics.decoding_failure_count.clone(),
+    );
+    web_update_registry.register(
+      "apply_update_failure_count",
+      "Number of updates that failed to apply",
+      metrics.apply_update_failure_count.clone(),
+    );
+    metrics
+  }
+
+  pub fn record_update_size_bytes(&self, size: usize) {
+    self.update_size_bytes.observe(size as f64);
+  }
+
+  pub fn incr_decoding_failure_count(&self, count: i64) {
+    self.decoding_failure_count.inc_by(count);
+  }
+
+  pub fn incr_apply_update_failure_count(&self, count: i64) {
+    self.apply_update_failure_count.inc_by(count);
   }
 }

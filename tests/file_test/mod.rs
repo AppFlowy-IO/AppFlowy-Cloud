@@ -37,6 +37,7 @@ impl Deref for TestBucket {
 impl TestBucket {
   pub async fn new() -> Self {
     let setting = S3Setting {
+      create_bucket: true,
       use_minio: true,
       minio_url: LOCALHOST_MINIO_URL.to_string(),
       access_key: LOCALHOST_MINIO_ACCESS_KEY.to_string(),

@@ -1,8 +1,9 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::DataSource;
-use collab::preclude::Collab;
 
+use anyhow::anyhow;
+use bytes::Bytes;
+use collab::preclude::Collab;
 use collab_database::database::gen_row_id;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -12,13 +13,11 @@ use collab_database::rows::RowMetaKey;
 use collab_database::rows::CELL_FIELD_TYPE;
 use collab_database::rows::ROW_CELLS;
 use collab_database::template::entity::CELL_DATA;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View};
-use collab_rt_entity::{ClientCollabMessage, UpdateSync};
-use collab_rt_protocol::{Message, SyncMessage};
 use database::collab::GetCollabOrigin;
 use database::collab::{select_workspace_database_oid, CollabStorage};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
@@ -28,20 +27,26 @@ use database::publish::select_published_data_for_view_id;
 use database::publish::select_published_metadata_for_view_id;
 use database_entity::dto::CollabParams;
 use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, PublishViewMetaData};
-use shared_entity::dto::workspace_dto;
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
 use std::collections::HashSet;
+use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
+
+use tracing::error;
 use workspace_template::gen_view_id;
-use yrs::updates::encoder::Encode;
 use yrs::Any;
 use yrs::Array;
 use yrs::ArrayRef;
 use yrs::Out;
 use yrs::{Map, MapRef};
 
+use crate::biz::collab::folder_view::to_folder_view_icon;
+use crate::biz::collab::folder_view::to_folder_view_layout;
 use crate::biz::collab::ops::get_latest_collab_encoded;
+
+use super::ops::broadcast_update;
+use super::ops::collab_from_doc_state;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
@@ -170,17 +175,20 @@ impl PublishCollabDuplicator {
     // for self.collabs_to_insert
     let mut txn = pg_pool.begin().await?;
     for (oid, (collab_type, encoded_collab)) in collabs_to_insert.into_iter() {
+      let params = CollabParams {
+        object_id: oid.clone(),
+        encoded_collab_v1: encoded_collab.into(),
+        collab_type,
+        embeddings: None,
+      };
+      let action = format!("duplicate collab: {}", params);
       collab_storage
         .insert_new_collab_with_transaction(
           &dest_workspace_id,
           &duplicator_uid,
-          CollabParams {
-            object_id: oid.clone(),
-            encoded_collab_v1: encoded_collab.into(),
-            collab_type,
-            embeddings: None,
-          },
+          params,
           &mut txn,
+          &action,
         )
         .await?;
     }
@@ -188,9 +196,9 @@ impl PublishCollabDuplicator {
     // update database if any
     if !workspace_databases.is_empty() {
       let ws_db_oid = select_workspace_database_oid(&pg_pool, &dest_workspace_id.parse()?).await?;
-      let mut ws_db_collab = {
+      let ws_db_collab = {
         let ws_database_ec = get_latest_collab_encoded(
-          collab_storage.clone(),
+          &collab_storage,
           GetCollabOrigin::User {
             uid: duplicator_uid,
           },
@@ -202,19 +210,33 @@ impl PublishCollabDuplicator {
         collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid)?
       };
 
-      let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
+      let mut ws_db = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
+        AppError::Unhandled(format!("failed to open workspace database: {}", err))
+      })?;
       let (ws_db_updates, updated_ws_w_db_collab) = tokio::task::spawn_blocking(move || {
         let ws_db_updates = {
-          let mut txn_wrapper = ws_db_collab.transact_mut();
-          for (db_collab_id, linked_views) in &workspace_databases {
-            ws_db_body.add_database(&mut txn_wrapper, db_collab_id, linked_views.clone());
-          }
-          txn_wrapper.encode_update_v1()
+          let view_ids_by_database_id = workspace_databases
+            .into_iter()
+            .map(|(database_id, view_ids)| (database_id, view_ids.into_iter().collect()))
+            .collect::<HashMap<_, _>>();
+
+          ws_db
+            .batch_add_database(view_ids_by_database_id)
+            .encode_update_v1()
         };
-        let updated_ws_w_db_collab = collab_to_bin(ws_db_collab, CollabType::WorkspaceDatabase);
+
+        let updated_ws_w_db_collab = ws_db
+          .encode_collab_v1()
+          .map(|encoded_collab| encoded_collab.encode_to_bytes().unwrap())
+          .map_err(|err| {
+            AppError::Internal(anyhow!("failed to encode workspace database: {}", err))
+          });
+
         (ws_db_updates, updated_ws_w_db_collab)
       })
       .await?;
+
+      let updated_ws_w_db_collab = updated_ws_w_db_collab?;
 
       collab_storage
         .insert_new_collab_with_transaction(
@@ -222,18 +244,19 @@ impl PublishCollabDuplicator {
           &duplicator_uid,
           CollabParams {
             object_id: ws_db_oid.clone(),
-            encoded_collab_v1: updated_ws_w_db_collab.await?.into(),
+            encoded_collab_v1: Bytes::from(updated_ws_w_db_collab),
             collab_type: CollabType::WorkspaceDatabase,
             embeddings: None,
           },
           &mut txn,
+          "duplicate workspace database collab",
         )
         .await?;
       broadcast_update(&collab_storage, &ws_db_oid, ws_db_updates).await?;
     }
 
     let collab_folder_encoded = get_latest_collab_encoded(
-      collab_storage.clone(),
+      &collab_storage,
       GetCollabOrigin::User {
         uid: duplicator_uid,
       },
@@ -318,14 +341,35 @@ impl PublishCollabDuplicator {
           embeddings: None,
         },
         &mut txn,
+        "duplicate folder collab",
       )
       .await?;
 
-    // broadcast folder changes
-    broadcast_update(&collab_storage, &dest_workspace_id, encoded_update).await?;
+    match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
+      Ok(result) => result.map_err(AppError::from),
+      Err(_) => {
+        error!("Timeout waiting for duplicating collabs");
+        Err(AppError::RequestTimeout(
+          "timeout while duplicating".to_string(),
+        ))
+      },
+    }?;
 
-    txn.commit().await?;
-    Ok(())
+    // broadcast folder changes
+    match tokio::time::timeout(
+      Duration::from_secs(30),
+      broadcast_update(&collab_storage, &dest_workspace_id, encoded_update),
+    )
+    .await
+    {
+      Ok(result) => result.map_err(AppError::from),
+      Err(_) => {
+        error!("Timeout waiting for broadcasting the updates");
+        Err(AppError::RequestTimeout(
+          "timeout while duplicating".to_string(),
+        ))
+      },
+    }
   }
 
   /// Deep copy a published collab to the destination workspace.
@@ -682,8 +726,12 @@ impl PublishCollabDuplicator {
   ) -> Result<(String, String, bool), AppError> {
     // collab of database
     let mut db_collab = collab_from_doc_state(published_db.database_collab.clone(), "")?;
-    let db_body = DatabaseBody::from_collab(&db_collab)
-      .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
+    let db_body = DatabaseBody::from_collab(
+      &db_collab,
+      Arc::new(NoPersistenceDatabaseCollabService),
+      None,
+    )
+    .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
     let pub_db_id = db_body.get_database_id(&db_collab.context.transact());
 
     // check if the database is already duplicated
@@ -1070,7 +1118,6 @@ impl PublishCollabDuplicator {
       id: new_view_id,
       parent_view_id: "".to_string(), // to be filled by caller
       name: view_info.name.clone(),
-      desc: "".to_string(), // unable to get from metadata
       children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
       created_at: self.ts_now,
       is_favorite: false,
@@ -1108,31 +1155,6 @@ impl PublishCollabDuplicator {
   }
 }
 
-/// broadcast updates to collab group if exists
-async fn broadcast_update(
-  collab_storage: &Arc<CollabAccessControlStorage>,
-  oid: &str,
-  encoded_update: Vec<u8>,
-) -> Result<(), AppError> {
-  tracing::info!("broadcasting update to group: {}", oid);
-
-  let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
-  let msg = ClientCollabMessage::ClientUpdateSync {
-    data: UpdateSync {
-      origin: CollabOrigin::Server,
-      object_id: oid.to_string(),
-      msg_id: chrono::Utc::now().timestamp_millis() as u64,
-      payload: payload.into(),
-    },
-  };
-
-  collab_storage
-    .broadcast_encode_collab(oid.to_string(), vec![msg])
-    .await?;
-
-  Ok(())
-}
-
 fn view_info_by_view_id(meta: &PublishViewMetaData) -> HashMap<String, PublishViewInfo> {
   let mut acc = HashMap::new();
   acc.insert(meta.view.view_id.clone(), meta.view.clone());
@@ -1147,43 +1169,6 @@ fn add_to_view_info(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[Pu
     if let Some(child_views) = &view_info.child_views {
       add_to_view_info(acc, child_views);
     }
-  }
-}
-
-pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
-  let collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    object_id,
-    DataSource::DocStateV1(doc_state),
-    vec![],
-    false,
-  )
-  .map_err(|e| AppError::Unhandled(e.to_string()))?;
-  Ok(collab)
-}
-
-fn to_folder_view_icon(icon: workspace_dto::ViewIcon) -> collab_folder::ViewIcon {
-  collab_folder::ViewIcon {
-    ty: to_folder_view_icon_type(icon.ty),
-    value: icon.value,
-  }
-}
-
-fn to_folder_view_icon_type(icon: workspace_dto::IconType) -> collab_folder::IconType {
-  match icon {
-    workspace_dto::IconType::Emoji => collab_folder::IconType::Emoji,
-    workspace_dto::IconType::Url => collab_folder::IconType::Url,
-    workspace_dto::IconType::Icon => collab_folder::IconType::Icon,
-  }
-}
-
-fn to_folder_view_layout(layout: workspace_dto::ViewLayout) -> collab_folder::ViewLayout {
-  match layout {
-    ViewLayout::Document => collab_folder::ViewLayout::Document,
-    ViewLayout::Grid => collab_folder::ViewLayout::Grid,
-    ViewLayout::Board => collab_folder::ViewLayout::Board,
-    ViewLayout::Calendar => collab_folder::ViewLayout::Calendar,
-    ViewLayout::Chat => collab_folder::ViewLayout::Chat,
   }
 }
 

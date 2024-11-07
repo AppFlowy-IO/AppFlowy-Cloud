@@ -1,6 +1,6 @@
 use crate::http::log_request_id;
 use crate::Client;
-use bytes::Bytes;
+
 use client_api_entity::{
   ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
   RepeatedChatMessage, UpdateChatMessageContentParams,
@@ -9,9 +9,7 @@ use futures_core::{ready, Stream};
 use pin_project::pin_project;
 use reqwest::Method;
 use serde_json::Value;
-use shared_entity::dto::ai_dto::{
-  CreateTextChatContext, RepeatedRelatedQuestion, STEAM_ANSWER_KEY, STEAM_METADATA_KEY,
-};
+use shared_entity::dto::ai_dto::{RepeatedRelatedQuestion, STREAM_ANSWER_KEY, STREAM_METADATA_KEY};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -98,27 +96,6 @@ impl Client {
       .into_data()
   }
 
-  /// Ask AI with a question for given question's message_id
-  pub async fn stream_answer(
-    &self,
-    workspace_id: &str,
-    chat_id: &str,
-    question_message_id: i64,
-  ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/{question_message_id}/answer/stream",
-      self.base_url
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .timeout(Duration::from_secs(30))
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::answer_response_stream(resp).await
-  }
-
   pub async fn stream_answer_v2(
     &self,
     workspace_id: &str,
@@ -140,8 +117,6 @@ impl Client {
     Ok(QuestionStream::new(stream))
   }
 
-  /// Generate an answer for given question's message_id. The same as ask_question but return ChatMessage
-  /// instead of stream of Bytes
   pub async fn get_answer(
     &self,
     workspace_id: &str,
@@ -240,46 +215,6 @@ impl Client {
       .await?
       .into_data()
   }
-
-  /// It's no longer used in the frontend application since 0.6.0 version.
-  pub async fn create_question_answer(
-    &self,
-    workspace_id: &str,
-    chat_id: &str,
-    params: CreateChatMessageParams,
-  ) -> Result<impl Stream<Item = Result<ChatMessage, AppResponseError>>, AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/message",
-      self.base_url
-    );
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatMessage>::json_response_stream(resp).await
-  }
-
-  pub async fn create_chat_context(
-    &self,
-    workspace_id: &str,
-    params: CreateTextChatContext,
-  ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{}/context/text",
-      self.base_url, params.chat_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
-  }
 }
 
 #[pin_project]
@@ -322,12 +257,12 @@ impl Stream for QuestionStream {
     return match ready!(this.stream.as_mut().poll_next(cx)) {
       Some(Ok(value)) => match value {
         Value::Object(mut value) => {
-          if let Some(metadata) = value.remove(STEAM_METADATA_KEY) {
+          if let Some(metadata) = value.remove(STREAM_METADATA_KEY) {
             return Poll::Ready(Some(Ok(QuestionStreamValue::Metadata { value: metadata })));
           }
 
           if let Some(answer) = value
-            .remove(STEAM_ANSWER_KEY)
+            .remove(STREAM_ANSWER_KEY)
             .and_then(|s| s.as_str().map(ToString::to_string))
           {
             return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: answer })));

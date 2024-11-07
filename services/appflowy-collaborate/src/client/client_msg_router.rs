@@ -53,16 +53,15 @@ impl ClientMessageRouter {
   /// - An `UnboundedSenderSink<T>`, which is used to send updates to the connected client.
   /// - A `ReceiverStream<MessageByObjectId>`, which is used to receive authorized updates from the connected client.
   ///
-  pub fn init_client_communication<T, AC>(
+  pub fn init_client_communication<T>(
     &mut self,
     workspace_id: &str,
     user: &RealtimeUser,
     object_id: &str,
-    access_control: Arc<AC>,
+    access_control: Arc<dyn RealtimeAccessControl>,
   ) -> (UnboundedSenderSink<T>, ReceiverStream<MessageByObjectId>)
   where
     T: Into<RealtimeMessage> + Send + Sync + 'static,
-    AC: RealtimeAccessControl,
   {
     let client_ws_sink = self.sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
@@ -122,7 +121,7 @@ impl ClientMessageRouter {
                 &stream_workspace_id,
                 &user.uid,
                 &message_object_id,
-                &access_control,
+                access_control.clone(),
                 original_messages,
               )
               .await;
@@ -170,16 +169,13 @@ impl ClientMessageRouter {
   }
 
   #[inline]
-  async fn access_control<AC>(
+  async fn access_control(
     workspace_id: &str,
     uid: &i64,
     object_id: &str,
-    access_control: &Arc<AC>,
+    access_control: Arc<dyn RealtimeAccessControl>,
     messages: Vec<ClientCollabMessage>,
-  ) -> (Vec<ClientCollabMessage>, Vec<ClientCollabMessage>)
-  where
-    AC: RealtimeAccessControl,
-  {
+  ) -> (Vec<ClientCollabMessage>, Vec<ClientCollabMessage>) {
     let can_write = access_control
       .can_write_collab(workspace_id, uid, object_id)
       .await

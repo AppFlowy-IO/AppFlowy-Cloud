@@ -8,7 +8,6 @@ use dashmap::DashMap;
 use futures_util::StreamExt;
 use tracing::{instrument, trace, warn};
 
-use access_control::collab::RealtimeAccessControl;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, SinkMessage};
 use collab_rt_entity::{CollabAck, RealtimeMessage};
@@ -47,20 +46,18 @@ pub type GroupCommandReceiver = tokio::sync::mpsc::Receiver<GroupCommand>;
 /// in tokio multi-thread runtime. It will receive the group command from the receiver and handle the
 /// command.
 ///
-pub struct GroupCommandRunner<S, AC>
+pub struct GroupCommandRunner<S>
 where
-  AC: RealtimeAccessControl,
   S: CollabStorage,
 {
-  pub group_manager: Arc<GroupManager<S, AC>>,
+  pub group_manager: Arc<GroupManager<S>>,
   pub msg_router_by_user: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
   pub recv: Option<GroupCommandReceiver>,
 }
 
-impl<S, AC> GroupCommandRunner<S, AC>
+impl<S> GroupCommandRunner<S>
 where
   S: CollabStorage,
-  AC: RealtimeAccessControl,
 {
   pub async fn run(mut self, object_id: String, notify: Arc<tokio::sync::Notify>) {
     let mut receiver = self.recv.take().expect("Only take once");

@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWorkspace, AFWorkspaceInvitationStatus,
+  AccessRequestMinimal, AccessRequestStatus, AccessRequestWithViewId, AccessRequesterInfo,
   AccountLink, GlobalComment, Reaction, Template, TemplateCategory, TemplateCategoryMinimal,
   TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
 };
@@ -12,12 +13,13 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 /// Represent the row of the af_workspace table
-#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, sqlx::Type)]
 pub struct AFWorkspaceRow {
   pub workspace_id: Uuid,
   pub database_storage_id: Option<Uuid>,
   pub owner_uid: Option<i64>,
   pub owner_name: Option<String>,
+  pub owner_email: Option<String>,
   pub created_at: Option<DateTime<Utc>>,
   pub workspace_type: i32,
   pub deleted_at: Option<DateTime<Utc>>,
@@ -45,11 +47,57 @@ impl TryFrom<AFWorkspaceRow> for AFWorkspace {
       database_storage_id,
       owner_uid,
       owner_name: value.owner_name.unwrap_or_default(),
+      owner_email: value.owner_email.unwrap_or_default(),
       workspace_type: value.workspace_type,
       workspace_name,
       created_at,
       icon,
       member_count: None,
+    })
+  }
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, sqlx::Type)]
+pub struct AFWorkspaceWithMemberCountRow {
+  pub workspace_id: Uuid,
+  pub database_storage_id: Option<Uuid>,
+  pub owner_uid: Option<i64>,
+  pub owner_name: Option<String>,
+  pub owner_email: Option<String>,
+  pub created_at: Option<DateTime<Utc>>,
+  pub workspace_type: i32,
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub workspace_name: Option<String>,
+  pub icon: Option<String>,
+  pub member_count: i64,
+}
+
+impl TryFrom<AFWorkspaceWithMemberCountRow> for AFWorkspace {
+  type Error = AppError;
+
+  fn try_from(value: AFWorkspaceWithMemberCountRow) -> Result<Self, Self::Error> {
+    let owner_uid = value
+      .owner_uid
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty owner_uid")))?;
+    let database_storage_id = value
+      .database_storage_id
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty workspace_id")))?;
+
+    let workspace_name = value.workspace_name.unwrap_or_default();
+    let created_at = value.created_at.unwrap_or_else(Utc::now);
+    let icon = value.icon.unwrap_or_default();
+
+    Ok(Self {
+      workspace_id: value.workspace_id,
+      database_storage_id,
+      owner_uid,
+      owner_name: value.owner_name.unwrap_or_default(),
+      owner_email: value.owner_email.unwrap_or_default(),
+      workspace_type: value.workspace_type,
+      workspace_name,
+      created_at,
+      icon,
+      member_count: Some(value.member_count),
     })
   }
 }
@@ -500,5 +548,100 @@ impl From<AFTemplateGroupRow> for TemplateGroup {
       category: value.category.into(),
       templates,
     }
+  }
+}
+
+#[derive(Debug, FromRow, Serialize, Deserialize)]
+pub struct AFImportTask {
+  pub task_id: Uuid,
+  pub file_size: i64,
+  pub workspace_id: String,
+  pub created_by: i64,
+  pub status: i16,
+  pub metadata: serde_json::Value,
+  pub created_at: DateTime<Utc>,
+  #[serde(default)]
+  pub file_url: Option<String>,
+}
+#[derive(sqlx::Type, Serialize, Deserialize, Debug)]
+#[repr(i32)]
+pub enum AFAccessRequestStatusColumn {
+  Pending = 0,
+  Approved = 1,
+  Rejected = 2,
+}
+
+impl From<AFAccessRequestStatusColumn> for AccessRequestStatus {
+  fn from(value: AFAccessRequestStatusColumn) -> Self {
+    match value {
+      AFAccessRequestStatusColumn::Pending => AccessRequestStatus::Pending,
+      AFAccessRequestStatusColumn::Approved => AccessRequestStatus::Approved,
+      AFAccessRequestStatusColumn::Rejected => AccessRequestStatus::Rejected,
+    }
+  }
+}
+
+#[derive(sqlx::Type, Serialize, Debug)]
+pub struct AFAccessRequesterColumn {
+  pub uid: i64,
+  pub uuid: Uuid,
+  pub name: String,
+  pub email: String,
+  pub avatar_url: Option<String>,
+}
+
+impl From<AFAccessRequesterColumn> for AccessRequesterInfo {
+  fn from(value: AFAccessRequesterColumn) -> Self {
+    Self {
+      uid: value.uid,
+      uuid: value.uuid,
+      name: value.name,
+      email: value.email,
+      avatar_url: value.avatar_url,
+    }
+  }
+}
+
+#[derive(sqlx::Type, Serialize, Debug)]
+pub struct AFAccessRequestMinimalColumn {
+  pub request_id: Uuid,
+  pub workspace_id: Uuid,
+  pub requester_id: Uuid,
+  pub view_id: Uuid,
+}
+
+impl From<AFAccessRequestMinimalColumn> for AccessRequestMinimal {
+  fn from(value: AFAccessRequestMinimalColumn) -> Self {
+    Self {
+      request_id: value.request_id,
+      workspace_id: value.workspace_id,
+      requester_id: value.requester_id,
+      view_id: value.view_id,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AFAccessRequestWithViewIdColumn {
+  pub request_id: Uuid,
+  pub workspace: AFWorkspaceWithMemberCountRow,
+  pub requester: AccessRequesterInfo,
+  pub view_id: Uuid,
+  pub status: AFAccessRequestStatusColumn,
+  pub created_at: DateTime<Utc>,
+}
+
+impl TryFrom<AFAccessRequestWithViewIdColumn> for AccessRequestWithViewId {
+  type Error = anyhow::Error;
+
+  fn try_from(value: AFAccessRequestWithViewIdColumn) -> Result<Self, Self::Error> {
+    Ok(Self {
+      request_id: value.request_id,
+      workspace: value.workspace.try_into()?,
+      requester: value.requester,
+      view_id: value.view_id,
+      status: value.status.into(),
+      created_at: value.created_at,
+    })
   }
 }

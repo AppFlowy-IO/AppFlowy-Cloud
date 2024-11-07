@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT workspace_id\n      FROM af_workspace_namespace\n      WHERE namespace = $1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "eb142b33bd6d0d9f3ceb597be9251eac710a463d1052ba10c41b207dbf63efe1"
+}

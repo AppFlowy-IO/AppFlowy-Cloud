@@ -14,7 +14,6 @@ pub mod metrics;
 mod permission;
 mod pg_listener;
 mod rt_server;
-pub mod shared_state;
 pub mod snapshot;
 mod state;
 pub mod telemetry;

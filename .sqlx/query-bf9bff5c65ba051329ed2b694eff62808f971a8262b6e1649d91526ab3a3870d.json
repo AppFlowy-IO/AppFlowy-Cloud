@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT workspace_id, namespace, is_original\n      FROM af_workspace_namespace\n      WHERE workspace_id = $1\n        AND namespace = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "is_original",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bf9bff5c65ba051329ed2b694eff62808f971a8262b6e1649d91526ab3a3870d"
+}

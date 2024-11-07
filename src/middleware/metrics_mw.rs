@@ -56,6 +56,7 @@ where
 
     let request_id = get_request_id(&req);
     let endpoint = req.match_pattern();
+    let method = req.method().to_string();
 
     // Call the next service
     let res = self.service.call(req);
@@ -69,6 +70,7 @@ where
         metrics.record_request(
           request_id,
           endpoint,
+          method,
           duration.as_millis() as u64,
           status.into(),
         );

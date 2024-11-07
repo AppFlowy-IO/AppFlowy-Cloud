@@ -7,7 +7,8 @@ use collab_entity::CollabType;
 use tracing::instrument;
 
 #[instrument(level = "trace", skip(data), fields(len = %data.len()))]
-pub async fn validate_encode_collab(
+#[inline]
+pub async fn spawn_blocking_validate_encode_collab(
   object_id: &str,
   data: &[u8],
   collab_type: &CollabType,
@@ -30,4 +31,24 @@ pub async fn validate_encode_collab(
     Ok::<(), Error>(())
   })
   .await?
+}
+
+#[instrument(level = "trace", skip(data), fields(len = %data.len()))]
+#[inline]
+pub fn validate_encode_collab(
+  object_id: &str,
+  data: &[u8],
+  collab_type: &CollabType,
+) -> Result<(), Error> {
+  let encoded_collab = EncodedCollab::decode_from_bytes(data)?;
+  let collab = Collab::new_with_source(
+    CollabOrigin::Empty,
+    object_id,
+    DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
+    vec![],
+    false,
+  )?;
+
+  collab_type.validate_require_data(&collab)?;
+  Ok::<(), Error>(())
 }

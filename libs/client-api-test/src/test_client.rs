@@ -13,7 +13,9 @@ use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
 use collab::lock::{Mutex, RwLock};
 use collab::preclude::{Collab, Prelim};
-use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_database::database::{Database, DatabaseContext};
+use collab_database::workspace_database::WorkspaceDatabase;
+use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use collab_user::core::UserAwareness;
@@ -38,11 +40,12 @@ use database_entity::dto::{
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use shared_entity::dto::workspace_dto::{
-  BlobMetadata, CollabResponse, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
-  WorkspaceSpaceUsage,
+  BlobMetadata, CollabResponse, PublishedDuplicate, WorkspaceMemberChangeset,
+  WorkspaceMemberInvitation, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
 
+use crate::database_util::TestDatabaseCollabService;
 use crate::user::{generate_unique_registered_user, User};
 use crate::{load_env, localhost_client_with_device_id, setup_log};
 
@@ -120,6 +123,76 @@ impl TestClient {
   pub async fn new_user_without_ws_conn() -> Self {
     let registered_user = generate_unique_registered_user().await;
     Self::new(registered_user, false).await
+  }
+
+  pub async fn get_folder(&self, workspace_id: &str) -> Folder {
+    let uid = self.uid().await;
+    let folder_collab = self
+      .api_client
+      .get_collab(QueryCollabParams::new(
+        workspace_id.to_string(),
+        CollabType::Folder,
+        workspace_id.to_string(),
+      ))
+      .await
+      .unwrap()
+      .encode_collab;
+    Folder::from_collab_doc_state(
+      uid,
+      CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone())),
+      folder_collab.into(),
+      workspace_id,
+      vec![],
+    )
+    .unwrap()
+  }
+
+  pub async fn get_database(&self, workspace_id: &str, database_id: &str) -> Database {
+    let service = TestDatabaseCollabService {
+      api_client: self.api_client.clone(),
+      workspace_id: workspace_id.to_string(),
+    };
+    let context = DatabaseContext::new(Arc::new(service));
+    Database::open(database_id, context).await.unwrap()
+  }
+
+  pub async fn get_document(&self, workspace_id: &str, document_id: &str) -> Document {
+    let collab = self
+      .get_collab_to_collab(
+        workspace_id.to_string(),
+        document_id.to_string(),
+        CollabType::Document,
+      )
+      .await
+      .unwrap();
+    Document::open(collab).unwrap()
+  }
+
+  pub async fn get_workspace_database(&self, workspace_id: &str) -> WorkspaceDatabase {
+    let workspaces = self.api_client.get_workspaces().await.unwrap();
+    let workspace_database_id = workspaces
+      .iter()
+      .find(|w| w.workspace_id.to_string() == workspace_id)
+      .unwrap()
+      .database_storage_id
+      .to_string();
+
+    let collab = self
+      .api_client
+      .get_collab(QueryCollabParams::new(
+        workspace_database_id.clone(),
+        CollabType::WorkspaceDatabase,
+        workspace_id.to_string(),
+      ))
+      .await
+      .unwrap();
+
+    WorkspaceDatabase::from_collab_doc_state(
+      &workspace_database_id,
+      CollabOrigin::Empty,
+      collab.encode_collab.into(),
+    )
+    .unwrap()
   }
 
   pub async fn get_connect_users(&self, object_id: &str) -> Vec<i64> {
@@ -213,11 +286,10 @@ impl TestClient {
   }
 
   pub async fn get_db_collab_from_view(&mut self, workspace_id: &str, view_id: &str) -> Collab {
-    let mut ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
-    let ws_db_body = WorkspaceDatabaseBody::open(&mut ws_db_collab);
-    let txn = ws_db_collab.transact();
+    let ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
+    let ws_db_body = WorkspaceDatabase::open(ws_db_collab).unwrap();
     let db_id = ws_db_body
-      .get_all_database_meta(&txn)
+      .get_all_database_meta()
       .into_iter()
       .find(|db_meta| db_meta.linked_views.contains(&view_id.to_string()))
       .unwrap()
@@ -855,6 +927,28 @@ impl TestClient {
       .publish_collabs(workspace_id, pub_items)
       .await
       .unwrap();
+  }
+
+  pub async fn duplicate_published_to_workspace(
+    &self,
+    dest_workspace_id: &str,
+    src_view_id: &str,
+    dest_view_id: &str,
+  ) {
+    self
+      .api_client
+      .duplicate_published_to_workspace(
+        dest_workspace_id,
+        &PublishedDuplicate {
+          published_view_id: src_view_id.to_string(),
+          dest_view_id: dest_view_id.to_string(),
+        },
+      )
+      .await
+      .unwrap();
+
+    // wait a while for folder collab to be synced
+    tokio::time::sleep(Duration::from_secs(1)).await;
   }
 }
 

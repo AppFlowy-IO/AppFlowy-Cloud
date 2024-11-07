@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT workspace_id, view_id\n      FROM af_published_collab\n      WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)\n      AND publish_name = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "view_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "59b2a7854bb8f0d7ee34b9dfa4e3db5cac8e25fdebe186ba2cbd65012eb91f5f"
+}

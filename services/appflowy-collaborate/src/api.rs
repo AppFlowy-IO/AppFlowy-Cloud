@@ -26,7 +26,6 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use crate::actix_ws::client::RealtimeClient;
 use crate::actix_ws::entities::ClientStreamMessage;
 use crate::actix_ws::server::RealtimeServerActor;
-use crate::collab::access_control::RealtimeCollabAccessControlImpl;
 use crate::collab::storage::CollabAccessControlStorage;
 use crate::compression::{
   decompress, CompressionType, X_COMPRESSION_BUFFER_SIZE, X_COMPRESSION_TYPE,
@@ -49,8 +48,7 @@ pub fn collab_scope() -> Scope {
 
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
-pub type RealtimeServerAddr =
-  Addr<RealtimeServerActor<CollabAccessControlStorage, RealtimeCollabAccessControlImpl>>;
+pub type RealtimeServerAddr = Addr<RealtimeServerActor<CollabAccessControlStorage>>;
 
 #[instrument(skip_all, err)]
 pub async fn establish_ws_connection_v1(
@@ -117,15 +115,6 @@ async fn post_realtime_message_stream_handler(
 
   event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
-  // Only send message to websocket server when the user is connected
-  if !state
-    .realtime_shared_state
-    .is_user_connected(&uid, &device_id)
-    .await
-    .unwrap_or(false)
-  {
-    return Ok(Json(AppResponse::Ok()));
-  }
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
   let stream_message = ClientStreamMessage {

@@ -4,12 +4,13 @@ use app_error::AppError;
 use async_trait::async_trait;
 use aws_sdk_s3::operation::delete_object::DeleteObjectOutput;
 
-use std::ops::Deref;
-
 use aws_sdk_s3::error::SdkError;
+use std::ops::Deref;
+use std::time::{Duration, SystemTime};
 
 use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
+use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
 use aws_sdk_s3::Client;
@@ -38,6 +39,38 @@ impl AwsS3BucketClientImpl {
   pub fn new(client: Client, bucket: String) -> Self {
     debug_assert!(!bucket.is_empty());
     AwsS3BucketClientImpl { client, bucket }
+  }
+
+  pub async fn gen_presigned_url(
+    &self,
+    s3_key: &str,
+    content_length: u64,
+    expires_in_secs: u64,
+  ) -> Result<String, AppError> {
+    let expires_in = Duration::from_secs(expires_in_secs);
+    let config = PresigningConfig::builder()
+      .start_time(SystemTime::now())
+      .expires_in(expires_in)
+      .build()
+      .map_err(|e| AppError::S3ResponseError(e.to_string()))?;
+
+    // There is no easy way to restrict file size of the upload (default limit max 5GB using PUT or other upload methods)
+    // https://github.com/aws/aws-sdk-net/issues/424
+    //
+    // consider using POST:
+    // https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-HTTPPOSTConstructPolicy.html
+    let put_object_req = self
+      .client
+      .put_object()
+      .bucket(&self.bucket)
+      .key(s3_key)
+      .content_type("application/zip")
+      .content_length(content_length as i64)
+      .presigned(config)
+      .await
+      .map_err(|err| AppError::Internal(anyhow!("Generate presigned url failed: {:?}", err)))?;
+    let url = put_object_req.uri().to_string();
+    Ok(url)
   }
 
   async fn complete_upload_and_get_metadata(
@@ -108,22 +141,20 @@ impl BucketClient for AwsS3BucketClientImpl {
   async fn put_blob_as_content_type(
     &self,
     object_key: &str,
-    content: &[u8],
+    stream: ByteStream,
     content_type: &str,
   ) -> Result<(), AppError> {
     trace!(
-      "Uploading object to S3 bucket:{}, key {}, len: {}",
+      "Uploading object to S3 bucket:{}, key {}",
       self.bucket,
       object_key,
-      content.len()
     );
-    let body = ByteStream::from(content.to_vec());
     self
       .client
       .put_object()
       .bucket(&self.bucket)
       .key(object_key)
-      .body(body)
+      .body(stream)
       .content_type(content_type)
       .send()
       .await

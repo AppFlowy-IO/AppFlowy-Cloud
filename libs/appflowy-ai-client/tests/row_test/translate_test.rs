@@ -20,6 +20,9 @@ async fn translate_row_test() {
     include_header: false,
   };
 
-  let result = client.translate_row(data, AIModel::GPT35).await.unwrap();
+  let result = client
+    .translate_row(data, AIModel::GPT4oMini)
+    .await
+    .unwrap();
   assert_eq!(result.items.len(), 2);
 }

@@ -1,22 +1,49 @@
 use bytes::Bytes;
+use client_api_entity::workspace_dto::PublishInfoView;
 use client_api_entity::{workspace_dto::PublishedDuplicate, PublishInfo, UpdatePublishNamespace};
 use client_api_entity::{
   CreateGlobalCommentParams, CreateReactionParams, DeleteGlobalCommentParams, DeleteReactionParams,
-  GetReactionQueryParams, GlobalComments, Reactions,
+  GetReactionQueryParams, GlobalComments, PatchPublishedCollab, PublishInfoMeta, Reactions,
+  UpdateDefaultPublishView,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
 use tracing::instrument;
 
-use crate::Client;
+use crate::{log_request_id, Client};
 
 // Publisher API
 impl Client {
+  #[instrument(level = "debug", skip_all)]
+  pub async fn list_published_views(
+    &self,
+    workspace_id: &str,
+  ) -> Result<Vec<PublishInfoView>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/published-info",
+      self.base_url, workspace_id,
+    );
+
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<Vec<PublishInfoView>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  /// Changes the namespace for the first non-original publish namespace
+  /// or the original publish namespace if not exists.
   pub async fn set_workspace_publish_namespace(
     &self,
     workspace_id: &str,
-    new_namespace: &str,
+    new_namespace: String,
   ) -> Result<(), AppResponseError> {
+    let old_namespace = self.get_workspace_publish_namespace(workspace_id).await?;
+
     let url = format!(
       "{}/api/workspace/{}/publish-namespace",
       self.base_url, workspace_id
@@ -26,11 +53,12 @@ impl Client {
       .http_client_with_auth(Method::PUT, &url)
       .await?
       .json(&UpdatePublishNamespace {
-        new_namespace: new_namespace.to_string(),
+        old_namespace,
+        new_namespace,
       })
       .send()
       .await?;
-
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -47,9 +75,26 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<String>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  pub async fn patch_published_collabs(
+    &self,
+    workspace_id: &str,
+    patches: &[PatchPublishedCollab],
+  ) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/publish", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(patches)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   pub async fn unpublish_collabs(
@@ -64,6 +109,7 @@ impl Client {
       .json(view_ids)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -86,6 +132,7 @@ impl Client {
       })
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -106,6 +153,7 @@ impl Client {
       })
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -128,6 +176,7 @@ impl Client {
       })
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -150,7 +199,63 @@ impl Client {
       })
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn set_default_publish_view(
+    &self,
+    workspace_id: &str,
+    view_id: uuid::Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/publish-default",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(&UpdateDefaultPublishView { view_id })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn delete_default_publish_view(
+    &self,
+    workspace_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/publish-default",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_default_publish_view_info(
+    &self,
+    workspace_id: &str,
+  ) -> Result<PublishInfo, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/publish-default",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<PublishInfo>::from_response(resp)
+      .await?
+      .into_data()
   }
 }
 
@@ -171,6 +276,7 @@ impl Client {
     };
 
     let resp = client.send().await?;
+    log_request_id(&resp);
     AppResponse::<GlobalComments>::from_response(resp)
       .await?
       .into_data()
@@ -184,10 +290,36 @@ impl Client {
     &self,
     view_id: &uuid::Uuid,
   ) -> Result<PublishInfo, AppResponseError> {
-    let url = format!("{}/api/workspace/published-info/{}", self.base_url, view_id,);
+    let url = format!("{}/api/workspace/published-info/{}", self.base_url, view_id);
 
     let resp = self.cloud_client.get(&url).send().await?;
     AppResponse::<PublishInfo>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all)]
+  pub async fn get_default_published_collab<T>(
+    &self,
+    publish_namespace: &str,
+  ) -> Result<PublishInfoMeta<T>, AppResponseError>
+  where
+    T: serde::de::DeserializeOwned + 'static,
+  {
+    let url = format!(
+      "{}/api/workspace/published/{}",
+      self.base_url, publish_namespace,
+    );
+
+    let resp = self
+      .cloud_client
+      .get(&url)
+      .send()
+      .await?
+      .error_for_status()?;
+
+    log_request_id(&resp);
+    AppResponse::<PublishInfoMeta<T>>::from_response(resp)
       .await?
       .into_data()
   }
@@ -199,7 +331,7 @@ impl Client {
     publish_name: &str,
   ) -> Result<T, AppResponseError>
   where
-    T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned + 'static,
   {
     tracing::debug!(
       "get_published_collab: {} {}",
@@ -207,7 +339,7 @@ impl Client {
       publish_name
     );
     let url = format!(
-      "{}/api/workspace/published/{}/{}",
+      "{}/api/workspace/v1/published/{}/{}",
       self.base_url, publish_namespace, publish_name
     );
 
@@ -217,16 +349,9 @@ impl Client {
       .send()
       .await?
       .error_for_status()?;
+    log_request_id(&resp);
 
-    let txt = resp.text().await?;
-
-    if let Ok(app_err) = serde_json::from_str::<AppResponseError>(&txt) {
-      return Err(app_err);
-    }
-
-    let meta = serde_json::from_str::<T>(&txt)?;
-
-    Ok(meta)
+    AppResponse::<T>::from_response(resp).await?.into_data()
   }
 
   #[instrument(level = "debug", skip_all)]
@@ -244,14 +369,9 @@ impl Client {
       "{}/api/workspace/published/{}/{}/blob",
       self.base_url, publish_namespace, publish_name
     );
-    let bytes = self
-      .cloud_client
-      .get(&url)
-      .send()
-      .await?
-      .error_for_status()?
-      .bytes()
-      .await?;
+    let resp = self.cloud_client.get(&url).send().await?;
+    log_request_id(&resp);
+    let bytes = resp.error_for_status()?.bytes().await?;
 
     if let Ok(app_err) = serde_json::from_slice::<AppResponseError>(&bytes) {
       return Err(app_err);
@@ -275,6 +395,7 @@ impl Client {
       .json(publish_duplicate)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -295,6 +416,7 @@ impl Client {
       })
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<Reactions>::from_response(resp)
       .await?
       .into_data()

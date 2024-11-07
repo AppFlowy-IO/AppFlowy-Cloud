@@ -153,8 +153,6 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::from_response(resp)
-      .await?
-      .into_data()
+    AppResponse::from_response(resp).await?.into_data()
   }
 }

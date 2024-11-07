@@ -1,5 +1,6 @@
 use client_api_entity::workspace_dto::{CreatePageParams, Page, PageCollab};
 use reqwest::Method;
+use serde_json::json;
 use shared_entity::response::{AppResponse, AppResponseError};
 use uuid::Uuid;
 
@@ -19,6 +20,24 @@ impl Client {
       .send()
       .await?;
     AppResponse::<Page>::from_response(resp).await?.into_data()
+  }
+
+  pub async fn move_workspace_page_view_to_trash(
+    &self,
+    workspace_id: Uuid,
+    view_id: String,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/move-to-trash",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&json!({}))
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   pub async fn get_workspace_page_view(

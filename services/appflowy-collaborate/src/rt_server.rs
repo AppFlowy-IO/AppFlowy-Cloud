@@ -55,6 +55,7 @@ where
     redis_connection_manager: RedisConnectionManager,
     group_persistence_interval: Duration,
     prune_grace_period: Duration,
+    save_snapshot_retries: u32,
     indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
     let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
@@ -78,6 +79,7 @@ where
         collab_stream,
         group_persistence_interval,
         prune_grace_period,
+        save_snapshot_retries,
         indexer_provider.clone(),
       )
       .await?,

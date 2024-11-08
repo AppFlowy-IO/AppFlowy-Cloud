@@ -42,6 +42,14 @@ impl AdminFrontendClient {
       .send()
       .await
       .unwrap();
+    let status = resp.status();
+    assert_eq!(
+      status,
+      reqwest::StatusCode::OK,
+      "resp: {:?}, payload: {}",
+      status,
+      resp.text().await.unwrap_or_default()
+    );
     let c = resp.cookies().find(|c| c.name() == "session_id").unwrap();
     self.session_id = Some(c.value().to_string());
   }

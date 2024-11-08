@@ -164,6 +164,25 @@ async fn move_view_out_from_trash(
   })
 }
 
+async fn move_all_views_out_from_trash(folder: &mut Folder) -> Result<FolderUpdate, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    if let Some(op) = folder
+      .body
+      .section
+      .section_op(&txn, collab_folder::Section::Trash)
+    {
+      op.clear(&mut txn);
+    };
+    txn.encode_update_v1()
+  };
+
+  Ok(FolderUpdate {
+    updated_encoded_collab: folder_to_encoded_collab(folder)?,
+    encoded_updates: encoded_update,
+  })
+}
+
 fn folder_to_encoded_collab(folder: &Folder) -> Result<Vec<u8>, AppError> {
   let collab_type = CollabType::Folder;
   let encoded_folder_collab = folder
@@ -284,6 +303,29 @@ pub async fn restore_page_from_trash(
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
   let folder_update = move_view_out_from_trash(view_id, &mut folder).await?;
+  let mut transaction = pg_pool.begin().await?;
+  insert_and_broadcast_workspace_folder_update(
+    uid,
+    workspace_id,
+    folder_update,
+    collab_storage,
+    &mut transaction,
+  )
+  .await?;
+  transaction.commit().await?;
+  Ok(())
+}
+
+pub async fn restore_all_pages_from_trash(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = move_all_views_out_from_trash(&mut folder).await?;
   let mut transaction = pg_pool.begin().await?;
   insert_and_broadcast_workspace_folder_update(
     uid,

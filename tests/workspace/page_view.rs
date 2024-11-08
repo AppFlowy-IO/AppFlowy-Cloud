@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use client_api::entity::{QueryCollab, QueryCollabParams};
 use client_api_test::{
@@ -146,40 +146,49 @@ async fn move_page_to_trash() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  let view_id_to_be_deleted = general_space.children[0].view_id.clone();
+  let view_ids_to_be_deleted = [
+    general_space.children[0].view_id.clone(),
+    general_space.children[1].view_id.clone(),
+  ];
   app_client.open_workspace_collab(&workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  web_client
-    .api_client
-    .move_workspace_page_view_to_trash(
-      Uuid::parse_str(&workspace_id).unwrap(),
-      view_id_to_be_deleted.clone(),
-    )
-    .await
-    .unwrap();
+  for view_id in view_ids_to_be_deleted.iter() {
+    app_client
+      .api_client
+      .move_workspace_page_view_to_trash(Uuid::parse_str(&workspace_id).unwrap(), view_id.clone())
+      .await
+      .unwrap();
+  }
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  assert!(folder
+  let views_in_trash_for_app = folder
     .get_my_trash_sections()
     .iter()
-    .any(|v| v.id == view_id_to_be_deleted.clone()));
-  let view_found = web_client
+    .map(|v| v.id.clone())
+    .collect::<HashSet<String>>();
+  for view_id in view_ids_to_be_deleted.iter() {
+    assert!(views_in_trash_for_app.contains(view_id));
+  }
+  let views_in_trash_for_web = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
     .await
     .unwrap()
     .views
     .iter()
-    .any(|v| v.view.view_id == view_id_to_be_deleted.clone());
-  assert!(view_found);
+    .map(|v| v.view.view_id.clone())
+    .collect::<HashSet<String>>();
+  for view_id in view_ids_to_be_deleted.iter() {
+    assert!(views_in_trash_for_web.contains(view_id));
+  }
 
   web_client
     .api_client
     .restore_workspace_page_view_from_trash(
       Uuid::parse_str(&workspace_id).unwrap(),
-      &view_id_to_be_deleted,
+      &view_ids_to_be_deleted[0],
     )
     .await
     .unwrap();
@@ -187,7 +196,7 @@ async fn move_page_to_trash() {
   assert!(!folder
     .get_my_trash_sections()
     .iter()
-    .any(|v| v.id == view_id_to_be_deleted.clone()));
+    .any(|v| v.id == view_ids_to_be_deleted[0]));
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -195,7 +204,26 @@ async fn move_page_to_trash() {
     .unwrap()
     .views
     .iter()
-    .any(|v| v.view.view_id == view_id_to_be_deleted.clone());
+    .any(|v| v.view.view_id == view_ids_to_be_deleted[0]);
+  assert!(!view_found);
+  web_client
+    .api_client
+    .restore_all_workspace_page_views_from_trash(Uuid::parse_str(&workspace_id).unwrap())
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  assert!(!folder
+    .get_my_trash_sections()
+    .iter()
+    .any(|v| v.id == view_ids_to_be_deleted[1]));
+  let view_found = web_client
+    .api_client
+    .get_workspace_trash(&workspace_id)
+    .await
+    .unwrap()
+    .views
+    .iter()
+    .any(|v| v.view.view_id == view_ids_to_be_deleted[1]);
   assert!(!view_found);
 }
 

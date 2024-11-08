@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      DELETE FROM af_published_collab\n      WHERE publish_name = ANY($1::text[])\n      RETURNING publish_name\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "publish_name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c45fa767d46311a0558110f5d27da6acd355ffe8e1df18d16c19aeb1b162fc8f"
+}

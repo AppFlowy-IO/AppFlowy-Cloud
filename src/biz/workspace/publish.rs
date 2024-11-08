@@ -287,7 +287,7 @@ pub trait PublishedCollabStore: Sync + Send + 'static {
     publish_name: &str,
   ) -> Result<Vec<u8>, AppError>;
 
-  async fn delete_collabs(
+  async fn unpublish_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],
@@ -401,7 +401,7 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
     result
   }
 
-  async fn delete_collabs(
+  async fn unpublish_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],
@@ -586,7 +586,7 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
     }
   }
 
-  async fn delete_collabs(
+  async fn unpublish_collabs(
     &self,
     workspace_id: &Uuid,
     view_ids: &[Uuid],

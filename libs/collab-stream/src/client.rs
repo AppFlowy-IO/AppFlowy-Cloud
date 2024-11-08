@@ -25,9 +25,9 @@ impl CollabRedisStream {
 
   pub async fn new(redis_client: redis::Client) -> Result<Self, redis::RedisError> {
     let router_options = StreamRouterOptions {
-      worker_count: 10,
+      worker_count: 60,
       xread_streams: 100,
-      xread_block_millis: Some(100),
+      xread_block_millis: Some(5000),
       xread_count: None,
     };
     let stream_router = Arc::new(StreamRouter::with_options(&redis_client, router_options)?);

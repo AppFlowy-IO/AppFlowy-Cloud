@@ -35,7 +35,6 @@ pub struct GroupManager<S> {
   control_event_stream: Arc<Mutex<StreamGroup>>,
   persistence_interval: Duration,
   prune_grace_period: Duration,
-  save_snapshot_retries: u32,
   indexer_provider: Arc<IndexerProvider>,
 }
 
@@ -51,7 +50,6 @@ where
     collab_stream: CollabRedisStream,
     persistence_interval: Duration,
     prune_grace_period: Duration,
-    save_snapshot_retries: u32,
     indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
     let collab_stream = Arc::new(collab_stream);
@@ -69,7 +67,6 @@ where
       control_event_stream,
       persistence_interval,
       prune_grace_period,
-      save_snapshot_retries,
       indexer_provider,
     })
   }
@@ -233,7 +230,6 @@ where
         self.collab_redis_stream.clone(),
         self.persistence_interval,
         self.prune_grace_period,
-        self.save_snapshot_retries,
         indexer,
       )
       .await?,

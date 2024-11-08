@@ -82,7 +82,6 @@ impl CollabGroup {
     collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
     prune_grace_period: Duration,
-    save_snapshot_retries: u32,
     indexer: Option<Arc<dyn Indexer>>,
   ) -> Result<Self, StreamError>
   where
@@ -148,7 +147,6 @@ impl CollabGroup {
         state.clone(),
         persistence_interval,
         is_new_collab,
-        save_snapshot_retries,
       ));
     }
 
@@ -299,12 +297,7 @@ impl CollabGroup {
     }
   }
 
-  async fn snapshot_task(
-    state: Arc<CollabGroupState>,
-    interval: Duration,
-    is_new_collab: bool,
-    retries: u32,
-  ) {
+  async fn snapshot_task(state: Arc<CollabGroupState>, interval: Duration, is_new_collab: bool) {
     if is_new_collab {
       tracing::trace!("persisting new collab for {}", state.object_id);
       if let Err(err) = state.persister.save().await {
@@ -320,20 +313,11 @@ impl CollabGroup {
     // if saving took longer than snapshot_tick, just skip it over and try in the next round
     snapshot_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-    let mut fail_counter = 0;
     loop {
       tokio::select! {
         _ = snapshot_tick.tick() => {
           if let Err(err) = state.persister.save().await {
             tracing::warn!("failed to persist collab `{}/{}`: {}", state.workspace_id, state.object_id, err);
-            fail_counter += 1;
-            if fail_counter >= retries {
-              tracing::info!("failed to persist `{}/{}` after {} consecutive tries. Shutting collab group down.", state.workspace_id, state.object_id, fail_counter);
-              state.shutdown.cancel();
-              break;
-            }
-          } else {
-            fail_counter = 0;
           }
         },
         _ = state.shutdown.cancelled() => {

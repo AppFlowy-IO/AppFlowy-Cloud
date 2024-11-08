@@ -1591,3 +1591,97 @@ fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<Str
   let row_ids: HashSet<String> = pub_db_data.database_row_collabs.into_keys().collect();
   (pub_db_id, row_ids)
 }
+
+#[tokio::test]
+async fn test_republish_doc() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&c).await;
+  let my_namespace = uuid::Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
+    .await
+    .unwrap();
+
+  let publish_name = "my-publish-name";
+  let view_id = uuid::Uuid::new_v4();
+
+  // User publishes 1 doc
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(
+    &workspace_id,
+    vec![PublishCollabItem {
+      meta: PublishCollabMetadata {
+        view_id,
+        publish_name: publish_name.to_string(),
+        metadata: MyCustomMetadata {
+          title: "my_title_1".to_string(),
+        },
+      },
+      data: "yrs_encoded_data_1".as_bytes(),
+    }],
+  )
+  .await
+  .unwrap();
+
+  {
+    // Check that the doc is published with correct publish name
+    let publish_info = c.get_published_collab_info(&view_id).await.unwrap();
+    assert_eq!(
+      publish_info.publish_name, publish_name,
+      "{:?}",
+      publish_info
+    );
+  }
+
+  // user unpublishes the doc
+  c.unpublish_collabs(&workspace_id, &[view_id])
+    .await
+    .unwrap();
+
+  {
+    // Check that the doc is unpublished
+    let publish_info = c.get_published_collab_info(&view_id).await.unwrap();
+    assert!(
+      publish_info.unpublished_timestamp.is_some(),
+      "{:?}",
+      publish_info
+    );
+    assert_eq!(
+      publish_info.publish_name, publish_name,
+      "{:?}",
+      publish_info
+    );
+  }
+
+  {
+    // User publish another doc with different id but same publish name
+    let view_id_2 = uuid::Uuid::new_v4();
+    c.publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: view_id_2,
+          publish_name: publish_name.to_string(),
+          metadata: MyCustomMetadata {
+            title: "my_title_2".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_2".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap();
+
+    let publish_info = c.get_published_collab_info(&view_id_2).await.unwrap();
+    assert_eq!(
+      publish_info.publish_name, publish_name,
+      "{:?}",
+      publish_info
+    );
+  }
+
+  {
+    // When fetching original document, it should return not found
+    // since the binded publish name is already used by another document
+    let err = c.get_published_collab_info(&view_id).await.unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+  }
+}

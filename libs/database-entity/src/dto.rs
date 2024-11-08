@@ -419,6 +419,8 @@ pub struct PublishInfo {
   pub publisher_email: String,
   #[serde(default)]
   pub publish_timestamp: DateTime<Utc>,
+  #[serde(default)]
+  pub unpublished_timestamp: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -187,8 +187,13 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(list_published_collab_info_handler)),
     )
     .service(
+      // deprecated since 0.7.4
       web::resource("/published-info/{view_id}")
         .route(web::get().to(get_published_collab_info_handler)),
+    )
+    .service(
+      web::resource("/v1/published-info/{view_id}")
+        .route(web::get().to(get_v1_published_collab_info_handler)),
     )
     .service(
       web::resource("/published-info/{view_id}/comment")
@@ -1387,7 +1392,23 @@ async fn list_published_collab_info_handler(
   Ok(Json(AppResponse::Ok().with_data(publish_infos)))
 }
 
+// Deprecated since 0.7.4
 async fn get_published_collab_info_handler(
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishInfo>>> {
+  let view_id = view_id.into_inner();
+  let collab_data = state
+    .published_collab_store
+    .get_collab_publish_info(&view_id)
+    .await?;
+  if collab_data.unpublished_timestamp.is_some() {
+    return Err(AppError::RecordNotFound("Collab is unpublished".to_string()).into());
+  }
+  Ok(Json(AppResponse::Ok().with_data(collab_data)))
+}
+
+async fn get_v1_published_collab_info_handler(
   view_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PublishInfo>>> {
@@ -1568,7 +1589,7 @@ async fn delete_published_collabs_handler(
   }
   state
     .published_collab_store
-    .delete_collabs(&workspace_id, &view_ids, &user_uuid)
+    .unpublish_collabs(&workspace_id, &view_ids, &user_uuid)
     .await?;
   Ok(Json(AppResponse::Ok()))
 }

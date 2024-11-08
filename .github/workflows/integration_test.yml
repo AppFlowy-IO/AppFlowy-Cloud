@@ -113,7 +113,7 @@ jobs:
           export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
-          
+
           container_id=$(docker ps --filter name=appflowy-cloud-ai-1 -q)
           if [ -n "$container_id" ]; then
           echo "Displaying logs for the AppFlowy-AI container..."
@@ -130,6 +130,12 @@ jobs:
       - name: Run Tests
         run: |
           echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test -p admin_frontend ${{ matrix.test_cmd }}
+
+      - name: Run Tests from main branch
+        run: |
+          git checkout main
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test -p admin_frontend ${{ matrix.test_cmd }}
 

@@ -137,7 +137,6 @@ pub async fn run_actix_server(
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     Duration::from_secs(config.collab.group_prune_grace_period_secs),
-    config.collab.save_snapshot_retries,
     state.indexer_provider.clone(),
   )
   .await
@@ -248,7 +247,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   // Redis
   info!("Connecting to Redis...");
   let (redis_conn_manager, redis_stream_router) =
-    get_redis_client(config.redis_uri.expose_secret()).await?;
+    get_redis_client(config.redis_uri.expose_secret(), config.redis_worker_count).await?;
 
   info!("Setup AppFlowy AI: {}", config.appflowy_ai.url());
   let appflowy_ai_client = AppFlowyAIClient::new(&config.appflowy_ai.url());
@@ -426,6 +425,7 @@ async fn setup_admin_account(
 
 async fn get_redis_client(
   redis_uri: &str,
+  worker_count: usize,
 ) -> Result<(redis::aio::ConnectionManager, Arc<StreamRouter>), Error> {
   info!("Connecting to redis with uri: {}", redis_uri);
   let client = redis::Client::open(redis_uri).context("failed to connect to redis")?;
@@ -433,9 +433,9 @@ async fn get_redis_client(
   let router = StreamRouter::with_options(
     &client,
     StreamRouterOptions {
-      worker_count: 10,
+      worker_count,
       xread_streams: 100,
-      xread_block_millis: Some(100),
+      xread_block_millis: Some(5000),
       xread_count: None,
     },
   )?;

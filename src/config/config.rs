@@ -19,6 +19,7 @@ pub struct Config {
   pub application: ApplicationSetting,
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
+  pub redis_worker_count: usize,
   pub s3: S3Setting,
   pub appflowy_ai: AppFlowyAISetting,
   pub grpc_history: GrpcHistorySetting,
@@ -146,7 +147,6 @@ pub struct CollabSetting {
   pub group_prune_grace_period_secs: u64,
   pub edit_state_max_count: u32,
   pub edit_state_max_secs: i64,
-  pub save_snapshot_retries: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -225,6 +225,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       min_client_version: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_MIN_VERSION", "0.5.0").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
+    redis_worker_count: get_env_var("APPFLOWY_REDIS_WORKERS", "60").parse()?,
     s3: S3Setting {
       create_bucket: get_env_var("APPFLOWY_S3_CREATE_BUCKET", "true")
         .parse()
@@ -255,7 +256,6 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
         .parse()?,
       edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
       edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "60").parse()?,
-      save_snapshot_retries: get_env_var("APPFLOWY_COLLAB_SAVE_SNAPSHOT_RETRIES", "10").parse()?,
     },
     published_collab: PublishedCollabSetting {
       storage_backend: get_env_var("APPFLOWY_PUBLISHED_COLLAB_STORAGE_BACKEND", "postgres")

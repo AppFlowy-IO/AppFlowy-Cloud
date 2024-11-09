@@ -1,8 +1,41 @@
 use client_api_test::generate_unique_registered_user_client;
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabParams;
+use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
+
+#[tokio::test]
+async fn workspace_list_database() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = c.get_workspaces().await.unwrap()[0].workspace_id;
+  let dbs = c.list_databases(&workspace_id.to_string()).await.unwrap();
+  assert_eq!(dbs.len(), 1);
+
+  let db = &dbs[0];
+
+  assert_eq!(db.name, "");
+  assert!(db.fields.contains(&AFDatabaseField {
+    name: "Last modified".to_string(),
+    field_type: "LastEditedTime".to_string(),
+  }));
+  assert!(db.fields.contains(&AFDatabaseField {
+    name: "Multiselect".to_string(),
+    field_type: "MultiSelect".to_string(),
+  }));
+  assert!(db.fields.contains(&AFDatabaseField {
+    name: "Tasks".to_string(),
+    field_type: "Checklist".to_string(),
+  }));
+  assert!(db.fields.contains(&AFDatabaseField {
+    name: "Status".to_string(),
+    field_type: "SingleSelect".to_string(),
+  }));
+  assert!(db.fields.contains(&AFDatabaseField {
+    name: "Description".to_string(),
+    field_type: "RichText".to_string(),
+  }));
+}
 
 #[tokio::test]
 async fn add_and_delete_workspace_for_user() {

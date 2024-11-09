@@ -244,7 +244,7 @@ pub async fn insert_or_replace_publish_collabs(
   )
   .fetch_all(txn.as_mut())
   .await?;
-  if delete_publish_names.len() > 0 {
+  if !delete_publish_names.is_empty() {
     tracing::info!(
       "Deleted existing published collab record with publish names: {:?}",
       delete_publish_names

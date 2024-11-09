@@ -141,7 +141,6 @@ jobs:
         run: |
           git checkout main
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test -p admin_frontend ${{ matrix.test_cmd }}
 
   cleanup:
     name: Cleanup Docker Images

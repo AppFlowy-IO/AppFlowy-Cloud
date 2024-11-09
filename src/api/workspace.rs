@@ -1392,6 +1392,7 @@ async fn post_published_duplicate_handler(
     params.dest_view_id,
   )
   .await?;
+
   Ok(Json(AppResponse::Ok()))
 }
 

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT metadata\n    FROM af_published_collab\n    WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)\n      AND unpublished_at IS NULL\n      AND publish_name = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "51a3a723b1825da7b9abd9cb36db0cf8220abf063098a73e4a6fc3f87352b395"
+}

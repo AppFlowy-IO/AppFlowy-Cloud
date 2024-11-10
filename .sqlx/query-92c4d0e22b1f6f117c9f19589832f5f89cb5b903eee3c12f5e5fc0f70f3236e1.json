@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE af_published_collab\n      SET\n        blob = E''::bytea,\n        unpublished_at = NOW()\n      WHERE workspace_id = $1\n        AND view_id = ANY($2)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "92c4d0e22b1f6f117c9f19589832f5f89cb5b903eee3c12f5e5fc0f70f3236e1"
+}

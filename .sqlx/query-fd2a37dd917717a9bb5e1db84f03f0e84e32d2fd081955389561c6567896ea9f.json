@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT blob\n      FROM af_published_collab\n      WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)\n        AND unpublished_at IS NULL\n        AND publish_name = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blob",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fd2a37dd917717a9bb5e1db84f03f0e84e32d2fd081955389561c6567896ea9f"
+}

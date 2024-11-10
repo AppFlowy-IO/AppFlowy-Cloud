@@ -301,6 +301,7 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
     SELECT metadata
     FROM af_published_collab
     WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
+      AND unpublished_at IS NULL
       AND publish_name = $2
     "#,
     publish_namespace,
@@ -313,7 +314,7 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
 }
 
 #[inline]
-pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn set_published_collabs_as_unpublished<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
   view_ids: &[Uuid],
@@ -322,7 +323,7 @@ pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
     r#"
       UPDATE af_published_collab
       SET
-        blob = NULL,
+        blob = E''::bytea,
         unpublished_at = NOW()
       WHERE workspace_id = $1
         AND view_id = ANY($2)
@@ -454,7 +455,8 @@ pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgre
       SELECT blob
       FROM af_published_collab
       WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
-      AND publish_name = $2
+        AND unpublished_at IS NULL
+        AND publish_name = $2
     "#,
     publish_namespace,
     publish_name,

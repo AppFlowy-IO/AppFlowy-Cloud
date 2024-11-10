@@ -27,11 +27,11 @@ use uuid::Uuid;
 use database::{
   file::{s3_client_impl::AwsS3BucketClientImpl, BucketClient, ResponseBlob},
   publish::{
-    delete_published_collabs, insert_or_replace_publish_collabs, select_publish_collab_meta,
-    select_published_collab_blob, select_published_collab_info,
-    select_published_collab_workspace_view_id, select_published_data_for_view_id,
-    select_published_metadata_for_view_id, select_user_is_collab_publisher_for_all_views,
-    select_workspace_publish_namespace_exists, update_non_orginal_workspace_publish_namespace,
+    insert_or_replace_publish_collabs, select_publish_collab_meta, select_published_collab_blob,
+    select_published_collab_info, select_published_collab_workspace_view_id,
+    select_published_data_for_view_id, select_published_metadata_for_view_id,
+    select_user_is_collab_publisher_for_all_views, select_workspace_publish_namespace_exists,
+    set_published_collabs_as_unpublished, update_non_orginal_workspace_publish_namespace,
   },
   workspace::select_user_is_workspace_owner,
 };
@@ -408,7 +408,7 @@ impl PublishedCollabStore for PublishedCollabPostgresStore {
     user_uuid: &Uuid,
   ) -> Result<(), AppError> {
     check_workspace_owner_or_publisher(&self.pg_pool, user_uuid, workspace_id, view_ids).await?;
-    delete_published_collabs(&self.pg_pool, workspace_id, view_ids).await?;
+    set_published_collabs_as_unpublished(&self.pg_pool, workspace_id, view_ids).await?;
     Ok(())
   }
 
@@ -598,7 +598,7 @@ impl PublishedCollabStore for PublishedCollabS3StoreWithPostgresFallback {
       .map(|view_id| get_collab_s3_key(workspace_id, view_id))
       .collect::<Vec<String>>();
     self.bucket_client.delete_blobs(object_keys).await?;
-    delete_published_collabs(&self.pg_pool, workspace_id, view_ids).await?;
+    set_published_collabs_as_unpublished(&self.pg_pool, workspace_id, view_ids).await?;
     Ok(())
   }
 

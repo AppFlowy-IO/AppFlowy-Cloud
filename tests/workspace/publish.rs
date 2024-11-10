@@ -423,16 +423,14 @@ async fn test_publish_doc() {
     let err = guest_client
       .get_published_collab::<MyCustomMetadata>(&my_namespace, publish_name_1)
       .await
-      .err()
-      .unwrap();
+      .unwrap_err();
     assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
 
     let guest_client = localhost_client();
     let err = guest_client
       .get_published_collab_blob(&my_namespace, publish_name_1)
       .await
-      .err()
-      .unwrap();
+      .unwrap_err();
     assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
 
     // default publish view should not be accessible

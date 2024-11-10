@@ -1489,7 +1489,8 @@ pub async fn select_view_id_from_publish_name(
       SELECT view_id
       FROM af_published_collab
       WHERE workspace_id = $1
-      AND publish_name = $2
+        AND unpublished_at IS NULL
+        AND publish_name = $2
     "#,
     workspace_uuid,
     publish_name

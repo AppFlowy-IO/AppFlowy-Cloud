@@ -480,10 +480,20 @@ async fn test_publish_comments() {
 
   // Test if only authenticated users can create
   let page_owner_comment_content = "comment from page owner";
-  page_owner_client
-    .create_comment_on_published_view(&view_id, page_owner_comment_content, &None)
-    .await
-    .unwrap();
+  {
+    page_owner_client
+      .create_comment_on_published_view(&view_id, page_owner_comment_content, &None)
+      .await
+      .unwrap();
+    let comments = page_owner_client
+      .get_published_view_comments(&view_id)
+      .await
+      .unwrap()
+      .comments;
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].content, page_owner_comment_content);
+  }
+
   let (first_user_client, first_user) = generate_unique_registered_user_client().await;
   let first_user_comment_content = "comment from first authenticated user";
   // This is to ensure that the second comment creation timestamp is later than the first one

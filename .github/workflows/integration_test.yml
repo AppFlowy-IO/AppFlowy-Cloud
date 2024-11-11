@@ -143,6 +143,11 @@ jobs:
           git checkout main
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
 
+      - name: Print Service Logs
+        if: failure()
+        run: |
+          docker compose --file docker-compose-ci.yml logs appflowy_cloud
+
   cleanup:
     name: Cleanup Docker Images
     if: always()

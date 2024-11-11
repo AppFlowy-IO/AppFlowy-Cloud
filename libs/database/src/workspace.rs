@@ -1115,7 +1115,7 @@ pub async fn insert_comment_to_published_view<'a, E: Executor<'a, Database = Pos
   view_id: &Uuid,
   user_uuid: &Uuid,
   content: &str,
-  reply_comment_id: &Option<Uuid>,
+  reply_comment_id: Option<&Uuid>,
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
@@ -1125,7 +1125,7 @@ pub async fn insert_comment_to_published_view<'a, E: Executor<'a, Database = Pos
     view_id,
     user_uuid,
     content,
-    reply_comment_id.clone(),
+    reply_comment_id,
   )
   .execute(executor)
   .await?;

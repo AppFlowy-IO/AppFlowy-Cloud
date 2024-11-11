@@ -198,7 +198,14 @@ pub async fn create_comment_on_published_view(
       "comment content exceed limit".to_string(),
     ));
   }
-  insert_comment_to_published_view(pg_pool, view_id, user_uuid, content, reply_comment_id).await?;
+  insert_comment_to_published_view(
+    pg_pool,
+    view_id,
+    user_uuid,
+    content,
+    reply_comment_id.as_ref(),
+  )
+  .await?;
   Ok(())
 }
 

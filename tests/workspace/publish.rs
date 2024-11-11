@@ -494,8 +494,8 @@ async fn test_publish_comments() {
     assert_eq!(comments[0].content, page_owner_comment_content);
   }
 
-  let (first_user_client, first_user) = generate_unique_registered_user_client().await;
   let first_user_comment_content = "comment from first authenticated user";
+  let (first_user_client, first_user) = generate_unique_registered_user_client().await;
   // This is to ensure that the second comment creation timestamp is later than the first one
   sleep(Duration::from_millis(1));
   first_user_client
@@ -503,6 +503,7 @@ async fn test_publish_comments() {
     .await
     .unwrap();
   let guest_client = localhost_client();
+  sleep(Duration::from_millis(1));
   let result = guest_client
     .create_comment_on_published_view(&view_id, "comment from anonymous", &None)
     .await;

@@ -17,7 +17,7 @@ reqwest = { workspace = true, features = ["stream"] }
 uuid = { version = "1.6.1", features = ["v4"] }
 gotrue-entity = { path = "../gotrue-entity" }
 database-entity.workspace = true
-infra.workspace = true
+infra = { workspace = true, features = ["request_util"] }
 collab-entity = { workspace = true }
 app-error = { workspace = true }
 chrono = "0.4.31"
@@ -32,7 +32,7 @@ actix-web = { version = "4.4.1", default-features = false, features = [
 validator = { version = "0.16", features = [
   "validator_derive",
   "derive",
-], optional = true }
+] }
 futures = "0.3.30"
 bytes = "1.6.0"
 log = "0.4.21"
@@ -40,4 +40,4 @@ tracing = { workspace = true }
 
 
 [features]
-cloud = ["actix-web", "validator"]
+cloud = ["actix-web"]

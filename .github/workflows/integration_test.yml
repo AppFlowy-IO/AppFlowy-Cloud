@@ -135,7 +135,7 @@ jobs:
       - name: Run Tests
         run: |
           echo "Running tests for test test_publish_comments"
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test test_publish_comments
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test publish
 
       # - name: Run Tests from main branch
       #   run: |

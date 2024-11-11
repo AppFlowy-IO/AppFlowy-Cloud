@@ -565,6 +565,14 @@ async fn test_publish_comments() {
   // Test if it's possible to reply to another user's comment
   let second_user_comment_content = "comment from second authenticated user";
   let (second_user_client, second_user) = generate_unique_registered_user_client().await;
+  {
+    let published_view_comments: Vec<GlobalComment> = guest_client
+      .get_published_view_comments(&view_id)
+      .await
+      .unwrap()
+      .comments;
+    assert_eq!(published_view_comments.len(), 2);
+  }
   // User 2 reply to user 1
   second_user_client
     .create_comment_on_published_view(
@@ -574,6 +582,14 @@ async fn test_publish_comments() {
     )
     .await
     .unwrap();
+  {
+    let published_view_comments: Vec<GlobalComment> = guest_client
+      .get_published_view_comments(&view_id)
+      .await
+      .unwrap()
+      .comments;
+    assert_eq!(published_view_comments.len(), 3);
+  }
   let published_view_comments: Vec<GlobalComment> = guest_client
     .get_published_view_comments(&view_id)
     .await

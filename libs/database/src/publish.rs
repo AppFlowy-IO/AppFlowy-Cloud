@@ -237,9 +237,11 @@ pub async fn insert_or_replace_publish_collabs(
   let delete_publish_names = sqlx::query_scalar!(
     r#"
       DELETE FROM af_published_collab
-      WHERE publish_name = ANY($1::text[])
+      WHERE workspace_id = $1
+        AND publish_name = ANY($2::text[])
       RETURNING publish_name
     "#,
+    workspace_id,
     &publish_names,
   )
   .fetch_all(txn.as_mut())

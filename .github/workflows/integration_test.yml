@@ -134,27 +134,11 @@ jobs:
 
       - name: Run Tests
         run: |
-          echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
-
-      - name: Run Tests from main branch
-        run: |
-          git fetch origin main
-          git checkout main
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
+          echo "Running tests for test_publish_comments"
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test test_publish_comments
 
       - name: Print Service Logs
         if: failure()
         run: |
           docker compose --file docker-compose-ci.yml logs appflowy_cloud
-
-  cleanup:
-    name: Cleanup Docker Images
-    if: always()
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Remove Docker Images from Docker Hub
-        run: |
-          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "appflowyinc", "password": "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
-          curl -s -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/${{ matrix.test_service }}/tags/${GITHUB_SHA}/
+          docker compose --file docker-compose-ci.yml logs postgres

@@ -37,6 +37,7 @@ where
     .await?;
 
   let mut database_records = vec![];
+  let mut collab_params = Vec::with_capacity(templates.len());
   for template in templates {
     let template_id = template.template_id;
     let (view_id, object_id) = match &template_id {
@@ -53,21 +54,12 @@ where
       .encoded_collab
       .encode_to_bytes()
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
-
-    collab_storage
-      .insert_new_collab_with_transaction(
-        &workspace_id,
-        &uid,
-        CollabParams {
-          object_id: object_id.clone(),
-          encoded_collab_v1: encoded_collab_v1.into(),
-          collab_type: object_type.clone(),
-          embeddings: None,
-        },
-        txn,
-        "initialize workspace for user",
-      )
-      .await?;
+    collab_params.push(CollabParams {
+      object_id: object_id.clone(),
+      encoded_collab_v1: encoded_collab_v1.into(),
+      collab_type: object_type.clone(),
+      embeddings: None,
+    });
 
     // push the database record
     if object_type == CollabType::Database {
@@ -80,6 +72,10 @@ where
       }
     }
   }
+
+  collab_storage
+    .batch_insert_new_collab(&workspace_id, &uid, collab_params)
+    .await?;
 
   // Create a workspace database object for given user
   // The database_storage_id is auto-generated when the workspace is created. So, it should be available

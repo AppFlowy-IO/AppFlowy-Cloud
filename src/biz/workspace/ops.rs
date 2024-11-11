@@ -77,14 +77,14 @@ pub async fn create_empty_workspace(
   user_uid: i64,
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let mut txn = pg_pool.begin().await?;
-  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name, false).await?;
+  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name, false).await?;
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
     .await?;
   let workspace_id = new_workspace_row.workspace_id.to_string();
 
   // create CollabType::Folder
+  let mut txn = pg_pool.begin().await?;
   create_workspace_collab(
     user_uid,
     &workspace_id,
@@ -130,14 +130,14 @@ pub async fn create_workspace_for_user(
   user_uid: i64,
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let mut txn = pg_pool.begin().await?;
-  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name, true).await?;
+  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name, true).await?;
 
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
     .await?;
 
   // add create initial collab for user
+  let mut txn = pg_pool.begin().await?;
   initialize_workspace_for_user(
     user_uid,
     user_uuid,
@@ -147,9 +147,9 @@ pub async fn create_workspace_for_user(
     collab_storage,
   )
   .await?;
+  txn.commit().await?;
 
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
-  txn.commit().await?;
   Ok(new_workspace)
 }
 

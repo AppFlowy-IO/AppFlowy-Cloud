@@ -42,7 +42,7 @@ pub async fn delete_from_workspace(pg_pool: &PgPool, workspace_id: &Uuid) -> Res
 
 #[inline]
 pub async fn insert_user_workspace(
-  tx: &mut Transaction<'_, sqlx::Postgres>,
+  pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_name: &str,
   is_initialized: bool,
@@ -73,7 +73,7 @@ pub async fn insert_user_workspace(
     workspace_name,
     is_initialized,
   )
-  .fetch_one(tx.deref_mut())
+  .fetch_one(pg_pool)
   .await?;
 
   Ok(workspace)

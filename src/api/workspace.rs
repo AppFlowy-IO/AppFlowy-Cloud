@@ -333,10 +333,16 @@ async fn list_workspace_handler(
   state: Data<AppState>,
   query: web::Query<QueryWorkspaceParam>,
 ) -> Result<JsonAppResponse<Vec<AFWorkspace>>> {
+  let QueryWorkspaceParam {
+    include_member_count,
+    include_role,
+  } = query.into_inner();
+
   let workspaces = workspace::ops::get_all_user_workspaces(
     &state.pg_pool,
     &uuid,
-    query.into_inner().include_member_count.unwrap_or(false),
+    include_member_count.unwrap_or(false),
+    include_role.unwrap_or(false),
   )
   .await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())

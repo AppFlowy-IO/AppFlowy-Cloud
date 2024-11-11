@@ -851,10 +851,32 @@ pub async fn select_member_count_for_workspaces<'a, E: Executor<'a, Database = P
     };
     ret.insert(row.workspace_id, count);
   }
-  for workspace_id in workspace_ids.iter() {
-    if !ret.contains_key(workspace_id) {
-      ret.insert(*workspace_id, 0);
-    }
+
+  Ok(ret)
+}
+
+pub async fn select_roles_for_workspaces(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_ids: &[Uuid],
+) -> Result<HashMap<Uuid, AFRole>, AppError> {
+  let query_res = sqlx::query!(
+    r#"
+      SELECT workspace_id, role_id
+      FROM af_workspace_member
+      WHERE workspace_id = ANY($1)
+        AND uid = (SELECT uid FROM public.af_user WHERE uuid = $2)
+    "#,
+    workspace_ids,
+    user_uuid,
+  )
+  .fetch_all(pg_pool)
+  .await?;
+
+  let mut ret = HashMap::with_capacity(workspace_ids.len());
+  for row in query_res {
+    let role = AFRole::from(row.role_id);
+    ret.insert(row.workspace_id, role);
   }
 
   Ok(ret)

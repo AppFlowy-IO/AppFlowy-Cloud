@@ -256,6 +256,7 @@ pub async fn get_all_user_workspaces(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   include_member_count: bool,
+  include_role: bool,
 ) -> Result<Vec<AFWorkspace>, AppResponseError> {
   let workspaces = select_all_user_workspaces(pg_pool, user_uuid).await?;
   let mut workspaces = workspaces
@@ -273,10 +274,23 @@ pub async fn get_all_user_workspaces(
       .iter()
       .map(|row| row.workspace_id)
       .collect::<Vec<_>>();
-    let member_count_by_workspace_id = select_member_count_for_workspaces(pg_pool, &ids).await?;
+    let mut member_count_by_workspace_id =
+      select_member_count_for_workspaces(pg_pool, &ids).await?;
     for workspace in workspaces.iter_mut() {
-      if let Some(member_count) = member_count_by_workspace_id.get(&workspace.workspace_id) {
-        workspace.member_count = Some(*member_count);
+      if let Some(member_count) = member_count_by_workspace_id.remove(&workspace.workspace_id) {
+        workspace.member_count = Some(member_count);
+      }
+    }
+  }
+  if include_role {
+    let ids = workspaces
+      .iter()
+      .map(|row| row.workspace_id)
+      .collect::<Vec<_>>();
+    let mut roles_by_workspace_id = select_roles_for_workspaces(pg_pool, user_uuid, &ids).await?;
+    for workspace in workspaces.iter_mut() {
+      if let Some(role) = roles_by_workspace_id.remove(&workspace.workspace_id) {
+        workspace.role = Some(role.clone());
       }
     }
   }

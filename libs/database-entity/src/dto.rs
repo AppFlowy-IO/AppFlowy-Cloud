@@ -622,6 +622,8 @@ pub struct AFWorkspace {
   pub created_at: DateTime<Utc>,
   pub icon: String,
   pub member_count: Option<i64>,
+  #[serde(default)]
+  pub role: Option<AFRole>, // role of the user requesting the workspace
 }
 
 #[derive(Serialize, Deserialize)]

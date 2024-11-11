@@ -22,6 +22,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
 
+  // Create new user if it doesn't exist
   let mut txn = state
     .pg_pool
     .begin()
@@ -41,24 +42,32 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
       .workspace_access_control
       .insert_role(&new_uid, &workspace_id, AFRole::Owner)
       .await?;
+    // Need to commit the transaction for the record in `af_user` to be inserted
+    // so that `initialize_workspace_for_user` will be able to find the user
+    txn
+      .commit()
+      .await
+      .context("fail to commit transaction to verify token")?;
 
     // Create a workspace with the GetStarted template
+    let mut txn2 = state.pg_pool.begin().await?;
     initialize_workspace_for_user(
       new_uid,
       &user_uuid,
       &workspace_row,
-      &mut txn,
+      &mut txn2,
       vec![GettingStartedTemplate],
       &state.collab_access_control_storage,
     )
     .await?;
+    txn2
+      .commit()
+      .await
+      .context("fail to commit transaction to initialize workspace")?;
   } else {
     trace!("user already exists:{},{}", user.id, user.email);
   }
-  txn
-    .commit()
-    .await
-    .context("fail to commit transaction to verify token")?;
+
   Ok(is_new)
 }
 

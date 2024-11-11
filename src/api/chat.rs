@@ -186,10 +186,10 @@ async fn create_question_handler(
 
 #[instrument(level = "debug", skip_all, err)]
 async fn create_question_handler_v2(
-  state: Data<AppState>,
-  path: web::Path<(String, String)>,
-  payload: Json<CreateChatMessageParamsV2>,
-  uuid: UserUuid,
+  _state: Data<AppState>,
+  _path: web::Path<(String, String)>,
+  _payload: Json<CreateChatMessageParamsV2>,
+  _uuid: UserUuid,
 ) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
   todo!()
 }

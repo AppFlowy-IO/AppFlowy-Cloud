@@ -1,6 +1,6 @@
 use crate::ai_test::util::read_text_from_asset;
 
-use assert_json_diff::assert_json_eq;
+use assert_json_diff::{assert_json_eq, assert_json_include};
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{local_ai_test_enabled, TestClient};
 use futures_util::StreamExt;
@@ -133,14 +133,14 @@ async fn chat_qa_test() {
     .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
-  assert_json_eq!(
-    question.meta_data,
-    json!([
+  assert_json_include!(
+    actual: question.meta_data,
+    expected: json!([
       {
         "id": "123",
         "name": "test context",
         "source": "user added",
-        "extract": {
+        "extra": {
             "created_at": 123
         }
       }

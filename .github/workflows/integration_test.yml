@@ -147,6 +147,7 @@ jobs:
         if: failure()
         run: |
           docker compose --file docker-compose-ci.yml logs appflowy_cloud
+          docker compose --file docker-compose-ci.yml logs postgres
 
   cleanup:
     name: Cleanup Docker Images

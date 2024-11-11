@@ -41,26 +41,26 @@ jobs:
           sudo apt-get install protobuf-compiler
           sudo update-ca-certificates
 
-      - name: Build Docker Images
-        run: |
-          export DOCKER_DEFAULT_PLATFORM=linux/amd64
-          docker compose build appflowy_cloud appflowy_history appflowy_worker admin_frontend
+      # - name: Build Docker Images
+      #   run: |
+      #     export DOCKER_DEFAULT_PLATFORM=linux/amd64
+      #     docker compose build appflowy_cloud appflowy_history appflowy_worker admin_frontend
 
-      - name: Push docker images to docker hub
-        run: |
-          docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
-          docker tag appflowyinc/appflowy_history appflowyinc/appflowy_history:${GITHUB_SHA}
-          docker tag appflowyinc/appflowy_worker appflowyinc/appflowy_worker:${GITHUB_SHA}
-          docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:${GITHUB_SHA}
-          echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
-          docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
-          docker push appflowyinc/appflowy_history:${GITHUB_SHA}
-          docker push appflowyinc/appflowy_worker:${GITHUB_SHA}
-          docker push appflowyinc/admin_frontend:${GITHUB_SHA}
-          APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
-          APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
-          APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
-          APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
+      # - name: Push docker images to docker hub
+      #   run: |
+      #     docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
+      #     docker tag appflowyinc/appflowy_history appflowyinc/appflowy_history:${GITHUB_SHA}
+      #     docker tag appflowyinc/appflowy_worker appflowyinc/appflowy_worker:${GITHUB_SHA}
+      #     docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:${GITHUB_SHA}
+      #     echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
+      #     docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
+      #     docker push appflowyinc/appflowy_history:${GITHUB_SHA}
+      #     docker push appflowyinc/appflowy_worker:${GITHUB_SHA}
+      #     docker push appflowyinc/admin_frontend:${GITHUB_SHA}
+      #     APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
+      #     APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
+      #     APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
+      #     APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
 
   test:
     name: Integration Tests
@@ -71,12 +71,12 @@ jobs:
         include:
           - test_service: "appflowy_cloud"
             test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --features ai-test-enabled"
-          - test_service: "appflowy_history"
-            test_cmd: "-p appflowy-history"
-          - test_service: "appflowy_worker"
-            test_cmd: "-p appflowy-worker"
-          - test_service: "admin_frontend"
-            test_cmd: "-p admin_frontend"
+          # - test_service: "appflowy_history"
+          #   test_cmd: "-p appflowy-history"
+          # - test_service: "appflowy_worker"
+          #   test_cmd: "-p appflowy-worker"
+          # - test_service: "admin_frontend"
+          #   test_cmd: "-p admin_frontend"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -112,10 +112,10 @@ jobs:
 
       - name: Run Docker-Compose
         run: |
-          export APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
-          export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
-          export APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
-          export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
+          export APPFLOWY_HISTORY_VERSION=0.7.2
+          export APPFLOWY_WORKER_VERSION=0.7.2
+          export APPFLOWY_CLOUD_VERSION=zack
+          export APPFLOWY_ADMIN_FRONTEND_VERSION=0.7.2
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
 

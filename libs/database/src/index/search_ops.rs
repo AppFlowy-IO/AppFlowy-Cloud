@@ -5,6 +5,13 @@ use pgvector::Vector;
 use sqlx::Transaction;
 use uuid::Uuid;
 
+/// Logs each search request to track usage by workspace. It either inserts a new record or updates
+/// an existing one with the current date, workspace ID, request count, and token usage. This ensures
+/// accurate usage tracking for billing or monitoring.
+///
+/// Searches and retrieves documents based on their similarity to a given search embedding.
+/// It filters by workspace, user access, and document status, and returns a limited number
+/// of the most relevant documents, sorted by similarity score.
 pub async fn search_documents(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   params: SearchDocumentParams,

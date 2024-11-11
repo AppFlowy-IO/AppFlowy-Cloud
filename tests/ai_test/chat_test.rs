@@ -1,13 +1,13 @@
 use crate::ai_test::util::read_text_from_asset;
 
-use assert_json_diff::assert_json_eq;
+use assert_json_diff::{assert_json_eq, assert_json_include};
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{local_ai_test_enabled, TestClient};
-use database_entity::dto::{
-  ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams, MessageCursor,
-};
 use futures_util::StreamExt;
 use serde_json::json;
+use shared_entity::dto::chat_dto::{
+  ChatMessageMetadata, ChatRAGData, CreateChatMessageParams, CreateChatParams, MessageCursor,
+};
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
@@ -120,28 +120,27 @@ async fn chat_qa_test() {
 
   let content = read_text_from_asset("my_profile.txt");
   let metadata = ChatMessageMetadata {
-    data: ChatMetadataData::new_text(content),
+    data: ChatRAGData::new_text(content),
     id: "123".to_string(),
     name: "test context".to_string(),
     source: "user added".to_string(),
-    extract: Some(json!({"created_at": 123})),
+    extra: Some(json!({"created_at": 123})),
   };
 
-  let params =
-    CreateChatMessageParams::new_user("Where lucas live?").with_metadata(json!(vec![metadata]));
+  let params = CreateChatMessageParams::new_user("Where lucas live?").with_metadata(metadata);
   let question = test_client
     .api_client
     .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
-  assert_json_eq!(
-    question.meta_data,
-    json!([
+  assert_json_include!(
+    actual: question.meta_data,
+    expected: json!([
       {
         "id": "123",
         "name": "test context",
         "source": "user added",
-        "extract": {
+        "extra": {
             "created_at": 123
         }
       }
@@ -230,11 +229,11 @@ async fn create_chat_context_test() {
 
   let content = "Lacus have lived in the US for five years".to_string();
   let metadata = ChatMessageMetadata {
-    data: ChatMetadataData::from_text(content),
+    data: ChatRAGData::from_text(content),
     id: chat_id.clone(),
     name: "".to_string(),
     source: "appflowy".to_string(),
-    extract: None,
+    extra: None,
   };
 
   let params = CreateChatMessageParams::new_user("Where Lacus live?").with_metadata(metadata);

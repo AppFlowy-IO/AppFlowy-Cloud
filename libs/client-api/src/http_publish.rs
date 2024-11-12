@@ -290,7 +290,10 @@ impl Client {
     &self,
     view_id: &uuid::Uuid,
   ) -> Result<PublishInfo, AppResponseError> {
-    let url = format!("{}/api/workspace/published-info/{}", self.base_url, view_id);
+    let url = format!(
+      "{}/api/workspace/v1/published-info/{}",
+      self.base_url, view_id
+    );
 
     let resp = self.cloud_client.get(&url).send().await?;
     AppResponse::<PublishInfo>::from_response(resp)

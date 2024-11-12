@@ -261,6 +261,7 @@ impl Default for ViewLayout {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceParam {
   pub include_member_count: Option<bool>,
+  pub include_role: Option<bool>,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]

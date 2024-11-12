@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      DELETE FROM af_published_collab\n      WHERE workspace_id = $1\n        AND publish_name = ANY($2::text[])\n      RETURNING publish_name\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "publish_name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a3c235bd5df50f80ec93c3d9f6da8db7e17e89788f30c5b6432c582992b6a009"
+}

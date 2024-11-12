@@ -49,7 +49,8 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  create_page, get_page_view_collab, move_page_to_trash, update_page, update_page_collab_data,
+  create_page, get_page_view_collab, move_page_to_trash, restore_all_pages_from_trash,
+  restore_page_from_trash, update_page, update_page_collab_data,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::domain::compression::{
@@ -139,6 +140,14 @@ pub fn workspace_scope() -> Scope {
         .route(web::post().to(move_page_to_trash_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/restore-from-trash")
+        .route(web::post().to(restore_page_from_trash_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/restore-all-pages-from-trash")
+        .route(web::post().to(restore_all_pages_from_trash_handler)),
+    )
+    .service(
       web::resource("/{workspace_id}/batch/collab")
         .route(web::post().to(batch_create_collab_handler)),
     )
@@ -182,8 +191,13 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(list_published_collab_info_handler)),
     )
     .service(
+      // deprecated since 0.7.4
       web::resource("/published-info/{view_id}")
         .route(web::get().to(get_published_collab_info_handler)),
+    )
+    .service(
+      web::resource("/v1/published-info/{view_id}")
+        .route(web::get().to(get_v1_published_collab_info_handler)),
     )
     .service(
       web::resource("/published-info/{view_id}/comment")
@@ -236,6 +250,7 @@ pub fn workspace_scope() -> Scope {
       // Web browser can't carry payload when using GET method, so for browser compatibility, we use POST method
       .route(web::post().to(batch_get_collab_handler)),
     )
+    .service(web::resource("/{workspace_id}/database").route(web::get().to(list_database_handler)))
 }
 
 pub fn collab_scope() -> Scope {
@@ -918,6 +933,41 @@ async fn move_page_to_trash_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+async fn restore_page_from_trash_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  restore_page_from_trash(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_uuid,
+    &view_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn restore_all_pages_from_trash_handler(
+  user_uuid: UserUuid,
+  path: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_uuid = path.into_inner();
+  restore_all_pages_from_trash(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_uuid,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
 async fn update_page_view_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, String)>,
@@ -1347,6 +1397,7 @@ async fn post_published_duplicate_handler(
     params.dest_view_id,
   )
   .await?;
+
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1364,7 +1415,23 @@ async fn list_published_collab_info_handler(
   Ok(Json(AppResponse::Ok().with_data(publish_infos)))
 }
 
+// Deprecated since 0.7.4
 async fn get_published_collab_info_handler(
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishInfo>>> {
+  let view_id = view_id.into_inner();
+  let collab_data = state
+    .published_collab_store
+    .get_collab_publish_info(&view_id)
+    .await?;
+  if collab_data.unpublished_timestamp.is_some() {
+    return Err(AppError::RecordNotFound("Collab is unpublished".to_string()).into());
+  }
+  Ok(Json(AppResponse::Ok().with_data(collab_data)))
+}
+
+async fn get_v1_published_collab_info_handler(
   view_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PublishInfo>>> {
@@ -1545,7 +1612,7 @@ async fn delete_published_collabs_handler(
   }
   state
     .published_collab_store
-    .delete_collabs(&workspace_id, &view_ids, &user_uuid)
+    .unpublish_collabs(&workspace_id, &view_ids, &user_uuid)
     .await?;
   Ok(Json(AppResponse::Ok()))
 }
@@ -1728,6 +1795,23 @@ async fn get_workspace_publish_outline_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(published_view)))
+}
+
+async fn list_database_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<String>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<Vec<AFDatabase>>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_id = workspace_id.into_inner();
+  let dbs = biz::collab::ops::list_database(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(dbs)))
 }
 
 #[inline]

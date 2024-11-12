@@ -34,7 +34,7 @@ jobs:
     name: Setup Environment
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install prerequisites
         run: |
           sudo apt-get update
@@ -44,17 +44,21 @@ jobs:
       - name: Build Docker Images
         run: |
           export DOCKER_DEFAULT_PLATFORM=linux/amd64
-          docker compose build appflowy_cloud appflowy_worker
+          docker compose build appflowy_cloud appflowy_history appflowy_worker admin_frontend
 
       - name: Push docker images to docker hub
         run: |
           docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker tag appflowyinc/appflowy_worker appflowyinc/appflowy_worker:${GITHUB_SHA}
+          docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:${GITHUB_SHA}
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker push appflowyinc/appflowy_worker:${GITHUB_SHA}
+          docker push appflowyinc/admin_frontend:${GITHUB_SHA}
+          APPFLOWY_HISTORY_VERSION=${GITHUB_SHA}
           APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
+          APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
 
   test:
     name: Integration Tests
@@ -67,8 +71,10 @@ jobs:
             test_cmd: "--workspace --exclude appflowy-ai-client --features ai-test-enabled"
           - test_service: "appflowy_worker"
             test_cmd: "-p appflowy-worker"
+          - test_service: "admin_frontend"
+            test_cmd: "-p admin_frontend"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -107,7 +113,7 @@ jobs:
           export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
-          
+
           container_id=$(docker ps --filter name=appflowy-cloud-ai-1 -q)
           if [ -n "$container_id" ]; then
           echo "Displaying logs for the AppFlowy-AI container..."
@@ -116,7 +122,7 @@ jobs:
             echo "No running container found to display logs."
           fi
 
-      - name: install prerequisites
+      - name: Install prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
@@ -125,7 +131,12 @@ jobs:
         run: |
           echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test -p admin_frontend ${{ matrix.test_cmd }}
+
+      - name: Run Tests from main branch
+        run: |
+          git fetch origin main
+          git checkout main
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
 
   cleanup:
     name: Cleanup Docker Images

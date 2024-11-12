@@ -3,8 +3,10 @@ use database::chat::chat_ops::{
   delete_chat, get_all_chat_messages, insert_chat, insert_question_message, select_chat,
   select_chat_messages,
 };
-use database_entity::dto::{ChatAuthor, ChatAuthorType, CreateChatParams, GetChatMessageParams};
 use serde_json::json;
+use shared_entity::dto::chat_dto::{
+  ChatAuthor, ChatAuthorType, CreateChatParams, GetChatMessageParams,
+};
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = false)]
@@ -96,7 +98,7 @@ async fn chat_message_crud_test(pool: PgPool) {
       ChatAuthor::new(0, ChatAuthorType::System),
       &chat_id,
       format!("message {}", i),
-      None,
+      vec![],
     )
     .await
     .unwrap();

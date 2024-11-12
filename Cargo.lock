@@ -2948,6 +2948,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shared-entity",
  "sqlx",
  "tokio",
  "tonic-proto",
@@ -2967,6 +2968,7 @@ dependencies = [
  "bytes",
  "chrono",
  "collab-entity",
+ "infra",
  "prost",
  "serde",
  "serde_json",
@@ -4164,6 +4166,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "validator",
 ]
 
 [[package]]

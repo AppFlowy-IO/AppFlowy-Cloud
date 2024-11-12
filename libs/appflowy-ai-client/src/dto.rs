@@ -1,4 +1,5 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::json;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -274,87 +275,35 @@ pub struct LocalAIConfig {
   pub plugin: AppFlowyOfflineAI,
 }
 
-#[derive(Debug, Clone)]
-pub enum ChatContextLoader {
-  Txt,
-  Markdown,
-}
-
-impl Display for ChatContextLoader {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    match self {
-      ChatContextLoader::Txt => write!(f, "text"),
-      ChatContextLoader::Markdown => write!(f, "markdown"),
-    }
-  }
-}
-
-impl FromStr for ChatContextLoader {
-  type Err = anyhow::Error;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "text" => Ok(ChatContextLoader::Txt),
-      "markdown" => Ok(ChatContextLoader::Markdown),
-      _ => Err(anyhow::anyhow!("unknown context loader type")),
-    }
-  }
-}
-impl Serialize for ChatContextLoader {
-  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-  where
-    S: Serializer,
-  {
-    match self {
-      ChatContextLoader::Txt => serializer.serialize_str("text"),
-      ChatContextLoader::Markdown => serializer.serialize_str("markdown"),
-    }
-  }
-}
-
-impl<'de> Deserialize<'de> for ChatContextLoader {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    let s = String::deserialize(deserializer)?;
-    match s.as_str() {
-      "text" => Ok(ChatContextLoader::Txt),
-      "markdown" => Ok(ChatContextLoader::Markdown),
-      _ => Err(serde::de::Error::custom("unknown value")),
-    }
-  }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CreateTextChatContext {
+pub struct CreateChatContext {
   pub chat_id: String,
-  pub context_loader: ChatContextLoader,
+  pub context_loader: String,
   pub content: String,
   pub chunk_size: i32,
   pub chunk_overlap: i32,
-  pub metadata: HashMap<String, serde_json::Value>,
+  pub metadata: serde_json::Value,
 }
 
-impl CreateTextChatContext {
-  pub fn new(chat_id: String, context_loader: ChatContextLoader, text: String) -> Self {
-    CreateTextChatContext {
+impl CreateChatContext {
+  pub fn new(chat_id: String, context_loader: String, text: String) -> Self {
+    CreateChatContext {
       chat_id,
       context_loader,
       content: text,
       chunk_size: 2000,
       chunk_overlap: 20,
-      metadata: HashMap::new(),
+      metadata: json!({}),
     }
   }
 
-  pub fn with_metadata(mut self, metadata: HashMap<String, serde_json::Value>) -> Self {
-    self.metadata = metadata;
+  pub fn with_metadata<T: Serialize>(mut self, metadata: T) -> Self {
+    self.metadata = json!(metadata);
     self
   }
 }
 
-impl Display for CreateTextChatContext {
+impl Display for CreateChatContext {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
       "Create Chat context: {{ chat_id: {}, content_type: {}, content size: {},  metadata: {:?} }}",

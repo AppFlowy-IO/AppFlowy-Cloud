@@ -214,8 +214,8 @@ pub async fn select_workspace_publish_namespace(
 }
 
 #[inline]
-pub async fn insert_or_replace_publish_collabs<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
+pub async fn insert_or_replace_publish_collabs(
+  pg_pool: &PgPool,
   workspace_id: &Uuid,
   publisher_uuid: &Uuid,
   publish_items: Vec<PublishCollabItem<serde_json::Value, Vec<u8>>>,
@@ -231,6 +231,27 @@ pub async fn insert_or_replace_publish_collabs<'a, E: Executor<'a, Database = Po
     metadatas.push(item.meta.metadata);
     blobs.push(item.data);
   });
+
+  let mut txn = pg_pool.begin().await?;
+
+  let delete_publish_names = sqlx::query_scalar!(
+    r#"
+      DELETE FROM af_published_collab
+      WHERE workspace_id = $1
+        AND publish_name = ANY($2::text[])
+      RETURNING publish_name
+    "#,
+    workspace_id,
+    &publish_names,
+  )
+  .fetch_all(txn.as_mut())
+  .await?;
+  if !delete_publish_names.is_empty() {
+    tracing::info!(
+      "Deleted existing published collab record with publish names: {:?}",
+      delete_publish_names
+    );
+  }
 
   let res = sqlx::query!(
     r#"
@@ -257,7 +278,7 @@ pub async fn insert_or_replace_publish_collabs<'a, E: Executor<'a, Database = Po
     &blobs,
     item_count as i32,
   )
-  .execute(executor)
+  .execute(txn.as_mut())
   .await?;
 
   if res.rows_affected() != item_count as u64 {
@@ -267,6 +288,7 @@ pub async fn insert_or_replace_publish_collabs<'a, E: Executor<'a, Database = Po
     );
   }
 
+  txn.commit().await?;
   Ok(())
 }
 
@@ -281,6 +303,7 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
     SELECT metadata
     FROM af_published_collab
     WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
+      AND unpublished_at IS NULL
       AND publish_name = $2
     "#,
     publish_namespace,
@@ -293,14 +316,17 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
 }
 
 #[inline]
-pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn set_published_collabs_as_unpublished<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
   view_ids: &[Uuid],
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
-      DELETE FROM af_published_collab
+      UPDATE af_published_collab
+      SET
+        blob = E''::bytea,
+        unpublished_at = NOW()
       WHERE workspace_id = $1
         AND view_id = ANY($2)
     "#,
@@ -431,7 +457,8 @@ pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgre
       SELECT blob
       FROM af_published_collab
       WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
-      AND publish_name = $2
+        AND unpublished_at IS NULL
+        AND publish_name = $2
     "#,
     publish_namespace,
     publish_name,
@@ -502,7 +529,7 @@ async fn select_first_non_original_namespace(
   Ok(res)
 }
 
-pub async fn select_published_collab_info_for_view_ids(
+pub async fn select_publish_info_for_view_ids(
   pg_pool: &PgPool,
   view_ids: &[Uuid],
 ) -> Result<Vec<PublishInfo>, AppError> {
@@ -514,7 +541,8 @@ pub async fn select_published_collab_info_for_view_ids(
         apc.publish_name,
         apc.view_id,
         au.email AS publisher_email,
-        apc.created_at AS publish_timestamp
+        apc.created_at AS publish_timestamp,
+        apc.unpublished_at AS unpublished_timestamp
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
@@ -543,7 +571,7 @@ pub async fn select_published_collab_info(
   pg_pool: &PgPool,
   view_id: &Uuid,
 ) -> Result<PublishInfo, AppError> {
-  select_published_collab_info_for_view_ids(pg_pool, &[*view_id])
+  select_publish_info_for_view_ids(pg_pool, &[*view_id])
     .await?
     .into_iter()
     .next()
@@ -562,12 +590,13 @@ pub async fn select_all_published_collab_info(
         apc.publish_name,
         apc.view_id,
         au.email AS publisher_email,
-        apc.created_at AS publish_timestamp
+        apc.created_at AS publish_timestamp,
+        apc.unpublished_at AS unpublished_timestamp
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
       JOIN af_workspace_namespace awn ON aw.workspace_id = awn.workspace_id AND awn.is_original = TRUE
-      WHERE apc.workspace_id = $1;
+      WHERE apc.workspace_id = $1 AND apc.unpublished_at IS NULL;
     "#,
     workspace_id,
   )

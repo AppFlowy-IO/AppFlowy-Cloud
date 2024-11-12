@@ -34,7 +34,7 @@ jobs:
     name: Setup Environment
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install prerequisites
         run: |
           sudo apt-get update
@@ -78,7 +78,7 @@ jobs:
           - test_service: "admin_frontend"
             test_cmd: "-p admin_frontend"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -135,6 +135,12 @@ jobs:
       - name: Run Tests
         run: |
           echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
+
+      - name: Run Tests from main branch
+        run: |
+          git fetch origin main
+          git checkout main
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
 
   cleanup:

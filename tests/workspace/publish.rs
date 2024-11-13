@@ -1709,3 +1709,69 @@ async fn test_republish_doc() {
     assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
   }
 }
+
+#[tokio::test]
+async fn test_republish_patch() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&c).await;
+  let my_namespace = uuid::Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
+    .await
+    .unwrap();
+
+  let publish_name = "my-publish-name";
+  let view_id = uuid::Uuid::new_v4();
+
+  // User publishes 1 doc
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(
+    &workspace_id,
+    vec![PublishCollabItem {
+      meta: PublishCollabMetadata {
+        view_id,
+        publish_name: publish_name.to_string(),
+        metadata: MyCustomMetadata {
+          title: "my_title_1".to_string(),
+        },
+      },
+      data: "yrs_encoded_data_1".as_bytes(),
+    }],
+  )
+  .await
+  .unwrap();
+
+  // user unpublishes the doc
+  c.unpublish_collabs(&workspace_id, &[view_id])
+    .await
+    .unwrap();
+
+  // User publish another doc
+  let publish_name_2 = "my-publish-name-2";
+  let view_id_2 = uuid::Uuid::new_v4();
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(
+    &workspace_id,
+    vec![PublishCollabItem {
+      meta: PublishCollabMetadata {
+        view_id: view_id_2,
+        publish_name: publish_name_2.to_string(),
+        metadata: MyCustomMetadata {
+          title: "my_title_1".to_string(),
+        },
+      },
+      data: "yrs_encoded_data_1".as_bytes(),
+    }],
+  )
+  .await
+  .unwrap();
+
+  // User change the publish name of the document to publish_name
+  // which should be allowed since the original document is already unpublished
+  c.patch_published_collabs(
+    &workspace_id,
+    &[PatchPublishedCollab {
+      view_id: view_id_2,
+      publish_name: Some(publish_name.to_string()),
+    }],
+  )
+  .await
+  .unwrap();
+}

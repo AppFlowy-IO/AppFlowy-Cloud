@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::fmt::Display;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::Arc;
@@ -12,22 +11,18 @@ use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
-use tracing::{error, event, info, trace};
-use yrs::updates::decoder::Decode;
-use yrs::updates::encoder::Encode;
-use yrs::Update;
+use tracing::{event, info, trace};
 
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
-use collab_stream::client::CollabRedisStream;
+
 use collab_stream::error::StreamError;
-use collab_stream::model::{CollabUpdateEvent, StreamBinary};
-use collab_stream::stream_group::StreamGroup;
+
 use database::collab::CollabStorage;
 
 use crate::error::RealtimeError;
-use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, Subscription};
+use crate::group::broadcast::{CollabBroadcast, Subscription};
 use crate::group::persistence::GroupPersistence;
 use crate::indexer::Indexer;
 use crate::metrics::CollabRealtimeMetrics;
@@ -65,7 +60,6 @@ impl CollabGroup {
     metrics_calculate: Arc<CollabRealtimeMetrics>,
     storage: Arc<S>,
     is_new_collab: bool,
-    collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
@@ -81,13 +75,7 @@ impl CollabGroup {
     ));
     let broadcast = {
       let lock = collab.read().await;
-      CollabBroadcast::new(
-        &object_id,
-        10,
-        edit_state.clone(),
-        &lock,
-        CollabUpdateStreamingImpl::new(&workspace_id, &object_id, &collab_redis_stream).await?,
-      )
+      CollabBroadcast::new(&object_id, 10, edit_state.clone(), &lock)
     };
     let (destroy_group_tx, rx) = mpsc::channel(1);
 
@@ -379,82 +367,6 @@ impl EditState {
 
     // Determine if we should save based on either condition being met
     edit_count_exceeded || (current_edit_count != prev_edit_count && time_exceeded)
-  }
-}
-
-struct CollabUpdateStreamingImpl {
-  sender: mpsc::UnboundedSender<Vec<u8>>,
-  stopped: Arc<AtomicBool>,
-}
-
-impl CollabUpdateStreamingImpl {
-  async fn new(
-    workspace_id: &str,
-    object_id: &str,
-    collab_redis_stream: &CollabRedisStream,
-  ) -> Result<Self, StreamError> {
-    let stream = collab_redis_stream
-      .collab_update_stream(workspace_id, object_id, "collaborate_update_producer")
-      .await?;
-    let stopped = Arc::new(AtomicBool::new(false));
-    let (sender, receiver) = mpsc::unbounded_channel();
-    let cloned_stopped = stopped.clone();
-    tokio::spawn(async move {
-      if let Err(err) = Self::consume_messages(receiver, stream).await {
-        error!("Failed to consume incoming updates: {}", err);
-      }
-      cloned_stopped.store(true, Ordering::SeqCst);
-    });
-    Ok(Self { sender, stopped })
-  }
-
-  async fn consume_messages(
-    mut receiver: mpsc::UnboundedReceiver<Vec<u8>>,
-    mut stream: StreamGroup,
-  ) -> Result<(), RealtimeError> {
-    while let Some(update) = receiver.recv().await {
-      let mut update_count = 1;
-      let update = {
-        let mut updates = VecDeque::new();
-        // there may be already more messages inside waiting, try to read them all right away
-        while let Ok(update) = receiver.try_recv() {
-          updates.push_back(Update::decode_v1(&update)?);
-        }
-        if updates.is_empty() {
-          update // no following messages
-        } else {
-          update_count += updates.len();
-          // prepend first update and merge them all together
-          updates.push_front(Update::decode_v1(&update)?);
-          Update::merge_updates(updates).encode_v1()
-        }
-      };
-
-      let msg = StreamBinary::try_from(CollabUpdateEvent::UpdateV1 {
-        encode_update: update,
-      })?;
-      stream.insert_messages(vec![msg]).await?;
-      trace!("Sent cumulative ({}) collab update to redis", update_count);
-    }
-    Ok(())
-  }
-
-  pub fn is_stopped(&self) -> bool {
-    self.stopped.load(Ordering::SeqCst)
-  }
-}
-
-impl CollabUpdateStreaming for CollabUpdateStreamingImpl {
-  fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError> {
-    if self.is_stopped() {
-      Err(RealtimeError::Internal(anyhow::anyhow!(
-        "stream stopped processing incoming updates"
-      )))
-    } else if let Err(err) = self.sender.send(update) {
-      Err(RealtimeError::Internal(err.into()))
-    } else {
-      Ok(())
-    }
   }
 }
 

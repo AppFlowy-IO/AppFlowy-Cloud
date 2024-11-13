@@ -4,18 +4,16 @@ use std::time::Duration;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::lock::{Mutex, RwLock};
+use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use tracing::{error, instrument, trace};
+use tracing::{instrument, trace};
 
 use access_control::collab::RealtimeAccessControl;
 use app_error::AppError;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
-use collab_stream::client::{CollabRedisStream, CONTROL_STREAM_KEY};
-use collab_stream::model::CollabControlEvent;
-use collab_stream::stream_group::StreamGroup;
+
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::QueryCollabParams;
 
@@ -31,8 +29,6 @@ pub struct GroupManager<S> {
   storage: Arc<S>,
   access_control: Arc<dyn RealtimeAccessControl>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
-  collab_redis_stream: Arc<CollabRedisStream>,
-  control_event_stream: Arc<Mutex<StreamGroup>>,
   persistence_interval: Duration,
   edit_state_max_count: u32,
   edit_state_max_secs: i64,
@@ -48,25 +44,16 @@ where
     storage: Arc<S>,
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
-    collab_stream: CollabRedisStream,
     persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
     indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
-    let collab_stream = Arc::new(collab_stream);
-    let control_event_stream = collab_stream
-      .collab_control_stream(CONTROL_STREAM_KEY, "collaboration")
-      .await
-      .map_err(|err| RealtimeError::Internal(err.into()))?;
-    let control_event_stream = Arc::new(Mutex::from(control_event_stream));
     Ok(Self {
-      state: GroupManagementState::new(metrics_calculate.clone(), control_event_stream.clone()),
+      state: GroupManagementState::new(metrics_calculate.clone()),
       storage,
       access_control,
       metrics_calculate,
-      collab_redis_stream: collab_stream,
-      control_event_stream,
       persistence_interval,
       edit_state_max_count,
       edit_state_max_secs,
@@ -162,7 +149,7 @@ where
     }
 
     let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
-    let (collab, encode_collab) = {
+    let (collab, _encode_collab) = {
       let (mut collab, encode_collab) = match result {
         Ok(value) => value,
         Err(err) => {
@@ -183,26 +170,6 @@ where
       let collab = Arc::new(RwLock::from(collab));
       (collab, encode_collab)
     };
-
-    let cloned_control_event_stream = self.control_event_stream.clone();
-    let open_event = CollabControlEvent::Open {
-      workspace_id: workspace_id.to_string(),
-      object_id: object_id.to_string(),
-      collab_type: collab_type.clone(),
-      doc_state: encode_collab.doc_state.to_vec(),
-    };
-    trace!("Send control event: {}", open_event);
-
-    tokio::spawn(async move {
-      if let Err(err) = cloned_control_event_stream
-        .lock()
-        .await
-        .insert_message(open_event)
-        .await
-      {
-        error!("Failed to insert open event to control stream: {}", err);
-      }
-    });
 
     trace!(
       "[realtime]: create group: uid:{},workspace_id:{},object_id:{}:{}",
@@ -233,7 +200,6 @@ where
         self.metrics_calculate.clone(),
         self.storage.clone(),
         is_new_collab,
-        self.collab_redis_stream.clone(),
         self.persistence_interval,
         self.edit_state_max_count,
         self.edit_state_max_secs,

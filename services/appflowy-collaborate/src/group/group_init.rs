@@ -75,7 +75,7 @@ impl CollabGroup {
     ));
     let broadcast = {
       let lock = collab.read().await;
-      CollabBroadcast::new(&object_id, 10, edit_state.clone(), &lock)
+      CollabBroadcast::new(&object_id, 1000, edit_state.clone(), &lock)
     };
     let (destroy_group_tx, rx) = mpsc::channel(1);
 

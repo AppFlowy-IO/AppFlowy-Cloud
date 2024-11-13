@@ -526,7 +526,10 @@ pub async fn delete_workspace_members(
   .unwrap_or(false);
 
   if is_owner {
-    return Err(AppError::NotEnoughPermissions);
+    return Err(AppError::NotEnoughPermissions {
+      user: member_email.to_string(),
+      workspace_id: workspace_id.to_string(),
+    });
   }
 
   sqlx::query!(

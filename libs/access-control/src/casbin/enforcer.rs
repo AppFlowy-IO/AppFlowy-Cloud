@@ -162,7 +162,10 @@ where
     if result {
       Ok(())
     } else {
-      Err(AppError::NotEnoughPermissions)
+      Err(AppError::NotEnoughPermissions {
+        user: uid.to_string(),
+        workspace_id: workspace_id.to_string(),
+      })
     }
   }
 

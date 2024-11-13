@@ -206,11 +206,12 @@ impl CollabBroadcast {
 
                   trace!("[realtime]: send {} => {}", message, cloned_user.user_device());
                   if let Err(err) = sink.send(message).await {
-                    error!("fail to broadcast message:{}", err);
+                    warn!("fail to broadcast message:{}", err);
                   }
                 }
-                Err(e) => {
-                  error!("fail to receive message:{}", e);
+                Err(_) => {
+                  // Err(RecvError::Closed) is returned when all Sender halves have dropped,
+                  // indicating that no further values can be sent on the channel.
                   break;
                 },
               }

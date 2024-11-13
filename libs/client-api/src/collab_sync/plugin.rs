@@ -21,7 +21,6 @@ use client_api_entity::{CollabObject, CollabType};
 use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 
-use crate::af_spawn;
 use crate::collab_sync::collab_stream::CollabRef;
 use crate::collab_sync::{CollabSyncState, SinkConfig, SyncControl, SyncReason};
 use crate::ws::{ConnectState, WSConnectStateReceiver};
@@ -79,7 +78,7 @@ where
 
     let mut sync_state_stream = sync_queue.subscribe_sync_state();
     let sync_state_collab = collab.clone();
-    af_spawn(async move {
+    tokio::spawn(async move {
       while let Ok(sink_state) = sync_state_stream.recv().await {
         if let Some(collab) = sync_state_collab.upgrade() {
           let sync_state = match sink_state {
@@ -97,7 +96,7 @@ where
     let sync_queue = Arc::new(sync_queue);
     let weak_local_collab = collab.clone();
     let weak_sync_queue = Arc::downgrade(&sync_queue);
-    af_spawn(async move {
+    tokio::spawn(async move {
       while let Ok(connect_state) = ws_connect_state.recv().await {
         match connect_state {
           ConnectState::Connected => {

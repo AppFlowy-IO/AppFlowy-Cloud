@@ -2,7 +2,7 @@ use crate::error::{internal, StreamError};
 use bytes::Bytes;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::updates::decoder::Decode;
-use collab::preclude::StateVector;
+use collab::preclude::{StateVector, Uuid};
 use collab_entity::proto::collab::collab_update_event::Update;
 use collab_entity::{proto, CollabType};
 use prost::Message;
@@ -372,10 +372,17 @@ pub struct CollabStreamUpdate {
   pub state_vector: StateVector,
   pub sender: CollabOrigin,
   pub flags: UpdateFlags,
+  pub row: Option<Uuid>,
 }
 
 impl CollabStreamUpdate {
-  pub fn new<B, F>(data: B, state_vector: StateVector, sender: CollabOrigin, flags: F) -> Self
+  pub fn new<B, F>(
+    data: B,
+    state_vector: StateVector,
+    sender: CollabOrigin,
+    flags: F,
+    row: Option<Uuid>,
+  ) -> Self
   where
     B: Into<Vec<u8>>,
     F: Into<UpdateFlags>,
@@ -384,6 +391,7 @@ impl CollabStreamUpdate {
       data: data.into(),
       sender,
       state_vector,
+      row,
       flags: flags.into(),
     }
   }
@@ -409,7 +417,7 @@ impl CollabStreamUpdate {
   }
 }
 
-impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
+impl TryFrom<HashMap<String, Value>> for CollabStreamUpdate {
   type Error = StreamError;
 
   fn try_from(fields: HashMap<String, Value>) -> Result<Self, Self::Error> {
@@ -437,11 +445,16 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
       .get("data")
       .ok_or_else(|| internal("expecting field `data`"))?;
     let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
+    let row: Option<Uuid> = match fields.get("row") {
+      None => None,
+      Some(value) => Some(String::from_redis_value(value)?.into()),
+    };
     Ok(CollabStreamUpdate {
       data,
       sender,
       state_vector,
       flags,
+      row,
     })
   }
 }
@@ -449,6 +462,7 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
 pub struct AwarenessStreamUpdate {
   pub data: Vec<u8>, // AwarenessUpdate::encode_v1
   pub sender: CollabOrigin,
+  pub row: Option<Uuid>,
 }
 
 impl AwarenessStreamUpdate {
@@ -473,7 +487,11 @@ impl TryFrom<HashMap<String, redis::Value>> for AwarenessStreamUpdate {
       .get("data")
       .ok_or_else(|| internal("expecting field `data`"))?;
     let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
-    Ok(AwarenessStreamUpdate { data, sender })
+    let row: Option<Uuid> = match fields.get("row") {
+      None => None,
+      Some(value) => Some(String::from_redis_value(value)?.into()),
+    };
+    Ok(AwarenessStreamUpdate { data, sender, row })
   }
 }
 

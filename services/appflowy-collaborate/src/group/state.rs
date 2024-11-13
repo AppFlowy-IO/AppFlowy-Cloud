@@ -9,13 +9,13 @@ use tracing::{error, event, trace, warn};
 
 use crate::config::get_env_var;
 use crate::error::RealtimeError;
-use crate::group::group_init::CollabGroup;
+use crate::group::collab_group::CollabGroup;
 use crate::metrics::CollabRealtimeMetrics;
 use collab_rt_entity::user::RealtimeUser;
 
 #[derive(Clone)]
 pub(crate) struct GroupManagementState {
-  group_by_object_id: Arc<DashMap<String, Arc<CollabGroup>>>,
+  group_by_object_id: Arc<DashMap<String, CollabGroup>>,
   /// Keep track of all [Collab] objects that a user is subscribed to.
   editing_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
@@ -42,7 +42,7 @@ impl GroupManagementState {
     let mut inactive_group_ids = vec![];
     for entry in self.group_by_object_id.iter() {
       let (object_id, group) = (entry.key(), entry.value());
-      if group.is_inactive().await {
+      if group.is_inactive() {
         inactive_group_ids.push(object_id.clone());
         if inactive_group_ids.len() > self.remove_batch_size {
           break;
@@ -58,7 +58,7 @@ impl GroupManagementState {
     inactive_group_ids
   }
 
-  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
+  pub async fn get_group(&self, object_id: &str) -> Option<CollabGroup> {
     let mut attempts = 0;
     let max_attempts = 3;
     let retry_delay = Duration::from_millis(100);
@@ -82,10 +82,7 @@ impl GroupManagementState {
 
   /// Get a mutable reference to the group by object_id.
   /// may deadlock when holding the RefMut and trying to read group_by_object_id.
-  pub(crate) async fn get_mut_group(
-    &self,
-    object_id: &str,
-  ) -> Option<RefMut<String, Arc<CollabGroup>>> {
+  pub(crate) async fn get_mut_group(&self, object_id: &str) -> Option<RefMut<String, CollabGroup>> {
     let mut attempts = 0;
     let max_attempts = 3;
     let retry_delay = Duration::from_millis(300);
@@ -107,18 +104,13 @@ impl GroupManagementState {
     }
   }
 
-  pub(crate) async fn insert_group(&self, object_id: &str, group: Arc<CollabGroup>) {
+  pub(crate) async fn insert_group(&self, object_id: &str, group: CollabGroup) {
     self.group_by_object_id.insert(object_id.to_string(), group);
     self.metrics_calculate.opening_collab_count.inc();
   }
 
   pub(crate) async fn contains_group(&self, object_id: &str) -> bool {
-    if let Some(group) = self.group_by_object_id.get(object_id) {
-      let cancelled = group.is_cancelled();
-      !cancelled
-    } else {
-      false
-    }
+    self.group_by_object_id.contains_key(object_id)
   }
 
   pub(crate) async fn remove_group(&self, object_id: &str) {
@@ -163,16 +155,7 @@ impl GroupManagementState {
       for editing in editing_objects {
         match self.group_by_object_id.try_get(&editing.object_id) {
           TryResult::Present(group) => {
-            group.remove_user(user).await;
-
-            if cfg!(debug_assertions) {
-              event!(
-                tracing::Level::TRACE,
-                "{}: current group member: {}",
-                &editing.object_id,
-                group.user_count(),
-              );
-            }
+            group.remove_user(user);
           },
           TryResult::Absent => {},
           TryResult::Locked => {

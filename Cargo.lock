@@ -718,6 +718,7 @@ dependencies = [
  "bytes",
  "chrono",
  "collab",
+ "collab-database",
  "collab-document",
  "collab-entity",
  "collab-folder",

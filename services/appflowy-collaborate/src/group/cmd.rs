@@ -211,12 +211,14 @@ where
 
     if let Some(group) = self.group_manager.get_group(&object_id).await {
       let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
-      group.subscribe(
-        &server_rt_user,
-        CollabOrigin::Server,
-        NullSender::default(),
-        message_by_oid_receiver,
-      );
+      group
+        .subscribe(
+          &server_rt_user,
+          CollabOrigin::Server,
+          NullSender::default(),
+          message_by_oid_receiver,
+        )
+        .await;
       let message = HashMap::from([(object_id.clone(), messages)]);
       if let Err(err) = message_by_oid_sender.try_send(message) {
         tracing::error!(
@@ -272,6 +274,7 @@ where
             &data.workspace_id,
             object_id,
             data.collab_type.clone(),
+            &data.payload,
           )
           .await?;
 

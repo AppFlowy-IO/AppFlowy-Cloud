@@ -1,10 +1,21 @@
-use std::sync::Arc;
-use std::time::Duration;
-
+use crate::client::client_msg_router::ClientMessageRouter;
+use crate::error::{CreateGroupFailedReason, RealtimeError};
+use crate::group::collab_group::CollabGroup;
+use crate::group::database_init::DatabaseCollabGroup;
+use crate::group::group_init::DefaultCollabGroup;
+use crate::group::persister::CollabPersister;
+use crate::group::state::GroupManagementState;
+use crate::indexer::IndexerProvider;
+use crate::metrics::CollabRealtimeMetrics;
+use access_control::collab::RealtimeAccessControl;
+use app_error::AppError;
+use bytes::Bytes;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
+use collab_database::rows::{DatabaseRowBody, RowId};
+use collab_entity::define::DATABASE_ID;
 use collab_entity::CollabType;
 use tracing::{instrument, trace};
 
@@ -15,13 +26,12 @@ use collab_rt_entity::CollabMessage;
 use collab_stream::client::CollabRedisStream;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::QueryCollabParams;
-
-use crate::client::client_msg_router::ClientMessageRouter;
-use crate::error::{CreateGroupFailedReason, RealtimeError};
-use crate::group::group_init::CollabGroup;
-use crate::group::state::GroupManagementState;
-use crate::indexer::IndexerProvider;
-use crate::metrics::CollabRealtimeMetrics;
+use std::sync::Arc;
+use std::time::Duration;
+use tracing::{error, instrument, trace};
+use uuid::Uuid;
+use yrs::updates::decoder::{Decode, DecoderV1};
+use yrs::{Map, Update};
 
 pub struct GroupManager<S> {
   state: GroupManagementState,
@@ -77,7 +87,7 @@ where
     self.state.contains_group(object_id).await
   }
 
-  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
+  pub async fn get_group(&self, object_id: &str) -> Option<CollabGroup> {
     self.state.get_group(object_id).await
   }
 
@@ -96,14 +106,16 @@ where
     // Lock the group and subscribe the user to the group.
     if let Some(mut e) = self.state.get_mut_group(object_id).await {
       let group = e.value_mut();
-      trace!("[realtime]: {} subscribe group:{}", user, object_id,);
+      trace!("[realtime]: {} subscribe group:{}", user, object_id);
       let (sink, stream) = client_msg_router.init_client_communication::<CollabMessage>(
         group.workspace_id(),
         user,
         object_id,
         self.access_control.clone(),
       );
-      group.subscribe(user, message_origin.clone(), sink, stream);
+      group
+        .subscribe(user, message_origin.clone(), sink, stream)
+        .await;
       // explicitly drop the group to release the lock.
       drop(e);
 
@@ -122,9 +134,9 @@ where
     workspace_id: &str,
     object_id: &str,
     collab_type: CollabType,
+    payload: &[u8],
   ) -> Result<(), RealtimeError> {
     let mut is_new_collab = false;
-    let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
     // Ensure the workspace_id matches the metadata's workspace_id when creating a collaboration object
     // of type [CollabType::Folder]. In this case, both the object id and the workspace id should be
     // identical.
@@ -166,109 +178,106 @@ where
       tracing::trace!("workspace {} indexing is disabled", workspace_id);
       indexer = None;
     }
-    let group = Arc::new(
-      CollabGroup::new(
-        user.uid,
-        workspace_id.to_string(),
-        object_id.to_string(),
-        collab_type,
-        self.metrics_calculate.clone(),
-        self.storage.clone(),
-        is_new_collab,
-        self.collab_redis_stream.clone(),
-        self.persistence_interval,
-        self.prune_grace_period,
-        indexer,
-      )
-      .await?,
+    let persister = CollabPersister::new(
+      user.uid,
+      self.storage.clone(),
+      self.collab_redis_stream.clone(),
+      indexer,
+      self.metrics_calculate.clone(),
+      self.prune_grace_period,
     );
-    self.state.insert_group(object_id, group.clone()).await;
+    let group = match &collab_type {
+      CollabType::Database | CollabType::DatabaseRow => {
+        let database_id = self
+          .get_database_id(workspace_id, object_id, collab_type.clone(), payload)
+          .await?;
+        let database_id = match database_id {
+          Some(id) => id,
+          None => return Err(RealtimeError::GroupNotFound(object_id.into())),
+        };
+        let database_group = self.get_database_group(database_id).await?;
+        let object_id =
+          Uuid::parse_str(object_id).map_err(|e| RealtimeError::Internal(e.into()))?;
+        CollabGroup::Database(database_group.scoped(object_id))
+      },
+      _ => {
+        let default_group = DefaultCollabGroup::new(
+          workspace_id.to_string(),
+          object_id.to_string(),
+          collab_type,
+          self.metrics_calculate.clone(),
+          persister,
+          is_new_collab,
+          self.persistence_interval,
+        )
+        .await?;
+        CollabGroup::Default(default_group)
+      },
+    };
+    self.state.insert_group(object_id, group).await;
     Ok(())
   }
-}
 
-#[instrument(level = "trace", skip_all)]
-async fn load_collab<S>(
-  uid: i64,
-  object_id: &str,
-  params: QueryCollabParams,
-  storage: Arc<S>,
-) -> Result<(Collab, EncodedCollab), AppError>
-where
-  S: CollabStorage,
-{
-  let encode_collab = storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, params.clone(), false)
-    .await?;
-  let result = Collab::new_with_source(
-    CollabOrigin::Server,
-    object_id,
-    DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
-    vec![],
-    false,
-  );
-  match result {
-    Ok(collab) => Ok((collab, encode_collab)),
-    Err(err) => load_collab_from_snapshot(object_id, params, storage)
+  async fn get_database_id(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+    payload: &[u8],
+  ) -> Result<Option<Uuid>, RealtimeError> {
+    let mut collab = Collab::new(0, object_id, "", vec![], false);
+    Self::apply_sync_messages(&mut collab, payload)?;
+
+    tracing::debug!("couldn't resolve database_id out of collab {}", object_id);
+
+    let params = QueryCollabParams::new(object_id, collab_type, workspace_id);
+    let encode_collab = self
+      .storage
+      .get_encode_collab(GetCollabOrigin::Server, params, false)
       .await
-      .ok_or_else(|| AppError::Internal(err.into())),
+      .map_err(|e| RealtimeError::Internal(e.into()))?;
+
+    let update = Update::decode_v1(&encode_collab.doc_state)?;
+    collab
+      .transact_mut()
+      .apply_update(update)
+      .map_err(|e| RealtimeError::CollabError(CollabError::Internal(e.into())))?;
+    let db_id: Option<String> = collab.data.get_as(&collab.transact(), DATABASE_ID)?;
+    if let Some(id) = db_id {
+      let uuid = Uuid::parse_str(id.as_str()).map_err(|e| RealtimeError::Internal(e.into()))?;
+      return Ok(Some(uuid));
+    }
+    Ok(None)
   }
-}
 
-async fn load_collab_from_snapshot<S>(
-  object_id: &str,
-  params: QueryCollabParams,
-  storage: Arc<S>,
-) -> Option<(Collab, EncodedCollab)>
-where
-  S: CollabStorage,
-{
-  let encode_collab = get_latest_snapshot(
-    &params.workspace_id,
-    object_id,
-    &storage,
-    &params.collab_type,
-  )
-  .await?;
-  let collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    object_id,
-    DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
-    vec![],
-    false,
-  )
-  .ok()?;
-  Some((collab, encode_collab))
-}
-
-async fn get_latest_snapshot<S>(
-  workspace_id: &str,
-  object_id: &str,
-  storage: &S,
-  collab_type: &CollabType,
-) -> Option<EncodedCollab>
-where
-  S: CollabStorage,
-{
-  let metas = storage.get_collab_snapshot_list(object_id).await.ok()?.0;
-  for meta in metas {
-    let snapshot_data = storage
-      .get_collab_snapshot(workspace_id, &meta.object_id, &meta.snapshot_id)
-      .await
-      .ok()?;
-    if let Ok(encoded_collab) = EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1) {
-      if let Ok(collab) = Collab::new_with_source(
-        CollabOrigin::Empty,
-        object_id,
-        DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
-        vec![],
-        false,
-      ) {
-        // TODO(nathan): this check is not necessary, can be removed in the future.
-        collab_type.validate_require_data(&collab).ok()?;
-        return Some(encoded_collab);
+  fn apply_sync_messages(collab: &mut Collab, payload: &[u8]) -> Result<(), RealtimeError> {
+    let mut decoder = DecoderV1::from(payload);
+    let reader = MessageReader::new(&mut decoder);
+    let mut txn = collab.transact_mut();
+    for msg in reader {
+      match msg? {
+        Message::Sync(SyncMessage::SyncStep2(update))
+        | Message::Sync(SyncMessage::Update(update)) => {
+          let u = yrs::Update::decode_v1(&update)?;
+          txn
+            .apply_update(u)
+            .map_err(|e| RealtimeError::CollabError(CollabError::Internal(e.into())))?;
+        },
+        _ => {},
       }
     }
+    Ok(())
   }
-  None
+
+  async fn get_database_group(
+    &self,
+    database_id: Uuid,
+  ) -> Result<DatabaseCollabGroup, RealtimeError> {
+    let object_id = database_id.to_string();
+    if let Some(CollabGroup::Database(group)) = self.state.get_group(&object_id).await {
+      Ok(group)
+    } else {
+      todo!()
+    }
+  }
 }

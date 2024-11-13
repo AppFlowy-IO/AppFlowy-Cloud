@@ -1,120 +1,56 @@
 use crate::error::RealtimeError;
-use crate::group::collab_group::{SubscriptionSink, SubscriptionStream};
+use crate::group::collab_group::{CollabGroup, SubscriptionSink, SubscriptionStream};
 use crate::group::persister::CollabPersister;
-use crate::indexer::Indexer;
-use crate::metrics::CollabRealtimeMetrics;
+use crate::CollabRealtimeMetrics;
 use anyhow::anyhow;
-use app_error::AppError;
 use arc_swap::ArcSwap;
-use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::lock::RwLock;
-use collab::preclude::Collab;
+use collab_database::database::Database;
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{
-  AckCode, AwarenessSync, BroadcastSync, CollabAck, MessageByObjectId, MsgId,
+  AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, MessageByObjectId, MsgId,
 };
-use collab_rt_entity::{ClientCollabMessage, CollabMessage};
 use collab_rt_protocol::{Message, MessageReader, RTProtocolError, SyncMessage};
-use collab_stream::client::CollabRedisStream;
 use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
-use collab_stream::error::StreamError;
-use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
+use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, UpdateFlags};
 use dashmap::DashMap;
-use database::collab::{CollabStorage, GetCollabOrigin};
-use database_entity::dto::{
-  AFCollabEmbeddings, CollabParams, InsertSnapshotParams, QueryCollabParams,
-};
-use futures::{pin_mut, Sink, Stream};
+use futures::pin_mut;
 use futures_util::{SinkExt, StreamExt};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, trace};
+use uuid::Uuid;
 use yrs::updates::decoder::{Decode, DecoderV1};
-use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::updates::encoder::{Encode, EncoderV1};
 use yrs::{ReadTxn, StateVector, Update};
 
-/// A group used to manage a single [Collab] object
+//TODO: this should be defined at collab crate level.
+pub type WorkspaceId = Arc<str>;
+//TODO: this should be defined at collab crate level.
+pub type ObjectId = Arc<str>;
+
 #[derive(Clone)]
-pub struct DefaultCollabGroup {
+pub struct DatabaseCollabGroup {
+  object_id: ObjectId,
   state: Arc<Inner>,
 }
 
-/// Inner state of [CollabGroup] that's private and hidden behind Arc, so that it can be moved into
-/// tasks.
-struct Inner {
-  workspace_id: String,
-  object_id: String,
-  collab_type: CollabType,
-  /// A list of subscribers to this group. Each subscriber will receive updates from the
-  /// broadcast.
-  subscribers: DashMap<RealtimeUser, Subscription>,
-  persister: CollabPersister,
-  metrics: Arc<CollabRealtimeMetrics>,
-  /// Cancellation token triggered when current collab group is about to be stopped.
-  /// This will also shut down all subsequent [Subscription]s.
-  shutdown: CancellationToken,
-  last_activity: ArcSwap<Instant>,
-  seq_no: AtomicU32,
-  /// The most recent state vector from a redis update.
-  state_vector: RwLock<StateVector>,
-  collab_update_sink: CollabUpdateSink,
-  awareness_update_sink: AwarenessUpdateSink,
-}
-
-impl Drop for DefaultCollabGroup {
-  fn drop(&mut self) {
-    // we're going to use state shutdown to cancel subsequent tasks
-    self.state.shutdown.cancel();
-  }
-}
-
-impl DefaultCollabGroup {
+impl DatabaseCollabGroup {
   #[allow(clippy::too_many_arguments)]
-  pub async fn new(
-    workspace_id: String,
-    object_id: String,
-    collab_type: CollabType,
-    metrics: Arc<CollabRealtimeMetrics>,
+  pub fn new(
+    workspace_id: WorkspaceId,
+    database_id: ObjectId,
     persister: CollabPersister,
-    is_new_collab: bool,
+    metrics: Arc<CollabRealtimeMetrics>,
     persistence_interval: Duration,
-  ) -> Result<Self, StreamError> {
-    let collab_update_sink = persister
-      .collab_redis_stream
-      .collab_update_sink(&workspace_id, &object_id);
-    let awareness_update_sink = persister
-      .collab_redis_stream
-      .awareness_update_sink(&workspace_id, &object_id);
-
-    let state = Arc::new(Inner {
-      workspace_id,
-      object_id,
-      collab_type,
-      collab_update_sink,
-      awareness_update_sink,
-      subscribers: DashMap::new(),
-      metrics,
-      shutdown: CancellationToken::new(),
-      persister,
-      last_activity: ArcSwap::new(Instant::now().into()),
-      seq_no: AtomicU32::new(0),
-      state_vector: Default::default(),
-    });
-
-    /*
-     NOTE: we don't want to pass `Weak<CollabGroupState>` to tasks and terminate them when they
-     cannot be upgraded since we want to be sure that ie. when collab group is to be removed,
-     that we're going to call for a final save of the document state.
-
-     For that we use `CancellationToken` instead, which is racing against internal loops of child
-     tasks and triggered when this `CollabGroup` is dropped.
-    */
+  ) -> Self {
+    let state = Arc::new(Inner::new(workspace_id, database_id, persister, metrics));
 
     // setup task used to receive collab updates from Redis
     {
@@ -138,245 +74,55 @@ impl DefaultCollabGroup {
 
     // setup periodic snapshot
     {
-      tokio::spawn(Self::snapshot_task(
-        state.clone(),
-        persistence_interval,
-        is_new_collab,
-      ));
-    }
-
-    Ok(Self { state })
-  }
-
-  pub fn workspace_id(&self) -> &str {
-    &self.state.workspace_id
-  }
-
-  /// Task used to receive collab updates from Redis.
-  async fn inbound_task(state: Arc<Inner>) -> Result<(), RealtimeError> {
-    let updates = state.persister.collab_redis_stream.live_collab_updates(
-      &state.workspace_id,
-      &state.object_id,
-      None,
-    );
-    pin_mut!(updates);
-    loop {
-      tokio::select! {
-        _ = state.shutdown.cancelled() => {
-          break;
-        }
-        res = updates.next() => {
-          match res {
-            Some(Ok((_message_id, update))) => {
-              Self::handle_inbound_update(&state, update).await;
-            },
-            Some(Err(err)) => {
-              tracing::warn!("failed to handle incoming update for collab `{}`: {}", state.object_id, err);
-              break;
-            },
-            None => {
-              break;
-            }
-          }
-        }
-      }
-    }
-    Ok(())
-  }
-
-  /// Handle a single collab update received from Redis stream.
-  async fn handle_inbound_update(state: &Inner, update: CollabStreamUpdate) {
-    // update state vector based on incoming message
-    let mut sv = state.state_vector.write().await;
-    sv.merge(update.state_vector);
-    drop(sv);
-
-    let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
-    tracing::trace!(
-      "broadcasting collab update from {} ({} bytes) - seq_num: {}",
-      update.sender,
-      update.data.len(),
-      seq_num
-    );
-    let payload = Message::Sync(SyncMessage::Update(update.data)).encode_v1();
-    let message = BroadcastSync::new(update.sender, state.object_id.clone(), payload, seq_num);
-    for mut e in state.subscribers.iter_mut() {
-      let subscription = e.value_mut();
-      if message.origin == subscription.collab_origin {
-        continue; // don't send update to its sender
-      }
-
-      if let Err(err) = subscription.sink.send(message.clone().into()).await {
-        tracing::debug!(
-          "failed to send collab `{}` update to `{}`: {}",
-          state.object_id,
-          subscription.collab_origin,
-          err
-        );
-      }
-
-      state.last_activity.store(Arc::new(Instant::now()));
+      tokio::spawn(Self::snapshot_task(state.clone(), persistence_interval));
     }
   }
 
-  /// Task used to receive awareness updates from Redis.
-  async fn inbound_awareness_task(state: Arc<Inner>) -> Result<(), RealtimeError> {
-    let updates = state.persister.collab_redis_stream.awareness_updates(
-      &state.workspace_id,
-      &state.object_id,
-      None,
-    );
-    pin_mut!(updates);
-    loop {
-      tokio::select! {
-        _ = state.shutdown.cancelled() => {
-          break;
-        }
-        res = updates.next() => {
-          match res {
-            Some(Ok(awareness_update)) => {
-              Self::handle_inbound_awareness(&state, awareness_update).await;
-            },
-            Some(Err(err)) => {
-              tracing::warn!("failed to handle incoming update for collab `{}`: {}", state.object_id, err);
-              break;
-            },
-            None => {
-              break;
-            }
-          }
-        }
+  /// Reinterprets commands performed on the underlying group as made from the perspective of
+  /// given `object_id`.
+  pub fn scoped(self, object_id: ObjectId) -> Self {
+    if self.object_id == object_id {
+      self
+    } else {
+      DatabaseCollabGroup {
+        object_id,
+        state: self.state,
       }
-    }
-    Ok(())
-  }
-
-  /// Handle a single awareness update comming from Redis stream.
-  async fn handle_inbound_awareness(state: &Inner, update: AwarenessStreamUpdate) {
-    tracing::trace!(
-      "broadcasting awareness update from {} ({} bytes)",
-      update.sender,
-      update.data.len()
-    );
-    let sender = update.sender;
-    let message = AwarenessSync::new(
-      state.object_id.clone(),
-      Message::Awareness(update.data).encode_v1(),
-      CollabOrigin::Empty,
-    );
-    for mut e in state.subscribers.iter_mut() {
-      let subscription = e.value_mut();
-      if sender == subscription.collab_origin {
-        continue; // don't send update to its sender
-      }
-
-      if let Err(err) = subscription.sink.send(message.clone().into()).await {
-        tracing::debug!(
-          "failed to send awareness `{}` update to `{}`: {}",
-          state.object_id,
-          subscription.collab_origin,
-          err
-        );
-      }
-
-      state.last_activity.store(Arc::new(Instant::now()));
     }
   }
 
-  /// Async task which periodically will try to pull collab updates from Redis and - if there
-  /// are any - save them as snapshots and collab doc state.
-  async fn snapshot_task(state: Arc<Inner>, interval: Duration, is_new_collab: bool) {
-    if is_new_collab {
-      tracing::trace!("persisting new collab for {}", state.object_id);
-      if let Err(err) = state
-        .persister
-        .save(
-          &state.workspace_id,
-          &state.object_id,
-          state.collab_type.clone(),
-        )
-        .await
-      {
-        tracing::warn!(
-          "failed to persist new document `{}`: {}",
-          state.object_id,
-          err
-        );
-      }
-    }
+  pub fn is_database(&self) -> bool {
+    self.object_id == self.state.database_id
+  }
 
-    let mut snapshot_tick = tokio::time::interval(interval);
-    // if saving took longer than snapshot_tick, just skip it over and try in the next round
-    snapshot_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
-    loop {
-      tokio::select! {
-        _ = snapshot_tick.tick() => {
-          if let Err(err) = state.persister.save(
-              &state.workspace_id,
-              &state.object_id,
-              state.collab_type.clone()).await {
-            tracing::warn!("failed to persist collab `{}/{}`: {}", state.workspace_id, state.object_id, err);
-          }
-        },
-        _ = state.shutdown.cancelled() => {
-          if let Err(err) = state.persister.save(
-              &state.workspace_id,
-              &state.object_id,
-              state.collab_type.clone()).await {
-            tracing::warn!("failed to persist collab on shutdown `{}/{}`: {}", state.workspace_id, state.object_id, err);
-          }
-          break;
-        }
-      }
+  pub fn collab_type(&self) -> CollabType {
+    if self.is_database() {
+      CollabType::Database
+    } else {
+      CollabType::DatabaseRow
     }
   }
 
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
+    let collab_type = self.collab_type();
     let snapshot = self
       .state
       .persister
       .load_compact(
         &self.state.workspace_id,
-        &self.state.object_id,
-        self.state.collab_type.clone(),
+        &self.object_id.to_string(),
+        collab_type.clone(),
       )
       .await?;
     let encode_collab = snapshot.collab.encode_collab_v1(|collab| {
-      self
-        .state
-        .collab_type
+      collab_type
         .validate_require_data(collab)
         .map_err(|err| RealtimeError::Internal(err.into()))
     })?;
     Ok(encode_collab)
   }
 
-  pub fn contains_user(&self, user: &RealtimeUser) -> bool {
-    self.state.subscribers.contains_key(user)
-  }
-
-  pub fn remove_user(&self, user: &RealtimeUser) {
-    if self.state.subscribers.remove(user).is_some() {
-      trace!(
-        "{} remove subscriber from group: {}",
-        self.state.object_id,
-        user
-      );
-    }
-  }
-
-  pub fn user_count(&self) -> usize {
-    self.state.subscribers.len()
-  }
-
-  pub fn modified_at(&self) -> Instant {
-    *self.state.last_activity.load_full()
-  }
-
-  /// Subscribes a new connection to the broadcast group for collaborative activities.
-  ///
-  pub fn subscribe<Sink, Stream>(
+  pub async fn subscribe<Sink, Stream>(
     &self,
     user: &RealtimeUser,
     subscriber_origin: CollabOrigin,
@@ -390,6 +136,7 @@ impl DefaultCollabGroup {
     let subscriber_shutdown = self.state.shutdown.child_token();
 
     tokio::spawn(Self::receive_from_client_task(
+      self.object_id.clone(),
       self.state.clone(),
       sink.clone(),
       stream,
@@ -397,38 +144,30 @@ impl DefaultCollabGroup {
     ));
 
     let sub = Subscription::new(sink, subscriber_origin, subscriber_shutdown);
-    if self
+    let subgroup = self
       .state
-      .subscribers
-      .insert((*user).clone(), sub)
-      .is_some()
-    {
-      tracing::warn!("{}: remove old subscriber: {}", &self.state.object_id, user);
+      .subgroups
+      .entry(self.object_id.clone())
+      .or_default();
+    let subgroup = subgroup.write().await;
+    if subgroup.subscribers.insert((*user).clone(), sub).is_some() {
+      tracing::warn!("{}: removed old subscriber: {}", &self.object_id, user);
     }
 
     if cfg!(debug_assertions) {
-      trace!(
-        "{}: add new subscriber, current group member: {}",
-        &self.state.object_id,
+      tracing::trace!(
+        "{}: added new subscriber, current group member: {}",
+        &self.object_id,
         self.user_count(),
       );
     }
-
-    trace!(
-      "[realtime]:{} new subscriber:{}, connect at:{}, connected members: {}",
-      self.state.object_id,
-      user.user_device(),
-      user.connect_at,
-      self.state.subscribers.len(),
-    );
   }
 
-  /// Async task that will pull messages from `client_stream` and handle them, optionally sending
-  /// response messages to `client_sink`.
   async fn receive_from_client_task<Sink, Stream>(
+    object_id: ObjectId,
     state: Arc<Inner>,
-    mut client_sink: Sink,
-    mut client_stream: Stream,
+    mut sink: Sink,
+    mut stream: Stream,
     origin: CollabOrigin,
   ) where
     Sink: SubscriptionSink + 'static,
@@ -439,13 +178,13 @@ impl DefaultCollabGroup {
         _ = state.shutdown.cancelled() => {
           break;
         }
-        msg = client_stream.next() => {
+        msg = stream.next() => {
           match msg {
             None => break,
-            Some(msg) => if let Err(err) =  Self::handle_messages(&state, &mut client_sink, msg).await {
+            Some(msg) => if let Err(err) =  Self::handle_messages(&state, &mut sink, msg).await {
               tracing::warn!(
                 "collab `{}` failed to handle message from `{}`: {}",
-                state.object_id,
+                object_id,
                 origin,
                 err
               );
@@ -457,7 +196,6 @@ impl DefaultCollabGroup {
     }
   }
 
-  /// Handles group of messages coming from the client.
   async fn handle_messages<Sink>(
     state: &Inner,
     sink: &mut Sink,
@@ -466,41 +204,40 @@ impl DefaultCollabGroup {
   where
     Sink: SubscriptionSink + 'static,
   {
-    for (message_object_id, messages) in msg {
-      if state.object_id != message_object_id {
-        error!(
-          "Expect object id:{} but got:{}",
-          state.object_id, message_object_id
-        );
-        continue;
-      }
-      for message in messages {
-        match Self::handle_client_message(state, message).await {
-          Ok(response) => {
-            trace!("[realtime]: sending response: {}", response);
-            match sink.send(response.into()).await {
-              Ok(()) => {},
-              Err(err) => {
-                trace!("[realtime]: send failed: {}", err);
-                break;
-              },
-            }
-          },
-          Err(err) => {
-            error!(
-              "Error handling collab message for object_id: {}: {}",
-              message_object_id, err
-            );
-            break;
-          },
+    for (object_id, messages) in msg {
+      if let Some(subgroup) = state.subgroups.get(object_id.as_str()) {
+        let subgroup = subgroup.read().await;
+        for message in messages {
+          match Self::handle_client_message(&subgroup, state, message).await {
+            Ok(response) => {
+              tracing::trace!("[realtime]: sending response: {}", response);
+              match sink.send(response.into()).await {
+                Ok(()) => {},
+                Err(err) => {
+                  tracing::trace!("[realtime]: send failed: {}", err);
+                  break;
+                },
+              }
+            },
+            Err(err) => {
+              tracing::error!(
+                "Error handling collab message for object_id: {}: {}",
+                object_id,
+                err
+              );
+              break;
+            },
+          }
         }
       }
     }
     Ok(())
   }
 
-  /// Handle a single message sent from the client.
+  /// Handle the message sent from the client
   async fn handle_client_message(
+    object_id: &str,
+    subgroup: &Subgroup,
     state: &Inner,
     collab_msg: ClientCollabMessage,
   ) -> Result<CollabAck, RealtimeError> {
@@ -511,17 +248,17 @@ impl DefaultCollabGroup {
     // Currently, only the ping message should has an empty payload.
     if collab_msg.payload().is_empty() {
       if !matches!(collab_msg, ClientCollabMessage::ClientCollabStateCheck(_)) {
-        error!("receive unexpected empty payload message:{}", collab_msg);
+        tracing::error!("receive unexpected empty payload message:{}", collab_msg);
       }
       return Ok(CollabAck::new(
         message_origin,
-        state.object_id.to_string(),
+        object_id.to_string(),
         msg_id,
-        state.seq_no.load(Ordering::SeqCst),
+        subgroup.seq_no.load(Ordering::SeqCst),
       ));
     }
 
-    trace!(
+    tracing::trace!(
       "Applying client updates: {}, origin:{}",
       collab_msg,
       message_origin
@@ -545,6 +282,7 @@ impl DefaultCollabGroup {
   }
 
   async fn handle_message(
+    object_id: &str,
     state: &Inner,
     payload: &[u8],
     message_origin: &CollabOrigin,
@@ -564,7 +302,7 @@ impl DefaultCollabGroup {
                 ack_response = Some(
                   CollabAck::new(
                     message_origin.clone(),
-                    state.object_id.to_string(),
+                    object_id.to_string(),
                     msg_id,
                     state.seq_no.load(Ordering::SeqCst),
                   )
@@ -588,7 +326,7 @@ impl DefaultCollabGroup {
               ack_response = Some(
                 CollabAck::new(
                   message_origin.clone(),
-                  state.object_id.to_string(),
+                  object_id.to_string(),
                   msg_id,
                   state.seq_no.load(Ordering::SeqCst),
                 )
@@ -601,7 +339,7 @@ impl DefaultCollabGroup {
           }
         },
         Err(e) => {
-          error!("{} => parse sync message failed: {:?}", state.object_id, e);
+          tracing::error!("{} => parse sync message failed: {}", object_id, e);
           break;
         },
       }
@@ -712,7 +450,6 @@ impl DefaultCollabGroup {
         upper_state_vector,
         origin.clone(),
         UpdateFlags::default(),
-        None,
       );
       state
         .collab_update_sink
@@ -766,17 +503,256 @@ impl DefaultCollabGroup {
     }
   }
 
+  pub fn contains_user(&self, user: &RealtimeUser) -> bool {
+    self.state.subscribers.contains_key(user)
+  }
+
+  pub fn remove_user(&self, user: &RealtimeUser) {
+    self.state.subscribers.remove(user);
+  }
+
   /// Check if the group is active. A group is considered active if it has at least one
   /// subscriber
   pub fn is_inactive(&self) -> bool {
     self.state.shutdown.is_cancelled() || self.state.subscribers.is_empty()
   }
+
+  pub fn workspace_id(&self) -> &str {
+    &self.state.workspace_id
+  }
+
+  /// Task used to receive collab updates from Redis.
+  async fn inbound_task(state: Arc<Inner>) -> Result<(), RealtimeError> {
+    let updates = state.persister.collab_redis_stream.live_collab_updates(
+      &state.workspace_id,
+      &state.object_id,
+      None,
+    );
+    pin_mut!(updates);
+    loop {
+      tokio::select! {
+        _ = state.shutdown.cancelled() => {
+          break;
+        }
+        res = updates.next() => {
+          match res {
+            Some(Ok((_message_id, update))) => {
+              Self::handle_inbound_update(&state, update).await;
+            },
+            Some(Err(err)) => {
+              tracing::warn!("failed to handle incoming update for collab `{}`: {}", state.object_id, err);
+              break;
+            },
+            None => {
+              break;
+            }
+          }
+        }
+      }
+    }
+    Ok(())
+  }
+
+  async fn handle_inbound_update(state: &Inner, update: CollabStreamUpdate) {
+    if let Some(object_id) = update.row {
+      if let Some(subgroup) = state.subgroups.get(&*object_id) {
+        // update state vector based on incoming message
+        let mut sv = subgroup.state_vector.write().await;
+        sv.merge(update.state_vector);
+        drop(sv);
+
+        let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
+        tracing::trace!(
+          "broadcasting collab update from {} ({} bytes) - seq_num: {}",
+          update.sender,
+          update.data.len(),
+          seq_num
+        );
+        let payload = Message::Sync(SyncMessage::Update(update.data)).encode_v1();
+        let message = BroadcastSync::new(update.sender, state.object_id.clone(), payload, seq_num);
+        for mut e in state.subscribers.iter_mut() {
+          let subscription = e.value_mut();
+          if message.origin == subscription.collab_origin {
+            continue; // don't send update to its sender
+          }
+
+          if let Err(err) = subscription.sink.send(message.clone().into()).await {
+            tracing::debug!(
+              "failed to send collab `{}` update to `{}`: {}",
+              state.object_id,
+              subscription.collab_origin,
+              err
+            );
+          }
+
+          state.last_activity.store(Arc::new(Instant::now()));
+        }
+      } else {
+        tracing::debug!("database collab group - no subgroup for {}", object_id);
+      }
+    } else {
+      tracing::warn!("database collab group got awareness update without target object id");
+    }
+  }
+
+  /// Task used to receive awareness updates from Redis.
+  async fn inbound_awareness_task(state: Arc<Inner>) -> Result<(), RealtimeError> {
+    let updates = state.persister.collab_redis_stream.awareness_updates(
+      &state.workspace_id,
+      &state.database_id,
+      None,
+    );
+    pin_mut!(updates);
+    loop {
+      tokio::select! {
+        _ = state.shutdown.cancelled() => {
+          break;
+        }
+        res = updates.next() => {
+          match res {
+            Some(Ok(awareness_update)) => {
+              Self::handle_inbound_awareness(&state, awareness_update).await;
+            },
+            Some(Err(err)) => {
+              tracing::warn!("failed to handle incoming update for database: {}", err);
+              break;
+            },
+            None => {
+              break;
+            }
+          }
+        }
+      }
+    }
+    Ok(())
+  }
+
+  async fn handle_inbound_awareness(state: &Inner, update: AwarenessStreamUpdate) {
+    tracing::trace!(
+      "broadcasting awareness update from {} ({} bytes)",
+      update.sender,
+      update.data.len()
+    );
+
+    if let Some(object_id) = update.row {
+      if let Some(subgroup) = state.subgroups.get(&*object_id) {
+        let subgroup = subgroup.write().await;
+        let sender = update.sender;
+        let message = AwarenessSync::new(
+          object_id.clone().into(),
+          Message::Awareness(update.data).encode_v1(),
+          CollabOrigin::Empty,
+        );
+        for mut e in subgroup.subscribers.iter_mut() {
+          let subscription = e.value_mut();
+          if sender == subscription.collab_origin {
+            continue; // don't send update to its sender
+          }
+
+          if let Err(err) = subscription.sink.send(message.clone().into()).await {
+            tracing::debug!(
+              "failed to send awareness `{}` update to `{}`: {}",
+              object_id,
+              subscription.collab_origin,
+              err
+            );
+          }
+
+          state.last_activity.store(Arc::new(Instant::now()));
+        }
+      } else {
+        tracing::debug!("database collab group - no subgroup for {}", object_id);
+      }
+    } else {
+      tracing::warn!("database collab group got awareness update without target object id");
+    }
+  }
+
+  async fn snapshot_task(state: Arc<Inner>, interval: Duration) {
+    let mut snapshot_tick = tokio::time::interval(interval);
+    // if saving took longer than snapshot_tick, just skip it over and try in the next round
+    snapshot_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+    let database_id = state.database_id.to_string();
+    loop {
+      tokio::select! {
+        _ = snapshot_tick.tick() => {
+          if let Err(err) = state.persister.save_database(&state.workspace_id, &database_id).await {
+            tracing::warn!("failed to persist database `{}/{}`: {}", state.workspace_id, state.database_id, err);
+          }
+        },
+        _ = state.shutdown.cancelled() => {
+          if let Err(err) = state.persister.save_database(&state.workspace_id, &database_id).await {
+            tracing::warn!("failed to persist database on shutdown `{}/{}`: {}", state.workspace_id, state.database_id, err);
+          }
+          break;
+        }
+      }
+    }
+  }
+}
+
+struct Inner {
+  workspace_id: WorkspaceId,
+  /// Database id. For `Database` collab type it's its own id, for `DatabaseRow` it's an ID of
+  /// the database, this row belongs to.
+  database_id: ObjectId,
+  /// State vectors of rows.
+  subgroups: DashMap<ObjectId, RwLock<Subgroup>>,
+  persister: CollabPersister,
+  metrics: Arc<CollabRealtimeMetrics>,
+  /// Cancellation token triggered when current collab group is about to be stopped.
+  /// This will also shut down all subsequent [Subscription]s.
+  shutdown: CancellationToken,
+  last_activity: ArcSwap<Instant>,
+  collab_update_sink: CollabUpdateSink,
+  awareness_update_sink: AwarenessUpdateSink,
+}
+
+impl Inner {
+  pub fn new(
+    workspace_id: WorkspaceId,
+    database_id: ObjectId,
+    persister: CollabPersister,
+    metrics: Arc<CollabRealtimeMetrics>,
+  ) -> Self {
+    let collab_update_sink = persister
+      .collab_redis_stream
+      .collab_update_sink(&workspace_id, &database_id.to_string());
+    let awareness_update_sink = persister
+      .collab_redis_stream
+      .awareness_update_sink(&workspace_id, &database_id.to_string());
+
+    Inner {
+      workspace_id,
+      database_id,
+      persister,
+      metrics,
+      collab_update_sink,
+      awareness_update_sink,
+      shutdown: CancellationToken::new(),
+      last_activity: ArcSwap::new(Instant::now().into()),
+      subgroups: DashMap::new(),
+    }
+  }
+}
+
+/// While [DatabaseCollabGroup] takes care of the common tasks shared between `Database` and its
+/// `DatabaseRow`s, [Subgroup] contains a state that's specific to a given collab instance.
+///
+/// It can contain both states for `Database` and its `DatabaseRow`s: it's not limited to only one
+/// collab type.
+#[derive(Default)]
+struct Subgroup {
+  state_vector: StateVector,
+  subscribers: HashMap<RealtimeUser, Subscription>,
 }
 
 struct Subscription {
   collab_origin: CollabOrigin,
   sink: Box<dyn SubscriptionSink>,
   shutdown: CancellationToken,
+  seq_no: AtomicU32,
 }
 
 impl Subscription {
@@ -788,13 +764,14 @@ impl Subscription {
       sink: Box::new(sink),
       collab_origin,
       shutdown,
+      seq_no: AtomicU32::new(0),
     }
   }
 }
 
 impl Drop for Subscription {
   fn drop(&mut self) {
-    tracing::trace!("closing subscription: {}", self.collab_origin);
+    tracing::trace!("closing database subscription: {}", self.collab_origin);
     self.shutdown.cancel();
   }
 }

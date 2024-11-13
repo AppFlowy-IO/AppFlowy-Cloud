@@ -67,6 +67,7 @@ collab = { workspace = true }
 collab-entity = { workspace = true }
 collab-folder = { workspace = true }
 collab-document = { workspace = true }
+collab-database = { workspace = true }
 collab-stream = { workspace = true }
 database.workspace = true
 database-entity.workspace = true

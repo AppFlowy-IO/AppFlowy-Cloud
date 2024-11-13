@@ -91,12 +91,12 @@ impl Display for CollabParams {
 }
 
 impl CollabParams {
-  pub fn new<T: ToString>(
+  pub fn new<T: Into<String>>(
     object_id: T,
     collab_type: CollabType,
     encoded_collab_v1: Vec<u8>,
   ) -> Self {
-    let object_id = object_id.to_string();
+    let object_id = object_id.into();
     Self {
       object_id,
       collab_type,

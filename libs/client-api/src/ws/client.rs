@@ -14,16 +14,15 @@ use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tracing::{error, info, trace, warn};
 
+use crate::ping::ServerFixIntervalPing;
+use crate::retry::retry_connect;
+use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
+use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
 use client_websocket::{CloseCode, CloseFrame, Message, WebSocketStream};
 use collab_rt_entity::user::UserMessage;
 use collab_rt_entity::ClientCollabMessage;
 use collab_rt_entity::ServerCollabMessage;
 use collab_rt_entity::{RealtimeMessage, SystemMessage};
-
-use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
-use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
-use crate::ServerFixIntervalPing;
-use crate::{af_spawn, retry_connect};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -181,7 +180,7 @@ impl WSClient {
   fn spawn_aggregate_message(&self) {
     let mut rx = self.rt_msg_sender.subscribe();
     let weak_aggregate_queue = Arc::downgrade(&self.aggregate_queue);
-    af_spawn(async move {
+    tokio::spawn(async move {
       while let Ok(msg) = rx.recv().await {
         if let Some(aggregate_queue) = weak_aggregate_queue.upgrade() {
           aggregate_queue.push(msg).await;
@@ -230,7 +229,7 @@ impl WSClient {
       }
     };
 
-    af_spawn(async move {
+    tokio::spawn(async move {
       loop {
         tokio::select! {
            _ = &mut stop_ws_msg_loop_rx => break,
@@ -265,7 +264,7 @@ impl WSClient {
     #[cfg(debug_assertions)]
     let cloned_skip_realtime_message = self.skip_realtime_message.clone();
     let user_message_tx = self.user_channel.as_ref().clone();
-    af_spawn(async move {
+    tokio::spawn(async move {
       while let Some(Ok(ws_msg)) = stream.next().await {
         match ws_msg {
           Message::Binary(data) => {
@@ -462,7 +461,7 @@ async fn send_message(
   if message.is_binary() && message.len() > MAXIMUM_MESSAGE_SIZE {
     if let Some(http_sender) = http_sender.upgrade() {
       let cloned_device_id = device_id.to_string();
-      af_spawn(async move {
+      tokio::spawn(async move {
         if let Err(err) = http_sender.send_ws_msg(&cloned_device_id, message).await {
           error!("Failed to send WebSocket message over HTTP: {}", err);
         }

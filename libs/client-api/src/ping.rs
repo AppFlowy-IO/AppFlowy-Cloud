@@ -1,4 +1,3 @@
-use crate::af_spawn;
 use crate::ws::{ConnectState, ConnectStateNotify};
 use client_websocket::Message;
 use std::sync::Arc;
@@ -52,7 +51,7 @@ impl ServerFixIntervalPing {
     let weak_ping_count = Arc::downgrade(&self.ping_count);
     let weak_state = Arc::downgrade(&self.state);
     let reconnect_per_ping = self.maximum_ping_count;
-    af_spawn(async move {
+    tokio::spawn(async move {
       loop {
         tokio::select! {
           _ = interval.tick() => {

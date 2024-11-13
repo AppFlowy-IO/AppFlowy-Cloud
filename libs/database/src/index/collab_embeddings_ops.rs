@@ -77,34 +77,35 @@ pub async fn upsert_collab_embeddings(
     .await?;
   }
 
-  for r in records {
-    sqlx::query(
-      r#"INSERT INTO af_collab_embeddings (fragment_id, oid, partition_key, content_type, content, embedding, indexed_at)
+  if !records.is_empty() {
+    // replace existing collab embeddings
+    remove_collab_embeddings(tx, &records[0].object_id).await?;
+    for r in records {
+      sqlx::query(
+        r#"INSERT INTO af_collab_embeddings (fragment_id, oid, partition_key, content_type, content, embedding, indexed_at)
         VALUES ($1, $2, $3, $4, $5, $6, NOW())
         ON CONFLICT (fragment_id) DO UPDATE SET content_type = $4, content = $5, embedding = $6, indexed_at = NOW()"#,
-    )
-    .bind(&r.fragment_id)
-    .bind(&r.object_id)
-    .bind(crate::collab::partition_key_from_collab_type(&r.collab_type))
-    .bind(r.content_type as i32)
-    .bind(&r.content)
-    .bind(r.embedding.clone().map(Vector::from))
-    .execute(tx.deref_mut())
-    .await?;
+      )
+          .bind(&r.fragment_id)
+          .bind(&r.object_id)
+          .bind(crate::collab::partition_key_from_collab_type(&r.collab_type))
+          .bind(r.content_type as i32)
+          .bind(&r.content)
+          .bind(r.embedding.clone().map(Vector::from))
+          .execute(tx.deref_mut())
+          .await?;
+    }
   }
   Ok(())
 }
 
 pub async fn remove_collab_embeddings(
   tx: &mut Transaction<'_, sqlx::Postgres>,
-  ids: &[String],
+  object_id: &str,
 ) -> Result<(), sqlx::Error> {
-  sqlx::query!(
-    "DELETE FROM af_collab_embeddings WHERE fragment_id IN (SELECT unnest($1::text[]))",
-    ids
-  )
-  .execute(tx.deref_mut())
-  .await?;
+  sqlx::query!("DELETE FROM af_collab_embeddings WHERE oid = $1", object_id)
+    .execute(tx.deref_mut())
+    .await?;
   Ok(())
 }
 

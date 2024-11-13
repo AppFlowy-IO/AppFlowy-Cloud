@@ -4,12 +4,12 @@ use app_error::ErrorCode;
 use appflowy_cloud::api::file_storage::BlobPathV1;
 use aws_sdk_s3::types::CompletedPart;
 use bytes::Bytes;
-use client_api::ChunkedBytes;
 use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
 use database::file::{BlobKey, BucketClient, ResponseBlob};
 use database_entity::file_dto::{
   CompleteUploadRequest, CompletedPartRequest, CreateUploadRequest, UploadPartData,
 };
+use infra::file_util::ChunkedBytes;
 use uuid::Uuid;
 
 #[tokio::test]

@@ -1,4 +1,3 @@
-use crate::af_spawn;
 use collab_rt_entity::ClientCollabMessage;
 use collab_rt_entity::RealtimeMessage;
 use futures_util::Sink;
@@ -51,7 +50,7 @@ where
     let (tx, mut rx) = unbounded_channel::<Vec<ClientCollabMessage>>();
     let cloned_sender = self.rt_msg_sender.clone();
     let object_id = self.object_id.clone();
-    af_spawn(async move {
+    tokio::spawn(async move {
       while let Some(msg) = rx.recv().await {
         let _ = cloned_sender.send(msg);
       }
@@ -66,7 +65,7 @@ where
     let (tx, rx) = unbounded_channel::<Result<T, anyhow::Error>>();
     let mut recv = self.receiver.subscribe();
     let object_id = self.object_id.clone();
-    af_spawn(async move {
+    tokio::spawn(async move {
       while let Ok(msg) = recv.recv().await {
         if let Err(err) = tx.send(Ok(msg)) {
           trace!("Failed to send message to channel stream: {}", err);

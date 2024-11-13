@@ -44,7 +44,6 @@ async fn test_document_indexing_and_search() {
   sleep(Duration::from_millis(2000)).await;
 
   // document should get automatically indexed after opening if it wasn't indexed before
-
   let search_resp = test_client
     .api_client
     .search_documents(&workspace_id, "Appflowy", 1, 20)

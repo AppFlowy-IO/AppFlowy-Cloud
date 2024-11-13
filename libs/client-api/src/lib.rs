@@ -8,6 +8,7 @@ mod http_collab;
 mod http_history;
 mod http_member;
 mod http_publish;
+mod http_search;
 mod http_template;
 mod http_view;
 pub use http::*;
@@ -15,23 +16,12 @@ pub use http::*;
 #[cfg(feature = "collab-sync")]
 pub mod collab_sync;
 
-pub mod notify;
-
-#[cfg(not(target_arch = "wasm32"))]
-mod native;
-#[cfg(not(target_arch = "wasm32"))]
-pub use native::*;
-
-#[cfg(target_arch = "wasm32")]
-mod wasm;
-#[cfg(target_arch = "wasm32")]
-pub use wasm::*;
-
-#[cfg(not(target_arch = "wasm32"))]
 mod http_chat;
-
-mod http_search;
+mod http_file;
 mod http_settings;
+pub mod notify;
+mod ping;
+mod retry;
 pub mod ws;
 
 pub mod error {

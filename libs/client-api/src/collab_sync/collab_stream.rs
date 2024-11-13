@@ -23,7 +23,6 @@ use collab_rt_protocol::{
   ClientSyncProtocol, CollabSyncProtocol, Message, MessageReader, SyncMessage,
 };
 
-use crate::af_spawn;
 use crate::collab_sync::{
   start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
 };
@@ -72,7 +71,7 @@ where
 
     if let Some(interval) = periodic_sync_interval {
       tracing::trace!("setting periodic sync step 1 for {}", object_id);
-      af_spawn(ObserveCollab::<Sink, Stream>::periodic_sync_step_1(
+      tokio::spawn(ObserveCollab::<Sink, Stream>::periodic_sync_step_1(
         origin.clone(),
         sink.clone(),
         cloned_weak_collab.clone(),
@@ -80,7 +79,7 @@ where
         object_id.clone(),
       ));
     }
-    af_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
+    tokio::spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
       origin,
       arc_object,
       stream,

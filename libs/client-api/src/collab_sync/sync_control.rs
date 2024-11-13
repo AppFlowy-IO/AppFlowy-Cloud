@@ -16,7 +16,6 @@ use yrs::{ReadTxn, StateVector};
 use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol, Message, SyncMessage};
 
-use crate::af_spawn;
 use crate::collab_sync::collab_stream::{CollabRef, ObserveCollab};
 use crate::collab_sync::{
   CollabSink, CollabSinkRunner, CollabSyncState, MissUpdateReason, SinkSignal, SyncError,
@@ -76,7 +75,7 @@ where
       sync_state_tx.clone(),
       sink_config,
     ));
-    af_spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
+    tokio::spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
 
     // Create the observe collab stream.
     let _cloned_protocol = protocol.clone();

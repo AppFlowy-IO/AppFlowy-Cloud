@@ -1491,7 +1491,8 @@ pub async fn select_publish_name_exists(
         SELECT 1
         FROM af_published_collab
         WHERE workspace_id = $1
-        AND publish_name = $2
+          AND publish_name = $2
+          AND unpublished_at IS NULL
       )
     "#,
     workspace_uuid,

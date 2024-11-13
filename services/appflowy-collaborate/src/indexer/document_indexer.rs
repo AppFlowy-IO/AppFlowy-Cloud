@@ -13,7 +13,7 @@ use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, EmbeddingContentType};
-use uuid::{NoContext, Timestamp, Uuid};
+use uuid::Uuid;
 
 use crate::indexer::{DocumentDataExt, Indexer};
 

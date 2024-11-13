@@ -52,7 +52,7 @@ impl Indexer for DocumentIndexer {
           // we should split document into multiple fragments
           let (left, right) = slice.split_at(Self::DOC_CONTENT_SPLIT);
           let param = AFCollabEmbeddingParams {
-            fragment_id: Uuid::new_v7(Timestamp::now(NoContext)).to_string(),
+            fragment_id: Uuid::new_v4().to_string(),
             object_id: object_id.clone(),
             collab_type: CollabType::Document,
             content_type: EmbeddingContentType::PlainText,

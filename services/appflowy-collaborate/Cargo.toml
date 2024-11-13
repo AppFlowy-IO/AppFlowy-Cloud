@@ -74,7 +74,7 @@ yrs.workspace = true
 chrono = "0.4.31"
 collab-rt-entity = { workspace = true, features = ["actix_message"] }
 collab-rt-protocol.workspace = true
-uuid = { version = "1", features = ["v4", "v7"] }
+uuid = { version = "1", features = ["v4"] }
 md5 = "0.7"
 prometheus-client = "0.22.1"
 indexmap = "2.2.5"

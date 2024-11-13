@@ -74,7 +74,6 @@ pub async fn run_actix_server(
     )),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
-    state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     config.collab.edit_state_max_count,
     config.collab.edit_state_max_secs,

@@ -239,53 +239,6 @@ jobs:
         run: docker logout
 
 
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 1
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-      - name: Get git tag
-        id: vars
-        run: |
-          T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
-          echo "GIT_TAG=$T" >> $GITHUB_ENV
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: registry.hub.docker.com/${{ env.IMAGE_NAME }}
-
-      - name: Build and push ${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
-        uses: docker/build-push-action@v5
-        with:
-          platforms: ${{ matrix.job.docker_platform }}
-          file: ./services/appflowy-history/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
-            ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-${{ matrix.job.name }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: false
-
-      - name: Logout from Docker Hub
-        if: always()
-        run: docker logout
-
-
   appflowy_worker_image:
     runs-on: ubuntu-22.04
     env:

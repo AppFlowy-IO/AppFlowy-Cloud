@@ -124,7 +124,7 @@ async fn open_app_handler(
         session.token.refresh_token,
         session.token.token_type,
   );
-  Ok(Redirect::to(&app_sign_in_url).into_response())
+  Ok(htmx_redirect(&app_sign_in_url).into_response())
 }
 
 /// Delete the user account and all associated data.

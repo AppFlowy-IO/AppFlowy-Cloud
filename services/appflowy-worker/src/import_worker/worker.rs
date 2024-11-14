@@ -46,7 +46,7 @@ use database::pg_row::AFImportTask;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use sqlx::types::chrono;
-use sqlx::types::chrono::{DateTime, Utc};
+use sqlx::types::chrono::{DateTime, TimeZone, Utc};
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 use std::env::temp_dir;
@@ -259,7 +259,7 @@ async fn consume_task(
     }
 
     // Check if the task is expired
-    if is_task_expired(task.created_at.unwrap(), task.last_process_at) {
+    if let Err(err) = is_task_expired(task.created_at.unwrap(), task.last_process_at) {
       if let Ok(import_record) = select_import_task(&context.pg_pool, &task.task_id).await {
         handle_expired_task(
           &mut context,
@@ -268,6 +268,7 @@ async fn consume_task(
           stream_name,
           group_name,
           &entry_id,
+          &err,
         )
         .await?;
       }
@@ -304,10 +305,11 @@ async fn handle_expired_task(
   stream_name: &str,
   group_name: &str,
   entry_id: &str,
+  reason: &str,
 ) -> Result<(), ImportError> {
   info!(
-    "[Import]: {} import is expired, delete workspace",
-    task.workspace_id
+    "[Import]: {} import is expired with reason:{}, delete workspace",
+    task.workspace_id, reason
   );
 
   update_import_task_status(
@@ -363,20 +365,20 @@ async fn process_and_ack_task(
   result
 }
 
-fn is_task_expired(created_timestamp: i64, last_process_at: Option<i64>) -> bool {
-  match DateTime::<Utc>::from_timestamp(created_timestamp, 0) {
-    None => {
-      info!("[Import] failed to parse timestamp: {}", created_timestamp);
-      true
-    },
+fn is_task_expired(created_timestamp: i64, last_process_at: Option<i64>) -> Result<(), String> {
+  match Utc.timestamp_opt(created_timestamp, 0).single() {
+    None => Err(format!(
+      "[Import] failed to parse timestamp: {}",
+      created_timestamp
+    )),
     Some(created_at) => {
       let now = Utc::now();
       if created_at > now {
-        error!(
+        return Err(format!(
           "[Import] created_at is in the future: {} > {}",
-          created_at, now
-        );
-        return false;
+          created_at.format("%m/%d/%y %H:%M"),
+          now.format("%m/%d/%y %H:%M")
+        ));
       }
 
       let elapsed = now - created_at;
@@ -385,18 +387,33 @@ fn is_task_expired(created_timestamp: i64, last_process_at: Option<i64>) -> bool
         .unwrap_or(6);
 
       if elapsed.num_hours() >= hours {
-        return true;
+        return Err(format!(
+          "[Import] task is expired: created_at: {}, last_process_at: {:?}, elapsed: {} hours",
+          created_at.format("%m/%d/%y %H:%M"),
+          last_process_at,
+          elapsed.num_hours()
+        ));
       }
 
       if last_process_at.is_none() {
-        return false;
+        return Ok(());
       }
 
       let elapsed = now - created_at;
       let minutes = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_MINUTES", "30")
         .parse::<i64>()
         .unwrap_or(30);
-      elapsed.num_minutes() >= minutes
+
+      if elapsed.num_minutes() >= minutes {
+        Err(format!(
+          "[Import] task is expired: created_at: {}, last_process_at: {:?}, elapsed: {} minutes",
+          created_at.format("%m/%d/%y %H:%M"),
+          last_process_at,
+          elapsed.num_minutes()
+        ))
+      } else {
+        Ok(())
+      }
     },
   }
 }
@@ -513,16 +530,18 @@ async fn process_task(
             remove_workspace(&task.workspace_id, &context.pg_pool).await;
           }
 
-          match fs::remove_dir_all(&unzip_dir_path).await {
-            Ok(_) => info!(
-              "[Import]: {} deleted unzip file: {:?}",
-              task.workspace_id, unzip_dir_path
-            ),
-            Err(err) => error!("Failed to delete unzip file: {:?}", err),
-          }
-
           clean_up(&context.s3_client, &task).await;
           notify_user(&task, result, context.notifier, &context.metrics).await?;
+
+          tokio::spawn(async move {
+            match fs::remove_dir_all(&unzip_dir_path).await {
+              Ok(_) => info!(
+                "[Import]: {} deleted unzip file: {:?}",
+                task.workspace_id, unzip_dir_path
+              ),
+              Err(err) => error!("Failed to delete unzip file: {:?}", err),
+            }
+          });
         },
         Err(err) => {
           // If there is any errors when download or unzip the file, we will remove the file from S3 and notify the user.
@@ -706,10 +725,9 @@ async fn download_and_unzip_file(
         .await
         .map_err(|err| ImportError::Internal(err.into()))??;
 
-    trace!(
-      "[Import] {} finish unzip file: {:?}",
-      import_task.workspace_id,
-      unzip_file.unzip_dir
+    info!(
+      "[Import] {} finish unzip file to dir:{}, file:{:?}",
+      import_task.workspace_id, unzip_file.dir_name, unzip_file.unzip_dir
     );
     Ok(unzip_file.unzip_dir)
   }

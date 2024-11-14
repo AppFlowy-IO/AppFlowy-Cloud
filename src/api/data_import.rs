@@ -220,13 +220,8 @@ async fn import_data_handler(
     "User:{} import data:{} to new workspace:{}, name:{}",
     uid, file.size, workspace_id, file.name,
   );
-  let stream = ByteStream::from_path(&file.file_path).await.map_err(|e| {
-    AppError::Internal(anyhow!("Failed to create ByteStream from file path: {}", e))
-  })?;
-  state
-    .bucket_client
-    .put_blob_as_content_type(&workspace_id, stream, "application/zip")
-    .await?;
+
+  upload_file_with_retry(&state, &workspace_id, &file.file_path).await?;
 
   // This task will be deserialized into ImportTask
   let task_id = Uuid::new_v4();
@@ -258,6 +253,39 @@ async fn import_data_handler(
   .await?;
 
   Ok(AppResponse::Ok().into())
+}
+
+async fn upload_file_with_retry(
+  state: &AppState,
+  workspace_id: &str,
+  file_path: &PathBuf,
+) -> Result<(), AppError> {
+  let mut attempt = 0;
+  let max_retries = 3;
+
+  while attempt <= max_retries {
+    let stream = ByteStream::from_path(file_path).await.map_err(|e| {
+      AppError::Internal(anyhow!("Failed to create ByteStream from file path: {}", e))
+    })?;
+    let result = state
+      .bucket_client
+      .put_blob_with_content_type(workspace_id, stream, "application/zip")
+      .await;
+
+    match result {
+      Ok(_) => return Ok(()),
+      Err(AppError::ServiceTemporaryUnavailable(_)) if attempt < max_retries => {
+        attempt += 1;
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        continue;
+      },
+      Err(err) => return Err(err),
+    }
+  }
+
+  Err(AppError::ServiceTemporaryUnavailable(
+    "Failed to upload file to S3".to_string(),
+  ))
 }
 
 async fn check_maximum_task(state: &Data<AppState>, uid: i64) -> Result<(), AppError> {

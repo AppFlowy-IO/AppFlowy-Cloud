@@ -58,8 +58,9 @@ mod tests {
   #[tokio::test]
   async fn render_import_report() {
     let mailer = Mailer::new(
-      "test mailer".to_string(),
-      "123".to_string(),
+      "smtp_username".to_string(),
+      "stmp_email".to_string(),
+      "smtp_password".to_string().into(),
       "localhost",
       465,
     )

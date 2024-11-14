@@ -511,7 +511,8 @@ async fn create_bucket_if_not_exists(
 async fn get_mailer(config: &Config) -> Result<AFCloudMailer, Error> {
   let mailer = Mailer::new(
     config.mailer.smtp_username.clone(),
-    config.mailer.smtp_password.expose_secret().clone(),
+    config.mailer.smtp_email.clone(),
+    config.mailer.smtp_password.clone(),
     &config.mailer.smtp_host,
     config.mailer.smtp_port,
   )

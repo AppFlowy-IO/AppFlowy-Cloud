@@ -25,7 +25,7 @@ pub trait BucketClient {
 
   async fn put_blob(&self, object_key: &str, content: &[u8]) -> Result<(), AppError>;
 
-  async fn put_blob_as_content_type(
+  async fn put_blob_with_content_type(
     &self,
     object_key: &str,
     stream: ByteStream,

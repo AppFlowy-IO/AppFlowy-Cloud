@@ -448,7 +448,7 @@ pub async fn upload_avatar(
 
   let object_key = avatar_object_key(&file_id);
   client
-    .put_blob_as_content_type(
+    .put_blob_with_content_type(
       &object_key,
       ByteStream::from(avatar.data.to_vec()),
       &content_type,

@@ -48,6 +48,12 @@ impl Config {
       mailer: MailerSetting {
         smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),
         smtp_port: get_env_var("APPFLOWY_MAILER_SMTP_PORT", "465").parse()?,
+        smtp_email: get_env_var("APPFLOWY_MAILER_SMTP_EMAIL", "sender@example.com"),
+        // `smtp_username` could be the same as `smtp_email`, but may not have to be.
+        // For example:
+        //  - Azure Communication services uses a string of the format <resource name>.<app id>.<tenant id>
+        //  - SendGrid uses the string apikey
+        // Adapted from: https://github.com/AppFlowy-IO/AppFlowy-Cloud/issues/984
         smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
         smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
       },

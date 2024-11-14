@@ -277,7 +277,6 @@ async fn upload_file_with_retry(
       Err(AppError::ServiceTemporaryUnavailable(_)) if attempt < max_retries => {
         attempt += 1;
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        continue;
       },
       Err(err) => return Err(err),
     }

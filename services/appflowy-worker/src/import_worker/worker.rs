@@ -3,7 +3,7 @@ use crate::s3_client::{download_file, AutoRemoveDownloadedFile, S3StreamResponse
 use anyhow::anyhow;
 use aws_sdk_s3::primitives::ByteStream;
 
-use crate::error::ImportError;
+use crate::error::{ImportError, WorkerError};
 use crate::mailer::ImportNotionMailerParam;
 use crate::s3_client::S3Client;
 
@@ -1215,11 +1215,12 @@ async fn batch_upload_files_to_s3(
   .buffer_unordered(5);
   let results: Vec<_> = upload_stream.collect().await;
   let errors: Vec<_> = results.into_iter().filter_map(Result::err).collect();
-  if errors.is_empty() {
-    Ok(())
-  } else {
-    Err(anyhow!("Some uploads failed: {:?}", errors))
+
+  if !errors.is_empty() {
+    error!("Some uploads failed: {:?}", errors);
   }
+
+  Ok(())
 }
 
 async fn upload_file_to_s3(
@@ -1235,12 +1236,29 @@ async fn upload_file_to_s3(
     return Err(anyhow!("File does not exist: {:?}", path));
   }
 
+  let mut attempt = 0;
+  let max_retries = 2;
+
   let object_key = format!("{}/{}/{}", workspace_id, object_id, file_id);
-  let byte_stream = ByteStream::from_path(path).await?;
-  client
-    .put_blob(&object_key, byte_stream, Some(file_type))
-    .await?;
-  Ok(())
+  while attempt <= max_retries {
+    let byte_stream = ByteStream::from_path(path).await?;
+    match client
+      .put_blob(&object_key, byte_stream, Some(file_type))
+      .await
+    {
+      Ok(_) => return Ok(()),
+      Err(WorkerError::S3ServiceUnavailable(_)) if attempt < max_retries => {
+        attempt += 1;
+        tokio::time::sleep(Duration::from_secs(3)).await;
+      },
+      Err(err) => return Err(err.into()),
+    }
+  }
+
+  Err(anyhow!(
+    "Failed to upload file to S3 after {} attempts",
+    max_retries + 1
+  ))
 }
 
 async fn get_encode_collab_from_bytes(

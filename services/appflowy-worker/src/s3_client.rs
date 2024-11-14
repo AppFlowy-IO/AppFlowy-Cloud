@@ -128,10 +128,18 @@ impl S3Client for S3ClientImpl {
       .await
     {
       Ok(_) => Ok(()),
-      Err(err) => Err(WorkerError::from(anyhow!(
-        "Failed to put object to S3: {}",
-        err
-      ))),
+      Err(err) => match err {
+        SdkError::TimeoutError(_) | SdkError::DispatchFailure(_) | SdkError::ServiceError(_) => {
+          Err(WorkerError::S3ServiceUnavailable(format!(
+            "Failed to upload object to S3: {}",
+            err
+          )))
+        },
+        _ => Err(WorkerError::Internal(anyhow!(
+          "Failed to upload object to S3: {}",
+          err
+        ))),
+      },
     }
   }
 

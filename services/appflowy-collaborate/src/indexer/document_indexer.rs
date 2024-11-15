@@ -165,7 +165,7 @@ fn create_embedding_params(
       }
       current_len = 0;
 
-3     // Check if the grapheme itself is longer than max_content_len
+      // Check if the grapheme itself is longer than max_content_len
       if grapheme_len > max_content_len {
         // Push the grapheme as a fragment on its own
         result.push(create_param(

@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use collab::preclude::Collab;
 
-use crate::config::get_env_var;
+
 use crate::indexer::{DocumentDataExt, Indexer};
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
@@ -21,22 +21,15 @@ use uuid::Uuid;
 
 pub struct DocumentIndexer {
   ai_client: AppFlowyAIClient,
-  doc_content_split: usize,
   tokenizer: CoreBPE,
   embedding_model: EmbeddingModel,
 }
 
 impl DocumentIndexer {
   pub fn new(ai_client: AppFlowyAIClient) -> Arc<Self> {
-    // We assume that every token is ~4 bytes. We're going to split document content into fragments
-    // of ~2000 tokens each.
-    let doc_content_split = get_env_var("APPFLOWY_INDEXER_DOCUMENT_CONTENT_SPLIT_LEN", "8000")
-      .parse()
-      .unwrap_or(8000);
     let tokenizer = tiktoken_rs::cl100k_base().unwrap();
     Arc::new(Self {
       ai_client,
-      doc_content_split,
       tokenizer,
       embedding_model: EmbeddingModel::TextEmbedding3Small,
     })
@@ -94,7 +87,7 @@ impl Indexer for DocumentIndexer {
       .embeddings(EmbeddingRequest {
         input: EmbeddingInput::StringArray(contents),
         model: EmbeddingModel::TextEmbedding3Small.to_string(),
-        chunk_size: (self.doc_content_split / 4) as i32,
+        chunk_size: 2000,
         encoding_format: EmbeddingEncodingFormat::Float,
         dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
       })

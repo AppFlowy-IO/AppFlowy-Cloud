@@ -753,7 +753,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "unicode-segmentation",
+ "unicode-normalization",
  "uuid",
  "validator",
  "workspace-template",

@@ -19,7 +19,8 @@ ARG FEATURES=""
 
 COPY --from=planner /app/recipe.json recipe.json
 # Build our project dependencies
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json --jobs=$(nproc)
+
 COPY . .
 ENV SQLX_OFFLINE true
 

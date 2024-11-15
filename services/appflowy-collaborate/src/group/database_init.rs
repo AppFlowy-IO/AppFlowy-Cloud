@@ -27,7 +27,7 @@ use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use yrs::updates::decoder::{Decode, DecoderV1};
-use yrs::updates::encoder::{Encode, EncoderV1};
+use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Update};
 
 //TODO: this should be defined at collab crate level.
@@ -135,7 +135,9 @@ impl DatabaseCollabGroup {
     // create new subscription for new subscriber
     let subscriber_shutdown = self.state.shutdown.child_token();
 
+    let user = user.clone();
     tokio::spawn(Self::receive_from_client_task(
+      user,
       self.object_id.clone(),
       self.state.clone(),
       sink.clone(),
@@ -155,15 +157,12 @@ impl DatabaseCollabGroup {
     }
 
     if cfg!(debug_assertions) {
-      tracing::trace!(
-        "{}: added new subscriber, current group member: {}",
-        &self.object_id,
-        self.user_count(),
-      );
+      tracing::trace!("{}: added new subscriber", &self.object_id,);
     }
   }
 
   async fn receive_from_client_task<Sink, Stream>(
+    user: RealtimeUser,
     object_id: ObjectId,
     state: Arc<Inner>,
     mut sink: Sink,
@@ -181,7 +180,7 @@ impl DatabaseCollabGroup {
         msg = stream.next() => {
           match msg {
             None => break,
-            Some(msg) => if let Err(err) =  Self::handle_messages(&state, &mut sink, msg).await {
+            Some(msg) => if let Err(err) =  Self::handle_messages(&user, &state, &mut sink, msg).await {
               tracing::warn!(
                 "collab `{}` failed to handle message from `{}`: {}",
                 object_id,
@@ -197,6 +196,7 @@ impl DatabaseCollabGroup {
   }
 
   async fn handle_messages<Sink>(
+    user: &RealtimeUser,
     state: &Inner,
     sink: &mut Sink,
     msg: MessageByObjectId,
@@ -208,7 +208,7 @@ impl DatabaseCollabGroup {
       if let Some(subgroup) = state.subgroups.get(object_id.as_str()) {
         let subgroup = subgroup.read().await;
         for message in messages {
-          match Self::handle_client_message(&subgroup, state, message).await {
+          match Self::handle_client_message(user, &object_id, &subgroup, state, message).await {
             Ok(response) => {
               tracing::trace!("[realtime]: sending response: {}", response);
               match sink.send(response.into()).await {
@@ -236,6 +236,7 @@ impl DatabaseCollabGroup {
 
   /// Handle the message sent from the client
   async fn handle_client_message(
+    user: &RealtimeUser,
     object_id: &str,
     subgroup: &Subgroup,
     state: &Inner,
@@ -244,6 +245,10 @@ impl DatabaseCollabGroup {
     let msg_id = collab_msg.msg_id();
     let message_origin = collab_msg.origin().clone();
 
+    let subscription = subgroup
+      .subscribers
+      .get(user)
+      .ok_or_else(|| RealtimeError::UserNotFound(user.to_string()))?;
     // If the payload is empty, we don't need to apply any updates .
     // Currently, only the ping message should has an empty payload.
     if collab_msg.payload().is_empty() {
@@ -254,7 +259,7 @@ impl DatabaseCollabGroup {
         message_origin,
         object_id.to_string(),
         msg_id,
-        subgroup.seq_no.load(Ordering::SeqCst),
+        subscription.seq_no.load(Ordering::SeqCst),
       ));
     }
 
@@ -267,7 +272,7 @@ impl DatabaseCollabGroup {
     let payload = collab_msg.payload();
 
     // Spawn a blocking task to handle the message
-    let result = Self::handle_message(state, payload, &message_origin, msg_id).await;
+    let result = Self::handle_message(subscription, state, payload, &message_origin, msg_id).await;
 
     match result {
       Ok(inner_result) => match inner_result {
@@ -282,6 +287,7 @@ impl DatabaseCollabGroup {
   }
 
   async fn handle_message(
+    subscription: &Subscription,
     object_id: &str,
     state: &Inner,
     payload: &[u8],
@@ -304,7 +310,7 @@ impl DatabaseCollabGroup {
                     message_origin.clone(),
                     object_id.to_string(),
                     msg_id,
-                    state.seq_no.load(Ordering::SeqCst),
+                    subscription.seq_no.load(Ordering::SeqCst),
                   )
                   .with_payload(payload.unwrap_or_default()),
                 );
@@ -328,7 +334,7 @@ impl DatabaseCollabGroup {
                   message_origin.clone(),
                   object_id.to_string(),
                   msg_id,
-                  state.seq_no.load(Ordering::SeqCst),
+                  subscription.seq_no.load(Ordering::SeqCst),
                 )
                 .with_code(code)
                 .with_payload(payload),
@@ -366,21 +372,21 @@ impl DatabaseCollabGroup {
   }
 
   async fn handle_sync_step1(
+    subgroup: &Subgroup,
     state: &Inner,
     remote_sv: &StateVector,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
-    if let Ok(sv) = state.state_vector.try_read() {
-      // we optimistically try to obtain state vector lock for a fast track:
-      // if we remote sv is up-to-date with current one, we don't need to do anything
-      match sv.partial_cmp(remote_sv) {
-        Some(std::cmp::Ordering::Equal) => return Ok(None), // client and server are in sync
-        Some(std::cmp::Ordering::Less) => {
-          // server is behind client
-          let msg = Message::Sync(SyncMessage::SyncStep1(sv.clone()));
-          return Ok(Some(msg.encode_v1()));
-        },
-        Some(std::cmp::Ordering::Greater) | None => { /* server has some new updates */ },
-      }
+    let sv = &subgroup.state_vector;
+    // we optimistically try to obtain state vector lock for a fast track:
+    // if we remote sv is up-to-date with current one, we don't need to do anything
+    match sv.partial_cmp(remote_sv) {
+      Some(std::cmp::Ordering::Equal) => return Ok(None), // client and server are in sync
+      Some(std::cmp::Ordering::Less) => {
+        // server is behind client
+        let msg = Message::Sync(SyncMessage::SyncStep1(sv.clone()));
+        return Ok(Some(msg.encode_v1()));
+      },
+      Some(std::cmp::Ordering::Greater) | None => { /* server has some new updates */ },
     }
 
     // we need to reconstruct document state on the server side
@@ -412,6 +418,7 @@ impl DatabaseCollabGroup {
   }
 
   async fn handle_sync_step2(
+    subgroup: &Subgroup,
     state: &Inner,
     origin: &CollabOrigin,
     update: Vec<u8>,
@@ -432,7 +439,7 @@ impl DatabaseCollabGroup {
       .map_err(|err| RTProtocolError::Internal(err.into()))??
     };
     let missing_updates = {
-      let state_vector = state.state_vector.read().await;
+      let state_vector = &subgroup.state_vector;
       match state_vector.partial_cmp(&decoded_update.state_vector_lower()) {
         None | Some(std::cmp::Ordering::Less) => Some(state_vector.clone()),
         _ => None,
@@ -468,14 +475,16 @@ impl DatabaseCollabGroup {
   }
 
   async fn handle_update(
+    subgroup: &Subgroup,
     state: &Inner,
     origin: &CollabOrigin,
     update: Vec<u8>,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
-    Self::handle_sync_step2(state, origin, update).await
+    Self::handle_sync_step2(subgroup, state, origin, update).await
   }
 
   async fn handle_awareness_update(
+    subgroup: Subgroup,
     state: &Inner,
     origin: &CollabOrigin,
     data: Vec<u8>,
@@ -483,6 +492,7 @@ impl DatabaseCollabGroup {
     let msg = AwarenessStreamUpdate {
       data,
       sender: origin.clone(),
+      row: Some(row_id),
     };
     state
       .awareness_update_sink
@@ -503,18 +513,26 @@ impl DatabaseCollabGroup {
     }
   }
 
-  pub fn contains_user(&self, user: &RealtimeUser) -> bool {
-    self.state.subscribers.contains_key(user)
+  pub async fn contains_user(&self, user: &RealtimeUser) -> bool {
+    if let Some(subgroup) = self.state.subgroups.get(&self.object_id) {
+      let subgroup = subgroup.read().await;
+      subgroup.subscribers.contains_key(user)
+    } else {
+      false
+    }
   }
 
-  pub fn remove_user(&self, user: &RealtimeUser) {
-    self.state.subscribers.remove(user);
+  pub async fn remove_user(&self, user: &RealtimeUser) {
+    if let Some(subgroup) = self.state.subgroups.get(&self.object_id) {
+      let subgroup = subgroup.write().await;
+      subgroup.subscribers.remove(user);
+    }
   }
 
   /// Check if the group is active. A group is considered active if it has at least one
   /// subscriber
   pub fn is_inactive(&self) -> bool {
-    self.state.shutdown.is_cancelled() || self.state.subscribers.is_empty()
+    self.state.shutdown.is_cancelled()
   }
 
   pub fn workspace_id(&self) -> &str {
@@ -553,13 +571,12 @@ impl DatabaseCollabGroup {
     Ok(())
   }
 
-  async fn handle_inbound_update(state: &Inner, update: CollabStreamUpdate) {
+  async fn handle_inbound_update(object_id: &str, state: &Inner, update: CollabStreamUpdate) {
     if let Some(object_id) = update.row {
       if let Some(subgroup) = state.subgroups.get(&*object_id) {
+        let subgroup = subgroup.write().await;
         // update state vector based on incoming message
-        let mut sv = subgroup.state_vector.write().await;
-        sv.merge(update.state_vector);
-        drop(sv);
+        subgroup.state_vector.merge(update.state_vector);
 
         let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
         tracing::trace!(
@@ -569,8 +586,8 @@ impl DatabaseCollabGroup {
           seq_num
         );
         let payload = Message::Sync(SyncMessage::Update(update.data)).encode_v1();
-        let message = BroadcastSync::new(update.sender, state.object_id.clone(), payload, seq_num);
-        for mut e in state.subscribers.iter_mut() {
+        let message = BroadcastSync::new(update.sender, object_id.into(), payload, seq_num);
+        for mut e in subgroup.subscribers.iter_mut() {
           let subscription = e.value_mut();
           if message.origin == subscription.collab_origin {
             continue; // don't send update to its sender
@@ -579,7 +596,7 @@ impl DatabaseCollabGroup {
           if let Err(err) = subscription.sink.send(message.clone().into()).await {
             tracing::debug!(
               "failed to send collab `{}` update to `{}`: {}",
-              state.object_id,
+              object_id,
               subscription.collab_origin,
               err
             );
@@ -745,6 +762,7 @@ impl Inner {
 #[derive(Default)]
 struct Subgroup {
   state_vector: StateVector,
+  seq_no: AtomicU32,
   subscribers: HashMap<RealtimeUser, Subscription>,
 }
 
@@ -752,7 +770,6 @@ struct Subscription {
   collab_origin: CollabOrigin,
   sink: Box<dyn SubscriptionSink>,
   shutdown: CancellationToken,
-  seq_no: AtomicU32,
 }
 
 impl Subscription {

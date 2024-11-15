@@ -6,7 +6,7 @@ use tracing::instrument;
 use crate::{
   act::{Action, ActionVariant},
   collab::{CollabAccessControl, RealtimeAccessControl},
-  entity::ObjectType,
+  entity::{ObjectType, SubjectType},
 };
 
 use super::access::AccessControl;
@@ -70,7 +70,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
     self
       .access_control
       .update_policy(
-        uid,
+        SubjectType::User(*uid),
         ObjectType::Collab(oid),
         ActionVariant::FromAccessLevel(&level),
       )
@@ -83,7 +83,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError> {
     self
       .access_control
-      .remove_policy(uid, &ObjectType::Collab(oid))
+      .remove_policy(&SubjectType::User(*uid), &ObjectType::Collab(oid))
       .await?;
     Ok(())
   }
@@ -96,20 +96,6 @@ pub struct RealtimeCollabAccessControlImpl {
 
 impl RealtimeCollabAccessControlImpl {
   pub fn new(access_control: AccessControl) -> Self {
-    // let action_by_oid = Arc::new(DashMap::new());
-    // let mut sub = access_control.subscribe_change();
-    // let weak_action_by_oid = Arc::downgrade(&action_by_oid);
-    // tokio::spawn(async move {
-    //   while let Ok(change) = sub.recv().await {
-    //     match weak_action_by_oid.upgrade() {
-    //       None => break,
-    //       Some(action_by_oid) => match change {
-    //         AccessControlChange::UpdatePolicy { uid, oid } => {},
-    //         AccessControlChange::RemovePolicy { uid, oid } => {},
-    //       },
-    //     }
-    //   }
-    // });
     Self { access_control }
   }
 

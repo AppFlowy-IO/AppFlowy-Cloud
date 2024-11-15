@@ -13,6 +13,7 @@ use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, EmbeddingContentType};
+use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 
 use crate::indexer::{DocumentDataExt, Indexer};
@@ -45,42 +46,12 @@ impl Indexer for DocumentIndexer {
     match result {
       Ok(document_data) => {
         let content = document_data.to_plain_text();
-        let mut result = Vec::with_capacity(1 + content.len() / Self::DOC_CONTENT_SPLIT);
-
-        let mut slice = content.as_str();
-        while slice.len() > Self::DOC_CONTENT_SPLIT {
-          // we should split document into multiple fragments
-          let (left, right) = slice.split_at(Self::DOC_CONTENT_SPLIT);
-          let param = AFCollabEmbeddingParams {
-            fragment_id: Uuid::new_v4().to_string(),
-            object_id: object_id.clone(),
-            collab_type: CollabType::Document,
-            content_type: EmbeddingContentType::PlainText,
-            content: left.to_string(),
-            embedding: None,
-          };
-          result.push(param);
-          slice = right;
-        }
-
-        let content = if slice.len() == content.len() {
-          content // we didn't slice the content
-        } else {
-          slice.to_string()
-        };
-        if !content.is_empty() {
-          let param = AFCollabEmbeddingParams {
-            fragment_id: object_id.clone(),
-            object_id: object_id.clone(),
-            collab_type: CollabType::Document,
-            content_type: EmbeddingContentType::PlainText,
-            content,
-            embedding: None,
-          };
-          result.push(param);
-        }
-
-        Ok(result)
+        create_embedding_params(
+          object_id,
+          content,
+          CollabType::Document,
+          Self::DOC_CONTENT_SPLIT,
+        )
       },
       Err(err) => {
         if matches!(err, DocumentError::NoRequiredData) {
@@ -139,5 +110,213 @@ impl Indexer for DocumentIndexer {
       tokens_consumed: resp.total_tokens as u32,
       params,
     }))
+  }
+}
+
+fn create_embedding_params(
+  object_id: String,
+  content: String,
+  collab_type: CollabType,
+  max_content_len: usize,
+) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+  let mut result = Vec::with_capacity(1 + content.len() / max_content_len);
+
+  let mut start = 0;
+  let mut current_len = 0;
+  let graphemes: Vec<&str> = content.graphemes(true).collect();
+
+  for (i, grapheme) in graphemes.iter().enumerate() {
+    current_len += grapheme.len();
+    if current_len > max_content_len {
+      let fragment = graphemes[start..i].concat();
+      result.push(AFCollabEmbeddingParams {
+        fragment_id: Uuid::new_v4().to_string(),
+        object_id: object_id.clone(),
+        collab_type: collab_type.clone(),
+        content_type: EmbeddingContentType::PlainText,
+        content: fragment,
+        embedding: None,
+      });
+      start = i;
+      current_len = grapheme.len();
+    }
+  }
+
+  if start < graphemes.len() {
+    let fragment = graphemes[start..].concat();
+    if !fragment.is_empty() {
+      result.push(AFCollabEmbeddingParams {
+        fragment_id: object_id.clone(),
+        object_id: object_id.clone(),
+        collab_type,
+        content_type: EmbeddingContentType::PlainText,
+        content: fragment,
+        embedding: None,
+      });
+    }
+  }
+
+  Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::indexer::document_indexer::create_embedding_params;
+  use collab_entity::CollabType;
+
+  #[test]
+  fn test_split_at_non_utf8() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 10; // Small number for testing
+
+    // Content with multibyte characters (emojis)
+    let content = "Hello 😃 World 🌍! This is a test 🚀.".to_string();
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    // Ensure that we didn't split in the middle of a multibyte character
+    for param in params {
+      assert!(param.content.is_char_boundary(0));
+      assert!(param.content.is_char_boundary(param.content.len()));
+    }
+  }
+
+  #[test]
+  fn test_exact_boundary_split() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 5; // Set to 5 for testing
+
+    // Content length is exactly a multiple of max_content_len
+    let content = "abcdefghij".to_string(); // 10 characters
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].content, "abcde");
+    assert_eq!(params[1].content, "fghij");
+  }
+
+  #[test]
+  fn test_content_shorter_than_max_len() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 100;
+
+    let content = "Short content".to_string();
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].content, content);
+  }
+
+  #[test]
+  fn test_empty_content() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 10;
+
+    let content = "".to_string();
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    assert_eq!(params.len(), 0);
+  }
+
+  #[test]
+  fn test_content_with_only_multibyte_characters() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 4; // Small number for testing
+
+    // Each emoji is 4 bytes in UTF-8
+    let content = "😀😃😄😁😆".to_string();
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    assert_eq!(params.len(), 5);
+    let expected_contents = vec!["😀", "😃", "😄", "😁", "😆"];
+    for (param, expected) in params.iter().zip(expected_contents.iter()) {
+      assert_eq!(param.content, *expected);
+    }
+  }
+
+  #[test]
+  fn test_split_with_combining_characters() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 5; // Small number for testing
+
+    // String with combining characters (e.g., letters with accents)
+    let content = "a\u{0301}e\u{0301}i\u{0301}o\u{0301}u\u{0301}".to_string(); // "áéíóú"
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    assert_eq!(params.len(), 5);
+    let expected_contents = vec!["á", "é", "í", "ó", "ú"];
+    for (param, expected) in params.iter().zip(expected_contents.iter()) {
+      assert_eq!(param.content, *expected);
+    }
+  }
+
+  #[test]
+  fn test_large_content() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 1000;
+
+    // Generate a large content string
+    let content = "a".repeat(5000); // 5000 characters
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    assert_eq!(params.len(), 5); // 5000 / 1000 = 5
+    for param in params {
+      assert_eq!(param.content.len(), 1000);
+    }
   }
 }

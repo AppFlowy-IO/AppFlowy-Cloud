@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::access::AccessControl;
 use crate::act::{Action, ActionVariant};
-use crate::entity::ObjectType;
+use crate::entity::{ObjectType, SubjectType};
 use crate::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use database_entity::dto::AFRole;
@@ -66,7 +66,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     self
       .access_control
       .update_policy(
-        uid,
+        SubjectType::User(*uid),
         ObjectType::Workspace(&workspace_id.to_string()),
         ActionVariant::FromRole(&role),
       )
@@ -82,12 +82,18 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   ) -> Result<(), AppError> {
     self
       .access_control
-      .remove_policy(uid, &ObjectType::Workspace(&workspace_id.to_string()))
+      .remove_policy(
+        &SubjectType::User(*uid),
+        &ObjectType::Workspace(&workspace_id.to_string()),
+      )
       .await?;
 
     self
       .access_control
-      .remove_policy(uid, &ObjectType::Collab(&workspace_id.to_string()))
+      .remove_policy(
+        &SubjectType::User(*uid),
+        &ObjectType::Collab(&workspace_id.to_string()),
+      )
       .await?;
     Ok(())
   }

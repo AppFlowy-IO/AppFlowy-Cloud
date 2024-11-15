@@ -1,7 +1,7 @@
 use super::adapter::PgAdapter;
-use super::enforcer::{AFEnforcer, NoEnforceGroup};
+use super::enforcer::AFEnforcer;
 use crate::act::{Action, ActionVariant, Acts};
-use crate::entity::ObjectType;
+use crate::entity::{ObjectType, SubjectType};
 use crate::metrics::{tick_metric, AccessControlMetrics};
 
 use anyhow::anyhow;
@@ -14,14 +14,7 @@ use database_entity::dto::{AFAccessLevel, AFRole};
 use sqlx::PgPool;
 
 use std::sync::Arc;
-use tokio::sync::broadcast;
 use tracing::trace;
-
-#[derive(Debug, Clone)]
-pub enum AccessControlChange {
-  UpdatePolicy { uid: i64, oid: String },
-  RemovePolicy { uid: i64, oid: String },
-}
 
 /// Manages access control.
 ///
@@ -37,10 +30,9 @@ pub enum AccessControlChange {
 /// according to the model defined.
 #[derive(Clone)]
 pub struct AccessControl {
-  enforcer: Arc<AFEnforcer<NoEnforceGroup>>,
+  enforcer: Arc<AFEnforcer>,
   #[allow(dead_code)]
   access_control_metrics: Arc<AccessControlMetrics>,
-  change_tx: broadcast::Sender<AccessControlChange>,
 }
 
 impl AccessControl {
@@ -55,41 +47,33 @@ impl AccessControl {
     })?;
     enforcer.add_function("cmpRoleOrLevel", OperatorFunction::Arg2(cmp_role_or_level));
 
-    let enforcer = Arc::new(AFEnforcer::new(enforcer, NoEnforceGroup).await?);
+    let enforcer = Arc::new(AFEnforcer::new(enforcer).await?);
     tick_metric(
       enforcer.metrics_state.clone(),
       access_control_metrics.clone(),
     );
-    let (change_tx, _) = broadcast::channel(1000);
     Ok(Self {
       enforcer,
       access_control_metrics,
-      change_tx,
     })
-  }
-
-  pub fn subscribe_change(&self) -> broadcast::Receiver<AccessControlChange> {
-    self.change_tx.subscribe()
   }
 
   pub async fn update_policy(
     &self,
-    uid: &i64,
+    sub: SubjectType,
     obj: ObjectType<'_>,
     act: ActionVariant<'_>,
   ) -> Result<(), AppError> {
-    let access_control_change = self.enforcer.update_policy(uid, obj, act).await?;
-    if let Some(change) = access_control_change {
-      let _ = self.change_tx.send(change);
-    }
+    self.enforcer.update_policy(sub, obj, act).await?;
     Ok(())
   }
 
-  pub async fn remove_policy(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
-    let access_control_change = self.enforcer.remove_policy(uid, obj).await?;
-    if let Some(change) = access_control_change {
-      let _ = self.change_tx.send(change);
-    }
+  pub async fn remove_policy(
+    &self,
+    sub: &SubjectType,
+    obj: &ObjectType<'_>,
+  ) -> Result<(), AppError> {
+    self.enforcer.remove_policy(sub, obj).await?;
     Ok(())
   }
 
@@ -169,13 +153,13 @@ r = sub, obj, act
 p = sub, obj, act
 
 [role_definition]
-g = _, _ # role and access level rule
+g = _, _ # grouping rule
 
 [policy_effect]
 e = some(where (p.eft == allow))
 
 [matchers]
-m = r.sub == p.sub && p.obj == r.obj && (g(p.act, r.act) || cmpRoleOrLevel(r.act, p.act))
+m = g(r.sub, p.sub) && p.obj == r.obj && (g(p.act, r.act) || cmpRoleOrLevel(r.act, p.act))
 "###;
 
 pub async fn casbin_model() -> Result<DefaultModel, AppError> {

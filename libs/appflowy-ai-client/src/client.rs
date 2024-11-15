@@ -1,8 +1,9 @@
 use crate::dto::{
-  AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, CreateChatContext,
-  CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
-  RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse,
-  TranslateRowData, TranslateRowResponse,
+  AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextResponse,
+  CompletionType, CreateChatContext, CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse,
+  LocalAIConfig, MessageData, RepeatedLocalAIPackage, RepeatedRelatedQuestion,
+  SearchDocumentsRequest, SimilarityResponse, SummarizeRowResponse, TranslateRowData,
+  TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -211,6 +212,7 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
+        rag_ids: vec![],
       },
     };
     let url = format!("{}/chat/message", self.url);
@@ -230,6 +232,7 @@ impl AppFlowyAIClient {
     chat_id: &str,
     content: &str,
     metadata: Option<Value>,
+    rag_ids: Vec<String>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -237,6 +240,7 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
+        rag_ids,
       },
     };
     let url = format!("{}/chat/message/stream", self.url);
@@ -255,6 +259,7 @@ impl AppFlowyAIClient {
     chat_id: &str,
     content: &str,
     metadata: Option<Value>,
+    rag_ids: Vec<String>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -262,6 +267,7 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
+        rag_ids,
       },
     };
     let url = format!("{}/v2/chat/message/stream", self.url);
@@ -319,6 +325,21 @@ impl AppFlowyAIClient {
 
     let resp = self.http_client(Method::GET, &url)?.send().await?;
     AIResponse::<LocalAIConfig>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn calculate_similarity(
+    &self,
+    params: CalculateSimilarityParams,
+  ) -> Result<SimilarityResponse, AIError> {
+    let url = format!("{}/similarity", self.url);
+    let resp = self
+      .http_client(Method::POST, &url)?
+      .json(&params)
+      .send()
+      .await?;
+    AIResponse::<SimilarityResponse>::from_response(resp)
       .await?
       .into_data()
   }

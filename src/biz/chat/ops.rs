@@ -17,7 +17,7 @@ use shared_entity::dto::chat_dto::{
   CreateChatParams, GetChatMessageParams, RepeatedChatMessage, UpdateChatMessageContentParams,
 };
 use sqlx::PgPool;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 use appflowy_ai_client::dto::AIModel;
 use validator::Validate;
@@ -28,6 +28,7 @@ pub(crate) async fn create_chat(
   workspace_id: &str,
 ) -> Result<(), AppError> {
   params.validate()?;
+  trace!("[Chat] create chat {:?}", params);
 
   let mut txn = pg_pool.begin().await?;
   insert_chat(&mut txn, workspace_id, params).await?;

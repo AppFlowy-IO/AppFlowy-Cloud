@@ -23,6 +23,8 @@ pub struct MessageData {
   pub content: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<serde_json::Value>,
+  #[serde(default)]
+  pub rag_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -319,4 +321,16 @@ impl Display for CreateChatContext {
 pub struct CustomPrompt {
   pub system: String,
   pub user: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CalculateSimilarityParams {
+  pub workspace_id: String,
+  pub input: String,
+  pub expected: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SimilarityResponse {
+  pub score: f64,
 }

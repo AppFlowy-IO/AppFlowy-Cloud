@@ -138,7 +138,7 @@ services:
 
   ai:
     restart: on-failure
-    image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
+    image: appflowyinc/appflowy_ai_premium:${APPFLOWY_AI_VERSION:-latest}
     ports:
       - "5001:5001"
     environment:

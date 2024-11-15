@@ -314,4 +314,5 @@ collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 
 [features]
 history = []
+# Some AI test features are not available for self-hosted AppFlowy Cloud. Therefore, AI testing is disabled by default.
 ai-test-enabled = ["client-api-test/ai-test-enabled"]

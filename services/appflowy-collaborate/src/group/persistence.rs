@@ -134,7 +134,7 @@ where
 
       let lock = collab.read().await;
       if let Some(indexer) = &self.indexer {
-        match indexer.embedding_params(&lock) {
+        match indexer.embedding_params(&lock).await {
           Ok(embedding_params) => {
             drop(lock); // we no longer need the lock
             match indexer.embeddings(embedding_params).await {

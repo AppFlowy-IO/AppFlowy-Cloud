@@ -36,7 +36,7 @@ async-stream.workspace = true
 futures.workspace = true
 appflowy-ai-client = { workspace = true, features = ["client-api"] }
 tracing = "0.1.40"
-futures-util = "0.3.30"
+futures-util = "0.3"
 tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
 tokio = { workspace = true, features = [

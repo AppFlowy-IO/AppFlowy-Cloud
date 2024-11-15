@@ -16,7 +16,7 @@ tracing = { version = "0.1" }
 thiserror = "1.0.56"
 bytes = "1.5"
 uuid.workspace = true
-futures-util = "0.3.30"
+futures-util = "0.3"
 futures-core = "0.3.30"
 parking_lot = "0.12.1"
 brotli = { version = "3.4.0", optional = true }

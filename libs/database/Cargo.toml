@@ -38,7 +38,7 @@ redis = { workspace = true, features = [
   "tokio-comp",
   "connection-manager",
 ] }
-futures-util = "0.3.30"
+futures-util = "0.3"
 bytes = "1.5"
 aws-sdk-s3 = { version = "1.36.0", features = [
   "behavior-version-latest",

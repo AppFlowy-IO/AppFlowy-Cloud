@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-futures-util = "0.3.30"
+futures-util = "0.3"
 anyhow = "1.0.79"
 reqwest = { workspace = true, features = ["json", "rustls-tls", "cookies"] }
 tokio = { workspace = true, features = ["sync", "macros"] }

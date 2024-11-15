@@ -257,7 +257,7 @@ actix-http = { version = "3.6.0", default-features = false }
 tokio = { version = "1.36.0", features = ["sync"] }
 tokio-stream = "0.1.14"
 rayon = "1.10.0"
-futures-util = "0.3.30"
+futures-util = "0.3"
 bincode = "1.3.3"
 client-websocket = { path = "libs/client-websocket" }
 infra = { path = "libs/infra" }
@@ -281,6 +281,7 @@ sanitize-filename = "0.5.0"
 base64 = "0.22"
 md5 = "0.7.0"
 pin-project = "1.1.5"
+web-time = "1.1.0"
 
 # collaboration
 yrs = { version = "0.21.3", features = ["sync"] }

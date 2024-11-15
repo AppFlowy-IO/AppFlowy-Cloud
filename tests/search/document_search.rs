@@ -2,14 +2,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use appflowy_ai_client::dto::CalculateSimilarityParams;
-use client_api_test::{collect_answer, load_env, TestClient};
+use client_api_test::{collect_answer, TestClient};
 use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use shared_entity::dto::chat_dto::{CreateChatMessageParams, CreateChatParams};
 use tokio::time::sleep;
-use tracing::trace;
 use workspace_template::document::getting_started::getting_started_document_data;
 
 #[tokio::test]
@@ -45,18 +44,44 @@ async fn test_embedding_when_create_document() {
     .unwrap();
   let search_resp = test_client
     .api_client
-    .search_documents(&workspace_id, "Kathryn", 5, 20)
+    .search_documents(&workspace_id, "Kathryn", 5, 100)
     .await
     .unwrap();
-  assert_eq!(search_resp.len(), 2);
-  assert!(search_resp[0].preview.clone().unwrap().contains("Kathryn"));
-  assert!(search_resp[0]
-    .preview
-    .clone()
-    .unwrap()
-    .contains("The Five Dysfunction"));
+  assert_eq!(search_resp.len(), 5);
 
   if ai_test_enabled() {
+    let previews = search_resp
+      .iter()
+      .map(|item| item.preview.clone().unwrap())
+      .collect::<Vec<String>>()
+      .join("\n");
+    let params = CalculateSimilarityParams {
+      workspace_id: workspace_id.clone(),
+      input: previews,
+      expected: r#"
+      "Kathryn’s Journey to Becoming a Tennis Player Kathryn’s love for tennis began on a warm summer day w
+yn decided to pursue tennis seriously. She joined a competitive training academy, where the
+practice
+mwork. Part III: Heavy Lifting With initial trust in place, Kathryn shifts her focus to accountabili
+’s ideas without fear of
+reprisal. Lack of Commitment Without clarity and buy-in, team decisions bec
+The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a Team by Patrick Lenci"
+    "#
+      .to_string(),
+    };
+    let score = test_client
+      .api_client
+      .calculate_similarity(params)
+      .await
+      .unwrap()
+      .score;
+
+    assert!(
+      score > 0.9,
+      "preview score should greater than 0.9, but got: {}",
+      score
+    );
+
     // Create a chat to ask questions that related to the five dysfunctions of a team.
     let chat_id = uuid::Uuid::new_v4().to_string();
     let params = CreateChatParams {
@@ -168,6 +193,5 @@ pub fn ai_test_enabled() -> bool {
   if cfg!(feature = "ai-test-enabled") {
     return true;
   }
-
   false
 }

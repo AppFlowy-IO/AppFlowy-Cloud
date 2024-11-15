@@ -64,7 +64,7 @@ pub async fn search_document(
       user_id: uid,
       workspace_id,
       limit: request.limit.unwrap_or(10) as i32,
-      preview: request.preview_size.unwrap_or(180) as i32,
+      preview: request.preview_size.unwrap_or(500) as i32,
       embedding,
     },
     total_tokens,

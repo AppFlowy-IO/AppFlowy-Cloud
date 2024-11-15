@@ -4,6 +4,8 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use collab::preclude::Collab;
 
+use crate::config::get_env_var;
+use crate::indexer::{DocumentDataExt, Indexer};
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_ai_client::dto::{
@@ -13,21 +15,26 @@ use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, EmbeddingContentType};
+use tracing::trace;
 use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 
-use crate::indexer::{DocumentDataExt, Indexer};
-
 pub struct DocumentIndexer {
   ai_client: AppFlowyAIClient,
+  doc_content_split: usize,
 }
 
 impl DocumentIndexer {
-  /// We assume that every token is ~4 bytes. We're going to split document content into fragments
-  /// of ~2000 tokens each.
-  pub const DOC_CONTENT_SPLIT: usize = 8000;
   pub fn new(ai_client: AppFlowyAIClient) -> Arc<Self> {
-    Arc::new(Self { ai_client })
+    // We assume that every token is ~4 bytes. We're going to split document content into fragments
+    // of ~2000 tokens each.
+    let doc_content_split = get_env_var("APPFLOWY_INDEXER_DOCUMENT_CONTENT_SPLIT_LEN", "8000")
+      .parse()
+      .unwrap_or(8000);
+    Arc::new(Self {
+      ai_client,
+      doc_content_split,
+    })
   }
 }
 
@@ -50,7 +57,7 @@ impl Indexer for DocumentIndexer {
           object_id,
           content,
           CollabType::Document,
-          Self::DOC_CONTENT_SPLIT,
+          self.doc_content_split,
         )
       },
       Err(err) => {
@@ -81,11 +88,16 @@ impl Indexer for DocumentIndexer {
       .embeddings(EmbeddingRequest {
         input: EmbeddingInput::StringArray(contents),
         model: EmbeddingsModel::TextEmbedding3Small.to_string(),
-        chunk_size: (Self::DOC_CONTENT_SPLIT / 4) as i32,
+        chunk_size: (self.doc_content_split / 4) as i32,
         encoding_format: EmbeddingEncodingFormat::Float,
         dimensions: 1536,
       })
       .await?;
+    trace!(
+      "[Embedding] request {} embeddings, received {} embeddings",
+      params.len(),
+      resp.data.len()
+    );
 
     for embedding in resp.data {
       let param = &mut params[embedding.index as usize];
@@ -301,7 +313,7 @@ mod tests {
     .unwrap();
 
     assert_eq!(params.len(), 5);
-    let expected_contents = vec!["😀", "😃", "😄", "😁", "😆"];
+    let expected_contents = ["😀", "😃", "😄", "😁", "😆"];
     for (param, expected) in params.iter().zip(expected_contents.iter()) {
       assert_eq!(param.content, *expected);
     }
@@ -325,7 +337,7 @@ mod tests {
     .unwrap();
 
     assert_eq!(params.len(), 5);
-    let expected_contents = vec!["á", "é", "í", "ó", "ú"];
+    let expected_contents = ["á", "é", "í", "ó", "ú"];
     for (param, expected) in params.iter().zip(expected_contents.iter()) {
       assert_eq!(param.content, *expected);
     }

@@ -112,53 +112,87 @@ impl Indexer for DocumentIndexer {
     }))
   }
 }
-
+#[inline]
 fn create_embedding_params(
   object_id: String,
   content: String,
   collab_type: CollabType,
   max_content_len: usize,
 ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
-  let mut result = Vec::with_capacity(1 + content.len() / max_content_len);
+  if content.is_empty() {
+    return Ok(vec![]);
+  }
 
-  let mut start = 0;
-  let mut current_len = 0;
-  let graphemes: Vec<&str> = content.graphemes(true).collect();
-
-  for (i, grapheme) in graphemes.iter().enumerate() {
-    current_len += grapheme.len();
-    if current_len > max_content_len {
-      let fragment = graphemes[start..i].concat();
-      result.push(AFCollabEmbeddingParams {
-        fragment_id: Uuid::new_v4().to_string(),
-        object_id: object_id.clone(),
-        collab_type: collab_type.clone(),
-        content_type: EmbeddingContentType::PlainText,
-        content: fragment,
-        embedding: None,
-      });
-      start = i;
-      current_len = grapheme.len();
+  // Helper function to create AFCollabEmbeddingParams
+  fn create_param(
+    fragment_id: String,
+    object_id: &str,
+    collab_type: &CollabType,
+    content: String,
+  ) -> AFCollabEmbeddingParams {
+    AFCollabEmbeddingParams {
+      fragment_id,
+      object_id: object_id.to_string(),
+      collab_type: collab_type.clone(),
+      content_type: EmbeddingContentType::PlainText,
+      content,
+      embedding: None,
     }
   }
 
-  if start < graphemes.len() {
-    let fragment = graphemes[start..].concat();
-    if !fragment.is_empty() {
-      result.push(AFCollabEmbeddingParams {
-        fragment_id: object_id.clone(),
-        object_id: object_id.clone(),
-        collab_type,
-        content_type: EmbeddingContentType::PlainText,
-        content: fragment,
-        embedding: None,
-      });
+  if content.len() <= max_content_len {
+    // Content is short enough; return as a single fragment
+    let param = create_param(object_id.clone(), &object_id, &collab_type, content);
+    return Ok(vec![param]);
+  }
+
+  // Content is longer than max_content_len; need to split
+  let mut result = Vec::with_capacity(1 + content.len() / max_content_len);
+  let mut fragment = String::with_capacity(max_content_len);
+  let mut current_len = 0;
+
+  for grapheme in content.graphemes(true) {
+    let grapheme_len = grapheme.len();
+    if current_len + grapheme_len > max_content_len {
+      if !fragment.is_empty() {
+        // Move the fragment to avoid cloning
+        result.push(create_param(
+          Uuid::new_v4().to_string(),
+          &object_id,
+          &collab_type,
+          std::mem::take(&mut fragment),
+        ));
+      }
+      current_len = 0;
+
+3     // Check if the grapheme itself is longer than max_content_len
+      if grapheme_len > max_content_len {
+        // Push the grapheme as a fragment on its own
+        result.push(create_param(
+          Uuid::new_v4().to_string(),
+          &object_id,
+          &collab_type,
+          grapheme.to_string(),
+        ));
+        continue;
+      }
     }
+    fragment.push_str(grapheme);
+    current_len += grapheme_len;
+  }
+
+  // Add the last fragment if it's not empty
+  if !fragment.is_empty() {
+    result.push(create_param(
+      object_id.clone(),
+      &object_id,
+      &collab_type,
+      fragment,
+    ));
   }
 
   Ok(result)
 }
-
 #[cfg(test)]
 mod tests {
   use crate::indexer::document_indexer::create_embedding_params;
@@ -318,5 +352,95 @@ mod tests {
     for param in params {
       assert_eq!(param.content.len(), 1000);
     }
+  }
+  #[test]
+  fn test_non_ascii_characters() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 5;
+
+    // Non-ASCII characters: "áéíóú"
+    let content = "áéíóú".to_string();
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    // Content should be split into two fragments
+    assert_eq!(params.len(), 3);
+    assert_eq!(params[0].content, "áé");
+    assert_eq!(params[1].content, "íó");
+    assert_eq!(params[2].content, "ú");
+  }
+
+  #[test]
+  fn test_content_with_leading_and_trailing_whitespace() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 5;
+
+    let content = "  abcde  ".to_string();
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    // Content should include leading and trailing whitespace
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].content, "  abc");
+    assert_eq!(params[1].content, "de  ");
+  }
+
+  #[test]
+  fn test_content_with_multiple_zero_width_joiners() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 10;
+
+    // Complex emoji sequence with multiple zero-width joiners
+    let content = "👩‍👩‍👧‍👧👨‍👨‍👦‍👦".to_string();
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    // Each complex emoji should be treated as a single grapheme
+    assert_eq!(params.len(), 2);
+    assert_eq!(params[0].content, "👩‍👩‍👧‍👧");
+    assert_eq!(params[1].content, "👨‍👨‍👦‍👦");
+  }
+
+  #[test]
+  fn test_content_with_long_combining_sequences() {
+    let object_id = "test_object".to_string();
+    let collab_type = CollabType::Document;
+    let max_content_len = 5;
+
+    // Character with multiple combining marks
+    let content = "a\u{0300}\u{0301}\u{0302}\u{0303}\u{0304}".to_string(); // a with multiple accents
+
+    let params = create_embedding_params(
+      object_id.clone(),
+      content.clone(),
+      collab_type.clone(),
+      max_content_len,
+    )
+    .unwrap();
+
+    // The entire combining sequence should be in one fragment
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].content, content);
   }
 }

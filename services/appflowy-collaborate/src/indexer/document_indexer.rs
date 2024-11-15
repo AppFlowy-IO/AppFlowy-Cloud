@@ -9,7 +9,7 @@ use crate::indexer::{DocumentDataExt, Indexer};
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_ai_client::dto::{
-  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingRequest, EmbeddingsModel,
+  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
 };
 use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
@@ -87,10 +87,10 @@ impl Indexer for DocumentIndexer {
       .ai_client
       .embeddings(EmbeddingRequest {
         input: EmbeddingInput::StringArray(contents),
-        model: EmbeddingsModel::TextEmbedding3Small.to_string(),
+        model: EmbeddingModel::TextEmbedding3Small.to_string(),
         chunk_size: (self.doc_content_split / 4) as i32,
         encoding_format: EmbeddingEncodingFormat::Float,
-        dimensions: 1536,
+        dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
       })
       .await?;
     trace!(

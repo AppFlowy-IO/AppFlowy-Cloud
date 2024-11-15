@@ -747,6 +747,7 @@ dependencies = [
  "shared-entity",
  "sqlx",
  "thiserror",
+ "tiktoken-rs",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -7168,6 +7169,22 @@ dependencies = [
  "jpeg-decoder",
  "miniz_oxide 0.4.4",
  "weezl",
+]
+
+[[package]]
+name = "tiktoken-rs"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44075987ee2486402f0808505dd65692163d243a337fc54363d49afac41087f6"
+dependencies = [
+ "anyhow",
+ "base64 0.21.7",
+ "bstr",
+ "fancy-regex 0.13.0",
+ "lazy_static",
+ "parking_lot 0.12.3",
+ "regex",
+ "rustc-hash",
 ]
 
 [[package]]

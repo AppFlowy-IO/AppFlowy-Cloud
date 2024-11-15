@@ -129,6 +129,33 @@ impl Indexer for DocumentIndexer {
   }
 }
 
+/// ## Execution Time Comparison Results
+///
+/// The following results were observed when running `execution_time_comparison_tests`:
+///
+/// | Content Size (chars) | Direct Time (ms) | spawn_blocking Time (ms) |
+/// |-----------------------|------------------|--------------------------|
+/// | 500                  | 1                | 1                        |
+/// | 1000                 | 2                | 2                        |
+/// | 2000                 | 5                | 5                        |
+/// | 5000                 | 11               | 11                       |
+/// | 20000                | 49               | 48                       |
+///
+/// ## Guidelines for Using `spawn_blocking`
+///
+/// - **Short Tasks (< 1 ms)**:
+///   Use direct execution on the async runtime. The minimal execution time has negligible impact.
+///
+/// - **Moderate Tasks (1–10 ms)**:
+///   - For infrequent or low-concurrency tasks, direct execution is acceptable.
+///   - For frequent or high-concurrency tasks, consider using `spawn_blocking` to avoid delays.
+///
+/// - **Long Tasks (> 10 ms)**:
+///   Always offload to a blocking thread with `spawn_blocking` to maintain runtime efficiency and responsiveness.
+///
+/// Related blog:
+/// https://tokio.rs/blog/2020-04-preemption
+/// https://ryhl.io/blog/async-what-is-blocking/
 async fn create_embedding(
   object_id: String,
   content: String,
@@ -136,12 +163,6 @@ async fn create_embedding(
   max_tokens: usize,
   tokenizer: Arc<CoreBPE>,
 ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
-  // Running execution_time_comparison_tests, we got the following results:
-  // Content Size: 500 | Direct Time: 1ms | spawn_blocking Time: 1ms
-  // Content Size: 1000 | Direct Time: 2ms | spawn_blocking Time: 2ms
-  // Content Size: 2000 | Direct Time: 5ms | spawn_blocking Time: 5ms
-  // Content Size: 5000 | Direct Time: 11ms | spawn_blocking Time: 11ms
-  // Content Size: 20000 | Direct Time: 49ms | spawn_blocking Time: 48ms
   let split_contents = if content.len() < 500 {
     split_text_by_max_tokens(content, max_tokens, tokenizer.as_ref())?
   } else {

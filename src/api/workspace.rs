@@ -251,6 +251,10 @@ pub fn workspace_scope() -> Scope {
       .route(web::post().to(batch_get_collab_handler)),
     )
     .service(web::resource("/{workspace_id}/database").route(web::get().to(list_database_handler)))
+    .service(
+      web::resource("/{workspace_id}/database/{database_id}/changes")
+        .route(web::get().to(list_database_changes_handler)),
+    )
 }
 
 pub fn collab_scope() -> Scope {
@@ -1815,6 +1819,32 @@ async fn list_database_handler(
     &state.collab_access_control_storage,
     uid,
     workspace_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(dbs)))
+}
+
+async fn list_database_changes_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(String, String)>,
+  state: Data<AppState>,
+  query: web::Query<QueryDatabaseParam>,
+) -> Result<Json<AppResponse<Vec<AFDatabaseRowChanges>>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+
+  let (workspace_id, database_id) = path.into_inner();
+
+  let since_ts: i64 = match query.since_ts_sec {
+    Some(since_ts_sec) => since_ts_sec,
+    None => chrono::Utc::now().timestamp() - 3600,
+  };
+
+  let dbs = biz::collab::ops::list_database_changes(
+    &state.collab_access_control_storage,
+    uid,
+    workspace_id,
+    database_id,
+    since_ts,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(dbs)))

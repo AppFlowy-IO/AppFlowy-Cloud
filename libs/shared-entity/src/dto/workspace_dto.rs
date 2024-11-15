@@ -265,6 +265,11 @@ pub struct QueryWorkspaceParam {
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
+pub struct QueryDatabaseParam {
+  pub since_ts_sec: Option<i64>,
+}
+
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceFolder {
   pub depth: Option<u32>,
   pub root_view_id: Option<String>,
@@ -293,4 +298,10 @@ pub struct AFDatabase {
 pub struct AFDatabaseField {
   pub name: String,
   pub field_type: String,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct AFDatabaseRowChanges {
+  pub id: String,
+  // Add payload here?
 }

@@ -19,6 +19,7 @@ use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
+use shared_entity::dto::workspace_dto::AFDatabaseRowChanges;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
 use shared_entity::dto::workspace_dto::RecentFolderView;
 use shared_entity::dto::workspace_dto::TrashFolderView;
@@ -454,4 +455,82 @@ pub async fn list_database(
   }
 
   Ok(af_databases)
+}
+
+pub async fn list_database_changes(
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: String,
+  database_id: String,
+  since_ts: i64,
+) -> Result<Vec<AFDatabaseRowChanges>, AppError> {
+  let db_collab_ec = collab_storage
+    .get_encode_collab(
+      GetCollabOrigin::User { uid },
+      QueryCollabParams {
+        workspace_id,
+        inner: QueryCollab {
+          object_id: database_id.clone(),
+          collab_type: CollabType::Database,
+        },
+      },
+      true,
+    )
+    .await?;
+
+  let db_collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    &database_id,
+    db_collab_ec.into(),
+    vec![],
+    false,
+  )
+  .map_err(|e| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create collab from encoded collab: {:?}",
+      e
+    ))
+  })?;
+
+  match DatabaseBody::from_collab(
+    &db_collab,
+    Arc::new(NoPersistenceDatabaseCollabService),
+    None,
+  ) {
+    Some(db_body) => {
+      let txn = db_collab.context.transact();
+      let changes = get_updates_from_db_body(db_body, &txn, since_ts);
+      Ok(changes)
+    },
+    None => Err(AppError::RecordNotFound(format!(
+      "Database with id {} not found",
+      database_id
+    ))),
+  }
+}
+
+/// External service will poll this to get updates
+/// `id` field will be used to disambiguate
+/// Example:
+/// 1st Poll: [1, 2, 3]
+/// 2nd Poll: [1, 2, 3, 4]
+/// Changes interpreted: [4]
+///
+/// TODO:
+/// [x] New rows
+/// [ ] Updated rows
+fn get_updates_from_db_body(
+  db_body: DatabaseBody,
+  txn: &yrs::Transaction,
+  _since_ts: i64,
+) -> Vec<AFDatabaseRowChanges> {
+  let iid = db_body.get_inline_view_id(txn);
+  let rows = db_body.views.get_row_orders(txn, &iid);
+
+  let mut changes: Vec<AFDatabaseRowChanges> = Vec::with_capacity(rows.len());
+  for row in rows {
+    changes.push(AFDatabaseRowChanges { id: row.id.into() });
+  }
+
+  changes
 }

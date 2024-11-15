@@ -2,13 +2,14 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use appflowy_ai_client::dto::CalculateSimilarityParams;
-use client_api_test::{collect_answer, TestClient};
+use client_api_test::{collect_answer, load_env, TestClient};
 use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use shared_entity::dto::chat_dto::{CreateChatMessageParams, CreateChatParams};
 use tokio::time::sleep;
+use tracing::trace;
 use workspace_template::document::getting_started::getting_started_document_data;
 
 #[tokio::test]
@@ -47,70 +48,63 @@ async fn test_embedding_when_create_document() {
     .search_documents(&workspace_id, "Kathryn", 5, 20)
     .await
     .unwrap();
-  println!("{:?}", search_resp);
-
-  // Create a chat to ask questions that related to the five dysfunctions of a team
-  let chat_id = uuid::Uuid::new_v4().to_string();
-  let params = CreateChatParams {
-    chat_id: chat_id.clone(),
-    name: "chat with the five dysfunctions of a team".to_string(),
-    rag_ids: vec![object_id_1],
-  };
-
-  test_client
-    .api_client
-    .create_chat(&workspace_id, params)
-    .await
-    .unwrap();
-
-  let params = CreateChatMessageParams::new_user("what kathryn did?");
-  let question = test_client
-    .api_client
-    .create_question(&workspace_id, &chat_id, params)
-    .await
-    .unwrap();
-  let answer_stream = test_client
-    .api_client
-    .stream_answer_v2(&workspace_id, &chat_id, question.message_id)
-    .await
-    .unwrap();
-  let answer = collect_answer(answer_stream).await;
-
-  let params = CalculateSimilarityParams {
-    workspace_id,
-    input: answer,
-    expected: r#"
-    ### Kathryn Petersen from *The Five Dysfunctions of a Team*
-1. **New CEO Role**:
-   - Appointed as the CEO of DecisionTech, a struggling startup with a dysfunctional executive team.
-
-2. **Identifying Issues**:
-   - Recognized that the team's problems stemmed from poor communication, lack of trust, and weak commitment.
-
-3. **Building Trust**:
-   - Organized an offsite meeting in Napa Valley to foster trust among team members through personal sharing and vulnerability.
-
-4. **Encouraging Constructive Conflict**:
-   - Promoted open discussions and healthy conflict to improve decision-making and team dynamics.
-
-5. **Fostering Accountability**:
-   - Held the team to high standards, emphasizing the importance of accountability and addressing issues directly.
-
-6. **Focusing on Shared Goals**:
-   - Reinforced commitment to collective achievements over individual successes, leading to improved team performance.
-
-7. **Implementing a Model**:
-   - Utilized a model that identified five key dysfunctions of a team and provided strategies to overcome them, focusing on trust, conflict, commitment, accountability, and results.
-    "#.to_string(),
-  };
-  let score = test_client
-    .api_client
-    .calculate_similarity(params)
-    .await
+  assert_eq!(search_resp.len(), 2);
+  assert!(search_resp[0].preview.clone().unwrap().contains("Kathryn"));
+  assert!(search_resp[0]
+    .preview
+    .clone()
     .unwrap()
-    .score;
+    .contains("The Five Dysfunction"));
 
-  println!("{:?}", score);
+  if ai_test_enabled() {
+    // Create a chat to ask questions that related to the five dysfunctions of a team.
+    let chat_id = uuid::Uuid::new_v4().to_string();
+    let params = CreateChatParams {
+      chat_id: chat_id.clone(),
+      name: "chat with the five dysfunctions of a team".to_string(),
+      rag_ids: vec![object_id_1],
+    };
+
+    test_client
+      .api_client
+      .create_chat(&workspace_id, params)
+      .await
+      .unwrap();
+
+    let params = CreateChatMessageParams::new_user("Tell me what Kathryn concisely?");
+    let question = test_client
+      .api_client
+      .create_question(&workspace_id, &chat_id, params)
+      .await
+      .unwrap();
+    let answer_stream = test_client
+      .api_client
+      .stream_answer_v2(&workspace_id, &chat_id, question.message_id)
+      .await
+      .unwrap();
+    let answer = collect_answer(answer_stream).await;
+
+    let params = CalculateSimilarityParams {
+      workspace_id,
+      input: answer,
+      expected: r#"
+    Kathryn Petersen is the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup.
+     She steps into a role facing a dysfunctional executive team characterized by poor communication,
+      lack of trust, and weak commitment. Throughout the narrative, Kathryn focuses on addressing
+      foundational team issues by fostering trust, encouraging open conflict, and promoting accountability,
+       ultimately leading her team toward improved collaboration and performance.
+    "#
+          .to_string(),
+    };
+    let score = test_client
+      .api_client
+      .calculate_similarity(params)
+      .await
+      .unwrap()
+      .score;
+
+    assert!(score > 0.9, "score: {}", score);
+  }
 }
 
 #[ignore]
@@ -168,4 +162,12 @@ async fn create_document_collab(document_id: &str, file_name: &str) -> Document 
   let importer = MDImporter::new(None);
   let document_data = importer.import(document_id, md).unwrap();
   Document::create(document_id, document_data).unwrap()
+}
+
+pub fn ai_test_enabled() -> bool {
+  if cfg!(feature = "ai-test-enabled") {
+    return true;
+  }
+
+  false
 }

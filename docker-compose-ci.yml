@@ -120,6 +120,7 @@ services:
       dockerfile: Dockerfile
       args:
         FEATURES: ""
+        PROFILE: "ci"
     image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
 
   admin_frontend:

@@ -174,7 +174,7 @@ where
       .map_err(AppError::from)?;
     self
       .cache
-      .insert_encode_collab_to_disk(workspace_id.into(), uid, params, &mut transaction)
+      .insert_encode_collab_to_disk(workspace_id, uid, params, &mut transaction)
       .await?;
     tokio::time::timeout(Duration::from_secs(10), transaction.commit())
       .await

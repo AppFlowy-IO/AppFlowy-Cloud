@@ -44,7 +44,7 @@ jobs:
       - name: Build Docker Images
         run: |
           export DOCKER_DEFAULT_PLATFORM=linux/amd64
-          docker compose build appflowy_cloud  appflowy_worker admin_frontend
+          docker compose build --build-arg PROFILE=ci appflowy_cloud  appflowy_worker admin_frontend
 
       - name: Push docker images to docker hub
         run: |

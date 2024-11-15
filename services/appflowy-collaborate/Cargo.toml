@@ -89,6 +89,7 @@ validator = "0.16.1"
 rayon.workspace = true
 tiktoken-rs = "0.6.0"
 unicode-segmentation = "1.9.0"
+unicode-normalization = "0.1.24"
 
 [dev-dependencies]
 rand = "0.8.5"

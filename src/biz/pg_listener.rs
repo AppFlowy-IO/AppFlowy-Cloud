@@ -1,6 +1,4 @@
-use access_control::casbin::notification::WorkspaceMemberNotification;
 use anyhow::Error;
-use appflowy_collaborate::collab::notification::CollabMemberNotification;
 use database::listener::PostgresDBListener;
 use database::pg_row::AFUserNotification;
 use sqlx::PgPool;
@@ -31,6 +29,4 @@ impl PgListeners {
   }
 }
 
-pub type CollabMemberListener = PostgresDBListener<CollabMemberNotification>;
 pub type UserListener = PostgresDBListener<AFUserNotification>;
-pub type WorkspaceMemberListener = PostgresDBListener<WorkspaceMemberNotification>;

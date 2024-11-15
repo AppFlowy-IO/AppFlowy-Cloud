@@ -1,3 +1,18 @@
+#[derive(Debug)]
+pub enum SubjectType {
+  User(i64),
+  Group(String),
+}
+
+impl SubjectType {
+  pub fn policy_subject(&self) -> String {
+    match self {
+      SubjectType::User(i) => i.to_string(),
+      SubjectType::Group(s) => s.clone(),
+    }
+  }
+}
+
 /// Represents the object type that is stored in the access control policy.
 #[derive(Debug)]
 pub enum ObjectType<'id> {

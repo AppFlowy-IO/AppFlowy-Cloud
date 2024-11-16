@@ -37,7 +37,7 @@ pub type ObjectId = Arc<str>;
 
 #[derive(Clone)]
 pub struct DatabaseCollabGroup {
-  object_id: ObjectId,
+  object_id: Option<ObjectId>,
   state: Arc<Inner>,
 }
 
@@ -81,18 +81,18 @@ impl DatabaseCollabGroup {
   /// Reinterprets commands performed on the underlying group as made from the perspective of
   /// given `object_id`.
   pub fn scoped(self, object_id: ObjectId) -> Self {
-    if self.object_id == object_id {
+    if &*self.object_id == Some(&object_id) {
       self
     } else {
       DatabaseCollabGroup {
-        object_id,
+        object_id: Some(object_id),
         state: self.state,
       }
     }
   }
 
   pub fn is_database(&self) -> bool {
-    self.object_id == self.state.database_id
+    self.object_id.is_none()
   }
 
   pub fn collab_type(&self) -> CollabType {
@@ -135,9 +135,8 @@ impl DatabaseCollabGroup {
     // create new subscription for new subscriber
     let subscriber_shutdown = self.state.shutdown.child_token();
 
-    let user = user.clone();
     tokio::spawn(Self::receive_from_client_task(
-      user,
+      user.clone(),
       self.object_id.clone(),
       self.state.clone(),
       sink.clone(),
@@ -146,24 +145,21 @@ impl DatabaseCollabGroup {
     ));
 
     let sub = Subscription::new(sink, subscriber_origin, subscriber_shutdown);
-    let subgroup = self
-      .state
-      .subgroups
-      .entry(self.object_id.clone())
-      .or_default();
+    let group_id = self.object_id.as_ref().unwrap_or(&self.state.database_id);
+    let subgroup = self.state.subgroups.entry(group_id.clone()).or_default();
     let subgroup = subgroup.write().await;
-    if subgroup.subscribers.insert((*user).clone(), sub).is_some() {
-      tracing::warn!("{}: removed old subscriber: {}", &self.object_id, user);
+    if subgroup.subscribers.insert(user.clone(), sub).is_some() {
+      tracing::warn!("{}: removed old subscriber: {}", group_id, user);
     }
 
     if cfg!(debug_assertions) {
-      tracing::trace!("{}: added new subscriber", &self.object_id,);
+      tracing::trace!("{}: added new subscriber", group_id);
     }
   }
 
   async fn receive_from_client_task<Sink, Stream>(
     user: RealtimeUser,
-    object_id: ObjectId,
+    row_id: Option<ObjectId>,
     state: Arc<Inner>,
     mut sink: Sink,
     mut stream: Stream,
@@ -180,10 +176,10 @@ impl DatabaseCollabGroup {
         msg = stream.next() => {
           match msg {
             None => break,
-            Some(msg) => if let Err(err) =  Self::handle_messages(&user, &state, &mut sink, msg).await {
+            Some(msg) => if let Err(err) =  Self::handle_messages(&user, &state, &mut sink, msg, row_id.as_ref()).await {
               tracing::warn!(
                 "collab `{}` failed to handle message from `{}`: {}",
-                object_id,
+                row_id,
                 origin,
                 err
               );
@@ -200,6 +196,7 @@ impl DatabaseCollabGroup {
     state: &Inner,
     sink: &mut Sink,
     msg: MessageByObjectId,
+    row_id: Option<&ObjectId>,
   ) -> Result<(), RealtimeError>
   where
     Sink: SubscriptionSink + 'static,
@@ -259,7 +256,7 @@ impl DatabaseCollabGroup {
         message_origin,
         object_id.to_string(),
         msg_id,
-        subscription.seq_no.load(Ordering::SeqCst),
+        subgroup.seq_no.load(Ordering::SeqCst),
       ));
     }
 
@@ -272,7 +269,8 @@ impl DatabaseCollabGroup {
     let payload = collab_msg.payload();
 
     // Spawn a blocking task to handle the message
-    let result = Self::handle_message(subscription, state, payload, &message_origin, msg_id).await;
+    let result =
+      Self::handle_message(subgroup, object_id, state, payload, &message_origin, msg_id).await;
 
     match result {
       Ok(inner_result) => match inner_result {
@@ -287,7 +285,7 @@ impl DatabaseCollabGroup {
   }
 
   async fn handle_message(
-    subscription: &Subscription,
+    subgroup: &Subgroup,
     object_id: &str,
     state: &Inner,
     payload: &[u8],
@@ -300,7 +298,7 @@ impl DatabaseCollabGroup {
     for msg in reader {
       match msg {
         Ok(msg) => {
-          match Self::handle_protocol_message(state, message_origin, msg).await {
+          match Self::handle_protocol_message(subgroup, state, message_origin, msg).await {
             Ok(payload) => {
               // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
               // send one ack back to the client.
@@ -310,7 +308,7 @@ impl DatabaseCollabGroup {
                     message_origin.clone(),
                     object_id.to_string(),
                     msg_id,
-                    subscription.seq_no.load(Ordering::SeqCst),
+                    subgroup.seq_no.load(Ordering::SeqCst),
                   )
                   .with_payload(payload.unwrap_or_default()),
                 );
@@ -334,7 +332,7 @@ impl DatabaseCollabGroup {
                   message_origin.clone(),
                   object_id.to_string(),
                   msg_id,
-                  subscription.seq_no.load(Ordering::SeqCst),
+                  subgroup.seq_no.load(Ordering::SeqCst),
                 )
                 .with_code(code)
                 .with_payload(payload),
@@ -354,18 +352,23 @@ impl DatabaseCollabGroup {
   }
 
   async fn handle_protocol_message(
+    subgroup: &Subgroup,
     state: &Inner,
     origin: &CollabOrigin,
     msg: Message,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     match msg {
       Message::Sync(msg) => match msg {
-        SyncMessage::SyncStep1(sv) => Self::handle_sync_step1(state, &sv).await,
-        SyncMessage::SyncStep2(update) => Self::handle_sync_step2(state, origin, update).await,
-        SyncMessage::Update(update) => Self::handle_update(state, origin, update).await,
+        SyncMessage::SyncStep1(sv) => Self::handle_sync_step1(subgroup, state, &sv).await,
+        SyncMessage::SyncStep2(update) => {
+          Self::handle_sync_step2(subgroup, state, origin, update).await
+        },
+        SyncMessage::Update(update) => Self::handle_update(subgroup, state, origin, update).await,
       },
       //FIXME: where is the QueryAwareness protocol?
-      Message::Awareness(update) => Self::handle_awareness_update(state, origin, update).await,
+      Message::Awareness(update) => {
+        Self::handle_awareness_update(subgroup, state, origin, update).await
+      },
       Message::Auth(_reason) => Ok(None),
       Message::Custom(_msg) => Ok(None),
     }
@@ -457,6 +460,7 @@ impl DatabaseCollabGroup {
         upper_state_vector,
         origin.clone(),
         UpdateFlags::default(),
+        Some(row_id),
       );
       state
         .collab_update_sink
@@ -484,7 +488,7 @@ impl DatabaseCollabGroup {
   }
 
   async fn handle_awareness_update(
-    subgroup: Subgroup,
+    subgroup: &Subgroup,
     state: &Inner,
     origin: &CollabOrigin,
     data: Vec<u8>,
@@ -781,7 +785,6 @@ impl Subscription {
       sink: Box::new(sink),
       collab_origin,
       shutdown,
-      seq_no: AtomicU32::new(0),
     }
   }
 }

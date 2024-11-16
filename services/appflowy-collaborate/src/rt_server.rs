@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::Result;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use redis::aio::ConnectionManager;
 use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, info, trace};
@@ -52,7 +53,7 @@ where
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
     redis_stream_router: Arc<StreamRouter>,
-    redis_connection_manager: RedisConnectionManager,
+    redis_connection_manager: ConnectionManager,
     group_persistence_interval: Duration,
     prune_grace_period: Duration,
     indexer_provider: Arc<IndexerProvider>,
@@ -75,6 +76,7 @@ where
         storage.clone(),
         access_control.clone(),
         metrics.clone(),
+        collab_stream,
         group_persistence_interval,
         prune_grace_period,
         indexer_provider.clone(),

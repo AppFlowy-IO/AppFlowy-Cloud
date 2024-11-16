@@ -128,18 +128,6 @@ impl GroupManagementState {
       error!("Group for object_id:{} not found", object_id);
     }
 
-    if let Err(err) = self
-      .control_event_stream
-      .lock()
-      .await
-      .insert_message(CollabControlEvent::Close {
-        object_id: object_id.to_string(),
-      })
-      .await
-    {
-      error!("Failed to insert close event to control stream: {}", err);
-    }
-
     self
       .metrics_calculate
       .opening_collab_count

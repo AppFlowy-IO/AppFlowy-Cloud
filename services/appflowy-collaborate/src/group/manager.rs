@@ -12,7 +12,7 @@ use access_control::collab::RealtimeAccessControl;
 use app_error::AppError;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
-
+use collab_stream::client::CollabRedisStream;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::QueryCollabParams;
 
@@ -28,6 +28,7 @@ pub struct GroupManager<S> {
   storage: Arc<S>,
   access_control: Arc<dyn RealtimeAccessControl>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
+  collab_redis_stream: Arc<CollabRedisStream>,
   persistence_interval: Duration,
   prune_grace_period: Duration,
   indexer_provider: Arc<IndexerProvider>,
@@ -42,15 +43,18 @@ where
     storage: Arc<S>,
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
+    collab_stream: CollabRedisStream,
     persistence_interval: Duration,
     prune_grace_period: Duration,
     indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
+    let collab_stream = Arc::new(collab_stream);
     Ok(Self {
       state: GroupManagementState::new(metrics_calculate.clone()),
       storage,
       access_control,
       metrics_calculate,
+      collab_redis_stream: collab_stream,
       persistence_interval,
       prune_grace_period,
       indexer_provider,
@@ -143,28 +147,6 @@ where
       }
     }
 
-    let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
-    let (collab, _encode_collab) = {
-      let (mut collab, encode_collab) = match result {
-        Ok(value) => value,
-        Err(err) => {
-          if err.is_record_not_found() {
-            is_new_collab = true;
-            let collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![], false);
-            let encode_collab = collab.encode_collab_v1(|_| Ok::<_, RealtimeError>(()))?;
-            (collab, encode_collab)
-          } else {
-            return Err(RealtimeError::CreateGroupFailed(
-              CreateGroupFailedReason::CannotGetCollabData,
-            ));
-          }
-        },
-      };
-
-      collab.initialize();
-      encode_collab
-    };
-
     trace!(
       "[realtime]: create group: uid:{},workspace_id:{},object_id:{}:{}",
       user.uid,
@@ -193,6 +175,7 @@ where
         self.metrics_calculate.clone(),
         self.storage.clone(),
         is_new_collab,
+        self.collab_redis_stream.clone(),
         self.persistence_interval,
         self.prune_grace_period,
         indexer,

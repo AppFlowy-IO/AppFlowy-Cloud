@@ -2,7 +2,7 @@ use crate::api::metrics::RequestMetrics;
 use app_error::ErrorCode;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_ai_client::dto::{
-  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingRequest, EmbeddingsModel,
+  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
 };
 
 use database::index::{search_documents, SearchDocumentParams};
@@ -25,10 +25,10 @@ pub async fn search_document(
   let embeddings = ai_client
     .embeddings(EmbeddingRequest {
       input: EmbeddingInput::String(request.query.clone()),
-      model: EmbeddingsModel::TextEmbedding3Small.to_string(),
+      model: EmbeddingModel::TextEmbedding3Small.to_string(),
       chunk_size: 500,
       encoding_format: EmbeddingEncodingFormat::Float,
-      dimensions: 1536,
+      dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
     })
     .await
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
@@ -64,7 +64,7 @@ pub async fn search_document(
       user_id: uid,
       workspace_id,
       limit: request.limit.unwrap_or(10) as i32,
-      preview: request.preview_size.unwrap_or(180) as i32,
+      preview: request.preview_size.unwrap_or(500) as i32,
       embedding,
     },
     total_tokens,

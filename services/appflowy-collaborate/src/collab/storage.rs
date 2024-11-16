@@ -63,6 +63,7 @@ pub struct CollabStorageImpl<AC> {
   snapshot_control: SnapshotControl,
   rt_cmd_sender: CLCommandSender,
   queue: Sender<PendingCollabWrite>,
+  metrics: Arc<CollabMetrics>,
 }
 
 impl<AC> CollabStorageImpl<AC>
@@ -74,23 +75,30 @@ where
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: CLCommandSender,
+    metrics: Arc<CollabMetrics>,
   ) -> Self {
     let (queue, reader) = channel(1000);
-    {
-      let cache = cache.clone();
-      tokio::spawn(Self::periodic_write_task(cache, reader));
-    }
+    tokio::spawn(Self::periodic_write_task(
+      cache.clone(),
+      metrics.clone(),
+      reader,
+    ));
     Self {
       cache,
       access_control,
       snapshot_control,
       rt_cmd_sender,
       queue,
+      metrics,
     }
   }
 
   const PENDING_WRITE_BUF_CAPACITY: usize = 100;
-  async fn periodic_write_task(cache: CollabCache, mut reader: Receiver<PendingCollabWrite>) {
+  async fn periodic_write_task(
+    cache: CollabCache,
+    metrics: Arc<CollabMetrics>,
+    mut reader: Receiver<PendingCollabWrite>,
+  ) {
     let mut buf = Vec::with_capacity(Self::PENDING_WRITE_BUF_CAPACITY);
     loop {
       let n = reader
@@ -100,7 +108,7 @@ where
         break;
       }
       let pending = buf.drain(..n);
-      if let Err(e) = Self::persist(&cache, pending).await {
+      if let Err(e) = Self::persist(&cache, &metrics, pending).await {
         tracing::error!("failed to persist {} collabs: {}", n, e);
       }
     }
@@ -108,6 +116,7 @@ where
 
   async fn persist(
     cache: &CollabCache,
+    metrics: &CollabMetrics,
     records: impl ExactSizeIterator<Item = PendingCollabWrite>,
   ) -> Result<(), AppError> {
     // Start a database transaction
@@ -118,7 +127,8 @@ where
       .context("Failed to acquire transaction for writing pending collaboration data")
       .map_err(AppError::from)?;
 
-    tracing::trace!("persisting {} collabs", records.len());
+    let total_records = records.len();
+    let mut successful_writes = 0;
     // Insert each record into the database within the transaction context
     let mut action_description = String::new();
     for (index, record) in records.into_iter().enumerate() {
@@ -137,8 +147,12 @@ where
         sqlx::query(&format!("ROLLBACK TO SAVEPOINT {}", savepoint_name))
           .execute(transaction.deref_mut())
           .await?;
+      } else {
+        successful_writes += 1;
       }
     }
+
+    metrics.record_write_collab(successful_writes, total_records as _);
 
     // Commit the transaction to finalize all writes
     match tokio::time::timeout(Duration::from_secs(10), transaction.commit()).await {
@@ -305,6 +319,8 @@ where
     let pending = PendingCollabWrite::new(workspace_id.into(), *uid, params);
     if let Err(e) = self.queue.send(pending).await {
       tracing::error!("Failed to queue insert collab doc state: {}", e);
+    } else {
+      self.metrics.record_queue_collab(1);
     }
     Ok(())
   }

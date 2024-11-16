@@ -299,6 +299,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_storage_access_control,
     snapshot_control,
     rt_cmd_tx,
+    metrics.collab_metrics.clone(),
   ));
 
   info!(

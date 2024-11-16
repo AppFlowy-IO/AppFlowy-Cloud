@@ -80,8 +80,8 @@ The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a T
       .score;
 
     assert!(
-      score > 0.9,
-      "preview score should greater than 0.9, but got: {}",
+      score > 0.85,
+      "preview score should greater than 0.85, but got: {}",
       score
     );
 

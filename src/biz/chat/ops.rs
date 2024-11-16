@@ -61,7 +61,13 @@ pub async fn update_chat_message(
 
   // TODO(nathan): query the metadata from the database
   let new_answer = ai_client
-    .send_question(&params.chat_id, &params.content, &ai_model, None)
+    .send_question(
+      &params.chat_id,
+      params.message_id,
+      &params.content,
+      &ai_model,
+      None,
+    )
     .await?;
   let _answer = insert_answer_message(
     pg_pool,
@@ -86,7 +92,13 @@ pub async fn generate_chat_message_answer(
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(pg_pool, question_message_id).await?;
   let new_answer = ai_client
-    .send_question(chat_id, &content, &ai_model, Some(metadata))
+    .send_question(
+      chat_id,
+      question_message_id,
+      &content,
+      &ai_model,
+      Some(metadata),
+    )
     .await?;
 
   info!("new_answer: {:?}", new_answer);
@@ -175,7 +187,7 @@ pub async fn create_chat_message_stream(
       match params.message_type {
           ChatMessageType::System => {}
           ChatMessageType::User => {
-              let answer = match ai_client.send_question(&chat_id, &params.content, &ai_model, Some(json!(params.metadata))).await {
+              let answer = match ai_client.send_question(&chat_id,question_id, &params.content, &ai_model, Some(json!(params.metadata))).await {
                   Ok(response) => response,
                   Err(err) => {
                       error!("Failed to send question to AI: {}", err);

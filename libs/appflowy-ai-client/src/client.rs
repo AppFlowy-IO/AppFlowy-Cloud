@@ -203,6 +203,7 @@ impl AppFlowyAIClient {
   pub async fn send_question(
     &self,
     chat_id: &str,
+    question_id: i64,
     content: &str,
     model: &AIModel,
     metadata: Option<Value>,
@@ -213,6 +214,7 @@ impl AppFlowyAIClient {
         content: content.to_string(),
         metadata,
         rag_ids: vec![],
+        message_id: Some(question_id.to_string()),
       },
     };
     let url = format!("{}/chat/message", self.url);
@@ -241,6 +243,7 @@ impl AppFlowyAIClient {
         content: content.to_string(),
         metadata,
         rag_ids,
+        message_id: None,
       },
     };
     let url = format!("{}/chat/message/stream", self.url);
@@ -257,6 +260,7 @@ impl AppFlowyAIClient {
   pub async fn stream_question_v2(
     &self,
     chat_id: &str,
+    question_id: i64,
     content: &str,
     metadata: Option<Value>,
     rag_ids: Vec<String>,
@@ -268,6 +272,7 @@ impl AppFlowyAIClient {
         content: content.to_string(),
         metadata,
         rag_ids,
+        message_id: Some(question_id.to_string()),
       },
     };
     let url = format!("{}/v2/chat/message/stream", self.url);

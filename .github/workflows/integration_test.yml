@@ -130,6 +130,7 @@ jobs:
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
 
       - name: Docker Logs
+        if: always()
         run: |
           docker logs appflowy-cloud-ai-1
 

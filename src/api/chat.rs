@@ -286,7 +286,14 @@ async fn answer_stream_v2_handler(
   );
   match state
     .ai_client
-    .stream_question_v2(&chat_id, &content, Some(metadata), rag_ids, &ai_model)
+    .stream_question_v2(
+      &chat_id,
+      question_id,
+      &content,
+      Some(metadata),
+      rag_ids,
+      &ai_model,
+    )
     .await
   {
     Ok(answer_stream) => {

@@ -25,6 +25,8 @@ pub struct MessageData {
   pub metadata: Option<serde_json::Value>,
   #[serde(default)]
   pub rag_ids: Vec<String>,
+  #[serde(default)]
+  pub message_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

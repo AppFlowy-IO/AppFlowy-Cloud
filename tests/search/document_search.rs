@@ -42,12 +42,15 @@ async fn test_embedding_when_create_document() {
     )
     .await
     .unwrap();
+
   let search_resp = test_client
     .api_client
     .search_documents(&workspace_id, "Kathryn", 5, 100)
     .await
     .unwrap();
-  assert_eq!(search_resp.len(), 5);
+  // The number of returned documents affected by the max token size when splitting the document
+  // into chunks.
+  assert_eq!(search_resp.len(), 2);
 
   if ai_test_enabled() {
     let previews = search_resp

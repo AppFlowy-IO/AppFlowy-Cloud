@@ -145,7 +145,8 @@ pub struct AppState {
 async fn get_worker_mailer(config: &Config) -> Result<AFWorkerMailer, Error> {
   let mailer = Mailer::new(
     config.mailer.smtp_username.clone(),
-    config.mailer.smtp_password.expose_secret().clone(),
+    config.mailer.smtp_email.clone(),
+    config.mailer.smtp_password.clone(),
     &config.mailer.smtp_host,
     config.mailer.smtp_port,
   )

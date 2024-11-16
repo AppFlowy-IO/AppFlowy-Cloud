@@ -79,7 +79,6 @@ impl CollabGroup {
     metrics: Arc<CollabRealtimeMetrics>,
     storage: Arc<S>,
     is_new_collab: bool,
-    collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
     prune_grace_period: Duration,
     indexer: Option<Arc<dyn Indexer>>,

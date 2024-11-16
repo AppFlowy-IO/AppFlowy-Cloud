@@ -53,6 +53,7 @@ impl TryFrom<AFWorkspaceRow> for AFWorkspace {
       created_at,
       icon,
       member_count: None,
+      role: None,
     })
   }
 }
@@ -98,6 +99,7 @@ impl TryFrom<AFWorkspaceWithMemberCountRow> for AFWorkspace {
       created_at,
       icon,
       member_count: Some(value.member_count),
+      role: None,
     })
   }
 }

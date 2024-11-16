@@ -10,7 +10,7 @@ use app_error::ErrorCode;
 use aws_sdk_s3::primitives::ByteStream;
 use database::{
   file::{s3_client_impl::AwsS3BucketClientImpl, BucketClient, ResponseBlob},
-  publish::{select_published_collab_info, select_published_collab_info_for_view_ids},
+  publish::{select_publish_info_for_view_ids, select_published_collab_info},
   template::*,
 };
 use database_entity::dto::{
@@ -251,8 +251,7 @@ pub async fn get_templates_with_publish_info(
   )
   .await?;
   let view_ids = templates.iter().map(|t| t.view_id).collect::<Vec<Uuid>>();
-  let publish_info_for_views =
-    select_published_collab_info_for_view_ids(pg_pool, &view_ids).await?;
+  let publish_info_for_views = select_publish_info_for_view_ids(pg_pool, &view_ids).await?;
   let mut publish_info_map = publish_info_for_views
     .into_iter()
     .map(|info| (info.view_id, info))
@@ -326,7 +325,7 @@ pub async fn get_template_homepage(
   let all_view_ids: Vec<Uuid> = all_view_ids.into_iter().collect();
 
   let publish_info_for_views: Vec<PublishInfo> =
-    select_published_collab_info_for_view_ids(pg_pool, &all_view_ids).await?;
+    select_publish_info_for_view_ids(pg_pool, &all_view_ids).await?;
   let publish_info_map = publish_info_for_views
     .into_iter()
     .map(|info| (info.view_id, info))
@@ -449,7 +448,7 @@ pub async fn upload_avatar(
 
   let object_key = avatar_object_key(&file_id);
   client
-    .put_blob_as_content_type(
+    .put_blob_with_content_type(
       &object_key,
       ByteStream::from(avatar.data.to_vec()),
       &content_type,

@@ -1,12 +1,12 @@
 use crate::appflowy_ai_client;
-use appflowy_ai_client::dto::{AIModel, ChatContextLoader, CreateTextChatContext};
+use appflowy_ai_client::dto::{AIModel, CreateChatContext};
 #[tokio::test]
 async fn create_chat_context_test() {
   let client = appflowy_ai_client();
   let chat_id = uuid::Uuid::new_v4().to_string();
-  let context = CreateTextChatContext {
+  let context = CreateChatContext {
     chat_id: chat_id.clone(),
-    context_loader: ChatContextLoader::Txt,
+    context_loader: "text".to_string(),
     content: "I have lived in the US for five years".to_string(),
     chunk_size: 1000,
     chunk_overlap: 20,

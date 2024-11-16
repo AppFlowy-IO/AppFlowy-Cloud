@@ -1,33 +1,6 @@
 use crate::act::ActionVariant;
 use crate::entity::ObjectType;
 
-pub struct GroupPolicyRequest<'a> {
-  pub guid: &'a str,
-  pub object_type: &'a ObjectType<'a>,
-  pub action: &'a ActionVariant<'a>,
-}
-
-impl GroupPolicyRequest<'_> {
-  pub fn new<'a>(
-    guid: &'a str,
-    object_type: &'a ObjectType<'a>,
-    action: &'a ActionVariant<'a>,
-  ) -> GroupPolicyRequest<'a> {
-    GroupPolicyRequest {
-      guid,
-      object_type,
-      action,
-    }
-  }
-  pub fn to_policy(&self) -> Vec<String> {
-    vec![
-      self.guid.to_string(),
-      self.object_type.policy_object(),
-      self.action.to_enforce_act().to_string(),
-    ]
-  }
-}
-
 pub struct WorkspacePolicyRequest<'a> {
   workspace_id: &'a str,
   uid: &'a i64,

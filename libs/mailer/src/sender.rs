@@ -5,21 +5,23 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::Address;
 use lettre::AsyncSmtpTransport;
 use lettre::AsyncTransport;
+use secrecy::ExposeSecret;
 
 #[derive(Clone)]
 pub struct Mailer {
   smtp_transport: AsyncSmtpTransport<lettre::Tokio1Executor>,
-  smtp_username: String,
+  smtp_email: String,
   handlers: Handlebars<'static>,
 }
 impl Mailer {
   pub async fn new(
     smtp_username: String,
-    smtp_password: String,
+    smtp_email: String,
+    smtp_password: secrecy::Secret<String>,
     smtp_host: &str,
     smtp_port: u16,
   ) -> Result<Self, anyhow::Error> {
-    let creds = Credentials::new(smtp_username.clone(), smtp_password);
+    let creds = Credentials::new(smtp_username, smtp_password.expose_secret().to_string());
     let smtp_transport = AsyncSmtpTransport::<lettre::Tokio1Executor>::relay(smtp_host)?
       .credentials(creds)
       .port(smtp_port)
@@ -27,7 +29,7 @@ impl Mailer {
     let handlers = Handlebars::new();
     Ok(Self {
       smtp_transport,
-      smtp_username,
+      smtp_email,
       handlers,
     })
   }
@@ -64,7 +66,7 @@ impl Mailer {
     let email = Message::builder()
       .from(lettre::message::Mailbox::new(
         Some("AppFlowy Notification".to_string()),
-        self.smtp_username.parse::<Address>()?,
+        self.smtp_email.parse::<Address>()?,
       ))
       .to(lettre::message::Mailbox::new(
         recipient_name,

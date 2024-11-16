@@ -27,7 +27,7 @@ use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::metrics::spawn_metrics;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
-use crate::state::RedisConnectionManager;
+
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
@@ -75,7 +75,6 @@ where
         storage.clone(),
         access_control.clone(),
         metrics.clone(),
-        collab_stream,
         group_persistence_interval,
         prune_grace_period,
         indexer_provider.clone(),

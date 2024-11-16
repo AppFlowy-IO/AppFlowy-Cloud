@@ -261,6 +261,7 @@ impl Default for ViewLayout {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceParam {
   pub include_member_count: Option<bool>,
+  pub include_role: Option<bool>,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
@@ -279,4 +280,17 @@ pub struct PublishedView {
   /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<PublishedView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct AFDatabase {
+  pub id: String,
+  pub name: String,
+  pub fields: Vec<AFDatabaseField>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AFDatabaseField {
+  pub name: String,
+  pub field_type: String,
 }

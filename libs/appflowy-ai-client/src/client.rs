@@ -1,8 +1,9 @@
 use crate::dto::{
-  AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, CreateChatContext,
-  CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
-  RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse,
-  TranslateRowData, TranslateRowResponse,
+  AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextResponse,
+  CompletionType, CreateChatContext, CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse,
+  LocalAIConfig, MessageData, RepeatedLocalAIPackage, RepeatedRelatedQuestion,
+  SearchDocumentsRequest, SimilarityResponse, SummarizeRowResponse, TranslateRowData,
+  TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -202,6 +203,7 @@ impl AppFlowyAIClient {
   pub async fn send_question(
     &self,
     chat_id: &str,
+    question_id: i64,
     content: &str,
     model: &AIModel,
     metadata: Option<Value>,
@@ -211,6 +213,8 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
+        rag_ids: vec![],
+        message_id: Some(question_id.to_string()),
       },
     };
     let url = format!("{}/chat/message", self.url);
@@ -230,6 +234,7 @@ impl AppFlowyAIClient {
     chat_id: &str,
     content: &str,
     metadata: Option<Value>,
+    rag_ids: Vec<String>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -237,6 +242,8 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
+        rag_ids,
+        message_id: None,
       },
     };
     let url = format!("{}/chat/message/stream", self.url);
@@ -253,8 +260,10 @@ impl AppFlowyAIClient {
   pub async fn stream_question_v2(
     &self,
     chat_id: &str,
+    question_id: i64,
     content: &str,
     metadata: Option<Value>,
+    rag_ids: Vec<String>,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -262,6 +271,8 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
+        rag_ids,
+        message_id: Some(question_id.to_string()),
       },
     };
     let url = format!("{}/v2/chat/message/stream", self.url);
@@ -319,6 +330,21 @@ impl AppFlowyAIClient {
 
     let resp = self.http_client(Method::GET, &url)?.send().await?;
     AIResponse::<LocalAIConfig>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn calculate_similarity(
+    &self,
+    params: CalculateSimilarityParams,
+  ) -> Result<SimilarityResponse, AIError> {
+    let url = format!("{}/similarity", self.url);
+    let resp = self
+      .http_client(Method::POST, &url)?
+      .json(&params)
+      .send()
+      .await?;
+    AIResponse::<SimilarityResponse>::from_response(resp)
       .await?
       .into_data()
   }

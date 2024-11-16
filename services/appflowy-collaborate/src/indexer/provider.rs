@@ -26,7 +26,10 @@ use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, CollabPa
 
 #[async_trait]
 pub trait Indexer: Send + Sync {
-  fn embedding_params(&self, collab: &Collab) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
+  async fn embedding_params(
+    &self,
+    collab: &Collab,
+  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
 
   async fn embeddings(
     &self,
@@ -46,7 +49,7 @@ pub trait Indexer: Send + Sync {
       false,
     )
     .map_err(|err| AppError::Internal(err.into()))?;
-    let embedding_params = self.embedding_params(&collab)?;
+    let embedding_params = self.embedding_params(&collab).await?;
     self.embeddings(embedding_params).await
   }
 }

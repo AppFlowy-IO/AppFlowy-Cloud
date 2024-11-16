@@ -4,36 +4,44 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use collab::preclude::Collab;
 
+use crate::indexer::{DocumentDataExt, Indexer};
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_ai_client::dto::{
-  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingRequest, EmbeddingsModel,
+  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
 };
 use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, EmbeddingContentType};
-use unicode_segmentation::UnicodeSegmentation;
-use uuid::Uuid;
 
-use crate::indexer::{DocumentDataExt, Indexer};
+use tiktoken_rs::CoreBPE;
+use tracing::trace;
+use uuid::Uuid;
 
 pub struct DocumentIndexer {
   ai_client: AppFlowyAIClient,
+  tokenizer: Arc<CoreBPE>,
+  embedding_model: EmbeddingModel,
 }
 
 impl DocumentIndexer {
-  /// We assume that every token is ~4 bytes. We're going to split document content into fragments
-  /// of ~2000 tokens each.
-  pub const DOC_CONTENT_SPLIT: usize = 8000;
   pub fn new(ai_client: AppFlowyAIClient) -> Arc<Self> {
-    Arc::new(Self { ai_client })
+    let tokenizer = tiktoken_rs::cl100k_base().unwrap();
+    Arc::new(Self {
+      ai_client,
+      tokenizer: Arc::new(tokenizer),
+      embedding_model: EmbeddingModel::TextEmbedding3Small,
+    })
   }
 }
 
 #[async_trait]
 impl Indexer for DocumentIndexer {
-  fn embedding_params(&self, collab: &Collab) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+  async fn embedding_params(
+    &self,
+    collab: &Collab,
+  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
     let object_id = collab.object_id().to_string();
     let document = DocumentBody::from_collab(collab).ok_or_else(|| {
       anyhow!(
@@ -46,12 +54,15 @@ impl Indexer for DocumentIndexer {
     match result {
       Ok(document_data) => {
         let content = document_data.to_plain_text();
-        create_embedding_params(
+        let max_tokens = self.embedding_model.default_dimensions() as usize;
+        create_embedding(
           object_id,
           content,
           CollabType::Document,
-          Self::DOC_CONTENT_SPLIT,
+          max_tokens,
+          self.tokenizer.clone(),
         )
+        .await
       },
       Err(err) => {
         if matches!(err, DocumentError::NoRequiredData) {
@@ -80,12 +91,17 @@ impl Indexer for DocumentIndexer {
       .ai_client
       .embeddings(EmbeddingRequest {
         input: EmbeddingInput::StringArray(contents),
-        model: EmbeddingsModel::TextEmbedding3Small.to_string(),
-        chunk_size: (Self::DOC_CONTENT_SPLIT / 4) as i32,
+        model: EmbeddingModel::TextEmbedding3Small.to_string(),
+        chunk_size: 2000,
         encoding_format: EmbeddingEncodingFormat::Float,
-        dimensions: 1536,
+        dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
       })
       .await?;
+    trace!(
+      "[Embedding] request {} embeddings, received {} embeddings",
+      params.len(),
+      resp.data.len()
+    );
 
     for embedding in resp.data {
       let param = &mut params[embedding.index as usize];
@@ -112,335 +128,322 @@ impl Indexer for DocumentIndexer {
     }))
   }
 }
-#[inline]
-fn create_embedding_params(
+
+/// ## Execution Time Comparison Results
+///
+/// The following results were observed when running `execution_time_comparison_tests`:
+///
+/// | Content Size (chars) | Direct Time (ms) | spawn_blocking Time (ms) |
+/// |-----------------------|------------------|--------------------------|
+/// | 500                  | 1                | 1                        |
+/// | 1000                 | 2                | 2                        |
+/// | 2000                 | 5                | 5                        |
+/// | 5000                 | 11               | 11                       |
+/// | 20000                | 49               | 48                       |
+///
+/// ## Guidelines for Using `spawn_blocking`
+///
+/// - **Short Tasks (< 1 ms)**:
+///   Use direct execution on the async runtime. The minimal execution time has negligible impact.
+///
+/// - **Moderate Tasks (1–10 ms)**:
+///   - For infrequent or low-concurrency tasks, direct execution is acceptable.
+///   - For frequent or high-concurrency tasks, consider using `spawn_blocking` to avoid delays.
+///
+/// - **Long Tasks (> 10 ms)**:
+///   Always offload to a blocking thread with `spawn_blocking` to maintain runtime efficiency and responsiveness.
+///
+/// Related blog:
+/// https://tokio.rs/blog/2020-04-preemption
+/// https://ryhl.io/blog/async-what-is-blocking/
+async fn create_embedding(
   object_id: String,
   content: String,
   collab_type: CollabType,
-  max_content_len: usize,
+  max_tokens: usize,
+  tokenizer: Arc<CoreBPE>,
 ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+  let split_contents = if content.len() < 500 {
+    split_text_by_max_tokens(content, max_tokens, tokenizer.as_ref())?
+  } else {
+    tokio::task::spawn_blocking(move || {
+      split_text_by_max_tokens(content, max_tokens, tokenizer.as_ref())
+    })
+    .await??
+  };
+
+  Ok(
+    split_contents
+      .into_iter()
+      .map(|content| AFCollabEmbeddingParams {
+        fragment_id: Uuid::new_v4().to_string(),
+        object_id: object_id.clone(),
+        collab_type: collab_type.clone(),
+        content_type: EmbeddingContentType::PlainText,
+        content,
+        embedding: None,
+      })
+      .collect(),
+  )
+}
+
+fn split_text_by_max_tokens(
+  content: String,
+  max_tokens: usize,
+  tokenizer: &CoreBPE,
+) -> Result<Vec<String>, AppError> {
   if content.is_empty() {
     return Ok(vec![]);
   }
 
-  // Helper function to create AFCollabEmbeddingParams
-  fn create_param(
-    fragment_id: String,
-    object_id: &str,
-    collab_type: &CollabType,
-    content: String,
-  ) -> AFCollabEmbeddingParams {
-    AFCollabEmbeddingParams {
-      fragment_id,
-      object_id: object_id.to_string(),
-      collab_type: collab_type.clone(),
-      content_type: EmbeddingContentType::PlainText,
-      content,
-      embedding: None,
-    }
+  let token_ids = tokenizer.encode_ordinary(&content);
+  let total_tokens = token_ids.len();
+  if total_tokens <= max_tokens {
+    return Ok(vec![content]);
   }
 
-  if content.len() <= max_content_len {
-    // Content is short enough; return as a single fragment
-    let param = create_param(object_id.clone(), &object_id, &collab_type, content);
-    return Ok(vec![param]);
-  }
-
-  // Content is longer than max_content_len; need to split
-  let mut result = Vec::with_capacity(1 + content.len() / max_content_len);
-  let mut fragment = String::with_capacity(max_content_len);
-  let mut current_len = 0;
-
-  for grapheme in content.graphemes(true) {
-    let grapheme_len = grapheme.len();
-    if current_len + grapheme_len > max_content_len {
-      if !fragment.is_empty() {
-        // Move the fragment to avoid cloning
-        result.push(create_param(
-          Uuid::new_v4().to_string(),
-          &object_id,
-          &collab_type,
-          std::mem::take(&mut fragment),
-        ));
-      }
-      current_len = 0;
-
-      // Check if the grapheme itself is longer than max_content_len
-      if grapheme_len > max_content_len {
-        // Push the grapheme as a fragment on its own
-        result.push(create_param(
-          Uuid::new_v4().to_string(),
-          &object_id,
-          &collab_type,
-          grapheme.to_string(),
-        ));
-        continue;
+  let mut chunks = Vec::new();
+  let mut start_idx = 0;
+  while start_idx < total_tokens {
+    let mut end_idx = (start_idx + max_tokens).min(total_tokens);
+    let mut decoded = false;
+    // Try to decode the chunk, adjust end_idx if decoding fails
+    while !decoded {
+      let token_chunk = &token_ids[start_idx..end_idx];
+      // Attempt to decode the current chunk
+      match tokenizer.decode(token_chunk.to_vec()) {
+        Ok(chunk_text) => {
+          chunks.push(chunk_text);
+          start_idx = end_idx;
+          decoded = true;
+        },
+        Err(_) => {
+          // If we can extend the chunk, do so
+          if end_idx < total_tokens {
+            end_idx += 1;
+          } else if start_idx + 1 < total_tokens {
+            // Skip the problematic token at start_idx
+            start_idx += 1;
+            end_idx = (start_idx + max_tokens).min(total_tokens);
+          } else {
+            // Cannot decode any further, break to avoid infinite loop
+            start_idx = total_tokens;
+            break;
+          }
+        },
       }
     }
-    fragment.push_str(grapheme);
-    current_len += grapheme_len;
   }
 
-  // Add the last fragment if it's not empty
-  if !fragment.is_empty() {
-    result.push(create_param(
-      object_id.clone(),
-      &object_id,
-      &collab_type,
-      fragment,
-    ));
-  }
-
-  Ok(result)
+  Ok(chunks)
 }
+
 #[cfg(test)]
 mod tests {
-  use crate::indexer::document_indexer::create_embedding_params;
-  use collab_entity::CollabType;
+  use crate::indexer::document_indexer::split_text_by_max_tokens;
+
+  use tiktoken_rs::cl100k_base;
 
   #[test]
   fn test_split_at_non_utf8() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 10; // Small number for testing
+    let max_tokens = 10; // Small number for testing
 
     // Content with multibyte characters (emojis)
     let content = "Hello 😃 World 🌍! This is a test 🚀.".to_string();
-
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
     // Ensure that we didn't split in the middle of a multibyte character
-    for param in params {
-      assert!(param.content.is_char_boundary(0));
-      assert!(param.content.is_char_boundary(param.content.len()));
+    for content in params {
+      assert!(content.is_char_boundary(0));
+      assert!(content.is_char_boundary(content.len()));
     }
   }
-
   #[test]
   fn test_exact_boundary_split() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 5; // Set to 5 for testing
+    let max_tokens = 5; // Set to 5 tokens for testing
+    let content = "The quick brown fox jumps over the lazy dog".to_string();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
-    // Content length is exactly a multiple of max_content_len
-    let content = "abcdefghij".to_string(); // 10 characters
-
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
-
-    assert_eq!(params.len(), 2);
-    assert_eq!(params[0].content, "abcde");
-    assert_eq!(params[1].content, "fghij");
+    let total_tokens = tokenizer.encode_ordinary(&content).len();
+    let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
+    assert_eq!(params.len(), expected_fragments);
   }
 
   #[test]
   fn test_content_shorter_than_max_len() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 100;
-
+    let max_tokens = 100;
     let content = "Short content".to_string();
-
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].content, content);
+    assert_eq!(params[0], content);
   }
 
   #[test]
   fn test_empty_content() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 10;
-
+    let max_tokens = 10;
     let content = "".to_string();
-
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
     assert_eq!(params.len(), 0);
   }
 
   #[test]
   fn test_content_with_only_multibyte_characters() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 4; // Small number for testing
-
-    // Each emoji is 4 bytes in UTF-8
+    let max_tokens = 1; // Set to 1 token for testing
     let content = "😀😃😄😁😆".to_string();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
-
-    assert_eq!(params.len(), 5);
-    let expected_contents = vec!["😀", "😃", "😄", "😁", "😆"];
-    for (param, expected) in params.iter().zip(expected_contents.iter()) {
-      assert_eq!(param.content, *expected);
+    let emojis: Vec<String> = content.chars().map(|c| c.to_string()).collect();
+    for (param, emoji) in params.iter().zip(emojis.iter()) {
+      assert_eq!(param, emoji);
     }
   }
 
   #[test]
   fn test_split_with_combining_characters() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 5; // Small number for testing
-
-    // String with combining characters (e.g., letters with accents)
+    let max_tokens = 1; // Set to 1 token for testing
     let content = "a\u{0301}e\u{0301}i\u{0301}o\u{0301}u\u{0301}".to_string(); // "áéíóú"
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
+    let total_tokens = tokenizer.encode_ordinary(&content).len();
+    assert_eq!(params.len(), total_tokens);
 
-    assert_eq!(params.len(), 5);
-    let expected_contents = vec!["á", "é", "í", "ó", "ú"];
-    for (param, expected) in params.iter().zip(expected_contents.iter()) {
-      assert_eq!(param.content, *expected);
-    }
+    let reconstructed_content = params.join("");
+    assert_eq!(reconstructed_content, content);
   }
 
   #[test]
   fn test_large_content() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 1000;
-
-    // Generate a large content string
+    let max_tokens = 1000;
     let content = "a".repeat(5000); // 5000 characters
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
-
-    assert_eq!(params.len(), 5); // 5000 / 1000 = 5
-    for param in params {
-      assert_eq!(param.content.len(), 1000);
-    }
+    let total_tokens = tokenizer.encode_ordinary(&content).len();
+    let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
+    assert_eq!(params.len(), expected_fragments);
   }
+
   #[test]
   fn test_non_ascii_characters() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 5;
-
-    // Non-ASCII characters: "áéíóú"
+    let max_tokens = 2;
     let content = "áéíóú".to_string();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
+    let total_tokens = tokenizer.encode_ordinary(&content).len();
+    let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
+    assert_eq!(params.len(), expected_fragments);
 
-    // Content should be split into two fragments
-    assert_eq!(params.len(), 3);
-    assert_eq!(params[0].content, "áé");
-    assert_eq!(params[1].content, "íó");
-    assert_eq!(params[2].content, "ú");
+    let reconstructed_content: String = params.concat();
+    assert_eq!(reconstructed_content, content);
   }
 
   #[test]
   fn test_content_with_leading_and_trailing_whitespace() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 5;
-
+    let max_tokens = 3;
     let content = "  abcde  ".to_string();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
+    let total_tokens = tokenizer.encode_ordinary(&content).len();
+    let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
+    assert_eq!(params.len(), expected_fragments);
 
-    // Content should include leading and trailing whitespace
-    assert_eq!(params.len(), 2);
-    assert_eq!(params[0].content, "  abc");
-    assert_eq!(params[1].content, "de  ");
+    let reconstructed_content: String = params.concat();
+    assert_eq!(reconstructed_content, content);
   }
 
   #[test]
   fn test_content_with_multiple_zero_width_joiners() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 10;
-
-    // Complex emoji sequence with multiple zero-width joiners
+    let max_tokens = 1;
     let content = "👩‍👩‍👧‍👧👨‍👨‍👦‍👦".to_string();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
-
-    // Each complex emoji should be treated as a single grapheme
-    assert_eq!(params.len(), 2);
-    assert_eq!(params[0].content, "👩‍👩‍👧‍👧");
-    assert_eq!(params[1].content, "👨‍👨‍👦‍👦");
+    let reconstructed_content: String = params.concat();
+    assert_eq!(reconstructed_content, content);
   }
 
   #[test]
   fn test_content_with_long_combining_sequences() {
-    let object_id = "test_object".to_string();
-    let collab_type = CollabType::Document;
-    let max_content_len = 5;
+    let max_tokens = 1;
+    let content = "a\u{0300}\u{0301}\u{0302}\u{0303}\u{0304}".to_string();
+    let tokenizer = cl100k_base().unwrap();
+    let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
-    // Character with multiple combining marks
-    let content = "a\u{0300}\u{0301}\u{0302}\u{0303}\u{0304}".to_string(); // a with multiple accents
-
-    let params = create_embedding_params(
-      object_id.clone(),
-      content.clone(),
-      collab_type.clone(),
-      max_content_len,
-    )
-    .unwrap();
-
-    // The entire combining sequence should be in one fragment
-    assert_eq!(params.len(), 1);
-    assert_eq!(params[0].content, content);
+    let reconstructed_content: String = params.concat();
+    assert_eq!(reconstructed_content, content);
   }
 }
+
+// #[cfg(test)]
+// mod execution_time_comparison_tests {
+//   use crate::indexer::document_indexer::split_text_by_max_tokens;
+//   use rand::distributions::Alphanumeric;
+//   use rand::{thread_rng, Rng};
+//   use std::sync::Arc;
+//   use std::time::Instant;
+//   use tiktoken_rs::{cl100k_base, CoreBPE};
+//
+//   #[tokio::test]
+//   async fn test_execution_time_comparison() {
+//     let tokenizer = Arc::new(cl100k_base().unwrap());
+//     let max_tokens = 100;
+//
+//     let sizes = vec![500, 1000, 2000, 5000, 20000]; // Content sizes to test
+//     for size in sizes {
+//       let content = generate_random_string(size);
+//
+//       // Measure direct execution time
+//       let direct_time = measure_direct_execution(content.clone(), max_tokens, &tokenizer);
+//
+//       // Measure spawn_blocking execution time
+//       let spawn_blocking_time =
+//         measure_spawn_blocking_execution(content, max_tokens, Arc::clone(&tokenizer)).await;
+//
+//       println!(
+//         "Content Size: {} | Direct Time: {}ms | spawn_blocking Time: {}ms",
+//         size, direct_time, spawn_blocking_time
+//       );
+//     }
+//   }
+//
+//   // Measure direct execution time
+//   fn measure_direct_execution(content: String, max_tokens: usize, tokenizer: &CoreBPE) -> u128 {
+//     let start = Instant::now();
+//     split_text_by_max_tokens(content, max_tokens, tokenizer).unwrap();
+//     start.elapsed().as_millis()
+//   }
+//
+//   // Measure `spawn_blocking` execution time
+//   async fn measure_spawn_blocking_execution(
+//     content: String,
+//     max_tokens: usize,
+//     tokenizer: Arc<CoreBPE>,
+//   ) -> u128 {
+//     let start = Instant::now();
+//     tokio::task::spawn_blocking(move || {
+//       split_text_by_max_tokens(content, max_tokens, tokenizer.as_ref()).unwrap()
+//     })
+//     .await
+//     .unwrap();
+//     start.elapsed().as_millis()
+//   }
+//
+//   pub fn generate_random_string(len: usize) -> String {
+//     let rng = thread_rng();
+//     rng
+//       .sample_iter(&Alphanumeric)
+//       .take(len)
+//       .map(char::from)
+//       .collect()
+//   }
+// }

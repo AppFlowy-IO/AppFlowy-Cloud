@@ -31,7 +31,10 @@ use uuid::Uuid;
 #[cfg(feature = "collab-sync")]
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::entity::id::user_awareness_object_id;
-use client_api::entity::{PublishCollabItem, PublishCollabMetadata, QueryWorkspaceMember};
+use client_api::entity::{
+  PublishCollabItem, PublishCollabMetadata, QueryWorkspaceMember, QuestionStream,
+  QuestionStreamValue,
+};
 use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
@@ -845,24 +848,21 @@ impl TestClient {
   #[allow(unused_variables)]
   pub async fn create_collab_with_data(
     &mut self,
-    object_id: String,
     workspace_id: &str,
+    object_id: &str,
     collab_type: CollabType,
-    encoded_collab_v1: Option<EncodedCollab>,
+    encoded_collab_v1: EncodedCollab,
   ) -> Result<(), AppResponseError> {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = match encoded_collab_v1 {
-      None => Collab::new_with_origin(origin.clone(), &object_id, vec![], false),
-      Some(data) => Collab::new_with_source(
-        origin.clone(),
-        &object_id,
-        DataSource::DocStateV1(data.doc_state.to_vec()),
-        vec![],
-        false,
-      )
-      .unwrap(),
-    };
+    let collab = Collab::new_with_source(
+      origin.clone(),
+      object_id,
+      DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()),
+      vec![],
+      false,
+    )
+    .unwrap();
 
     let encoded_collab_v1 = collab
       .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
@@ -873,7 +873,7 @@ impl TestClient {
     self
       .api_client
       .create_collab(CreateCollabParams {
-        object_id: object_id.clone(),
+        object_id: object_id.to_string(),
         encoded_collab_v1,
         collab_type: collab_type.clone(),
         workspace_id: workspace_id.to_string(),
@@ -1166,4 +1166,17 @@ pub async fn get_collab_json_from_server(
   )
   .unwrap()
   .to_json_value()
+}
+
+pub async fn collect_answer(mut stream: QuestionStream) -> String {
+  let mut answer = String::new();
+  while let Some(value) = stream.next().await {
+    match value.unwrap() {
+      QuestionStreamValue::Answer { value } => {
+        answer.push_str(&value);
+      },
+      QuestionStreamValue::Metadata { .. } => {},
+    }
+  }
+  answer
 }

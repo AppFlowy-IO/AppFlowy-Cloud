@@ -266,6 +266,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),
       smtp_port: get_env_var("APPFLOWY_MAILER_SMTP_PORT", "465").parse()?,
       smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
+      smtp_email: get_env_var("APPFLOWY_MAILER_SMTP_EMAIL", "sender@example.com"),
       smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
     },
     apple_oauth: AppleOAuthSetting {

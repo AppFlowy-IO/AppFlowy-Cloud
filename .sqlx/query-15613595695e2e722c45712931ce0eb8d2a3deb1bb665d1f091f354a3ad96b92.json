@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT EXISTS(\n        SELECT 1\n        FROM af_published_collab\n        WHERE workspace_id = $1\n          AND publish_name = $2\n          AND unpublished_at IS NULL\n      )\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "15613595695e2e722c45712931ce0eb8d2a3deb1bb665d1f091f354a3ad96b92"
+}

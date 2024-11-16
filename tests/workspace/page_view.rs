@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use client_api::entity::{QueryCollab, QueryCollabParams};
 use client_api_test::{
@@ -13,6 +13,32 @@ use shared_entity::dto::workspace_dto::{
 };
 use tokio::time::sleep;
 use uuid::Uuid;
+
+async fn get_latest_folder(test_client: &TestClient, workspace_id: &str) -> Folder {
+  // Wait for websocket updates
+  sleep(Duration::from_secs(1)).await;
+  let lock = test_client
+    .collabs
+    .get(workspace_id)
+    .unwrap()
+    .collab
+    .read()
+    .await;
+  let collab: &Collab = (*lock).borrow();
+  let collab_type = CollabType::Folder;
+  let encoded_collab = collab
+    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+    .unwrap();
+  let uid = test_client.uid().await;
+  Folder::from_collab_doc_state(
+    uid,
+    CollabOrigin::Client(CollabClient::new(uid, test_client.device_id.clone())),
+    encoded_collab.into(),
+    workspace_id,
+    vec![],
+  )
+  .unwrap()
+}
 
 #[tokio::test]
 async fn get_page_view() {
@@ -34,7 +60,7 @@ async fn get_page_view() {
     .iter()
     .find(|v| v.name == "To-dos")
     .unwrap();
-  let todo_list_view_id = Uuid::parse_str(&todo.view_id).unwrap();
+  let todo_list_view_id = &todo.view_id;
   let resp = c
     .get_workspace_page_view(workspace_id, todo_list_view_id)
     .await
@@ -45,7 +71,7 @@ async fn get_page_view() {
     .iter()
     .find(|v| v.name == "Getting started")
     .unwrap();
-  let getting_started_view_id = Uuid::parse_str(&getting_started.view_id).unwrap();
+  let getting_started_view_id = &getting_started.view_id;
   let resp = c
     .get_workspace_page_view(workspace_id, getting_started_view_id)
     .await
@@ -110,14 +136,9 @@ async fn move_page_to_trash() {
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
-  app_client.open_workspace_collab(&workspace_id).await;
-  app_client
-    .wait_object_sync_complete(&workspace_id)
-    .await
-    .unwrap();
   let folder_view = web_client
     .api_client
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -125,51 +146,85 @@ async fn move_page_to_trash() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  let view_id_to_be_deleted = general_space.children[0].view_id.clone();
-  web_client
-    .api_client
-    .move_workspace_page_view_to_trash(
-      Uuid::parse_str(&workspace_id).unwrap(),
-      view_id_to_be_deleted.clone(),
-    )
+  let view_ids_to_be_deleted = [
+    general_space.children[0].view_id.clone(),
+    general_space.children[1].view_id.clone(),
+  ];
+  app_client.open_workspace_collab(&workspace_id).await;
+  app_client
+    .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-
-  // Wait for websocket to receive update
-  sleep(Duration::from_secs(1)).await;
-  let lock = app_client
-    .collabs
-    .get(&workspace_id)
-    .unwrap()
-    .collab
-    .read()
-    .await;
-  let collab: &Collab = (*lock).borrow();
-  let collab_type = CollabType::Folder;
-  let encoded_collab = collab
-    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-    .unwrap();
-  let uid = app_client.uid().await;
-  let folder = Folder::from_collab_doc_state(
-    uid,
-    CollabOrigin::Client(CollabClient::new(uid, app_client.device_id.clone())),
-    encoded_collab.into(),
-    &workspace_id,
-    vec![],
-  )
-  .unwrap();
-  assert!(folder
+  for view_id in view_ids_to_be_deleted.iter() {
+    app_client
+      .api_client
+      .move_workspace_page_view_to_trash(Uuid::parse_str(&workspace_id).unwrap(), view_id.clone())
+      .await
+      .unwrap();
+  }
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let views_in_trash_for_app = folder
     .get_my_trash_sections()
     .iter()
-    .any(|v| v.id == view_id_to_be_deleted.clone()));
-  web_client
+    .map(|v| v.id.clone())
+    .collect::<HashSet<String>>();
+  for view_id in view_ids_to_be_deleted.iter() {
+    assert!(views_in_trash_for_app.contains(view_id));
+  }
+  let views_in_trash_for_web = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
     .await
     .unwrap()
     .views
     .iter()
-    .any(|v| v.view.view_id == view_id_to_be_deleted.clone());
+    .map(|v| v.view.view_id.clone())
+    .collect::<HashSet<String>>();
+  for view_id in view_ids_to_be_deleted.iter() {
+    assert!(views_in_trash_for_web.contains(view_id));
+  }
+
+  web_client
+    .api_client
+    .restore_workspace_page_view_from_trash(
+      Uuid::parse_str(&workspace_id).unwrap(),
+      &view_ids_to_be_deleted[0],
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  assert!(!folder
+    .get_my_trash_sections()
+    .iter()
+    .any(|v| v.id == view_ids_to_be_deleted[0]));
+  let view_found = web_client
+    .api_client
+    .get_workspace_trash(&workspace_id)
+    .await
+    .unwrap()
+    .views
+    .iter()
+    .any(|v| v.view.view_id == view_ids_to_be_deleted[0]);
+  assert!(!view_found);
+  web_client
+    .api_client
+    .restore_all_workspace_page_views_from_trash(Uuid::parse_str(&workspace_id).unwrap())
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  assert!(!folder
+    .get_my_trash_sections()
+    .iter()
+    .any(|v| v.id == view_ids_to_be_deleted[1]));
+  let view_found = web_client
+    .api_client
+    .get_workspace_trash(&workspace_id)
+    .await
+    .unwrap()
+    .views
+    .iter()
+    .any(|v| v.view.view_id == view_ids_to_be_deleted[1]);
+  assert!(!view_found);
 }
 
 #[tokio::test]
@@ -198,42 +253,20 @@ async fn update_page() {
     .api_client
     .update_workspace_page_view(
       Uuid::parse_str(&workspace_id).unwrap(),
-      view_id_to_be_updated.clone(),
+      &view_id_to_be_updated,
       &UpdatePageParams {
         name: "New Name".to_string(),
         icon: Some(ViewIcon {
           ty: IconType::Emoji,
           value: "🚀".to_string(),
         }),
-        extra: Some(json!({"key": "value"})),
+        extra: Some(json!({"is_pinned": true})),
       },
     )
     .await
     .unwrap();
 
-  // Wait for websocket to receive update
-  sleep(Duration::from_secs(1)).await;
-  let lock = app_client
-    .collabs
-    .get(&workspace_id)
-    .unwrap()
-    .collab
-    .read()
-    .await;
-  let collab: &Collab = (*lock).borrow();
-  let collab_type = CollabType::Folder;
-  let encoded_collab = collab
-    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-    .unwrap();
-  let uid = app_client.uid().await;
-  let folder = Folder::from_collab_doc_state(
-    uid,
-    CollabOrigin::Client(CollabClient::new(uid, app_client.device_id.clone())),
-    encoded_collab.into(),
-    &workspace_id,
-    vec![],
-  )
-  .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
   let updated_view = folder.get_view(&view_id_to_be_updated).unwrap();
   assert_eq!(updated_view.name, "New Name");
   assert_eq!(
@@ -245,6 +278,6 @@ async fn update_page() {
   );
   assert_eq!(
     updated_view.extra,
-    Some(json!({"key": "value"}).to_string())
+    Some(json!({"is_pinned": true}).to_string())
   );
 }

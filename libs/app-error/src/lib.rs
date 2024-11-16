@@ -64,8 +64,10 @@ pub enum AppError {
   #[error("Not Logged In:{0}")]
   NotLoggedIn(String),
 
-  #[error("User does not have permissions to execute this action")]
-  NotEnoughPermissions,
+  #[error(
+    "User:{user} does not have permissions to execute this action in workspace:{workspace_id}"
+  )]
+  NotEnoughPermissions { user: String, workspace_id: String },
 
   #[error("s3 response error:{0}")]
   S3ResponseError(String),
@@ -173,6 +175,9 @@ pub enum AppError {
 
   #[error("There is an invalid character in the publish namespace: {character}")]
   CustomNamespaceInvalidCharacter { character: char },
+
+  #[error("{0}")]
+  ServiceTemporaryUnavailable(String),
 }
 
 impl AppError {
@@ -249,6 +254,7 @@ impl AppError {
       AppError::CustomNamespaceInvalidCharacter { .. } => {
         ErrorCode::CustomNamespaceInvalidCharacter
       },
+      AppError::ServiceTemporaryUnavailable(_) => ErrorCode::ServiceTemporaryUnavailable,
     }
   }
 }
@@ -388,6 +394,7 @@ pub enum ErrorCode {
   PublishNameInvalidCharacter = 1051,
   PublishNameTooLong = 1052,
   CustomNamespaceInvalidCharacter = 1053,
+  ServiceTemporaryUnavailable = 1054,
 }
 
 impl ErrorCode {

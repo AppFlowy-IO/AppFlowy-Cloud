@@ -212,7 +212,6 @@ members = [
   "libs/client-websocket",
   "libs/client-api-test",
   "libs/wasm-test",
-  "libs/client-api-wasm",
   "libs/appflowy-ai-client",
   "libs/client-api-entity",
   # services

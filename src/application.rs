@@ -135,9 +135,7 @@ pub async fn run_actix_server(
     rt_cmd_recv,
     state.redis_stream_router.clone(),
     state.redis_connection_manager.clone(),
-    Duration::from_secs(config.collab.group_persistence_interval_secs),
-    Duration::from_secs(config.collab.group_prune_grace_period_secs),
-    state.indexer_provider.clone(),
+    Duration::from_secs(config.collab.group_persistence_interval_secs)
   )
   .await
   .unwrap();
@@ -529,7 +527,8 @@ async fn create_bucket_if_not_exists(
 async fn get_mailer(config: &Config) -> Result<AFCloudMailer, Error> {
   let mailer = Mailer::new(
     config.mailer.smtp_username.clone(),
-    config.mailer.smtp_password.expose_secret().clone(),
+    config.mailer.smtp_email.clone(),
+    config.mailer.smtp_password.clone(),
     &config.mailer.smtp_host,
     config.mailer.smtp_port,
   )

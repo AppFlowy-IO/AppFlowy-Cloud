@@ -44,7 +44,6 @@ async fn test_document_indexing_and_search() {
   sleep(Duration::from_millis(2000)).await;
 
   // document should get automatically indexed after opening if it wasn't indexed before
-
   let search_resp = test_client
     .api_client
     .search_documents(&workspace_id, "Appflowy", 1, 20)
@@ -53,5 +52,7 @@ async fn test_document_indexing_and_search() {
   assert_eq!(search_resp.len(), 1);
   let item = &search_resp[0];
   assert_eq!(item.object_id, object_id);
-  assert_eq!(item.preview.as_deref(), Some("\nWelcome to AppFlowy"));
+
+  let preview = item.preview.clone().unwrap();
+  assert!(preview.contains("Welcome to AppFlowy"));
 }

@@ -1,5 +1,5 @@
 use crate::dto::{
-  AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, CreateTextChatContext,
+  AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, CreateChatContext,
   CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
   RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse,
   TranslateRowData, TranslateRowResponse,
@@ -188,10 +188,7 @@ impl AppFlowyAIClient {
       .into_data()
   }
 
-  pub async fn create_chat_text_context(
-    &self,
-    context: CreateTextChatContext,
-  ) -> Result<(), AIError> {
+  pub async fn create_chat_text_context(&self, context: CreateChatContext) -> Result<(), AIError> {
     let url = format!("{}/chat/context/text", self.url);
     let resp = self
       .http_client(Method::POST, &url)?

@@ -1,4 +1,3 @@
-use collab::lock::Mutex;
 use dashmap::mapref::one::RefMut;
 use dashmap::try_result::TryResult;
 use dashmap::DashMap;
@@ -13,8 +12,6 @@ use crate::error::RealtimeError;
 use crate::group::group_init::CollabGroup;
 use crate::metrics::CollabRealtimeMetrics;
 use collab_rt_entity::user::RealtimeUser;
-use collab_stream::model::CollabControlEvent;
-use collab_stream::stream_group::StreamGroup;
 
 #[derive(Clone)]
 pub(crate) struct GroupManagementState {
@@ -24,14 +21,10 @@ pub(crate) struct GroupManagementState {
   metrics_calculate: Arc<CollabRealtimeMetrics>,
   /// By default, the number of groups to remove in a single batch is 50.
   remove_batch_size: usize,
-  control_event_stream: Arc<Mutex<StreamGroup>>,
 }
 
 impl GroupManagementState {
-  pub(crate) fn new(
-    metrics_calculate: Arc<CollabRealtimeMetrics>,
-    control_event_stream: Arc<Mutex<StreamGroup>>,
-  ) -> Self {
+  pub(crate) fn new(metrics_calculate: Arc<CollabRealtimeMetrics>) -> Self {
     let remove_batch_size = get_env_var("APPFLOWY_COLLABORATE_REMOVE_BATCH_SIZE", "50")
       .parse::<usize>()
       .unwrap_or(50);
@@ -40,7 +33,6 @@ impl GroupManagementState {
       editing_by_user: Arc::new(DashMap::new()),
       metrics_calculate,
       remove_batch_size,
-      control_event_stream,
     }
   }
 

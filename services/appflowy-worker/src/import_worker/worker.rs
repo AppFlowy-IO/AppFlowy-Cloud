@@ -3,7 +3,7 @@ use crate::s3_client::{download_file, AutoRemoveDownloadedFile, S3StreamResponse
 use anyhow::anyhow;
 use aws_sdk_s3::primitives::ByteStream;
 
-use crate::error::ImportError;
+use crate::error::{ImportError, WorkerError};
 use crate::mailer::ImportNotionMailerParam;
 use crate::s3_client::S3Client;
 
@@ -46,7 +46,7 @@ use database::pg_row::AFImportTask;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use sqlx::types::chrono;
-use sqlx::types::chrono::{DateTime, Utc};
+use sqlx::types::chrono::{DateTime, TimeZone, Utc};
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 use std::env::temp_dir;
@@ -253,37 +253,48 @@ async fn consume_task(
   entry_id: String,
 ) -> Result<(), ImportError> {
   if let ImportTask::Notion(task) = &mut import_task {
-    if let Some(created_at_timestamp) = task.created_at {
-      if is_task_expired(created_at_timestamp, task.last_process_at) {
-        if let Ok(import_record) = select_import_task(&context.pg_pool, &task.task_id).await {
-          handle_expired_task(
-            &mut context,
-            &import_record,
-            task,
-            stream_name,
-            group_name,
-            &entry_id,
-          )
-          .await?;
-        }
+    // If no created_at timestamp, proceed directly to processing
+    if task.created_at.is_none() {
+      return process_and_ack_task(context, import_task, stream_name, group_name, &entry_id).await;
+    }
 
-        return Ok(());
-      } else if !check_blob_existence(&context.s3_client, &task.s3_key).await? {
-        task.last_process_at = Some(Utc::now().timestamp());
-        trace!("[Import] {} file not found, re-add task", task.workspace_id);
-        re_add_task(
-          &mut context.redis_client,
+    // Check if the task is expired
+    if let Err(err) = is_task_expired(task.created_at.unwrap(), task.last_process_at) {
+      if let Ok(import_record) = select_import_task(&context.pg_pool, &task.task_id).await {
+        handle_expired_task(
+          &mut context,
+          &import_record,
+          task,
           stream_name,
           group_name,
-          import_task,
           &entry_id,
+          &err,
         )
         .await?;
-        return Ok(());
       }
+      return Ok(());
+    }
+
+    // Check if the blob exists
+    if check_blob_existence(&context.s3_client, &task.s3_key).await? {
+      if task.last_process_at.is_none() {
+        task.last_process_at = Some(Utc::now().timestamp());
+      }
+    } else {
+      trace!("[Import] {} file not found, queue task", task.workspace_id);
+      push_task(
+        &mut context.redis_client,
+        stream_name,
+        group_name,
+        import_task,
+        &entry_id,
+      )
+      .await?;
+      return Ok(());
     }
   }
 
+  // Process and acknowledge the task
   process_and_ack_task(context, import_task, stream_name, group_name, &entry_id).await
 }
 
@@ -294,10 +305,11 @@ async fn handle_expired_task(
   stream_name: &str,
   group_name: &str,
   entry_id: &str,
+  reason: &str,
 ) -> Result<(), ImportError> {
   info!(
-    "[Import]: {} import is expired, delete workspace",
-    task.workspace_id
+    "[Import]: {} import is expired with reason:{}, delete workspace",
+    task.workspace_id, reason
   );
 
   update_import_task_status(
@@ -353,36 +365,60 @@ async fn process_and_ack_task(
   result
 }
 
-fn is_task_expired(timestamp: i64, last_process_at: Option<i64>) -> bool {
-  if last_process_at.is_none() {
-    return false;
-  }
-
-  match DateTime::<Utc>::from_timestamp(timestamp, 0) {
-    None => {
-      info!("[Import] failed to parse timestamp: {}", timestamp);
-      true
-    },
+fn is_task_expired(created_timestamp: i64, last_process_at: Option<i64>) -> Result<(), String> {
+  match Utc.timestamp_opt(created_timestamp, 0).single() {
+    None => Err(format!(
+      "[Import] failed to parse timestamp: {}",
+      created_timestamp
+    )),
     Some(created_at) => {
       let now = Utc::now();
       if created_at > now {
-        error!(
+        return Err(format!(
           "[Import] created_at is in the future: {} > {}",
-          created_at, now
-        );
-        return false;
+          created_at.format("%m/%d/%y %H:%M"),
+          now.format("%m/%d/%y %H:%M")
+        ));
       }
 
       let elapsed = now - created_at;
-      let minutes = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_MINUTES", "20")
+      let hours = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_PROCESS_EXPIRE_HOURS", "6")
         .parse::<i64>()
-        .unwrap_or(20);
-      elapsed.num_minutes() >= minutes
+        .unwrap_or(6);
+
+      if elapsed.num_hours() >= hours {
+        return Err(format!(
+          "[Import] task is expired: created_at: {}, last_process_at: {:?}, elapsed: {} hours",
+          created_at.format("%m/%d/%y %H:%M"),
+          last_process_at,
+          elapsed.num_hours()
+        ));
+      }
+
+      if last_process_at.is_none() {
+        return Ok(());
+      }
+
+      let elapsed = now - created_at;
+      let minutes = get_env_var("APPFLOWY_WORKER_IMPORT_TASK_EXPIRE_MINUTES", "30")
+        .parse::<i64>()
+        .unwrap_or(30);
+
+      if elapsed.num_minutes() >= minutes {
+        Err(format!(
+          "[Import] task is expired: created_at: {}, last_process_at: {:?}, elapsed: {} minutes",
+          created_at.format("%m/%d/%y %H:%M"),
+          last_process_at,
+          elapsed.num_minutes()
+        ))
+      } else {
+        Ok(())
+      }
     },
   }
 }
 
-async fn re_add_task(
+async fn push_task(
   redis_client: &mut ConnectionManager,
   stream_name: &str,
   group_name: &str,
@@ -496,6 +532,16 @@ async fn process_task(
 
           clean_up(&context.s3_client, &task).await;
           notify_user(&task, result, context.notifier, &context.metrics).await?;
+
+          tokio::spawn(async move {
+            match fs::remove_dir_all(&unzip_dir_path).await {
+              Ok(_) => info!(
+                "[Import]: {} deleted unzip file: {:?}",
+                task.workspace_id, unzip_dir_path
+              ),
+              Err(err) => error!("Failed to delete unzip file: {:?}", err),
+            }
+          });
         },
         Err(err) => {
           // If there is any errors when download or unzip the file, we will remove the file from S3 and notify the user.
@@ -679,10 +725,9 @@ async fn download_and_unzip_file(
         .await
         .map_err(|err| ImportError::Internal(err.into()))??;
 
-    trace!(
-      "[Import] {} finish unzip file: {:?}",
-      import_task.workspace_id,
-      unzip_file.unzip_dir
+    info!(
+      "[Import] {} finish unzip file to dir:{}, file:{:?}",
+      import_task.workspace_id, unzip_file.dir_name, unzip_file.unzip_dir
     );
     Ok(unzip_file.unzip_dir)
   }
@@ -1067,17 +1112,6 @@ async fn process_unzip_file(
   batch_upload_files_to_s3(&import_task.workspace_id, s3_client, upload_resources)
     .await
     .map_err(|err| ImportError::Internal(anyhow!("Failed to upload files to S3: {:?}", err)))?;
-
-  // 10. delete zip file regardless of success or failure
-  match fs::remove_dir_all(unzip_dir_path).await {
-    Ok(_) => trace!(
-      "[Import]: {} deleted unzip file: {:?}",
-      import_task.workspace_id,
-      unzip_dir_path
-    ),
-    Err(err) => error!("Failed to delete unzip file: {:?}", err),
-  }
-
   Ok(())
 }
 
@@ -1181,11 +1215,12 @@ async fn batch_upload_files_to_s3(
   .buffer_unordered(5);
   let results: Vec<_> = upload_stream.collect().await;
   let errors: Vec<_> = results.into_iter().filter_map(Result::err).collect();
-  if errors.is_empty() {
-    Ok(())
-  } else {
-    Err(anyhow!("Some uploads failed: {:?}", errors))
+
+  if !errors.is_empty() {
+    error!("Some uploads failed: {:?}", errors);
   }
+
+  Ok(())
 }
 
 async fn upload_file_to_s3(
@@ -1201,12 +1236,29 @@ async fn upload_file_to_s3(
     return Err(anyhow!("File does not exist: {:?}", path));
   }
 
+  let mut attempt = 0;
+  let max_retries = 2;
+
   let object_key = format!("{}/{}/{}", workspace_id, object_id, file_id);
-  let byte_stream = ByteStream::from_path(path).await?;
-  client
-    .put_blob(&object_key, byte_stream, Some(file_type))
-    .await?;
-  Ok(())
+  while attempt <= max_retries {
+    let byte_stream = ByteStream::from_path(path).await?;
+    match client
+      .put_blob(&object_key, byte_stream, Some(file_type))
+      .await
+    {
+      Ok(_) => return Ok(()),
+      Err(WorkerError::S3ServiceUnavailable(_)) if attempt < max_retries => {
+        attempt += 1;
+        tokio::time::sleep(Duration::from_secs(3)).await;
+      },
+      Err(err) => return Err(err.into()),
+    }
+  }
+
+  Err(anyhow!(
+    "Failed to upload file to S3 after {} attempts",
+    max_retries + 1
+  ))
 }
 
 async fn get_encode_collab_from_bytes(

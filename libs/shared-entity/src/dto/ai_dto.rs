@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::dto::chat_dto::ChatMessage;
 pub use appflowy_ai_client::dto::*;
-use database_entity::dto::ChatMessage;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowParams {

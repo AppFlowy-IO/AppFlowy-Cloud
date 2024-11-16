@@ -423,16 +423,14 @@ async fn test_publish_doc() {
     let err = guest_client
       .get_published_collab::<MyCustomMetadata>(&my_namespace, publish_name_1)
       .await
-      .err()
-      .unwrap();
+      .unwrap_err();
     assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
 
     let guest_client = localhost_client();
     let err = guest_client
       .get_published_collab_blob(&my_namespace, publish_name_1)
       .await
-      .err()
-      .unwrap();
+      .unwrap_err();
     assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
 
     // default publish view should not be accessible
@@ -482,10 +480,20 @@ async fn test_publish_comments() {
 
   // Test if only authenticated users can create
   let page_owner_comment_content = "comment from page owner";
-  page_owner_client
-    .create_comment_on_published_view(&view_id, page_owner_comment_content, &None)
-    .await
-    .unwrap();
+  {
+    page_owner_client
+      .create_comment_on_published_view(&view_id, page_owner_comment_content, &None)
+      .await
+      .unwrap();
+    let comments = page_owner_client
+      .get_published_view_comments(&view_id)
+      .await
+      .unwrap()
+      .comments;
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].content, page_owner_comment_content);
+  }
+
   let (first_user_client, first_user) = generate_unique_registered_user_client().await;
   let first_user_comment_content = "comment from first authenticated user";
   // This is to ensure that the second comment creation timestamp is later than the first one
@@ -557,6 +565,14 @@ async fn test_publish_comments() {
   // Test if it's possible to reply to another user's comment
   let second_user_comment_content = "comment from second authenticated user";
   let (second_user_client, second_user) = generate_unique_registered_user_client().await;
+  {
+    let published_view_comments: Vec<GlobalComment> = guest_client
+      .get_published_view_comments(&view_id)
+      .await
+      .unwrap()
+      .comments;
+    assert_eq!(published_view_comments.len(), 2);
+  }
   // User 2 reply to user 1
   second_user_client
     .create_comment_on_published_view(
@@ -566,6 +582,14 @@ async fn test_publish_comments() {
     )
     .await
     .unwrap();
+  {
+    let published_view_comments: Vec<GlobalComment> = guest_client
+      .get_published_view_comments(&view_id)
+      .await
+      .unwrap()
+      .comments;
+    assert_eq!(published_view_comments.len(), 3);
+  }
   let published_view_comments: Vec<GlobalComment> = guest_client
     .get_published_view_comments(&view_id)
     .await
@@ -1590,4 +1614,164 @@ fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<Str
   let pub_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
   let row_ids: HashSet<String> = pub_db_data.database_row_collabs.into_keys().collect();
   (pub_db_id, row_ids)
+}
+
+#[tokio::test]
+async fn test_republish_doc() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&c).await;
+  let my_namespace = uuid::Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
+    .await
+    .unwrap();
+
+  let publish_name = "my-publish-name";
+  let view_id = uuid::Uuid::new_v4();
+
+  // User publishes 1 doc
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(
+    &workspace_id,
+    vec![PublishCollabItem {
+      meta: PublishCollabMetadata {
+        view_id,
+        publish_name: publish_name.to_string(),
+        metadata: MyCustomMetadata {
+          title: "my_title_1".to_string(),
+        },
+      },
+      data: "yrs_encoded_data_1".as_bytes(),
+    }],
+  )
+  .await
+  .unwrap();
+
+  {
+    // Check that the doc is published with correct publish name
+    let publish_info = c.get_published_collab_info(&view_id).await.unwrap();
+    assert_eq!(
+      publish_info.publish_name, publish_name,
+      "{:?}",
+      publish_info
+    );
+  }
+
+  // user unpublishes the doc
+  c.unpublish_collabs(&workspace_id, &[view_id])
+    .await
+    .unwrap();
+
+  {
+    // Check that the doc is unpublished
+    let publish_info = c.get_published_collab_info(&view_id).await.unwrap();
+    assert!(
+      publish_info.unpublished_timestamp.is_some(),
+      "{:?}",
+      publish_info
+    );
+    assert_eq!(
+      publish_info.publish_name, publish_name,
+      "{:?}",
+      publish_info
+    );
+  }
+
+  {
+    // User publish another doc with different id but same publish name
+    let view_id_2 = uuid::Uuid::new_v4();
+    c.publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: view_id_2,
+          publish_name: publish_name.to_string(),
+          metadata: MyCustomMetadata {
+            title: "my_title_2".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_2".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap();
+
+    let publish_info = c.get_published_collab_info(&view_id_2).await.unwrap();
+    assert_eq!(
+      publish_info.publish_name, publish_name,
+      "{:?}",
+      publish_info
+    );
+  }
+
+  {
+    // When fetching original document, it should return not found
+    // since the binded publish name is already used by another document
+    let err = c.get_published_collab_info(&view_id).await.unwrap_err();
+    assert_eq!(err.code, ErrorCode::RecordNotFound, "{:?}", err);
+  }
+}
+
+#[tokio::test]
+async fn test_republish_patch() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&c).await;
+  let my_namespace = uuid::Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
+    .await
+    .unwrap();
+
+  let publish_name = "my-publish-name";
+  let view_id = uuid::Uuid::new_v4();
+
+  // User publishes 1 doc
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(
+    &workspace_id,
+    vec![PublishCollabItem {
+      meta: PublishCollabMetadata {
+        view_id,
+        publish_name: publish_name.to_string(),
+        metadata: MyCustomMetadata {
+          title: "my_title_1".to_string(),
+        },
+      },
+      data: "yrs_encoded_data_1".as_bytes(),
+    }],
+  )
+  .await
+  .unwrap();
+
+  // user unpublishes the doc
+  c.unpublish_collabs(&workspace_id, &[view_id])
+    .await
+    .unwrap();
+
+  // User publish another doc
+  let publish_name_2 = "my-publish-name-2";
+  let view_id_2 = uuid::Uuid::new_v4();
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(
+    &workspace_id,
+    vec![PublishCollabItem {
+      meta: PublishCollabMetadata {
+        view_id: view_id_2,
+        publish_name: publish_name_2.to_string(),
+        metadata: MyCustomMetadata {
+          title: "my_title_1".to_string(),
+        },
+      },
+      data: "yrs_encoded_data_1".as_bytes(),
+    }],
+  )
+  .await
+  .unwrap();
+
+  // User change the publish name of the document to publish_name
+  // which should be allowed since the original document is already unpublished
+  c.patch_published_collabs(
+    &workspace_id,
+    &[PatchPublishedCollab {
+      view_id: view_id_2,
+      publish_name: Some(publish_name.to_string()),
+    }],
+  )
+  .await
+  .unwrap();
 }

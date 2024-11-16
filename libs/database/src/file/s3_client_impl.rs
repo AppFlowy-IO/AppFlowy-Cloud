@@ -4,12 +4,13 @@ use app_error::AppError;
 use async_trait::async_trait;
 use aws_sdk_s3::operation::delete_object::DeleteObjectOutput;
 
-use aws_sdk_s3::error::SdkError;
 use std::ops::Deref;
 use std::time::{Duration, SystemTime};
 
+use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
+
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
@@ -133,12 +134,17 @@ impl BucketClient for AwsS3BucketClientImpl {
       .body(body)
       .send()
       .await
-      .map_err(|err| anyhow!("Failed to upload object to S3: {}", err))?;
+      .map_err(|err| match err {
+        SdkError::TimeoutError(_) | SdkError::DispatchFailure(_) | SdkError::ServiceError(_) => {
+          AppError::ServiceTemporaryUnavailable(format!("Failed to upload object to S3: {}", err))
+        },
+        _ => AppError::Internal(anyhow!("Failed to upload object to S3: {}", err)),
+      })?;
 
     Ok(())
   }
 
-  async fn put_blob_as_content_type(
+  async fn put_blob_with_content_type(
     &self,
     object_key: &str,
     stream: ByteStream,
@@ -158,7 +164,12 @@ impl BucketClient for AwsS3BucketClientImpl {
       .content_type(content_type)
       .send()
       .await
-      .map_err(|err| anyhow!("Failed to upload object to S3: {}", err))?;
+      .map_err(|err| match err {
+        SdkError::TimeoutError(_) | SdkError::DispatchFailure(_) | SdkError::ServiceError(_) => {
+          AppError::ServiceTemporaryUnavailable(format!("Failed to upload object to S3: {}", err))
+        },
+        _ => AppError::Internal(anyhow!("Failed to upload object to S3: {}", err)),
+      })?;
 
     Ok(())
   }

@@ -93,7 +93,7 @@ where
     }
   }
 
-  const PENDING_WRITE_BUF_CAPACITY: usize = 100;
+  const PENDING_WRITE_BUF_CAPACITY: usize = 20;
   async fn periodic_write_task(
     cache: CollabCache,
     metrics: Arc<CollabMetrics>,

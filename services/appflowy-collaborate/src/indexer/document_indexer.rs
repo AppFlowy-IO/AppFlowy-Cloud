@@ -25,15 +25,21 @@ pub struct DocumentIndexer {
   ai_client: AppFlowyAIClient,
   tokenizer: Arc<CoreBPE>,
   embedding_model: EmbeddingModel,
+  use_tiktoken: bool,
 }
 
 impl DocumentIndexer {
   pub fn new(ai_client: AppFlowyAIClient) -> Arc<Self> {
     let tokenizer = tiktoken_rs::cl100k_base().unwrap();
+    let use_tiktoken = get_env_var("APPFLOWY_AI_CONTENT_SPLITTER_TIKTOKEN", "false")
+      .parse::<bool>()
+      .unwrap_or(false);
+
     Arc::new(Self {
       ai_client,
       tokenizer: Arc::new(tokenizer),
       embedding_model: EmbeddingModel::TextEmbedding3Small,
+      use_tiktoken,
     })
   }
 }
@@ -62,6 +68,7 @@ impl Indexer for DocumentIndexer {
           CollabType::Document,
           &self.embedding_model,
           self.tokenizer.clone(),
+          self.use_tiktoken,
         )
         .await
       },
@@ -136,11 +143,8 @@ async fn create_embedding(
   collab_type: CollabType,
   embedding_model: &EmbeddingModel,
   tokenizer: Arc<CoreBPE>,
+  use_tiktoken: bool,
 ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
-  let use_tiktoken = get_env_var("APPFLOWY_AI_CONTENT_SPLITTER_TIKTOKEN", "false")
-    .parse::<bool>()
-    .unwrap_or(false);
-
   let split_contents = if use_tiktoken {
     let max_tokens = embedding_model.default_dimensions() as usize;
     if content.len() < 500 {

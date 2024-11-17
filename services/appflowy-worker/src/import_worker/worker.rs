@@ -245,7 +245,6 @@ async fn process_upcoming_tasks(
       }
     }
   }
-  info!("[Import] stop reading tasks from stream");
 }
 #[derive(Clone)]
 struct TaskContext {

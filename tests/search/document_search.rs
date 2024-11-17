@@ -114,7 +114,7 @@ The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a T
 
     let params = CalculateSimilarityParams {
       workspace_id,
-      input: answer,
+      input: answer.clone(),
       expected: r#"
     Kathryn Petersen is the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup.
      She steps into a role facing a dysfunctional executive team characterized by poor communication,
@@ -131,7 +131,7 @@ The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a T
       .unwrap()
       .score;
 
-    assert!(score > 0.9, "score: {}", score);
+    assert!(score > 0.9, "score: {}, input:{}", score, answer);
   }
 }
 

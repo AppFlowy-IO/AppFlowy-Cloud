@@ -178,7 +178,9 @@ mod tests {
     let content = "".to_string();
     let tokenizer = cl100k_base().unwrap();
     let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
+    assert_eq!(params.len(), 0);
 
+    let params = split_text_by_max_content_len(content.clone(), max_tokens).unwrap();
     assert_eq!(params.len(), 0);
   }
 
@@ -204,13 +206,16 @@ mod tests {
   fn test_split_with_combining_characters() {
     let max_tokens = 1; // Set to 1 token for testing
     let content = "a\u{0301}e\u{0301}i\u{0301}o\u{0301}u\u{0301}".to_string(); // "áéíóú"
+
     let tokenizer = cl100k_base().unwrap();
     let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
-
     let total_tokens = tokenizer.encode_ordinary(&content).len();
     assert_eq!(params.len(), total_tokens);
-
     let reconstructed_content = params.join("");
+    assert_eq!(reconstructed_content, content);
+
+    let params = split_text_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
   }
 
@@ -236,7 +241,10 @@ mod tests {
     let total_tokens = tokenizer.encode_ordinary(&content).len();
     let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
     assert_eq!(params.len(), expected_fragments);
+    let reconstructed_content: String = params.concat();
+    assert_eq!(reconstructed_content, content);
 
+    let params = split_text_by_max_content_len(content.clone(), max_tokens).unwrap();
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
   }
@@ -251,7 +259,10 @@ mod tests {
     let total_tokens = tokenizer.encode_ordinary(&content).len();
     let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
     assert_eq!(params.len(), expected_fragments);
+    let reconstructed_content: String = params.concat();
+    assert_eq!(reconstructed_content, content);
 
+    let params = split_text_by_max_content_len(content.clone(), max_tokens).unwrap();
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
   }
@@ -262,7 +273,6 @@ mod tests {
     let content = "👩‍👩‍👧‍👧👨‍👨‍👦‍👦".to_string();
     let tokenizer = cl100k_base().unwrap();
     let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
-
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
 

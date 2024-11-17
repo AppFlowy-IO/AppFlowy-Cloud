@@ -56,12 +56,11 @@ impl Indexer for DocumentIndexer {
     match result {
       Ok(document_data) => {
         let content = document_data.to_plain_text();
-        let max_tokens = self.embedding_model.default_dimensions() as usize;
         create_embedding(
           object_id,
           content,
           CollabType::Document,
-          max_tokens,
+          &self.embedding_model,
           self.tokenizer.clone(),
         )
         .await
@@ -135,7 +134,7 @@ async fn create_embedding(
   object_id: String,
   content: String,
   collab_type: CollabType,
-  max_tokens: usize,
+  embedding_model: &EmbeddingModel,
   tokenizer: Arc<CoreBPE>,
 ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
   let use_tiktoken = get_env_var("APPFLOWY_AI_CONTENT_SPLITTER_TIKTOKEN", "false")
@@ -143,6 +142,7 @@ async fn create_embedding(
     .unwrap_or(false);
 
   let split_contents = if use_tiktoken {
+    let max_tokens = embedding_model.default_dimensions() as usize;
     if content.len() < 500 {
       split_text_by_max_tokens(content, max_tokens, tokenizer.as_ref())?
     } else {
@@ -152,6 +152,10 @@ async fn create_embedding(
       .await??
     }
   } else {
+    debug_assert!(matches!(
+      embedding_model,
+      EmbeddingModel::TextEmbedding3Small
+    ));
     // We assume that every token is ~4 bytes. We're going to split document content into fragments
     // of ~2000 tokens each.
     split_text_by_max_content_len(content, 8000)?

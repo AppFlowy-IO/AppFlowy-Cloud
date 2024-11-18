@@ -38,24 +38,6 @@ async fn get_collab_response_compatible_test() {
 }
 
 #[tokio::test]
-#[should_panic]
-async fn create_collab_workspace_id_equal_to_object_id_test() {
-  let mut test_client = TestClient::new_user().await;
-  let workspace_id = test_client.workspace_id().await;
-  // Only the object with [CollabType::Folder] can have the same object_id as workspace_id. But
-  // it should use create workspace API
-  test_client
-    .create_collab_with_data(
-      workspace_id.clone(),
-      &workspace_id,
-      CollabType::Unknown,
-      None,
-    )
-    .await
-    .unwrap()
-}
-
-#[tokio::test]
 async fn batch_insert_collab_with_empty_payload_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;

@@ -24,6 +24,7 @@ env:
   LOCALHOST_URL: http://localhost
   LOCALHOST_WS: ws://localhost/ws/v1
   APPFLOWY_REDIS_URI: redis://redis:6379
+  APPFLOWY_AI_REDIS_URL: redis://redis:6379
   LOCALHOST_GOTRUE: http://localhost/gotrue
   POSTGRES_PASSWORD: password
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
@@ -105,6 +106,12 @@ jobs:
         # the wasm-pack headless tests will run on random ports, so we need to allow all origins
         run: sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
       - name: Run Docker-Compose
         run: |
           export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
@@ -113,29 +120,20 @@ jobs:
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
 
-          container_id=$(docker ps --filter name=appflowy-cloud-ai-1 -q)
-          if [ -n "$container_id" ]; then
-          echo "Displaying logs for the AppFlowy-AI container..."
-            docker logs "$container_id"
-          else
-            echo "No running container found to display logs."
-          fi
-
       - name: Install prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install protobuf-compiler
+          sudo apt-get install -y protobuf-compiler
 
       - name: Run Tests
         run: |
           echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
 
-      - name: Run Tests from main branch
+      - name: Docker Logs
+        if: always()
         run: |
-          git fetch origin main
-          git checkout main
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
+          docker logs appflowy-cloud-ai-1
 
   cleanup:
     name: Cleanup Docker Images

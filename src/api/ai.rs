@@ -5,7 +5,8 @@ use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 use app_error::AppError;
 use appflowy_ai_client::dto::{
-  CompleteTextResponse, LocalAIConfig, TranslateRowParams, TranslateRowResponse,
+  CalculateSimilarityParams, CompleteTextResponse, LocalAIConfig, SimilarityResponse,
+  TranslateRowParams, TranslateRowResponse,
 };
 
 use futures_util::{stream, TryStreamExt};
@@ -25,6 +26,9 @@ pub fn ai_completion_scope() -> Scope {
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
     .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
     .service(web::resource("/local/config").route(web::get().to(local_ai_config_handler)))
+    .service(
+      web::resource("/calculate_similarity").route(web::post().to(calculate_similarity_handler)),
+    )
 }
 
 async fn complete_text_handler(
@@ -162,4 +166,19 @@ async fn local_ai_config_handler(
     .await
     .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
   Ok(AppResponse::Ok().with_data(config).into())
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn calculate_similarity_handler(
+  state: web::Data<AppState>,
+  payload: web::Json<CalculateSimilarityParams>,
+) -> actix_web::Result<Json<AppResponse<SimilarityResponse>>> {
+  let params = payload.into_inner();
+
+  let response = state
+    .ai_client
+    .calculate_similarity(params)
+    .await
+    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
+  Ok(AppResponse::Ok().with_data(response).into())
 }

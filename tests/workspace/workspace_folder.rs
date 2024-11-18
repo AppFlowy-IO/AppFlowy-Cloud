@@ -1,7 +1,10 @@
+use std::time::Duration;
+
 use client_api::entity::{CreateCollabParams, QueryCollabParams};
 use client_api_test::generate_unique_registered_user_client;
 use collab::core::origin::CollabClient;
 use collab_folder::{CollabOrigin, Folder};
+use tokio::time::sleep;
 
 #[tokio::test]
 async fn get_workpace_folder() {
@@ -83,6 +86,8 @@ async fn get_section_items() {
   })
   .await
   .unwrap();
+  // Collab update is performed asynchronously via a queue
+  sleep(Duration::from_secs(1)).await;
   let favorite_section_items = c.get_workspace_favorite(&workspace_id).await.unwrap();
   assert_eq!(favorite_section_items.views.len(), 1);
   assert_eq!(

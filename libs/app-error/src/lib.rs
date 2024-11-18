@@ -3,7 +3,6 @@ pub mod gotrue;
 
 #[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
-use std::error::Error as StdError;
 use std::string::FromUtf8Error;
 
 #[cfg(feature = "appflowy_ai_error")]
@@ -92,7 +91,7 @@ pub enum AppError {
   #[error("{desc}: {err}")]
   SqlxArgEncodingError {
     desc: String,
-    err: Box<dyn StdError + 'static + Send + Sync>,
+    err: Box<dyn std::error::Error + 'static + Send + Sync>,
   },
 
   #[cfg(feature = "validation_error")]

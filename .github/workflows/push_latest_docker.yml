@@ -95,6 +95,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
           build-args: |
+            PROFILE=release
             FEATURES=
 
       - name: Logout from Docker Hub

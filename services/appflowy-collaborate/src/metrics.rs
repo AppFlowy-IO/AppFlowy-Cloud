@@ -1,9 +1,9 @@
-use std::sync::Arc;
-use std::time::Duration;
-
+use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::metrics::histogram::Histogram;
 use prometheus_client::registry::Registry;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::time::interval;
 
 use database::collab::CollabStorage;
@@ -160,10 +160,9 @@ where
 pub struct CollabMetrics {
   success_write_snapshot_count: Gauge,
   total_write_snapshot_count: Gauge,
-  success_write_collab_count: Gauge,
-  total_write_collab_count: Gauge,
-  total_queue_collab_count: Gauge,
-  success_queue_collab_count: Gauge,
+  success_write_collab_count: Counter,
+  total_write_collab_count: Counter,
+  success_queue_collab_count: Counter,
 }
 
 impl CollabMetrics {
@@ -173,7 +172,6 @@ impl CollabMetrics {
       total_write_snapshot_count: Default::default(),
       success_write_collab_count: Default::default(),
       total_write_collab_count: Default::default(),
-      total_queue_collab_count: Default::default(),
       success_queue_collab_count: Default::default(),
     }
   }
@@ -206,11 +204,6 @@ impl CollabMetrics {
       "success queue collab",
       metrics.success_queue_collab_count.clone(),
     );
-    realtime_registry.register(
-      "total_queue_collab_count",
-      "total queue pending collab",
-      metrics.total_queue_collab_count.clone(),
-    );
 
     metrics
   }
@@ -220,13 +213,12 @@ impl CollabMetrics {
     self.total_write_snapshot_count.set(total_attempt);
   }
 
-  pub fn record_write_collab(&self, success_attempt: i64, total_attempt: i64) {
-    self.success_write_collab_count.set(success_attempt);
-    self.total_write_collab_count.set(total_attempt);
+  pub fn record_write_collab(&self, success_attempt: u64, total_attempt: u64) {
+    self.success_write_collab_count.inc_by(success_attempt);
+    self.total_write_collab_count.inc_by(total_attempt);
   }
 
-  pub fn record_queue_collab(&self, success_attempt: i64, total_attempt: i64) {
-    self.success_queue_collab_count.set(success_attempt);
-    self.total_queue_collab_count.set(total_attempt);
+  pub fn record_queue_collab(&self, attempt: u64) {
+    self.success_queue_collab_count.inc_by(attempt);
   }
 }

@@ -95,7 +95,6 @@ async fn create_chat_handler(
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let workspace_id = path.into_inner();
   let params = payload.into_inner();
-  trace!("create new chat: {:?}", params);
   create_chat(&state.pg_pool, params, &workspace_id).await?;
   Ok(AppResponse::Ok().into())
 }
@@ -242,10 +241,11 @@ async fn answer_stream_handler(
   let (_workspace_id, chat_id, question_id) = path.into_inner();
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
+  let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &chat_id).await?;
   let ai_model = ai_model_from_header(&req);
   match state
     .ai_client
-    .stream_question(&chat_id, &content, Some(metadata), &ai_model)
+    .stream_question(&chat_id, &content, Some(metadata), rag_ids, &ai_model)
     .await
   {
     Ok(answer_stream) => {
@@ -275,10 +275,25 @@ async fn answer_stream_v2_handler(
   let (_workspace_id, chat_id, question_id) = path.into_inner();
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
+  let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &chat_id).await?;
   let ai_model = ai_model_from_header(&req);
+
+  trace!(
+    "[Chat] stream answer for chat: {}, question: {}, rag_ids: {:?}",
+    chat_id,
+    content,
+    rag_ids
+  );
   match state
     .ai_client
-    .stream_question_v2(&chat_id, &content, Some(metadata), &ai_model)
+    .stream_question_v2(
+      &chat_id,
+      question_id,
+      &content,
+      Some(metadata),
+      rag_ids,
+      &ai_model,
+    )
     .await
   {
     Ok(answer_stream) => {

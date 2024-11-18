@@ -746,6 +746,7 @@ impl DefaultCollabGroup {
     let msg = AwarenessStreamUpdate {
       data,
       sender: origin.clone(),
+      row: None,
     };
     state
       .awareness_update_sink

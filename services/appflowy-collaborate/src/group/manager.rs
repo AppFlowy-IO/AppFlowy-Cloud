@@ -13,16 +13,13 @@ use bytes::Bytes;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
+use collab::error::CollabError;
 use collab::preclude::Collab;
-use collab_database::rows::{DatabaseRowBody, RowId};
 use collab_entity::define::DATABASE_ID;
 use collab_entity::CollabType;
-use tracing::{instrument, trace};
-
-use access_control::collab::RealtimeAccessControl;
-use app_error::AppError;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
+use collab_rt_protocol::{Message, MessageReader, SyncMessage};
 use collab_stream::client::CollabRedisStream;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::QueryCollabParams;
@@ -196,9 +193,7 @@ where
           None => return Err(RealtimeError::GroupNotFound(object_id.into())),
         };
         let database_group = self.get_database_group(database_id).await?;
-        let object_id =
-          Uuid::parse_str(object_id).map_err(|e| RealtimeError::Internal(e.into()))?;
-        CollabGroup::Database(database_group.scoped(object_id))
+        CollabGroup::Database(database_group.scoped(object_id.into()))
       },
       _ => {
         let default_group = DefaultCollabGroup::new(

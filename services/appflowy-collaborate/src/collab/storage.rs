@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+#![allow(unused_imports)]
 
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
@@ -10,10 +9,15 @@ use database::collab::cache::CollabCache;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::Transaction;
-
+use std::collections::HashMap;
+use std::ops::DerefMut;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::time::timeout;
 use tracing::warn;
 use tracing::{error, instrument, trace};
+use uuid::Uuid;
 use validator::Validate;
 
 use crate::command::{CLCommandSender, CollaborationCommand};
@@ -28,14 +32,27 @@ use database_entity::dto::{
 };
 
 use crate::collab::access_control::CollabStorageAccessControlImpl;
-use crate::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
-use crate::collab::queue_redis_ops::WritePriority;
 use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
 use crate::snapshot::SnapshotControl;
-use crate::state::RedisConnectionManager;
 
 pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessControlImpl>;
+
+struct PendingCollabWrite {
+  workspace_id: String,
+  uid: i64,
+  params: CollabParams,
+}
+
+impl PendingCollabWrite {
+  fn new(workspace_id: String, uid: i64, params: CollabParams) -> Self {
+    PendingCollabWrite {
+      workspace_id,
+      uid,
+      params,
+    }
+  }
+}
 
 /// A wrapper around the actual storage implementation that provides access control and caching.
 #[derive(Clone)]
@@ -45,7 +62,8 @@ pub struct CollabStorageImpl<AC> {
   access_control: AC,
   snapshot_control: SnapshotControl,
   rt_cmd_sender: CLCommandSender,
-  queue: Arc<StorageQueue>,
+  queue: Sender<PendingCollabWrite>,
+  metrics: Arc<CollabMetrics>,
 }
 
 impl<AC> CollabStorageImpl<AC>
@@ -57,14 +75,13 @@ where
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: CLCommandSender,
-    redis_conn_manager: RedisConnectionManager,
     metrics: Arc<CollabMetrics>,
   ) -> Self {
-    let queue = Arc::new(StorageQueue::new_with_metrics(
+    let (queue, reader) = channel(1000);
+    tokio::spawn(Self::periodic_write_task(
       cache.clone(),
-      redis_conn_manager,
-      REDIS_PENDING_WRITE_QUEUE,
-      Some(metrics),
+      metrics.clone(),
+      reader,
     ));
     Self {
       cache,
@@ -72,7 +89,115 @@ where
       snapshot_control,
       rt_cmd_sender,
       queue,
+      metrics,
     }
+  }
+
+  const PENDING_WRITE_BUF_CAPACITY: usize = 20;
+  async fn periodic_write_task(
+    cache: CollabCache,
+    metrics: Arc<CollabMetrics>,
+    mut reader: Receiver<PendingCollabWrite>,
+  ) {
+    let mut buf = Vec::with_capacity(Self::PENDING_WRITE_BUF_CAPACITY);
+    loop {
+      let n = reader
+        .recv_many(&mut buf, Self::PENDING_WRITE_BUF_CAPACITY)
+        .await;
+      if n == 0 {
+        break;
+      }
+      let pending = buf.drain(..n);
+      if let Err(e) = Self::persist(&cache, &metrics, pending).await {
+        tracing::error!("failed to persist {} collabs: {}", n, e);
+      }
+    }
+  }
+
+  async fn persist(
+    cache: &CollabCache,
+    metrics: &CollabMetrics,
+    records: impl ExactSizeIterator<Item = PendingCollabWrite>,
+  ) -> Result<(), AppError> {
+    // Start a database transaction
+    let mut transaction = cache
+      .pg_pool()
+      .begin()
+      .await
+      .context("Failed to acquire transaction for writing pending collaboration data")
+      .map_err(AppError::from)?;
+
+    let total_records = records.len();
+    let mut successful_writes = 0;
+    // Insert each record into the database within the transaction context
+    let mut action_description = String::new();
+    for (index, record) in records.into_iter().enumerate() {
+      let params = record.params;
+      action_description = format!("{}", params);
+      let savepoint_name = format!("sp_{}", index);
+
+      // using savepoint to rollback the transaction if the insert fails
+      sqlx::query(&format!("SAVEPOINT {}", savepoint_name))
+        .execute(transaction.deref_mut())
+        .await?;
+      if let Err(_err) = cache
+        .insert_encode_collab_to_disk(&record.workspace_id, &record.uid, params, &mut transaction)
+        .await
+      {
+        sqlx::query(&format!("ROLLBACK TO SAVEPOINT {}", savepoint_name))
+          .execute(transaction.deref_mut())
+          .await?;
+      } else {
+        successful_writes += 1;
+      }
+    }
+
+    metrics.record_write_collab(successful_writes, total_records as _);
+
+    // Commit the transaction to finalize all writes
+    match tokio::time::timeout(Duration::from_secs(10), transaction.commit()).await {
+      Ok(result) => {
+        result.map_err(AppError::from)?;
+        Ok(())
+      },
+      Err(_) => {
+        error!(
+          "Timeout waiting for committing the transaction for pending write:{}",
+          action_description
+        );
+        Err(AppError::Internal(anyhow!(
+          "Timeout when committing the transaction for pending collaboration data"
+        )))
+      },
+    }
+  }
+
+  async fn insert_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+  ) -> AppResult<()> {
+    // Start a database transaction
+    let mut transaction = self
+      .cache
+      .pg_pool()
+      .begin()
+      .await
+      .context("Failed to acquire transaction for writing pending collaboration data")
+      .map_err(AppError::from)?;
+    self
+      .cache
+      .insert_encode_collab_to_disk(workspace_id, uid, params, &mut transaction)
+      .await?;
+    tokio::time::timeout(Duration::from_secs(10), transaction.commit())
+      .await
+      .map_err(|_| {
+        AppError::Internal(anyhow!(
+          "Timeout when committing the transaction for pending collaboration data"
+        ))
+      })??;
+    Ok(())
   }
 
   async fn check_write_workspace_permission(
@@ -178,7 +303,6 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    priority: WritePriority,
   ) -> Result<(), AppError> {
     trace!(
       "Queue insert collab:{}:{}",
@@ -192,11 +316,13 @@ where
       )));
     }
 
-    self
-      .queue
-      .push(workspace_id, uid, &params, priority)
-      .await
-      .map_err(AppError::from)
+    let pending = PendingCollabWrite::new(workspace_id.into(), *uid, params);
+    if let Err(e) = self.queue.send(pending).await {
+      tracing::error!("Failed to queue insert collab doc state: {}", e);
+    } else {
+      self.metrics.record_queue_collab(1);
+    }
+    Ok(())
   }
 
   async fn batch_insert_collabs(
@@ -259,14 +385,11 @@ where
         .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
         .await?;
     }
-    let priority = if write_immediately {
-      WritePriority::High
+    if write_immediately {
+      self.insert_collab(workspace_id, uid, params).await?;
     } else {
-      WritePriority::Low
-    };
-    self
-      .queue_insert_collab(workspace_id, uid, params, priority)
-      .await?;
+      self.queue_insert_collab(workspace_id, uid, params).await?;
+    }
     Ok(())
   }
 

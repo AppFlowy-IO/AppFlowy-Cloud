@@ -213,6 +213,32 @@ pub async fn select_workspace_publish_namespace(
   Ok(res)
 }
 
+async fn delete_published_collabs(
+  txn: &mut sqlx::Transaction<'_, Postgres>,
+  workspace_id: &Uuid,
+  publish_names: &[String],
+) -> Result<(), AppError> {
+  let delete_publish_names = sqlx::query_scalar!(
+    r#"
+      DELETE FROM af_published_collab
+      WHERE workspace_id = $1
+        AND publish_name = ANY($2::text[])
+      RETURNING publish_name
+    "#,
+    workspace_id,
+    &publish_names,
+  )
+  .fetch_all(txn.as_mut())
+  .await?;
+  if !delete_publish_names.is_empty() {
+    tracing::info!(
+      "Deleted existing published collab record with publish names: {:?}",
+      delete_publish_names
+    );
+  }
+  Ok(())
+}
+
 #[inline]
 pub async fn insert_or_replace_publish_collabs(
   pg_pool: &PgPool,
@@ -233,25 +259,7 @@ pub async fn insert_or_replace_publish_collabs(
   });
 
   let mut txn = pg_pool.begin().await?;
-
-  let delete_publish_names = sqlx::query_scalar!(
-    r#"
-      DELETE FROM af_published_collab
-      WHERE workspace_id = $1
-        AND publish_name = ANY($2::text[])
-      RETURNING publish_name
-    "#,
-    workspace_id,
-    &publish_names,
-  )
-  .fetch_all(txn.as_mut())
-  .await?;
-  if !delete_publish_names.is_empty() {
-    tracing::info!(
-      "Deleted existing published collab record with publish names: {:?}",
-      delete_publish_names
-    );
-  }
+  delete_published_collabs(&mut txn, workspace_id, &publish_names).await?;
 
   let res = sqlx::query!(
     r#"
@@ -354,6 +362,15 @@ pub async fn update_published_collabs(
   workspace_id: &Uuid,
   patches: &[PatchPublishedCollab],
 ) -> Result<(), AppError> {
+  {
+    // Delete existing published collab records with the same publish names
+    let publish_names: Vec<String> = patches
+      .iter()
+      .filter_map(|patch| patch.publish_name.clone())
+      .collect();
+    delete_published_collabs(txn, workspace_id, &publish_names).await?;
+  }
+
   for patch in patches {
     let new_publish_name = match &patch.publish_name {
       Some(new_publish_name) => new_publish_name,
@@ -365,7 +382,7 @@ pub async fn update_published_collabs(
         UPDATE af_published_collab
         SET publish_name = $1
         WHERE workspace_id = $2
-            AND view_id = $3
+          AND view_id = $3
       "#,
       patch.publish_name,
       workspace_id,

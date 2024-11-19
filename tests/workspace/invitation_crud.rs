@@ -15,6 +15,15 @@ async fn invite_workspace_crud() {
     .workspace_id;
 
   let (bob_client, bob) = generate_unique_registered_user_client().await;
+  let bob_workspace_id = bob_client
+    .get_workspaces()
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .workspace_id;
+
+  // alice invite bob to alice's workspace
   alice_client
     .invite_workspace_members(
       alice_workspace_id.to_string().as_str(),
@@ -94,16 +103,49 @@ async fn invite_workspace_crud() {
     .unwrap();
   assert_eq!(accepted_invs.len(), 1);
 
-  // workspace now have 2 members
-  let member_count = alice_client
-    .get_workspaces_opt(QueryWorkspaceParam {
-      include_member_count: Some(true),
-    })
-    .await
-    .unwrap()
-    .first()
-    .unwrap()
-    .member_count
-    .unwrap();
-  assert_eq!(member_count, 2);
+  {
+    // alice's view of the workspaces
+    let workspaces = alice_client
+      .get_workspaces_opt(QueryWorkspaceParam {
+        include_member_count: Some(true),
+        include_role: Some(true),
+      })
+      .await
+      .unwrap();
+
+    assert_eq!(workspaces.len(), 1);
+    assert_eq!(workspaces[0].workspace_id, alice_workspace_id);
+    assert_eq!(workspaces[0].member_count, Some(2));
+    assert_eq!(workspaces[0].role, Some(AFRole::Owner));
+  }
+
+  {
+    // bob's view of the workspaces
+    // bob should see 2 workspaces, one is his own and the other is alice's
+    let workspaces = bob_client
+      .get_workspaces_opt(QueryWorkspaceParam {
+        include_member_count: Some(true),
+        include_role: Some(true),
+      })
+      .await
+      .unwrap();
+    assert_eq!(workspaces.len(), 2);
+    {
+      let alice_workspace = workspaces
+        .iter()
+        .find(|w| w.workspace_id == alice_workspace_id)
+        .unwrap();
+      assert_eq!(alice_workspace.member_count, Some(2));
+      assert_eq!(alice_workspace.role, Some(AFRole::Member));
+    }
+    {
+      let bob_workspace = workspaces
+        .iter()
+        .find(|w| w.workspace_id == bob_workspace_id)
+        .unwrap();
+      println!("{:?}", bob_workspace);
+      assert_eq!(bob_workspace.member_count, Some(1));
+      assert_eq!(bob_workspace.role, Some(AFRole::Owner));
+    }
+  }
 }

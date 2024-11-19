@@ -13,6 +13,12 @@ pub enum WorkerError {
   #[error(transparent)]
   ImportError(#[from] ImportError),
 
+  #[error("S3 service unavailable: {0}")]
+  S3ServiceUnavailable(String),
+
+  #[error("Redis stream group not exist: {0}")]
+  StreamGroupNotExist(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }

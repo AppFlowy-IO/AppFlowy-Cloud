@@ -47,7 +47,6 @@ pub struct CollabBroadcast {
   edit_state: Arc<EditState>,
   /// The last modified time of the document.
   pub modified_at: Arc<parking_lot::Mutex<Instant>>,
-  update_streaming: Arc<dyn CollabUpdateStreaming>,
 }
 
 unsafe impl Send for CollabBroadcast {}
@@ -71,9 +70,7 @@ impl CollabBroadcast {
     buffer_capacity: usize,
     edit_state: Arc<EditState>,
     collab: &Collab,
-    update_streaming: impl CollabUpdateStreaming,
   ) -> Self {
-    let update_streaming = Arc::new(update_streaming);
     let object_id = object_id.to_owned();
     // broadcast channel
     let (sender, _) = channel(buffer_capacity);
@@ -84,7 +81,6 @@ impl CollabBroadcast {
       doc_subscription: Default::default(),
       edit_state,
       modified_at: Arc::new(parking_lot::Mutex::new(Instant::now())),
-      update_streaming,
     };
     this.observe_collab_changes(collab);
     this
@@ -97,7 +93,6 @@ impl CollabBroadcast {
       let broadcast_sink = self.broadcast_sender.clone();
       let modified_at = self.modified_at.clone();
       let edit_state = self.edit_state.clone();
-      let update_streaming = self.update_streaming.clone();
 
       // Observer the document's update and broadcast it to all subscribers. When one of the clients
       // sends an update to the document that alters its state, the document observer will trigger
@@ -115,10 +110,6 @@ impl CollabBroadcast {
             origin
           );
 
-          let stream_update = event.update.clone();
-          if let Err(err) = update_streaming.send_update(stream_update) {
-            warn!("fail to send updates to redis:{}", err)
-          }
           let payload = gen_update_message(&event.update);
           let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, seq_num);
           if let Err(err) = broadcast_sink.send(msg.into()) {
@@ -215,11 +206,12 @@ impl CollabBroadcast {
 
                   trace!("[realtime]: send {} => {}", message, cloned_user.user_device());
                   if let Err(err) = sink.send(message).await {
-                    error!("fail to broadcast message:{}", err);
+                    warn!("fail to broadcast message:{}", err);
                   }
                 }
-                Err(e) => {
-                  error!("fail to receive message:{}", e);
+                Err(_) => {
+                  // Err(RecvError::Closed) is returned when all Sender halves have dropped,
+                  // indicating that no further values can be sent on the channel.
                   break;
                 },
               }

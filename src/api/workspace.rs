@@ -49,8 +49,8 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  create_page, get_page_view_collab, move_page_to_trash, restore_all_pages_from_trash,
-  restore_page_from_trash, update_page, update_page_collab_data,
+  create_page, create_space, get_page_view_collab, move_page_to_trash,
+  restore_all_pages_from_trash, restore_page_from_trash, update_page, update_page_collab_data,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::domain::compression::{
@@ -127,6 +127,7 @@ pub fn workspace_scope() -> Scope {
       web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
         .route(web::post().to(post_web_update_handler)),
     )
+    .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
       web::resource("/{workspace_id}/page-view").route(web::post().to(post_page_view_handler)),
     )
@@ -338,10 +339,16 @@ async fn list_workspace_handler(
   state: Data<AppState>,
   query: web::Query<QueryWorkspaceParam>,
 ) -> Result<JsonAppResponse<Vec<AFWorkspace>>> {
+  let QueryWorkspaceParam {
+    include_member_count,
+    include_role,
+  } = query.into_inner();
+
   let workspaces = workspace::ops::get_all_user_workspaces(
     &state.pg_pool,
     &uuid,
-    query.into_inner().include_member_count.unwrap_or(false),
+    include_member_count.unwrap_or(false),
+    include_role.unwrap_or(false),
   )
   .await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())
@@ -895,6 +902,28 @@ async fn post_web_update_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+async fn post_space_handler(
+  user_uuid: UserUuid,
+  path: web::Path<Uuid>,
+  payload: Json<CreateSpaceParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<Space>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_uuid = path.into_inner();
+  let space = create_space(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_uuid,
+    &payload.space_permission,
+    &payload.name,
+    &payload.space_icon,
+    &payload.space_icon_color,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(space)))
+}
+
 async fn post_page_view_handler(
   user_uuid: UserUuid,
   path: web::Path<Uuid>,
@@ -910,6 +939,7 @@ async fn post_page_view_handler(
     workspace_uuid,
     &payload.parent_view_id,
     &payload.layout,
+    payload.name.as_deref(),
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))

@@ -9,7 +9,10 @@ use futures_core::{ready, Stream};
 use pin_project::pin_project;
 use reqwest::Method;
 use serde_json::Value;
-use shared_entity::dto::ai_dto::{RepeatedRelatedQuestion, STREAM_ANSWER_KEY, STREAM_METADATA_KEY};
+use shared_entity::dto::ai_dto::{
+  CalculateSimilarityParams, RepeatedRelatedQuestion, SimilarityResponse, STREAM_ANSWER_KEY,
+  STREAM_METADATA_KEY,
+};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -212,6 +215,26 @@ impl Client {
       .send()
       .await?;
     AppResponse::<RepeatedChatMessage>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn calculate_similarity(
+    &self,
+    params: CalculateSimilarityParams,
+  ) -> Result<SimilarityResponse, AppResponseError> {
+    let url = format!(
+      "{}/api/ai/{}/calculate_similarity",
+      self.base_url, &params.workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<SimilarityResponse>::from_response(resp)
       .await?
       .into_data()
   }

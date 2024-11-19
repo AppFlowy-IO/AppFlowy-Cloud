@@ -87,7 +87,11 @@ lazy_static = "1.4.0"
 itertools = "0.12.0"
 validator = "0.16.1"
 rayon.workspace = true
+tiktoken-rs = "0.6.0"
+unicode-segmentation = "1.9.0"
+
 
 [dev-dependencies]
 rand = "0.8.5"
 workspace-template.workspace = true
+unicode-normalization = "0.1.24"

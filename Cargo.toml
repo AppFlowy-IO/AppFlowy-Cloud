@@ -211,11 +211,10 @@ members = [
   "libs/client-websocket",
   "libs/client-api-test",
   "libs/wasm-test",
-  "libs/client-api-wasm",
   "libs/appflowy-ai-client",
   "libs/client-api-entity",
   # services
-  "services/appflowy-history",
+  #"services/appflowy-history",
   "services/appflowy-collaborate",
   "services/appflowy-worker",
   # xtask
@@ -302,6 +301,11 @@ codegen-units = 1
 inherits = "release"
 debug = true
 
+[profile.ci]
+inherits = "release"
+opt-level = 2
+lto = false # Disable Link-Time Optimization
+
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
@@ -315,4 +319,5 @@ collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 
 [features]
 history = []
+# Some AI test features are not available for self-hosted AppFlowy Cloud. Therefore, AI testing is disabled by default.
 ai-test-enabled = ["client-api-test/ai-test-enabled"]

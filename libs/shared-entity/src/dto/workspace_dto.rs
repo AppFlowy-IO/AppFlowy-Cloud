@@ -142,6 +142,14 @@ pub struct CreateSpaceParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSpaceParams {
+  pub space_permission: SpacePermission,
+  pub name: String,
+  pub space_icon: String,
+  pub space_icon_color: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePageParams {
   pub parent_view_id: String,
   pub layout: ViewLayout,

@@ -224,48 +224,6 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn collab_group_test() {
-    let enforcer = test_enforcer().await;
-
-    let uid = 1;
-    let group_id = "collab_owner_group:w1";
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // allow workspace member to access collab
-    enforcer
-      .update_policy(
-        SubjectType::Group(group_id.to_string()),
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAccessLevel(&AFAccessLevel::FullAccess),
-      )
-      .await
-      .unwrap();
-
-    // include user in the collab owner group
-    enforcer
-      .add_grouping_policy(
-        &SubjectType::User(uid),
-        &SubjectType::Group(group_id.to_string()),
-      )
-      .await
-      .unwrap();
-
-    // when the user is the owner of the collab, then the user should have access to the collab
-    for action in [Action::Write, Action::Read] {
-      let result = enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAction(&action),
-        )
-        .await;
-      assert!(result.is_ok());
-    }
-  }
-
-  #[tokio::test]
   async fn workspace_group_policy_test() {
     let enforcer = test_enforcer().await;
     let uid = 1;

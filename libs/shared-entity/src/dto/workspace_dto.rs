@@ -132,6 +132,7 @@ pub struct Page {
 pub struct CreatePageParams {
   pub parent_view_id: String,
   pub layout: ViewLayout,
+  pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

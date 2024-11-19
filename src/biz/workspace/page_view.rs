@@ -49,13 +49,22 @@ pub async fn create_page(
   workspace_id: Uuid,
   parent_view_id: &str,
   view_layout: &ViewLayout,
+  name: Option<&str>,
 ) -> Result<Page, AppError> {
   if *view_layout != ViewLayout::Document {
     return Err(AppError::InvalidRequest(
       "Only document layout is supported for page creation".to_string(),
     ));
   }
-  create_document_page(pg_pool, collab_storage, uid, workspace_id, parent_view_id).await
+  create_document_page(
+    pg_pool,
+    collab_storage,
+    uid,
+    workspace_id,
+    parent_view_id,
+    name,
+  )
+  .await
 }
 
 fn prepare_default_document_collab_param() -> Result<CollabParams, AppError> {
@@ -80,10 +89,12 @@ async fn add_new_view_to_folder(
   parent_view_id: &str,
   view_id: &str,
   folder: &mut Folder,
+  name: Option<&str>,
 ) -> Result<FolderUpdate, AppError> {
   let encoded_update = {
     let view = NestedChildViewBuilder::new(uid, parent_view_id.to_string())
       .with_view_id(view_id)
+      .with_name(name.unwrap_or_default())
       .build()
       .view;
     let mut txn = folder.collab.transact_mut();
@@ -234,13 +245,15 @@ async fn create_document_page(
   uid: i64,
   workspace_id: Uuid,
   parent_view_id: &str,
+  name: Option<&str>,
 ) -> Result<Page, AppError> {
   let default_document_collab_params = prepare_default_document_collab_param()?;
   let view_id = default_document_collab_params.object_id.clone();
   let collab_origin = GetCollabOrigin::User { uid };
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
-  let folder_update = add_new_view_to_folder(uid, parent_view_id, &view_id, &mut folder).await?;
+  let folder_update =
+    add_new_view_to_folder(uid, parent_view_id, &view_id, &mut folder, name).await?;
   let mut transaction = pg_pool.begin().await?;
   let action = format!("Create new collab: {}", view_id);
   collab_storage

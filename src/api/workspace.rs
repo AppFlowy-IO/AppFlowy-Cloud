@@ -916,6 +916,7 @@ async fn post_page_view_handler(
     workspace_uuid,
     &payload.parent_view_id,
     &payload.layout,
+    payload.name.as_deref(),
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))

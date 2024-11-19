@@ -100,6 +100,7 @@ async fn create_new_document_page() {
       &CreatePageParams {
         parent_view_id: general_space.view_id.clone(),
         layout: ViewLayout::Document,
+        name: Some("New document".to_string()),
       },
     )
     .await
@@ -114,11 +115,12 @@ async fn create_new_document_page() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  general_space
+  let view = general_space
     .children
     .iter()
     .find(|v| v.view_id == page.view_id)
     .unwrap();
+  assert_eq!(view.name, "New document");
   c.get_collab(QueryCollabParams {
     workspace_id: workspace_id.to_string(),
     inner: QueryCollab {

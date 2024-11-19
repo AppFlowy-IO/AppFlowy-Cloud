@@ -13,11 +13,9 @@ use tokio::sync::{broadcast, watch};
 use tokio::time::{interval, sleep};
 use tracing::{error, trace, warn};
 
-use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
-
-use crate::af_spawn;
 use crate::collab_sync::collab_stream::SeqNumCounter;
 use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
+use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
 
 pub(crate) const SEND_INTERVAL: Duration = Duration::from_secs(8);
 pub const COLLAB_SINK_DELAY_MILLIS: u64 = 500;
@@ -81,7 +79,7 @@ where
 
     let cloned_state = state.clone();
     let weak_notifier = Arc::downgrade(&notifier);
-    af_spawn(async move {
+    tokio::spawn(async move {
       // Initial delay to make sure the first tick waits for SEND_INTERVAL
       sleep(SEND_INTERVAL).await;
       loop {

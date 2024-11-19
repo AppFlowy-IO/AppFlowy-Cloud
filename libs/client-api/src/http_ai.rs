@@ -1,5 +1,7 @@
 use crate::http::log_request_id;
 use crate::Client;
+use bytes::Bytes;
+use futures_core::Stream;
 use reqwest::Method;
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, CompleteTextResponse, LocalAIConfig, SummarizeRowParams,
@@ -10,6 +12,22 @@ use std::time::Duration;
 use tracing::instrument;
 
 impl Client {
+  pub async fn stream_completion_text(
+    &self,
+    workspace_id: &str,
+    params: CompleteTextParams,
+  ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
+    let url = format!("{}/api/ai/{}/complete/stream", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::answer_response_stream(resp).await
+  }
+
   #[instrument(level = "info", skip_all)]
   pub async fn summarize_row(
     &self,

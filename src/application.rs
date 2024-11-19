@@ -132,7 +132,6 @@ pub async fn run_actix_server(
     state.realtime_access_control.clone(),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
-    state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     config.collab.edit_state_max_count,
     config.collab.edit_state_max_secs,
@@ -300,7 +299,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_storage_access_control,
     snapshot_control,
     rt_cmd_tx,
-    redis_conn_manager.clone(),
     metrics.collab_metrics.clone(),
   ));
 
@@ -512,7 +510,8 @@ async fn create_bucket_if_not_exists(
 async fn get_mailer(config: &Config) -> Result<AFCloudMailer, Error> {
   let mailer = Mailer::new(
     config.mailer.smtp_username.clone(),
-    config.mailer.smtp_password.expose_secret().clone(),
+    config.mailer.smtp_email.clone(),
+    config.mailer.smtp_password.clone(),
     &config.mailer.smtp_host,
     config.mailer.smtp_port,
   )

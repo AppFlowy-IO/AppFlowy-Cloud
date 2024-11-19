@@ -16,8 +16,9 @@ use database::user::select_web_user_from_uid;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use serde_json::json;
 use shared_entity::dto::workspace_dto::{
-  FolderView, Page, PageCollab, PageCollabData, ViewIcon, ViewLayout,
+  FolderView, Page, PageCollab, PageCollabData, Space, SpacePermission, ViewIcon, ViewLayout,
 };
 use sqlx::{PgPool, Transaction};
 use std::collections::{HashMap, HashSet};
@@ -29,6 +30,7 @@ use yrs::Update;
 use crate::api::metrics::AppFlowyWebMetrics;
 use crate::biz::collab::folder_view::{
   parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
+  to_space_permission,
 };
 use crate::biz::collab::{
   folder_view::view_is_space,
@@ -42,6 +44,56 @@ struct FolderUpdate {
   pub encoded_updates: Vec<u8>,
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn create_space(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+  space_permission: &SpacePermission,
+  name: &str,
+  space_icon: &str,
+  space_color: &str,
+) -> Result<Space, AppError> {
+  let default_document_collab_params = prepare_default_document_collab_param()?;
+  let view_id = default_document_collab_params.object_id.clone();
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = add_new_space_to_folder(
+    uid,
+    &workspace_id.to_string(),
+    &view_id,
+    &mut folder,
+    space_permission,
+    name,
+    space_icon,
+    space_color,
+  )
+  .await?;
+  let mut transaction = pg_pool.begin().await?;
+  let action = format!("Create new space: {}", view_id);
+  collab_storage
+    .insert_new_collab_with_transaction(
+      &workspace_id.to_string(),
+      &uid,
+      default_document_collab_params,
+      &mut transaction,
+      &action,
+    )
+    .await?;
+  insert_and_broadcast_workspace_folder_update(
+    uid,
+    workspace_id,
+    folder_update,
+    collab_storage,
+    &mut transaction,
+  )
+  .await?;
+  transaction.commit().await?;
+  Ok(Space { view_id })
+}
+
 pub async fn create_page(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
@@ -49,13 +101,22 @@ pub async fn create_page(
   workspace_id: Uuid,
   parent_view_id: &str,
   view_layout: &ViewLayout,
+  name: Option<&str>,
 ) -> Result<Page, AppError> {
   if *view_layout != ViewLayout::Document {
     return Err(AppError::InvalidRequest(
       "Only document layout is supported for page creation".to_string(),
     ));
   }
-  create_document_page(pg_pool, collab_storage, uid, workspace_id, parent_view_id).await
+  create_document_page(
+    pg_pool,
+    collab_storage,
+    uid,
+    workspace_id,
+    parent_view_id,
+    name,
+  )
+  .await
 }
 
 fn prepare_default_document_collab_param() -> Result<CollabParams, AppError> {
@@ -75,19 +136,63 @@ fn prepare_default_document_collab_param() -> Result<CollabParams, AppError> {
   })
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn add_new_space_to_folder(
+  uid: i64,
+  workspace_id: &str,
+  view_id: &str,
+  folder: &mut Folder,
+  space_permission: &SpacePermission,
+  name: &str,
+  space_icon: &str,
+  space_color: &str,
+) -> Result<FolderUpdate, AppError> {
+  let encoded_update = {
+    let view = NestedChildViewBuilder::new(uid, workspace_id.to_string())
+      .with_view_id(view_id)
+      .with_name(name)
+      .with_extra(|builder| {
+        let mut extra = builder
+          .is_space(true, to_space_permission(space_permission))
+          .build();
+        extra["space_icon_color"] = json!(space_color);
+        extra["space_icon"] = json!(space_icon);
+        extra
+      })
+      .build()
+      .view;
+    let mut txn = folder.collab.transact_mut();
+    folder.body.views.insert(&mut txn, view, None);
+    if *space_permission == SpacePermission::Private {
+      folder
+        .body
+        .views
+        .update_view(&mut txn, view_id, |update| update.set_private(true).done());
+    }
+    txn.encode_update_v1()
+  };
+  Ok(FolderUpdate {
+    updated_encoded_collab: folder_to_encoded_collab(folder)?,
+    encoded_updates: encoded_update,
+  })
+}
+
 async fn add_new_view_to_folder(
   uid: i64,
   parent_view_id: &str,
   view_id: &str,
   folder: &mut Folder,
+  name: Option<&str>,
 ) -> Result<FolderUpdate, AppError> {
   let encoded_update = {
     let view = NestedChildViewBuilder::new(uid, parent_view_id.to_string())
       .with_view_id(view_id)
+      .with_name(name.unwrap_or_default())
       .build()
       .view;
     let mut txn = folder.collab.transact_mut();
     folder.body.views.insert(&mut txn, view, None);
+
     txn.encode_update_v1()
   };
   Ok(FolderUpdate {
@@ -234,13 +339,15 @@ async fn create_document_page(
   uid: i64,
   workspace_id: Uuid,
   parent_view_id: &str,
+  name: Option<&str>,
 ) -> Result<Page, AppError> {
   let default_document_collab_params = prepare_default_document_collab_param()?;
   let view_id = default_document_collab_params.object_id.clone();
   let collab_origin = GetCollabOrigin::User { uid };
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
-  let folder_update = add_new_view_to_folder(uid, parent_view_id, &view_id, &mut folder).await?;
+  let folder_update =
+    add_new_view_to_folder(uid, parent_view_id, &view_id, &mut folder, name).await?;
   let mut transaction = pg_pool.begin().await?;
   let action = format!("Create new collab: {}", view_id);
   collab_storage

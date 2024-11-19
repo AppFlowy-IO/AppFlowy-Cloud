@@ -33,7 +33,6 @@ pub async fn insert_chat(
     )));
   }
   let rag_ids = json!(params.rag_ids);
-
   sqlx::query!(
     r#"
        INSERT INTO af_chat (chat_id, name, workspace_id, rag_ids)
@@ -143,6 +142,25 @@ pub async fn select_chat<'a, E: Executor<'a, Database = Postgres>>(
       chat_id
     ))),
   }
+}
+
+pub async fn select_chat_rag_ids<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  chat_id: &str,
+) -> Result<Vec<String>, AppError> {
+  let chat_id = Uuid::from_str(chat_id)?;
+  let row = sqlx::query!(
+    r#"
+        SELECT rag_ids
+        FROM af_chat
+        WHERE chat_id = $1 AND deleted_at IS NULL
+    "#,
+    &chat_id,
+  )
+  .fetch_one(executor)
+  .await?;
+  let rag_ids = serde_json::from_value::<Vec<String>>(row.rag_ids).unwrap_or_default();
+  Ok(rag_ids)
 }
 
 pub async fn insert_answer_message_with_transaction(

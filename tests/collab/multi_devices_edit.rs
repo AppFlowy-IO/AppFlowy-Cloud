@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use client_api::entity::AFRole;
 use collab_entity::CollabType;
 use serde_json::json;
 use sqlx::types::uuid;
@@ -7,7 +8,7 @@ use tokio::time::sleep;
 use tracing::trace;
 
 use client_api_test::*;
-use database_entity::dto::{AFAccessLevel, QueryCollabParams};
+use database_entity::dto::QueryCollabParams;
 
 #[tokio::test]
 async fn sync_collab_content_after_reconnect_test() {
@@ -200,15 +201,11 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
-  // add client 2 as a member of the collab
+  // add client 2 as a member of the workspace
   client_1
-    .add_collab_member(
-      &workspace_id,
-      &object_id,
-      &client_2,
-      AFAccessLevel::ReadAndWrite,
-    )
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &client_2, AFRole::Member)
+    .await
+    .unwrap();
   client_1.disconnect().await;
 
   client_2

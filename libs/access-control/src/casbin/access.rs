@@ -159,7 +159,7 @@ g = _, _ # grouping rule
 e = some(where (p.eft == allow))
 
 [matchers]
-m = g(r.sub, p.sub) && p.obj == r.obj && (g(p.act, r.act) || cmpRoleOrLevel(r.act, p.act))
+m = r.sub == p.sub && p.obj == r.obj && (g(p.act, r.act) || cmpRoleOrLevel(r.act, p.act))
 "###;
 
 pub async fn casbin_model() -> Result<DefaultModel, AppError> {

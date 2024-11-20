@@ -39,7 +39,7 @@ async fn test_set_publish_namespace_set() {
       .unwrap();
   }
 
-  let new_namespace = uuid::Uuid::new_v4().to_string();
+  let new_namespace = format!("namespace_{}", uuid::Uuid::new_v4());
   c.set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace.clone())
     .await
     .unwrap();
@@ -156,9 +156,9 @@ async fn test_publish_doc() {
     assert_eq!(err.code, ErrorCode::PublishNameTooLong, "{:?}", err);
   }
 
-  let publish_name_1 = "publish-name-1";
+  let publish_name_1 = "publish_name-1";
   let view_id_1 = uuid::Uuid::new_v4();
-  let publish_name_2 = "publish-name-2";
+  let publish_name_2 = "publish_name-2";
   let view_id_2 = uuid::Uuid::new_v4();
 
   // User publishes two collabs

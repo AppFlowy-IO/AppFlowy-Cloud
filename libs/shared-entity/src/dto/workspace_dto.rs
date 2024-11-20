@@ -124,14 +124,36 @@ pub struct CollabResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Space {
+  pub view_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Page {
   pub view_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSpaceParams {
+  pub space_permission: SpacePermission,
+  pub name: String,
+  pub space_icon: String,
+  pub space_icon_color: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateSpaceParams {
+  pub space_permission: SpacePermission,
+  pub name: String,
+  pub space_icon: String,
+  pub space_icon_color: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePageParams {
   pub parent_view_id: String,
   pub layout: ViewLayout,
+  pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,6 +278,13 @@ impl Default for ViewLayout {
   fn default() -> Self {
     Self::Document
   }
+}
+
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum SpacePermission {
+  PublicToAll = 0,
+  Private = 1,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]

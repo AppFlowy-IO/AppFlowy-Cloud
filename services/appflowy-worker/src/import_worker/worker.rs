@@ -78,6 +78,7 @@ pub async fn run_import_worker(
   notifier: Arc<dyn ImportNotifier>,
   stream_name: &str,
   tick_interval_secs: u64,
+  max_import_file_size: u64,
 ) -> Result<(), ImportError> {
   info!("Starting importer worker");
   if let Err(err) = ensure_consumer_group(stream_name, GROUP_NAME, &mut redis_client).await {
@@ -95,6 +96,7 @@ pub async fn run_import_worker(
     CONSUMER_NAME,
     notifier.clone(),
     &metrics,
+    max_import_file_size,
   )
   .await;
 
@@ -109,6 +111,7 @@ pub async fn run_import_worker(
     notifier.clone(),
     tick_interval_secs,
     &metrics,
+    max_import_file_size,
   )
   .await?;
 
@@ -126,6 +129,7 @@ async fn process_un_acked_tasks(
   consumer_name: &str,
   notifier: Arc<dyn ImportNotifier>,
   metrics: &Option<Arc<ImportMetrics>>,
+  maximum_import_file_size: u64,
 ) {
   // when server restarts, we need to check if there are any unacknowledged tasks
   match get_un_ack_tasks(stream_name, group_name, consumer_name, redis_client).await {
@@ -139,6 +143,7 @@ async fn process_un_acked_tasks(
           pg_pool: pg_pool.clone(),
           notifier: notifier.clone(),
           metrics: metrics.clone(),
+          maximum_import_file_size,
         };
         // Ignore the error here since the consume task will handle the error
         let _ = consume_task(
@@ -167,6 +172,7 @@ async fn process_upcoming_tasks(
   notifier: Arc<dyn ImportNotifier>,
   interval_secs: u64,
   metrics: &Option<Arc<ImportMetrics>>,
+  maximum_import_file_size: u64,
 ) -> Result<(), ImportError> {
   let options = StreamReadOptions::default()
     .group(group_name, consumer_name)
@@ -215,6 +221,7 @@ async fn process_upcoming_tasks(
               pg_pool: pg_pool.clone(),
               notifier: notifier.clone(),
               metrics: metrics.clone(),
+              maximum_import_file_size,
             };
 
             let handle = spawn_local(async move {
@@ -254,6 +261,7 @@ struct TaskContext {
   pg_pool: PgPool,
   notifier: Arc<dyn ImportNotifier>,
   metrics: Option<Arc<ImportMetrics>>,
+  maximum_import_file_size: u64,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -268,6 +276,26 @@ async fn consume_task(
     // If no created_at timestamp, proceed directly to processing
     if task.created_at.is_none() {
       return process_and_ack_task(context, import_task, stream_name, group_name, &entry_id).await;
+    }
+
+    match task.file_size {
+      None => {
+        return Err(ImportError::UpgradeToLatestVersion(format!(
+          "Missing file_size for task: {}",
+          task.task_id
+        )))
+      },
+      Some(file_size) => {
+        if file_size > context.maximum_import_file_size as i64 {
+          let file_size_in_mb = file_size as f64 / 1_048_576.0;
+          let max_size_in_mb = context.maximum_import_file_size as f64 / 1_048_576.0;
+
+          return Err(ImportError::UploadFileTooLarge {
+            file_size_in_mb,
+            max_size_in_mb,
+          });
+        }
+      },
     }
 
     // Check if the task is expired
@@ -1395,10 +1423,11 @@ pub struct NotionImportTask {
 
 impl Display for NotionImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let file_size_mb = self.file_size.map(|size| size as f64 / 1_048_576.0);
     write!(
       f,
-      "NotionImportTask {{ task_id: {}, workspace_id: {}, file_size:{:?}, workspace_name: {}, user_name: {}, user_email: {} }}",
-      self.task_id, self.workspace_id, self.file_size, self.workspace_name, self.user_name, self.user_email
+      "NotionImportTask {{ task_id: {}, workspace_id: {}, file_size:{:?}MB, workspace_name: {}, user_name: {}, user_email: {} }}",
+      self.task_id, self.workspace_id, file_size_mb, self.workspace_name, self.user_name, self.user_email
     )
   }
 }

@@ -123,8 +123,7 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) -> Result<(), RealtimeError> {
-    let mut is_new_collab = false;
-    let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
+    let mut is_new_collab = true;
     // Ensure the workspace_id matches the metadata's workspace_id when creating a collaboration object
     // of type [CollabType::Folder]. In this case, both the object id and the workspace id should be
     // identical.
@@ -145,6 +144,7 @@ where
           });
         return Err(err);
       }
+      is_new_collab = false;
     }
 
     trace!(

@@ -136,6 +136,7 @@ fn run_importer_worker(
   tick_interval_secs: u64,
 ) -> std::thread::JoinHandle<()> {
   setup_log();
+  let max_import_file_size = 1_000_000_000;
 
   std::thread::spawn(move || {
     let runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -148,6 +149,7 @@ fn run_importer_worker(
       notifier,
       &stream_name,
       tick_interval_secs,
+      max_import_file_size,
     ));
     runtime.block_on(import_worker_fut).unwrap();
   })

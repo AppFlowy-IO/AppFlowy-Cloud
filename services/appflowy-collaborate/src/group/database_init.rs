@@ -189,7 +189,7 @@ impl DatabaseCollabGroup {
         msg = stream.next() => {
           match msg {
             None => break,
-            Some(msg) => if let Err(err) =  Self::handle_messages(&user, &state, &mut sink, msg, &object_id).await {
+            Some(msg) => if let Err(err) =  Self::handle_messages(&user, &state, &mut sink, msg).await {
               tracing::warn!(
                 "collab `{}` failed to handle message from `{}`: {}",
                 object_id,
@@ -209,7 +209,6 @@ impl DatabaseCollabGroup {
     state: &Inner,
     sink: &mut Sink,
     msg: MessageByObjectId,
-    object_id: &ObjectId,
   ) -> Result<(), RealtimeError>
   where
     Sink: SubscriptionSink + 'static,
@@ -253,10 +252,6 @@ impl DatabaseCollabGroup {
     let msg_id = collab_msg.msg_id();
     let message_origin = collab_msg.origin().clone();
 
-    let subscription = subgroup
-      .subscribers
-      .get(user)
-      .ok_or_else(|| RealtimeError::UserNotFound(user.to_string()))?;
     // If the payload is empty, we don't need to apply any updates .
     // Currently, only the ping message should has an empty payload.
     if collab_msg.payload().is_empty() {
@@ -366,6 +361,11 @@ impl DatabaseCollabGroup {
     origin: &CollabOrigin,
     msg: Message,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+    tracing::trace!(
+      "handle protocol message for database(row) {}: {:?}",
+      subgroup.object_id,
+      msg
+    );
     match msg {
       Message::Sync(msg) => match msg {
         SyncMessage::SyncStep1(sv) => Self::handle_sync_step1(subgroup, state, &sv).await,

@@ -190,7 +190,14 @@ where
           .await?;
         let database_id = match database_id {
           Some(id) => id,
-          None => return Err(RealtimeError::GroupNotFound(object_id.into())),
+          None => {
+            tracing::warn!(
+              "couldn't find database_id for {} {}",
+              collab_type,
+              object_id
+            );
+            return Err(RealtimeError::GroupNotFound(object_id.into()));
+          },
         };
         let database_group = self.get_database_group(database_id).await?;
         CollabGroup::Database(database_group.scoped(object_id.into()))

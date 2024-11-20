@@ -1158,7 +1158,7 @@ impl CollabPersister {
 
   async fn embeddings(&self, collab: &Collab) -> Result<Option<AFCollabEmbeddings>, AppError> {
     if let Some(indexer) = self.indexer.clone() {
-      let params = indexer.embedding_params(collab)?;
+      let params = indexer.embedding_params(collab).await?;
       let embeddings = indexer.embeddings(params).await?;
       Ok(embeddings)
     } else {

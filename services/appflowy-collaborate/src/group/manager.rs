@@ -187,6 +187,7 @@ where
   }
 }
 
+#[allow(dead_code)]
 #[instrument(level = "trace", skip_all)]
 async fn load_collab<S>(
   uid: i64,

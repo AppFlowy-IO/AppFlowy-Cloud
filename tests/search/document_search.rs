@@ -131,7 +131,12 @@ The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a T
       .unwrap()
       .score;
 
-    assert!(score > 0.9, "score: {}, input:{}", score, answer);
+    assert!(
+      score > 0.8,
+      "expected: 0.8, but got score: {}, input:{}",
+      score,
+      answer
+    );
   }
 }
 

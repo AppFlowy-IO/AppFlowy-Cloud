@@ -7,8 +7,6 @@ use casbin::Filter;
 use casbin::Model;
 use casbin::Result;
 
-use database::collab::select_collab_member_access_level;
-use database::pg_row::AFCollabMemberAccessLevelRow;
 use database::pg_row::AFWorkspaceMemberPermRow;
 use database::workspace::select_workspace_member_perm_stream;
 
@@ -33,28 +31,6 @@ impl PgAdapter {
       access_control_metrics,
     }
   }
-}
-
-async fn load_collab_policies(
-  mut stream: BoxStream<'_, sqlx::Result<AFCollabMemberAccessLevelRow>>,
-) -> Result<Vec<Vec<String>>> {
-  let mut policies: Vec<Vec<String>> = Vec::new();
-
-  while let Some(Ok(member_access_lv)) = stream.next().await {
-    let uid = member_access_lv.uid;
-    let object_type = ObjectType::Collab(&member_access_lv.oid);
-    for act in member_access_lv.access_level.policy_acts() {
-      let policy = [
-        uid.to_string(),
-        object_type.policy_object(),
-        act.to_string(),
-      ]
-      .to_vec();
-      policies.push(policy);
-    }
-  }
-
-  Ok(policies)
 }
 
 /// Loads workspace policies from a given stream of workspace member permissions.
@@ -127,12 +103,6 @@ impl Adapter for PgAdapter {
 
     // Policy definition `p` of type `p`. See `model.conf`
     model.add_policies("p", "p", workspace_policies);
-
-    let collab_member_access_lv_stream = select_collab_member_access_level(&self.pg_pool);
-    let collab_policies = load_collab_policies(collab_member_access_lv_stream).await?;
-
-    // Policy definition `p` of type `p`. See `model.conf`
-    model.add_policies("p", "p", collab_policies);
 
     self
       .access_control_metrics

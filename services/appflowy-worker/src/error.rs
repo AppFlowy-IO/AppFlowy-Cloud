@@ -16,6 +16,9 @@ pub enum WorkerError {
   #[error("S3 service unavailable: {0}")]
   S3ServiceUnavailable(String),
 
+  #[error("Redis stream group not exist: {0}")]
+  StreamGroupNotExist(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }
@@ -36,6 +39,15 @@ pub enum ImportError {
 
   #[error("Upload file expired")]
   UploadFileExpire,
+
+  #[error("Please upgrade to the latest version of the app")]
+  UpgradeToLatestVersion(String),
+
+  #[error("Upload file too large")]
+  UploadFileTooLarge {
+    file_size_in_mb: f64,
+    max_size_in_mb: f64,
+  },
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
@@ -179,6 +191,27 @@ impl ImportError {
             task_id
           ),
           format!("Task ID: {} - Upload file expired", task_id),
+        )
+      }
+      ImportError::UpgradeToLatestVersion(s) => {
+        (
+          format!(
+            "Task ID: {} - {}, please upgrade to the latest version of the app to import this file",
+            task_id,
+            s,
+
+          ),
+          format!("Task ID: {} - Upgrade to latest version", task_id),
+        )
+      }
+      ImportError::UploadFileTooLarge{ file_size_in_mb, max_size_in_mb}=> {
+        (
+          format!(
+            "Task ID: {} - The file size is too large. The maximum file size allowed is {} MB. Please upload a smaller file.",
+            task_id,
+            max_size_in_mb,
+          ),
+          format!("Task ID: {} - Upload file too large: {} MB", task_id, file_size_in_mb),
         )
       }
     }

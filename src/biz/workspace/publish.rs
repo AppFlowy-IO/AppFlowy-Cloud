@@ -74,7 +74,7 @@ fn check_collab_publish_name(publish_name: &str) -> Result<(), AppError> {
 
   // Only contain alphanumeric characters and hyphens
   for c in publish_name.chars() {
-    if !c.is_alphanumeric() && c != '-' {
+    if !c.is_alphanumeric() && c != '-' && c != '_' {
       return Err(AppError::PublishNameInvalidCharacter { character: c });
     }
   }
@@ -246,8 +246,9 @@ pub async fn list_collab_publish_info(
 async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> {
   // Must be url safe
   // Only contain alphanumeric characters and hyphens
+  // and underscores (discouraged)
   for c in new_namespace.chars() {
-    if !c.is_alphanumeric() && c != '-' {
+    if !c.is_alphanumeric() && c != '-' && c != '_' {
       return Err(AppError::CustomNamespaceInvalidCharacter { character: c });
     }
   }

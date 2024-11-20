@@ -16,16 +16,19 @@ RUN apt update && apt install -y protobuf-compiler lld clang
 
 # Specify a default value for FEATURES; it could be an empty string if no features are enabled by default
 ARG FEATURES=""
+ARG PROFILE="release"
 
 COPY --from=planner /app/recipe.json recipe.json
 # Build our project dependencies
+ENV CARGO_BUILD_JOBS=4
 RUN cargo chef cook --release --recipe-path recipe.json
+
 COPY . .
 ENV SQLX_OFFLINE true
 
 # Build the project
-RUN echo "Building with features: ${FEATURES}"
-RUN cargo build --profile=release --features "${FEATURES}" --bin appflowy_cloud
+RUN echo "Building with profile: ${PROFILE}, features: ${FEATURES}, "
+RUN cargo build --profile=${PROFILE} --features "${FEATURES}" --bin appflowy_cloud
 
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app

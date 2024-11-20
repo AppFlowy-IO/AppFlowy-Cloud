@@ -7,9 +7,10 @@ use client_api_test::{
 use collab::{core::origin::CollabClient, preclude::Collab};
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
-use serde_json::json;
+use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  CreatePageParams, IconType, UpdatePageParams, ViewIcon, ViewLayout,
+  CreatePageParams, CreateSpaceParams, IconType, SpacePermission, UpdatePageParams,
+  UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -100,6 +101,7 @@ async fn create_new_document_page() {
       &CreatePageParams {
         parent_view_id: general_space.view_id.clone(),
         layout: ViewLayout::Document,
+        name: Some("New document".to_string()),
       },
     )
     .await
@@ -114,11 +116,12 @@ async fn create_new_document_page() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  general_space
+  let view = general_space
     .children
     .iter()
     .find(|v| v.view_id == page.view_id)
     .unwrap();
+  assert_eq!(view.name, "New document");
   c.get_collab(QueryCollabParams {
     workspace_id: workspace_id.to_string(),
     inner: QueryCollab {
@@ -280,4 +283,98 @@ async fn update_page() {
     updated_view.extra,
     Some(json!({"is_pinned": true}).to_string())
   );
+}
+
+#[tokio::test]
+async fn create_space() {
+  let registered_user = generate_unique_registered_user().await;
+  let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let workspace_id = app_client.workspace_id().await;
+  app_client.open_workspace_collab(&workspace_id).await;
+  app_client
+    .wait_object_sync_complete(&workspace_id)
+    .await
+    .unwrap();
+  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let public_space = web_client
+    .api_client
+    .create_space(
+      workspace_uuid,
+      &CreateSpaceParams {
+        space_permission: SpacePermission::PublicToAll,
+        name: "Public Space".to_string(),
+        space_icon: "space_icon_1".to_string(),
+        space_icon_color: "0xFFA34AFD".to_string(),
+      },
+    )
+    .await
+    .unwrap();
+  web_client
+    .api_client
+    .create_space(
+      workspace_uuid,
+      &CreateSpaceParams {
+        space_permission: SpacePermission::Private,
+        name: "Private Space".to_string(),
+        space_icon: "space_icon_2".to_string(),
+        space_icon_color: "0xFFA34AFD".to_string(),
+      },
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let view = folder.get_view(&public_space.view_id).unwrap();
+  let space_info: Value = serde_json::from_str(view.extra.as_ref().unwrap()).unwrap();
+  assert!(space_info["is_space"].as_bool().unwrap());
+  assert_eq!(
+    space_info["space_permission"].as_u64().unwrap() as u8,
+    SpacePermission::PublicToAll as u8
+  );
+  assert_eq!(space_info["space_icon"].as_str().unwrap(), "space_icon_1");
+  assert_eq!(
+    space_info["space_icon_color"].as_str().unwrap(),
+    "0xFFA34AFD"
+  );
+  let folder_view = web_client
+    .api_client
+    .get_workspace_folder(&workspace_id, Some(2), Some(workspace_id.to_string()))
+    .await
+    .unwrap();
+  folder_view
+    .children
+    .iter()
+    .find(|v| v.name == "Public Space")
+    .unwrap();
+  let private_space = folder_view
+    .children
+    .iter()
+    .find(|v| v.name == "Private Space")
+    .unwrap();
+  assert!(private_space.is_private);
+
+  web_client
+    .api_client
+    .update_space(
+      workspace_uuid,
+      &private_space.view_id,
+      &UpdateSpaceParams {
+        space_permission: SpacePermission::PublicToAll,
+        name: "Renamed Space".to_string(),
+        space_icon: "space_icon_3".to_string(),
+        space_icon_color: "#000000".to_string(),
+      },
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let view = folder.get_view(&private_space.view_id).unwrap();
+  let space_info: Value = serde_json::from_str(view.extra.as_ref().unwrap()).unwrap();
+  assert!(space_info["is_space"].as_bool().unwrap());
+  assert_eq!(
+    space_info["space_permission"].as_u64().unwrap() as u8,
+    SpacePermission::PublicToAll as u8
+  );
+  assert_eq!(space_info["space_icon"].as_str().unwrap(), "space_icon_3");
+  assert_eq!(space_info["space_icon_color"].as_str().unwrap(), "#000000");
 }

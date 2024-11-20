@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use assert_json_diff::assert_json_eq;
+use client_api::entity::AFRole;
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use serde_json::json;
@@ -11,7 +12,6 @@ use uuid::Uuid;
 
 use client_api_test::*;
 use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
-use database_entity::dto::AFAccessLevel;
 
 use crate::collab::util::{
   generate_random_bytes, generate_random_string, make_big_collab_doc_state,
@@ -325,13 +325,9 @@ async fn two_direction_peer_sync_test() {
   // Before the client_2 want to edit the collab object, it needs to become a member of the collab
   // Otherwise, the server will reject the edit request
   client_1
-    .add_collab_member(
-      &workspace_id,
-      &object_id,
-      &client_2,
-      AFAccessLevel::FullAccess,
-    )
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &client_2, AFRole::Member)
+    .await
+    .unwrap();
 
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())

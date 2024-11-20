@@ -607,7 +607,7 @@ async fn update_workspace_member_handler(
   Ok(AppResponse::Ok().into())
 }
 
-#[instrument(skip(state, payload), err)]
+#[instrument(skip(state, payload))]
 async fn create_collab_handler(
   user_uuid: UserUuid,
   payload: Bytes,

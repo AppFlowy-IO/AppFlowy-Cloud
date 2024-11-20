@@ -107,6 +107,12 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     .parse::<u64>()
     .unwrap_or(10);
 
+  // Maximum file size for import
+  let maximum_import_file_size =
+    get_env_var("APPFLOWY_WORKER_MAX_IMPORT_FILE_SIZE", "1_000_000_000")
+      .parse::<u64>()
+      .unwrap_or(1_000_000_000);
+
   let import_worker_fut = local_set.run_until(run_import_worker(
     state.pg_pool.clone(),
     state.redis_client.clone(),
@@ -115,6 +121,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     Arc::new(email_notifier),
     "import_task_stream",
     tick_interval,
+    maximum_import_file_size,
   ));
 
   let app = Router::new()

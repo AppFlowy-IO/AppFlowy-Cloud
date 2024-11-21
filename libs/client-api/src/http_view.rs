@@ -1,5 +1,5 @@
 use client_api_entity::workspace_dto::{
-  CreatePageParams, CreateSpaceParams, Page, PageCollab, Space, UpdatePageParams,
+  CreatePageParams, CreateSpaceParams, Page, PageCollab, Space, UpdatePageParams, UpdateSpaceParams,
 };
 use reqwest::Method;
 use serde_json::json;
@@ -128,5 +128,24 @@ impl Client {
       .send()
       .await?;
     AppResponse::<Space>::from_response(resp).await?.into_data()
+  }
+
+  pub async fn update_space(
+    &self,
+    workspace_id: Uuid,
+    view_id: &str,
+    params: &UpdateSpaceParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/space/{}",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }

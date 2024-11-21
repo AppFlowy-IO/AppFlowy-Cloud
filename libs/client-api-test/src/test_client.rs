@@ -37,10 +37,9 @@ use client_api::entity::{
 };
 use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
-  AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
-  CollabParams, CreateCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabParams,
-  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
+  AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
+  AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult, CollabParams,
+  CreateCollabParams, QueryCollab, QueryCollabParams, QuerySnapshotParams, SnapshotData,
 };
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CollabResponse, PublishedDuplicate, WorkspaceMemberChangeset,
@@ -439,46 +438,6 @@ impl TestClient {
     };
 
     self.api_client.get_workspace_member(params).await
-  }
-
-  pub async fn add_collab_member(
-    &self,
-    workspace_id: &str,
-    object_id: &str,
-    other_client: &TestClient,
-    access_level: AFAccessLevel,
-  ) {
-    let uid = other_client.uid().await;
-    self
-      .api_client
-      .add_collab_member(InsertCollabMemberParams {
-        uid,
-        workspace_id: workspace_id.to_string(),
-        object_id: object_id.to_string(),
-        access_level,
-      })
-      .await
-      .unwrap();
-  }
-
-  pub async fn update_collab_member_access_level(
-    &self,
-    workspace_id: &str,
-    object_id: &str,
-    other_client: &TestClient,
-    access_level: AFAccessLevel,
-  ) {
-    let uid = other_client.uid().await;
-    self
-      .api_client
-      .update_collab_member(UpdateCollabMemberParams {
-        uid,
-        workspace_id: workspace_id.to_string(),
-        object_id: object_id.to_string(),
-        access_level,
-      })
-      .await
-      .unwrap();
   }
 
   pub async fn wait_object_sync_complete(&self, object_id: &str) -> Result<(), Error> {

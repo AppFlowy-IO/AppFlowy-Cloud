@@ -1,11 +1,11 @@
 use std::time::Duration;
 
+use client_api::entity::AFRole;
 use collab_entity::CollabType;
 use serde_json::{json, Value};
 use tokio::time::sleep;
 
 use client_api_test::{assert_client_collab_include_value, TestClient};
-use database_entity::dto::AFAccessLevel;
 
 #[tokio::test]
 async fn client_apply_update_find_missing_update_test() {
@@ -56,13 +56,9 @@ async fn make_clients() -> (TestClient, TestClient, String, Value) {
     .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
   client_1
-    .add_collab_member(
-      &workspace_id,
-      &object_id,
-      &client_2,
-      AFAccessLevel::ReadAndWrite,
-    )
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &client_2, AFRole::Member)
+    .await
+    .unwrap();
 
   // after client 2 finish init sync and then disable receive message
   client_2

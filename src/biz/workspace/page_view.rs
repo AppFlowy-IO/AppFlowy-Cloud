@@ -9,7 +9,7 @@ use collab_document::document::Document;
 use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
-use collab_folder::{CollabOrigin, Folder};
+use collab_folder::{timestamp, CollabOrigin, Folder};
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
@@ -42,6 +42,43 @@ use super::ops::{broadcast_update, collab_from_doc_state};
 struct FolderUpdate {
   pub updated_encoded_collab: Vec<u8>,
   pub encoded_updates: Vec<u8>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn update_space(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+  view_id: &str,
+  space_permission: &SpacePermission,
+  name: &str,
+  space_icon: &str,
+  space_icon_color: &str,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = update_space_properties(
+    view_id,
+    &mut folder,
+    space_permission,
+    name,
+    space_icon,
+    space_icon_color,
+  )
+  .await?;
+  let mut transaction = pg_pool.begin().await?;
+  insert_and_broadcast_workspace_folder_update(
+    uid,
+    workspace_id,
+    folder_update,
+    collab_storage,
+    &mut transaction,
+  )
+  .await?;
+  transaction.commit().await?;
+  Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -145,7 +182,7 @@ async fn add_new_space_to_folder(
   space_permission: &SpacePermission,
   name: &str,
   space_icon: &str,
-  space_color: &str,
+  space_icon_color: &str,
 ) -> Result<FolderUpdate, AppError> {
   let encoded_update = {
     let view = NestedChildViewBuilder::new(uid, workspace_id.to_string())
@@ -155,7 +192,7 @@ async fn add_new_space_to_folder(
         let mut extra = builder
           .is_space(true, to_space_permission(space_permission))
           .build();
-        extra["space_icon_color"] = json!(space_color);
+        extra["space_icon_color"] = json!(space_icon_color);
         extra["space_icon"] = json!(space_icon);
         extra
       })
@@ -169,6 +206,40 @@ async fn add_new_space_to_folder(
         .views
         .update_view(&mut txn, view_id, |update| update.set_private(true).done());
     }
+    txn.encode_update_v1()
+  };
+  Ok(FolderUpdate {
+    updated_encoded_collab: folder_to_encoded_collab(folder)?,
+    encoded_updates: encoded_update,
+  })
+}
+
+async fn update_space_properties(
+  view_id: &str,
+  folder: &mut Folder,
+  space_permission: &SpacePermission,
+  name: &str,
+  space_icon: &str,
+  space_icon_color: &str,
+) -> Result<FolderUpdate, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    folder.body.views.update_view(&mut txn, view_id, |update| {
+      let extra = json!({
+        "is_space": true,
+        "space_permission": to_space_permission(space_permission) as u8,
+        "space_created_at": timestamp(),
+        "space_icon": space_icon,
+        "space_icon_color": space_icon_color,
+      })
+      .to_string();
+      let is_private = *space_permission == SpacePermission::Private;
+      update
+        .set_name(name)
+        .set_extra(&extra)
+        .set_private(is_private)
+        .done()
+    });
     txn.encode_update_v1()
   };
   Ok(FolderUpdate {

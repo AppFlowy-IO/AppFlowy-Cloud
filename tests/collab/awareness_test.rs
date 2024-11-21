@@ -4,7 +4,7 @@ use collab_entity::CollabType;
 use tokio::time::sleep;
 
 use client_api_test::TestClient;
-use database_entity::dto::{AFAccessLevel, AFRole};
+use database_entity::dto::AFRole;
 
 #[tokio::test]
 async fn viewing_document_editing_users_test() {
@@ -27,14 +27,6 @@ async fn viewing_document_editing_users_test() {
   assert_eq!(clients.len(), 1);
   assert_eq!(clients[0], owner_uid);
 
-  owner
-    .add_collab_member(
-      &workspace_id,
-      &object_id,
-      &guest,
-      AFAccessLevel::ReadAndWrite,
-    )
-    .await;
   guest
     .open_collab(&workspace_id, &object_id, collab_type)
     .await;

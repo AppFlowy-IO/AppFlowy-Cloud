@@ -9,8 +9,8 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  CreatePageParams, CreateSpaceParams, IconType, SpacePermission, UpdatePageParams, ViewIcon,
-  ViewLayout,
+  CreatePageParams, CreateSpaceParams, IconType, SpacePermission, UpdatePageParams,
+  UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -352,4 +352,29 @@ async fn create_space() {
     .find(|v| v.name == "Private Space")
     .unwrap();
   assert!(private_space.is_private);
+
+  web_client
+    .api_client
+    .update_space(
+      workspace_uuid,
+      &private_space.view_id,
+      &UpdateSpaceParams {
+        space_permission: SpacePermission::PublicToAll,
+        name: "Renamed Space".to_string(),
+        space_icon: "space_icon_3".to_string(),
+        space_icon_color: "#000000".to_string(),
+      },
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let view = folder.get_view(&private_space.view_id).unwrap();
+  let space_info: Value = serde_json::from_str(view.extra.as_ref().unwrap()).unwrap();
+  assert!(space_info["is_space"].as_bool().unwrap());
+  assert_eq!(
+    space_info["space_permission"].as_u64().unwrap() as u8,
+    SpacePermission::PublicToAll as u8
+  );
+  assert_eq!(space_info["space_icon"].as_str().unwrap(), "space_icon_3");
+  assert_eq!(space_info["space_icon_color"].as_str().unwrap(), "#000000");
 }

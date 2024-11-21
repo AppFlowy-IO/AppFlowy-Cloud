@@ -29,3 +29,4 @@ ENV PORT=${ADMIN_FRONTEND_PORT:-${PORT:-3000}}
 EXPOSE $PORT
 
 CMD ["admin_frontend"]
+

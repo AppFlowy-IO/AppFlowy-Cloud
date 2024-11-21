@@ -15,7 +15,7 @@ use axum::extract::{Path, Query};
 use axum::http::{status, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Result};
 use axum::routing::{delete, get};
-use axum::Form;
+use axum::{Form, Json};
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
@@ -438,7 +438,7 @@ async fn oauth_redirect_handler(
 async fn oauth_redirect_token_handler(
   State(state): State<AppState>,
   Query(token_req): Query<OAuthRedirectToken>,
-) -> Result<axum::response::Response, WebApiError<'static>> {
+) -> Result<Json<GotrueTokenResponse>, WebApiError<'static>> {
   // Check client secret (if exists)
   if let Some(server_client_secret) = state.config.oauth.client_secret {
     match token_req.client_secret {
@@ -508,8 +508,7 @@ async fn oauth_redirect_token_handler(
     .await?
     .ok_or_else(|| WebApiError::new(StatusCode::BAD_REQUEST, "invalid session"))?;
 
-  let resp = axum::Json::from(user_session.token);
-  Ok(resp.into_response())
+  Ok(user_session.token.into())
 }
 
 async fn sign_up_handler(

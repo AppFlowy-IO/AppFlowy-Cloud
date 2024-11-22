@@ -8,33 +8,63 @@ use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 #[tokio::test]
 async fn workspace_list_database() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = c.get_workspaces().await.unwrap()[0].workspace_id;
-  let dbs = c.list_databases(&workspace_id.to_string()).await.unwrap();
-  assert_eq!(dbs.len(), 1);
+  let workspace_id = c.get_workspaces().await.unwrap()[0]
+    .workspace_id
+    .to_string();
 
-  let db = &dbs[0];
+  {
+    let dbs = c.list_databases(&workspace_id, None).await.unwrap();
+    assert_eq!(dbs.len(), 1);
 
-  assert_eq!(db.name, "");
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Last modified".to_string(),
-    field_type: "LastEditedTime".to_string(),
-  }));
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Multiselect".to_string(),
-    field_type: "MultiSelect".to_string(),
-  }));
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Tasks".to_string(),
-    field_type: "Checklist".to_string(),
-  }));
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Status".to_string(),
-    field_type: "SingleSelect".to_string(),
-  }));
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Description".to_string(),
-    field_type: "RichText".to_string(),
-  }));
+    let db = &dbs[0];
+
+    assert_eq!(db.names.len(), 2);
+    assert!(db.names.contains(&String::from("Untitled")));
+    assert!(db.names.contains(&String::from("Grid")));
+
+    assert!(db.fields.contains(&AFDatabaseField {
+      name: "Last modified".to_string(),
+      field_type: "LastEditedTime".to_string(),
+    }));
+    assert!(db.fields.contains(&AFDatabaseField {
+      name: "Multiselect".to_string(),
+      field_type: "MultiSelect".to_string(),
+    }));
+    assert!(db.fields.contains(&AFDatabaseField {
+      name: "Tasks".to_string(),
+      field_type: "Checklist".to_string(),
+    }));
+    assert!(db.fields.contains(&AFDatabaseField {
+      name: "Status".to_string(),
+      field_type: "SingleSelect".to_string(),
+    }));
+    assert!(db.fields.contains(&AFDatabaseField {
+      name: "Description".to_string(),
+      field_type: "RichText".to_string(),
+    }));
+  }
+
+  {
+    let dbs = c
+      .list_databases(&workspace_id, Some(String::from("nomatch")))
+      .await
+      .unwrap();
+    assert_eq!(dbs.len(), 0);
+  }
+  {
+    let dbs = c
+      .list_databases(&workspace_id, Some(String::from("ntitle")))
+      .await
+      .unwrap();
+    assert_eq!(dbs.len(), 1);
+  }
+  {
+    let dbs = c
+      .list_databases(&workspace_id, Some(String::from("rid")))
+      .await
+      .unwrap();
+    assert_eq!(dbs.len(), 1);
+  }
 }
 
 #[tokio::test]

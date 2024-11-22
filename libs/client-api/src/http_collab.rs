@@ -2,7 +2,7 @@ use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, brotli_compress, Client};
 use app_error::AppError;
 use bytes::Bytes;
-use client_api_entity::workspace_dto::AFDatabase;
+use client_api_entity::workspace_dto::{AFDatabase, ListDatabaseParam};
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
   DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
@@ -159,11 +159,13 @@ impl Client {
   pub async fn list_databases(
     &self,
     workspace_id: &str,
+    name_filter: Option<String>,
   ) -> Result<Vec<AFDatabase>, AppResponseError> {
     let url = format!("{}/api/workspace/{}/database", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
+      .query(&ListDatabaseParam { name_filter })
       .send()
       .await?;
     log_request_id(&resp);

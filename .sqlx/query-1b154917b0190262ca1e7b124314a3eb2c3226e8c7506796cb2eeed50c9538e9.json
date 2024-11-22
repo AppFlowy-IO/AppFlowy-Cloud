@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n        w.workspace_id,\n        w.database_storage_id,\n        w.owner_uid,\n        u.name AS owner_name,\n        u.email AS owner_email,\n        w.created_at,\n        w.workspace_type,\n        w.deleted_at,\n        w.workspace_name,\n        w.icon\n      FROM af_workspace w\n      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id\n      JOIN public.af_user u ON w.owner_uid = u.uid\n      WHERE wm.uid = (\n         SELECT uid FROM public.af_user WHERE uuid = $1\n      )\n      AND COALESCE(w.is_initialized, true) = true;\n    ",
+  "query": "\n      SELECT\n        w.workspace_id,\n        w.database_storage_id,\n        w.owner_uid,\n        u.name AS owner_name,\n        u.email AS owner_email,\n        w.created_at,\n        w.workspace_type,\n        w.deleted_at,\n        w.workspace_name,\n        w.icon\n      FROM af_workspace w\n      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id\n      JOIN public.af_user u ON w.owner_uid = u.uid\n      WHERE wm.uid = (\n         SELECT uid FROM public.af_user WHERE uuid = $1\n      )\n      AND COALESCE(w.is_initialized, true) = true\n      AND ($2::TEXT IS NULL OR w.workspace_name ILIKE $2::TEXT);\n    ",
   "describe": {
     "columns": [
       {
@@ -56,7 +56,8 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
@@ -72,5 +73,5 @@
       false
     ]
   },
-  "hash": "a603b05473649d17748978ca6e10ce79c7b63ba219b18f7b49f5dd919689bb9b"
+  "hash": "1b154917b0190262ca1e7b124314a3eb2c3226e8c7506796cb2eeed50c9538e9"
 }

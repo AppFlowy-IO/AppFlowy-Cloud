@@ -28,6 +28,7 @@ async fn multiple_part_put_and_get_test() {
         file_id: file_id.clone(),
         parent_dir: parent_dir.clone(),
         content_type: mime.to_string(),
+        file_size: Some(text.len() as u64),
       },
     )
     .await
@@ -95,6 +96,7 @@ async fn single_part_put_and_get_test() {
         file_id: file_id.clone(),
         parent_dir: workspace_id.clone(),
         content_type: mime.to_string(),
+        file_size: Some(text.len() as u64),
       },
     )
     .await
@@ -158,6 +160,7 @@ async fn empty_part_upload_test() {
         file_id: file_id.clone(),
         parent_dir: workspace_id.clone(),
         content_type: mime.to_string(),
+        file_size: Some(0),
       },
     )
     .await
@@ -213,6 +216,7 @@ async fn perform_upload_test(
     file_id: file_id.clone(),
     parent_dir: parent_dir.clone(),
     content_type: "text".to_string(),
+    file_size: Some(file_size as u64),
   };
 
   let key = BlobPathV1 {
@@ -312,11 +316,13 @@ async fn invalid_test() {
       file_id: "".to_string(),
       parent_dir: parent_dir.clone(),
       content_type: mime.to_string(),
+      file_size: Some(0),
     },
     CreateUploadRequest {
       file_id: file_id.clone(),
       parent_dir: "".to_string(),
       content_type: mime.to_string(),
+      file_size: Some(0),
     },
   ] {
     let err = c1.create_upload(&workspace_id, request).await.unwrap_err();
@@ -378,6 +384,7 @@ async fn multiple_level_dir_upload_file_test() {
         file_id: file_id.clone(),
         parent_dir: parent_dir.clone(),
         content_type: mime.to_string(),
+        file_size: Some(text.len() as u64),
       },
     )
     .await

@@ -19,6 +19,7 @@ use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
+use shared_entity::dto::workspace_dto::AFDatabaseRow;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
 use shared_entity::dto::workspace_dto::RecentFolderView;
 use shared_entity::dto::workspace_dto::TrashFolderView;
@@ -336,6 +337,24 @@ pub async fn get_latest_collab_encoded(
     .await
 }
 
+pub async fn get_latest_collab(
+  storage: &CollabAccessControlStorage,
+  origin: GetCollabOrigin,
+  workspace_id: &str,
+  oid: &str,
+  collab_type: CollabType,
+) -> Result<Collab, AppError> {
+  let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
+  let collab: Collab = Collab::new_with_source(CollabOrigin::Server, oid, ec.into(), vec![], false)
+    .map_err(|e| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to create collab from encoded collab: {:?}",
+        e
+      ))
+    })?;
+  Ok(collab)
+}
+
 pub async fn get_published_view(
   collab_storage: &CollabAccessControlStorage,
   publish_namespace: String,
@@ -368,7 +387,7 @@ pub async fn list_database(
   let workspace_uuid: Uuid = workspace_uuid_str.as_str().parse()?;
   let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_uuid).await?;
 
-  let ec = get_latest_collab_encoded(
+  let mut ws_body_collab = get_latest_collab(
     collab_storage,
     GetCollabOrigin::Server,
     &workspace_uuid_str,
@@ -376,23 +395,14 @@ pub async fn list_database(
     CollabType::WorkspaceDatabase,
   )
   .await?;
-  let mut collab: Collab =
-    Collab::new_with_source(CollabOrigin::Server, &ws_db_oid, ec.into(), vec![], false).map_err(
-      |e| {
-        AppError::Internal(anyhow::anyhow!(
-          "Failed to create collab from encoded collab: {:?}",
-          e
-        ))
-      },
-    )?;
 
-  let ws_body = WorkspaceDatabaseBody::open(&mut collab).map_err(|e| {
+  let ws_body = WorkspaceDatabaseBody::open(&mut ws_body_collab).map_err(|e| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to open workspace database body: {:?}",
       e
     ))
   })?;
-  let db_metas = ws_body.get_all_meta(&collab.transact());
+  let db_metas = ws_body.get_all_meta(&ws_body_collab.transact());
   let query_collabs: Vec<QueryCollab> = db_metas
     .into_iter()
     .map(|meta| QueryCollab {
@@ -404,7 +414,7 @@ pub async fn list_database(
     .batch_get_collab(&uid, query_collabs, true)
     .await;
 
-  let txn = collab.transact();
+  let txn = ws_body_collab.transact();
   let mut af_databases: Vec<AFDatabase> = Vec::with_capacity(results.len());
   for (oid, result) in results {
     match result {
@@ -462,4 +472,48 @@ pub async fn list_database(
   }
 
   Ok(af_databases)
+}
+
+pub async fn list_database_row(
+  collab_storage: &CollabAccessControlStorage,
+  workspace_uuid_str: String,
+  database_uuid_str: String,
+) -> Result<Vec<AFDatabaseRow>, AppError> {
+  let db_collab = get_latest_collab(
+    collab_storage,
+    GetCollabOrigin::Server,
+    &workspace_uuid_str,
+    &database_uuid_str,
+    CollabType::Database,
+  )
+  .await?;
+  let db_body = DatabaseBody::from_collab(
+    &db_collab,
+    Arc::new(NoPersistenceDatabaseCollabService),
+    None,
+  )
+  .ok_or_else(|| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create database body from collab, db_collab_id: {}",
+      database_uuid_str,
+    ))
+  })?;
+
+  // get any view_id
+  let txn = db_collab.transact();
+  let iid = db_body.get_inline_view_id(&txn);
+
+  let iview = db_body.views.get_view(&txn, &iid).ok_or_else(|| {
+    AppError::Internal(anyhow::anyhow!("Failed to get inline view, iid: {}", iid))
+  })?;
+
+  let db_rows = iview
+    .row_orders
+    .into_iter()
+    .map(|row_order| AFDatabaseRow {
+      id: row_order.id.to_string(),
+    })
+    .collect();
+
+  Ok(db_rows)
 }

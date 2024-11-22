@@ -299,6 +299,22 @@ pub struct ListDatabaseParam {
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
+pub struct ListDatabaseRowDetailParam {
+  // Comma separated database row ids
+  // e.g. "<uuid_1>,<uuid_2>,<uuid_3>"
+  pub ids: String,
+}
+
+impl ListDatabaseRowDetailParam {
+  pub fn from(ids: &[&str]) -> Self {
+    Self { ids: ids.join(",") }
+  }
+  pub fn into_ids(&self) -> Vec<&str> {
+    self.ids.split(',').collect()
+  }
+}
+
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceFolder {
   pub depth: Option<u32>,
   pub root_view_id: Option<String>,
@@ -338,4 +354,10 @@ pub struct AFDatabaseMeta {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct AFDatabaseRow {
   pub id: String,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AFDatabaseRowDetail {
+  pub id: String,
+  pub cells: HashMap<String, HashMap<String, String>>,
 }

@@ -294,6 +294,11 @@ pub struct QueryWorkspaceParam {
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
+pub struct ListDatabaseParam {
+  pub name_filter: Option<String>, // logic: if database name contains
+}
+
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceFolder {
   pub depth: Option<u32>,
   pub root_view_id: Option<String>,
@@ -314,7 +319,7 @@ pub struct PublishedView {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct AFDatabase {
   pub id: String,
-  pub name: String,
+  pub names: Vec<String>,
   pub fields: Vec<AFDatabaseField>,
 }
 
@@ -322,4 +327,10 @@ pub struct AFDatabase {
 pub struct AFDatabaseField {
   pub name: String,
   pub field_type: String,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AFDatabaseMeta {
+  pub name: String,
+  pub icon: String,
 }

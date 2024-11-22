@@ -6,6 +6,8 @@ pub struct CreateUploadRequest {
   pub file_id: String,
   pub parent_dir: String,
   pub content_type: String,
+  #[serde(default)]
+  pub file_size: Option<u64>,
 }
 
 impl Display for CreateUploadRequest {

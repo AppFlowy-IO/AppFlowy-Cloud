@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use app_error::AppError;
@@ -5,6 +6,8 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
+use collab_database::fields::Field;
+use collab_database::rows::RowDetail;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::CollabType;
@@ -20,6 +23,7 @@ use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
+use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
 use shared_entity::dto::workspace_dto::RecentFolderView;
 use shared_entity::dto::workspace_dto::TrashFolderView;
@@ -516,4 +520,131 @@ pub async fn list_database_row(
     .collect();
 
   Ok(db_rows)
+}
+
+pub async fn list_database_row_details(
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_uuid_str: String,
+  database_uuid_str: String,
+  row_ids: &[&str],
+) -> Result<Vec<AFDatabaseRowDetail>, AppError> {
+  let query_collabs: Vec<QueryCollab> = row_ids
+    .iter()
+    .map(|id| QueryCollab {
+      object_id: id.to_string(),
+      collab_type: CollabType::DatabaseRow,
+    })
+    .collect();
+
+  let database_collab = get_latest_collab(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_uuid_str,
+    &database_uuid_str,
+    CollabType::Database,
+  )
+  .await?;
+  let db_body = DatabaseBody::from_collab(
+    &database_collab,
+    Arc::new(NoPersistenceDatabaseCollabService),
+    None,
+  )
+  .ok_or_else(|| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create database body from collab, db_collab_id: {}",
+      database_uuid_str,
+    ))
+  })?;
+
+  // create a map of field id to field.
+  // ensure that the field name is unique.
+  // if the field name is repeated, it will be appended with the field id,
+  // under practical usage circumstances, no other collision should occur
+  let field_by_id: HashMap<String, Field> = {
+    let all_fields = db_body.fields.get_all_fields(&database_collab.transact());
+
+    let mut uniq_name_set: HashSet<String> = HashSet::with_capacity(all_fields.len());
+    let mut field_by_id: HashMap<String, Field> = HashMap::with_capacity(all_fields.len());
+
+    for mut field in all_fields {
+      // if the name already exists, append the field id to the name
+      if uniq_name_set.contains(&field.name) {
+        let new_name = format!("{}-{}", field.name, field.id);
+        field.name = new_name.clone();
+      }
+      uniq_name_set.insert(field.name.clone());
+      field_by_id.insert(field.id.clone(), field);
+    }
+    field_by_id
+  };
+
+  let database_row_details = collab_storage
+    .batch_get_collab(&uid, query_collabs, true)
+    .await
+    .into_iter()
+    .flat_map(|(id, result)| match result {
+      QueryCollabResult::Success { encode_collab_v1 } => {
+        let ec = EncodedCollab::decode_from_bytes(&encode_collab_v1).unwrap();
+        let collab =
+          Collab::new_with_source(CollabOrigin::Server, &id, ec.into(), vec![], false).unwrap();
+        let row_detail = RowDetail::from_collab(&collab).unwrap();
+        let cells = convert_database_cells_human_readable(row_detail.row.cells, &field_by_id);
+        Some(AFDatabaseRowDetail { id, cells })
+      },
+      QueryCollabResult::Failed { error } => {
+        tracing::warn!("Failed to get collab: {:?}", error);
+        None
+      },
+    })
+    .collect::<Vec<AFDatabaseRowDetail>>();
+
+  Ok(database_row_details)
+}
+
+fn convert_database_cells_human_readable(
+  db_cells: HashMap<String, HashMap<String, yrs::Any>>,
+  field_by_id: &HashMap<String, Field>,
+) -> HashMap<String, HashMap<String, String>> {
+  let mut human_readable_records: HashMap<String, HashMap<String, String>> =
+    HashMap::with_capacity(db_cells.len());
+
+  for (field_id, cell) in db_cells {
+    let field = match field_by_id.get(&field_id) {
+      Some(field) => field,
+      None => {
+        tracing::error!("Failed to get field by id: {}", field_id);
+        continue;
+      },
+    };
+
+    let mut human_readable_cell: HashMap<String, String> = HashMap::with_capacity(cell.len());
+    for (key, value) in cell {
+      let serde_value: String = match key.as_str() {
+        "created_at" | "last_modified" => match value.cast::<i64>() {
+          Ok(timestamp) => chrono::DateTime::from_timestamp(timestamp, 0)
+            .unwrap_or_default()
+            .to_rfc3339(),
+          Err(err) => {
+            tracing::error!("Failed to cast timestamp: {:?}", err);
+            "".to_string()
+          },
+        },
+        "field_type" => match value.cast::<i64>() {
+          Ok(field_type_int) => {
+            let field_type = FieldType::from(field_type_int);
+            format!("{:?}", field_type)
+          },
+          Err(err) => {
+            tracing::error!("Failed to cast field type: {:?}", err);
+            String::from("Unknown")
+          },
+        },
+        _ => value.to_string(),
+      };
+      human_readable_cell.insert(key, serde_value);
+    }
+    human_readable_records.insert(field.name.clone(), human_readable_cell);
+  }
+  human_readable_records
 }

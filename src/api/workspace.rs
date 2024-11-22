@@ -256,6 +256,10 @@ pub fn workspace_scope() -> Scope {
       .route(web::post().to(batch_get_collab_handler)),
     )
     .service(web::resource("/{workspace_id}/database").route(web::get().to(list_database_handler)))
+    .service(
+      web::resource("/{workspace_id}/database/{database_id}/row")
+        .route(web::get().to(list_database_row_id_handler)),
+    )
 }
 
 pub fn collab_scope() -> Scope {
@@ -1872,6 +1876,25 @@ async fn list_database_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(dbs)))
+}
+
+async fn list_database_row_id_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<Vec<AFDatabaseRow>>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Read)
+    .await?;
+
+  let db_rows =
+    biz::collab::ops::list_database_row(&state.collab_access_control_storage, workspace_id, db_id)
+      .await?;
+  Ok(Json(AppResponse::Ok().with_data(db_rows)))
 }
 
 #[inline]

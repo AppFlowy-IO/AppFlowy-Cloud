@@ -2,7 +2,7 @@ use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, brotli_compress, Client};
 use app_error::AppError;
 use bytes::Bytes;
-use client_api_entity::workspace_dto::{AFDatabase, ListDatabaseParam};
+use client_api_entity::workspace_dto::{AFDatabase, AFDatabaseRow, ListDatabaseParam};
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
   DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
@@ -166,6 +166,24 @@ impl Client {
       .http_client_with_auth(Method::GET, &url)
       .await?
       .query(&ListDatabaseParam { name_filter })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  pub async fn list_database_row_ids(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+  ) -> Result<Vec<AFDatabaseRow>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
       .send()
       .await?;
     log_request_id(&resp);

@@ -334,3 +334,8 @@ pub struct AFDatabaseMeta {
   pub name: String,
   pub icon: String,
 }
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct AFDatabaseRow {
+  pub id: String,
+}

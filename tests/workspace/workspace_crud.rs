@@ -57,6 +57,14 @@ async fn workspace_list_database() {
       .await
       .unwrap();
     assert_eq!(dbs.len(), 1);
+    {
+      let untitled_db = &dbs[0];
+      let db_row_ids = c
+        .list_database_row_ids(&workspace_id, &untitled_db.id)
+        .await
+        .unwrap();
+      assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
+    }
   }
   {
     let dbs = c
@@ -64,6 +72,14 @@ async fn workspace_list_database() {
       .await
       .unwrap();
     assert_eq!(dbs.len(), 1);
+    {
+      let grid_db = &dbs[0];
+      let db_row_ids = c
+        .list_database_row_ids(&workspace_id, &grid_db.id)
+        .await
+        .unwrap();
+      assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
+    }
   }
 }
 

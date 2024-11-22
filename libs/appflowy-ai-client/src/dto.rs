@@ -23,6 +23,10 @@ pub struct MessageData {
   pub content: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<serde_json::Value>,
+  #[serde(default)]
+  pub rag_ids: Vec<String>,
+  #[serde(default)]
+  pub message_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -182,7 +186,7 @@ pub struct EmbeddingRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum EmbeddingsModel {
+pub enum EmbeddingModel {
   #[serde(rename = "text-embedding-3-small")]
   TextEmbedding3Small,
   #[serde(rename = "text-embedding-3-large")]
@@ -191,12 +195,55 @@ pub enum EmbeddingsModel {
   TextEmbeddingAda002,
 }
 
-impl Display for EmbeddingsModel {
+impl EmbeddingModel {
+  pub fn supported_models() -> &'static [&'static str] {
+    &[
+      "text-embedding-ada-002",
+      "text-embedding-3-small",
+      "text-embedding-3-large",
+    ]
+  }
+
+  pub fn max_token(&self) -> usize {
+    match self {
+      EmbeddingModel::TextEmbeddingAda002 => 8191,
+      EmbeddingModel::TextEmbedding3Large => 8191,
+      EmbeddingModel::TextEmbedding3Small => 8191,
+    }
+  }
+
+  pub fn default_dimensions(&self) -> i32 {
+    match self {
+      EmbeddingModel::TextEmbeddingAda002 => 1536,
+      EmbeddingModel::TextEmbedding3Large => 3072,
+      EmbeddingModel::TextEmbedding3Small => 1536,
+    }
+  }
+
+  pub fn name(&self) -> &'static str {
+    match self {
+      EmbeddingModel::TextEmbeddingAda002 => "text-embedding-ada-002",
+      EmbeddingModel::TextEmbedding3Large => "text-embedding-3-large",
+      EmbeddingModel::TextEmbedding3Small => "text-embedding-3-small",
+    }
+  }
+
+  pub fn from_name(name: &str) -> Option<Self> {
+    match name {
+      "text-embedding-ada-002" => Some(EmbeddingModel::TextEmbeddingAda002),
+      "text-embedding-3-large" => Some(EmbeddingModel::TextEmbedding3Large),
+      "text-embedding-3-small" => Some(EmbeddingModel::TextEmbedding3Small),
+      _ => None,
+    }
+  }
+}
+
+impl Display for EmbeddingModel {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      EmbeddingsModel::TextEmbedding3Small => write!(f, "text-embedding-3-small"),
-      EmbeddingsModel::TextEmbedding3Large => write!(f, "text-embedding-3-large"),
-      EmbeddingsModel::TextEmbeddingAda002 => write!(f, "text-embedding-ada-002"),
+      EmbeddingModel::TextEmbedding3Small => write!(f, "text-embedding-3-small"),
+      EmbeddingModel::TextEmbedding3Large => write!(f, "text-embedding-3-large"),
+      EmbeddingModel::TextEmbeddingAda002 => write!(f, "text-embedding-ada-002"),
     }
   }
 }
@@ -319,4 +366,16 @@ impl Display for CreateChatContext {
 pub struct CustomPrompt {
   pub system: String,
   pub user: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CalculateSimilarityParams {
+  pub workspace_id: String,
+  pub input: String,
+  pub expected: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SimilarityResponse {
+  pub score: f64,
 }

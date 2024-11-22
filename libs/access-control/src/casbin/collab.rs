@@ -28,16 +28,25 @@ impl CollabAccessControl for CollabAccessControlImpl {
     &self,
     workspace_id: &str,
     uid: &i64,
-    oid: &str,
+    _oid: &str,
     action: Action,
   ) -> Result<(), AppError> {
+    // TODO: allow non workspace member to read a collab.
+
+    // Anyone who can write to a workspace, can also delete a collab.
+    let workspace_action = match action {
+      Action::Read => Action::Read,
+      Action::Write => Action::Write,
+      Action::Delete => Action::Write,
+    };
+
     self
       .access_control
       .enforce(
         workspace_id,
         uid,
-        ObjectType::Collab(oid),
-        ActionVariant::FromAction(&action),
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromAction(&workspace_action),
       )
       .await
   }
@@ -46,16 +55,26 @@ impl CollabAccessControl for CollabAccessControlImpl {
     &self,
     workspace_id: &str,
     uid: &i64,
-    oid: &str,
+    _oid: &str,
     access_level: AFAccessLevel,
   ) -> Result<(), AppError> {
+    // TODO: allow non workspace member to read a collab.
+
+    // Anyone who can write to a workspace, also have full access to a collab.
+    let workspace_action = match access_level {
+      AFAccessLevel::ReadOnly => Action::Read,
+      AFAccessLevel::ReadAndComment => Action::Read,
+      AFAccessLevel::ReadAndWrite => Action::Write,
+      AFAccessLevel::FullAccess => Action::Write,
+    };
+
     self
       .access_control
       .enforce(
         workspace_id,
         uid,
-        ObjectType::Collab(oid),
-        ActionVariant::FromAccessLevel(&access_level),
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromAction(&workspace_action),
       )
       .await
   }
@@ -63,28 +82,17 @@ impl CollabAccessControl for CollabAccessControlImpl {
   #[instrument(level = "info", skip_all)]
   async fn update_access_level_policy(
     &self,
-    uid: &i64,
-    oid: &str,
-    level: AFAccessLevel,
+    _uid: &i64,
+    _oid: &str,
+    _level: AFAccessLevel,
   ) -> Result<(), AppError> {
-    self
-      .access_control
-      .update_policy(
-        uid,
-        ObjectType::Collab(oid),
-        ActionVariant::FromAccessLevel(&level),
-      )
-      .await?;
-
+    // TODO: allow non workspace member to read a collab.
     Ok(())
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError> {
-    self
-      .access_control
-      .remove_policy(uid, &ObjectType::Collab(oid))
-      .await?;
+  async fn remove_access_level(&self, _uid: &i64, _oid: &str) -> Result<(), AppError> {
+    // TODO: allow non workspace member to read a collab.
     Ok(())
   }
 }
@@ -96,20 +104,6 @@ pub struct RealtimeCollabAccessControlImpl {
 
 impl RealtimeCollabAccessControlImpl {
   pub fn new(access_control: AccessControl) -> Self {
-    // let action_by_oid = Arc::new(DashMap::new());
-    // let mut sub = access_control.subscribe_change();
-    // let weak_action_by_oid = Arc::downgrade(&action_by_oid);
-    // tokio::spawn(async move {
-    //   while let Ok(change) = sub.recv().await {
-    //     match weak_action_by_oid.upgrade() {
-    //       None => break,
-    //       Some(action_by_oid) => match change {
-    //         AccessControlChange::UpdatePolicy { uid, oid } => {},
-    //         AccessControlChange::RemovePolicy { uid, oid } => {},
-    //       },
-    //     }
-    //   }
-    // });
     Self { access_control }
   }
 
@@ -117,20 +111,35 @@ impl RealtimeCollabAccessControlImpl {
     &self,
     workspace_id: &str,
     uid: &i64,
-    oid: &str,
+    _oid: &str,
     required_action: Action,
   ) -> Result<bool, AppError> {
-    self
+    // TODO: allow non workspace member to read a collab.
+
+    // Anyone who can write to a workspace, can also delete a collab.
+    let workspace_action = match required_action {
+      Action::Read => Action::Read,
+      Action::Write => Action::Write,
+      Action::Delete => Action::Write,
+    };
+
+    let enforcement_result = self
       .access_control
       .enforce(
         workspace_id,
         uid,
-        ObjectType::Collab(oid),
-        ActionVariant::FromAction(&required_action),
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromAction(&workspace_action),
       )
-      .await?;
-
-    Ok(true)
+      .await;
+    match enforcement_result {
+      Ok(_) => Ok(true),
+      Err(AppError::NotEnoughPermissions {
+        user: _user,
+        workspace_id: _workspace_id,
+      }) => Ok(false),
+      Err(e) => Err(e),
+    }
   }
 }
 

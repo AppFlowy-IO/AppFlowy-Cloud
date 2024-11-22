@@ -78,12 +78,10 @@ pub async fn run_import_worker(
   notifier: Arc<dyn ImportNotifier>,
   stream_name: &str,
   tick_interval_secs: u64,
+  max_import_file_size: u64,
 ) -> Result<(), ImportError> {
   info!("Starting importer worker");
-  if let Err(err) = ensure_consumer_group(stream_name, GROUP_NAME, &mut redis_client)
-    .await
-    .map_err(ImportError::Internal)
-  {
+  if let Err(err) = ensure_consumer_group(stream_name, GROUP_NAME, &mut redis_client).await {
     error!("Failed to ensure consumer group: {:?}", err);
   }
 
@@ -98,6 +96,7 @@ pub async fn run_import_worker(
     CONSUMER_NAME,
     notifier.clone(),
     &metrics,
+    max_import_file_size,
   )
   .await;
 
@@ -112,6 +111,7 @@ pub async fn run_import_worker(
     notifier.clone(),
     tick_interval_secs,
     &metrics,
+    max_import_file_size,
   )
   .await?;
 
@@ -129,6 +129,7 @@ async fn process_un_acked_tasks(
   consumer_name: &str,
   notifier: Arc<dyn ImportNotifier>,
   metrics: &Option<Arc<ImportMetrics>>,
+  maximum_import_file_size: u64,
 ) {
   // when server restarts, we need to check if there are any unacknowledged tasks
   match get_un_ack_tasks(stream_name, group_name, consumer_name, redis_client).await {
@@ -142,6 +143,7 @@ async fn process_un_acked_tasks(
           pg_pool: pg_pool.clone(),
           notifier: notifier.clone(),
           metrics: metrics.clone(),
+          maximum_import_file_size,
         };
         // Ignore the error here since the consume task will handle the error
         let _ = consume_task(
@@ -170,6 +172,7 @@ async fn process_upcoming_tasks(
   notifier: Arc<dyn ImportNotifier>,
   interval_secs: u64,
   metrics: &Option<Arc<ImportMetrics>>,
+  maximum_import_file_size: u64,
 ) -> Result<(), ImportError> {
   let options = StreamReadOptions::default()
     .group(group_name, consumer_name)
@@ -179,6 +182,7 @@ async fn process_upcoming_tasks(
 
   loop {
     interval.tick().await;
+
     let tasks: StreamReadReply = match redis_client
       .xread_options(&[stream_name], &[">"], &options)
       .await
@@ -186,6 +190,17 @@ async fn process_upcoming_tasks(
       Ok(tasks) => tasks,
       Err(err) => {
         error!("Failed to read tasks from Redis stream: {:?}", err);
+
+        // Use command:
+        // docker exec -it appflowy-cloud-redis-1 redis-cli FLUSHDB to generate the error
+        // NOGROUP: No such key 'import_task_stream' or consumer group 'import_task_group' in XREADGROUP with GROUP option
+        if let Some(code) = err.code() {
+          if code == "NOGROUP" {
+            if let Err(err) = ensure_consumer_group(stream_name, GROUP_NAME, redis_client).await {
+              error!("Failed to ensure consumer group: {:?}", err);
+            }
+          }
+        }
         continue;
       },
     };
@@ -198,6 +213,7 @@ async fn process_upcoming_tasks(
           Ok(import_task) => {
             let stream_name = stream_name.to_string();
             let group_name = group_name.to_string();
+
             let context = TaskContext {
               storage_dir: storage_dir.to_path_buf(),
               redis_client: redis_client.clone(),
@@ -205,8 +221,10 @@ async fn process_upcoming_tasks(
               pg_pool: pg_pool.clone(),
               notifier: notifier.clone(),
               metrics: metrics.clone(),
+              maximum_import_file_size,
             };
-            task_handlers.push(spawn_local(async move {
+
+            let handle = spawn_local(async move {
               consume_task(
                 context,
                 import_task,
@@ -216,7 +234,8 @@ async fn process_upcoming_tasks(
               )
               .await?;
               Ok::<(), ImportError>(())
-            }));
+            });
+            task_handlers.push(handle);
           },
           Err(err) => {
             error!("Failed to deserialize task: {:?}", err);
@@ -242,6 +261,7 @@ struct TaskContext {
   pg_pool: PgPool,
   notifier: Arc<dyn ImportNotifier>,
   metrics: Option<Arc<ImportMetrics>>,
+  maximum_import_file_size: u64,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -256,6 +276,26 @@ async fn consume_task(
     // If no created_at timestamp, proceed directly to processing
     if task.created_at.is_none() {
       return process_and_ack_task(context, import_task, stream_name, group_name, &entry_id).await;
+    }
+
+    match task.file_size {
+      None => {
+        return Err(ImportError::UpgradeToLatestVersion(format!(
+          "Missing file_size for task: {}",
+          task.task_id
+        )))
+      },
+      Some(file_size) => {
+        if file_size > context.maximum_import_file_size as i64 {
+          let file_size_in_mb = file_size as f64 / 1_048_576.0;
+          let max_size_in_mb = context.maximum_import_file_size as f64 / 1_048_576.0;
+
+          return Err(ImportError::UploadFileTooLarge {
+            file_size_in_mb,
+            max_size_in_mb,
+          });
+        }
+      },
     }
 
     // Check if the task is expired
@@ -280,8 +320,12 @@ async fn consume_task(
       if task.last_process_at.is_none() {
         task.last_process_at = Some(Utc::now().timestamp());
       }
+      process_and_ack_task(context, import_task, stream_name, group_name, &entry_id).await
     } else {
-      trace!("[Import] {} file not found, queue task", task.workspace_id);
+      info!(
+        "[Import] {} zip file not found, queue task",
+        task.workspace_id
+      );
       push_task(
         &mut context.redis_client,
         stream_name,
@@ -290,12 +334,12 @@ async fn consume_task(
         &entry_id,
       )
       .await?;
-      return Ok(());
+      Ok(())
     }
+  } else {
+    // If the task is not a notion task, proceed directly to processing
+    process_and_ack_task(context, import_task, stream_name, group_name, &entry_id).await
   }
-
-  // Process and acknowledge the task
-  process_and_ack_task(context, import_task, stream_name, group_name, &entry_id).await
 }
 
 async fn handle_expired_task(
@@ -308,7 +352,7 @@ async fn handle_expired_task(
   reason: &str,
 ) -> Result<(), ImportError> {
   info!(
-    "[Import]: {} import is expired with reason:{}, delete workspace",
+    "[Import]: {} import is expired with reason:{}",
     task.workspace_id, reason
   );
 
@@ -323,6 +367,7 @@ async fn handle_expired_task(
     ImportError::Internal(e.into())
   })?;
   remove_workspace(&import_record.workspace_id, &context.pg_pool).await;
+  info!("[Import]: deleted workspace {}", task.workspace_id);
 
   if let Err(err) = context.s3_client.delete_blob(task.s3_key.as_str()).await {
     error!(
@@ -330,7 +375,12 @@ async fn handle_expired_task(
       task.workspace_id, err
     );
   }
-  let _ = xack_task(&mut context.redis_client, stream_name, group_name, entry_id).await;
+  if let Err(err) = xack_task(&mut context.redis_client, stream_name, group_name, entry_id).await {
+    error!(
+      "[Import] failed to acknowledge task:{} error:{:?}",
+      task.workspace_id, err
+    );
+  }
   notify_user(
     task,
     Err(ImportError::UploadFileExpire),
@@ -388,7 +438,7 @@ fn is_task_expired(created_timestamp: i64, last_process_at: Option<i64>) -> Resu
 
       if elapsed.num_hours() >= hours {
         return Err(format!(
-          "[Import] task is expired: created_at: {}, last_process_at: {:?}, elapsed: {} hours",
+          "task is expired: created_at: {}, last_process_at: {:?}, elapsed: {} hours",
           created_at.format("%m/%d/%y %H:%M"),
           last_process_at,
           elapsed.num_hours()
@@ -485,10 +535,7 @@ async fn process_task(
     .parse()
     .unwrap_or(false);
 
-  info!(
-    "[Import]: Processing task: {}, retry interval: {}, streaming: {}",
-    import_task, retry_interval, streaming
-  );
+  info!("[Import]: Processing task: {}", import_task);
 
   match import_task {
     ImportTask::Notion(task) => {
@@ -1285,7 +1332,7 @@ async fn ensure_consumer_group(
   stream_key: &str,
   group_name: &str,
   redis_client: &mut ConnectionManager,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), WorkerError> {
   let result: RedisResult<()> = redis_client
     .xgroup_create_mkstream(stream_key, group_name, "0")
     .await;
@@ -1293,11 +1340,15 @@ async fn ensure_consumer_group(
   if let Err(redis_error) = result {
     if let Some(code) = redis_error.code() {
       if code == "BUSYGROUP" {
-        return Ok(()); // Group already exists, considered as success.
+        return Ok(());
+      }
+
+      if code == "NOGROUP" {
+        return Err(WorkerError::StreamGroupNotExist(group_name.to_string()));
       }
     }
     error!("Error when creating consumer group: {:?}", redis_error);
-    return Err(redis_error.into());
+    return Err(WorkerError::Internal(redis_error.into()));
   }
 
   Ok(())
@@ -1372,10 +1423,11 @@ pub struct NotionImportTask {
 
 impl Display for NotionImportTask {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let file_size_mb = self.file_size.map(|size| size as f64 / 1_048_576.0);
     write!(
       f,
-      "NotionImportTask {{ task_id: {}, workspace_id: {}, file_size:{:?}, workspace_name: {}, user_name: {}, user_email: {} }}",
-      self.task_id, self.workspace_id, self.file_size, self.workspace_name, self.user_name, self.user_email
+      "NotionImportTask {{ task_id: {}, workspace_id: {}, file_size:{:?}MB, workspace_name: {}, user_name: {}, user_email: {} }}",
+      self.task_id, self.workspace_id, file_size_mb, self.workspace_name, self.user_name, self.user_email
     )
   }
 }

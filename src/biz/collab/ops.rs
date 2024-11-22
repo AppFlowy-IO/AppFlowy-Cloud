@@ -364,6 +364,7 @@ pub async fn list_database(
   collab_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_uuid_str: String,
+  name_filter: Option<String>,
 ) -> Result<Vec<AFDatabase>, AppError> {
   let workspace_uuid: Uuid = workspace_uuid_str.as_str().parse()?;
   let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_uuid).await?;
@@ -417,28 +418,35 @@ pub async fn list_database(
                 Arc::new(NoPersistenceDatabaseCollabService),
                 None,
               ) {
-                Some(db_body) => match db_body.metas.get_inline_view_id(&txn) {
-                  Some(iid) => match db_body.views.get_view(&txn, &iid) {
-                    Some(iview) => {
-                      let name = iview.name;
+                Some(db_body) => {
+                  let db_views = db_body.views.get_all_views_meta(&txn);
+                  let names = db_views
+                    .iter()
+                    .map(|v| v.name.clone())
+                    .filter(|name| !name.is_empty())
+                    .collect::<Vec<String>>();
 
-                      let db_fields = db_body.fields.get_all_fields(&txn);
-                      let mut af_fields: Vec<AFDatabaseField> = Vec::with_capacity(db_fields.len());
-                      for db_field in db_fields {
-                        af_fields.push(AFDatabaseField {
-                          name: db_field.name,
-                          field_type: format!("{:?}", FieldType::from(db_field.field_type)),
-                        });
-                      }
-                      af_databases.push(AFDatabase {
-                        id: db_body.get_database_id(&txn),
-                        name,
-                        fields: af_fields,
-                      });
-                    },
-                    None => tracing::warn!("Failed to get inline view: {}", iid),
-                  },
-                  None => tracing::error!("Failed to get inline view id for database: {}", oid),
+                  // if there exists a name filter,
+                  // there must be at least one view name that contains the filter
+                  if let Some(name_filter) = &name_filter {
+                    if !names.iter().any(|name| name.contains(name_filter)) {
+                      continue;
+                    }
+                  }
+
+                  let db_fields = db_body.fields.get_all_fields(&txn);
+                  let mut af_fields: Vec<AFDatabaseField> = Vec::with_capacity(db_fields.len());
+                  for db_field in db_fields {
+                    af_fields.push(AFDatabaseField {
+                      name: db_field.name,
+                      field_type: format!("{:?}", FieldType::from(db_field.field_type)),
+                    });
+                  }
+                  af_databases.push(AFDatabase {
+                    id: db_body.get_database_id(&txn),
+                    names,
+                    fields: af_fields,
+                  });
                 },
                 None => tracing::error!("Failed to create db_body from db_collab, oid: {}", oid),
               },

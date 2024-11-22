@@ -70,6 +70,7 @@ const GROUP_NAME: &str = "import_task_group";
 const CONSUMER_NAME: &str = "appflowy_worker";
 const MAXIMUM_CONTENT_LENGTH: &str = "3221225472";
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_import_worker(
   pg_pool: PgPool,
   mut redis_client: ConnectionManager,

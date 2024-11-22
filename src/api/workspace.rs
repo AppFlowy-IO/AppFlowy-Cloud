@@ -344,6 +344,7 @@ async fn list_workspace_handler(
   query: web::Query<QueryWorkspaceParam>,
 ) -> Result<JsonAppResponse<Vec<AFWorkspace>>> {
   let QueryWorkspaceParam {
+    name_filter,
     include_member_count,
     include_role,
   } = query.into_inner();
@@ -351,6 +352,7 @@ async fn list_workspace_handler(
   let workspaces = workspace::ops::get_all_user_workspaces(
     &state.pg_pool,
     &uuid,
+    name_filter.as_deref(),
     include_member_count.unwrap_or(false),
     include_role.unwrap_or(false),
   )

@@ -755,6 +755,7 @@ pub async fn update_updated_at_of_workspace_with_uid<'a, E: Executor<'a, Databas
 pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
+  name_filter: Option<&str>,
 ) -> Result<Vec<AFWorkspaceRow>, AppError> {
   let workspaces = sqlx::query_as!(
     AFWorkspaceRow,
@@ -776,9 +777,11 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
       WHERE wm.uid = (
          SELECT uid FROM public.af_user WHERE uuid = $1
       )
-      AND COALESCE(w.is_initialized, true) = true;
+      AND COALESCE(w.is_initialized, true) = true
+      AND ($2::TEXT IS NULL OR w.workspace_name ILIKE $2::TEXT);
     "#,
-    user_uuid
+    user_uuid,
+    name_filter.map(|filter| format!("%{}%", filter))
   )
   .fetch_all(executor)
   .await?;

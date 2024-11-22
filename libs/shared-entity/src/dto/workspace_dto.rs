@@ -289,6 +289,7 @@ pub enum SpacePermission {
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceParam {
+  pub name_filter: Option<String>,
   pub include_member_count: Option<bool>,
   pub include_role: Option<bool>,
 }

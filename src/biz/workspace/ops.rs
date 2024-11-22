@@ -255,10 +255,11 @@ pub async fn remove_reaction_on_comment(
 pub async fn get_all_user_workspaces(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
+  name_filter: Option<&str>,
   include_member_count: bool,
   include_role: bool,
 ) -> Result<Vec<AFWorkspace>, AppResponseError> {
-  let workspaces = select_all_user_workspaces(pg_pool, user_uuid).await?;
+  let workspaces = select_all_user_workspaces(pg_pool, user_uuid, name_filter).await?;
   let mut workspaces = workspaces
     .into_iter()
     .flat_map(|row| {

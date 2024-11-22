@@ -107,6 +107,7 @@ async fn invite_workspace_crud() {
     // alice's view of the workspaces
     let workspaces = alice_client
       .get_workspaces_opt(QueryWorkspaceParam {
+        name_filter: None,
         include_member_count: Some(true),
         include_role: Some(true),
       })
@@ -124,6 +125,7 @@ async fn invite_workspace_crud() {
     // bob should see 2 workspaces, one is his own and the other is alice's
     let workspaces = bob_client
       .get_workspaces_opt(QueryWorkspaceParam {
+        name_filter: None,
         include_member_count: Some(true),
         include_role: Some(true),
       })
@@ -147,5 +149,21 @@ async fn invite_workspace_crud() {
       assert_eq!(bob_workspace.member_count, Some(1));
       assert_eq!(bob_workspace.role, Some(AFRole::Owner));
     }
+  }
+
+  {
+    // bob's filter workspaces by name
+    let workspaces = bob_client
+      .get_workspaces_opt(QueryWorkspaceParam {
+        name_filter: Some("alice".to_string()),
+        include_member_count: Some(true),
+        include_role: Some(true),
+      })
+      .await
+      .unwrap();
+    assert_eq!(workspaces.len(), 1);
+    let alice_workspace = &workspaces[0];
+    assert_eq!(alice_workspace.member_count, Some(2));
+    assert_eq!(alice_workspace.role, Some(AFRole::Member));
   }
 }

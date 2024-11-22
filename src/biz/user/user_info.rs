@@ -48,7 +48,7 @@ pub async fn get_user_workspace_info(
   let user_profile = AFUserProfile::try_from(row)?;
 
   // Get all workspaces that the user can access to
-  let workspaces = select_all_user_workspaces(txn.deref_mut(), uuid)
+  let workspaces = select_all_user_workspaces(txn.deref_mut(), uuid, None)
     .await?
     .into_iter()
     .flat_map(|row| AFWorkspace::try_from(row).ok())

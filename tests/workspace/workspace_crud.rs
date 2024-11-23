@@ -1,7 +1,6 @@
 use client_api_test::generate_unique_registered_user_client;
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabParams;
-use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 
@@ -13,54 +12,22 @@ async fn workspace_list_database() {
     .to_string();
 
   {
-    let dbs = c.list_databases(&workspace_id, None).await.unwrap();
-    assert_eq!(dbs.len(), 1);
-
-    let db = &dbs[0];
-
-    assert_eq!(db.names.len(), 2);
-    assert!(db.names.contains(&String::from("Untitled")));
-    assert!(db.names.contains(&String::from("Grid")));
-
-    assert!(db.fields.contains(&AFDatabaseField {
-      name: "Last modified".to_string(),
-      field_type: "LastEditedTime".to_string(),
-    }));
-    assert!(db.fields.contains(&AFDatabaseField {
-      name: "Multiselect".to_string(),
-      field_type: "MultiSelect".to_string(),
-    }));
-    assert!(db.fields.contains(&AFDatabaseField {
-      name: "Tasks".to_string(),
-      field_type: "Checklist".to_string(),
-    }));
-    assert!(db.fields.contains(&AFDatabaseField {
-      name: "Status".to_string(),
-      field_type: "SingleSelect".to_string(),
-    }));
-    assert!(db.fields.contains(&AFDatabaseField {
-      name: "Description".to_string(),
-      field_type: "RichText".to_string(),
-    }));
-  }
-
-  {
-    let dbs = c
-      .list_databases(&workspace_id, Some(String::from("nomatch")))
-      .await
-      .unwrap();
-    assert_eq!(dbs.len(), 0);
-  }
-  {
-    let dbs = c
-      .list_databases(&workspace_id, Some(String::from("ntitle")))
-      .await
-      .unwrap();
-    assert_eq!(dbs.len(), 1);
+    let dbs = c.list_databases(&workspace_id).await.unwrap();
+    assert_eq!(dbs.len(), 1, "{:?}", dbs);
+    let todos_db = &dbs[0];
+    assert_eq!(todos_db.names.len(), 1);
+    assert!(todos_db.names.contains(&String::from("To-dos")));
     {
-      let untitled_db = &dbs[0];
       let db_row_ids = c
-        .list_database_row_ids(&workspace_id, &untitled_db.id)
+        .list_database_row_ids(&workspace_id, &todos_db.id)
+        .await
+        .unwrap();
+      assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
+    }
+
+    {
+      let db_row_ids = c
+        .list_database_row_ids(&workspace_id, &todos_db.id)
         .await
         .unwrap();
       assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
@@ -68,7 +35,7 @@ async fn workspace_list_database() {
         let db_row_ids: Vec<&str> = db_row_ids.iter().map(|s| s.id.as_str()).collect();
         let db_row_ids: &[&str] = &db_row_ids;
         let db_row_details = c
-          .list_database_row_details(&workspace_id, &untitled_db.id, db_row_ids)
+          .list_database_row_details(&workspace_id, &todos_db.id, db_row_ids)
           .await
           .unwrap();
         assert_eq!(db_row_details.len(), 5, "{:#?}", db_row_details);
@@ -109,21 +76,6 @@ async fn workspace_list_database() {
           })
           .unwrap();
       }
-    }
-  }
-  {
-    let dbs = c
-      .list_databases(&workspace_id, Some(String::from("rid")))
-      .await
-      .unwrap();
-    assert_eq!(dbs.len(), 1);
-    {
-      let grid_db = &dbs[0];
-      let db_row_ids = c
-        .list_database_row_ids(&workspace_id, &grid_db.id)
-        .await
-        .unwrap();
-      assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
     }
   }
 }

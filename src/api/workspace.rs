@@ -1866,9 +1866,7 @@ async fn list_database_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<String>,
   state: Data<AppState>,
-  query: web::Query<ListDatabaseParam>,
 ) -> Result<Json<AppResponse<Vec<AFDatabase>>>> {
-  let name_filter = query.into_inner().name_filter;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
   let dbs = biz::collab::ops::list_database(
@@ -1876,7 +1874,6 @@ async fn list_database_handler(
     &state.collab_access_control_storage,
     uid,
     workspace_id,
-    name_filter,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(dbs)))

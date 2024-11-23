@@ -294,11 +294,6 @@ pub struct QueryWorkspaceParam {
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
-pub struct ListDatabaseParam {
-  pub name_filter: Option<String>, // logic: if database name contains
-}
-
-#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct ListDatabaseRowDetailParam {
   // Comma separated database row ids
   // e.g. "<uuid_1>,<uuid_2>,<uuid_3>"
@@ -336,7 +331,6 @@ pub struct PublishedView {
 pub struct AFDatabase {
   pub id: String,
   pub names: Vec<String>,
-  pub fields: Vec<AFDatabaseField>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

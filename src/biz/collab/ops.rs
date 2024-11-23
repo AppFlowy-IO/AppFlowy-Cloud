@@ -7,6 +7,7 @@ use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
+use collab_database::fields::TypeOptions;
 use collab_database::rows::RowDetail;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
@@ -535,6 +536,11 @@ pub async fn list_database_row_details(
     field_by_id
   };
 
+  let mut selection_name_by_id: HashMap<String, String> = HashMap::new();
+  for field in field_by_id.values() {
+    add_to_selection_from_field(&mut selection_name_by_id, field);
+  }
+
   let database_row_details = collab_storage
     .batch_get_collab(&uid, query_collabs, true)
     .await
@@ -545,7 +551,11 @@ pub async fn list_database_row_details(
         let collab =
           Collab::new_with_source(CollabOrigin::Server, &id, ec.into(), vec![], false).unwrap();
         let row_detail = RowDetail::from_collab(&collab).unwrap();
-        let cells = convert_database_cells_human_readable(row_detail.row.cells, &field_by_id);
+        let cells = convert_database_cells_human_readable(
+          row_detail.row.cells,
+          &field_by_id,
+          &selection_name_by_id,
+        );
         Some(AFDatabaseRowDetail { id, cells })
       },
       QueryCollabResult::Failed { error } => {
@@ -561,8 +571,9 @@ pub async fn list_database_row_details(
 fn convert_database_cells_human_readable(
   db_cells: HashMap<String, HashMap<String, yrs::Any>>,
   field_by_id: &HashMap<String, Field>,
-) -> HashMap<String, HashMap<String, String>> {
-  let mut human_readable_records: HashMap<String, HashMap<String, String>> =
+  selection_name_by_id: &HashMap<String, String>,
+) -> HashMap<String, HashMap<String, serde_json::Value>> {
+  let mut human_readable_records: HashMap<String, HashMap<String, serde_json::Value>> =
     HashMap::with_capacity(db_cells.len());
 
   for (field_id, cell) in db_cells {
@@ -573,37 +584,132 @@ fn convert_database_cells_human_readable(
         continue;
       },
     };
+    let field_type = FieldType::from(field.field_type);
 
-    println!("field_type: {:#?}", field.field_type);
-    println!("type_options: {:#?}", field.type_options);
-
-    let mut human_readable_cell: HashMap<String, String> = HashMap::with_capacity(cell.len());
+    let mut human_readable_cell: HashMap<String, serde_json::Value> =
+      HashMap::with_capacity(cell.len());
     for (key, value) in cell {
-      let value_str: String = match key.as_str() {
+      let serde_value: serde_json::Value = match key.as_str() {
         "created_at" | "last_modified" => match value.cast::<i64>() {
           Ok(timestamp) => chrono::DateTime::from_timestamp(timestamp, 0)
             .unwrap_or_default()
-            .to_rfc3339(),
+            .to_rfc3339()
+            .into(),
           Err(err) => {
             tracing::error!("Failed to cast timestamp: {:?}", err);
-            "".to_string()
+            serde_json::Value::Null
           },
         },
-        "field_type" => match value.cast::<i64>() {
-          Ok(field_type_int) => {
-            let field_type = FieldType::from(field_type_int);
-            format!("{:?}", field_type)
-          },
-          Err(err) => {
-            tracing::error!("Failed to cast field type: {:?}", err);
-            String::from("Unknown")
-          },
+        "field_type" => format!("{:?}", field_type).into(),
+        "data" => {
+          match field_type {
+            FieldType::DateTime => {
+              if let yrs::any::Any::String(value_str) = value {
+                let int_value = value_str.parse::<i64>().unwrap_or_default();
+                chrono::DateTime::from_timestamp(int_value, 0)
+                  .unwrap_or_default()
+                  .to_rfc3339()
+                  .into()
+              } else {
+                serde_json::to_value(value).unwrap_or_default()
+              }
+            },
+            FieldType::Checklist => {
+              if let yrs::any::Any::String(value_str) = value {
+                serde_json::from_str(&value_str).unwrap_or_default()
+              } else {
+                serde_json::to_value(value).unwrap_or_default()
+              }
+            },
+            FieldType::Media => {
+              if let yrs::any::Any::Array(arr) = value {
+                let mut acc = Vec::with_capacity(arr.len());
+                for v in arr.as_ref() {
+                  if let yrs::any::Any::String(value_str) = v {
+                    let serde_value = serde_json::from_str(value_str).unwrap_or_default();
+                    acc.push(serde_value);
+                  }
+                }
+                serde_json::Value::Array(acc)
+              } else {
+                serde_json::to_value(value).unwrap_or_default()
+              }
+            },
+            FieldType::SingleSelect => {
+              if let yrs::any::Any::String(ref value_str) = value {
+                selection_name_by_id
+                  .get(value_str.as_ref())
+                  .map(|v| v.to_string())
+                  .map(serde_json::Value::String)
+                  .unwrap_or_else(|| value.to_string().into())
+              } else {
+                serde_json::to_value(value).unwrap_or_default()
+              }
+            },
+            FieldType::MultiSelect => {
+              if let yrs::any::Any::String(value_str) = value {
+                value_str
+                  .split(',')
+                  .filter_map(|v| selection_name_by_id.get(v).map(|v| v.to_string()))
+                  .fold(String::new(), |mut acc, s| {
+                    if !acc.is_empty() {
+                      acc.push(',');
+                    }
+                    acc.push_str(&s);
+                    acc
+                  })
+                  .into()
+              } else {
+                serde_json::to_value(value).unwrap_or_default()
+              }
+            },
+            // Handle different field types formatting as needed
+            _ => serde_json::to_value(value).unwrap_or_default(),
+          }
         },
-        _ => value.to_string(),
+        _ => serde_json::to_value(value).unwrap_or_default(),
       };
-      human_readable_cell.insert(key, value_str);
+      human_readable_cell.insert(key, serde_value);
     }
     human_readable_records.insert(field.name.clone(), human_readable_cell);
   }
   human_readable_records
+}
+
+fn add_to_selection_from_field(name_by_id: &mut HashMap<String, String>, field: &Field) {
+  let field_type = FieldType::from(field.field_type);
+  match field_type {
+    FieldType::SingleSelect => {
+      add_to_selection_from_type_options(name_by_id, &field.type_options, &field_type);
+    },
+    FieldType::MultiSelect => {
+      add_to_selection_from_type_options(name_by_id, &field.type_options, &field_type)
+    },
+    _ => (),
+  }
+}
+
+fn add_to_selection_from_type_options(
+  name_by_id: &mut HashMap<String, String>,
+  type_options: &TypeOptions,
+  field_type: &FieldType,
+) {
+  if let Some(type_opt) = type_options.get(&field_type.type_id()) {
+    if let Some(yrs::Any::String(arc_str)) = type_opt.get("content") {
+      if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(arc_str) {
+        if let Some(selections) = serde_value.get("options").and_then(|v| v.as_array()) {
+          for selection in selections {
+            if let serde_json::Value::Object(selection) = selection {
+              if let (Some(id), Some(name)) = (
+                selection.get("id").and_then(|v| v.as_str()),
+                selection.get("name").and_then(|v| v.as_str()),
+              ) {
+                name_by_id.insert(id.to_owned(), name.to_owned());
+              }
+            }
+          }
+        }
+      }
+    }
+  };
 }

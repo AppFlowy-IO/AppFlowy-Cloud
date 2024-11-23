@@ -347,5 +347,5 @@ pub struct AFDatabaseRow {
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AFDatabaseRowDetail {
   pub id: String,
-  pub cells: HashMap<String, HashMap<String, String>>,
+  pub cells: HashMap<String, HashMap<String, serde_json::Value>>,
 }

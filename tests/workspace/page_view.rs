@@ -81,6 +81,81 @@ async fn get_page_view() {
 }
 
 #[tokio::test]
+async fn create_new_page_with_database() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspaces = c.get_workspaces().await.unwrap();
+  assert_eq!(workspaces.len(), 1);
+  let workspace_id = workspaces[0].workspace_id;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let calendar_page = c
+    .create_workspace_page_view(
+      workspace_id,
+      &CreatePageParams {
+        parent_view_id: general_space.view_id.clone(),
+        layout: ViewLayout::Calendar,
+        name: Some("New calendar".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  let grid_page = c
+    .create_workspace_page_view(
+      workspace_id,
+      &CreatePageParams {
+        parent_view_id: general_space.view_id.clone(),
+        layout: ViewLayout::Grid,
+        name: Some("New grid".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  let board_page = c
+    .create_workspace_page_view(
+      workspace_id,
+      &CreatePageParams {
+        parent_view_id: general_space.view_id.clone(),
+        layout: ViewLayout::Grid,
+        name: Some("New board".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  sleep(Duration::from_secs(1)).await;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let views_under_general_space: HashSet<String> = general_space
+    .children
+    .iter()
+    .map(|v| v.view_id.clone())
+    .collect();
+  for view_id in &[
+    calendar_page.view_id.clone(),
+    grid_page.view_id.clone(),
+    board_page.view_id.clone(),
+  ] {
+    assert!(views_under_general_space.contains(view_id));
+    c.get_workspace_page_view(workspace_id, view_id)
+      .await
+      .unwrap();
+  }
+}
+
+#[tokio::test]
 async fn create_new_document_page() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspaces = c.get_workspaces().await.unwrap();

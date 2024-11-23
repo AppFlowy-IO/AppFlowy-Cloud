@@ -15,8 +15,8 @@ async fn workspace_list_database() {
     let dbs = c.list_databases(&workspace_id).await.unwrap();
     assert_eq!(dbs.len(), 1, "{:?}", dbs);
     let todos_db = &dbs[0];
-    assert_eq!(todos_db.names.len(), 1);
-    assert!(todos_db.names.contains(&String::from("To-dos")));
+    assert_eq!(todos_db.views.len(), 1);
+    assert_eq!(todos_db.views[0].name, "To-dos");
     {
       let db_row_ids = c
         .list_database_row_ids(&workspace_id, &todos_db.id)

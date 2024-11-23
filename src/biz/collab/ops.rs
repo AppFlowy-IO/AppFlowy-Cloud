@@ -24,6 +24,7 @@ use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
 use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
+use shared_entity::dto::workspace_dto::FolderViewMinimal;
 use shared_entity::dto::workspace_dto::RecentFolderView;
 use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
@@ -47,6 +48,7 @@ use super::folder_view::collab_folder_to_folder_view;
 use super::folder_view::section_items_to_favorite_folder_view;
 use super::folder_view::section_items_to_recent_folder_view;
 use super::folder_view::section_items_to_trash_folder_view;
+use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
 
 /// Create a new collab member
@@ -416,17 +418,17 @@ pub async fn list_database(
   let mut af_databases = Vec::with_capacity(db_metas.len());
   for db_meta in db_metas {
     let id = db_meta.database_id;
-    let names: Vec<String> = db_meta
+    let views: Vec<FolderViewMinimal> = db_meta
       .linked_views
       .into_iter()
       .map(|view_id| {
         folder
           .get_view(&view_id)
-          .map(|v| v.name.clone())
+          .map(|view| to_dto_folder_view_miminal(&view))
           .unwrap_or_default()
       })
       .collect();
-    af_databases.push(AFDatabase { id, names });
+    af_databases.push(AFDatabase { id, views });
   }
 
   Ok(af_databases)
@@ -572,9 +574,12 @@ fn convert_database_cells_human_readable(
       },
     };
 
+    println!("field_type: {:#?}", field.field_type);
+    println!("type_options: {:#?}", field.type_options);
+
     let mut human_readable_cell: HashMap<String, String> = HashMap::with_capacity(cell.len());
     for (key, value) in cell {
-      let serde_value: String = match key.as_str() {
+      let value_str: String = match key.as_str() {
         "created_at" | "last_modified" => match value.cast::<i64>() {
           Ok(timestamp) => chrono::DateTime::from_timestamp(timestamp, 0)
             .unwrap_or_default()
@@ -596,7 +601,7 @@ fn convert_database_cells_human_readable(
         },
         _ => value.to_string(),
       };
-      human_readable_cell.insert(key, serde_value);
+      human_readable_cell.insert(key, value_str);
     }
     human_readable_records.insert(field.name.clone(), human_readable_cell);
   }

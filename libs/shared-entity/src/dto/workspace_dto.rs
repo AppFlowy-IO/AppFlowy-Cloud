@@ -330,19 +330,13 @@ pub struct PublishedView {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct AFDatabase {
   pub id: String,
-  pub names: Vec<String>,
+  pub views: Vec<FolderViewMinimal>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AFDatabaseField {
   pub name: String,
   pub field_type: String,
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AFDatabaseMeta {
-  pub name: String,
-  pub icon: String,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

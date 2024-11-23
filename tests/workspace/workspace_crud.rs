@@ -45,7 +45,7 @@ async fn workspace_list_database() {
         //         "field_type": "MultiSelect",
         //         "last_modified": "2024-08-16T07:23:57+00:00",
         //         "created_at": "2024-08-16T07:23:35+00:00",
-        //         "data": "BD-T,6UxM",
+        //         "data": "looks great,fast",
         //     },
         //     "Description": {
         //         "field_type": "RichText",
@@ -54,7 +54,7 @@ async fn workspace_list_database() {
         //         "data": "Install AppFlowy Mobile",
         //     },
         //     "Status": {
-        //         "data": "CEZD",
+        //         "data": "To Do",
         //         "field_type": "SingleSelect",
         //     },
         // },
@@ -64,14 +64,14 @@ async fn workspace_list_database() {
             row.cells["Multiselect"]["field_type"] == "MultiSelect"
               && row.cells["Multiselect"]["last_modified"] == "2024-08-16T07:23:57+00:00"
               && row.cells["Multiselect"]["created_at"] == "2024-08-16T07:23:35+00:00"
-              && row.cells["Multiselect"]["data"] == "BD-T,6UxM"
+              && row.cells["Multiselect"]["data"] == "looks great,fast"
               // Description
               && row.cells["Description"]["field_type"] == "RichText"
               && row.cells["Description"]["last_modified"] == "2024-08-16T07:17:03+00:00"
               && row.cells["Description"]["created_at"] == "2024-08-16T07:16:51+00:00"
               && row.cells["Description"]["data"] == "Install AppFlowy Mobile"
               // Status
-              && row.cells["Status"]["data"] == "CEZD"
+              && row.cells["Status"]["data"] == "To Do"
               && row.cells["Status"]["field_type"] == "SingleSelect"
           })
           .unwrap();

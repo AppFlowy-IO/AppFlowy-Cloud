@@ -21,7 +21,6 @@ use database::publish::select_workspace_id_for_publish_namespace;
 use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
-use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
 use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
@@ -386,7 +385,6 @@ pub async fn list_database(
   collab_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_uuid_str: String,
-  name_filter: Option<String>,
 ) -> Result<Vec<AFDatabase>, AppError> {
   let workspace_uuid: Uuid = workspace_uuid_str.as_str().parse()?;
   let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_uuid).await?;
@@ -407,72 +405,28 @@ pub async fn list_database(
     ))
   })?;
   let db_metas = ws_body.get_all_meta(&ws_body_collab.transact());
-  let query_collabs: Vec<QueryCollab> = db_metas
-    .into_iter()
-    .map(|meta| QueryCollab {
-      object_id: meta.database_id.clone(),
-      collab_type: CollabType::Database,
-    })
-    .collect();
-  let results = collab_storage
-    .batch_get_collab(&uid, query_collabs, true)
-    .await;
 
-  let txn = ws_body_collab.transact();
-  let mut af_databases: Vec<AFDatabase> = Vec::with_capacity(results.len());
-  for (oid, result) in results {
-    match result {
-      QueryCollabResult::Success { encode_collab_v1 } => {
-        match EncodedCollab::decode_from_bytes(&encode_collab_v1) {
-          Ok(ec) => {
-            match Collab::new_with_source(CollabOrigin::Server, &oid, ec.into(), vec![], false) {
-              Ok(db_collab) => match DatabaseBody::from_collab(
-                &db_collab,
-                Arc::new(NoPersistenceDatabaseCollabService),
-                None,
-              ) {
-                Some(db_body) => {
-                  let db_views = db_body.views.get_all_views_meta(&txn);
-                  let names = db_views
-                    .iter()
-                    .map(|v| v.name.clone())
-                    .filter(|name| !name.is_empty())
-                    .collect::<Vec<String>>();
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_uuid_str,
+  )
+  .await?;
 
-                  // if there exists a name filter,
-                  // there must be at least one view name that contains the filter
-                  if let Some(name_filter) = &name_filter {
-                    if !names.iter().any(|name| name.contains(name_filter)) {
-                      continue;
-                    }
-                  }
-
-                  let db_fields = db_body.fields.get_all_fields(&txn);
-                  let mut af_fields: Vec<AFDatabaseField> = Vec::with_capacity(db_fields.len());
-                  for db_field in db_fields {
-                    af_fields.push(AFDatabaseField {
-                      name: db_field.name,
-                      field_type: format!("{:?}", FieldType::from(db_field.field_type)),
-                    });
-                  }
-                  af_databases.push(AFDatabase {
-                    id: db_body.get_database_id(&txn),
-                    names,
-                    fields: af_fields,
-                  });
-                },
-                None => tracing::error!("Failed to create db_body from db_collab, oid: {}", oid),
-              },
-              Err(err) => tracing::error!("Failed to create db_collab: {:?}", err),
-            }
-          },
-          Err(err) => tracing::error!("Failed to decode collab: {:?}", err),
-        }
-      },
-      QueryCollabResult::Failed { error } => {
-        tracing::warn!("Failed to get collab: {:?}", error)
-      },
-    }
+  let mut af_databases = Vec::with_capacity(db_metas.len());
+  for db_meta in db_metas {
+    let id = db_meta.database_id;
+    let names: Vec<String> = db_meta
+      .linked_views
+      .into_iter()
+      .map(|view_id| {
+        folder
+          .get_view(&view_id)
+          .map(|v| v.name.clone())
+          .unwrap_or_default()
+      })
+      .collect();
+    af_databases.push(AFDatabase { id, names });
   }
 
   Ok(af_databases)

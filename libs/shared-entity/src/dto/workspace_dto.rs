@@ -294,8 +294,19 @@ pub struct QueryWorkspaceParam {
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
-pub struct ListDatabaseParam {
-  pub name_filter: Option<String>, // logic: if database name contains
+pub struct ListDatabaseRowDetailParam {
+  // Comma separated database row ids
+  // e.g. "<uuid_1>,<uuid_2>,<uuid_3>"
+  pub ids: String,
+}
+
+impl ListDatabaseRowDetailParam {
+  pub fn from(ids: &[&str]) -> Self {
+    Self { ids: ids.join(",") }
+  }
+  pub fn into_ids(&self) -> Vec<&str> {
+    self.ids.split(',').collect()
+  }
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
@@ -319,8 +330,7 @@ pub struct PublishedView {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct AFDatabase {
   pub id: String,
-  pub names: Vec<String>,
-  pub fields: Vec<AFDatabaseField>,
+  pub views: Vec<FolderViewMinimal>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -329,8 +339,13 @@ pub struct AFDatabaseField {
   pub field_type: String,
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct AFDatabaseRow {
+  pub id: String,
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AFDatabaseMeta {
-  pub name: String,
-  pub icon: String,
+pub struct AFDatabaseRowDetail {
+  pub id: String,
+  pub cells: HashMap<String, HashMap<String, serde_json::Value>>,
 }

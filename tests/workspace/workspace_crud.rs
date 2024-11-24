@@ -24,6 +24,13 @@ async fn workspace_list_database() {
         .unwrap();
       assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
     }
+    {
+      let db_row_ids = c
+        .list_database_row_ids_updated(&workspace_id, &todos_db.id, None)
+        .await
+        .unwrap();
+      assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
+    }
 
     {
       let db_row_ids = c

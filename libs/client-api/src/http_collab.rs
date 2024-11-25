@@ -2,8 +2,10 @@ use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, brotli_compress, Client};
 use app_error::AppError;
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 use client_api_entity::workspace_dto::{
-  AFDatabase, AFDatabaseRow, AFDatabaseRowDetail, ListDatabaseRowDetailParam,
+  AFDatabase, AFDatabaseRow, AFDatabaseRowDetail, DatabaseRowUpdatedItem,
+  ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
 };
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
@@ -184,6 +186,26 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  pub async fn list_database_row_ids_updated(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    after: Option<DateTime<Utc>>,
+  ) -> Result<Vec<DatabaseRowUpdatedItem>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row/updated",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .query(&ListDatabaseRowUpdatedParam { after })
       .send()
       .await?;
     log_request_id(&resp);

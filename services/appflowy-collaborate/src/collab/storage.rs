@@ -32,11 +32,12 @@ use database_entity::dto::{
 };
 
 use crate::collab::access_control::CollabStorageAccessControlImpl;
+use crate::collab::s3_storage::S3CollabStorage;
 use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
 use crate::snapshot::SnapshotControl;
 
-pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessControlImpl>;
+pub type CollabAccessControlStorage = S3CollabStorage;
 
 struct PendingCollabWrite {
   workspace_id: String,
@@ -70,7 +71,7 @@ impl<AC> CollabStorageImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
-  pub fn new(
+  fn new(
     cache: CollabCache,
     access_control: AC,
     snapshot_control: SnapshotControl,

@@ -37,6 +37,7 @@ use tracing::{error, info, warn};
 
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
+use appflowy_collaborate::collab::s3_storage::S3CollabStorage;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::indexer::IndexerProvider;
@@ -207,10 +208,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   // Bucket storage
   info!("Setting up S3 bucket...");
-  let s3_client = AwsS3BucketClientImpl::new(
-    get_aws_s3_client(&config.s3).await?,
-    config.s3.bucket.clone(),
-  );
+  let s3 = get_aws_s3_client(&config.s3).await?;
+  let s3_client = AwsS3BucketClientImpl::new(s3.clone(), config.s3.bucket.clone());
   let bucket_storage = Arc::new(S3BucketStorage::from_bucket_impl(
     s3_client.clone(),
     pg_pool.clone(),
@@ -283,23 +282,11 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     };
   let collab_cache = CollabCache::new(redis_conn_manager.clone(), pg_pool.clone());
 
-  let collab_storage_access_control = CollabStorageAccessControlImpl {
-    collab_access_control: collab_access_control.clone(),
-    workspace_access_control: workspace_access_control.clone(),
-    cache: collab_cache.clone(),
-  };
-  let snapshot_control = SnapshotControl::new(
-    redis_conn_manager.clone(),
-    pg_pool.clone(),
-    metrics.collab_metrics.clone(),
-  )
-  .await;
-  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
-    collab_cache.clone(),
-    collab_storage_access_control,
-    snapshot_control,
+  let collab_access_control_storage = Arc::new(S3CollabStorage::new(
     rt_cmd_tx,
-    metrics.collab_metrics.clone(),
+    pg_pool.clone(),
+    s3.clone(),
+    config.s3.bucket.clone(),
   ));
 
   info!(

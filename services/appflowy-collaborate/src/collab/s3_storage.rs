@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use crate::command::{CLCommandSender, CollaborationCommand};
 use anyhow::anyhow;
 use app_error::AppError;
@@ -13,7 +15,8 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use database::collab::{
-  AppResult, CollabMetadata, CollabStorage, GetCollabOrigin, SNAPSHOT_PER_HOUR,
+  batch_select_collab_blob, get_all_collab_snapshot_meta, select_blob_from_af_collab,
+  select_snapshot, AppResult, CollabMetadata, CollabStorage, GetCollabOrigin, SNAPSHOT_PER_HOUR,
 };
 use database_entity::dto::{
   AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
@@ -101,7 +104,9 @@ impl S3CollabStorage {
   }
 
   async fn collab_pg(&self, params: QueryCollabParams) -> AppResult<EncodedCollab> {
-    todo!()
+    let blob =
+      select_blob_from_af_collab(&self.pg_pool, &params.collab_type, &params.object_id).await?;
+    Ok(EncodedCollab::decode_from_bytes(&blob)?)
   }
 
   async fn snapshot_list_pg(
@@ -110,7 +115,8 @@ impl S3CollabStorage {
     object_id: &str,
     max_count: usize,
   ) -> AppResult<Vec<AFSnapshotMeta>> {
-    todo!()
+    let metas = get_all_collab_snapshot_meta(&self.pg_pool, object_id).await?;
+    Ok(metas.0)
   }
 
   async fn snapshot_pg(
@@ -119,7 +125,14 @@ impl S3CollabStorage {
     object_id: &str,
     snapshot_id: &i64,
   ) -> AppResult<Bytes> {
-    todo!()
+    if let Some(row) = select_snapshot(&self.pg_pool, snapshot_id).await? {
+      Ok(row.blob.into())
+    } else {
+      Err(AppError::RecordNotFound(format!(
+        "Snapshot not found: {}",
+        snapshot_id
+      )))
+    }
   }
 
   async fn delete_collab_s3(&self, workspace_id: &str, object_id: &str) -> AppResult<()> {
@@ -389,7 +402,8 @@ impl CollabStorage for S3CollabStorage {
     }
 
     if !not_found.is_empty() {
-      todo!("get remaining collabs from postgres");
+      let res = batch_select_collab_blob(&self.pg_pool, queries).await;
+      result.extend(res);
     }
 
     result

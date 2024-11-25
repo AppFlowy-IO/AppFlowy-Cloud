@@ -10,6 +10,11 @@ use actix_web::dev::Server;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer};
 use anyhow::{Context, Error};
+use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
+use aws_sdk_s3::operation::create_bucket::CreateBucketError;
+use aws_sdk_s3::types::{
+  BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
+};
 use database::collab::cache::CollabCache;
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
@@ -22,10 +27,10 @@ use access_control::casbin::access::AccessControl;
 use appflowy_ai_client::client::AppFlowyAIClient;
 
 use crate::api::{collab_scope, ws_scope};
-
+use crate::collab::s3_storage::S3CollabStorage;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
-use crate::config::{Config, DatabaseSetting};
+use crate::config::{Config, DatabaseSetting, S3Setting};
 use crate::indexer::IndexerProvider;
 use crate::pg_listener::PgListeners;
 use crate::snapshot::SnapshotControl;
@@ -128,12 +133,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     metrics.collab_metrics.clone(),
   )
   .await;
-  let collab_storage = Arc::new(CollabStorageImpl::new(
-    collab_cache.clone(),
-    collab_storage_access_control,
-    snapshot_control,
+  let s3 = get_aws_s3_client(&config.s3).await?;
+  let collab_storage = Arc::new(S3CollabStorage::new(
     rt_cmd_tx,
-    metrics.collab_metrics.clone(),
+    pg_pool,
+    s3,
+    config.s3.bucket.clone(),
   ));
   let app_state = AppState {
     config: Arc::new(config.clone()),
@@ -146,6 +151,85 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     indexer_provider,
   };
   Ok(app_state)
+}
+
+pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Client, Error> {
+  let credentials = Credentials::new(
+    s3_setting.access_key.clone(),
+    s3_setting.secret_key.expose_secret().clone(),
+    None,
+    None,
+    "custom",
+  );
+  let shared_credentials = SharedCredentialsProvider::new(credentials);
+
+  // Configure the AWS SDK
+  let config_builder = aws_sdk_s3::Config::builder()
+    .credentials_provider(shared_credentials)
+    .force_path_style(true)
+    .region(Region::new(s3_setting.region.clone()));
+
+  let config = if s3_setting.use_minio {
+    config_builder.endpoint_url(&s3_setting.minio_url).build()
+  } else {
+    config_builder.build()
+  };
+  let client = aws_sdk_s3::Client::from_conf(config);
+  if s3_setting.create_bucket {
+    create_bucket_if_not_exists(&client, s3_setting).await?;
+  } else {
+    info!("Skipping bucket creation, assumed to be created externally");
+  }
+  Ok(client)
+}
+
+async fn create_bucket_if_not_exists(
+  client: &aws_sdk_s3::Client,
+  s3_setting: &S3Setting,
+) -> Result<(), Error> {
+  let bucket_cfg = if s3_setting.use_minio {
+    CreateBucketConfiguration::builder()
+      .bucket(BucketInfo::builder().r#type(BucketType::Directory).build())
+      .build()
+  } else {
+    CreateBucketConfiguration::builder()
+      .location_constraint(BucketLocationConstraint::from(s3_setting.region.as_str()))
+      .build()
+  };
+
+  match client
+    .create_bucket()
+    .bucket(&s3_setting.bucket)
+    .create_bucket_configuration(bucket_cfg)
+    .send()
+    .await
+  {
+    Ok(_) => {
+      info!(
+        "bucket created successfully: {}, region: {}",
+        s3_setting.bucket, s3_setting.region
+      );
+      Ok(())
+    },
+    Err(err) => {
+      if let Some(service_error) = err.as_service_error() {
+        match service_error {
+          CreateBucketError::BucketAlreadyOwnedByYou(_)
+          | CreateBucketError::BucketAlreadyExists(_) => {
+            info!("Bucket already exists");
+            Ok(())
+          },
+          _ => {
+            tracing::error!("Unhandle s3 service error: {:?}", err);
+            Err(err.into())
+          },
+        }
+      } else {
+        tracing::error!("Failed to create bucket: {:?}", err);
+        Ok(())
+      }
+    },
+  }
 }
 
 async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManager, Error> {

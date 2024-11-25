@@ -300,6 +300,17 @@ pub struct ListDatabaseRowDetailParam {
   pub ids: String,
 }
 
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct ListDatabaseRowUpdatedParam {
+  pub after: Option<DateTime<Utc>>,
+}
+
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct DatabaseRowUpdatedItem {
+  pub updated_at: DateTime<Utc>,
+  pub row_id: String,
+}
+
 impl ListDatabaseRowDetailParam {
   pub fn from(ids: &[&str]) -> Self {
     Self { ids: ids.join(",") }

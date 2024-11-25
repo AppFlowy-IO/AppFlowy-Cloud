@@ -4,12 +4,13 @@ use database_entity::dto::{
   AFAccessLevel, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas, CollabParams,
   QueryCollab, QueryCollabResult, RawData,
 };
+use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
 
 use crate::collab::{partition_key_from_collab_type, SNAPSHOT_PER_HOUR};
 use crate::pg_row::AFSnapshotRow;
 use crate::pg_row::{AFCollabMemberAccessLevelRow, AFCollabRowMeta};
 use app_error::AppError;
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use futures_util::stream::BoxStream;
 
 use sqlx::postgres::PgRow;
@@ -791,4 +792,30 @@ pub async fn select_workspace_database_oid<'a, E: Executor<'a, Database = Postgr
   )
   .fetch_one(executor)
   .await
+}
+
+pub async fn select_last_updated_database_row_ids(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  row_ids: &[String],
+  after: &DateTime<Utc>,
+) -> Result<Vec<DatabaseRowUpdatedItem>, sqlx::Error> {
+  let updated_row_items = sqlx::query_as!(
+    DatabaseRowUpdatedItem,
+    r#"
+      SELECT
+        updated_at as updated_at,
+        oid as row_id
+      FROM af_collab_database_row
+      WHERE workspace_id = $1
+        AND oid = ANY($2)
+        AND updated_at > $3
+    "#,
+    workspace_id,
+    row_ids,
+    after,
+  )
+  .fetch_all(pg_pool)
+  .await?;
+  Ok(updated_row_items)
 }

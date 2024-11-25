@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use chrono::DateTime;
+use chrono::Utc;
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -15,6 +17,7 @@ use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::SectionItem;
 use collab_folder::{CollabOrigin, Folder};
+use database::collab::select_last_updated_database_row_ids;
 use database::collab::select_workspace_database_oid;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
@@ -24,6 +27,7 @@ use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
 use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
+use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
 use shared_entity::dto::workspace_dto::FolderViewMinimal;
 use shared_entity::dto::workspace_dto::RecentFolderView;
@@ -435,16 +439,16 @@ pub async fn list_database(
   Ok(af_databases)
 }
 
-pub async fn list_database_row(
+pub async fn list_database_row_ids(
   collab_storage: &CollabAccessControlStorage,
-  workspace_uuid_str: String,
-  database_uuid_str: String,
+  workspace_uuid_str: &str,
+  database_uuid_str: &str,
 ) -> Result<Vec<AFDatabaseRow>, AppError> {
   let db_collab = get_latest_collab(
     collab_storage,
     GetCollabOrigin::Server,
-    &workspace_uuid_str,
-    &database_uuid_str,
+    workspace_uuid_str,
+    database_uuid_str,
     CollabType::Database,
   )
   .await?;
@@ -477,6 +481,25 @@ pub async fn list_database_row(
     .collect();
 
   Ok(db_rows)
+}
+
+pub async fn list_database_row_ids_updated(
+  collab_storage: &CollabAccessControlStorage,
+  pg_pool: &PgPool,
+  workspace_uuid_str: &str,
+  database_uuid_str: &str,
+  after: &DateTime<Utc>,
+) -> Result<Vec<DatabaseRowUpdatedItem>, AppError> {
+  let row_ids = list_database_row_ids(collab_storage, workspace_uuid_str, database_uuid_str)
+    .await?
+    .into_iter()
+    .map(|row| row.id)
+    .collect::<Vec<String>>();
+
+  let workspace_uuid: Uuid = workspace_uuid_str.parse()?;
+  let updated_row_ids =
+    select_last_updated_database_row_ids(pg_pool, &workspace_uuid, &row_ids, after).await?;
+  Ok(updated_row_ids)
 }
 
 pub async fn list_database_row_details(

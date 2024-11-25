@@ -5,6 +5,7 @@ use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use bytes::BytesMut;
+use chrono::{DateTime, Duration, Utc};
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use futures_util::future::try_join_all;
@@ -259,6 +260,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row")
         .route(web::get().to(list_database_row_id_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/database/{database_id}/row/updated")
+        .route(web::get().to(list_database_row_id_updated_handler)),
     )
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row/detail")
@@ -1892,9 +1897,42 @@ async fn list_database_row_id_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
 
-  let db_rows =
-    biz::collab::ops::list_database_row(&state.collab_access_control_storage, workspace_id, db_id)
-      .await?;
+  let db_rows = biz::collab::ops::list_database_row_ids(
+    &state.collab_access_control_storage,
+    &workspace_id,
+    &db_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(db_rows)))
+}
+
+async fn list_database_row_id_updated_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+  param: web::Query<ListDatabaseRowUpdatedParam>,
+) -> Result<Json<AppResponse<Vec<DatabaseRowUpdatedItem>>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Read)
+    .await?;
+
+  // Default to 1 hour ago
+  let after: DateTime<Utc> = param
+    .after
+    .unwrap_or_else(|| Utc::now() - Duration::hours(1));
+
+  let db_rows = biz::collab::ops::list_database_row_ids_updated(
+    &state.collab_access_control_storage,
+    &state.pg_pool,
+    &workspace_id,
+    &db_id,
+    &after,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))
 }
 

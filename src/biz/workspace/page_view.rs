@@ -656,10 +656,11 @@ async fn get_page_collab_data_for_database(
       )))?
       .database_id
   };
+  let wid = workspace_id.to_string();
   let db = get_latest_collab_encoded(
     collab_access_control_storage,
     GetCollabOrigin::User { uid },
-    &workspace_id.to_string(),
+    &wid,
     &db_oid,
     CollabType::Database,
   )
@@ -705,7 +706,7 @@ async fn get_page_collab_data_for_database(
     })
     .collect();
   let row_query_collab_results = collab_access_control_storage
-    .batch_get_collab(&uid, queries, true)
+    .batch_get_collab(&uid, &wid, queries, true)
     .await;
   let row_data = tokio::task::spawn_blocking(move || {
     let row_collabs: HashMap<String, Vec<u8>> = row_query_collab_results

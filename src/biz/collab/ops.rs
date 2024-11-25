@@ -400,7 +400,7 @@ pub async fn list_database(
     })
     .collect();
   let results = collab_storage
-    .batch_get_collab(&uid, query_collabs, true)
+    .batch_get_collab(&uid, &workspace_uuid_str, query_collabs, true)
     .await;
 
   let txn = collab.transact();

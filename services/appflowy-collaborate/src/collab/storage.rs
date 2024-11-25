@@ -501,6 +501,7 @@ where
   async fn batch_get_collab(
     &self,
     _uid: &i64,
+    workspace_id: &str,
     queries: Vec<QueryCollab>,
     from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult> {
@@ -571,16 +572,15 @@ where
     Ok(())
   }
 
-  async fn query_collab_meta(
+  async fn should_create_snapshot(
     &self,
+    workspace_id: &str,
     object_id: &str,
-    collab_type: &CollabType,
-  ) -> AppResult<CollabMetadata> {
-    self.cache.get_collab_meta(object_id, collab_type).await
-  }
-
-  async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError> {
-    self.snapshot_control.should_create_snapshot(oid).await
+  ) -> Result<bool, AppError> {
+    self
+      .snapshot_control
+      .should_create_snapshot(object_id)
+      .await
   }
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta> {
@@ -603,8 +603,15 @@ where
       .await
   }
 
-  async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
-    self.snapshot_control.get_collab_snapshot_list(oid).await
+  async fn get_collab_snapshot_list(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> AppResult<AFSnapshotMetas> {
+    self
+      .snapshot_control
+      .get_collab_snapshot_list(object_id)
+      .await
   }
 
   async fn broadcast_encode_collab(

@@ -1135,10 +1135,10 @@ async fn get_all_collab_snapshot_list_handler(
   path: web::Path<(String, String)>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
-  let (_, object_id) = path.into_inner();
+  let (workspace_id, object_id) = path.into_inner();
   let data = state
     .collab_access_control_storage
-    .get_collab_snapshot_list(&object_id)
+    .get_collab_snapshot_list(&workspace_id, &object_id)
     .await
     .map_err(AppResponseError::from)?;
   Ok(Json(AppResponse::Ok().with_data(data)))
@@ -1147,9 +1147,11 @@ async fn get_all_collab_snapshot_list_handler(
 #[instrument(level = "debug", skip(payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
+  path: web::Path<String>,
   state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
+  let workspace_id = path.into_inner();
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)
@@ -1158,7 +1160,7 @@ async fn batch_get_collab_handler(
   let result = BatchQueryCollabResult(
     state
       .collab_access_control_storage
-      .batch_get_collab(&uid, payload.into_inner().0, false)
+      .batch_get_collab(&uid, &workspace_id, payload.into_inner().0, false)
       .await,
   );
   Ok(Json(AppResponse::Ok().with_data(result)))

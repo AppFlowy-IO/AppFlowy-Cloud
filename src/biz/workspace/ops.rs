@@ -1,6 +1,4 @@
 use authentication::jwt::OptionalUserUuid;
-use collab::core::collab::DataSource;
-use collab::preclude::Collab;
 use collab_folder::CollabOrigin;
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
@@ -749,16 +747,4 @@ pub async fn broadcast_update(
     .await?;
 
   Ok(())
-}
-
-pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
-  let collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    object_id,
-    DataSource::DocStateV1(doc_state),
-    vec![],
-    false,
-  )
-  .map_err(|e| AppError::Unhandled(e.to_string()))?;
-  Ok(collab)
 }

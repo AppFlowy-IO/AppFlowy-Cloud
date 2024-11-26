@@ -304,18 +304,18 @@ debug = true
 [profile.ci]
 inherits = "release"
 opt-level = 2
-lto = false # Disable Link-Time Optimization
+lto = false          # Disable Link-Time Optimization
 
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
-collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "be6bb90faac22ca8443a950ea3deafc7ec99b3a8" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
+collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
 
 [features]
 history = []

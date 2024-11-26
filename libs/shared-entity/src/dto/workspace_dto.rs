@@ -344,12 +344,6 @@ pub struct AFDatabase {
   pub views: Vec<FolderViewMinimal>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AFDatabaseField {
-  pub name: String,
-  pub field_type: String,
-}
-
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct AFDatabaseRow {
   pub id: String,
@@ -359,4 +353,12 @@ pub struct AFDatabaseRow {
 pub struct AFDatabaseRowDetail {
   pub id: String,
   pub cells: HashMap<String, HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AFDatabaseField {
+  pub id: String,
+  pub name: String,
+  pub field_type: String,
+  pub is_primary: bool,
 }

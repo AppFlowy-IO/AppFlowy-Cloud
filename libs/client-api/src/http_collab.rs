@@ -4,7 +4,7 @@ use app_error::AppError;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use client_api_entity::workspace_dto::{
-  AFDatabase, AFDatabaseRow, AFDatabaseRowDetail, DatabaseRowUpdatedItem,
+  AFDatabase, AFDatabaseField, AFDatabaseRow, AFDatabaseRowDetail, DatabaseRowUpdatedItem,
   ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
 };
 use client_api_entity::{
@@ -181,6 +181,24 @@ impl Client {
   ) -> Result<Vec<AFDatabaseRow>, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/database/{}/row",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  pub async fn get_database_fields(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+  ) -> Result<Vec<AFDatabaseField>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/fields",
       self.base_url, workspace_id, database_id
     );
     let resp = self

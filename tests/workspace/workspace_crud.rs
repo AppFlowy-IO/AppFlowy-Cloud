@@ -1,6 +1,7 @@
 use client_api_test::generate_unique_registered_user_client;
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabParams;
+use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 
@@ -25,13 +26,54 @@ async fn workspace_list_database() {
       assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
     }
     {
+      let mut db_fields = c
+        .get_database_fields(&workspace_id, &todos_db.id)
+        .await
+        .unwrap();
+      db_fields.sort();
+
+      let expected = vec![
+        AFDatabaseField {
+          id: "3AE6iK".to_string(),
+          name: "Last modified".to_string(),
+          field_type: "LastEditedTime".to_string(),
+          is_primary: false,
+        },
+        AFDatabaseField {
+          id: "KinVda".to_string(),
+          name: "Tasks".to_string(),
+          field_type: "Checklist".to_string(),
+          is_primary: false,
+        },
+        AFDatabaseField {
+          id: "SqwRg1".to_string(),
+          name: "Status".to_string(),
+          field_type: "SingleSelect".to_string(),
+          is_primary: false,
+        },
+        AFDatabaseField {
+          id: "phVRgL".to_string(),
+          name: "Description".to_string(),
+          field_type: "RichText".to_string(),
+          is_primary: true,
+        },
+        AFDatabaseField {
+          id: "wdX8DG".to_string(),
+          name: "Multiselect".to_string(),
+          field_type: "MultiSelect".to_string(),
+          is_primary: false,
+        },
+      ];
+
+      assert_eq!(db_fields, expected, "{:#?}", db_fields);
+    }
+    {
       let db_row_ids = c
         .list_database_row_ids_updated(&workspace_id, &todos_db.id, None)
         .await
         .unwrap();
       assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
     }
-
     {
       let db_row_ids = c
         .list_database_row_ids(&workspace_id, &todos_db.id)

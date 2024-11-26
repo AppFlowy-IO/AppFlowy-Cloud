@@ -18,7 +18,7 @@ use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::{ops::DerefMut, str::FromStr};
-use tracing::{error, event, instrument};
+use tracing::{error, instrument};
 use uuid::Uuid;
 
 /// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
@@ -64,9 +64,9 @@ pub async fn insert_into_af_collab(
   sqlx::query!(
     r#"
   INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
-  VALUES ($1, $2, $3, $4, $5, $6, $7)
-  ON CONFLICT (oid, partition_key) DO UPDATE
-  SET blob = $2, len = $3, encrypt = $5, owner_uid = $6;
+  SELECT $1, $2, $3, $4, $5, $6, $7
+  ON CONFLICT (oid, partition_key) WHERE workspace_id = $7
+  DO UPDATE SET blob = $2, len = $3, encrypt = $5, owner_uid = $6;
   "#,
     params.object_id,
     params.encoded_collab_v1.as_ref(),

@@ -2,7 +2,6 @@ use std::ops::DerefMut;
 
 use collab_entity::CollabType;
 use pgvector::Vector;
-use serde::Serialize;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
 use sqlx::{Error, Executor, Postgres, Transaction};
 use uuid::Uuid;

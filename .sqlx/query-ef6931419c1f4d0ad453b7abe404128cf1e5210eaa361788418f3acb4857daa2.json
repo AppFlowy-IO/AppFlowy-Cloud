@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n  INSERT INTO af_collab_member (uid, oid, permission_id)\n  VALUES ($1, $2, (SELECT rp.permission_id \n    FROM af_role_permissions rp\n    JOIN af_roles ON rp.role_id = af_roles.id\n    WHERE af_roles.name = 'Owner'))\n  ON CONFLICT (uid, oid)\n  DO UPDATE SET permission_id = excluded.permission_id;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ef6931419c1f4d0ad453b7abe404128cf1e5210eaa361788418f3acb4857daa2"
+}

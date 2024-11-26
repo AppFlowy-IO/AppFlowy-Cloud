@@ -1,6 +1,6 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
-use appflowy_cloud::biz::workspace::ops::collab_from_doc_state;
+use appflowy_cloud::biz::collab::ops::collab_from_doc_state;
 use client_api::entity::{
   AFRole, GlobalComment, PatchPublishedCollab, PublishCollabItem, PublishCollabMetadata,
   PublishInfoMeta,

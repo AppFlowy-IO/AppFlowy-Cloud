@@ -274,6 +274,19 @@ pub enum ViewLayout {
   Chat = 4,
 }
 
+impl std::fmt::Display for ViewLayout {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let s = match self {
+      ViewLayout::Document => "Document",
+      ViewLayout::Grid => "Grid",
+      ViewLayout::Board => "Board",
+      ViewLayout::Calendar => "Calendar",
+      ViewLayout::Chat => "Chat",
+    };
+    write!(f, "{}", s)
+  }
+}
+
 impl Default for ViewLayout {
   fn default() -> Self {
     Self::Document

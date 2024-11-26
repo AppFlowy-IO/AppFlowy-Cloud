@@ -5,6 +5,7 @@ use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
 use chrono::Utc;
+use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -12,6 +13,7 @@ use collab_database::fields::Field;
 use collab_database::fields::TypeOptions;
 use collab_database::rows::RowDetail;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
@@ -294,6 +296,30 @@ pub async fn get_user_workspace_structure(
     .map(|id| id.to_string())
     .collect();
   collab_folder_to_folder_view(root_view_id, &folder, depth, &publish_view_ids)
+}
+
+pub async fn get_latest_workspace_database(
+  collab_storage: &CollabAccessControlStorage,
+  pg_pool: &PgPool,
+  collab_origin: GetCollabOrigin,
+  workspace_id: Uuid,
+) -> Result<(String, WorkspaceDatabase), AppError> {
+  let workspace_database_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
+  let workspace_database_collab = {
+    let encoded_collab = get_latest_collab_encoded(
+      collab_storage,
+      collab_origin,
+      &workspace_id.to_string(),
+      &workspace_database_oid,
+      CollabType::WorkspaceDatabase,
+    )
+    .await?;
+    collab_from_doc_state(encoded_collab.doc_state.to_vec(), &workspace_database_oid)?
+  };
+
+  let workspace_database = WorkspaceDatabase::open(workspace_database_collab)
+    .map_err(|err| AppError::Unhandled(format!("failed to open workspace database: {}", err)))?;
+  Ok((workspace_database_oid, workspace_database))
 }
 
 pub async fn get_latest_collab_folder(
@@ -766,4 +792,16 @@ async fn get_database_body(
     ))
   })?;
   Ok((db_collab, db_body))
+}
+
+pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
+  let collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    object_id,
+    DataSource::DocStateV1(doc_state),
+    vec![],
+    false,
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok(collab)
 }

@@ -126,27 +126,6 @@ where
   ) -> Result<(), RealtimeError> {
     let mut is_new_collab = false;
     let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
-    // Ensure the workspace_id matches the metadata's workspace_id when creating a collaboration object
-    // of type [CollabType::Folder]. In this case, both the object id and the workspace id should be
-    // identical.
-    if let Ok(metadata) = self
-      .storage
-      .query_collab_meta(workspace_id, object_id, &collab_type)
-      .await
-    {
-      if metadata.workspace_id != workspace_id {
-        let err =
-          RealtimeError::CreateGroupFailed(CreateGroupFailedReason::CollabWorkspaceIdNotMatch {
-            expect: metadata.workspace_id,
-            actual: workspace_id.to_string(),
-            detail: format!(
-              "user_id:{},app_version:{},object_id:{}:{}",
-              user.uid, user.app_version, object_id, collab_type
-            ),
-          });
-        return Err(err);
-      }
-    }
 
     let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
     let (collab, _encode_collab) = {

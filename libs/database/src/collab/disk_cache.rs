@@ -14,6 +14,7 @@ use crate::collab::{
   select_collab_meta_from_af_collab, AppResult,
 };
 use crate::file::s3_client_impl::AwsS3BucketClientImpl;
+use crate::file::BucketClient;
 use crate::index::upsert_collab_embeddings;
 use crate::pg_row::AFCollabRowMeta;
 use app_error::AppError;
@@ -33,21 +34,6 @@ impl CollabDiskCache {
   pub async fn is_exist(&self, object_id: &str) -> AppResult<bool> {
     let is_exist = is_collab_exists(object_id, &self.pg_pool).await?;
     Ok(is_exist)
-  }
-
-  pub async fn get_collab_meta(
-    &self,
-    object_id: &str,
-    collab_type: &CollabType,
-  ) -> AppResult<AFCollabRowMeta> {
-    let result = select_collab_meta_from_af_collab(&self.pg_pool, object_id, collab_type).await?;
-    match result {
-      None => {
-        let msg = format!("Can't find the row for object_id: {}", object_id);
-        Err(AppError::RecordNotFound(msg))
-      },
-      Some(meta) => Ok(meta),
-    }
   }
 
   pub async fn upsert_collab_with_transaction(
@@ -144,4 +130,8 @@ impl CollabDiskCache {
     .await?;
     Ok(())
   }
+}
+
+fn collab_key(workspace_id: &str, object_id: &str) -> String {
+  format!("collabs/{}/{}/collab", workspace_id, object_id)
 }

@@ -131,16 +131,21 @@ impl SnapshotControl {
     }
   }
 
-  pub async fn get_collab_snapshot(&self, snapshot_id: &i64) -> AppResult<SnapshotData> {
-    match select_snapshot(&self.pg_pool, snapshot_id).await? {
+  pub async fn get_collab_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    snapshot_id: &i64,
+  ) -> AppResult<SnapshotData> {
+    match select_snapshot(&self.pg_pool, workspace_id, object_id, snapshot_id).await? {
       None => Err(AppError::RecordNotFound(format!(
         "Can't find the snapshot with id:{}",
         snapshot_id
       ))),
       Some(row) => Ok(SnapshotData {
-        object_id: row.oid,
+        object_id: object_id.to_string(),
         encoded_collab_v1: row.blob,
-        workspace_id: row.workspace_id.to_string(),
+        workspace_id: workspace_id.to_string(),
       }),
     }
   }
@@ -172,7 +177,11 @@ impl SnapshotControl {
     let encoded_collab_v1 = self.cache.try_get(&key.0).await.unwrap_or(None);
 
     match encoded_collab_v1 {
-      None => self.get_collab_snapshot(snapshot_id).await,
+      None => {
+        self
+          .get_collab_snapshot(workspace_id, object_id, snapshot_id)
+          .await
+      },
       Some(encoded_collab_v1) => Ok(SnapshotData {
         encoded_collab_v1,
         workspace_id: workspace_id.to_string(),

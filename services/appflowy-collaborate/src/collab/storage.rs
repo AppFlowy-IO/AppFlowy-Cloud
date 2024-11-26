@@ -571,18 +571,6 @@ where
     Ok(())
   }
 
-  async fn query_collab_meta(
-    &self,
-    workspace_id: &str,
-    object_id: &str,
-    collab_type: &CollabType,
-  ) -> AppResult<CollabMetadata> {
-    self
-      .cache
-      .get_collab_meta(workspace_id, object_id, collab_type)
-      .await
-  }
-
   async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError> {
     self.snapshot_control.should_create_snapshot(oid).await
   }

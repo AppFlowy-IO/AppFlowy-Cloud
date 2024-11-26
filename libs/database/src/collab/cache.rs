@@ -40,37 +40,6 @@ impl CollabCache {
     }
   }
 
-  pub async fn get_collab_meta(
-    &self,
-    workspace_id: &str,
-    object_id: &str,
-    collab_type: &CollabType,
-  ) -> Result<CollabMetadata, AppError> {
-    match self.mem_cache.get_collab_meta(object_id).await {
-      Ok(meta) => Ok(meta),
-      Err(_) => {
-        let row = self
-          .disk_cache
-          .get_collab_meta(object_id, collab_type)
-          .await?;
-        let meta = CollabMetadata {
-          object_id: row.oid,
-          workspace_id: row.workspace_id.to_string(),
-        };
-
-        // Spawn a background task to insert the collaboration metadata into the memory cache.
-        let cloned_meta = meta.clone();
-        let mem_cache = self.mem_cache.clone();
-        tokio::spawn(async move {
-          if let Err(err) = mem_cache.insert_collab_meta(cloned_meta).await {
-            error!("{:?}", err);
-          }
-        });
-        Ok(meta)
-      },
-    }
-  }
-
   pub async fn get_encode_collab(&self, query: QueryCollab) -> Result<EncodedCollab, AppError> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.

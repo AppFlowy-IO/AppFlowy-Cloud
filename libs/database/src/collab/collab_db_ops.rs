@@ -461,15 +461,20 @@ pub async fn create_snapshot_and_maintain_limit<'a>(
 #[inline]
 pub async fn select_snapshot(
   pg_pool: &PgPool,
+  workspace_id: &str,
+  object_id: &str,
   snapshot_id: &i64,
 ) -> Result<Option<AFSnapshotRow>, Error> {
+  let workspace_id = Uuid::from_str(workspace_id).map_err(|err| Error::Decode(err.into()))?;
   let row = sqlx::query_as!(
     AFSnapshotRow,
     r#"
       SELECT * FROM af_collab_snapshot
-      WHERE sid = $1 AND deleted_at IS NULL;
+      WHERE sid = $1 AND oid = $2 AND workspace_id = $3 AND deleted_at IS NULL;
     "#,
     snapshot_id,
+    object_id,
+    workspace_id
   )
   .fetch_optional(pg_pool)
   .await?;

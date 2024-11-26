@@ -11,6 +11,7 @@ use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 
+use aws_sdk_s3::operation::list_objects_v2::{ListObjectsV2, ListObjectsV2Error};
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};

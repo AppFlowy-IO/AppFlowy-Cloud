@@ -149,12 +149,6 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
   async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()>;
 
-  async fn query_collab_meta(
-    &self,
-    workspace_id: &str,
-    object_id: &str,
-    collab_type: &CollabType,
-  ) -> AppResult<CollabMetadata>;
   async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError>;
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta>;

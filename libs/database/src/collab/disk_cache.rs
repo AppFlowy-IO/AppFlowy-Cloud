@@ -63,7 +63,13 @@ impl CollabDiskCache {
         em.tokens_consumed
       );
       let workspace_id = Uuid::parse_str(workspace_id)?;
-      upsert_collab_embeddings(transaction, &workspace_id, em.tokens_consumed, &em.params).await?;
+      upsert_collab_embeddings(
+        transaction,
+        &workspace_id,
+        em.tokens_consumed,
+        em.params.clone(),
+      )
+      .await?;
     } else if params.collab_type == CollabType::Document {
       tracing::info!("no embeddings to save for collab {}", params.object_id);
     }

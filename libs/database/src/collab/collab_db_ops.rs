@@ -62,50 +62,19 @@ pub async fn insert_into_af_collab(
   );
 
   sqlx::query!(
-    r#"
-  INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
-  VALUES ($1, $2, $3, $4, $5, $6, $7)
-  ON CONFLICT (oid, partition_key)
-  DO UPDATE SET blob = $2, len = $3, encrypt = $5, owner_uid = $6 WHERE excluded.workspace_id = $7;
-  "#,
-    params.object_id,
-    params.encoded_collab_v1.as_ref(),
-    params.encoded_collab_v1.len() as i32,
-    partition_key,
-    encrypt,
-    uid,
+    r#"CALL af_collab_upsert($1, $2, $3, $4, $5, $6)"#,
     workspace_id,
+    params.object_id,
+    partition_key,
+    *uid,
+    encrypt,
+    params.encoded_collab_v1.as_ref(),
   )
   .execute(tx.deref_mut())
   .await
   .map_err(|err| {
     AppError::Internal(anyhow!(
       "Update af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}. error: {:?}",
-      workspace_id,
-      uid,
-      params.object_id,
-      params.collab_type,
-      err,
-    ))
-  })?;
-
-  sqlx::query!(
-    r#"
-  INSERT INTO af_collab_member (uid, oid, permission_id)
-  VALUES ($1, $2, (SELECT rp.permission_id 
-    FROM af_role_permissions rp
-    JOIN af_roles ON rp.role_id = af_roles.id
-    WHERE af_roles.name = 'Owner'))
-  ON CONFLICT (uid, oid)
-  DO UPDATE SET permission_id = excluded.permission_id;"#,
-    uid,
-    params.object_id
-  )
-  .execute(tx.deref_mut())
-  .await
-  .map_err(|err| {
-    AppError::Internal(anyhow!(
-      "Update af_collab_member failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}. error: {:?}",
       workspace_id,
       uid,
       params.object_id,

@@ -2,6 +2,8 @@ use std::ops::DerefMut;
 
 use collab_entity::CollabType;
 use pgvector::Vector;
+use serde::Serialize;
+use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
 use sqlx::{Error, Executor, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -58,52 +60,52 @@ WHERE w.workspace_id = $1"#,
   }
 }
 
+#[derive(sqlx::Type)]
+#[sqlx(type_name = "af_fragment", no_pg_array)]
+struct Fragment {
+  fragment_id: String,
+  content_type: i32,
+  contents: String,
+  embedding: Option<Vector>,
+}
+
+impl From<AFCollabEmbeddingParams> for Fragment {
+  fn from(value: AFCollabEmbeddingParams) -> Self {
+    Fragment {
+      fragment_id: value.fragment_id,
+      content_type: value.content_type as i32,
+      contents: value.content,
+      embedding: value.embedding.map(Vector::from),
+    }
+  }
+}
+
+impl PgHasArrayType for Fragment {
+  fn array_type_info() -> PgTypeInfo {
+    PgTypeInfo::with_name("af_fragment[]")
+  }
+}
+
 pub async fn upsert_collab_embeddings(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &Uuid,
   tokens_used: u32,
-  records: &[AFCollabEmbeddingParams],
+  records: Vec<AFCollabEmbeddingParams>,
 ) -> Result<(), sqlx::Error> {
-  if tokens_used > 0 {
-    sqlx::query(r#"
-      INSERT INTO af_workspace_ai_usage(created_at, workspace_id, search_requests, search_tokens_consumed, index_tokens_consumed)
-      VALUES (now()::date, $1, 0, 0, $2)
-      ON CONFLICT (created_at, workspace_id) DO UPDATE
-      SET index_tokens_consumed = af_workspace_ai_usage.index_tokens_consumed + $2"#,
-    )
-    .bind(workspace_id)
-    .bind(tokens_used as i64)
-    .execute(tx.deref_mut())
-    .await?;
+  if records.is_empty() {
+    return Ok(());
   }
+  let object_id = records[0].object_id.clone();
+  let collab_type = records[0].collab_type.clone();
 
-  if !records.is_empty() {
-    // replace existing collab embeddings
-    remove_collab_embeddings(tx, &records[0].object_id).await?;
-    for r in records {
-      sqlx::query(
-        r#"INSERT INTO af_collab_embeddings (fragment_id, oid, partition_key, content_type, content, embedding, indexed_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
-        ON CONFLICT (fragment_id) DO UPDATE SET content_type = $4, content = $5, embedding = $6, indexed_at = NOW()"#,
-      )
-          .bind(&r.fragment_id)
-          .bind(&r.object_id)
-          .bind(crate::collab::partition_key_from_collab_type(&r.collab_type))
-          .bind(r.content_type as i32)
-          .bind(&r.content)
-          .bind(r.embedding.clone().map(Vector::from))
-          .execute(tx.deref_mut())
-          .await?;
-    }
-  }
-  Ok(())
-}
+  let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
 
-pub async fn remove_collab_embeddings(
-  tx: &mut Transaction<'_, sqlx::Postgres>,
-  object_id: &str,
-) -> Result<(), sqlx::Error> {
-  sqlx::query!("DELETE FROM af_collab_embeddings WHERE oid = $1", object_id)
+  sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4, $5::af_fragment[])"#)
+    .bind(*workspace_id)
+    .bind(object_id)
+    .bind(crate::collab::partition_key_from_collab_type(&collab_type))
+    .bind(tokens_used as i32)
+    .bind(fragments)
     .execute(tx.deref_mut())
     .await?;
   Ok(())

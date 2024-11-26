@@ -714,6 +714,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "authentication",
+ "aws-sdk-s3",
  "brotli 3.5.0",
  "bytes",
  "chrono",

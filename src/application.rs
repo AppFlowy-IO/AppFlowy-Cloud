@@ -281,7 +281,11 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     } else {
       Arc::new(NoOpsRealtimeCollabAccessControlImpl::new())
     };
-  let collab_cache = CollabCache::new(redis_conn_manager.clone(), pg_pool.clone());
+  let collab_cache = CollabCache::new(
+    redis_conn_manager.clone(),
+    pg_pool.clone(),
+    s3_client.clone(),
+  );
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {
     collab_access_control: collab_access_control.clone(),

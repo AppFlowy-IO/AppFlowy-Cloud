@@ -13,6 +13,7 @@ use crate::collab::{
   batch_select_collab_blob, insert_into_af_collab, is_collab_exists, select_blob_from_af_collab,
   select_collab_meta_from_af_collab, AppResult,
 };
+use crate::file::s3_client_impl::AwsS3BucketClientImpl;
 use crate::index::upsert_collab_embeddings;
 use crate::pg_row::AFCollabRowMeta;
 use app_error::AppError;
@@ -21,11 +22,12 @@ use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 #[derive(Clone)]
 pub struct CollabDiskCache {
   pub pg_pool: PgPool,
+  s3: AwsS3BucketClientImpl,
 }
 
 impl CollabDiskCache {
-  pub fn new(pg_pool: PgPool) -> Self {
-    Self { pg_pool }
+  pub fn new(pg_pool: PgPool, s3: AwsS3BucketClientImpl) -> Self {
+    Self { pg_pool, s3 }
   }
 
   pub async fn is_exist(&self, object_id: &str) -> AppResult<bool> {

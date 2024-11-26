@@ -89,7 +89,10 @@ validator = "0.16.1"
 rayon.workspace = true
 tiktoken-rs = "0.6.0"
 unicode-segmentation = "1.9.0"
-
+aws-sdk-s3 = { version = "1.36.0", features = [
+  "behavior-version-latest",
+  "rt-tokio",
+] }
 
 [dev-dependencies]
 rand = "0.8.5"

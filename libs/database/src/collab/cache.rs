@@ -12,6 +12,7 @@ use tracing::{error, event, Level};
 use crate::collab::disk_cache::CollabDiskCache;
 use crate::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use crate::collab::CollabMetadata;
+use crate::file::s3_client_impl::AwsS3BucketClientImpl;
 use app_error::AppError;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
@@ -24,9 +25,13 @@ pub struct CollabCache {
 }
 
 impl CollabCache {
-  pub fn new(redis_conn_manager: redis::aio::ConnectionManager, pg_pool: PgPool) -> Self {
+  pub fn new(
+    redis_conn_manager: redis::aio::ConnectionManager,
+    pg_pool: PgPool,
+    s3: AwsS3BucketClientImpl,
+  ) -> Self {
     let mem_cache = CollabMemCache::new(redis_conn_manager.clone());
-    let disk_cache = CollabDiskCache::new(pg_pool.clone());
+    let disk_cache = CollabDiskCache::new(pg_pool.clone(), s3);
     Self {
       disk_cache,
       mem_cache,
@@ -37,6 +42,7 @@ impl CollabCache {
 
   pub async fn get_collab_meta(
     &self,
+    workspace_id: &str,
     object_id: &str,
     collab_type: &CollabType,
   ) -> Result<CollabMetadata, AppError> {

@@ -233,8 +233,6 @@ pub struct QuerySnapshotParams {
 pub struct QueryCollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
-
-  #[serde(flatten)]
   #[validate]
   pub inner: QueryCollab,
 }

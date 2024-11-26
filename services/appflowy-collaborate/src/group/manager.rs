@@ -131,7 +131,7 @@ where
     // identical.
     if let Ok(metadata) = self
       .storage
-      .query_collab_meta(object_id, &collab_type)
+      .query_collab_meta(workspace_id, object_id, &collab_type)
       .await
     {
       if metadata.workspace_id != workspace_id {
@@ -251,7 +251,7 @@ where
   let encode_collab = get_latest_snapshot(
     &params.workspace_id,
     object_id,
-    &storage,
+    &*storage,
     &params.collab_type,
   )
   .await?;

@@ -16,6 +16,18 @@ pub struct Config {
   pub collab: CollabSetting,
   pub redis_uri: Secret<String>,
   pub ai: AISettings,
+  pub s3: S3Setting,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct S3Setting {
+  pub create_bucket: bool,
+  pub use_minio: bool,
+  pub minio_url: String,
+  pub access_key: String,
+  pub secret_key: Secret<String>,
+  pub bucket: String,
+  pub region: String,
 }
 
 #[derive(Clone, Debug)]
@@ -154,6 +166,19 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "40")
         .parse()
         .context("fail to get APPFLOWY_DATABASE_MAX_CONNECTIONS")?,
+    },
+    s3: S3Setting {
+      create_bucket: get_env_var("APPFLOWY_S3_CREATE_BUCKET", "true")
+        .parse()
+        .context("fail to get APPFLOWY_S3_CREATE_BUCKET")?,
+      use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true")
+        .parse()
+        .context("fail to get APPFLOWY_S3_USE_MINIO")?,
+      minio_url: get_env_var("APPFLOWY_S3_MINIO_URL", "http://localhost:9000"),
+      access_key: get_env_var("APPFLOWY_S3_ACCESS_KEY", "minioadmin"),
+      secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
+      bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
+      region: get_env_var("APPFLOWY_S3_REGION", ""),
     },
     gotrue: GoTrueSetting {
       jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),

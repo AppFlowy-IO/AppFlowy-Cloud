@@ -64,9 +64,9 @@ pub async fn insert_into_af_collab(
   sqlx::query!(
     r#"
   INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
-  SELECT $1, $2, $3, $4, $5, $6, $7
-  ON CONFLICT (oid, partition_key) WHERE workspace_id = $7
-  DO UPDATE SET blob = $2, len = $3, encrypt = $5, owner_uid = $6;
+  VALUES ($1, $2, $3, $4, $5, $6, $7)
+  ON CONFLICT (oid, partition_key)
+  DO UPDATE SET blob = $2, len = $3, encrypt = $5, owner_uid = $6 WHERE excluded.workspace_id = $7;
   "#,
     params.object_id,
     params.encoded_collab_v1.as_ref(),

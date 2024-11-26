@@ -25,6 +25,7 @@ use database::publish::select_workspace_id_for_publish_namespace;
 use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
+use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
 use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
 use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
@@ -444,26 +445,8 @@ pub async fn list_database_row_ids(
   workspace_uuid_str: &str,
   database_uuid_str: &str,
 ) -> Result<Vec<AFDatabaseRow>, AppError> {
-  let db_collab = get_latest_collab(
-    collab_storage,
-    GetCollabOrigin::Server,
-    workspace_uuid_str,
-    database_uuid_str,
-    CollabType::Database,
-  )
-  .await?;
-  let db_body = DatabaseBody::from_collab(
-    &db_collab,
-    Arc::new(NoPersistenceDatabaseCollabService),
-    None,
-  )
-  .ok_or_else(|| {
-    AppError::Internal(anyhow::anyhow!(
-      "Failed to create database body from collab, db_collab_id: {}",
-      database_uuid_str,
-    ))
-  })?;
-
+  let (db_collab, db_body) =
+    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
   // get any view_id
   let txn = db_collab.transact();
   let iid = db_body.get_inline_view_id(&txn);
@@ -481,6 +464,27 @@ pub async fn list_database_row_ids(
     .collect();
 
   Ok(db_rows)
+}
+
+pub async fn get_database_fields(
+  collab_storage: &CollabAccessControlStorage,
+  workspace_uuid_str: &str,
+  database_uuid_str: &str,
+) -> Result<Vec<AFDatabaseField>, AppError> {
+  let (db_collab, db_body) =
+    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+
+  let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
+  let mut acc = Vec::with_capacity(all_fields.len());
+  for field in all_fields {
+    acc.push(AFDatabaseField {
+      id: field.id,
+      name: field.name,
+      field_type: format!("{:?}", FieldType::from(field.field_type)),
+      is_primary: field.is_primary,
+    });
+  }
+  Ok(acc)
 }
 
 pub async fn list_database_row_ids_updated(
@@ -735,4 +739,31 @@ fn add_to_selection_from_type_options(
       }
     }
   };
+}
+
+async fn get_database_body(
+  collab_storage: &CollabAccessControlStorage,
+  workspace_uuid_str: &str,
+  database_uuid_str: &str,
+) -> Result<(Collab, DatabaseBody), AppError> {
+  let db_collab = get_latest_collab(
+    collab_storage,
+    GetCollabOrigin::Server,
+    workspace_uuid_str,
+    database_uuid_str,
+    CollabType::Database,
+  )
+  .await?;
+  let db_body = DatabaseBody::from_collab(
+    &db_collab,
+    Arc::new(NoPersistenceDatabaseCollabService),
+    None,
+  )
+  .ok_or_else(|| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create database body from collab, db_collab_id: {}",
+      database_uuid_str,
+    ))
+  })?;
+  Ok((db_collab, db_body))
 }

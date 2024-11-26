@@ -49,6 +49,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
   async fn enforce_delete(&self, workspace_id: &str, uid: &i64, oid: &str) -> Result<(), AppError>;
 }
 
+#[derive(Clone)]
 pub enum GetCollabOrigin {
   User { uid: i64 },
   Server,

@@ -27,7 +27,7 @@ impl Client {
   pub async fn move_workspace_page_view_to_trash(
     &self,
     workspace_id: Uuid,
-    view_id: String,
+    view_id: &str,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/page-view/{}/move-to-trash",

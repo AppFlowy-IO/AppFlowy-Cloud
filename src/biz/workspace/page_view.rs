@@ -309,9 +309,13 @@ async fn move_view_to_trash(view_id: &str, folder: &mut Folder) -> Result<Folder
     let mut txn = folder.collab.transact_mut();
     current_view_and_descendants.iter().for_each(|view_id| {
       folder.body.views.update_view(&mut txn, view_id, |update| {
-        update.set_favorite(false).set_trash(true).done()
+        update.set_favorite(false).done()
       });
     });
+    folder
+      .body
+      .views
+      .update_view(&mut txn, view_id, |update| update.set_trash(true).done());
     txn.encode_update_v1()
   };
 

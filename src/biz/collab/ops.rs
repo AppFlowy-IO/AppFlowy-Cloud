@@ -577,7 +577,7 @@ pub async fn list_database_row_details(
       // if the name already exists, append the field id to the name
       if uniq_name_set.contains(&field.name) {
         let new_name = format!("{}-{}", field.name, field.id);
-        field.name = new_name.clone();
+        field.name.clone_from(&new_name);
       }
       uniq_name_set.insert(field.name.clone());
       field_by_id.insert(field.id.clone(), field);

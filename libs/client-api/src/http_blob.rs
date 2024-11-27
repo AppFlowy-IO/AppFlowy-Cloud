@@ -10,6 +10,7 @@ use reqwest::{header, Method, StatusCode};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
 use shared_entity::response::{AppResponse, AppResponseError};
 
+use shared_entity::dto::file_dto::PutFileResponse;
 use tracing::instrument;
 use url::Url;
 
@@ -45,6 +46,38 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  #[instrument(level = "info", skip_all)]
+  pub async fn put_blob_v1<T: Into<Bytes>>(
+    &self,
+    workspace_id: &str,
+    parent_dir: &str,
+    data: T,
+    mime: &Mime,
+  ) -> Result<PutFileResponse, AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/v1/blob/{}",
+      self.base_url, workspace_id, parent_dir
+    );
+    let data = data.into();
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .header(header::CONTENT_TYPE, mime.to_string())
+      .body(data)
+      .send()
+      .await?;
+
+    log_request_id(&resp);
+    if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
+      return Err(AppResponseError::from(AppError::PayloadTooLarge(
+        StatusCode::PAYLOAD_TOO_LARGE.to_string(),
+      )));
+    }
+    AppResponse::<PutFileResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   /// Only expose this method for testing
   #[instrument(level = "info", skip_all)]
   #[cfg(debug_assertions)]
@@ -69,7 +102,6 @@ impl Client {
       .into_data()
   }
   pub fn get_blob_url_v1(&self, workspace_id: &str, parent_dir: &str, file_id: &str) -> String {
-    let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     format!(
       "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
       self.base_url

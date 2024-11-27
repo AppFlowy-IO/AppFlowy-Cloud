@@ -12,7 +12,7 @@ BEGIN
     INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
     VALUES (p_oid, p_blob, LENGTH(p_blob), p_partition_key, p_encrypt, p_uid, p_workspace_id)
     ON CONFLICT (oid, partition_key)
-    DO UPDATE SET blob = p_blob, len = LENGTH(p_blob), encrypt = p_encrypt, owner_uid = p_uid WHERE excluded.workspace_id = p_workspace_id;
+    DO UPDATE SET blob = p_blob, len = LENGTH(p_blob), encrypt = p_encrypt, owner_uid = p_uid WHERE excluded.workspace_id = af_collab.workspace_id;
 
     INSERT INTO af_collab_member (uid, oid, permission_id)
     SELECT p_uid, p_oid, rp.permission_id

@@ -79,7 +79,11 @@ impl CollabCache {
     Ok(())
   }
 
-  pub async fn get_encode_collab(&self, query: QueryCollab) -> Result<EncodedCollab, AppError> {
+  pub async fn get_encode_collab(
+    &self,
+    workspace_id: &str,
+    query: QueryCollab,
+  ) -> Result<EncodedCollab, AppError> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
@@ -95,7 +99,10 @@ impl CollabCache {
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
     let object_id = query.object_id.clone();
     let expiration_secs = cache_exp_secs_from_collab_type(&query.collab_type);
-    let encode_collab = self.disk_cache.get_collab_encoded_from_disk(query).await?;
+    let encode_collab = self
+      .disk_cache
+      .get_collab_encoded_from_disk(workspace_id, query)
+      .await?;
 
     // spawn a task to insert the encoded collab into the memory cache
     let cloned_encode_collab = encode_collab.clone();
@@ -113,6 +120,7 @@ impl CollabCache {
   /// returns a hashmap of the object_id to the encoded collab data.
   pub async fn batch_get_encode_collab<T: Into<QueryCollab>>(
     &self,
+    workspace_id: &str,
     queries: Vec<T>,
   ) -> HashMap<String, QueryCollabResult> {
     let queries = queries.into_iter().map(Into::into).collect::<Vec<_>>();
@@ -143,7 +151,10 @@ impl CollabCache {
 
     // 2. Retrieves remaining values from the disk cache for queries not satisfied by the memory cache.
     //    - These values are then merged into the final result set.
-    let values_from_disk_cache = self.disk_cache.batch_get_collab(disk_queries).await;
+    let values_from_disk_cache = self
+      .disk_cache
+      .batch_get_collab(workspace_id, disk_queries)
+      .await;
     results.extend(values_from_disk_cache);
     results
   }
@@ -154,13 +165,15 @@ impl CollabCache {
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: &CollabParams,
+    params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
     let collab_type = params.collab_type.clone();
     let object_id = params.object_id.clone();
     let encode_collab_data = params.encoded_collab_v1.clone();
-    CollabDiskCache::upsert_collab_with_transaction(workspace_id, uid, params, transaction).await?;
+    let s3 = self.disk_cache.s3_client();
+    CollabDiskCache::upsert_collab_with_transaction(workspace_id, uid, params, transaction, s3)
+      .await?;
 
     // when the data is written to the disk cache but fails to be written to the memory cache
     // we log the error and continue.
@@ -187,9 +200,13 @@ impl CollabCache {
 
   pub async fn get_encode_collab_from_disk(
     &self,
+    workspace_id: &str,
     query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
-    let encode_collab = self.disk_cache.get_collab_encoded_from_disk(query).await?;
+    let encode_collab = self
+      .disk_cache
+      .get_collab_encoded_from_disk(workspace_id, query)
+      .await?;
     Ok(encode_collab)
   }
 
@@ -201,7 +218,7 @@ impl CollabCache {
   ) -> Result<(), AppError> {
     self
       .disk_cache
-      .upsert_collab(workspace_id, uid, &params)
+      .upsert_collab(workspace_id, uid, params)
       .await?;
     Ok(())
   }

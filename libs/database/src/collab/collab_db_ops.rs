@@ -287,8 +287,8 @@ where
 pub async fn batch_select_collab_blob(
   pg_pool: &PgPool,
   queries: Vec<QueryCollab>,
-) -> HashMap<String, QueryCollabResult> {
-  let mut results = HashMap::new();
+  results: &mut HashMap<String, QueryCollabResult>,
+) {
   let mut object_ids_by_collab_type: HashMap<CollabType, Vec<String>> = HashMap::new();
   for params in queries {
     object_ids_by_collab_type
@@ -337,8 +337,6 @@ pub async fn batch_select_collab_blob(
       Err(err) => error!("Batch get collab errors: {}", err),
     }
   }
-
-  results
 }
 
 #[derive(Debug, sqlx::FromRow)]

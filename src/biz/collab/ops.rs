@@ -603,7 +603,7 @@ pub async fn list_database_row_details(
   }
 
   let database_row_details = collab_storage
-    .batch_get_collab(&uid, query_collabs, true)
+    .batch_get_collab(&uid, &workspace_uuid_str, query_collabs, true)
     .await
     .into_iter()
     .flat_map(|(id, result)| match result {

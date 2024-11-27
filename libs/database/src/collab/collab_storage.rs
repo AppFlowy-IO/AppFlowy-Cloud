@@ -134,6 +134,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   async fn batch_get_collab(
     &self,
     uid: &i64,
+    workspace_id: &str,
     queries: Vec<QueryCollab>,
     from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult>;

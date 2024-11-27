@@ -364,7 +364,7 @@ where
       Duration::from_secs(120),
       self
         .cache
-        .insert_encode_collab_data(workspace_id, uid, &params, transaction),
+        .insert_encode_collab_data(workspace_id, uid, params, transaction),
     )
     .await
     {
@@ -410,7 +410,10 @@ where
       }
     }
 
-    let encode_collab = self.cache.get_encode_collab(params.inner).await?;
+    let encode_collab = self
+      .cache
+      .get_encode_collab(&params.workspace_id, params.inner)
+      .await?;
     Ok(encode_collab)
   }
 
@@ -452,6 +455,7 @@ where
   async fn batch_get_collab(
     &self,
     _uid: &i64,
+    workspace_id: &str,
     queries: Vec<QueryCollab>,
     from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult> {
@@ -509,7 +513,12 @@ where
       valid_queries
     };
 
-    results.extend(self.cache.batch_get_encode_collab(cache_queries).await);
+    results.extend(
+      self
+        .cache
+        .batch_get_encode_collab(workspace_id, cache_queries)
+        .await,
+    );
     results
   }
 

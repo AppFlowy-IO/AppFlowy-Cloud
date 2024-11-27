@@ -820,7 +820,7 @@ fn type_options_serde(
   let mut result = HashMap::with_capacity(type_option.len());
   for (key, value) in type_option {
     match field_type {
-      FieldType::SingleSelect | FieldType::MultiSelect => {
+      FieldType::SingleSelect | FieldType::MultiSelect | FieldType::Media => {
         if let yrs::Any::String(arc_str) = value {
           if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(&arc_str) {
             result.insert(key.clone(), serde_value);

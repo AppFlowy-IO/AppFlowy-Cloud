@@ -447,20 +447,26 @@ pub async fn list_database(
   )
   .await?;
 
+  let trash = folder
+    .get_all_trash_sections()
+    .into_iter()
+    .map(|s| s.id)
+    .collect::<HashSet<_>>();
+
   let mut af_databases = Vec::with_capacity(db_metas.len());
   for db_meta in db_metas {
     let id = db_meta.database_id;
-    let views: Vec<FolderViewMinimal> = db_meta
-      .linked_views
-      .into_iter()
-      .map(|view_id| {
-        folder
-          .get_view(&view_id)
-          .map(|view| to_dto_folder_view_miminal(&view))
-          .unwrap_or_default()
-      })
-      .collect();
-    af_databases.push(AFDatabase { id, views });
+    let mut views: Vec<FolderViewMinimal> = Vec::new();
+    for linked_view_id in db_meta.linked_views {
+      if !trash.contains(&linked_view_id) {
+        if let Some(folder_view) = folder.get_view(&linked_view_id) {
+          views.push(to_dto_folder_view_miminal(&folder_view));
+        };
+      }
+    }
+    if !views.is_empty() {
+      af_databases.push(AFDatabase { id, views });
+    }
   }
 
   Ok(af_databases)
@@ -822,7 +828,7 @@ fn type_options_serde(
     match field_type {
       FieldType::SingleSelect | FieldType::MultiSelect | FieldType::Media => {
         if let yrs::Any::String(arc_str) = value {
-          if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(&arc_str) {
+          if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(arc_str) {
             result.insert(key.clone(), serde_value);
           }
         }

@@ -35,8 +35,8 @@ async fn workspace_list_database() {
         .unwrap();
 
       // convert to hashset to check for equeality
-      let actual = db_fields.sort_by(|a, b| a.id.cmp(&b.id));
-      let expected = vec![
+      db_fields.sort_by(|a, b| a.id.cmp(&b.id));
+      let mut expected = vec![
         AFDatabaseField {
           id: "wdX8DG".to_string(),
           name: "Multiselect".to_string(),
@@ -118,9 +118,9 @@ async fn workspace_list_database() {
           },
           is_primary: false,
         },
-      ]
-      .sort_by(|a, b| a.id.cmp(&b.id));
-      assert_eq!(actual, expected, "{:#?}", db_fields);
+      ];
+      expected.sort_by(|a, b| a.id.cmp(&b.id));
+      assert_eq!(db_fields, expected, "{:#?}", db_fields);
     }
     {
       let db_row_ids = c

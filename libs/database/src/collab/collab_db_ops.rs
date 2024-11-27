@@ -18,7 +18,7 @@ use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::{ops::DerefMut, str::FromStr};
-use tracing::{error, event, instrument};
+use tracing::{error, instrument};
 use uuid::Uuid;
 
 /// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
@@ -55,109 +55,33 @@ pub async fn insert_into_af_collab(
   let encrypt = 0;
   let partition_key = crate::collab::partition_key_from_collab_type(&params.collab_type);
   let workspace_id = Uuid::from_str(workspace_id)?;
-  let existing_workspace_id: Option<Uuid> = sqlx::query_scalar!(
-    "SELECT workspace_id FROM af_collab WHERE oid = $1",
-    &params.object_id
-  )
-  .fetch_optional(tx.deref_mut())
-  .await?;
-  event!(
-    tracing::Level::TRACE,
+  tracing::trace!(
     "upsert collab:{}, len:{}",
     params.object_id,
     params.encoded_collab_v1.len(),
   );
 
-  // If the collab already exists, update the row with the new data.
-  // In most cases, the workspace_id should be the same as the existing one. Comparing the workspace_id
-  // is a safety check to prevent a user from inserting a row with an existing object_id but a different
-  // workspace_id.
-  match existing_workspace_id {
-    Some(existing_workspace_id) => {
-      if existing_workspace_id == workspace_id {
-        sqlx::query!(
-          "UPDATE af_collab \
-        SET blob = $3, len = $4, encrypt = $5, owner_uid = $6 WHERE oid = $1 AND partition_key = $2;",
-          params.object_id,
-          partition_key,
-          params.encoded_collab_v1.as_ref(),
-          params.encoded_collab_v1.len() as i32,
-          encrypt,
-          uid,
-        )
-        .execute(tx.deref_mut())
-        .await.map_err(|err| {
-          AppError::Internal(anyhow!(
-            "Update af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}. error: {:?}",
-            workspace_id, uid, params.object_id, params.collab_type, err,
-          ))
-        })?;
-      } else {
-        return Err(AppError::Internal(anyhow!(
-          "workspace_id is not match. expect workspace_id:{}, but receive:{}",
-          existing_workspace_id,
-          workspace_id
-        )));
-      }
-    },
-    None => {
-      // If the collab doesn't exist, insert a new row into the `af_collab` table and add a corresponding
-      // entry to the `af_collab_member` table.
-      let permission_id: i32 = sqlx::query_scalar!(
-        r#"
-          SELECT rp.permission_id
-          FROM af_role_permissions rp
-          JOIN af_roles ON rp.role_id = af_roles.id
-          WHERE af_roles.name = 'Owner';
-        "#
-      )
-      .fetch_one(tx.deref_mut())
-      .await?;
-
-      sqlx::query!(
-        r#"
-        INSERT INTO af_collab_member (uid, oid, permission_id)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (uid, oid)
-        DO UPDATE
-          SET permission_id = excluded.permission_id;
-        "#,
-        uid,
-        params.object_id,
-        permission_id
-      )
-      .execute(tx.deref_mut())
-      .await
-      .map_err(|err| {
-        AppError::Internal(anyhow!(
-          "Insert af_collab_member failed: {}:{}:{}. error details:{:?}",
-          uid,
-          params.object_id,
-          permission_id,
-          err
-        ))
-      })?;
-
-      sqlx::query!(
-        "INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)\
-          VALUES ($1, $2, $3, $4, $5, $6, $7)",
-        params.object_id,
-        params.encoded_collab_v1.as_ref(),
-        params.encoded_collab_v1.len() as i32,
-        partition_key,
-        encrypt,
-        uid,
-        workspace_id,
-      )
-      .execute(tx.deref_mut())
-      .await.map_err(|err| {
-        AppError::Internal(anyhow!(
-          "Insert new af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}. payload len:{} error: {:?}",
-         workspace_id, uid, params.object_id, params.collab_type, params.encoded_collab_v1.len(), err,
-        ))
-      })?;
-    },
-  }
+  sqlx::query!(
+    r#"CALL af_collab_upsert($1, $2, $3, $4, $5, $6)"#,
+    workspace_id,
+    params.object_id,
+    partition_key,
+    *uid,
+    encrypt,
+    params.encoded_collab_v1.as_ref(),
+  )
+  .execute(tx.deref_mut())
+  .await
+  .map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Update af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}. error: {:?}",
+      workspace_id,
+      uid,
+      params.object_id,
+      params.collab_type,
+      err,
+    ))
+  })?;
 
   Ok(())
 }

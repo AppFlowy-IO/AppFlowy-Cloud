@@ -503,10 +503,12 @@ pub async fn get_database_fields(
   let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
   let mut acc = Vec::with_capacity(all_fields.len());
   for field in all_fields {
+    let field_type = FieldType::from(field.field_type);
     acc.push(AFDatabaseField {
       id: field.id,
       name: field.name,
-      field_type: format!("{:?}", FieldType::from(field.field_type)),
+      field_type: format!("{:?}", field_type),
+      type_option: type_options_serde(&field.type_options, &field_type),
       is_primary: field.is_primary,
     });
   }
@@ -804,4 +806,32 @@ pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Coll
   )
   .map_err(|e| AppError::Unhandled(e.to_string()))?;
   Ok(collab)
+}
+
+fn type_options_serde(
+  type_options: &TypeOptions,
+  field_type: &FieldType,
+) -> HashMap<String, serde_json::Value> {
+  let type_option = match type_options.get(&field_type.type_id()) {
+    Some(type_option) => type_option,
+    None => return HashMap::new(),
+  };
+
+  let mut result = HashMap::with_capacity(type_option.len());
+  for (key, value) in type_option {
+    match field_type {
+      FieldType::SingleSelect | FieldType::MultiSelect => {
+        if let yrs::Any::String(arc_str) = value {
+          if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(&arc_str) {
+            result.insert(key.clone(), serde_value);
+          }
+        }
+      },
+      _ => {
+        result.insert(key.clone(), serde_json::to_value(value).unwrap_or_default());
+      },
+    }
+  }
+
+  result
 }

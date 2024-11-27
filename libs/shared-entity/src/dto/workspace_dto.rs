@@ -368,10 +368,11 @@ pub struct AFDatabaseRowDetail {
   pub cells: HashMap<String, HashMap<String, serde_json::Value>>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AFDatabaseField {
   pub id: String,
   pub name: String,
   pub field_type: String,
+  pub type_option: HashMap<String, serde_json::Value>,
   pub is_primary: bool,
 }

@@ -67,6 +67,22 @@ impl CreateCollabParams {
 
 pub struct CollabIndexParams {}
 
+pub struct PendingCollabWrite {
+  pub workspace_id: String,
+  pub uid: i64,
+  pub params: CollabParams,
+}
+
+impl PendingCollabWrite {
+  pub fn new(workspace_id: String, uid: i64, params: CollabParams) -> Self {
+    PendingCollabWrite {
+      workspace_id,
+      uid,
+      params,
+    }
+  }
+}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize, PartialEq)]
 pub struct CollabParams {
   #[validate(custom = "validate_not_empty_str")]

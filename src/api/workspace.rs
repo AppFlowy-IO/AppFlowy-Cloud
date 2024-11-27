@@ -1259,7 +1259,11 @@ async fn add_collab_member_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  if !state.collab_cache.is_exist(&payload.object_id).await? {
+  if !state
+    .collab_cache
+    .is_exist(&payload.workspace_id, &payload.object_id)
+    .await?
+  {
     return Err(
       AppError::RecordNotFound(format!(
         "Fail to insert collab member. The Collab with object_id {} does not exist",
@@ -1286,7 +1290,11 @@ async fn update_collab_member_handler(
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
 
-  if !state.collab_cache.is_exist(&payload.object_id).await? {
+  if !state
+    .collab_cache
+    .is_exist(&payload.workspace_id, &payload.object_id)
+    .await?
+  {
     return Err(
       AppError::RecordNotFound(format!(
         "Fail to update collab member. The Collab with object_id {} does not exist",

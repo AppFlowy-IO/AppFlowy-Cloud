@@ -1,20 +1,21 @@
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-
+use anyhow::Context;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
+use std::collections::HashMap;
+use std::ops::DerefMut;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use tracing::{error, event, Level};
 
 use crate::collab::disk_cache::CollabDiskCache;
 use crate::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
-use crate::collab::CollabMetadata;
+use crate::collab::{insert_into_af_collab_bulk_for_user, CollabMetadata};
 use crate::file::s3_client_impl::AwsS3BucketClientImpl;
 use app_error::AppError;
-use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
+use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
 
 #[derive(Clone)]
 pub struct CollabCache {
@@ -38,6 +39,44 @@ impl CollabCache {
       success_attempts: Arc::new(AtomicU64::new(0)),
       total_attempts: Arc::new(AtomicU64::new(0)),
     }
+  }
+
+  pub async fn bulk_insert_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params_list: Vec<CollabParams>,
+  ) -> Result<(), AppError> {
+    self
+      .disk_cache
+      .bulk_insert_collab(workspace_id, uid, params_list.clone())
+      .await?;
+
+    // update the mem cache without blocking the current task
+    let mem_cache = self.mem_cache.clone();
+    tokio::spawn(async move {
+      let timestamp = chrono::Utc::now().timestamp();
+      for params in params_list {
+        if let Err(err) = mem_cache
+          .insert_encode_collab_data(
+            &params.object_id,
+            &params.encoded_collab_v1,
+            timestamp,
+            Some(cache_exp_secs_from_collab_type(&params.collab_type)),
+          )
+          .await
+          .map_err(|err| AppError::Internal(err.into()))
+        {
+          tracing::warn!(
+            "Failed to insert collab `{}` into memory cache: {}",
+            params.object_id,
+            err
+          );
+        }
+      }
+    });
+
+    Ok(())
   }
 
   pub async fn get_encode_collab(&self, query: QueryCollab) -> Result<EncodedCollab, AppError> {
@@ -121,10 +160,7 @@ impl CollabCache {
     let collab_type = params.collab_type.clone();
     let object_id = params.object_id.clone();
     let encode_collab_data = params.encoded_collab_v1.clone();
-    self
-      .disk_cache
-      .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
-      .await?;
+    CollabDiskCache::upsert_collab_with_transaction(workspace_id, uid, params, transaction).await?;
 
     // when the data is written to the disk cache but fails to be written to the memory cache
     // we log the error and continue.
@@ -162,27 +198,11 @@ impl CollabCache {
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
     self
       .disk_cache
-      .upsert_collab_with_transaction(workspace_id, uid, &params, transaction)
+      .upsert_collab(workspace_id, uid, &params)
       .await?;
-    Ok(())
-  }
-
-  pub async fn insert_encode_collab_to_mem(&self, params: &CollabParams) -> Result<(), AppError> {
-    let timestamp = chrono::Utc::now().timestamp();
-    self
-      .mem_cache
-      .insert_encode_collab_data(
-        &params.object_id,
-        &params.encoded_collab_v1,
-        timestamp,
-        Some(cache_exp_secs_from_collab_type(&params.collab_type)),
-      )
-      .await
-      .map_err(|err| AppError::Internal(err.into()))?;
     Ok(())
   }
 
@@ -201,19 +221,22 @@ impl CollabCache {
     Ok(())
   }
 
-  pub async fn is_exist(&self, oid: &str) -> Result<bool, AppError> {
+  pub async fn is_exist(&self, workspace_id: &str, oid: &str) -> Result<bool, AppError> {
     if let Ok(value) = self.mem_cache.is_exist(oid).await {
       if value {
         return Ok(value);
       }
     }
 
-    let is_exist = self.disk_cache.is_exist(oid).await?;
+    let is_exist = self.disk_cache.is_exist(workspace_id, oid).await?;
     Ok(is_exist)
   }
 
-  pub fn pg_pool(&self) -> &sqlx::PgPool {
-    &self.disk_cache.pg_pool
+  pub async fn batch_insert_collab(
+    &self,
+    records: Vec<PendingCollabWrite>,
+  ) -> Result<u64, AppError> {
+    self.disk_cache.batch_insert_collab(records).await
   }
 }
 

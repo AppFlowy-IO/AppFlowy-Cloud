@@ -102,6 +102,7 @@ impl Client {
       .into_data()
   }
   pub fn get_blob_url_v1(&self, workspace_id: &str, parent_dir: &str, file_id: &str) -> String {
+    let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     format!(
       "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
       self.base_url

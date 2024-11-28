@@ -11,6 +11,7 @@ use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
 use collab_database::fields::TypeOptions;
+use collab_database::rows::Cell;
 use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
@@ -505,18 +506,72 @@ pub async fn list_database_row_ids(
   Ok(db_rows)
 }
 
+fn new_cell_from_value(cell_value: serde_json::Value, field: &Field) -> Cell {
+  // Based on the type of the field, handle each value differently
+  // This should be as forgiving/generic/all-purpose as much as possible
+  // to support different use cases.
+  let field_type = FieldType::from(field.field_type);
+  match field_type {
+    FieldType::RichText => {
+      //
+      todo!()
+    },
+    FieldType::Number => todo!(),
+    FieldType::DateTime => todo!(),
+    FieldType::SingleSelect => todo!(),
+    FieldType::MultiSelect => todo!(),
+    FieldType::Checkbox => todo!(),
+    FieldType::URL => todo!(),
+    FieldType::Checklist => todo!(),
+    FieldType::LastEditedTime => todo!(),
+    FieldType::CreatedTime => todo!(),
+    FieldType::Relation => todo!(),
+    FieldType::Summary => todo!(),
+    FieldType::Translate => todo!(),
+    FieldType::Time => todo!(),
+    FieldType::Media => todo!(),
+  }
+}
+
 pub async fn insert_database_row(
   collab_storage: &CollabAccessControlStorage,
   workspace_uuid_str: &str,
   database_uuid_str: &str,
   uid: i64,
-  src_values: serde_json::Value,
+  cell_value_by_id: HashMap<String, serde_json::Value>,
 ) -> Result<(), AppError> {
+  // get database types and type options
+  let (mut db_collab, db_body) =
+    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+
+  let field_by_id = db_body
+    .fields
+    .get_all_fields(&db_collab.transact())
+    .into_iter()
+    .fold(HashMap::new(), |mut acc, field| {
+      acc.insert(field.id.clone(), field);
+      acc
+    });
+
   let new_db_row_id = uuid::Uuid::new_v4().to_string();
   let mut new_row = Row::new(new_db_row_id.clone(), database_uuid_str);
   {
-    // TODO: add values from row_data into new_row
-    _ = src_values;
+    for (id, cell_value) in cell_value_by_id {
+      let field = match field_by_id.get(&id) {
+        Some(f) => f,
+        None => {
+          tracing::warn!(
+            "field not found: {} for database: {}",
+            id,
+            database_uuid_str
+          );
+          continue;
+        },
+      };
+
+      let new_cell: Cell = new_cell_from_value(cell_value, field);
+      new_row.cells.insert(id.clone(), new_cell);
+    }
   }
 
   let mut new_db_row_collab =
@@ -542,9 +597,6 @@ pub async fn insert_database_row(
       true,
     )
     .await?;
-
-  let (mut db_collab, db_body) =
-    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
 
   // create a new row
   let db_collab_update = {
@@ -638,33 +690,8 @@ pub async fn list_database_row_details(
   database_uuid_str: String,
   row_ids: &[&str],
 ) -> Result<Vec<AFDatabaseRowDetail>, AppError> {
-  let query_collabs: Vec<QueryCollab> = row_ids
-    .iter()
-    .map(|id| QueryCollab {
-      object_id: id.to_string(),
-      collab_type: CollabType::DatabaseRow,
-    })
-    .collect();
-
-  let database_collab = get_latest_collab(
-    collab_storage,
-    GetCollabOrigin::User { uid },
-    &workspace_uuid_str,
-    &database_uuid_str,
-    CollabType::Database,
-  )
-  .await?;
-  let db_body = DatabaseBody::from_collab(
-    &database_collab,
-    Arc::new(NoPersistenceDatabaseCollabService),
-    None,
-  )
-  .ok_or_else(|| {
-    AppError::Internal(anyhow::anyhow!(
-      "Failed to create database body from collab, db_collab_id: {}",
-      database_uuid_str,
-    ))
-  })?;
+  let (database_collab, db_body) =
+    get_database_body(collab_storage, &workspace_uuid_str, &database_uuid_str).await?;
 
   // create a map of field id to field.
   // ensure that the field name is unique.
@@ -693,6 +720,13 @@ pub async fn list_database_row_details(
     add_to_selection_from_field(&mut selection_name_by_id, field);
   }
 
+  let query_collabs: Vec<QueryCollab> = row_ids
+    .iter()
+    .map(|id| QueryCollab {
+      object_id: id.to_string(),
+      collab_type: CollabType::DatabaseRow,
+    })
+    .collect();
   let database_row_details = collab_storage
     .batch_get_collab(&uid, query_collabs, true)
     .await

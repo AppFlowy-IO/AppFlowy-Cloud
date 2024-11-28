@@ -12,6 +12,7 @@ use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sqlx::types::uuid;
+use std::collections::HashMap;
 use std::time::Instant;
 
 use tokio_stream::StreamExt;
@@ -1915,7 +1916,7 @@ async fn post_database_row_handler(
   user_uuid: UserUuid,
   path_param: web::Path<(String, String)>,
   state: Data<AppState>,
-  data: Json<serde_json::Value>,
+  cells_by_id: Json<HashMap<String, serde_json::Value>>,
 ) -> Result<Json<AppResponse<()>>> {
   let (workspace_id, db_id) = path_param.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
@@ -1929,7 +1930,7 @@ async fn post_database_row_handler(
     &workspace_id,
     &db_id,
     uid,
-    data.into_inner(),
+    cells_by_id.into_inner(),
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

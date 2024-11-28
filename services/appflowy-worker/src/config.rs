@@ -96,6 +96,7 @@ impl Display for DatabaseSetting {
   }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct StreamSetting {
   /// The key of the stream that contains control event, [CollabControlEvent].

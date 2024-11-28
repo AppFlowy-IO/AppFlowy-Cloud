@@ -118,20 +118,19 @@ impl AwsS3BucketClientImpl {
 impl BucketClient for AwsS3BucketClientImpl {
   type ResponseData = S3ResponseData;
 
-  async fn put_blob(&self, object_key: &str, content: &[u8]) -> Result<(), AppError> {
-    trace!(
-      "Uploading object to S3 bucket:{}, key {}, len: {}",
-      self.bucket,
-      object_key,
-      content.len()
-    );
-    let body = ByteStream::from(content.to_vec());
+  async fn put_blob(
+    &self,
+    object_key: &str,
+    content: ByteStream,
+    content_type: Option<&str>,
+  ) -> Result<(), AppError> {
     self
       .client
       .put_object()
       .bucket(&self.bucket)
       .key(object_key)
-      .body(body)
+      .body(content)
+      .content_type(content_type.unwrap_or("application/octet-stream"))
       .send()
       .await
       .map_err(|err| match err {

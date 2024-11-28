@@ -29,6 +29,7 @@ env:
   POSTGRES_PASSWORD: password
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
   SQLX_OFFLINE: true
+  RUST_TOOLCHAIN: "1.78"
 
 jobs:
   setup:
@@ -78,6 +79,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           workspaces: "AppFlowy-Cloud"
 
       - name: Copy and rename deploy.env to .env

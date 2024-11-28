@@ -92,7 +92,7 @@ where
 
   #[instrument(skip_all, err)]
   #[inline]
-  pub async fn put_blob<K: BlobKey>(
+  pub async fn put_blob_with_content_type<K: BlobKey>(
     &self,
     key: K,
     file_stream: ByteStream,

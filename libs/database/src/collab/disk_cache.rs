@@ -14,9 +14,9 @@ use uuid::Uuid;
 use crate::collab::util::encode_collab_from_bytes;
 use crate::collab::{
   batch_select_collab_blob, insert_into_af_collab, insert_into_af_collab_bulk_for_user,
-  select_blob_from_af_collab, AppResult,
+  is_collab_exists, select_blob_from_af_collab, AppResult,
 };
-use crate::file::s3_client_impl::{AwsS3BucketClientImpl, S3ResponseData};
+use crate::file::s3_client_impl::AwsS3BucketClientImpl;
 use crate::file::{BucketClient, ResponseBlob};
 use crate::index::upsert_collab_embeddings;
 use app_error::AppError;
@@ -34,9 +34,14 @@ impl CollabDiskCache {
   }
 
   pub async fn is_exist(&self, workspace_id: &str, object_id: &str) -> AppResult<bool> {
-    let dir = collab_key_prefix(workspace_id, object_id);
+    let dir = collab_key_prefix(workspace_id, &object_id);
     let resp = self.s3.list_dir(&dir, 1).await?;
-    Ok(!resp.is_empty())
+    if resp.is_empty() {
+      // fallback to Postgres
+      Ok(is_collab_exists(object_id, &self.pg_pool).await?)
+    } else {
+      Ok(true)
+    }
   }
 
   pub async fn upsert_collab(
@@ -285,7 +290,7 @@ impl CollabDiskCache {
     blob: Bytes,
     mut retries: usize,
   ) -> Result<(), AppError> {
-    while let Err(err) = s3.put_blob(&key, &blob).await {
+    while let Err(err) = s3.put_blob(&key, blob.clone().into(), None).await {
       match err {
         AppError::ServiceTemporaryUnavailable(err) if retries > 0 => {
           tracing::info!(
@@ -315,7 +320,7 @@ async fn batch_put_collab_to_s3(
   for (key, blob) in collabs {
     let s3 = s3.clone();
     join_set.spawn(async move {
-      s3.put_blob(&key, &blob).await?;
+      s3.put_blob(&key, blob.into(), None).await?;
       Ok(())
     });
     i += 1;

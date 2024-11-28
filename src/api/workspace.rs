@@ -262,6 +262,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(list_database_row_id_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/database/{database_id}/fields")
+        .route(web::get().to(get_database_fields_handler)),
+    )
+    .service(
       web::resource("/{workspace_id}/database/{database_id}/row/updated")
         .route(web::get().to(list_database_row_id_updated_handler)),
     )
@@ -1904,6 +1908,28 @@ async fn list_database_row_id_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))
+}
+
+async fn get_database_fields_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<Vec<AFDatabaseField>>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Read)
+    .await?;
+
+  let db_fields = biz::collab::ops::get_database_fields(
+    &state.collab_access_control_storage,
+    &workspace_id,
+    &db_id,
+  )
+  .await?;
+
+  Ok(Json(AppResponse::Ok().with_data(db_fields)))
 }
 
 async fn list_database_row_id_updated_handler(

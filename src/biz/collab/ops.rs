@@ -27,6 +27,7 @@ use database::publish::select_workspace_id_for_publish_namespace;
 use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
+use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
 use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
 use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
@@ -446,20 +447,26 @@ pub async fn list_database(
   )
   .await?;
 
+  let trash = folder
+    .get_all_trash_sections()
+    .into_iter()
+    .map(|s| s.id)
+    .collect::<HashSet<_>>();
+
   let mut af_databases = Vec::with_capacity(db_metas.len());
   for db_meta in db_metas {
     let id = db_meta.database_id;
-    let views: Vec<FolderViewMinimal> = db_meta
-      .linked_views
-      .into_iter()
-      .map(|view_id| {
-        folder
-          .get_view(&view_id)
-          .map(|view| to_dto_folder_view_miminal(&view))
-          .unwrap_or_default()
-      })
-      .collect();
-    af_databases.push(AFDatabase { id, views });
+    let mut views: Vec<FolderViewMinimal> = Vec::new();
+    for linked_view_id in db_meta.linked_views {
+      if !trash.contains(&linked_view_id) {
+        if let Some(folder_view) = folder.get_view(&linked_view_id) {
+          views.push(to_dto_folder_view_miminal(&folder_view));
+        };
+      }
+    }
+    if !views.is_empty() {
+      af_databases.push(AFDatabase { id, views });
+    }
   }
 
   Ok(af_databases)
@@ -470,26 +477,8 @@ pub async fn list_database_row_ids(
   workspace_uuid_str: &str,
   database_uuid_str: &str,
 ) -> Result<Vec<AFDatabaseRow>, AppError> {
-  let db_collab = get_latest_collab(
-    collab_storage,
-    GetCollabOrigin::Server,
-    workspace_uuid_str,
-    database_uuid_str,
-    CollabType::Database,
-  )
-  .await?;
-  let db_body = DatabaseBody::from_collab(
-    &db_collab,
-    Arc::new(NoPersistenceDatabaseCollabService),
-    None,
-  )
-  .ok_or_else(|| {
-    AppError::Internal(anyhow::anyhow!(
-      "Failed to create database body from collab, db_collab_id: {}",
-      database_uuid_str,
-    ))
-  })?;
-
+  let (db_collab, db_body) =
+    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
   // get any view_id
   let txn = db_collab.transact();
   let iid = db_body.get_inline_view_id(&txn);
@@ -507,6 +496,29 @@ pub async fn list_database_row_ids(
     .collect();
 
   Ok(db_rows)
+}
+
+pub async fn get_database_fields(
+  collab_storage: &CollabAccessControlStorage,
+  workspace_uuid_str: &str,
+  database_uuid_str: &str,
+) -> Result<Vec<AFDatabaseField>, AppError> {
+  let (db_collab, db_body) =
+    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+
+  let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
+  let mut acc = Vec::with_capacity(all_fields.len());
+  for field in all_fields {
+    let field_type = FieldType::from(field.field_type);
+    acc.push(AFDatabaseField {
+      id: field.id,
+      name: field.name,
+      field_type: format!("{:?}", field_type),
+      type_option: type_options_serde(&field.type_options, &field_type),
+      is_primary: field.is_primary,
+    });
+  }
+  Ok(acc)
 }
 
 pub async fn list_database_row_ids_updated(
@@ -763,6 +775,33 @@ fn add_to_selection_from_type_options(
   };
 }
 
+async fn get_database_body(
+  collab_storage: &CollabAccessControlStorage,
+  workspace_uuid_str: &str,
+  database_uuid_str: &str,
+) -> Result<(Collab, DatabaseBody), AppError> {
+  let db_collab = get_latest_collab(
+    collab_storage,
+    GetCollabOrigin::Server,
+    workspace_uuid_str,
+    database_uuid_str,
+    CollabType::Database,
+  )
+  .await?;
+  let db_body = DatabaseBody::from_collab(
+    &db_collab,
+    Arc::new(NoPersistenceDatabaseCollabService),
+    None,
+  )
+  .ok_or_else(|| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create database body from collab, db_collab_id: {}",
+      database_uuid_str,
+    ))
+  })?;
+  Ok((db_collab, db_body))
+}
+
 pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
   let collab = Collab::new_with_source(
     CollabOrigin::Server,
@@ -773,4 +812,32 @@ pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Coll
   )
   .map_err(|e| AppError::Unhandled(e.to_string()))?;
   Ok(collab)
+}
+
+fn type_options_serde(
+  type_options: &TypeOptions,
+  field_type: &FieldType,
+) -> HashMap<String, serde_json::Value> {
+  let type_option = match type_options.get(&field_type.type_id()) {
+    Some(type_option) => type_option,
+    None => return HashMap::new(),
+  };
+
+  let mut result = HashMap::with_capacity(type_option.len());
+  for (key, value) in type_option {
+    match field_type {
+      FieldType::SingleSelect | FieldType::MultiSelect | FieldType::Media => {
+        if let yrs::Any::String(arc_str) = value {
+          if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(arc_str) {
+            result.insert(key.clone(), serde_value);
+          }
+        }
+      },
+      _ => {
+        result.insert(key.clone(), serde_json::to_value(value).unwrap_or_default());
+      },
+    }
+  }
+
+  result
 }

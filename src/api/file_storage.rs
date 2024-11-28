@@ -22,6 +22,7 @@ use database_entity::file_dto::{
 
 use crate::biz::data_import::LimitedPayload;
 use crate::state::AppState;
+use anyhow::anyhow;
 use aws_sdk_s3::primitives::ByteStream;
 use collab_importer::util::FileId;
 use serde::Deserialize;
@@ -238,7 +239,18 @@ async fn put_blob_handler(
   let content_type = content_type.into_inner().to_string();
   let content = {
     let mut payload_reader = payload_to_async_read(payload);
-    let mut content = vec![0; content_length];
+    let mut content = Vec::with_capacity(content_length);
+    if content.try_reserve_exact(content_length).is_err() {
+      return Err(
+        AppError::Internal(anyhow!(
+          "Can not alloc mem for blob content size:{}",
+          content_length
+        ))
+        .into(),
+      );
+    }
+    content.resize(content_length, 0);
+
     let n = payload_reader.read_exact(&mut content).await?;
     if n != content_length {
       error!(
@@ -514,7 +526,18 @@ async fn put_blob_handler_v1(
   let content_length = content_length.into_inner().into_inner();
   let content_type = content_type.into_inner().to_string();
 
-  let mut content = vec![0; content_length];
+  let mut content = Vec::with_capacity(content_length);
+  if content.try_reserve_exact(content_length).is_err() {
+    return Err(
+      AppError::Internal(anyhow!(
+        "Can not alloc mem for blob content size:{}",
+        content_length
+      ))
+      .into(),
+    );
+  }
+  content.resize(content_length, 0);
+
   let mut limited_payload = LimitedPayload::new(payload, content_length);
   let mut offset = 0;
   while let Some(bytes) = limited_payload.next().await {

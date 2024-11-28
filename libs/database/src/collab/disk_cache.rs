@@ -34,7 +34,7 @@ impl CollabDiskCache {
   }
 
   pub async fn is_exist(&self, workspace_id: &str, object_id: &str) -> AppResult<bool> {
-    let dir = collab_key_prefix(workspace_id, &object_id);
+    let dir = collab_key_prefix(workspace_id, object_id);
     let resp = self.s3.list_dir(&dir, 1).await?;
     if resp.is_empty() {
       // fallback to Postgres

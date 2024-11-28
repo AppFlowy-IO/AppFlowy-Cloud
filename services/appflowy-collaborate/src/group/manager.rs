@@ -254,7 +254,11 @@ async fn get_latest_snapshot<S>(
 where
   S: CollabStorage,
 {
-  let metas = storage.get_collab_snapshot_list(object_id).await.ok()?.0;
+  let metas = storage
+    .get_collab_snapshot_list(workspace_id, object_id)
+    .await
+    .ok()?
+    .0;
   for meta in metas {
     let snapshot_data = storage
       .get_collab_snapshot(workspace_id, &meta.object_id, &meta.snapshot_id)

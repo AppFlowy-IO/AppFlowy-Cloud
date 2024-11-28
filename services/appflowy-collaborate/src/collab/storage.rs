@@ -531,8 +531,11 @@ where
     Ok(())
   }
 
-  async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError> {
-    self.snapshot_control.should_create_snapshot(oid).await
+  async fn should_create_snapshot(&self, workspace_id: &str, oid: &str) -> Result<bool, AppError> {
+    self
+      .snapshot_control
+      .should_create_snapshot(workspace_id, oid)
+      .await
   }
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta> {
@@ -555,7 +558,14 @@ where
       .await
   }
 
-  async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
-    self.snapshot_control.get_collab_snapshot_list(oid).await
+  async fn get_collab_snapshot_list(
+    &self,
+    workspace_id: &str,
+    oid: &str,
+  ) -> AppResult<AFSnapshotMetas> {
+    self
+      .snapshot_control
+      .get_collab_snapshot_list(workspace_id, oid)
+      .await
   }
 }

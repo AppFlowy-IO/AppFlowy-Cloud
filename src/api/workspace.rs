@@ -1152,10 +1152,10 @@ async fn get_all_collab_snapshot_list_handler(
   path: web::Path<(String, String)>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
-  let (_, object_id) = path.into_inner();
+  let (workspace_id, object_id) = path.into_inner();
   let data = state
     .collab_access_control_storage
-    .get_collab_snapshot_list(&object_id)
+    .get_collab_snapshot_list(&workspace_id, &object_id)
     .await
     .map_err(AppResponseError::from)?;
   Ok(Json(AppResponse::Ok().with_data(data)))

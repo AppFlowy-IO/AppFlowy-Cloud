@@ -102,7 +102,10 @@ where
 
     tokio::spawn(async move {
       sleep(std::time::Duration::from_secs(2)).await;
-      match storage.should_create_snapshot(&object_id).await {
+      match storage
+        .should_create_snapshot(&workspace_id, &object_id)
+        .await
+      {
         Ok(true) => {
           if let Err(err) =
             Self::enqueue_snapshot(weak_collab, storage, workspace_id, object_id, collab_type).await

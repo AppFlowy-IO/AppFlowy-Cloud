@@ -527,7 +527,7 @@ where
       .access_control
       .enforce_delete(workspace_id, uid, object_id)
       .await?;
-    self.cache.delete_collab(object_id).await?;
+    self.cache.delete_collab(workspace_id, object_id).await?;
     Ok(())
   }
 

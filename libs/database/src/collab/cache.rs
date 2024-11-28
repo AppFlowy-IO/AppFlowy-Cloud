@@ -1,18 +1,14 @@
-use anyhow::Context;
 use collab::entity::EncodedCollab;
-use collab_entity::CollabType;
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
-use std::ops::DerefMut;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing::{error, event, Level};
 
 use crate::collab::disk_cache::CollabDiskCache;
 use crate::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
-use crate::collab::{insert_into_af_collab_bulk_for_user, CollabMetadata};
 use crate::file::s3_client_impl::AwsS3BucketClientImpl;
 use app_error::AppError;
 use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
@@ -232,9 +228,12 @@ impl CollabCache {
     }
   }
 
-  pub async fn delete_collab(&self, object_id: &str) -> Result<(), AppError> {
+  pub async fn delete_collab(&self, workspace_id: &str, object_id: &str) -> Result<(), AppError> {
     self.mem_cache.remove_encode_collab(object_id).await?;
-    self.disk_cache.delete_collab(object_id).await?;
+    self
+      .disk_cache
+      .delete_collab(workspace_id, object_id)
+      .await?;
     Ok(())
   }
 

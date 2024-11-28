@@ -7,12 +7,10 @@ use database_entity::dto::{
 };
 
 use collab::entity::EncodedCollab;
-use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub const COLLAB_SNAPSHOT_LIMIT: i64 = 30;
 pub const SNAPSHOT_PER_HOUR: i64 = 6;

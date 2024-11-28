@@ -6,20 +6,19 @@ use sqlx::{Error, PgPool, Transaction};
 use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::time::Duration;
-use tokio::task::{JoinError, JoinSet};
+use tokio::task::JoinSet;
 use tokio::time::sleep;
-use tracing::{error, event, instrument, Level};
+use tracing::{error, instrument};
 use uuid::Uuid;
 
 use crate::collab::util::encode_collab_from_bytes;
 use crate::collab::{
   batch_select_collab_blob, insert_into_af_collab, insert_into_af_collab_bulk_for_user,
-  is_collab_exists, select_blob_from_af_collab, select_collab_meta_from_af_collab, AppResult,
+  select_blob_from_af_collab, AppResult,
 };
 use crate::file::s3_client_impl::{AwsS3BucketClientImpl, S3ResponseData};
 use crate::file::{BucketClient, ResponseBlob};
 use crate::index::upsert_collab_embeddings;
-use crate::pg_row::AFCollabRowMeta;
 use app_error::AppError;
 use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
 
@@ -35,8 +34,9 @@ impl CollabDiskCache {
   }
 
   pub async fn is_exist(&self, workspace_id: &str, object_id: &str) -> AppResult<bool> {
-    let is_exist = is_collab_exists(object_id, &self.pg_pool).await?;
-    Ok(is_exist)
+    let dir = collab_key_prefix(workspace_id, object_id);
+    let resp = self.s3.list_dir(&dir, 1).await?;
+    Ok(!resp.is_empty())
   }
 
   pub async fn upsert_collab(
@@ -191,7 +191,7 @@ impl CollabDiskCache {
 
   pub async fn batch_insert_collab(
     &self,
-    mut records: Vec<PendingCollabWrite>,
+    records: Vec<PendingCollabWrite>,
   ) -> Result<u64, AppError> {
     let s3 = self.s3.clone();
     // Start a database transaction
@@ -205,7 +205,7 @@ impl CollabDiskCache {
     let mut successful_writes = 0;
     // Insert each record into the database within the transaction context
     let mut action_description = String::new();
-    for (index, mut record) in records.into_iter().enumerate() {
+    for (index, record) in records.into_iter().enumerate() {
       let params = record.params;
       action_description = format!("{}", params);
       let savepoint_name = format!("sp_{}", index);
@@ -260,7 +260,7 @@ impl CollabDiskCache {
     results
   }
 
-  pub async fn delete_collab(&self, object_id: &str) -> AppResult<()> {
+  pub async fn delete_collab(&self, workspace_id: &str, object_id: &str) -> AppResult<()> {
     sqlx::query!(
       r#"
         UPDATE af_collab
@@ -272,7 +272,11 @@ impl CollabDiskCache {
     )
     .execute(&self.pg_pool)
     .await?;
-    Ok(())
+    let key = collab_key(workspace_id, object_id);
+    match self.s3.delete_blob(&key).await {
+      Ok(_) | Err(AppError::RecordNotFound(_)) => Ok(()),
+      Err(err) => Err(err),
+    }
   }
 
   async fn insert_blob_with_retries(
@@ -381,6 +385,10 @@ async fn batch_get_collab_from_s3(
   // gather remaining results from the last chunk
   gather(&mut join_set, results, &mut not_found).await;
   not_found
+}
+
+fn collab_key_prefix(workspace_id: &str, object_id: &str) -> String {
+  format!("collabs/{}/{}/", workspace_id, object_id)
 }
 
 fn collab_key(workspace_id: &str, object_id: &str) -> String {

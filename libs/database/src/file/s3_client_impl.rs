@@ -11,7 +11,6 @@ use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 
-use aws_sdk_s3::operation::list_objects_v2::{ListObjectsV2, ListObjectsV2Error};
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
@@ -444,6 +443,27 @@ impl BucketClient for AwsS3BucketClientImpl {
     }
 
     Ok(())
+  }
+
+  async fn list_dir(&self, dir: &str, limit: usize) -> Result<Vec<String>, AppError> {
+    let list_objects = self
+      .client
+      .list_objects_v2()
+      .bucket(&self.bucket)
+      .prefix(dir)
+      .max_keys(limit as i32)
+      .send()
+      .await
+      .map_err(|err| anyhow!("Failed to list object: {}", err))?;
+
+    Ok(
+      list_objects
+        .contents
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|o| o.key)
+        .collect(),
+    )
   }
 }
 

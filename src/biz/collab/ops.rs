@@ -11,7 +11,11 @@ use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
 use collab_database::fields::TypeOptions;
+use collab_database::rows::CreateRowParams;
+use collab_database::rows::DatabaseRowBody;
+use collab_database::rows::Row;
 use collab_database::rows::RowDetail;
+use collab_database::views::OrderObjectPosition;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
@@ -24,6 +28,7 @@ use database::collab::select_workspace_database_oid;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
+use database_entity::dto::CollabParams;
 use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
@@ -51,6 +56,8 @@ use database_entity::dto::{
   AFCollabMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
   UpdateCollabMemberParams,
 };
+
+use crate::biz::workspace::ops::broadcast_update;
 
 use super::folder_view::collab_folder_to_folder_view;
 use super::folder_view::section_items_to_favorite_folder_view;
@@ -498,6 +505,90 @@ pub async fn list_database_row_ids(
   Ok(db_rows)
 }
 
+pub async fn insert_database_row(
+  collab_storage: &CollabAccessControlStorage,
+  workspace_uuid_str: &str,
+  database_uuid_str: &str,
+  uid: i64,
+  src_values: serde_json::Value,
+) -> Result<(), AppError> {
+  let new_db_row_id = uuid::Uuid::new_v4().to_string();
+  let mut new_row = Row::new(new_db_row_id.clone(), database_uuid_str);
+  {
+    // TODO: add values from row_data into new_row
+    _ = src_values;
+  }
+
+  let mut new_db_row_collab =
+    Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
+  let new_db_row_body = DatabaseRowBody::create(
+    new_db_row_id.clone().into(),
+    &mut new_db_row_collab,
+    new_row,
+  );
+  let db_row_ec_v1 = encode_collab_v1_bytes(&new_db_row_collab, CollabType::DatabaseRow)?;
+
+  // insert row
+  collab_storage
+    .queue_insert_or_update_collab(
+      workspace_uuid_str,
+      &uid,
+      CollabParams {
+        object_id: new_db_row_id.clone(),
+        encoded_collab_v1: db_row_ec_v1.into(),
+        collab_type: CollabType::Database,
+        embeddings: None,
+      },
+      true,
+    )
+    .await?;
+
+  let (mut db_collab, db_body) =
+    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+
+  // create a new row
+  let db_collab_update = {
+    let txn = db_collab.transact_mut();
+    let ts_now = chrono::Utc::now().timestamp();
+    let _ = db_body
+      .create_row(CreateRowParams {
+        id: uuid::Uuid::new_v4().to_string().into(),
+        database_id: database_uuid_str.to_string(),
+        cells: new_db_row_body
+          .cells(&new_db_row_collab.transact())
+          .unwrap_or_default(),
+        height: 30,
+        visibility: true,
+        row_position: OrderObjectPosition::End,
+        created_at: ts_now,
+        modified_at: ts_now,
+      })
+      .await
+      .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create row: {:?}", e)))?;
+
+    txn.encode_update_v1()
+  };
+  let db_ec_v1 = encode_collab_v1_bytes(&db_collab, CollabType::Database)?;
+
+  // insert database with new row
+  collab_storage
+    .queue_insert_or_update_collab(
+      workspace_uuid_str,
+      &uid,
+      CollabParams {
+        object_id: database_uuid_str.to_string(),
+        encoded_collab_v1: db_ec_v1.into(),
+        collab_type: CollabType::Database,
+        embeddings: None,
+      },
+      true,
+    )
+    .await?;
+  broadcast_update(&collab_storage, workspace_uuid_str, db_collab_update).await?;
+
+  Ok(())
+}
+
 pub async fn get_database_fields(
   collab_storage: &CollabAccessControlStorage,
   workspace_uuid_str: &str,
@@ -840,4 +931,12 @@ fn type_options_serde(
   }
 
   result
+}
+
+fn encode_collab_v1_bytes(collab: &Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
+  let bs = collab
+    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+    .map_err(|e| AppError::Unhandled(e.to_string()))?
+    .encode_to_bytes()?;
+  Ok(bs)
 }

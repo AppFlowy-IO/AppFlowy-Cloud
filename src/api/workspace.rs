@@ -259,7 +259,8 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("/{workspace_id}/database").route(web::get().to(list_database_handler)))
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row")
-        .route(web::get().to(list_database_row_id_handler)),
+        .route(web::get().to(list_database_row_id_handler))
+        .route(web::post().to(post_database_row_handler)),
     )
     .service(
       web::resource("/{workspace_id}/database/{database_id}/fields")
@@ -1908,6 +1909,30 @@ async fn list_database_row_id_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))
+}
+
+async fn post_database_row_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+  data: Json<serde_json::Value>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  biz::collab::ops::insert_database_row(
+    &state.collab_access_control_storage,
+    &workspace_id,
+    &db_id,
+    uid,
+    data.into_inner(),
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn get_database_fields_handler(

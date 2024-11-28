@@ -397,5 +397,5 @@ fn collab_key_prefix(workspace_id: &str, object_id: &str) -> String {
 }
 
 fn collab_key(workspace_id: &str, object_id: &str) -> String {
-  format!("collabs/{}/{}/collab", workspace_id, object_id)
+  format!("collabs/{}/{}/encoded_collab.v1", workspace_id, object_id)
 }

@@ -18,6 +18,7 @@ use database::collab::{
   create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, latest_snapshot_time,
   select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
 };
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database_entity::dto::{AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData};
 
 use crate::metrics::CollabMetrics;
@@ -41,12 +42,14 @@ pub struct SnapshotControl {
   cache: SnapshotCache,
   command_sender: SnapshotCommandSender,
   pg_pool: PgPool,
+  s3: AwsS3BucketClientImpl,
 }
 
 impl SnapshotControl {
   pub async fn new(
     redis_client: RedisConnectionManager,
     pg_pool: PgPool,
+    s3: AwsS3BucketClientImpl,
     collab_metrics: Arc<CollabMetrics>,
   ) -> Self {
     let redis_client = Arc::new(Mutex::from(redis_client));
@@ -79,6 +82,7 @@ impl SnapshotControl {
       cache,
       command_sender,
       pg_pool,
+      s3,
     }
   }
 

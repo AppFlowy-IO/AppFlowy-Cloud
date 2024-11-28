@@ -295,6 +295,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let snapshot_control = SnapshotControl::new(
     redis_conn_manager.clone(),
     pg_pool.clone(),
+    s3_client.clone(),
     metrics.collab_metrics.clone(),
   )
   .await;

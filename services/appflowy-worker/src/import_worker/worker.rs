@@ -33,7 +33,7 @@ use collab_importer::zip_tool::async_zip::async_unzip;
 use collab_importer::zip_tool::sync_zip::sync_unzip;
 
 use futures::stream::FuturesUnordered;
-use futures::{stream, AsyncBufRead, StreamExt};
+use futures::{stream, AsyncBufRead, AsyncReadExt, StreamExt};
 use infra::env_util::get_env_var;
 use redis::aio::ConnectionManager;
 use redis::streams::{
@@ -884,8 +884,14 @@ async fn process_unzip_file(
   );
 
   // 1. Open the workspace folder
-  let folder_collab =
-    get_encode_collab_from_bytes(&imported.workspace_id, &CollabType::Folder, pg_pool).await?;
+  let folder_collab = get_encode_collab_from_bytes(
+    &imported.workspace_id,
+    &imported.workspace_id,
+    &CollabType::Folder,
+    pg_pool,
+    s3_client,
+  )
+  .await?;
   let mut folder = Folder::from_collab_doc_state(
     import_task.uid,
     CollabOrigin::Server,
@@ -959,8 +965,14 @@ async fn process_unzip_file(
 
   // 4. Edit workspace database collab and then encode workspace database collab
   if !database_view_ids_by_database_id.is_empty() {
-    let w_db_collab =
-      get_encode_collab_from_bytes(&w_database_id, &CollabType::WorkspaceDatabase, pg_pool).await?;
+    let w_db_collab = get_encode_collab_from_bytes(
+      &import_task.workspace_id,
+      &w_database_id,
+      &CollabType::WorkspaceDatabase,
+      pg_pool,
+      s3_client,
+    )
+    .await?;
     let mut w_database = WorkspaceDatabase::from_collab_doc_state(
       &w_database_id,
       CollabOrigin::Server,
@@ -1310,13 +1322,32 @@ async fn upload_file_to_s3(
 }
 
 async fn get_encode_collab_from_bytes(
+  workspace_id: &str,
   object_id: &str,
   collab_type: &CollabType,
   pg_pool: &PgPool,
+  s3: &Arc<dyn S3Client>,
 ) -> Result<EncodedCollab, ImportError> {
-  let bytes = select_blob_from_af_collab(pg_pool, collab_type, object_id)
-    .await
-    .map_err(|err| ImportError::Internal(err.into()))?;
+  let key = collab_key(workspace_id, object_id);
+  let bytes = match s3.get_blob_stream(&key).await {
+    Ok(mut resp) => {
+      let mut buf = Vec::with_capacity(resp.content_length.unwrap_or(1024) as usize);
+      resp
+        .stream
+        .read_to_end(&mut buf)
+        .await
+        .map_err(|err| ImportError::Internal(err.into()))?;
+      buf
+    },
+    Err(WorkerError::RecordNotFound(_)) => {
+      // fallback to postgres
+      select_blob_from_af_collab(pg_pool, collab_type, object_id)
+        .await
+        .map_err(|err| ImportError::Internal(err.into()))?
+    },
+    Err(err) => return Err(err.into()),
+  };
+
   tokio::task::spawn_blocking(move || match EncodedCollab::decode_from_bytes(&bytes) {
     Ok(encoded_collab) => Ok(encoded_collab),
     Err(err) => Err(ImportError::Internal(anyhow!(
@@ -1545,4 +1576,8 @@ async fn insert_meta_from_path(
     file_type,
     file_size,
   })
+}
+
+fn collab_key(workspace_id: &str, object_id: &str) -> String {
+  format!("collabs/{}/{}/encoded_collab.v1", workspace_id, object_id)
 }

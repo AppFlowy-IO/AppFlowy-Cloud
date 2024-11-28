@@ -578,7 +578,7 @@ pub async fn select_publish_info_for_view_ids(
     select_first_non_original_namespace(pg_pool, &res[0].namespace).await?
   {
     res.iter_mut().for_each(|info| {
-      info.namespace = non_original_namespace.clone();
+      info.namespace.clone_from(&non_original_namespace);
     });
   }
   Ok(res)
@@ -636,7 +636,7 @@ async fn use_non_orginal_namespace_if_possible(
     select_first_non_original_namespace(pg_pool, &publish_infos[0].namespace).await?
   {
     publish_infos.iter_mut().for_each(|info| {
-      info.namespace = non_original_namespace.clone();
+      info.namespace.clone_from(&non_original_namespace);
     });
   }
   Ok(())

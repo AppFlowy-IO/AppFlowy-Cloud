@@ -20,7 +20,12 @@ use database_entity::file_dto::{
   UploadPartResponse,
 };
 
+use crate::biz::data_import::LimitedPayload;
+use crate::state::AppState;
+use aws_sdk_s3::primitives::ByteStream;
+use collab_importer::util::FileId;
 use serde::Deserialize;
+use shared_entity::dto::file_dto::PutFileResponse;
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
 use shared_entity::response::{AppResponse, AppResponseError, JsonAppResponse};
 use sqlx::types::Uuid;
@@ -30,11 +35,10 @@ use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
 use tracing::{error, event, instrument, trace};
 
-use crate::state::AppState;
-
 pub fn file_storage_scope() -> Scope {
   web::scope("/api/file_storage")
     .service(
+      // Deprecated, use put_blob_handler_v1 instead
       web::resource("/{workspace_id}/blob/{file_id}")
         .route(web::put().to(put_blob_handler))
         .route(web::get().to(get_blob_handler))
@@ -68,6 +72,14 @@ pub fn file_storage_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/v1/metadata/{parent_dir}/{file_id}")
         .route(web::get().to(get_blob_metadata_v1_handler)),
+    )
+    .service(
+      // Upload the file in a single request. This process combines the steps of create-upload,
+      // upload-part, and complete-upload into a single operation. The file can then be retrieved
+      // using the get_blob_v1_handler. If you want to support resumeable uploads, you should use
+      // the create-upload, upload-part, and complete-upload endpoints.
+      web::resource("/{workspace_id}/v1/blob/{parent_dir}")
+        .route(web::put().to(put_blob_handler_v1)),
     )
 }
 
@@ -260,9 +272,11 @@ async fn put_blob_handler(
     content_length
   );
 
+  let file_size = content.len();
+  let file_stream = ByteStream::from(content);
   state
     .bucket_storage
-    .put_blob(path, content, content_type)
+    .put_blob(path, file_stream, content_type, file_size)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -481,6 +495,61 @@ fn payload_to_async_read(payload: Payload) -> Pin<Box<dyn AsyncRead>> {
   Box::pin(reader)
 }
 
+#[instrument(skip(state, payload), err)]
+async fn put_blob_handler_v1(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  path: web::Path<BlobPathV2>,
+  content_type: web::Header<ContentType>,
+  content_length: web::Header<ContentLength>,
+  payload: Payload,
+) -> Result<JsonAppResponse<PutFileResponse>> {
+  let path = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &path.workspace_id.to_string(), Action::Write)
+    .await?;
+
+  let content_length = content_length.into_inner().into_inner();
+  let content_type = content_type.into_inner().to_string();
+
+  let mut content = vec![0; content_length];
+  let mut limited_payload = LimitedPayload::new(payload, content_length);
+  let mut offset = 0;
+  while let Some(bytes) = limited_payload.next().await {
+    let bytes = bytes?;
+    let len = bytes.len();
+    content[offset..offset + len].copy_from_slice(&bytes);
+    offset += len;
+  }
+
+  let file_id = FileId::from_bytes(&content, "".to_string());
+  let resp_data = PutFileResponse {
+    file_id: file_id.clone(),
+  };
+  event!(
+    tracing::Level::TRACE,
+    "start put blob. workspace_id: {}, file_id: {}, content_length: {}",
+    path.workspace_id,
+    file_id,
+    content_length
+  );
+
+  let file_stream = ByteStream::from(content);
+  state
+    .bucket_storage
+    .put_blob(
+      BlobPathV1::from((path, file_id)),
+      file_stream,
+      content_type,
+      content_length,
+    )
+    .await
+    .map_err(AppResponseError::from)?;
+  Ok(AppResponse::Ok().with_data(resp_data).into())
+}
+
 /// Use [BlobPathV0] when get/put object by single part
 #[derive(Deserialize, Debug)]
 struct BlobPathV0 {
@@ -529,5 +598,21 @@ impl BlobKey for BlobPathV1 {
 
   fn e_tag(&self) -> &str {
     &self.file_id
+  }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct BlobPathV2 {
+  pub workspace_id: Uuid,
+  pub parent_dir: String,
+}
+
+impl From<(BlobPathV2, String)> for BlobPathV1 {
+  fn from((path, file_id): (BlobPathV2, String)) -> Self {
+    BlobPathV1 {
+      workspace_id: path.workspace_id,
+      parent_dir: path.parent_dir,
+      file_id,
+    }
   }
 }

@@ -61,11 +61,11 @@ validator = "0.16.1"
 bytes = "1.5.0"
 rcgen = { version = "0.10.0", features = ["pem", "x509-parser"] }
 mime = "0.3.17"
-aws-sdk-s3 = { version = "1.36.0", features = [
+aws-sdk-s3 = { version = "1.63.0", features = [
   "behavior-version-latest",
   "rt-tokio",
 ] }
-aws-config = { version = "1.5.1", features = ["behavior-version-latest"] }
+aws-config = { version = "1.5.10", features = ["behavior-version-latest"] }
 redis = { workspace = true, features = [
   "json",
   "tokio-comp",
@@ -117,6 +117,7 @@ collab-entity = { workspace = true }
 collab-folder = { workspace = true }
 collab-user = { workspace = true }
 collab-database = { workspace = true }
+collab-importer = { workspace = true }
 collab-rt-protocol.workspace = true
 
 #Local crate
@@ -155,7 +156,7 @@ futures-lite = "2.3.0"
 
 base64.workspace = true
 md5.workspace = true
-
+nanoid = "0.4.0"
 
 [dev-dependencies]
 once_cell = "1.19.0"

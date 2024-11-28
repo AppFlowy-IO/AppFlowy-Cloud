@@ -281,9 +281,9 @@ async fn prepare_default_calendar_encoded_database(
   name: &str,
 ) -> Result<EncodedDatabase, AppError> {
   let text_field = Field::from_field_type("Title", FieldType::RichText, true);
-  let date_field = Field::from_field_type("Date", FieldType::DateTime, true);
+  let date_field = Field::from_field_type("Date", FieldType::DateTime, false);
   let date_field_id = date_field.id.clone();
-  let multi_select_field = Field::from_field_type("Tags", FieldType::MultiSelect, true);
+  let multi_select_field = Field::from_field_type("Tags", FieldType::MultiSelect, false);
   let fields = vec![text_field, date_field, multi_select_field];
   let layout_setting = CalendarLayoutSetting::new(date_field_id);
 
@@ -306,8 +306,8 @@ async fn prepare_default_grid_encoded_database(
   name: &str,
 ) -> Result<EncodedDatabase, AppError> {
   let text_field = Field::from_field_type("Name", FieldType::RichText, true);
-  let single_select_field = Field::from_field_type("Type", FieldType::SingleSelect, true);
-  let checkbox_field = Field::from_field_type("Done", FieldType::Checkbox, true);
+  let single_select_field = Field::from_field_type("Type", FieldType::SingleSelect, false);
+  let checkbox_field = Field::from_field_type("Done", FieldType::Checkbox, false);
   let fields = vec![text_field, single_select_field, checkbox_field];
   let rows = (0..3)
     .map(|_| CreateRowParams::new(gen_row_id(), database_id.to_string()))

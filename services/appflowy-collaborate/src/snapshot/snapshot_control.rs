@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use collab::entity::{EncodedCollab, EncoderVersion};
 use sqlx::PgPool;
 use tracing::{debug, error, trace, warn};
 use validator::Validate;
@@ -13,7 +14,9 @@ use database::collab::{
 };
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::file::{BucketClient, ResponseBlob};
-use database_entity::dto::{AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData};
+use database_entity::dto::{
+  AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData, ZSTD_COMPRESSION_LEVEL,
+};
 
 use crate::metrics::CollabMetrics;
 
@@ -116,11 +119,8 @@ impl SnapshotControl {
     let timestamp = Utc::now();
     let snapshot_id = timestamp.timestamp_millis();
     let key = collab_snapshot_key(&params.workspace_id, &params.object_id, snapshot_id);
-    if let Err(err) = self
-      .s3
-      .put_blob(&key, params.encoded_collab_v1.into(), None)
-      .await
-    {
+    let compressed = zstd::encode_all(params.data.as_ref(), ZSTD_COMPRESSION_LEVEL)?;
+    if let Err(err) = self.s3.put_blob(&key, compressed.into(), None).await {
       self.collab_metrics.write_snapshot_failures.inc();
       return Err(err);
     }
@@ -165,9 +165,15 @@ impl SnapshotControl {
     match self.s3.get_blob(&key).await {
       Ok(resp) => {
         self.collab_metrics.read_snapshot.inc();
+        let decompressed = zstd::decode_all(&*resp.to_blob())?;
+        let encoded_collab = EncodedCollab {
+          state_vector: Default::default(),
+          doc_state: decompressed.into(),
+          version: EncoderVersion::V1,
+        };
         Ok(SnapshotData {
           object_id: object_id.to_string(),
-          encoded_collab_v1: resp.to_blob(),
+          encoded_collab_v1: encoded_collab.encode_to_bytes()?,
           workspace_id: workspace_id.to_string(),
         })
       },

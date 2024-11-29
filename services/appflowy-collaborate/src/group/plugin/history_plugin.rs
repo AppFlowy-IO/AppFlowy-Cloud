@@ -61,10 +61,10 @@ where
       let lock = collab.read().await;
       let encode_collab =
         lock.encode_collab_v1(|collab| collab_type.validate_require_data(collab))?;
-      let bytes = encode_collab.encode_to_bytes()?;
+      let data = encode_collab.doc_state;
       let params = InsertSnapshotParams {
         object_id,
-        encoded_collab_v1: bytes,
+        data,
         workspace_id,
         collab_type,
       };

@@ -1122,7 +1122,7 @@ async fn create_collab_snapshot_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
-  let encoded_collab_v1 = state
+  let data = state
     .collab_access_control_storage
     .get_encode_collab(
       GetCollabOrigin::User { uid },
@@ -1130,15 +1130,14 @@ async fn create_collab_snapshot_handler(
       true,
     )
     .await?
-    .encode_to_bytes()
-    .unwrap();
+    .doc_state;
 
   let meta = state
     .collab_access_control_storage
     .create_snapshot(InsertSnapshotParams {
       object_id,
       workspace_id,
-      encoded_collab_v1,
+      data,
       collab_type,
     })
     .await?;

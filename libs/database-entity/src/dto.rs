@@ -19,6 +19,8 @@ use tracing::error;
 use uuid::Uuid;
 use validator::Validate;
 
+pub const ZSTD_COMPRESSION_LEVEL: i32 = 3;
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
   #[validate(custom = "validate_not_empty_str")]
@@ -222,12 +224,12 @@ pub struct DeleteCollabParams {
   pub workspace_id: String,
 }
 
-#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+#[derive(Debug, Clone, Validate)]
 pub struct InsertSnapshotParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   #[validate(custom = "validate_not_empty_payload")]
-  pub encoded_collab_v1: Vec<u8>,
+  pub data: Bytes,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
   pub collab_type: CollabType,

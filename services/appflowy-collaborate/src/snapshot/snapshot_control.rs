@@ -32,7 +32,7 @@ fn collab_snapshot_prefix(workspace_id: &str, object_id: &str) -> String {
 }
 
 fn get_timestamp(object_key: &str) -> Option<DateTime<Utc>> {
-  let (left, right) = object_key.rsplit_once('/')?;
+  let (_, right) = object_key.rsplit_once('/')?;
   let trimmed = right
     .trim_start_matches("snapshot_")
     .trim_end_matches(".v1");
@@ -111,14 +111,19 @@ impl SnapshotControl {
     params.validate()?;
 
     debug!("create snapshot for object:{}", params.object_id);
+    self.collab_metrics.write_snapshot.inc();
 
     let timestamp = Utc::now();
     let snapshot_id = timestamp.timestamp_millis();
     let key = collab_snapshot_key(&params.workspace_id, &params.object_id, snapshot_id);
-    self
+    if let Err(err) = self
       .s3
       .put_blob(&key, params.encoded_collab_v1.into(), None)
-      .await?;
+      .await
+    {
+      self.collab_metrics.write_snapshot_failures.inc();
+      return Err(err);
+    }
 
     // drop old snapshots if exceeds limit
     let list = self
@@ -158,11 +163,14 @@ impl SnapshotControl {
   ) -> AppResult<SnapshotData> {
     let key = collab_snapshot_key(workspace_id, object_id, *snapshot_id);
     match self.s3.get_blob(&key).await {
-      Ok(resp) => Ok(SnapshotData {
-        object_id: object_id.to_string(),
-        encoded_collab_v1: resp.to_blob(),
-        workspace_id: workspace_id.to_string(),
-      }),
+      Ok(resp) => {
+        self.collab_metrics.read_snapshot.inc();
+        Ok(SnapshotData {
+          object_id: object_id.to_string(),
+          encoded_collab_v1: resp.to_blob(),
+          workspace_id: workspace_id.to_string(),
+        })
+      },
       Err(AppError::RecordNotFound(_)) => {
         debug!(
           "snapshot {} for `{}` not found in s3: fallback to postgres",

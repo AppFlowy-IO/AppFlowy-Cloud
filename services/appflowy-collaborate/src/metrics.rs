@@ -144,8 +144,9 @@ where
 
 #[derive(Clone)]
 pub struct CollabMetrics {
-  success_write_snapshot_count: Gauge,
-  total_write_snapshot_count: Gauge,
+  pub write_snapshot: Counter,
+  pub write_snapshot_failures: Counter,
+  pub read_snapshot: Counter,
   success_write_collab_count: Counter,
   total_write_collab_count: Counter,
   success_queue_collab_count: Counter,
@@ -154,8 +155,9 @@ pub struct CollabMetrics {
 impl CollabMetrics {
   fn init() -> Self {
     Self {
-      success_write_snapshot_count: Gauge::default(),
-      total_write_snapshot_count: Default::default(),
+      write_snapshot: Default::default(),
+      write_snapshot_failures: Default::default(),
+      read_snapshot: Default::default(),
       success_write_collab_count: Default::default(),
       total_write_collab_count: Default::default(),
       success_queue_collab_count: Default::default(),
@@ -166,14 +168,19 @@ impl CollabMetrics {
     let metrics = Self::init();
     let realtime_registry = registry.sub_registry_with_prefix("collab");
     realtime_registry.register(
-      "success_write_snapshot_count",
-      "success write snapshot to db",
-      metrics.success_write_snapshot_count.clone(),
+      "write_snapshot",
+      "snapshot write attempts counter",
+      metrics.write_snapshot.clone(),
     );
     realtime_registry.register(
-      "total_attempt_write_snapshot_count",
-      "total attempt write snapshot to db",
-      metrics.total_write_snapshot_count.clone(),
+      "write_snapshot_failures",
+      "counter for failed attempts to write a snapshot",
+      metrics.write_snapshot_failures.clone(),
+    );
+    realtime_registry.register(
+      "read_snapshot",
+      "snapshot read counter",
+      metrics.read_snapshot.clone(),
     );
     realtime_registry.register(
       "success_write_collab_count",
@@ -192,11 +199,6 @@ impl CollabMetrics {
     );
 
     metrics
-  }
-
-  pub fn record_write_snapshot(&self, success_attempt: i64, total_attempt: i64) {
-    self.success_write_snapshot_count.set(success_attempt);
-    self.total_write_snapshot_count.set(total_attempt);
   }
 
   pub fn record_write_collab(&self, success_attempt: u64, total_attempt: u64) {

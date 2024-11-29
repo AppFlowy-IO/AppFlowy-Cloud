@@ -1927,6 +1927,7 @@ async fn post_database_row_handler(
 
   biz::collab::ops::insert_database_row(
     &state.collab_access_control_storage,
+    &state.pg_pool,
     &workspace_id,
     &db_id,
     uid,

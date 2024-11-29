@@ -5,19 +5,13 @@ use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
 use chrono::Utc;
-use collab::core::collab::DataSource;
 use collab::preclude::Collab;
-use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
-use collab_database::fields::Field;
-use collab_database::fields::TypeOptions;
-use collab_database::rows::Cell;
 use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
 use collab_database::rows::RowDetail;
 use collab_database::views::OrderObjectPosition;
-use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_entity::CollabType;
@@ -30,8 +24,8 @@ use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
 use database_entity::dto::CollabParams;
+use database_entity::dto::QueryCollab;
 use database_entity::dto::QueryCollabResult;
-use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
@@ -58,6 +52,7 @@ use database_entity::dto::{
   UpdateCollabMemberParams,
 };
 
+use crate::biz::collab::utils::field_by_name_uniq;
 use crate::biz::workspace::ops::broadcast_update;
 
 use super::folder_view::collab_folder_to_folder_view;
@@ -66,6 +61,16 @@ use super::folder_view::section_items_to_recent_folder_view;
 use super::folder_view::section_items_to_trash_folder_view;
 use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
+use super::utils::collab_from_doc_state;
+use super::utils::convert_database_cells_human_readable;
+use super::utils::encode_collab_v1_bytes;
+use super::utils::field_by_id_name_uniq;
+use super::utils::get_database_body;
+use super::utils::get_latest_collab;
+use super::utils::get_latest_collab_encoded;
+use super::utils::new_cell_from_value;
+use super::utils::selection_name_by_id;
+use super::utils::type_options_serde;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -360,46 +365,6 @@ pub async fn get_latest_collab_folder(
   Ok(folder)
 }
 
-pub async fn get_latest_collab_encoded(
-  collab_storage: &CollabAccessControlStorage,
-  collab_origin: GetCollabOrigin,
-  workspace_id: &str,
-  oid: &str,
-  collab_type: CollabType,
-) -> Result<EncodedCollab, AppError> {
-  collab_storage
-    .get_encode_collab(
-      collab_origin,
-      QueryCollabParams {
-        workspace_id: workspace_id.to_string(),
-        inner: QueryCollab {
-          object_id: oid.to_string(),
-          collab_type,
-        },
-      },
-      true,
-    )
-    .await
-}
-
-pub async fn get_latest_collab(
-  storage: &CollabAccessControlStorage,
-  origin: GetCollabOrigin,
-  workspace_id: &str,
-  oid: &str,
-  collab_type: CollabType,
-) -> Result<Collab, AppError> {
-  let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
-  let collab: Collab = Collab::new_with_source(CollabOrigin::Server, oid, ec.into(), vec![], false)
-    .map_err(|e| {
-      AppError::Internal(anyhow::anyhow!(
-        "Failed to create collab from encoded collab: {:?}",
-        e
-      ))
-    })?;
-  Ok(collab)
-}
-
 pub async fn get_published_view(
   collab_storage: &CollabAccessControlStorage,
   publish_namespace: String,
@@ -506,138 +471,133 @@ pub async fn list_database_row_ids(
   Ok(db_rows)
 }
 
-fn new_cell_from_value(cell_value: serde_json::Value, field: &Field) -> Cell {
-  // Based on the type of the field, handle each value differently
-  // This should be as forgiving/generic/all-purpose as much as possible
-  // to support different use cases.
-  let field_type = FieldType::from(field.field_type);
-  match field_type {
-    FieldType::RichText => {
-      //
-      todo!()
-    },
-    FieldType::Number => todo!(),
-    FieldType::DateTime => todo!(),
-    FieldType::SingleSelect => todo!(),
-    FieldType::MultiSelect => todo!(),
-    FieldType::Checkbox => todo!(),
-    FieldType::URL => todo!(),
-    FieldType::Checklist => todo!(),
-    FieldType::LastEditedTime => todo!(),
-    FieldType::CreatedTime => todo!(),
-    FieldType::Relation => todo!(),
-    FieldType::Summary => todo!(),
-    FieldType::Translate => todo!(),
-    FieldType::Time => todo!(),
-    FieldType::Media => todo!(),
-  }
-}
-
 pub async fn insert_database_row(
   collab_storage: &CollabAccessControlStorage,
+  pg_pool: &PgPool,
   workspace_uuid_str: &str,
   database_uuid_str: &str,
   uid: i64,
   cell_value_by_id: HashMap<String, serde_json::Value>,
 ) -> Result<(), AppError> {
+  let mut db_txn = pg_pool.begin().await?;
+
   // get database types and type options
   let (mut db_collab, db_body) =
     get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
 
-  let field_by_id = db_body
-    .fields
-    .get_all_fields(&db_collab.transact())
-    .into_iter()
-    .fold(HashMap::new(), |mut acc, field| {
-      acc.insert(field.id.clone(), field);
-      acc
-    });
+  let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
+  let field_by_id = all_fields.iter().fold(HashMap::new(), |mut acc, field| {
+    acc.insert(field.id.clone(), field.clone());
+    acc
+  });
+  let field_by_name = field_by_name_uniq(all_fields);
 
   let new_db_row_id = uuid::Uuid::new_v4().to_string();
-  let mut new_row = Row::new(new_db_row_id.clone(), database_uuid_str);
-  {
-    for (id, cell_value) in cell_value_by_id {
-      let field = match field_by_id.get(&id) {
-        Some(f) => f,
-        None => {
-          tracing::warn!(
-            "field not found: {} for database: {}",
-            id,
-            database_uuid_str
-          );
-          continue;
-        },
-      };
-
-      let new_cell: Cell = new_cell_from_value(cell_value, field);
-      new_row.cells.insert(id.clone(), new_cell);
-    }
-  }
 
   let mut new_db_row_collab =
     Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
-  let new_db_row_body = DatabaseRowBody::create(
-    new_db_row_id.clone().into(),
-    &mut new_db_row_collab,
-    new_row,
-  );
+  let new_db_row_body = {
+    let database_body = DatabaseRowBody::create(
+      new_db_row_id.clone().into(),
+      &mut new_db_row_collab,
+      Row::empty(new_db_row_id.clone().into(), database_uuid_str),
+    );
+    let mut txn = new_db_row_collab.transact_mut();
+    for (id, serde_val) in cell_value_by_id {
+      let field = match field_by_id.get(&id) {
+        Some(f) => f,
+        // try use field name if id not found
+        None => match field_by_name.get(&id) {
+          Some(f) => f,
+          None => {
+            tracing::warn!(
+              "field not found: {} for database: {}",
+              id,
+              database_uuid_str
+            );
+            continue;
+          },
+        },
+      };
+      let new_cell = new_cell_from_value(serde_val, field);
+      if let Some(new_cell) = new_cell {
+        database_body.update(&mut txn, |row_update| {
+          row_update.update_cells(|cells_update| {
+            cells_update.insert_cell(&field.id, new_cell);
+          });
+        });
+      }
+    }
+    database_body
+  };
   let db_row_ec_v1 = encode_collab_v1_bytes(&new_db_row_collab, CollabType::DatabaseRow)?;
 
   // insert row
   collab_storage
-    .queue_insert_or_update_collab(
+    .insert_new_collab_with_transaction(
       workspace_uuid_str,
       &uid,
       CollabParams {
         object_id: new_db_row_id.clone(),
         encoded_collab_v1: db_row_ec_v1.into(),
-        collab_type: CollabType::Database,
+        collab_type: CollabType::DatabaseRow,
         embeddings: None,
       },
-      true,
+      &mut db_txn,
+      "inserting new database row from server",
     )
     .await?;
 
-  // create a new row
+  let ts_now = chrono::Utc::now().timestamp();
+  let row_order = db_body
+    .create_row(CreateRowParams {
+      id: new_db_row_id.into(),
+      database_id: database_uuid_str.to_string(),
+      cells: new_db_row_body
+        .cells(&new_db_row_collab.transact())
+        .unwrap_or_default(),
+      height: 30,
+      visibility: true,
+      row_position: OrderObjectPosition::End,
+      created_at: ts_now,
+      modified_at: ts_now,
+    })
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create row: {:?}", e)))?;
+
+  // For each database view, add the new row order
   let db_collab_update = {
-    let txn = db_collab.transact_mut();
-    let ts_now = chrono::Utc::now().timestamp();
-    let _ = db_body
-      .create_row(CreateRowParams {
-        id: uuid::Uuid::new_v4().to_string().into(),
-        database_id: database_uuid_str.to_string(),
-        cells: new_db_row_body
-          .cells(&new_db_row_collab.transact())
-          .unwrap_or_default(),
-        height: 30,
-        visibility: true,
-        row_position: OrderObjectPosition::End,
-        created_at: ts_now,
-        modified_at: ts_now,
-      })
-      .await
-      .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create row: {:?}", e)))?;
+    let mut txn = db_collab.transact_mut();
+    let mut db_views = db_body.views.get_all_views(&txn);
+    for db_view in db_views.iter_mut() {
+      db_view.row_orders.push(row_order.clone());
+    }
+    db_body.views.clear(&mut txn);
+    for view in db_views {
+      db_body.views.insert_view(&mut txn, view);
+    }
 
     txn.encode_update_v1()
   };
-  let db_ec_v1 = encode_collab_v1_bytes(&db_collab, CollabType::Database)?;
+  let updated_db_collab = encode_collab_v1_bytes(&db_collab, CollabType::Database)?;
 
-  // insert database with new row
   collab_storage
-    .queue_insert_or_update_collab(
+    .insert_new_collab_with_transaction(
       workspace_uuid_str,
       &uid,
       CollabParams {
         object_id: database_uuid_str.to_string(),
-        encoded_collab_v1: db_ec_v1.into(),
+        encoded_collab_v1: updated_db_collab.into(),
         collab_type: CollabType::Database,
         embeddings: None,
       },
-      true,
+      &mut db_txn,
+      "inserting updated database from server",
     )
     .await?;
-  broadcast_update(&collab_storage, workspace_uuid_str, db_collab_update).await?;
 
+  db_txn.commit().await?;
+  broadcast_update(collab_storage, database_uuid_str, db_collab_update).await?;
   Ok(())
 }
 
@@ -693,32 +653,9 @@ pub async fn list_database_row_details(
   let (database_collab, db_body) =
     get_database_body(collab_storage, &workspace_uuid_str, &database_uuid_str).await?;
 
-  // create a map of field id to field.
-  // ensure that the field name is unique.
-  // if the field name is repeated, it will be appended with the field id,
-  // under practical usage circumstances, no other collision should occur
-  let field_by_id: HashMap<String, Field> = {
-    let all_fields = db_body.fields.get_all_fields(&database_collab.transact());
-
-    let mut uniq_name_set: HashSet<String> = HashSet::with_capacity(all_fields.len());
-    let mut field_by_id: HashMap<String, Field> = HashMap::with_capacity(all_fields.len());
-
-    for mut field in all_fields {
-      // if the name already exists, append the field id to the name
-      if uniq_name_set.contains(&field.name) {
-        let new_name = format!("{}-{}", field.name, field.id);
-        field.name.clone_from(&new_name);
-      }
-      uniq_name_set.insert(field.name.clone());
-      field_by_id.insert(field.id.clone(), field);
-    }
-    field_by_id
-  };
-
-  let mut selection_name_by_id: HashMap<String, String> = HashMap::new();
-  for field in field_by_id.values() {
-    add_to_selection_from_field(&mut selection_name_by_id, field);
-  }
+  let all_fields = db_body.fields.get_all_fields(&database_collab.transact());
+  let selection_name_by_id = selection_name_by_id(&all_fields);
+  let field_by_name_uniq = field_by_id_name_uniq(all_fields);
 
   let query_collabs: Vec<QueryCollab> = row_ids
     .iter()
@@ -733,13 +670,31 @@ pub async fn list_database_row_details(
     .into_iter()
     .flat_map(|(id, result)| match result {
       QueryCollabResult::Success { encode_collab_v1 } => {
-        let ec = EncodedCollab::decode_from_bytes(&encode_collab_v1).unwrap();
+        let ec = match EncodedCollab::decode_from_bytes(&encode_collab_v1) {
+          Ok(ec) => ec,
+          Err(err) => {
+            tracing::error!("Failed to decode encoded collab: {:?}", err);
+            return None;
+          },
+        };
         let collab =
-          Collab::new_with_source(CollabOrigin::Server, &id, ec.into(), vec![], false).unwrap();
-        let row_detail = RowDetail::from_collab(&collab).unwrap();
+          match Collab::new_with_source(CollabOrigin::Server, &id, ec.into(), vec![], false) {
+            Ok(collab) => collab,
+            Err(err) => {
+              tracing::error!("Failed to create collab: {:?}", err);
+              return None;
+            },
+          };
+        let row_detail = match RowDetail::from_collab(&collab) {
+          Some(row_detail) => row_detail,
+          None => {
+            tracing::error!("Failed to get row detail from collab: {:?}", collab);
+            return None;
+          },
+        };
         let cells = convert_database_cells_human_readable(
           row_detail.row.cells,
-          &field_by_id,
+          &field_by_name_uniq,
           &selection_name_by_id,
         );
         Some(AFDatabaseRowDetail { id, cells })
@@ -752,225 +707,4 @@ pub async fn list_database_row_details(
     .collect::<Vec<AFDatabaseRowDetail>>();
 
   Ok(database_row_details)
-}
-
-fn convert_database_cells_human_readable(
-  db_cells: HashMap<String, HashMap<String, yrs::Any>>,
-  field_by_id: &HashMap<String, Field>,
-  selection_name_by_id: &HashMap<String, String>,
-) -> HashMap<String, HashMap<String, serde_json::Value>> {
-  let mut human_readable_records: HashMap<String, HashMap<String, serde_json::Value>> =
-    HashMap::with_capacity(db_cells.len());
-
-  for (field_id, cell) in db_cells {
-    let field = match field_by_id.get(&field_id) {
-      Some(field) => field,
-      None => {
-        tracing::error!("Failed to get field by id: {}", field_id);
-        continue;
-      },
-    };
-    let field_type = FieldType::from(field.field_type);
-
-    let mut human_readable_cell: HashMap<String, serde_json::Value> =
-      HashMap::with_capacity(cell.len());
-    for (key, value) in cell {
-      let serde_value: serde_json::Value = match key.as_str() {
-        "created_at" | "last_modified" => match value.cast::<i64>() {
-          Ok(timestamp) => chrono::DateTime::from_timestamp(timestamp, 0)
-            .unwrap_or_default()
-            .to_rfc3339()
-            .into(),
-          Err(err) => {
-            tracing::error!("Failed to cast timestamp: {:?}", err);
-            serde_json::Value::Null
-          },
-        },
-        "field_type" => format!("{:?}", field_type).into(),
-        "data" => {
-          match field_type {
-            FieldType::DateTime => {
-              if let yrs::any::Any::String(value_str) = value {
-                let int_value = value_str.parse::<i64>().unwrap_or_default();
-                chrono::DateTime::from_timestamp(int_value, 0)
-                  .unwrap_or_default()
-                  .to_rfc3339()
-                  .into()
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            FieldType::Checklist => {
-              if let yrs::any::Any::String(value_str) = value {
-                serde_json::from_str(&value_str).unwrap_or_default()
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            FieldType::Media => {
-              if let yrs::any::Any::Array(arr) = value {
-                let mut acc = Vec::with_capacity(arr.len());
-                for v in arr.as_ref() {
-                  if let yrs::any::Any::String(value_str) = v {
-                    let serde_value = serde_json::from_str(value_str).unwrap_or_default();
-                    acc.push(serde_value);
-                  }
-                }
-                serde_json::Value::Array(acc)
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            FieldType::SingleSelect => {
-              if let yrs::any::Any::String(ref value_str) = value {
-                selection_name_by_id
-                  .get(value_str.as_ref())
-                  .map(|v| v.to_string())
-                  .map(serde_json::Value::String)
-                  .unwrap_or_else(|| value.to_string().into())
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            FieldType::MultiSelect => {
-              if let yrs::any::Any::String(value_str) = value {
-                value_str
-                  .split(',')
-                  .filter_map(|v| selection_name_by_id.get(v).map(|v| v.to_string()))
-                  .fold(String::new(), |mut acc, s| {
-                    if !acc.is_empty() {
-                      acc.push(',');
-                    }
-                    acc.push_str(&s);
-                    acc
-                  })
-                  .into()
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            // Handle different field types formatting as needed
-            _ => serde_json::to_value(value).unwrap_or_default(),
-          }
-        },
-        _ => serde_json::to_value(value).unwrap_or_default(),
-      };
-      human_readable_cell.insert(key, serde_value);
-    }
-    human_readable_records.insert(field.name.clone(), human_readable_cell);
-  }
-  human_readable_records
-}
-
-fn add_to_selection_from_field(name_by_id: &mut HashMap<String, String>, field: &Field) {
-  let field_type = FieldType::from(field.field_type);
-  match field_type {
-    FieldType::SingleSelect => {
-      add_to_selection_from_type_options(name_by_id, &field.type_options, &field_type);
-    },
-    FieldType::MultiSelect => {
-      add_to_selection_from_type_options(name_by_id, &field.type_options, &field_type)
-    },
-    _ => (),
-  }
-}
-
-fn add_to_selection_from_type_options(
-  name_by_id: &mut HashMap<String, String>,
-  type_options: &TypeOptions,
-  field_type: &FieldType,
-) {
-  if let Some(type_opt) = type_options.get(&field_type.type_id()) {
-    if let Some(yrs::Any::String(arc_str)) = type_opt.get("content") {
-      if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(arc_str) {
-        if let Some(selections) = serde_value.get("options").and_then(|v| v.as_array()) {
-          for selection in selections {
-            if let serde_json::Value::Object(selection) = selection {
-              if let (Some(id), Some(name)) = (
-                selection.get("id").and_then(|v| v.as_str()),
-                selection.get("name").and_then(|v| v.as_str()),
-              ) {
-                name_by_id.insert(id.to_owned(), name.to_owned());
-              }
-            }
-          }
-        }
-      }
-    }
-  };
-}
-
-async fn get_database_body(
-  collab_storage: &CollabAccessControlStorage,
-  workspace_uuid_str: &str,
-  database_uuid_str: &str,
-) -> Result<(Collab, DatabaseBody), AppError> {
-  let db_collab = get_latest_collab(
-    collab_storage,
-    GetCollabOrigin::Server,
-    workspace_uuid_str,
-    database_uuid_str,
-    CollabType::Database,
-  )
-  .await?;
-  let db_body = DatabaseBody::from_collab(
-    &db_collab,
-    Arc::new(NoPersistenceDatabaseCollabService),
-    None,
-  )
-  .ok_or_else(|| {
-    AppError::Internal(anyhow::anyhow!(
-      "Failed to create database body from collab, db_collab_id: {}",
-      database_uuid_str,
-    ))
-  })?;
-  Ok((db_collab, db_body))
-}
-
-pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
-  let collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    object_id,
-    DataSource::DocStateV1(doc_state),
-    vec![],
-    false,
-  )
-  .map_err(|e| AppError::Unhandled(e.to_string()))?;
-  Ok(collab)
-}
-
-fn type_options_serde(
-  type_options: &TypeOptions,
-  field_type: &FieldType,
-) -> HashMap<String, serde_json::Value> {
-  let type_option = match type_options.get(&field_type.type_id()) {
-    Some(type_option) => type_option,
-    None => return HashMap::new(),
-  };
-
-  let mut result = HashMap::with_capacity(type_option.len());
-  for (key, value) in type_option {
-    match field_type {
-      FieldType::SingleSelect | FieldType::MultiSelect | FieldType::Media => {
-        if let yrs::Any::String(arc_str) = value {
-          if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(arc_str) {
-            result.insert(key.clone(), serde_value);
-          }
-        }
-      },
-      _ => {
-        result.insert(key.clone(), serde_json::to_value(value).unwrap_or_default());
-      },
-    }
-  }
-
-  result
-}
-
-fn encode_collab_v1_bytes(collab: &Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
-  let bs = collab
-    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-    .map_err(|e| AppError::Unhandled(e.to_string()))?
-    .encode_to_bytes()?;
-  Ok(bs)
 }

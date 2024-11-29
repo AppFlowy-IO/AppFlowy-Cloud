@@ -43,8 +43,8 @@ use yrs::{Map, MapRef};
 
 use crate::biz::collab::folder_view::to_folder_view_icon;
 use crate::biz::collab::folder_view::to_folder_view_layout;
-use crate::biz::collab::ops::collab_from_doc_state;
-use crate::biz::collab::ops::get_latest_collab_encoded;
+use crate::biz::collab::utils::collab_from_doc_state;
+use crate::biz::collab::utils::get_latest_collab_encoded;
 
 use super::ops::broadcast_update;
 

@@ -207,7 +207,7 @@ where
       )
       .await?,
     );
-    self.state.insert_group(object_id, group.clone()).await;
+    self.state.insert_group(object_id, group).await;
     Ok(())
   }
 }

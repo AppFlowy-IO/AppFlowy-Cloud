@@ -46,11 +46,9 @@ use crate::biz::collab::folder_view::{
   parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
   to_space_permission,
 };
-use crate::biz::collab::ops::{collab_from_doc_state, get_latest_workspace_database};
-use crate::biz::collab::{
-  folder_view::view_is_space,
-  ops::{get_latest_collab_encoded, get_latest_collab_folder},
-};
+use crate::biz::collab::ops::get_latest_workspace_database;
+use crate::biz::collab::utils::{collab_from_doc_state, get_latest_collab_encoded};
+use crate::biz::collab::{folder_view::view_is_space, ops::get_latest_collab_folder};
 
 use super::ops::broadcast_update;
 

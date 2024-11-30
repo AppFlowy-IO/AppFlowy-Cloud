@@ -132,9 +132,37 @@ pub fn convert_database_cells_human_readable(
 pub fn selection_name_by_id(fields: &[Field]) -> HashMap<String, String> {
   let mut selection_name_by_id: HashMap<String, String> = HashMap::new();
   for field in fields {
-    add_to_selection_from_field(&mut selection_name_by_id, field);
+    let field_type = FieldType::from(field.field_type);
+    match field_type {
+      FieldType::SingleSelect | FieldType::MultiSelect => {
+        selection_id_name_pairs(&field.type_options, &field_type)
+          .into_iter()
+          .for_each(|(id, name)| {
+            selection_name_by_id.insert(id, name);
+          })
+      },
+      _ => (),
+    }
   }
   selection_name_by_id
+}
+
+pub fn selection_id_by_name(fields: &[Field]) -> HashMap<String, String> {
+  let mut selection_id_by_name: HashMap<String, String> = HashMap::new();
+  for field in fields {
+    let field_type = FieldType::from(field.field_type);
+    match field_type {
+      FieldType::SingleSelect | FieldType::MultiSelect => {
+        selection_id_name_pairs(&field.type_options, &field_type)
+          .into_iter()
+          .for_each(|(id, name)| {
+            selection_id_by_name.insert(name, id);
+          })
+      },
+      _ => (),
+    }
+  }
+  selection_id_by_name
 }
 
 /// create a map of field name to field
@@ -175,44 +203,6 @@ pub fn field_by_id_name_uniq(mut fields: Vec<Field>) -> HashMap<String, Field> {
     field_by_id.insert(field.id.clone(), field);
   }
   field_by_id
-}
-
-fn add_to_selection_from_field(name_by_id: &mut HashMap<String, String>, field: &Field) {
-  let field_type = FieldType::from(field.field_type);
-  match field_type {
-    FieldType::SingleSelect => {
-      add_to_selection_from_type_options(name_by_id, &field.type_options, &field_type);
-    },
-    FieldType::MultiSelect => {
-      add_to_selection_from_type_options(name_by_id, &field.type_options, &field_type)
-    },
-    _ => (),
-  }
-}
-
-fn add_to_selection_from_type_options(
-  name_by_id: &mut HashMap<String, String>,
-  type_options: &TypeOptions,
-  field_type: &FieldType,
-) {
-  if let Some(type_opt) = type_options.get(&field_type.type_id()) {
-    if let Some(yrs::Any::String(arc_str)) = type_opt.get("content") {
-      if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(arc_str) {
-        if let Some(selections) = serde_value.get("options").and_then(|v| v.as_array()) {
-          for selection in selections {
-            if let serde_json::Value::Object(selection) = selection {
-              if let (Some(id), Some(name)) = (
-                selection.get("id").and_then(|v| v.as_str()),
-                selection.get("name").and_then(|v| v.as_str()),
-              ) {
-                name_by_id.insert(id.to_owned(), name.to_owned());
-              }
-            }
-          }
-        }
-      }
-    }
-  };
 }
 
 pub fn type_options_serde(
@@ -382,9 +372,53 @@ pub fn new_cell_from_value(cell_value: serde_json::Value, field: &Field) -> Opti
         None
       },
     },
-    FieldType::SingleSelect
-    | FieldType::MultiSelect
-    | FieldType::Checklist
+    FieldType::SingleSelect => match cell_value {
+      serde_json::Value::String(s) => {
+        let selection_name_by_id = selection_name_by_id(std::slice::from_ref(field));
+        match selection_name_by_id.get(&s) {
+          Some(_name) => Some(yrs::any::Any::String(s.into())),
+          None => {
+            let selection_id_by_name = selection_id_by_name(std::slice::from_ref(field));
+            match selection_id_by_name.get(&s) {
+              Some(id) => Some(yrs::any::Any::String(id.as_str().into())),
+              None => {
+                tracing::warn!("invalid single select value for field: {:?}", field.name);
+                None
+              },
+            }
+          },
+        }
+      },
+      _ => {
+        tracing::warn!("invalid single value: {:?}", cell_value);
+        None
+      },
+    },
+    FieldType::MultiSelect => {
+      let selection_name_by_id = selection_name_by_id(std::slice::from_ref(field));
+      let selection_id_by_name = selection_id_by_name(std::slice::from_ref(field));
+      let input_ids: Vec<&str> = match cell_value {
+        serde_json::Value::String(ref s) => s.split(',').collect(),
+        serde_json::Value::Array(ref arr) => arr.iter().flat_map(|v| v.as_str()).collect(),
+        _ => {
+          tracing::warn!("invalid multi select value: {:?}", cell_value);
+          vec![]
+        },
+      };
+
+      let mut sel_ids = Vec::with_capacity(input_ids.len());
+      for input_id in input_ids {
+        if let Some(_name) = selection_name_by_id.get(input_id) {
+          sel_ids.push(input_id.to_owned());
+        } else if let Some(id) = selection_id_by_name.get(input_id) {
+          sel_ids.push(id.to_owned());
+        } else {
+          tracing::warn!("invalid multi select value: {:?}", cell_value);
+        }
+      }
+      yrs::any::Any::String(sel_ids.join(",").into()).into()
+    },
+    FieldType::Checklist
     | FieldType::URL
     | FieldType::Summary
     | FieldType::Translate
@@ -411,4 +445,32 @@ pub fn new_cell_from_value(cell_value: serde_json::Value, field: &Field) -> Opti
     new_cell.insert(CELL_DATA.to_string(), v);
     new_cell
   })
+}
+
+fn selection_id_name_pairs(
+  type_options: &TypeOptions,
+  field_type: &FieldType,
+) -> Vec<(String, String)> {
+  if let Some(type_opt) = type_options.get(&field_type.type_id()) {
+    if let Some(yrs::Any::String(arc_str)) = type_opt.get("content") {
+      if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(arc_str) {
+        if let Some(selections) = serde_value.get("options").and_then(|v| v.as_array()) {
+          let mut acc = Vec::with_capacity(selections.len());
+          for selection in selections {
+            if let serde_json::Value::Object(selection) = selection {
+              if let (Some(id), Some(name)) = (
+                selection.get("id").and_then(|v| v.as_str()),
+                selection.get("name").and_then(|v| v.as_str()),
+              ) {
+                acc.push((id.to_owned(), name.to_owned()));
+              }
+            }
+          }
+
+          return acc;
+        }
+      }
+    }
+  };
+  vec![]
 }

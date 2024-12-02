@@ -344,7 +344,7 @@ pub fn new_cell_from_value(cell_value: serde_json::Value, field: &Field) -> Opti
       if let serde_json::Value::String(value_str) = cell_value {
         Some(yrs::any::Any::String(value_str.into()))
       } else {
-        None
+        Some(yrs::any::Any::String(cell_value.to_string().into()))
       }
     },
     FieldType::Checkbox => {
@@ -418,16 +418,34 @@ pub fn new_cell_from_value(cell_value: serde_json::Value, field: &Field) -> Opti
       }
       yrs::any::Any::String(sel_ids.join(",").into()).into()
     },
-    FieldType::Checklist
-    | FieldType::URL
-    | FieldType::Summary
-    | FieldType::Translate
-    | FieldType::DateTime => match serde_json::to_string(&cell_value) {
-      Ok(s) => Some(yrs::any::Any::String(s.into())),
-      Err(err) => {
-        tracing::error!("Failed to serialize cell value: {:?}", err);
+    FieldType::DateTime => match cell_value {
+      serde_json::Value::Number(number) => {
+        let int_value = number.as_i64().unwrap_or_default();
+        Some(yrs::any::Any::String(int_value.to_string().into()))
+      },
+      serde_json::Value::String(s) => match s.parse::<i64>() {
+        Ok(int_value) => Some(yrs::any::Any::String(int_value.to_string().into())),
+        Err(_err) => match chrono::DateTime::parse_from_rfc3339(&s) {
+          Ok(dt) => Some(yrs::any::Any::String(dt.timestamp().to_string().into())),
+          Err(err) => {
+            tracing::warn!("Failed to parse datetime string: {:?}", err);
+            None
+          },
+        },
+      },
+      _ => {
+        tracing::warn!("invalid datetime value: {:?}", cell_value);
         None
       },
+    },
+    FieldType::Checklist | FieldType::URL | FieldType::Summary | FieldType::Translate => {
+      match serde_json::to_string(&cell_value) {
+        Ok(s) => Some(yrs::any::Any::String(s.into())),
+        Err(err) => {
+          tracing::error!("Failed to serialize cell value: {:?}", err);
+          None
+        },
+      }
     },
     FieldType::LastEditedTime | FieldType::CreatedTime | FieldType::Time => {
       // should not be possible

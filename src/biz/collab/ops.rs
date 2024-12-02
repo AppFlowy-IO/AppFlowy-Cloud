@@ -7,6 +7,9 @@ use chrono::DateTime;
 use chrono::Utc;
 use collab::preclude::Collab;
 use collab_database::entity::FieldType;
+use collab_database::fields::Field;
+use collab_database::fields::TypeOptionData;
+use collab_database::fields::TypeOptions;
 use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
@@ -33,6 +36,7 @@ use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
 use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
 use shared_entity::dto::workspace_dto::FolderViewMinimal;
+use shared_entity::dto::workspace_dto::InsertAFDatabaseField;
 use shared_entity::dto::workspace_dto::RecentFolderView;
 use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
@@ -622,6 +626,71 @@ pub async fn get_database_fields(
     });
   }
   Ok(acc)
+}
+
+// inserts a new field into the database
+// returns the id of the field created
+pub async fn add_database_field(
+  uid: i64,
+  collab_storage: &CollabAccessControlStorage,
+  pg_pool: &PgPool,
+  workspace_id: &str,
+  database_id: &str,
+  insert_field: InsertAFDatabaseField,
+) -> Result<String, AppError> {
+  let (mut db_collab, db_body) =
+    get_database_body(collab_storage, workspace_id, database_id).await?;
+
+  let new_id = uuid::Uuid::new_v4().to_string();
+  let mut type_options = TypeOptions::new();
+  let tod: TypeOptionData = match serde_json::from_value(insert_field.type_option) {
+    Ok(tod) => tod,
+    Err(err) => {
+      return Err(AppError::InvalidRequest(format!(
+        "Failed to parse type option: {:?}",
+        err
+      )));
+    },
+  };
+  type_options.insert(insert_field.field_type.to_string(), tod);
+
+  let db_collab_update = {
+    let mut yrs_txn = db_collab.transact_mut();
+    db_body.fields.insert_field(
+      &mut yrs_txn,
+      Field {
+        id: new_id.clone(),
+        name: insert_field.name,
+        field_type: insert_field.field_type,
+        type_options,
+        ..Default::default()
+      },
+    );
+    yrs_txn.encode_update_v1()
+  };
+
+  let updated_db_collab = encode_collab_v1_bytes(&db_collab, CollabType::Database)?;
+
+  let mut pg_txn = pg_pool.begin().await?;
+  collab_storage
+    .insert_new_collab_with_transaction(
+      workspace_id,
+      &uid,
+      CollabParams {
+        object_id: database_id.to_string(),
+        encoded_collab_v1: updated_db_collab.into(),
+        collab_type: CollabType::Database,
+        embeddings: None,
+      },
+      &mut pg_txn,
+      "inserting updated database from server",
+    )
+    .await?;
+
+  pg_txn.commit().await?;
+  broadcast_update(collab_storage, database_id, db_collab_update).await?;
+
+  Ok(new_id)
 }
 
 pub async fn list_database_row_ids_updated(

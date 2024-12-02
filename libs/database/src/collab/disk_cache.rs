@@ -2,7 +2,6 @@ use anyhow::{anyhow, Context};
 use bytes::Bytes;
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
-use serde::de::IntoDeserializer;
 use sqlx::{Error, PgPool, Transaction};
 use std::collections::HashMap;
 use std::ops::DerefMut;
@@ -22,7 +21,8 @@ use crate::file::{BucketClient, ResponseBlob};
 use crate::index::upsert_collab_embeddings;
 use app_error::AppError;
 use database_entity::dto::{
-  CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, ZSTD_COMPRESSION_LEVEL,
+  CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, S3_COLLAB_THRESHOLD,
+  ZSTD_COMPRESSION_LEVEL,
 };
 
 #[derive(Clone)]
@@ -93,8 +93,10 @@ impl CollabDiskCache {
     s3: AwsS3BucketClientImpl,
   ) -> AppResult<()> {
     let key = collab_key(workspace_id, &params.object_id);
-    let encoded_collab = std::mem::take(&mut params.encoded_collab_v1);
-    tokio::spawn(Self::insert_blob_with_retries(s3, key, encoded_collab, 3));
+    if params.encoded_collab_v1.len() > S3_COLLAB_THRESHOLD {
+      let encoded_collab = std::mem::take(&mut params.encoded_collab_v1);
+      tokio::spawn(Self::insert_blob_with_retries(s3, key, encoded_collab, 3));
+    }
 
     insert_into_af_collab(transaction, uid, workspace_id, &params).await?;
     if let Some(em) = &params.embeddings {
@@ -197,9 +199,11 @@ impl CollabDiskCache {
   ) -> Result<(), AppError> {
     let mut blobs = HashMap::new();
     for param in params_list.iter_mut() {
-      let key = collab_key(workspace_id, &param.object_id);
-      let blob = std::mem::take(&mut param.encoded_collab_v1);
-      blobs.insert(key, blob);
+      if param.encoded_collab_v1.len() > S3_COLLAB_THRESHOLD {
+        let key = collab_key(workspace_id, &param.object_id);
+        let blob = std::mem::take(&mut param.encoded_collab_v1);
+        blobs.insert(key, blob);
+      }
     }
 
     let mut transaction = self.pg_pool.begin().await?;

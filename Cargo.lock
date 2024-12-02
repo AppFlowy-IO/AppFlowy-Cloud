@@ -2925,6 +2925,7 @@ dependencies = [
  "tracing",
  "uuid",
  "validator",
+ "zstd 0.13.2",
 ]
 
 [[package]]

@@ -9,7 +9,7 @@ use crate::s3_client::S3Client;
 
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
-use collab::entity::EncodedCollab;
+use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_entity::CollabType;
 use collab_folder::{Folder, View, ViewLayout};
@@ -1329,7 +1329,7 @@ async fn get_encode_collab_from_bytes(
   s3: &Arc<dyn S3Client>,
 ) -> Result<EncodedCollab, ImportError> {
   let key = collab_key(workspace_id, object_id);
-  let bytes = match s3.get_blob_stream(&key).await {
+  match s3.get_blob_stream(&key).await {
     Ok(mut resp) => {
       let mut buf = Vec::with_capacity(resp.content_length.unwrap_or(1024) as usize);
       resp
@@ -1337,26 +1337,26 @@ async fn get_encode_collab_from_bytes(
         .read_to_end(&mut buf)
         .await
         .map_err(|err| ImportError::Internal(err.into()))?;
-      buf
+      let decompressed = zstd::decode_all(&*buf).map_err(|e| ImportError::Internal(e.into()))?;
+      Ok(EncodedCollab {
+        state_vector: Default::default(),
+        doc_state: decompressed.into(),
+        version: EncoderVersion::V1,
+      })
     },
     Err(WorkerError::RecordNotFound(_)) => {
       // fallback to postgres
-      select_blob_from_af_collab(pg_pool, collab_type, object_id)
+      let bytes = select_blob_from_af_collab(pg_pool, collab_type, object_id)
         .await
-        .map_err(|err| ImportError::Internal(err.into()))?
+        .map_err(|err| ImportError::Internal(err.into()))?;
+
+      Ok(
+        EncodedCollab::decode_from_bytes(&bytes)
+          .map_err(|err| ImportError::Internal(err.into()))?,
+      )
     },
     Err(err) => return Err(err.into()),
-  };
-
-  tokio::task::spawn_blocking(move || match EncodedCollab::decode_from_bytes(&bytes) {
-    Ok(encoded_collab) => Ok(encoded_collab),
-    Err(err) => Err(ImportError::Internal(anyhow!(
-      "Failed to decode collab from bytes: {:?}",
-      err
-    ))),
-  })
-  .await
-  .map_err(|err| ImportError::Internal(err.into()))?
+  }
 }
 
 /// Ensure the consumer group exists, if not, create it.
@@ -1579,5 +1579,8 @@ async fn insert_meta_from_path(
 }
 
 fn collab_key(workspace_id: &str, object_id: &str) -> String {
-  format!("collabs/{}/{}/encoded_collab.v1", workspace_id, object_id)
+  format!(
+    "collabs/{}/{}/encoded_collab.v1.zstd",
+    workspace_id, object_id
+  )
 }

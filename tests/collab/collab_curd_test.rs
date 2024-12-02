@@ -94,7 +94,10 @@ async fn batch_insert_collab_success_test() {
     let encoded_collab = result.0.get(&params.object_id).unwrap();
     match encoded_collab {
       QueryCollabResult::Success { encode_collab_v1 } => {
-        assert_eq!(encode_collab_v1, &params.encoded_collab_v1)
+        let actual = EncodedCollab::decode_from_bytes(encode_collab_v1.as_ref()).unwrap();
+        let expected = EncodedCollab::decode_from_bytes(params.encoded_collab_v1.as_ref()).unwrap();
+
+        assert_eq!(actual.doc_state, expected.doc_state);
       },
       QueryCollabResult::Failed { error } => {
         panic!("Failed to get collab: {:?}", error);

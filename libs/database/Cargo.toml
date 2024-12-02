@@ -20,6 +20,7 @@ anyhow = "1.0.79"
 serde.workspace = true
 serde_json.workspace = true
 tonic-proto.workspace = true
+zstd.workspace = true
 
 sqlx = { workspace = true, default-features = false, features = [
   "postgres",

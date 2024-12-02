@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
-use collab::entity::EncodedCollab;
+use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
+use serde::de::IntoDeserializer;
 use sqlx::{Error, PgPool, Transaction};
 use std::collections::HashMap;
 use std::ops::DerefMut;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 use tracing::{error, instrument};
@@ -20,7 +21,9 @@ use crate::file::s3_client_impl::AwsS3BucketClientImpl;
 use crate::file::{BucketClient, ResponseBlob};
 use crate::index::upsert_collab_embeddings;
 use app_error::AppError;
-use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
+use database_entity::dto::{
+  CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, ZSTD_COMPRESSION_LEVEL,
+};
 
 #[derive(Clone)]
 pub struct CollabDiskCache {
@@ -125,7 +128,20 @@ impl CollabDiskCache {
     let key = collab_key(workspace_id, &query.object_id);
     match self.s3.get_blob(&key).await {
       Ok(resp) => {
-        return encode_collab_from_bytes(resp.to_blob()).await;
+        let blob = resp.to_blob();
+        let now = Instant::now();
+        let decompressed = zstd::decode_all(&*blob)?;
+        tracing::trace!(
+          "decompressed collab {}B -> {}B in {:?}",
+          blob.len(),
+          decompressed.len(),
+          now.elapsed()
+        );
+        return Ok(EncodedCollab {
+          state_vector: Default::default(),
+          doc_state: decompressed.into(),
+          version: EncoderVersion::V1,
+        });
       },
       Err(AppError::RecordNotFound(_)) => {
         tracing::debug!(
@@ -290,7 +306,8 @@ impl CollabDiskCache {
     blob: Bytes,
     mut retries: usize,
   ) -> Result<(), AppError> {
-    while let Err(err) = s3.put_blob(&key, blob.clone().into(), None).await {
+    let doc_state = Self::compress_encoded_collab(blob)?;
+    while let Err(err) = s3.put_blob(&key, doc_state.clone().into(), None).await {
       match err {
         AppError::ServiceTemporaryUnavailable(err) if retries > 0 => {
           tracing::info!(
@@ -309,6 +326,20 @@ impl CollabDiskCache {
     }
     Ok(())
   }
+
+  fn compress_encoded_collab(encoded_collab_v1: Bytes) -> Result<Bytes, AppError> {
+    let encoded_collab = EncodedCollab::decode_from_bytes(&encoded_collab_v1)
+      .map_err(|err| AppError::Internal(err.into()))?;
+    let now = Instant::now();
+    let doc_state = zstd::encode_all(&*encoded_collab.doc_state, ZSTD_COMPRESSION_LEVEL)?;
+    tracing::trace!(
+      "compressed collab {}B -> {}B in {:?}",
+      encoded_collab_v1.len(),
+      doc_state.len(),
+      now.elapsed()
+    );
+    Ok(doc_state.into())
+  }
 }
 
 async fn batch_put_collab_to_s3(
@@ -320,7 +351,8 @@ async fn batch_put_collab_to_s3(
   for (key, blob) in collabs {
     let s3 = s3.clone();
     join_set.spawn(async move {
-      s3.put_blob(&key, blob.into(), None).await?;
+      let compressed = CollabDiskCache::compress_encoded_collab(blob)?;
+      s3.put_blob(&key, compressed.into(), None).await?;
       Ok(())
     });
     i += 1;
@@ -356,9 +388,36 @@ async fn batch_get_collab_from_s3(
     not_found: &mut Vec<QueryCollab>,
   ) {
     while let Some(result) = join_set.join_next().await {
+      let now = Instant::now();
       match result {
-        Ok(GetResult::Found(object_id, encode_collab_v1)) => {
-          results.insert(object_id, QueryCollabResult::Success { encode_collab_v1 });
+        Ok(GetResult::Found(object_id, compressed)) => match zstd::decode_all(&*compressed) {
+          Ok(decompressed) => {
+            tracing::trace!(
+              "decompressed collab {}B -> {}B in {:?}",
+              compressed.len(),
+              decompressed.len(),
+              now.elapsed()
+            );
+            let encoded_collab = EncodedCollab {
+              state_vector: Default::default(),
+              doc_state: decompressed.into(),
+              version: EncoderVersion::V1,
+            };
+            results.insert(
+              object_id,
+              QueryCollabResult::Success {
+                encode_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+              },
+            );
+          },
+          Err(err) => {
+            results.insert(
+              object_id,
+              QueryCollabResult::Failed {
+                error: err.to_string(),
+              },
+            );
+          },
         },
         Ok(GetResult::NotFound(query)) => not_found.push(query),
         Ok(GetResult::Error(object_id, error)) => {
@@ -397,5 +456,8 @@ fn collab_key_prefix(workspace_id: &str, object_id: &str) -> String {
 }
 
 fn collab_key(workspace_id: &str, object_id: &str) -> String {
-  format!("collabs/{}/{}/encoded_collab.v1", workspace_id, object_id)
+  format!(
+    "collabs/{}/{}/encoded_collab.v1.zstd",
+    workspace_id, object_id
+  )
 }

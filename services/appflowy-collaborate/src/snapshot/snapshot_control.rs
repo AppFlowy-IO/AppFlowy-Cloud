@@ -25,7 +25,7 @@ pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(2);
 fn collab_snapshot_key(workspace_id: &str, object_id: &str, snapshot_id: i64) -> String {
   let snapshot_id = u64::MAX - snapshot_id as u64;
   format!(
-    "collabs/{}/{}/snapshot_{:16x}.v1",
+    "collabs/{}/{}/snapshot_{:16x}.v1.zstd",
     workspace_id, object_id, snapshot_id
   )
 }
@@ -38,7 +38,7 @@ fn get_timestamp(object_key: &str) -> Option<DateTime<Utc>> {
   let (_, right) = object_key.rsplit_once('/')?;
   let trimmed = right
     .trim_start_matches("snapshot_")
-    .trim_end_matches(".v1");
+    .trim_end_matches(".v1.zstd");
   let snapshot_id = u64::from_str_radix(trimmed, 16).ok()?;
   let snapshot_id = u64::MAX - snapshot_id;
   DateTime::from_timestamp_millis(snapshot_id as i64)
@@ -49,7 +49,7 @@ fn get_meta(objct_key: String) -> Option<AFSnapshotMeta> {
   let (_, object_id) = left.rsplit_once('/')?;
   let trimmed = right
     .trim_start_matches("snapshot_")
-    .trim_end_matches(".v1");
+    .trim_end_matches(".v1.zstd");
   let snapshot_id = u64::from_str_radix(trimmed, 16).ok()?;
   let snapshot_id = u64::MAX - snapshot_id;
   Some(AFSnapshotMeta {

@@ -340,7 +340,7 @@ pub fn new_cell_from_value(cell_value: serde_json::Value, field: &Field) -> Opti
         None
       }
     },
-    FieldType::RichText => {
+    FieldType::RichText | FieldType::URL | FieldType::Summary | FieldType::Translate => {
       if let serde_json::Value::String(value_str) = cell_value {
         Some(yrs::any::Any::String(value_str.into()))
       } else {
@@ -438,14 +438,12 @@ pub fn new_cell_from_value(cell_value: serde_json::Value, field: &Field) -> Opti
         None
       },
     },
-    FieldType::Checklist | FieldType::URL | FieldType::Summary | FieldType::Translate => {
-      match serde_json::to_string(&cell_value) {
-        Ok(s) => Some(yrs::any::Any::String(s.into())),
-        Err(err) => {
-          tracing::error!("Failed to serialize cell value: {:?}", err);
-          None
-        },
-      }
+    FieldType::Checklist => match serde_json::to_string(&cell_value) {
+      Ok(s) => Some(yrs::any::Any::String(s.into())),
+      Err(err) => {
+        tracing::error!("Failed to serialize cell value: {:?}", err);
+        None
+      },
     },
     FieldType::LastEditedTime | FieldType::CreatedTime | FieldType::Time => {
       // should not be possible

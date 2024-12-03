@@ -32,7 +32,7 @@ use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
@@ -43,7 +43,6 @@ use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
-use gotrue::grant::{Grant, PasswordGrant};
 use mailer::sender::Mailer;
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
@@ -240,7 +239,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   // Gotrue
   info!("Connecting to GoTrue...");
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
-  let gotrue_admin = setup_admin_account(gotrue_client.clone(), &pg_pool, &config.gotrue).await?;
+  let gotrue_admin = get_admin_client(gotrue_client.clone(), &config.gotrue);
 
   // Redis
   info!("Connecting to Redis...");
@@ -345,82 +344,17 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   })
 }
 
-async fn setup_admin_account(
+fn get_admin_client(
   gotrue_client: gotrue::api::Client,
-  pg_pool: &PgPool,
   gotrue_setting: &GoTrueSetting,
-) -> Result<GoTrueAdmin, Error> {
+) -> GoTrueAdmin {
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.expose_secret();
-  let gotrue_admin = GoTrueAdmin::new(
+  GoTrueAdmin::new(
     admin_email.to_owned(),
     password.to_owned(),
     gotrue_client.clone(),
-  );
-
-  match gotrue_client
-    .token(&Grant::Password(PasswordGrant {
-      email: admin_email.to_owned(),
-      password: password.clone(),
-    }))
-    .await
-  {
-    Ok(_token) => return Ok(gotrue_admin),
-    Err(err) => tracing::warn!("Failed to get token: {:?}", err),
-  };
-
-  let res_resp = gotrue_client.sign_up(admin_email, password, None).await;
-  match res_resp {
-    Err(err) => {
-      if let app_error::gotrue::GoTrueError::Internal(err) = err {
-        match (err.code, err.msg.as_str()) {
-          (400..=499, "User already registered") => {
-            info!("Admin user already registered");
-            Ok(gotrue_admin)
-          },
-          _ => Err(err.into()),
-        }
-      } else {
-        Err(err.into())
-      }
-    },
-    Ok(resp) => {
-      let admin_user = {
-        match resp {
-          gotrue_entity::dto::SignUpResponse::Authenticated(resp) => resp.user,
-          gotrue_entity::dto::SignUpResponse::NotAuthenticated(user) => user,
-        }
-      };
-      match admin_user.role.as_str() {
-        "supabase_admin" => {
-          info!("Admin user already created and set role to supabase_admin");
-          Ok(gotrue_admin)
-        },
-        _ => {
-          let user_id = admin_user.id.parse::<uuid::Uuid>()?;
-          let result = sqlx::query!(
-            r#"
-            UPDATE auth.users
-            SET role = 'supabase_admin', email_confirmed_at = NOW()
-            WHERE id = $1
-            "#,
-            user_id,
-          )
-          .execute(pg_pool)
-          .await
-          .context("failed to update the admin user")?;
-
-          if result.rows_affected() != 1 {
-            warn!("Failed to update the admin user");
-          } else {
-            info!("Admin user created and set role to supabase_admin");
-          }
-
-          Ok(gotrue_admin)
-        },
-      }
-    },
-  }
+  )
 }
 
 async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManager, Error> {

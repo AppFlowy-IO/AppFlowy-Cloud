@@ -285,6 +285,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     redis_conn_manager.clone(),
     pg_pool.clone(),
     s3_client.clone(),
+    config.collab.s3_collab_threshold as usize,
   );
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {

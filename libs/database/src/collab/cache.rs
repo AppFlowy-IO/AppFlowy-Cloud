@@ -19,6 +19,7 @@ pub struct CollabCache {
   mem_cache: CollabMemCache,
   success_attempts: Arc<AtomicU64>,
   total_attempts: Arc<AtomicU64>,
+  s3_collab_threshold: usize,
 }
 
 impl CollabCache {
@@ -26,12 +27,14 @@ impl CollabCache {
     redis_conn_manager: redis::aio::ConnectionManager,
     pg_pool: PgPool,
     s3: AwsS3BucketClientImpl,
+    s3_collab_threshold: usize,
   ) -> Self {
     let mem_cache = CollabMemCache::new(redis_conn_manager.clone());
-    let disk_cache = CollabDiskCache::new(pg_pool.clone(), s3);
+    let disk_cache = CollabDiskCache::new(pg_pool.clone(), s3, s3_collab_threshold);
     Self {
       disk_cache,
       mem_cache,
+      s3_collab_threshold,
       success_attempts: Arc::new(AtomicU64::new(0)),
       total_attempts: Arc::new(AtomicU64::new(0)),
     }
@@ -168,8 +171,15 @@ impl CollabCache {
     let object_id = params.object_id.clone();
     let encode_collab_data = params.encoded_collab_v1.clone();
     let s3 = self.disk_cache.s3_client();
-    CollabDiskCache::upsert_collab_with_transaction(workspace_id, uid, params, transaction, s3)
-      .await?;
+    CollabDiskCache::upsert_collab_with_transaction(
+      workspace_id,
+      uid,
+      params,
+      transaction,
+      s3,
+      self.s3_collab_threshold,
+    )
+    .await?;
 
     // when the data is written to the disk cache but fails to be written to the memory cache
     // we log the error and continue.

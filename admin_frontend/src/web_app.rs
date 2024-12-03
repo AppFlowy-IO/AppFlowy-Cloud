@@ -27,6 +27,7 @@ fn page_router() -> Router<AppState> {
   Router::new()
     .route("/", get(home_handler))
     .route("/login", get(login_handler))
+    .route("/login-v2", get(login_v2_handler))
     .route("/login-callback", get(login_callback_handler))
     .route("/payment-success", get(payment_success_handler))
     .route("/login-callback-query", get(login_callback_query_handler))
@@ -377,6 +378,26 @@ async fn login_handler(
   let oauth_providers = external.oauth_providers();
   render_template(templates::Login {
     oauth_providers: &oauth_providers,
+    redirect_to: redirect_to.as_deref(),
+    oauth_redirect_to: oauth_redirect_to.as_deref(),
+  })
+}
+
+async fn login_v2_handler(Query(login): Query<LoginParams>) -> Result<Html<String>, WebAppError> {
+  let redirect_to = login
+    .redirect_to
+    .as_ref()
+    .map(|r| urlencoding::encode(r).to_string());
+  let oauth_redirect_to = login.redirect_to.as_ref().map(|r| {
+    urlencoding::encode(&format!(
+      "/web/login-callback?redirect_to={}",
+      urlencoding::encode(r)
+    ))
+    .to_string()
+  });
+
+  render_template(templates::LoginV2 {
+    oauth_providers: &["Google", "Apple", "Github", "Discord"],
     redirect_to: redirect_to.as_deref(),
     oauth_redirect_to: oauth_redirect_to.as_deref(),
   })

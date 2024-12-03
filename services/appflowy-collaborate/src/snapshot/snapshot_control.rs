@@ -1,94 +1,96 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
-use async_stream::stream;
 use chrono::{DateTime, Utc};
-use collab::lock::{Mutex, RwLock};
-use futures_util::StreamExt;
+use collab::entity::{EncodedCollab, EncoderVersion};
 use sqlx::PgPool;
-use tokio::time::interval;
 use tracing::{debug, error, trace, warn};
 use validator::Validate;
 
 use app_error::AppError;
-use collab_rt_protocol::spawn_blocking_validate_encode_collab;
 use database::collab::{
-  create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, latest_snapshot_time,
-  select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
+  get_all_collab_snapshot_meta, latest_snapshot_time, select_snapshot, AppResult,
+  COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
 };
-use database_entity::dto::{AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData};
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
+use database::file::{BucketClient, ResponseBlob};
+use database_entity::dto::{
+  AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData, ZSTD_COMPRESSION_LEVEL,
+};
 
 use crate::metrics::CollabMetrics;
-use crate::snapshot::cache::SnapshotCache;
-use crate::snapshot::queue::PendingQueue;
-use crate::state::RedisConnectionManager;
-
-pub type SnapshotCommandReceiver = tokio::sync::mpsc::Receiver<SnapshotCommand>;
-pub type SnapshotCommandSender = tokio::sync::mpsc::Sender<SnapshotCommand>;
 
 pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(2);
 
-pub enum SnapshotCommand {
-  InsertSnapshot(InsertSnapshotParams),
-  Tick(tokio::sync::oneshot::Sender<SnapshotMetric>),
+fn collab_snapshot_key(workspace_id: &str, object_id: &str, snapshot_id: i64) -> String {
+  let snapshot_id = u64::MAX - snapshot_id as u64;
+  format!(
+    "collabs/{}/{}/snapshot_{:16x}.v1.zstd",
+    workspace_id, object_id, snapshot_id
+  )
+}
+
+fn collab_snapshot_prefix(workspace_id: &str, object_id: &str) -> String {
+  format!("collabs/{}/{}/snapshot_", workspace_id, object_id)
+}
+
+fn get_timestamp(object_key: &str) -> Option<DateTime<Utc>> {
+  let (_, right) = object_key.rsplit_once('/')?;
+  let trimmed = right
+    .trim_start_matches("snapshot_")
+    .trim_end_matches(".v1.zstd");
+  let snapshot_id = u64::from_str_radix(trimmed, 16).ok()?;
+  let snapshot_id = u64::MAX - snapshot_id;
+  DateTime::from_timestamp_millis(snapshot_id as i64)
+}
+
+fn get_meta(objct_key: String) -> Option<AFSnapshotMeta> {
+  let (left, right) = objct_key.rsplit_once('/')?;
+  let (_, object_id) = left.rsplit_once('/')?;
+  let trimmed = right
+    .trim_start_matches("snapshot_")
+    .trim_end_matches(".v1.zstd");
+  let snapshot_id = u64::from_str_radix(trimmed, 16).ok()?;
+  let snapshot_id = u64::MAX - snapshot_id;
+  Some(AFSnapshotMeta {
+    snapshot_id: snapshot_id as i64,
+    object_id: object_id.to_string(),
+    created_at: DateTime::from_timestamp_millis(snapshot_id as i64)?,
+  })
 }
 
 #[derive(Clone)]
 // #[deprecated(note = "snapshot is implemented in the appflowy-history")]
 pub struct SnapshotControl {
-  cache: SnapshotCache,
-  command_sender: SnapshotCommandSender,
   pg_pool: PgPool,
+  s3: AwsS3BucketClientImpl,
+  collab_metrics: Arc<CollabMetrics>,
 }
 
 impl SnapshotControl {
   pub async fn new(
-    redis_client: RedisConnectionManager,
     pg_pool: PgPool,
+    s3: AwsS3BucketClientImpl,
     collab_metrics: Arc<CollabMetrics>,
   ) -> Self {
-    let redis_client = Arc::new(Mutex::from(redis_client));
-    let (command_sender, rx) = tokio::sync::mpsc::channel(2000);
-    let cache = SnapshotCache::new(redis_client);
-
-    let runner = SnapshotCommandRunner::new(pg_pool.clone(), cache.clone(), rx);
-    tokio::spawn(runner.run());
-
-    let cloned_sender = command_sender.clone();
-    tokio::spawn(async move {
-      let mut interval = interval(SNAPSHOT_TICK_INTERVAL);
-      loop {
-        interval.tick().await;
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        if let Err(err) = cloned_sender.send(SnapshotCommand::Tick(tx)).await {
-          error!("Failed to send tick command: {}", err);
-        }
-
-        if let Ok(metric) = rx.await {
-          collab_metrics.record_write_snapshot(
-            metric.success_write_snapshot_count,
-            metric.total_write_snapshot_count,
-          );
-        }
-      }
-    });
-
     Self {
-      cache,
-      command_sender,
       pg_pool,
+      s3,
+      collab_metrics,
     }
   }
 
-  pub async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError> {
+  pub async fn should_create_snapshot(
+    &self,
+    workspace_id: &str,
+    oid: &str,
+  ) -> Result<bool, AppError> {
     if oid.is_empty() {
       warn!("unexpected empty object id when checking should_create_snapshot");
       return Ok(false);
     }
 
-    let latest_created_at = self.latest_snapshot_time(oid).await?;
+    let latest_created_at = self.latest_snapshot_time(workspace_id, oid).await?;
     // Subtracting a fixed duration that is known not to cause underflow. If `checked_sub_signed` returns `None`,
     // it indicates an error in calculation, thus defaulting to creating a snapshot just in case.
     let threshold_time = Utc::now().checked_sub_signed(chrono::Duration::hours(SNAPSHOT_PER_HOUR));
@@ -112,53 +114,119 @@ impl SnapshotControl {
     params.validate()?;
 
     debug!("create snapshot for object:{}", params.object_id);
-    match self.pg_pool.try_begin().await {
-      Ok(Some(transaction)) => {
-        let meta = create_snapshot_and_maintain_limit(
-          transaction,
-          &params.workspace_id,
-          &params.object_id,
-          &params.encoded_collab_v1,
-          COLLAB_SNAPSHOT_LIMIT,
-        )
-        .await?;
-        Ok(meta)
-      },
-      _ => Err(AppError::Internal(anyhow!(
-        "fail to acquire transaction to create snapshot for object:{}",
-        params.object_id,
-      ))),
+    self.collab_metrics.write_snapshot.inc();
+
+    let timestamp = Utc::now();
+    let snapshot_id = timestamp.timestamp_millis();
+    let key = collab_snapshot_key(&params.workspace_id, &params.object_id, snapshot_id);
+    let compressed = zstd::encode_all(params.data.as_ref(), ZSTD_COMPRESSION_LEVEL)?;
+    if let Err(err) = self.s3.put_blob(&key, compressed.into(), None).await {
+      self.collab_metrics.write_snapshot_failures.inc();
+      return Err(err);
     }
+
+    // drop old snapshots if exceeds limit
+    let list = self
+      .s3
+      .list_dir(
+        &collab_snapshot_prefix(&params.workspace_id, &params.object_id),
+        100,
+      )
+      .await?;
+
+    if list.len() > COLLAB_SNAPSHOT_LIMIT as usize {
+      debug!(
+        "drop {} snapshots for `{}`",
+        list.len() - COLLAB_SNAPSHOT_LIMIT as usize,
+        params.object_id
+      );
+      let trimmed: Vec<_> = list
+        .into_iter()
+        .skip(COLLAB_SNAPSHOT_LIMIT as usize)
+        .collect();
+
+      self.s3.delete_blobs(trimmed).await?;
+    }
+
+    Ok(AFSnapshotMeta {
+      snapshot_id,
+      object_id: params.object_id,
+      created_at: timestamp,
+    })
   }
 
-  pub async fn get_collab_snapshot(&self, snapshot_id: &i64) -> AppResult<SnapshotData> {
-    match select_snapshot(&self.pg_pool, snapshot_id).await? {
-      None => Err(AppError::RecordNotFound(format!(
-        "Can't find the snapshot with id:{}",
-        snapshot_id
-      ))),
-      Some(row) => Ok(SnapshotData {
-        object_id: row.oid,
-        encoded_collab_v1: row.blob,
-        workspace_id: row.workspace_id.to_string(),
-      }),
+  pub async fn get_collab_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    snapshot_id: &i64,
+  ) -> AppResult<SnapshotData> {
+    let key = collab_snapshot_key(workspace_id, object_id, *snapshot_id);
+    match self.s3.get_blob(&key).await {
+      Ok(resp) => {
+        self.collab_metrics.read_snapshot.inc();
+        let decompressed = zstd::decode_all(&*resp.to_blob())?;
+        let encoded_collab = EncodedCollab {
+          state_vector: Default::default(),
+          doc_state: decompressed.into(),
+          version: EncoderVersion::V1,
+        };
+        Ok(SnapshotData {
+          object_id: object_id.to_string(),
+          encoded_collab_v1: encoded_collab.encode_to_bytes()?,
+          workspace_id: workspace_id.to_string(),
+        })
+      },
+      Err(AppError::RecordNotFound(_)) => {
+        debug!(
+          "snapshot {} for `{}` not found in s3: fallback to postgres",
+          snapshot_id, object_id
+        );
+        match select_snapshot(&self.pg_pool, workspace_id, object_id, snapshot_id).await? {
+          None => Err(AppError::RecordNotFound(format!(
+            "Can't find the snapshot with id:{}",
+            snapshot_id
+          ))),
+          Some(row) => Ok(SnapshotData {
+            object_id: object_id.to_string(),
+            encoded_collab_v1: row.blob,
+            workspace_id: workspace_id.to_string(),
+          }),
+        }
+      },
+      Err(err) => Err(err),
     }
   }
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
-  pub async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
-    let metas = get_all_collab_snapshot_meta(&self.pg_pool, oid).await?;
-    Ok(metas)
+  pub async fn get_collab_snapshot_list(
+    &self,
+    workspace_id: &str,
+    oid: &str,
+  ) -> AppResult<AFSnapshotMetas> {
+    let snapshot_prefix = collab_snapshot_prefix(workspace_id, oid);
+    let resp = self
+      .s3
+      .list_dir(&snapshot_prefix, COLLAB_SNAPSHOT_LIMIT as usize)
+      .await?;
+    if resp.is_empty() {
+      let metas = get_all_collab_snapshot_meta(&self.pg_pool, oid).await?;
+      Ok(metas)
+    } else {
+      let metas: Vec<_> = resp.into_iter().filter_map(get_meta).collect();
+      Ok(AFSnapshotMetas(metas))
+    }
   }
 
   pub async fn queue_snapshot(&self, params: InsertSnapshotParams) -> Result<(), AppError> {
     params.validate()?;
     trace!("Queuing snapshot for {}", params.object_id);
-    self
-      .command_sender
-      .send(SnapshotCommand::InsertSnapshot(params))
-      .await
-      .map_err(|err| AppError::Internal(err.into()))?;
+    let ctrl = self.clone();
+    tokio::spawn(async move {
+      if let Err(err) = ctrl.create_snapshot(params).await {
+        error!("Failed to create snapshot: {}", err);
+      }
+    });
     Ok(())
   }
 
@@ -168,165 +236,22 @@ impl SnapshotControl {
     object_id: &str,
     snapshot_id: &i64,
   ) -> Result<SnapshotData, AppError> {
-    let key = SnapshotKey::from_object_id(object_id);
-    let encoded_collab_v1 = self.cache.try_get(&key.0).await.unwrap_or(None);
+    self
+      .get_collab_snapshot(workspace_id, object_id, snapshot_id)
+      .await
+  }
 
-    match encoded_collab_v1 {
-      None => self.get_collab_snapshot(snapshot_id).await,
-      Some(encoded_collab_v1) => Ok(SnapshotData {
-        encoded_collab_v1,
-        workspace_id: workspace_id.to_string(),
-        object_id: object_id.to_string(),
-      }),
+  async fn latest_snapshot_time(
+    &self,
+    workspace_id: &str,
+    oid: &str,
+  ) -> Result<Option<DateTime<Utc>>, AppError> {
+    let snapshot_prefix = collab_snapshot_prefix(workspace_id, oid);
+    let mut resp = self.s3.list_dir(&snapshot_prefix, 1).await?;
+    if let Some(key) = resp.pop() {
+      Ok(get_timestamp(&key))
+    } else {
+      Ok(latest_snapshot_time(oid, &self.pg_pool).await?)
     }
   }
-
-  async fn latest_snapshot_time(&self, oid: &str) -> Result<Option<DateTime<Utc>>, AppError> {
-    let time = latest_snapshot_time(oid, &self.pg_pool).await?;
-    Ok(time)
-  }
-}
-
-struct SnapshotCommandRunner {
-  pg_pool: PgPool,
-  queue: RwLock<PendingQueue>,
-  cache: SnapshotCache,
-  recv: Option<SnapshotCommandReceiver>,
-  success_attempts: AtomicU64,
-  total_attempts: AtomicU64,
-}
-impl SnapshotCommandRunner {
-  fn new(pg_pool: PgPool, cache: SnapshotCache, recv: SnapshotCommandReceiver) -> Self {
-    let queue = PendingQueue::new();
-    Self {
-      pg_pool,
-      queue: RwLock::from(queue),
-      cache,
-      recv: Some(recv),
-      success_attempts: Default::default(),
-      total_attempts: Default::default(),
-    }
-  }
-
-  async fn run(mut self) {
-    let mut receiver = self.recv.take().expect("Only take once");
-    let stream = stream! {
-      while let Some(cmd) = receiver.recv().await {
-         yield cmd;
-      }
-    };
-
-    stream
-      .for_each(|command| async {
-        self.handle_command(command).await;
-      })
-      .await;
-  }
-
-  async fn handle_command(&self, command: SnapshotCommand) {
-    match command {
-      SnapshotCommand::InsertSnapshot(params) => {
-        let mut queue = self.queue.write().await;
-        let item = queue.generate_item(params.workspace_id, params.object_id, params.collab_type);
-        let key = SnapshotKey::from_object_id(&item.object_id);
-        queue.push_item(item);
-        drop(queue);
-
-        if let Err(err) = self.cache.insert(&key.0, params.encoded_collab_v1).await {
-          error!("Failed to insert snapshot to cache: {}", err);
-        }
-      },
-      SnapshotCommand::Tick(tx) => {
-        if let Err(e) = self.process_next_batch().await {
-          error!("Failed to process next batch: {}", e);
-        }
-
-        let _ = tx.send(SnapshotMetric {
-          success_write_snapshot_count: self.success_attempts.load(Ordering::Relaxed) as i64,
-          total_write_snapshot_count: self.total_attempts.load(Ordering::Relaxed) as i64,
-        });
-      },
-    }
-  }
-
-  async fn process_next_batch(&self) -> Result<(), AppError> {
-    let mut queue = self.queue.write().await;
-
-    let next_item = match queue.pop() {
-      Some(item) => item,
-      None => return Ok(()),
-    };
-
-    self.total_attempts.fetch_add(1, Ordering::Relaxed);
-    let key = SnapshotKey::from_object_id(&next_item.object_id);
-
-    // Attempt to fetch the collab data from the cache
-    let encoded_collab_v1 = match self.cache.try_get(&key.0).await {
-      Ok(Some(data)) => data,
-      Ok(None) => return Ok(()), // Cache miss, no data to process
-      Err(_) => {
-        queue.push_item(next_item); // Push back to queue on error
-        return Ok(());
-      },
-    };
-
-    // Validate collab data before processing
-    let result = spawn_blocking_validate_encode_collab(
-      &next_item.object_id,
-      &encoded_collab_v1,
-      &next_item.collab_type,
-    )
-    .await;
-
-    if result.is_err() {
-      return Ok(());
-    }
-
-    // Start a transaction
-    let transaction = match self.pg_pool.try_begin().await {
-      Ok(Some(tx)) => tx,
-      _ => {
-        debug!("Failed to start transaction to write snapshot, retrying later");
-        queue.push_item(next_item);
-        return Ok(());
-      },
-    };
-
-    // Create the snapshot and enforce limits
-    match create_snapshot_and_maintain_limit(
-      transaction,
-      &next_item.workspace_id,
-      &next_item.object_id,
-      &encoded_collab_v1,
-      COLLAB_SNAPSHOT_LIMIT,
-    )
-    .await
-    {
-      Ok(_) => {
-        trace!(
-          "successfully created snapshot for {}, remaining task: {}",
-          next_item.object_id,
-          queue.len()
-        );
-        let _ = self.cache.remove(&key.0).await;
-        self.success_attempts.fetch_add(1, Ordering::Relaxed);
-        Ok(())
-      },
-      Err(e) => Err(e), // Return the error if snapshot creation fails
-    }
-  }
-}
-
-const SNAPSHOT_PREFIX: &str = "full_snapshot";
-struct SnapshotKey(String);
-
-impl SnapshotKey {
-  fn from_object_id(object_id: &str) -> Self {
-    Self(format!("{}:{}", SNAPSHOT_PREFIX, object_id))
-  }
-}
-
-pub struct SnapshotMetric {
-  success_write_snapshot_count: i64,
-  total_write_snapshot_count: i64,
 }

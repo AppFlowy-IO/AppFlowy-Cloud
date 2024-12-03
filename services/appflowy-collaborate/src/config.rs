@@ -16,6 +16,18 @@ pub struct Config {
   pub collab: CollabSetting,
   pub redis_uri: Secret<String>,
   pub ai: AISettings,
+  pub s3: S3Setting,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct S3Setting {
+  pub create_bucket: bool,
+  pub use_minio: bool,
+  pub minio_url: String,
+  pub access_key: String,
+  pub secret_key: Secret<String>,
+  pub bucket: String,
+  pub region: String,
 }
 
 #[derive(Clone, Debug)]
@@ -116,6 +128,7 @@ pub struct CollabSetting {
   pub group_persistence_interval_secs: u64,
   pub edit_state_max_count: u32,
   pub edit_state_max_secs: i64,
+  pub s3_collab_threshold: u64,
 }
 
 pub fn get_env_var(key: &str, default: &str) -> String {
@@ -155,6 +168,19 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
         .parse()
         .context("fail to get APPFLOWY_DATABASE_MAX_CONNECTIONS")?,
     },
+    s3: S3Setting {
+      create_bucket: get_env_var("APPFLOWY_S3_CREATE_BUCKET", "true")
+        .parse()
+        .context("fail to get APPFLOWY_S3_CREATE_BUCKET")?,
+      use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true")
+        .parse()
+        .context("fail to get APPFLOWY_S3_USE_MINIO")?,
+      minio_url: get_env_var("APPFLOWY_S3_MINIO_URL", "http://localhost:9000"),
+      access_key: get_env_var("APPFLOWY_S3_ACCESS_KEY", "minioadmin"),
+      secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
+      bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
+      region: get_env_var("APPFLOWY_S3_REGION", ""),
+    },
     gotrue: GoTrueSetting {
       jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),
     },
@@ -166,6 +192,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       .parse()?,
       edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
       edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "60").parse()?,
+      s3_collab_threshold: get_env_var("APPFLOWY_COLLAB_S3_THRESHOLD", "8000").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     ai: AISettings {

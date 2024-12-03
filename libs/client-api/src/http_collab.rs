@@ -2,7 +2,11 @@ use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, brotli_compress, Client};
 use app_error::AppError;
 use bytes::Bytes;
-use client_api_entity::workspace_dto::AFDatabase;
+use chrono::{DateTime, Utc};
+use client_api_entity::workspace_dto::{
+  AFDatabase, AFDatabaseField, AFDatabaseRow, AFDatabaseRowDetail, DatabaseRowUpdatedItem,
+  ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
+};
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
   DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
@@ -164,6 +168,82 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  pub async fn list_database_row_ids(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+  ) -> Result<Vec<AFDatabaseRow>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  pub async fn get_database_fields(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+  ) -> Result<Vec<AFDatabaseField>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/fields",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  pub async fn list_database_row_ids_updated(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    after: Option<DateTime<Utc>>,
+  ) -> Result<Vec<DatabaseRowUpdatedItem>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row/updated",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .query(&ListDatabaseRowUpdatedParam { after })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  pub async fn list_database_row_details(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    row_ids: &[&str],
+  ) -> Result<Vec<AFDatabaseRowDetail>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row/detail",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .query(&ListDatabaseRowDetailParam::from(row_ids))
       .send()
       .await?;
     log_request_id(&resp);

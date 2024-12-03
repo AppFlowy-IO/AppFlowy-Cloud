@@ -89,6 +89,13 @@ impl S3Client for S3ClientImpl {
         let stream = output.body.into_async_read().compat();
         let content_type = output.content_type;
         let content_length = output.content_length;
+
+        trace!(
+          "get object from S3: {} ({:?} bytes)",
+          object_key,
+          content_length
+        );
+
         Ok(S3StreamResponse {
           stream: Box::new(stream),
           content_type,
@@ -127,7 +134,10 @@ impl S3Client for S3ClientImpl {
       .send()
       .await
     {
-      Ok(_) => Ok(()),
+      Ok(_) => {
+        trace!("put object to S3: {}", object_key);
+        Ok(())
+      },
       Err(err) => match err {
         SdkError::TimeoutError(_) | SdkError::DispatchFailure(_) | SdkError::ServiceError(_) => {
           Err(WorkerError::S3ServiceUnavailable(format!(
@@ -153,7 +163,10 @@ impl S3Client for S3ClientImpl {
       .send()
       .await
     {
-      Ok(_) => Ok(()),
+      Ok(_) => {
+        trace!("deleted object from S3: {}", object_key);
+        Ok(())
+      },
       Err(SdkError::ServiceError(service_err)) => Err(WorkerError::from(anyhow!(
         "Failed to delete object from S3: {:?}",
         service_err

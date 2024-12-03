@@ -1,6 +1,6 @@
 # User should build from parent directory
 
-FROM lukemathwalker/cargo-chef:latest-rust-1.77 as chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.78 as chef
 
 WORKDIR /app
 

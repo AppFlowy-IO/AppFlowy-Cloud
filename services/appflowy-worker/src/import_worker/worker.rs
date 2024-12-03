@@ -9,7 +9,7 @@ use crate::s3_client::S3Client;
 
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
-use collab::entity::EncodedCollab;
+use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_entity::CollabType;
 use collab_folder::{Folder, View, ViewLayout};
@@ -33,7 +33,7 @@ use collab_importer::zip_tool::async_zip::async_unzip;
 use collab_importer::zip_tool::sync_zip::sync_unzip;
 
 use futures::stream::FuturesUnordered;
-use futures::{stream, AsyncBufRead, StreamExt};
+use futures::{stream, AsyncBufRead, AsyncReadExt, StreamExt};
 use infra::env_util::get_env_var;
 use redis::aio::ConnectionManager;
 use redis::streams::{
@@ -70,6 +70,7 @@ const GROUP_NAME: &str = "import_task_group";
 const CONSUMER_NAME: &str = "appflowy_worker";
 const MAXIMUM_CONTENT_LENGTH: &str = "3221225472";
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_import_worker(
   pg_pool: PgPool,
   mut redis_client: ConnectionManager,
@@ -883,8 +884,14 @@ async fn process_unzip_file(
   );
 
   // 1. Open the workspace folder
-  let folder_collab =
-    get_encode_collab_from_bytes(&imported.workspace_id, &CollabType::Folder, pg_pool).await?;
+  let folder_collab = get_encode_collab_from_bytes(
+    &imported.workspace_id,
+    &imported.workspace_id,
+    &CollabType::Folder,
+    pg_pool,
+    s3_client,
+  )
+  .await?;
   let mut folder = Folder::from_collab_doc_state(
     import_task.uid,
     CollabOrigin::Server,
@@ -958,8 +965,14 @@ async fn process_unzip_file(
 
   // 4. Edit workspace database collab and then encode workspace database collab
   if !database_view_ids_by_database_id.is_empty() {
-    let w_db_collab =
-      get_encode_collab_from_bytes(&w_database_id, &CollabType::WorkspaceDatabase, pg_pool).await?;
+    let w_db_collab = get_encode_collab_from_bytes(
+      &import_task.workspace_id,
+      &w_database_id,
+      &CollabType::WorkspaceDatabase,
+      pg_pool,
+      s3_client,
+    )
+    .await?;
     let mut w_database = WorkspaceDatabase::from_collab_doc_state(
       &w_database_id,
       CollabOrigin::Server,
@@ -1309,22 +1322,41 @@ async fn upload_file_to_s3(
 }
 
 async fn get_encode_collab_from_bytes(
+  workspace_id: &str,
   object_id: &str,
   collab_type: &CollabType,
   pg_pool: &PgPool,
+  s3: &Arc<dyn S3Client>,
 ) -> Result<EncodedCollab, ImportError> {
-  let bytes = select_blob_from_af_collab(pg_pool, collab_type, object_id)
-    .await
-    .map_err(|err| ImportError::Internal(err.into()))?;
-  tokio::task::spawn_blocking(move || match EncodedCollab::decode_from_bytes(&bytes) {
-    Ok(encoded_collab) => Ok(encoded_collab),
-    Err(err) => Err(ImportError::Internal(anyhow!(
-      "Failed to decode collab from bytes: {:?}",
-      err
-    ))),
-  })
-  .await
-  .map_err(|err| ImportError::Internal(err.into()))?
+  let key = collab_key(workspace_id, object_id);
+  match s3.get_blob_stream(&key).await {
+    Ok(mut resp) => {
+      let mut buf = Vec::with_capacity(resp.content_length.unwrap_or(1024) as usize);
+      resp
+        .stream
+        .read_to_end(&mut buf)
+        .await
+        .map_err(|err| ImportError::Internal(err.into()))?;
+      let decompressed = zstd::decode_all(&*buf).map_err(|e| ImportError::Internal(e.into()))?;
+      Ok(EncodedCollab {
+        state_vector: Default::default(),
+        doc_state: decompressed.into(),
+        version: EncoderVersion::V1,
+      })
+    },
+    Err(WorkerError::RecordNotFound(_)) => {
+      // fallback to postgres
+      let bytes = select_blob_from_af_collab(pg_pool, collab_type, object_id)
+        .await
+        .map_err(|err| ImportError::Internal(err.into()))?;
+
+      Ok(
+        EncodedCollab::decode_from_bytes(&bytes)
+          .map_err(|err| ImportError::Internal(err.into()))?,
+      )
+    },
+    Err(err) => return Err(err.into()),
+  }
 }
 
 /// Ensure the consumer group exists, if not, create it.
@@ -1544,4 +1576,11 @@ async fn insert_meta_from_path(
     file_type,
     file_size,
   })
+}
+
+fn collab_key(workspace_id: &str, object_id: &str) -> String {
+  format!(
+    "collabs/{}/{}/encoded_collab.v1.zstd",
+    workspace_id, object_id
+  )
 }

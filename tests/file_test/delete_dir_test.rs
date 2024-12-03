@@ -40,6 +40,7 @@ async fn delete_workspace_sub_folder_resource_test() {
           file_id: file_id.clone(),
           parent_dir: parent_dir.clone(),
           content_type: mime.to_string(),
+          file_size: Some(text.len() as u64),
         },
       )
       .await

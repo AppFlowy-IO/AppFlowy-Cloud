@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use client_api_test::generate_unique_registered_user_client;
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabParams;
+use serde_json::json;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
@@ -8,33 +11,177 @@ use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 #[tokio::test]
 async fn workspace_list_database() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = c.get_workspaces().await.unwrap()[0].workspace_id;
-  let dbs = c.list_databases(&workspace_id.to_string()).await.unwrap();
-  assert_eq!(dbs.len(), 1);
+  let workspace_id = c.get_workspaces().await.unwrap()[0]
+    .workspace_id
+    .to_string();
 
-  let db = &dbs[0];
+  {
+    let dbs = c.list_databases(&workspace_id).await.unwrap();
+    assert_eq!(dbs.len(), 1, "{:?}", dbs);
+    let todos_db = &dbs[0];
+    assert_eq!(todos_db.views.len(), 1);
+    assert_eq!(todos_db.views[0].name, "To-dos");
+    {
+      let db_row_ids = c
+        .list_database_row_ids(&workspace_id, &todos_db.id)
+        .await
+        .unwrap();
+      assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
+    }
+    {
+      let mut db_fields = c
+        .get_database_fields(&workspace_id, &todos_db.id)
+        .await
+        .unwrap();
 
-  assert_eq!(db.name, "");
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Last modified".to_string(),
-    field_type: "LastEditedTime".to_string(),
-  }));
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Multiselect".to_string(),
-    field_type: "MultiSelect".to_string(),
-  }));
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Tasks".to_string(),
-    field_type: "Checklist".to_string(),
-  }));
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Status".to_string(),
-    field_type: "SingleSelect".to_string(),
-  }));
-  assert!(db.fields.contains(&AFDatabaseField {
-    name: "Description".to_string(),
-    field_type: "RichText".to_string(),
-  }));
+      // convert to hashset to check for equeality
+      db_fields.sort_by(|a, b| a.id.cmp(&b.id));
+      let mut expected = vec![
+        AFDatabaseField {
+          id: "wdX8DG".to_string(),
+          name: "Multiselect".to_string(),
+          field_type: "MultiSelect".to_string(),
+          type_option: {
+            let mut options = HashMap::new();
+            options.insert(
+              "content".to_string(),
+              json!({
+                "disable_color": false,
+                "options": [
+                  {"color": "Purple", "id": "4PDn", "name": "get things done"},
+                  {"color": "Blue", "id": "Bpyg", "name": "self-host"},
+                  {"color": "Aqua", "id": "GOQj", "name": "open source"},
+                  {"color": "Green", "id": "BD-T", "name": "looks great"},
+                  {"color": "Lime", "id": "6UxM", "name": "fast"},
+                  {"color": "Yellow", "id": "g2Uq", "name": "Claude 3"},
+                  {"color": "Orange", "id": "Tt-J", "name": "GPT-4o"},
+                  {"color": "LightPink", "id": "5QDY", "name": "Q&A"},
+                  {"color": "Pink", "id": "XYUx", "name": "news"},
+                  {"color": "Purple", "id": "hoZx", "name": "social"},
+                ],
+              }),
+            );
+            options
+          },
+          is_primary: false,
+        },
+        AFDatabaseField {
+          id: "SqwRg1".to_string(),
+          name: "Status".to_string(),
+          field_type: "SingleSelect".to_string(),
+          type_option: {
+            let mut options = HashMap::new();
+            options.insert(
+              "content".to_string(),
+              json!({
+                "disable_color": false,
+                "options": [
+                  {"color": "Purple", "id": "CEZD", "name": "To Do"},
+                  {"color": "Orange", "id": "TznH", "name": "Doing"},
+                  {"color": "Yellow", "id": "__n6", "name": "✅ Done"},
+                ],
+              }),
+            );
+            options
+          },
+          is_primary: false,
+        },
+        AFDatabaseField {
+          id: "phVRgL".to_string(),
+          name: "Description".to_string(),
+          field_type: "RichText".to_string(),
+          type_option: {
+            let mut options = HashMap::new();
+            options.insert("data".to_string(), json!(""));
+            options
+          },
+          is_primary: true,
+        },
+        AFDatabaseField {
+          id: "KinVda".to_string(),
+          name: "Tasks".to_string(),
+          field_type: "Checklist".to_string(),
+          type_option: HashMap::new(),
+          is_primary: false,
+        },
+        AFDatabaseField {
+          id: "3AE6iK".to_string(),
+          name: "Last modified".to_string(),
+          field_type: "LastEditedTime".to_string(),
+          type_option: {
+            let mut options = HashMap::new();
+            options.insert("date_format".to_string(), json!(3));
+            options.insert("field_type".to_string(), json!(8));
+            options.insert("include_time".to_string(), json!(true));
+            options.insert("time_format".to_string(), json!(1));
+            options
+          },
+          is_primary: false,
+        },
+      ];
+      expected.sort_by(|a, b| a.id.cmp(&b.id));
+      assert_eq!(db_fields, expected, "{:#?}", db_fields);
+    }
+    {
+      let db_row_ids = c
+        .list_database_row_ids_updated(&workspace_id, &todos_db.id, None)
+        .await
+        .unwrap();
+      assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
+    }
+    {
+      let db_row_ids = c
+        .list_database_row_ids(&workspace_id, &todos_db.id)
+        .await
+        .unwrap();
+      assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
+      {
+        let db_row_ids: Vec<&str> = db_row_ids.iter().map(|s| s.id.as_str()).collect();
+        let db_row_ids: &[&str] = &db_row_ids;
+        let db_row_details = c
+          .list_database_row_details(&workspace_id, &todos_db.id, db_row_ids)
+          .await
+          .unwrap();
+        assert_eq!(db_row_details.len(), 5, "{:#?}", db_row_details);
+
+        // cells: {
+        //     "Multiselect": {
+        //         "field_type": "MultiSelect",
+        //         "last_modified": "2024-08-16T07:23:57+00:00",
+        //         "created_at": "2024-08-16T07:23:35+00:00",
+        //         "data": "looks great,fast",
+        //     },
+        //     "Description": {
+        //         "field_type": "RichText",
+        //         "last_modified": "2024-08-16T07:17:03+00:00",
+        //         "created_at": "2024-08-16T07:16:51+00:00",
+        //         "data": "Install AppFlowy Mobile",
+        //     },
+        //     "Status": {
+        //         "data": "To Do",
+        //         "field_type": "SingleSelect",
+        //     },
+        // },
+        let _ = db_row_details
+          .into_iter()
+          .find(|row| {
+            row.cells["Multiselect"]["field_type"] == "MultiSelect"
+              && row.cells["Multiselect"]["last_modified"] == "2024-08-16T07:23:57+00:00"
+              && row.cells["Multiselect"]["created_at"] == "2024-08-16T07:23:35+00:00"
+              && row.cells["Multiselect"]["data"] == "looks great,fast"
+              // Description
+              && row.cells["Description"]["field_type"] == "RichText"
+              && row.cells["Description"]["last_modified"] == "2024-08-16T07:17:03+00:00"
+              && row.cells["Description"]["created_at"] == "2024-08-16T07:16:51+00:00"
+              && row.cells["Description"]["data"] == "Install AppFlowy Mobile"
+              // Status
+              && row.cells["Status"]["data"] == "To Do"
+              && row.cells["Status"]["field_type"] == "SingleSelect"
+          })
+          .unwrap();
+      }
+    }
+  }
 }
 
 #[tokio::test]

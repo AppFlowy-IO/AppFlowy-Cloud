@@ -169,7 +169,7 @@ impl IndexerProvider {
           &mut tx,
           &workspace_id,
           embeddings.tokens_consumed,
-          &embeddings.params,
+          embeddings.params,
         )
         .await?;
         tx.commit().await?;

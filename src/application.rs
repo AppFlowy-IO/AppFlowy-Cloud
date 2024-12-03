@@ -284,7 +284,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     } else {
       Arc::new(NoOpsRealtimeCollabAccessControlImpl::new())
     };
-  let collab_cache = CollabCache::new(redis_conn_manager.clone(), pg_pool.clone());
+  let collab_cache = CollabCache::new(
+    redis_conn_manager.clone(),
+    pg_pool.clone(),
+    s3_client.clone(),
+    config.collab.s3_collab_threshold as usize,
+  );
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {
     collab_access_control: collab_access_control.clone(),
@@ -292,8 +297,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     cache: collab_cache.clone(),
   };
   let snapshot_control = SnapshotControl::new(
-    redis_conn_manager.clone(),
     pg_pool.clone(),
+    s3_client.clone(),
     metrics.collab_metrics.clone(),
   )
   .await;

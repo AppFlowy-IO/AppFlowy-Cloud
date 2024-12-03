@@ -55,18 +55,33 @@ async fn batch_insert_collab_success_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
-  let mock_encoded_collab_v1 = vec![
-    test_encode_collab_v1("1", "title", &generate_random_string(1024)),
-    test_encode_collab_v1("2", "title", &generate_random_string(3 * 1024)),
-    test_encode_collab_v1("3", "title", &generate_random_string(600 * 1024)),
-    test_encode_collab_v1("4", "title", &generate_random_string(800 * 1024)),
-    test_encode_collab_v1("5", "title", &generate_random_string(1024 * 1024)),
-  ];
+  let mut mock_encoded_collab = vec![];
+  for _ in 0..200 {
+    let object_id = Uuid::new_v4().to_string();
+    let encoded_collab_v1 =
+      test_encode_collab_v1(&object_id, "title", &generate_random_string(2 * 1024));
+    mock_encoded_collab.push(encoded_collab_v1);
+  }
 
-  let params_list = (0..5)
-    .map(|i| CollabParams {
+  for _ in 0..30 {
+    let object_id = Uuid::new_v4().to_string();
+    let encoded_collab_v1 =
+      test_encode_collab_v1(&object_id, "title", &generate_random_string(10 * 1024));
+    mock_encoded_collab.push(encoded_collab_v1);
+  }
+
+  for _ in 0..10 {
+    let object_id = Uuid::new_v4().to_string();
+    let encoded_collab_v1 =
+      test_encode_collab_v1(&object_id, "title", &generate_random_string(800 * 1024));
+    mock_encoded_collab.push(encoded_collab_v1);
+  }
+
+  let params_list = mock_encoded_collab
+    .iter()
+    .map(|encoded_collab_v1| CollabParams {
       object_id: Uuid::new_v4().to_string(),
-      encoded_collab_v1: mock_encoded_collab_v1[i].encode_to_bytes().unwrap().into(),
+      encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Unknown,
       embeddings: None,
     })
@@ -94,7 +109,9 @@ async fn batch_insert_collab_success_test() {
     let encoded_collab = result.0.get(&params.object_id).unwrap();
     match encoded_collab {
       QueryCollabResult::Success { encode_collab_v1 } => {
-        assert_eq!(encode_collab_v1, &params.encoded_collab_v1)
+        let actual = EncodedCollab::decode_from_bytes(encode_collab_v1.as_ref()).unwrap();
+        let expected = EncodedCollab::decode_from_bytes(params.encoded_collab_v1.as_ref()).unwrap();
+        assert_eq!(actual.doc_state, expected.doc_state);
       },
       QueryCollabResult::Failed { error } => {
         panic!("Failed to get collab: {:?}", error);
@@ -102,7 +119,7 @@ async fn batch_insert_collab_success_test() {
     }
   }
 
-  assert_eq!(result.0.values().len(), 5);
+  assert_eq!(result.0.values().len(), 240);
 }
 
 #[tokio::test]

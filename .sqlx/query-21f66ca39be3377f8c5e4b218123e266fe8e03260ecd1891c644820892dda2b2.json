@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT * FROM af_collab_snapshot\n      WHERE sid = $1 AND deleted_at IS NULL;\n    ",
+  "query": "\n      SELECT * FROM af_collab_snapshot\n      WHERE sid = $1 AND oid = $2 AND workspace_id = $3 AND deleted_at IS NULL;\n    ",
   "describe": {
     "columns": [
       {
@@ -46,7 +46,9 @@
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Int8",
+        "Text",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -60,5 +62,5 @@
       false
     ]
   },
-  "hash": "1f04da964eb7bd99b6cd5016f27d8ca0d3635933e4c681cbf3591e52a9b06663"
+  "hash": "21f66ca39be3377f8c5e4b218123e266fe8e03260ecd1891c644820892dda2b2"
 }

@@ -8,12 +8,12 @@ use chrono::Utc;
 use collab::preclude::Collab;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
-use collab_database::fields::TypeOptionData;
 use collab_database::fields::TypeOptions;
 use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
 use collab_database::rows::RowDetail;
+use collab_database::views::FieldOrder;
 use collab_database::views::OrderObjectPosition;
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
@@ -33,10 +33,10 @@ use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
 use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
+use shared_entity::dto::workspace_dto::AFInsertDatabaseField;
 use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
 use shared_entity::dto::workspace_dto::FolderViewMinimal;
-use shared_entity::dto::workspace_dto::InsertAFDatabaseField;
 use shared_entity::dto::workspace_dto::RecentFolderView;
 use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
@@ -482,7 +482,7 @@ pub async fn insert_database_row(
   database_uuid_str: &str,
   uid: i64,
   cell_value_by_id: HashMap<String, serde_json::Value>,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
   let mut db_txn = pg_pool.begin().await?;
 
   // get database types and type options
@@ -555,7 +555,7 @@ pub async fn insert_database_row(
   let ts_now = chrono::Utc::now().timestamp();
   let row_order = db_body
     .create_row(CreateRowParams {
-      id: new_db_row_id.into(),
+      id: new_db_row_id.clone().into(),
       database_id: database_uuid_str.to_string(),
       cells: new_db_row_body
         .cells(&new_db_row_collab.transact())
@@ -602,7 +602,7 @@ pub async fn insert_database_row(
 
   db_txn.commit().await?;
   broadcast_update(collab_storage, database_uuid_str, db_collab_update).await?;
-  Ok(())
+  Ok(new_db_row_id)
 }
 
 pub async fn get_database_fields(
@@ -636,15 +636,23 @@ pub async fn add_database_field(
   pg_pool: &PgPool,
   workspace_id: &str,
   database_id: &str,
-  insert_field: InsertAFDatabaseField,
+  insert_field: AFInsertDatabaseField,
 ) -> Result<String, AppError> {
   let (mut db_collab, db_body) =
     get_database_body(collab_storage, workspace_id, database_id).await?;
 
-  let new_id = uuid::Uuid::new_v4().to_string();
+  let new_id = uuid::Uuid::new_v4()
+    .to_string()
+    .chars()
+    .take(6)
+    .collect::<String>();
+
   let mut type_options = TypeOptions::new();
-  let tod: TypeOptionData = match serde_json::from_value(insert_field.type_option) {
-    Ok(tod) => tod,
+  let type_option_data = insert_field
+    .type_option_data
+    .unwrap_or(serde_json::json!({}));
+  match serde_json::from_value(type_option_data) {
+    Ok(tod) => type_options.insert(insert_field.field_type.to_string(), tod),
     Err(err) => {
       return Err(AppError::InvalidRequest(format!(
         "Failed to parse type option: {:?}",
@@ -652,20 +660,27 @@ pub async fn add_database_field(
       )));
     },
   };
-  type_options.insert(insert_field.field_type.to_string(), tod);
+
+  let new_field = Field {
+    id: new_id.clone(),
+    name: insert_field.name,
+    field_type: insert_field.field_type,
+    type_options,
+    ..Default::default()
+  };
 
   let db_collab_update = {
     let mut yrs_txn = db_collab.transact_mut();
-    db_body.fields.insert_field(
-      &mut yrs_txn,
-      Field {
-        id: new_id.clone(),
-        name: insert_field.name,
-        field_type: insert_field.field_type,
-        type_options,
-        ..Default::default()
-      },
-    );
+    db_body.fields.insert_field(&mut yrs_txn, new_field);
+    let mut db_views = db_body.views.get_all_views(&yrs_txn);
+    for db_view in db_views.iter_mut() {
+      db_view.field_orders.push(FieldOrder { id: new_id.clone() });
+    }
+    db_body.views.clear(&mut yrs_txn);
+    for view in db_views {
+      db_body.views.insert_view(&mut yrs_txn, view);
+    }
+
     yrs_txn.encode_update_v1()
   };
 

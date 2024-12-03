@@ -8,3 +8,4 @@ mod single_device_edit;
 mod storage_test;
 pub mod util;
 mod web_edit;
+mod database_crud;

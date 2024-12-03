@@ -1918,7 +1918,7 @@ async fn post_database_row_handler(
   path_param: web::Path<(String, String)>,
   state: Data<AppState>,
   cells_by_id: Json<HashMap<String, serde_json::Value>>,
-) -> Result<Json<AppResponse<()>>> {
+) -> Result<Json<AppResponse<String>>> {
   let (workspace_id, db_id) = path_param.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
@@ -1926,7 +1926,7 @@ async fn post_database_row_handler(
     .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
 
-  biz::collab::ops::insert_database_row(
+  let new_db_row_id = biz::collab::ops::insert_database_row(
     &state.collab_access_control_storage,
     &state.pg_pool,
     &workspace_id,
@@ -1935,7 +1935,7 @@ async fn post_database_row_handler(
     cells_by_id.into_inner(),
   )
   .await?;
-  Ok(Json(AppResponse::Ok()))
+  Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
 }
 
 async fn get_database_fields_handler(
@@ -1964,8 +1964,8 @@ async fn post_database_fields_handler(
   user_uuid: UserUuid,
   path_param: web::Path<(String, String)>,
   state: Data<AppState>,
-  field: Json<InsertAFDatabaseField>,
-) -> Result<Json<AppResponse<()>>> {
+  field: Json<AFInsertDatabaseField>,
+) -> Result<Json<AppResponse<String>>> {
   let (workspace_id, db_id) = path_param.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
@@ -1973,7 +1973,7 @@ async fn post_database_fields_handler(
     .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
 
-  biz::collab::ops::add_database_field(
+  let field_id = biz::collab::ops::add_database_field(
     uid,
     &state.collab_access_control_storage,
     &state.pg_pool,
@@ -1983,7 +1983,7 @@ async fn post_database_fields_handler(
   )
   .await?;
 
-  Ok(Json(AppResponse::Ok()))
+  Ok(Json(AppResponse::Ok().with_data(field_id)))
 }
 
 async fn list_database_row_id_updated_handler(

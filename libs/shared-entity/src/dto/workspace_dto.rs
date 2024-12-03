@@ -378,8 +378,8 @@ pub struct AFDatabaseField {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct InsertAFDatabaseField {
+pub struct AFInsertDatabaseField {
   pub name: String,
-  pub field_type: i64, // FieldType ID
-  pub type_option: serde_json::Value,
+  pub field_type: i64,                        // FieldType ID
+  pub type_option_data: Option<serde_json::Value>, // TypeOptionData
 }

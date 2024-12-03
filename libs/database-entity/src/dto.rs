@@ -19,6 +19,13 @@ use tracing::error;
 use uuid::Uuid;
 use validator::Validate;
 
+/// The default compression level of ZSTD-compressed collabs.
+pub const ZSTD_COMPRESSION_LEVEL: i32 = 3;
+
+/// The threshold used to determine whether collab data should land
+/// in S3 or Postgres. Collabs with size below this value will land into Postgres.
+pub const S3_COLLAB_THRESHOLD: usize = 2000;
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
   #[validate(custom = "validate_not_empty_str")]
@@ -66,6 +73,22 @@ impl CreateCollabParams {
 }
 
 pub struct CollabIndexParams {}
+
+pub struct PendingCollabWrite {
+  pub workspace_id: String,
+  pub uid: i64,
+  pub params: CollabParams,
+}
+
+impl PendingCollabWrite {
+  pub fn new(workspace_id: String, uid: i64, params: CollabParams) -> Self {
+    PendingCollabWrite {
+      workspace_id,
+      uid,
+      params,
+    }
+  }
+}
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize, PartialEq)]
 pub struct CollabParams {
@@ -206,12 +229,12 @@ pub struct DeleteCollabParams {
   pub workspace_id: String,
 }
 
-#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+#[derive(Debug, Clone, Validate)]
 pub struct InsertSnapshotParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   #[validate(custom = "validate_not_empty_payload")]
-  pub encoded_collab_v1: Vec<u8>,
+  pub data: Bytes,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
   pub collab_type: CollabType,
@@ -233,8 +256,6 @@ pub struct QuerySnapshotParams {
 pub struct QueryCollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
-
-  #[serde(flatten)]
   #[validate]
   pub inner: QueryCollab,
 }

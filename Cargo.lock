@@ -697,6 +697,7 @@ dependencies = [
  "validator",
  "workspace-template",
  "yrs",
+ "zstd 0.13.2",
 ]
 
 [[package]]
@@ -714,6 +715,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "authentication",
+ "aws-sdk-s3",
  "brotli 3.5.0",
  "bytes",
  "chrono",
@@ -761,6 +763,7 @@ dependencies = [
  "validator",
  "workspace-template",
  "yrs",
+ "zstd 0.13.2",
 ]
 
 [[package]]
@@ -802,6 +805,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "zstd 0.13.2",
 ]
 
 [[package]]
@@ -2921,6 +2925,7 @@ dependencies = [
  "tracing",
  "uuid",
  "validator",
+ "zstd 0.13.2",
 ]
 
 [[package]]

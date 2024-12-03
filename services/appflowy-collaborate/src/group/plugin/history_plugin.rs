@@ -61,10 +61,10 @@ where
       let lock = collab.read().await;
       let encode_collab =
         lock.encode_collab_v1(|collab| collab_type.validate_require_data(collab))?;
-      let bytes = encode_collab.encode_to_bytes()?;
+      let data = encode_collab.doc_state;
       let params = InsertSnapshotParams {
         object_id,
-        encoded_collab_v1: bytes,
+        data,
         workspace_id,
         collab_type,
       };
@@ -102,7 +102,10 @@ where
 
     tokio::spawn(async move {
       sleep(std::time::Duration::from_secs(2)).await;
-      match storage.should_create_snapshot(&object_id).await {
+      match storage
+        .should_create_snapshot(&workspace_id, &object_id)
+        .await
+      {
         Ok(true) => {
           if let Err(err) =
             Self::enqueue_snapshot(weak_collab, storage, workspace_id, object_id, collab_type).await

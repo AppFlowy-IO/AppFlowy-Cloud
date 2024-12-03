@@ -214,6 +214,10 @@ impl CollabDiskCache {
     uid: &i64,
     mut params_list: Vec<CollabParams>,
   ) -> Result<(), AppError> {
+    if params_list.is_empty() {
+      return Ok(());
+    }
+
     let mut delete_from_s3 = Vec::new();
     let mut blobs = HashMap::new();
     for param in params_list.iter_mut() {
@@ -242,6 +246,10 @@ impl CollabDiskCache {
     &self,
     records: Vec<PendingCollabWrite>,
   ) -> Result<u64, AppError> {
+    if records.is_empty() {
+      return Ok(0);
+    }
+
     let s3 = self.s3.clone();
     // Start a database transaction
     let mut transaction = self

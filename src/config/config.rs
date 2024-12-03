@@ -252,7 +252,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       .parse()?,
       edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
       edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "60").parse()?,
-      s3_collab_threshold: get_env_var("APPFLOWY_COLLAB_S3_THRESHOLD", "60").parse()?,
+      s3_collab_threshold: get_env_var("APPFLOWY_COLLAB_S3_THRESHOLD", "8000").parse()?,
     },
     published_collab: PublishedCollabSetting {
       storage_backend: get_env_var("APPFLOWY_PUBLISHED_COLLAB_STORAGE_BACKEND", "postgres")

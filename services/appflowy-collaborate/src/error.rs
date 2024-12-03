@@ -67,26 +67,18 @@ pub enum RealtimeError {
 
 #[derive(Debug)]
 pub enum CreateGroupFailedReason {
-  CollabWorkspaceIdNotMatch {
-    expect: String,
-    actual: String,
-    detail: String,
-  },
+  CollabWorkspaceIdNotMatch { expect: String, detail: String },
   CannotGetCollabData,
 }
 
 impl Display for CreateGroupFailedReason {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      CreateGroupFailedReason::CollabWorkspaceIdNotMatch {
-        expect,
-        actual,
-        detail,
-      } => {
+      CreateGroupFailedReason::CollabWorkspaceIdNotMatch { expect, detail } => {
         write!(
           f,
-          "Collab workspace id not match: expect {}, actual {}, detail: {}",
-          expect, actual, detail
+          "Collab workspace id not match: expect {}, detail: {}",
+          expect, detail
         )
       },
       CreateGroupFailedReason::CannotGetCollabData => {

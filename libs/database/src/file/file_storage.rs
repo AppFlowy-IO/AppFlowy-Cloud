@@ -23,7 +23,12 @@ pub trait ResponseBlob {
 pub trait BucketClient {
   type ResponseData: ResponseBlob;
 
-  async fn put_blob(&self, object_key: &str, content: &[u8]) -> Result<(), AppError>;
+  async fn put_blob(
+    &self,
+    object_key: &str,
+    content: ByteStream,
+    content_type: Option<&str>,
+  ) -> Result<(), AppError>;
 
   async fn put_blob_with_content_type(
     &self,
@@ -55,6 +60,8 @@ pub trait BucketClient {
   ) -> Result<(usize, String), AppError>;
 
   async fn remove_dir(&self, dir: &str) -> Result<(), AppError>;
+
+  async fn list_dir(&self, dir: &str, limit: usize) -> Result<Vec<String>, AppError>;
 }
 
 pub trait BlobKey: Send + Sync {
@@ -85,11 +92,12 @@ where
 
   #[instrument(skip_all, err)]
   #[inline]
-  pub async fn put_blob<K: BlobKey>(
+  pub async fn put_blob_with_content_type<K: BlobKey>(
     &self,
     key: K,
-    file_data: Vec<u8>,
+    file_stream: ByteStream,
     file_type: String,
+    file_size: usize,
   ) -> Result<(), AppError> {
     if is_blob_metadata_exists(&self.pg_pool, key.workspace_id(), &key.meta_key()).await? {
       warn!(
@@ -100,14 +108,16 @@ where
       return Ok(());
     }
 
-    self.client.put_blob(&key.object_key(), &file_data).await?;
-
+    self
+      .client
+      .put_blob(&key.object_key(), file_stream, Some(&file_type))
+      .await?;
     insert_blob_metadata(
       &self.pg_pool,
       &key.meta_key(),
       key.workspace_id(),
       &file_type,
-      file_data.len(),
+      file_size,
     )
     .await?;
     Ok(())

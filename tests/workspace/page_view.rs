@@ -81,6 +81,81 @@ async fn get_page_view() {
 }
 
 #[tokio::test]
+async fn create_new_page_with_database() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspaces = c.get_workspaces().await.unwrap();
+  assert_eq!(workspaces.len(), 1);
+  let workspace_id = workspaces[0].workspace_id;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let calendar_page = c
+    .create_workspace_page_view(
+      workspace_id,
+      &CreatePageParams {
+        parent_view_id: general_space.view_id.clone(),
+        layout: ViewLayout::Calendar,
+        name: Some("New calendar".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  let grid_page = c
+    .create_workspace_page_view(
+      workspace_id,
+      &CreatePageParams {
+        parent_view_id: general_space.view_id.clone(),
+        layout: ViewLayout::Grid,
+        name: Some("New grid".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  let board_page = c
+    .create_workspace_page_view(
+      workspace_id,
+      &CreatePageParams {
+        parent_view_id: general_space.view_id.clone(),
+        layout: ViewLayout::Grid,
+        name: Some("New board".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  sleep(Duration::from_secs(1)).await;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let views_under_general_space: HashSet<String> = general_space
+    .children
+    .iter()
+    .map(|v| v.view_id.clone())
+    .collect();
+  for view_id in &[
+    calendar_page.view_id.clone(),
+    grid_page.view_id.clone(),
+    board_page.view_id.clone(),
+  ] {
+    assert!(views_under_general_space.contains(view_id));
+    c.get_workspace_page_view(workspace_id, view_id)
+      .await
+      .unwrap();
+  }
+}
+
+#[tokio::test]
 async fn create_new_document_page() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspaces = c.get_workspaces().await.unwrap();
@@ -161,7 +236,7 @@ async fn move_page_to_trash() {
   for view_id in view_ids_to_be_deleted.iter() {
     app_client
       .api_client
-      .move_workspace_page_view_to_trash(Uuid::parse_str(&workspace_id).unwrap(), view_id.clone())
+      .move_workspace_page_view_to_trash(Uuid::parse_str(&workspace_id).unwrap(), view_id)
       .await
       .unwrap();
   }
@@ -227,6 +302,80 @@ async fn move_page_to_trash() {
     .views
     .iter()
     .any(|v| v.view.view_id == view_ids_to_be_deleted[1]);
+  assert!(!view_found);
+}
+
+#[tokio::test]
+async fn move_page_with_child_to_trash() {
+  let registered_user = generate_unique_registered_user().await;
+  let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let workspace_id = app_client.workspace_id().await;
+  let folder_view = web_client
+    .api_client
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  app_client.open_workspace_collab(&workspace_id).await;
+  app_client
+    .wait_object_sync_complete(&workspace_id)
+    .await
+    .unwrap();
+  app_client
+    .api_client
+    .move_workspace_page_view_to_trash(
+      Uuid::parse_str(&workspace_id).unwrap(),
+      &general_space.view_id,
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let views_in_trash_for_app = folder
+    .get_my_trash_sections()
+    .iter()
+    .map(|v| v.id.clone())
+    .collect::<HashSet<String>>();
+  assert!(views_in_trash_for_app.contains(&general_space.view_id));
+  for view in general_space.children.iter() {
+    assert!(!views_in_trash_for_app.contains(&view.view_id));
+  }
+  let views_in_trash_for_web = web_client
+    .api_client
+    .get_workspace_trash(&workspace_id)
+    .await
+    .unwrap()
+    .views
+    .iter()
+    .map(|v| v.view.view_id.clone())
+    .collect::<HashSet<String>>();
+  assert!(views_in_trash_for_web.contains(&general_space.view_id));
+
+  web_client
+    .api_client
+    .restore_workspace_page_view_from_trash(
+      Uuid::parse_str(&workspace_id).unwrap(),
+      &general_space.view_id,
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  assert!(!folder
+    .get_my_trash_sections()
+    .iter()
+    .any(|v| v.id == general_space.view_id));
+  let view_found = web_client
+    .api_client
+    .get_workspace_trash(&workspace_id)
+    .await
+    .unwrap()
+    .views
+    .iter()
+    .any(|v| v.view.view_id == general_space.view_id);
   assert!(!view_found);
 }
 

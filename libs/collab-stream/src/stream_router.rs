@@ -167,7 +167,7 @@ impl Worker {
           for id in stream.ids {
             let message_id = id.id;
             let value = id.map;
-            message_ids[*idx] = message_id.clone(); //TODO: optimize
+            message_ids[*idx].clone_from(&message_id); //TODO: optimize
             msgs += 1;
             if let Err(err) = sender.send((message_id, value)) {
               tracing::warn!("failed to send: {}", err);

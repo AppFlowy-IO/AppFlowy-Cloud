@@ -1092,7 +1092,7 @@ impl CollabPersister {
         .observe(encoded_collab.len() as f64);
       let params = InsertSnapshotParams {
         object_id: self.object_id.clone(),
-        encoded_collab_v1: encoded_collab,
+        data: encoded_collab.into(),
         workspace_id: self.workspace_id.clone(),
         collab_type: self.collab_type.clone(),
       };
@@ -1171,7 +1171,11 @@ impl CollabPersister {
       // if we want history-keeping variant, we need to get a snapshot
       let snapshot = self
         .storage
-        .get_latest_snapshot(&self.workspace_id, &self.object_id)
+        .get_latest_snapshot(
+          &self.workspace_id,
+          &self.object_id,
+          self.collab_type.clone(),
+        )
         .await
         .map_err(|err| RealtimeError::Internal(err.into()))?;
       match snapshot {

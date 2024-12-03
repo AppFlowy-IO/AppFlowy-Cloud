@@ -29,10 +29,6 @@ use crate::error::RealtimeError;
 use crate::group::group_init::EditState;
 use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabRealtimeMetrics;
-
-pub trait CollabUpdateStreaming: 'static + Send + Sync {
-  fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError>;
-}
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with
 /// object_id.

@@ -22,10 +22,6 @@ use validator::Validate;
 /// The default compression level of ZSTD-compressed collabs.
 pub const ZSTD_COMPRESSION_LEVEL: i32 = 3;
 
-/// The threshold used to determine whether collab data should land
-/// in S3 or Postgres. Collabs with size below this value will land into Postgres.
-pub const S3_COLLAB_THRESHOLD: usize = 2000;
-
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
   #[validate(custom = "validate_not_empty_str")]

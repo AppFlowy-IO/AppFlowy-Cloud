@@ -21,19 +21,23 @@ use crate::file::{BucketClient, ResponseBlob};
 use crate::index::upsert_collab_embeddings;
 use app_error::AppError;
 use database_entity::dto::{
-  CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, S3_COLLAB_THRESHOLD,
-  ZSTD_COMPRESSION_LEVEL,
+  CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, ZSTD_COMPRESSION_LEVEL,
 };
 
 #[derive(Clone)]
 pub struct CollabDiskCache {
   pg_pool: PgPool,
   s3: AwsS3BucketClientImpl,
+  s3_collab_threshold: usize,
 }
 
 impl CollabDiskCache {
-  pub fn new(pg_pool: PgPool, s3: AwsS3BucketClientImpl) -> Self {
-    Self { pg_pool, s3 }
+  pub fn new(pg_pool: PgPool, s3: AwsS3BucketClientImpl, s3_collab_threshold: usize) -> Self {
+    Self {
+      pg_pool,
+      s3,
+      s3_collab_threshold,
+    }
   }
 
   pub async fn is_exist(&self, workspace_id: &str, object_id: &str) -> AppResult<bool> {
@@ -67,6 +71,7 @@ impl CollabDiskCache {
       params,
       &mut transaction,
       self.s3.clone(),
+      self.s3_collab_threshold,
     )
     .await?;
 
@@ -91,10 +96,11 @@ impl CollabDiskCache {
     mut params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
     s3: AwsS3BucketClientImpl,
+    s3_collab_threshold: usize,
   ) -> AppResult<()> {
     let mut delete_from_s3 = Vec::new();
     let key = collab_key(workspace_id, &params.object_id);
-    if params.encoded_collab_v1.len() > S3_COLLAB_THRESHOLD {
+    if params.encoded_collab_v1.len() > s3_collab_threshold {
       // put collab into S3
       let encoded_collab = std::mem::take(&mut params.encoded_collab_v1);
       tokio::spawn(Self::insert_blob_with_retries(
@@ -222,7 +228,7 @@ impl CollabDiskCache {
     let mut blobs = HashMap::new();
     for param in params_list.iter_mut() {
       let key = collab_key(workspace_id, &param.object_id);
-      if param.encoded_collab_v1.len() > S3_COLLAB_THRESHOLD {
+      if param.encoded_collab_v1.len() > self.s3_collab_threshold {
         let blob = std::mem::take(&mut param.encoded_collab_v1);
         blobs.insert(key, blob);
       } else {
@@ -277,6 +283,7 @@ impl CollabDiskCache {
         params,
         &mut transaction,
         s3.clone(),
+        self.s3_collab_threshold,
       )
       .await
       {

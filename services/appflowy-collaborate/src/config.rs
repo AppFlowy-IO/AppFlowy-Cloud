@@ -128,6 +128,7 @@ pub struct CollabSetting {
   pub group_persistence_interval_secs: u64,
   pub edit_state_max_count: u32,
   pub edit_state_max_secs: i64,
+  pub s3_collab_threshold: u64,
 }
 
 pub fn get_env_var(key: &str, default: &str) -> String {
@@ -191,6 +192,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       .parse()?,
       edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
       edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "60").parse()?,
+      s3_collab_threshold: get_env_var("APPFLOWY_COLLAB_S3_THRESHOLD", "8000").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     ai: AISettings {

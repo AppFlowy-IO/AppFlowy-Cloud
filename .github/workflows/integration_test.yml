@@ -146,4 +146,15 @@ jobs:
       - name: Remove Docker Images from Docker Hub
         run: |
           TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "appflowyinc", "password": "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
-          curl -s -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/${{ matrix.test_service }}/tags/${GITHUB_SHA}/
+          if [ -z "$TOKEN" ]; then
+            echo "Error: Docker Hub token not set"
+            exit 1
+          fi
+          IMAGE_TAG="${{ matrix.test_service }}"
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/${IMAGE_TAG}/tags/${GITHUB_SHA}/)
+          if [ "$RESPONSE" -ne 204 ]; then
+            echo "Error: Failed to delete Docker image tag. HTTP response code: $RESPONSE"
+          else
+            echo "Successfully deleted Docker image tag for $IMAGE_TAG:${GITHUB_SHA}"
+          fi
+

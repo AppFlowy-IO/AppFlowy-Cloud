@@ -60,6 +60,8 @@ pub trait BucketClient {
   ) -> Result<(usize, String), AppError>;
 
   async fn remove_dir(&self, dir: &str) -> Result<(), AppError>;
+
+  async fn list_dir(&self, dir: &str, limit: usize) -> Result<Vec<String>, AppError>;
 }
 
 pub trait BlobKey: Send + Sync {
@@ -90,7 +92,7 @@ where
 
   #[instrument(skip_all, err)]
   #[inline]
-  pub async fn put_blob<K: BlobKey>(
+  pub async fn put_blob_with_content_type<K: BlobKey>(
     &self,
     key: K,
     file_stream: ByteStream,

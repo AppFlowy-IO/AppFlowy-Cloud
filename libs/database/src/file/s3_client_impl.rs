@@ -102,7 +102,7 @@ impl AwsS3BucketClientImpl {
       .await
       .map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
 
-    let content_length = head_object_result
+    let content_len = head_object_result
       .content_length()
       .ok_or_else(|| AppError::Unhandled("Content-Length not found".to_string()))?;
     let content_type = head_object_result
@@ -110,7 +110,13 @@ impl AwsS3BucketClientImpl {
       .map(|s| s.to_string())
       .unwrap_or_else(|| "application/octet-stream".to_string());
 
-    Ok((content_length as usize, content_type))
+    trace!(
+      "completed upload to S3: {} ({} bytes)",
+      object_key,
+      content_len
+    );
+
+    Ok((content_len as usize, content_type))
   }
 }
 
@@ -140,6 +146,8 @@ impl BucketClient for AwsS3BucketClientImpl {
         _ => AppError::Internal(anyhow!("Failed to upload object to S3: {}", err)),
       })?;
 
+    trace!("put object to S3: {}", object_key);
+
     Ok(())
   }
 
@@ -149,11 +157,6 @@ impl BucketClient for AwsS3BucketClientImpl {
     stream: ByteStream,
     content_type: &str,
   ) -> Result<(), AppError> {
-    trace!(
-      "Uploading object to S3 bucket:{}, key {}",
-      self.bucket,
-      object_key,
-    );
     self
       .client
       .put_object()
@@ -170,6 +173,8 @@ impl BucketClient for AwsS3BucketClientImpl {
         _ => AppError::Internal(anyhow!("Failed to upload object to S3: {}", err)),
       })?;
 
+    trace!("put object to S3: {} ({})", object_key, content_type);
+
     Ok(())
   }
 
@@ -183,13 +188,15 @@ impl BucketClient for AwsS3BucketClientImpl {
       .await
       .map_err(|err| anyhow!("Failed to delete object to S3: {}", err))?;
 
+    trace!("deleted object from S3: {}", object_key);
+
     Ok(S3ResponseData::from(output))
   }
 
   async fn delete_blobs(&self, object_keys: Vec<String>) -> Result<Self::ResponseData, AppError> {
-    let mut delete_object_ids: Vec<aws_sdk_s3::types::ObjectIdentifier> = vec![];
+    let mut delete_object_ids: Vec<ObjectIdentifier> = vec![];
     for obj in object_keys {
-      let obj_id = aws_sdk_s3::types::ObjectIdentifier::builder()
+      let obj_id = ObjectIdentifier::builder()
         .key(obj)
         .build()
         .map_err(|err| {
@@ -198,6 +205,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       delete_object_ids.push(obj_id);
     }
 
+    let len = delete_object_ids.len();
     let output = self
       .client
       .delete_objects()
@@ -214,6 +222,8 @@ impl BucketClient for AwsS3BucketClientImpl {
       .await
       .map_err(|err| anyhow!("Failed to delete objects from S3: {}", err))?;
 
+    trace!("deleted {} objects from S3", len);
+
     Ok(S3ResponseData::from(output))
   }
 
@@ -229,6 +239,9 @@ impl BucketClient for AwsS3BucketClientImpl {
       Ok(output) => match output.body.collect().await {
         Ok(body) => {
           let data = body.into_bytes().to_vec();
+
+          trace!("get object from S3: {} ({} bytes)", object_key, data.len());
+
           Ok(S3ResponseData::new_with_data(data, output.content_type))
         },
         Err(err) => Err(AppError::from(anyhow!("Failed to collect body: {}", err))),
@@ -256,12 +269,8 @@ impl BucketClient for AwsS3BucketClientImpl {
     object_key: &str,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppError> {
-    trace!(
-      "Creating upload to S3 bucket:{}, key {}, request: {}",
-      self.bucket,
-      object_key,
-      req
-    );
+    trace!("creating multi-part upload to S3: {} - {}", object_key, req);
+
     let multipart_upload_res = self
       .client
       .create_multipart_upload()
@@ -289,12 +298,7 @@ impl BucketClient for AwsS3BucketClientImpl {
     if req.body.is_empty() {
       return Err(AppError::InvalidRequest("body is empty".to_string()));
     }
-    trace!(
-      "Uploading part to S3 bucket:{}, key {}, request: {}",
-      self.bucket,
-      object_key,
-      req,
-    );
+    trace!("multi-part upload to s3: {} - {}", object_key, req,);
     let body = ByteStream::from(req.body);
     let upload_part_res = self
       .client
@@ -323,12 +327,6 @@ impl BucketClient for AwsS3BucketClientImpl {
     object_key: &str,
     req: CompleteUploadRequest,
   ) -> Result<(usize, String), AppError> {
-    trace!(
-      "Completing upload to S3 bucket:{}, key {}, request: {}",
-      self.bucket,
-      object_key,
-      req,
-    );
     let parts = req
       .parts
       .into_iter()
@@ -380,7 +378,7 @@ impl BucketClient for AwsS3BucketClientImpl {
         .collect();
 
       trace!(
-        "objects_to_delete: {:?} at directory: {}",
+        "deleting {} objects at directory: {}",
         objects_to_delete.len(),
         parent_dir
       );
@@ -392,15 +390,6 @@ impl BucketClient for AwsS3BucketClientImpl {
         } else {
           Vec::new()
         };
-
-        trace!(
-          "Deleting {} objects: {:?}",
-          parent_dir,
-          objects_to_delete
-            .iter()
-            .map(|object| &object.key)
-            .collect::<Vec<&String>>()
-        );
 
         let delete = Delete::builder()
           .set_objects(Some(objects_to_delete))
@@ -443,6 +432,27 @@ impl BucketClient for AwsS3BucketClientImpl {
     }
 
     Ok(())
+  }
+
+  async fn list_dir(&self, dir: &str, limit: usize) -> Result<Vec<String>, AppError> {
+    let list_objects = self
+      .client
+      .list_objects_v2()
+      .bucket(&self.bucket)
+      .prefix(dir)
+      .max_keys(limit as i32)
+      .send()
+      .await
+      .map_err(|err| anyhow!("Failed to list object: {}", err))?;
+
+    Ok(
+      list_objects
+        .contents
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|o| o.key)
+        .collect(),
+    )
   }
 }
 

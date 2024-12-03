@@ -1,5 +1,5 @@
 use access_control::act::Action;
-use actix_web::web::{Bytes, Payload};
+use actix_web::web::{Bytes, Path, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
@@ -1122,7 +1122,7 @@ async fn create_collab_snapshot_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
-  let encoded_collab_v1 = state
+  let data = state
     .collab_access_control_storage
     .get_encode_collab(
       GetCollabOrigin::User { uid },
@@ -1130,15 +1130,14 @@ async fn create_collab_snapshot_handler(
       true,
     )
     .await?
-    .encode_to_bytes()
-    .unwrap();
+    .doc_state;
 
   let meta = state
     .collab_access_control_storage
     .create_snapshot(InsertSnapshotParams {
       object_id,
       workspace_id,
-      encoded_collab_v1,
+      data,
       collab_type,
     })
     .await?;
@@ -1152,10 +1151,10 @@ async fn get_all_collab_snapshot_list_handler(
   path: web::Path<(String, String)>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
-  let (_, object_id) = path.into_inner();
+  let (workspace_id, object_id) = path.into_inner();
   let data = state
     .collab_access_control_storage
-    .get_collab_snapshot_list(&object_id)
+    .get_collab_snapshot_list(&workspace_id, &object_id)
     .await
     .map_err(AppResponseError::from)?;
   Ok(Json(AppResponse::Ok().with_data(data)))
@@ -1164,9 +1163,11 @@ async fn get_all_collab_snapshot_list_handler(
 #[instrument(level = "debug", skip(payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
+  path: Path<String>,
   state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
+  let workspace_id = path.into_inner();
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)
@@ -1175,7 +1176,7 @@ async fn batch_get_collab_handler(
   let result = BatchQueryCollabResult(
     state
       .collab_access_control_storage
-      .batch_get_collab(&uid, payload.into_inner().0, false)
+      .batch_get_collab(&uid, &workspace_id, payload.into_inner().0, false)
       .await,
   );
   Ok(Json(AppResponse::Ok().with_data(result)))
@@ -1259,7 +1260,11 @@ async fn add_collab_member_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  if !state.collab_cache.is_exist(&payload.object_id).await? {
+  if !state
+    .collab_cache
+    .is_exist(&payload.workspace_id, &payload.object_id)
+    .await?
+  {
     return Err(
       AppError::RecordNotFound(format!(
         "Fail to insert collab member. The Collab with object_id {} does not exist",
@@ -1286,7 +1291,11 @@ async fn update_collab_member_handler(
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
 
-  if !state.collab_cache.is_exist(&payload.object_id).await? {
+  if !state
+    .collab_cache
+    .is_exist(&payload.workspace_id, &payload.object_id)
+    .await?
+  {
     return Err(
       AppError::RecordNotFound(format!(
         "Fail to update collab member. The Collab with object_id {} does not exist",

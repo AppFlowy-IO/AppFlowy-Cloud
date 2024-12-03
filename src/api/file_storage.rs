@@ -288,7 +288,7 @@ async fn put_blob_handler(
   let file_stream = ByteStream::from(content);
   state
     .bucket_storage
-    .put_blob(path, file_stream, content_type, file_size)
+    .put_blob_with_content_type(path, file_stream, content_type, file_size)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -562,7 +562,7 @@ async fn put_blob_handler_v1(
   let file_stream = ByteStream::from(content);
   state
     .bucket_storage
-    .put_blob(
+    .put_blob_with_content_type(
       BlobPathV1::from((path, file_id)),
       file_stream,
       content_type,

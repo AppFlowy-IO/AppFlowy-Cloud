@@ -92,10 +92,20 @@ impl CollabDiskCache {
     transaction: &mut Transaction<'_, sqlx::Postgres>,
     s3: AwsS3BucketClientImpl,
   ) -> AppResult<()> {
+    let mut delete_from_s3 = Vec::new();
     let key = collab_key(workspace_id, &params.object_id);
     if params.encoded_collab_v1.len() > S3_COLLAB_THRESHOLD {
+      // put collab into S3
       let encoded_collab = std::mem::take(&mut params.encoded_collab_v1);
-      tokio::spawn(Self::insert_blob_with_retries(s3, key, encoded_collab, 3));
+      tokio::spawn(Self::insert_blob_with_retries(
+        s3.clone(),
+        key,
+        encoded_collab,
+        3,
+      ));
+    } else {
+      // put collab into Postgres (and remove outdated version from S3)
+      delete_from_s3.push(key);
     }
 
     insert_into_af_collab(transaction, uid, workspace_id, &params).await?;
@@ -113,6 +123,13 @@ impl CollabDiskCache {
         em.params.clone(),
       )
       .await?;
+      if !delete_from_s3.is_empty() {
+        tokio::spawn(async move {
+          if let Err(err) = s3.delete_blobs(delete_from_s3).await {
+            tracing::warn!("failed to delete outdated collab from S3: {}", err);
+          }
+        });
+      }
     } else if params.collab_type == CollabType::Document {
       tracing::info!("no embeddings to save for collab {}", params.object_id);
     }
@@ -197,12 +214,16 @@ impl CollabDiskCache {
     uid: &i64,
     mut params_list: Vec<CollabParams>,
   ) -> Result<(), AppError> {
+    let mut delete_from_s3 = Vec::new();
     let mut blobs = HashMap::new();
     for param in params_list.iter_mut() {
+      let key = collab_key(workspace_id, &param.object_id);
       if param.encoded_collab_v1.len() > S3_COLLAB_THRESHOLD {
-        let key = collab_key(workspace_id, &param.object_id);
         let blob = std::mem::take(&mut param.encoded_collab_v1);
         blobs.insert(key, blob);
+      } else {
+        // put collab into Postgres (and remove outdated version from S3)
+        delete_from_s3.push(key);
       }
     }
 
@@ -211,6 +232,9 @@ impl CollabDiskCache {
     transaction.commit().await?;
 
     batch_put_collab_to_s3(&self.s3, blobs).await?;
+    if !delete_from_s3.is_empty() {
+      self.s3.delete_blobs(delete_from_s3).await?;
+    }
     Ok(())
   }
 

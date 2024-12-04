@@ -4,10 +4,14 @@ use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
+use collab_database::fields::type_option_cell_reader;
 use collab_database::fields::Field;
+use collab_database::fields::TypeOptionCellReader;
+use collab_database::fields::TypeOptionData;
 use collab_database::fields::TypeOptions;
 use collab_database::rows::new_cell_builder;
 use collab_database::rows::Cell;
+use collab_database::rows::Cells;
 use collab_database::template::entity::CELL_DATA;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_entity::CollabType;
@@ -21,112 +25,44 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-pub fn convert_database_cells_human_readable(
-  db_cells: HashMap<String, HashMap<String, yrs::Any>>,
-  field_by_id: &HashMap<String, Field>,
-  selection_name_by_id: &HashMap<String, String>,
-) -> HashMap<String, HashMap<String, serde_json::Value>> {
-  let mut human_readable_records: HashMap<String, HashMap<String, serde_json::Value>> =
-    HashMap::with_capacity(db_cells.len());
+pub fn cell_data_to_serde(
+  cell_data: Cell,
+  field: &Field,
+  type_option_reader_by_id: &HashMap<String, Box<dyn TypeOptionCellReader>>,
+) -> serde_json::Value {
+  match type_option_reader_by_id.get(&field.id) {
+    Some(tor) => tor.json_cell(&cell_data),
+    None => {
+      tracing::error!("Failed to get type option reader by id: {}", field.id);
+      serde_json::Value::Null
+    },
+  }
+}
 
-  for (field_id, cell) in db_cells {
-    let field = match field_by_id.get(&field_id) {
-      Some(field) => field,
+pub fn get_row_details_by_id(
+  cells: Cells,
+  field_by_id_name_uniq: &HashMap<String, Field>,
+  type_option_reader_by_id: &HashMap<String, Box<dyn TypeOptionCellReader>>,
+) -> HashMap<String, HashMap<String, serde_json::Value>> {
+  let mut row_details: HashMap<String, HashMap<String, serde_json::Value>> =
+    HashMap::with_capacity(cells.len());
+
+  for (field_id, field) in field_by_id_name_uniq {
+    let cell: Cell = match cells.get(field_id) {
+      Some(cell) => cell.clone(),
       None => {
-        tracing::error!("Failed to get field by id: {}, cell: {:?}", field_id, cell);
-        continue;
+        tracing::error!("Failed to get cell by field id: {}", field.id);
+        Cell::new()
       },
     };
-    let field_type = FieldType::from(field.field_type);
-
-    let mut human_readable_cell: HashMap<String, serde_json::Value> =
-      HashMap::with_capacity(cell.len());
-    for (key, value) in cell {
-      let serde_value: serde_json::Value = match key.as_str() {
-        "created_at" | "last_modified" => match value.cast::<i64>() {
-          Ok(timestamp) => chrono::DateTime::from_timestamp(timestamp, 0)
-            .unwrap_or_default()
-            .to_rfc3339()
-            .into(),
-          Err(err) => {
-            tracing::error!("Failed to cast timestamp: {:?}", err);
-            serde_json::Value::Null
-          },
-        },
-        "field_type" => format!("{:?}", field_type).into(),
-        "data" => {
-          match field_type {
-            FieldType::DateTime => {
-              if let yrs::any::Any::String(value_str) = value {
-                let int_value = value_str.parse::<i64>().unwrap_or_default();
-                chrono::DateTime::from_timestamp(int_value, 0)
-                  .unwrap_or_default()
-                  .to_rfc3339()
-                  .into()
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            FieldType::Checklist => {
-              if let yrs::any::Any::String(value_str) = value {
-                serde_json::from_str(&value_str).unwrap_or_default()
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            FieldType::Media => {
-              if let yrs::any::Any::Array(arr) = value {
-                let mut acc = Vec::with_capacity(arr.len());
-                for v in arr.as_ref() {
-                  if let yrs::any::Any::String(value_str) = v {
-                    let serde_value = serde_json::from_str(value_str).unwrap_or_default();
-                    acc.push(serde_value);
-                  }
-                }
-                serde_json::Value::Array(acc)
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            FieldType::SingleSelect => {
-              if let yrs::any::Any::String(ref value_str) = value {
-                selection_name_by_id
-                  .get(value_str.as_ref())
-                  .map(|v| v.to_string())
-                  .map(serde_json::Value::String)
-                  .unwrap_or_else(|| value.to_string().into())
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            FieldType::MultiSelect => {
-              if let yrs::any::Any::String(value_str) = value {
-                value_str
-                  .split(',')
-                  .filter_map(|v| selection_name_by_id.get(v).map(|v| v.to_string()))
-                  .fold(String::new(), |mut acc, s| {
-                    if !acc.is_empty() {
-                      acc.push(',');
-                    }
-                    acc.push_str(&s);
-                    acc
-                  })
-                  .into()
-              } else {
-                serde_json::to_value(value).unwrap_or_default()
-              }
-            },
-            // Handle different field types formatting as needed
-            _ => serde_json::to_value(value).unwrap_or_default(),
-          }
-        },
-        _ => serde_json::to_value(value).unwrap_or_default(),
-      };
-      human_readable_cell.insert(key, serde_value);
-    }
-    human_readable_records.insert(field.name.clone(), human_readable_cell);
+    let cell_value = cell_data_to_serde(cell, field, type_option_reader_by_id);
+    row_details.insert(
+      field.name.clone(),
+      HashMap::from([(CELL_DATA.to_string(), cell_value)]),
+    );
   }
-  human_readable_records
+
+  row_details
 }
 
 pub fn selection_name_by_id(fields: &[Field]) -> HashMap<String, String> {
@@ -203,6 +139,27 @@ pub fn field_by_id_name_uniq(mut fields: Vec<Field>) -> HashMap<String, Field> {
     field_by_id.insert(field.id.clone(), field);
   }
   field_by_id
+}
+
+/// create a map type option reader by field id
+pub fn type_option_reader_by_id(
+  fields: &[Field],
+) -> HashMap<String, Box<dyn TypeOptionCellReader>> {
+  let mut type_option_reader_by_id: HashMap<String, Box<dyn TypeOptionCellReader>> =
+    HashMap::with_capacity(fields.len());
+  for field in fields {
+    let field_id: String = field.id.clone();
+    let type_option_reader: Box<dyn TypeOptionCellReader> = {
+      let field_type: &FieldType = &FieldType::from(field.field_type);
+      let type_option_data: TypeOptionData = match field.type_options.get(&field_type.type_id()) {
+        Some(tod) => tod.clone(),
+        None => HashMap::new(),
+      };
+      type_option_cell_reader(type_option_data, field_type)
+    };
+    type_option_reader_by_id.insert(field_id, type_option_reader);
+  }
+  type_option_reader_by_id
 }
 
 pub fn type_options_serde(

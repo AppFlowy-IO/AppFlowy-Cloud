@@ -1,5 +1,6 @@
 use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
 use collab_database::entity::FieldType;
+use serde_json::json;
 use shared_entity::dto::workspace_dto::AFInsertDatabaseField;
 
 #[tokio::test]
@@ -36,6 +37,32 @@ async fn database_fields_crud() {
     .await
     .unwrap()
   };
+  let my_url_field_id = {
+    c.add_database_field(
+      &workspace_id,
+      &todo_db.id,
+      &AFInsertDatabaseField {
+        name: "MyUrlField".to_string(),
+        field_type: FieldType::URL.into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap()
+  };
+  let my_checkbox_field_id = {
+    c.add_database_field(
+      &workspace_id,
+      &todo_db.id,
+      &AFInsertDatabaseField {
+        name: "MyCheckboxColumn".to_string(),
+        field_type: FieldType::Checkbox.into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap()
+  };
   {
     let my_description = "my task 123";
     let my_status = "To Do";
@@ -49,6 +76,8 @@ async fn database_fields_crud() {
             "Multiselect": ["social", "news"],
             my_num_field_id: 123,
             my_datetime_field_id: 1733210221,
+            my_url_field_id: "https://appflowy.io",
+            my_checkbox_field_id: true,
         }),
       )
       .await
@@ -60,21 +89,25 @@ async fn database_fields_crud() {
       .unwrap();
     assert_eq!(row_details.len(), 1);
     let new_row_detail = &row_details[0];
-    assert_eq!(new_row_detail.cells["Description"]["data"], my_description);
-    assert_eq!(new_row_detail.cells["Status"]["data"], my_status);
-    assert_eq!(new_row_detail.cells["Multiselect"]["data"], "social,news");
+    assert_eq!(new_row_detail.cells["Description"]["data"], my_description,);
+    assert_eq!(new_row_detail.cells["Status"]["data"][0]["name"], my_status);
+    assert_eq!(
+      new_row_detail.cells["Multiselect"]["data"][0]["name"],
+      "social"
+    );
+    assert_eq!(
+      new_row_detail.cells["Multiselect"]["data"][1]["name"],
+      "news"
+    );
     assert_eq!(new_row_detail.cells["MyNumberColumn"]["data"], "123");
     assert_eq!(
-      new_row_detail.cells["MyDateTimeColumn"]["data"],
-      "2024-12-03T07:17:01+00:00"
-    )
-  }
-
-  let db_fields = c
-    .get_database_fields(&workspace_id, &todo_db.id)
-    .await
-    .unwrap();
-  if true {
-    panic!("{:#?}", db_fields);
+      new_row_detail.cells["MyDateTimeColumn"]["data"]["timestamp"],
+      1733210221
+    );
+    assert_eq!(
+      new_row_detail.cells["MyUrlField"]["data"],
+      json!({"data": "https://appflowy.io"}).to_string()
+    );
+    assert_eq!(new_row_detail.cells["MyCheckboxColumn"]["data"], "Yes");
   }
 }

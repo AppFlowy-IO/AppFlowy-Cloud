@@ -66,14 +66,14 @@ use super::folder_view::section_items_to_trash_folder_view;
 use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
 use super::utils::collab_from_doc_state;
-use super::utils::convert_database_cells_human_readable;
 use super::utils::encode_collab_v1_bytes;
 use super::utils::field_by_id_name_uniq;
 use super::utils::get_database_body;
 use super::utils::get_latest_collab;
 use super::utils::get_latest_collab_encoded;
+use super::utils::get_row_details_by_id;
 use super::utils::new_cell_from_value;
-use super::utils::selection_name_by_id;
+use super::utils::type_option_reader_by_id;
 use super::utils::type_options_serde;
 
 /// Create a new collab member
@@ -738,9 +738,8 @@ pub async fn list_database_row_details(
     get_database_body(collab_storage, &workspace_uuid_str, &database_uuid_str).await?;
 
   let all_fields = db_body.fields.get_all_fields(&database_collab.transact());
-  let selection_name_by_id = selection_name_by_id(&all_fields);
-  let field_by_name_uniq = field_by_id_name_uniq(all_fields);
-
+  let type_option_reader_by_id = type_option_reader_by_id(&all_fields);
+  let field_by_id = field_by_id_name_uniq(all_fields);
   let query_collabs: Vec<QueryCollab> = row_ids
     .iter()
     .map(|id| QueryCollab {
@@ -776,10 +775,11 @@ pub async fn list_database_row_details(
             return None;
           },
         };
-        let cells = convert_database_cells_human_readable(
+
+        let cells = get_row_details_by_id(
           row_detail.row.cells,
-          &field_by_name_uniq,
-          &selection_name_by_id,
+          &field_by_id,
+          &type_option_reader_by_id,
         );
         Some(AFDatabaseRowDetail { id, cells })
       },

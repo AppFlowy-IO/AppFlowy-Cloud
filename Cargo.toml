@@ -312,13 +312,21 @@ lto = false          # Disable Link-Time Optimization
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
-collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0efc824a6e1a56e4485646e6428c07fdccf6e918" }
+# collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cc31b093d1cb178505aa0f6ba3ca2148ef065ee8" }
+# collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cc31b093d1cb178505aa0f6ba3ca2148ef065ee8" }
+# collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cc31b093d1cb178505aa0f6ba3ca2148ef065ee8" }
+# collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cc31b093d1cb178505aa0f6ba3ca2148ef065ee8" }
+# collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cc31b093d1cb178505aa0f6ba3ca2148ef065ee8" }
+# collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cc31b093d1cb178505aa0f6ba3ca2148ef065ee8" }
+# collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "cc31b093d1cb178505aa0f6ba3ca2148ef065ee8" }
+
+collab = { path = "/home/zack2827/github.com/AppFlowy-IO/AppFlowy-Collab/collab" }
+collab-entity = { path = "/home/zack2827/github.com/AppFlowy-IO/AppFlowy-Collab/collab-entity" }
+collab-folder = { path = "/home/zack2827/github.com/AppFlowy-IO/AppFlowy-Collab/collab-folder" }
+collab-document = { path = "/home/zack2827/github.com/AppFlowy-IO/AppFlowy-Collab/collab-document" }
+collab-user = { path = "/home/zack2827/github.com/AppFlowy-IO/AppFlowy-Collab/collab-user" }
+collab-database = { path = "/home/zack2827/github.com/AppFlowy-IO/AppFlowy-Collab/collab-database" }
+collab-importer = { path = "/home/zack2827/github.com/AppFlowy-IO/AppFlowy-Collab/collab-importer" }
 
 [features]
 history = []

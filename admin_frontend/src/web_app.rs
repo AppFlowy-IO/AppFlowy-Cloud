@@ -10,7 +10,7 @@ use crate::models::{LoginParams, OAuthLoginAction, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
-use axum::response::{IntoResponse, Result};
+use axum::response::{IntoResponse, Redirect, Result};
 use axum::{response::Html, routing::get, Router};
 use axum_extra::extract::CookieJar;
 use gotrue_entity::dto::User;
@@ -189,10 +189,10 @@ async fn login_callback_query_handler(
         },
         Err(err) => {
           tracing::error!("Error decoding redirect_url: {:?}", err);
-          home_handler(State(state), new_session, jar).await
+          home_handler(State(state), Some(new_session), jar).await
         },
       },
-      None => home_handler(State(state), new_session, jar).await,
+      None => home_handler(State(state), Some(new_session), jar).await,
     },
   }
 }
@@ -409,9 +409,14 @@ async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
 
 pub async fn home_handler(
   State(state): State<AppState>,
-  session: UserSession,
+  session: Option<UserSession>,
   jar: CookieJar,
 ) -> Result<axum::response::Response, WebAppError> {
+  let session = match session {
+    Some(session) => session,
+    None => return Ok(Redirect::to("/web/login").into_response()),
+  };
+
   let user = state
     .gotrue_client
     .user_info(&session.token.access_token)

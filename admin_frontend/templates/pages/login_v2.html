@@ -26,7 +26,7 @@
       <div>
         <input
           class="input"
-          style="width: 100%; border-radius: 8px; padding: 8px; margin: 4px; margin-bottom: 8px"
+          style="width: 100%; border-radius: 8px; padding: 8px; margin: 4px; margin-bottom: 8px;"
           type="text"
           id="email"
           name="email"
@@ -49,29 +49,31 @@
     <table style="width: 100%; margin: 16px; border-collapse: collapse;">
       <tr style="display: flex; align-items: center;">
         <td style="width: 100%; margin: auto;">
-          <hr style="border: none; border-top: 1px solid lightgray;" />
+          <hr class="divider" />
         </td>
-        <td style="flex: 1; text-align: center; color: gray;">&nbsp;or&nbsp;</td>
+        <td style="flex: 1; text-align: center;">&nbsp;or&nbsp;</td>
         <td style="width: 100%; margin: auto;">
-          <hr style="border: none; border-top: 1px solid lightgray;" />
+          <hr class="divider" />
         </td>
       </tr>
     </table>
 
     <div id="oauth-container">
-      <div style="display: flex; align-items: center; justify-content: center; flex-direction: column; width: 100%">
+      <div style="display: flex; align-items: center; justify-content: center; flex-direction: column; width: 100%;">
         {% for provider in oauth_providers %}
-        <div style="border: 1px solid lightgray; width:100%; margin: 4px; border-radius: 8px">
+        <div class="oauth-item-inner">
           <a
             href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|default("/web/login-callback")|escape }}"
             style="text-decoration: none; color: inherit"
           >
             <div style="display: flex; align-items: center; justify-content: center; color: inherit">
-              <div
-                hx-get="../assets/login/{{ provider|escape }}.svg"
-                hx-trigger="load"
-                hx-swap="innerHTML"
-              ></div>
+              <div>
+                <div
+                  hx-get="../assets/login/{{ provider|escape }}.svg"
+                  hx-trigger="load"
+                  hx-swap="innerHTML"
+                ></div>
+              </div>
               <span> &nbsp </span>
               <div> Continue with {{ provider }} </div>
             </div>
@@ -95,8 +97,10 @@
                 svg.style.transform = "translateY(2px)";
               } else if (hxGet.includes("Apple")) {
                 svg.style.transform = "translateY(2px)";
+                svg.style.parentNode.filter = "invert(1)";
               } else if (hxGet.includes("Github")) {
                 svg.style.transform = "translateY(2px)";
+                svg.style.parentNode.filter = "invert(1)";
               }
             }
           });

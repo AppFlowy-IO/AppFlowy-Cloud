@@ -6,29 +6,6 @@ use collab_folder::ViewLayout;
 use std::path::PathBuf;
 use std::time::Duration;
 
-// #[tokio::test]
-// async fn import_blog_post_four_times_test() {
-//   let mut handles = vec![];
-//   // Simulate 4 clients, each uploading 3 files concurrently.
-//   for _ in 0..4 {
-//     let handle = tokio::spawn(async {
-//       let client = TestClient::new_user().await;
-//       for _ in 0..3 {
-//         let _ = upload_file(&client, "blog_post.zip", None).await.unwrap();
-//       }
-//
-//       // the default concurrency limit is 3, so the fourth import should fail
-//       upload_file(&client, "blog_post.zip", None).await.unwrap();
-//       wait_until_num_import_task_complete(&client, 3).await;
-//     });
-//     handles.push(handle);
-//   }
-//
-//   for result in join_all(handles).await {
-//     result.unwrap();
-//   }
-// }
-
 #[tokio::test]
 async fn import_blog_post_test() {
   // Step 1: Import the blog post zip
@@ -233,6 +210,8 @@ async fn import_notion_zip_until_complete(name: &str) -> (TestClient, String) {
   let client = TestClient::new_user().await;
   let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
   client.api_client.import_file(&file_path).await.unwrap();
+  upload_file(&client, name, None).await.unwrap();
+
   let default_workspace_id = client.workspace_id().await;
 
   // when importing a file, the workspace for the file should be created and it's

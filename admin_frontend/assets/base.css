@@ -1,8 +1,6 @@
-body {
-  font-family: sans-serif;
-}
-
 :root {
+  --af-background: #1a202c;
+  --line-divider: #384967;
   --af-purple: #9327ff;
   --af-dark-purple: #8427e0;
   --af-red: #fb006d;
@@ -12,6 +10,12 @@ body {
   --af-yellow: #ffce00;
   --af-dark-yellow: #ffbd00;
   --af-darker-yellow: #f7931e;
+}
+
+body {
+  font-family: sans-serif;
+  background-color: var(--af-background);
+  color: #e2e9f2;
 }
 
 .button {
@@ -106,12 +110,12 @@ body {
 .input {
   box-sizing: border-box;
   border-radius: 4px;
-  border: 2px solid #808080;
+  border: 1px solid var(--line-divider);
   margin: 4px 0;
   padding: 4px 8px;
   font-size: 16px;
-  color: #333;
-  background-color: #f5f5f5;
+  color: inherit;
+  background-color: inherit;
   outline: none;
 }
 
@@ -125,4 +129,21 @@ body {
 
 .loading-button {
   filter: brightness(0.7);
+}
+
+.oauth-item-inner {
+  border: 1px solid;
+  border-color: var(--line-divider);
+  width: 100%;
+  margin: 4px;
+  border-radius: 8px;
+}
+
+.oauth-item-inner:hover {
+  border-color: var(--af-dark-cyan);
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--line-divider);
 }

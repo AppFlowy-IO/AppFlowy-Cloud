@@ -9,6 +9,7 @@ use collab::preclude::Collab;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
 use collab_database::fields::TypeOptions;
+use collab_database::rows::Cell;
 use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
@@ -72,8 +73,8 @@ use super::utils::get_database_body;
 use super::utils::get_latest_collab;
 use super::utils::get_latest_collab_encoded;
 use super::utils::get_row_details_by_id;
-use super::utils::new_cell_from_value;
 use super::utils::type_option_reader_by_id;
+use super::utils::type_option_writer_by_id;
 use super::utils::type_options_serde;
 
 /// Create a new collab member
@@ -494,6 +495,7 @@ pub async fn insert_database_row(
     acc.insert(field.id.clone(), field.clone());
     acc
   });
+  let type_option_reader_by_id = type_option_writer_by_id(&all_fields);
   let field_by_name = field_by_name_uniq(all_fields);
 
   let new_db_row_id = uuid::Uuid::new_v4().to_string();
@@ -523,14 +525,19 @@ pub async fn insert_database_row(
           },
         },
       };
-      let new_cell = new_cell_from_value(serde_val, field);
-      if let Some(new_cell) = new_cell {
-        database_body.update(&mut txn, |row_update| {
-          row_update.update_cells(|cells_update| {
-            cells_update.insert_cell(&field.id, new_cell);
-          });
+      let cell_writer = match type_option_reader_by_id.get(&field.id) {
+        Some(cell_writer) => cell_writer,
+        None => {
+          tracing::error!("Failed to get type option writer for field: {}", field.id);
+          continue;
+        },
+      };
+      let new_cell: Cell = cell_writer.convert_json_to_cell(serde_val);
+      database_body.update(&mut txn, |row_update| {
+        row_update.update_cells(|cells_update| {
+          cells_update.insert_cell(&field.id, new_cell);
         });
-      }
+      });
     }
     database_body
   };

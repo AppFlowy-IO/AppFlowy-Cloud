@@ -89,7 +89,10 @@ async fn database_fields_crud() {
       .unwrap();
     assert_eq!(row_details.len(), 1);
     let new_row_detail = &row_details[0];
-    assert_eq!(new_row_detail.cells["Description"]["data"], my_description,);
+    assert_eq!(
+      new_row_detail.cells["Description"]["data"],
+      json!(my_description).to_string()
+    );
     assert_eq!(new_row_detail.cells["Status"]["data"][0]["name"], my_status);
     assert_eq!(
       new_row_detail.cells["Multiselect"]["data"][0]["name"],
@@ -106,8 +109,8 @@ async fn database_fields_crud() {
     );
     assert_eq!(
       new_row_detail.cells["MyUrlField"]["data"],
-      json!({"data": "https://appflowy.io"}).to_string()
+      json!({"data": json!("https://appflowy.io").to_string()}).to_string()
     );
-    assert_eq!(new_row_detail.cells["MyCheckboxColumn"]["data"], "Yes");
+    assert_eq!(new_row_detail.cells["MyCheckboxColumn"]["data"], "true");
   }
 }

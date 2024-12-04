@@ -10,7 +10,7 @@ use crate::models::{LoginParams, OAuthLoginAction, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
-use axum::response::{IntoResponse, Result};
+use axum::response::{IntoResponse, Redirect, Result};
 use axum::{response::Html, routing::get, Router};
 use axum_extra::extract::CookieJar;
 use gotrue_entity::dto::User;
@@ -27,6 +27,7 @@ fn page_router() -> Router<AppState> {
   Router::new()
     .route("/", get(home_handler))
     .route("/login", get(login_handler))
+    .route("/login-v2", get(login_v2_handler))
     .route("/login-callback", get(login_callback_handler))
     .route("/payment-success", get(payment_success_handler))
     .route("/login-callback-query", get(login_callback_query_handler))
@@ -188,10 +189,10 @@ async fn login_callback_query_handler(
         },
         Err(err) => {
           tracing::error!("Error decoding redirect_url: {:?}", err);
-          home_handler(State(state), new_session, jar).await
+          home_handler(State(state), Some(new_session), jar).await
         },
       },
-      None => home_handler(State(state), new_session, jar).await,
+      None => home_handler(State(state), Some(new_session), jar).await,
     },
   }
 }
@@ -382,15 +383,40 @@ async fn login_handler(
   })
 }
 
+async fn login_v2_handler(Query(login): Query<LoginParams>) -> Result<Html<String>, WebAppError> {
+  let redirect_to = login
+    .redirect_to
+    .as_ref()
+    .map(|r| urlencoding::encode(r).to_string());
+  let oauth_redirect_to = login.redirect_to.as_ref().map(|r| {
+    urlencoding::encode(&format!(
+      "/web/login-callback?redirect_to={}",
+      urlencoding::encode(r)
+    ))
+    .to_string()
+  });
+
+  render_template(templates::LoginV2 {
+    oauth_providers: &["Google", "Apple", "Github", "Discord"],
+    redirect_to: redirect_to.as_deref(),
+    oauth_redirect_to: oauth_redirect_to.as_deref(),
+  })
+}
+
 async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::ChangePassword)
 }
 
 pub async fn home_handler(
   State(state): State<AppState>,
-  session: UserSession,
+  session: Option<UserSession>,
   jar: CookieJar,
 ) -> Result<axum::response::Response, WebAppError> {
+  let session = match session {
+    Some(session) => session,
+    None => return Ok(Redirect::to("/web/login").into_response()),
+  };
+
   let user = state
     .gotrue_client
     .user_info(&session.token.access_token)

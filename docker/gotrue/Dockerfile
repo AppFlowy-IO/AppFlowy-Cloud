@@ -7,13 +7,14 @@ RUN git apply mfa_enabled.patch
 RUN CGO_ENABLED=0 go build -o /auth .
 RUN rm /go/src/supabase/auth/migrations/20240612123726_enable_rls_update_grants.up.sql
 
-FROM scratch
-COPY --from=base /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=base /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=base /etc/passwd /etc/passwd
-COPY --from=base /etc/group /etc/group
+FROM alpine:3.20
+RUN adduser -D -u 1000 supabase
+
+RUN apk add --no-cache ca-certificates
+USER supabase
 
 COPY --from=base /auth .
 COPY --from=base /go/src/supabase/auth/migrations ./migrations
 
-CMD ["./auth"]
+COPY start.sh .
+CMD ["./start.sh"]

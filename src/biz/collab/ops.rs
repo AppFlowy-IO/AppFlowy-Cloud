@@ -9,46 +9,43 @@ use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
-use collab_database::fields::Field;
-use collab_database::fields::TypeOptions;
+use collab_database::fields::{Field, TypeOptions};
 use collab_database::rows::RowDetail;
-use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
-use collab_database::workspace_database::WorkspaceDatabase;
-use collab_database::workspace_database::WorkspaceDatabaseBody;
-use collab_entity::CollabType;
-use collab_entity::EncodedCollab;
-use collab_folder::SectionItem;
-use collab_folder::{CollabOrigin, Folder};
+use collab_database::workspace_database::{
+  NoPersistenceDatabaseCollabService, WorkspaceDatabase, WorkspaceDatabaseBody,
+};
+use collab_entity::{CollabType, EncodedCollab};
+use collab_folder::{CollabOrigin, Folder, SectionItem};
+use collab_rt_entity::ClientCollabMessage;
+use collab_rt_entity::UpdateSync;
+use collab_rt_protocol::Message;
+use collab_rt_protocol::SyncMessage;
 use database::collab::select_last_updated_database_row_ids;
 use database::collab::select_workspace_database_oid;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
-use database_entity::dto::QueryCollabResult;
-use database_entity::dto::{QueryCollab, QueryCollabParams};
-use shared_entity::dto::workspace_dto::AFDatabase;
-use shared_entity::dto::workspace_dto::AFDatabaseField;
-use shared_entity::dto::workspace_dto::AFDatabaseRow;
-use shared_entity::dto::workspace_dto::AFDatabaseRowDetail;
-use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
-use shared_entity::dto::workspace_dto::FavoriteFolderView;
-use shared_entity::dto::workspace_dto::FolderViewMinimal;
-use shared_entity::dto::workspace_dto::RecentFolderView;
-use shared_entity::dto::workspace_dto::TrashFolderView;
+use database_entity::dto::{QueryCollab, QueryCollabParams, QueryCollabResult};
+use shared_entity::dto::workspace_dto::{
+  AFDatabase, AFDatabaseField, AFDatabaseRow, AFDatabaseRowDetail, DatabaseRowUpdatedItem,
+  FavoriteFolderView, FolderViewMinimal, RecentFolderView, TrashFolderView,
+};
 use sqlx::PgPool;
+use sqlx::Transaction;
 use std::ops::DerefMut;
 
 use anyhow::Context;
 use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
 use std::collections::HashSet;
+use yrs::updates::encoder::Encode;
 
 use tracing::{event, trace};
 use validator::Validate;
 
 use access_control::collab::CollabAccessControl;
 use database_entity::dto::{
-  AFCollabMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
+  AFCollabMember, CollabMemberIdentify, CollabParams, InsertCollabMemberParams, QueryCollabMembers,
   UpdateCollabMemberParams,
 };
 
@@ -846,4 +843,137 @@ fn type_options_serde(
   }
 
   result
+}
+
+pub struct CollabUpdate {
+  pub updated_encoded_collab: Vec<u8>,
+  pub encoded_update: Vec<u8>,
+  pub collab_type: CollabType,
+  pub object_id: String,
+}
+
+pub struct DocumentUpdate {
+  pub updated_encoded_collab: Vec<u8>,
+  pub encoded_update: Vec<u8>,
+  pub object_id: String,
+}
+
+impl From<DocumentUpdate> for CollabUpdate {
+  fn from(document_update: DocumentUpdate) -> Self {
+    CollabUpdate {
+      updated_encoded_collab: document_update.updated_encoded_collab,
+      encoded_update: document_update.encoded_update,
+      collab_type: CollabType::Document,
+      object_id: document_update.object_id,
+    }
+  }
+}
+
+pub struct FolderUpdate {
+  pub updated_encoded_collab: Vec<u8>,
+  pub encoded_update: Vec<u8>,
+  pub workspace_id: Uuid,
+}
+
+impl From<FolderUpdate> for CollabUpdate {
+  fn from(folder_update: FolderUpdate) -> Self {
+    CollabUpdate {
+      updated_encoded_collab: folder_update.updated_encoded_collab,
+      encoded_update: folder_update.encoded_update,
+      collab_type: CollabType::Folder,
+      object_id: folder_update.workspace_id.to_string(),
+    }
+  }
+}
+
+pub struct DatabaseUpdate {
+  pub updated_encoded_collab: Vec<u8>,
+  pub encoded_update: Vec<u8>,
+  pub database_id: String,
+}
+
+impl From<DatabaseUpdate> for CollabUpdate {
+  fn from(database_update: DatabaseUpdate) -> Self {
+    CollabUpdate {
+      updated_encoded_collab: database_update.updated_encoded_collab,
+      encoded_update: database_update.encoded_update,
+      collab_type: CollabType::Database,
+      object_id: database_update.database_id,
+    }
+  }
+}
+
+pub struct WorkspaceDatabaseUpdate {
+  pub updated_encoded_collab: Vec<u8>,
+  pub encoded_updates: Vec<u8>,
+  pub workspace_database_id: String,
+}
+
+impl From<WorkspaceDatabaseUpdate> for CollabUpdate {
+  fn from(workspace_database_update: WorkspaceDatabaseUpdate) -> Self {
+    CollabUpdate {
+      updated_encoded_collab: workspace_database_update.updated_encoded_collab,
+      encoded_update: workspace_database_update.encoded_updates,
+      collab_type: CollabType::WorkspaceDatabase,
+      object_id: workspace_database_update.workspace_database_id,
+    }
+  }
+}
+
+pub async fn insert_and_broadcast_collab_update(
+  uid: i64,
+  workspace_id: Uuid,
+  collab_update: CollabUpdate,
+  collab_storage: &CollabAccessControlStorage,
+  transaction: &mut Transaction<'_, sqlx::Postgres>,
+) -> Result<(), AppError> {
+  let CollabUpdate {
+    updated_encoded_collab,
+    encoded_update,
+    collab_type,
+    object_id,
+  } = collab_update;
+
+  let params = CollabParams {
+    object_id: object_id.clone(),
+    encoded_collab_v1: updated_encoded_collab.into(),
+    collab_type,
+    embeddings: None,
+  };
+  let action_description = format!("Update collab: {}", object_id.clone());
+  collab_storage
+    .upsert_new_collab_with_transaction(
+      &workspace_id.to_string(),
+      &uid,
+      params,
+      transaction,
+      &action_description,
+    )
+    .await?;
+  broadcast_update(collab_storage, &object_id, encoded_update).await?;
+  Ok(())
+}
+
+/// broadcast updates to collab group if exists
+pub async fn broadcast_update(
+  collab_storage: &CollabAccessControlStorage,
+  object_id: &str,
+  encoded_update: Vec<u8>,
+) -> Result<(), AppError> {
+  tracing::info!("broadcasting update to group: {}", object_id);
+  let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
+  let msg = ClientCollabMessage::ClientUpdateSync {
+    data: UpdateSync {
+      origin: CollabOrigin::Server,
+      object_id: object_id.to_string(),
+      msg_id: chrono::Utc::now().timestamp_millis() as u64,
+      payload: payload.into(),
+    },
+  };
+
+  collab_storage
+    .broadcast_encode_collab(object_id.to_string(), vec![msg])
+    .await?;
+
+  Ok(())
 }

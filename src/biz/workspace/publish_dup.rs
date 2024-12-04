@@ -35,17 +35,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::biz::collab::folder_view::to_folder_view_icon;
 use crate::biz::collab::folder_view::to_folder_view_layout;
+use crate::biz::collab::ops::broadcast_update;
 use crate::biz::collab::ops::collab_from_doc_state;
 use crate::biz::collab::ops::get_latest_collab_encoded;
 use tracing::error;
 use workspace_template::gen_view_id;
-use yrs::Any;
-use yrs::Array;
-use yrs::ArrayRef;
-use yrs::Out;
-use yrs::{Map, MapRef};
-
-use super::ops::broadcast_update;
+use yrs::{Any, Array, ArrayRef, Map, MapRef, Out};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(

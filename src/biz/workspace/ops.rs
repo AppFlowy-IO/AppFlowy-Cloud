@@ -1,7 +1,4 @@
 use authentication::jwt::OptionalUserUuid;
-use collab_folder::CollabOrigin;
-use collab_rt_entity::{ClientCollabMessage, UpdateSync};
-use collab_rt_protocol::{Message, SyncMessage};
 use database_entity::dto::AFWorkspaceSettingsChange;
 use std::collections::HashMap;
 
@@ -14,12 +11,11 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
-use yrs::updates::encoder::Encode;
 
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use database::collab::{upsert_collab_member_with_txn, CollabStorage};
+use database::collab::upsert_collab_member_with_txn;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
 
@@ -727,28 +723,4 @@ pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppErro
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to query pending tasks: {:?}", e)))?;
 
   Ok(count)
-}
-
-/// broadcast updates to collab group if exists
-pub async fn broadcast_update(
-  collab_storage: &CollabAccessControlStorage,
-  oid: &str,
-  encoded_update: Vec<u8>,
-) -> Result<(), AppError> {
-  tracing::info!("broadcasting update to group: {}", oid);
-  let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
-  let msg = ClientCollabMessage::ClientUpdateSync {
-    data: UpdateSync {
-      origin: CollabOrigin::Server,
-      object_id: oid.to_string(),
-      msg_id: chrono::Utc::now().timestamp_millis() as u64,
-      payload: payload.into(),
-    },
-  };
-
-  collab_storage
-    .broadcast_encode_collab(oid.to_string(), vec![msg])
-    .await?;
-
-  Ok(())
 }

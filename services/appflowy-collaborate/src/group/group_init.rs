@@ -78,15 +78,16 @@ impl CollabGroup {
     collab_type: CollabType,
     metrics: Arc<CollabRealtimeMetrics>,
     storage: Arc<S>,
-    is_new_collab: bool,
     collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
     prune_grace_period: Duration,
     indexer: Option<Arc<dyn Indexer>>,
+    state_vector: StateVector,
   ) -> Result<Self, StreamError>
   where
     S: CollabStorage,
   {
+    let is_new_collab = state_vector.is_empty();
     let persister = CollabPersister::new(
       uid,
       workspace_id.clone(),
@@ -109,7 +110,7 @@ impl CollabGroup {
       persister,
       last_activity: ArcSwap::new(Instant::now().into()),
       seq_no: AtomicU32::new(0),
-      state_vector: Default::default(),
+      state_vector: state_vector.into(),
     });
 
     /*

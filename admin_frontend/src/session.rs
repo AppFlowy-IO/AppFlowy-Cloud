@@ -156,7 +156,7 @@ impl FromRequestParts<AppState> for UserSession {
       .map(|uri| urlencoding::encode(&uri.to_string()).to_string());
 
     match original_url {
-      Some(url) => Err(Redirect::to(&format!("/web/login?redirect_to={}", url)).into_response()),
+      Some(url) => Err(Redirect::to(&format!("/web/login-v2?redirect_to={}", url)).into_response()),
       None => Err(Redirect::to("/web/login").into_response()),
     }
   }

@@ -343,7 +343,7 @@ where
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, ty = %params.collab_type, err)]
   #[allow(clippy::blocks_in_conditions)]
-  async fn insert_new_collab_with_transaction(
+  async fn upsert_new_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,

@@ -6,7 +6,6 @@ use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
 use sqlx::PgPool;
 use tracing::{debug, error, trace, warn};
-use uuid::Uuid;
 use validator::Validate;
 
 use app_error::AppError;

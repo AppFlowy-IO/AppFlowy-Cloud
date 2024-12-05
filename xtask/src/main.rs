@@ -20,7 +20,8 @@ async fn main() -> Result<()> {
   kill_existing_process(worker).await?;
 
   let mut appflowy_cloud_cmd = Command::new("cargo")
-    .args(["run", "--features", "history"])
+    .env("RUSTFLAGS", "--cfg tokio_unstable")
+    .args(["run", "--features", "history, tokio-runtime-profile"])
     .spawn()
     .context("Failed to start AppFlowy-Cloud process")?;
 

@@ -102,7 +102,7 @@ impl CollabRealtimeMetrics {
   }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct CollabMetrics {
   pub write_snapshot: Counter,
   pub write_snapshot_failures: Counter,
@@ -114,6 +114,7 @@ pub struct CollabMetrics {
   pub s3_read_collab_count: Counter,
   pub redis_read_collab_count: Counter,
   pub success_queue_collab_count: Counter,
+  pg_tx_collab_millis: Histogram,
 }
 
 impl CollabMetrics {
@@ -170,7 +171,41 @@ impl CollabMetrics {
       "success queue collab",
       metrics.success_queue_collab_count.clone(),
     );
+    realtime_registry.register(
+      "pg_tx_collab_millis",
+      "total time (in milliseconds) spend in transaction writing collab to postgres",
+      metrics.pg_tx_collab_millis.clone(),
+    );
 
     metrics
+  }
+
+  pub fn observe_pg_tx(&self, duration: std::time::Duration) {
+    self
+      .pg_tx_collab_millis
+      .observe(duration.as_millis() as f64);
+  }
+}
+
+impl Default for CollabMetrics {
+  fn default() -> Self {
+    CollabMetrics {
+      write_snapshot: Default::default(),
+      write_snapshot_failures: Default::default(),
+      read_snapshot: Default::default(),
+      pg_write_collab_count: Default::default(),
+      s3_write_collab_count: Default::default(),
+      redis_write_collab_count: Default::default(),
+      pg_read_collab_count: Default::default(),
+      s3_read_collab_count: Default::default(),
+      redis_read_collab_count: Default::default(),
+      success_queue_collab_count: Default::default(),
+      pg_tx_collab_millis: Histogram::new(
+        [
+          100.0, 300.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 30000.0, 60000.0,
+        ]
+        .into_iter(),
+      ),
+    }
   }
 }

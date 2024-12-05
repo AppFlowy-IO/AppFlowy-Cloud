@@ -701,6 +701,7 @@ async fn create_collab_handler(
     .await
     .context("acquire transaction to upsert collab")
     .map_err(AppError::from)?;
+  let start = Instant::now();
 
   let action = format!("Create new collab: {}", params);
   state
@@ -713,6 +714,7 @@ async fn create_collab_handler(
     .await
     .context("fail to commit the transaction to upsert collab")
     .map_err(AppError::from)?;
+  state.metrics.collab_metrics.observe_pg_tx(start.elapsed());
 
   Ok(Json(AppResponse::Ok()))
 }

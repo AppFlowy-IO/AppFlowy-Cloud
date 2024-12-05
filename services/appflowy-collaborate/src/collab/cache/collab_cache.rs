@@ -40,6 +40,10 @@ impl CollabCache {
     }
   }
 
+  pub fn metrics(&self) -> &CollabMetrics {
+    &self.metrics
+  }
+
   pub async fn bulk_insert_collab(
     &self,
     workspace_id: &str,

@@ -74,6 +74,7 @@ impl CollabDiskCache {
       .context("Failed to acquire transaction for writing pending collaboration data")
       .map_err(AppError::from)?;
 
+    let start = Instant::now();
     Self::upsert_collab_with_transaction(
       workspace_id,
       uid,
@@ -92,6 +93,7 @@ impl CollabDiskCache {
           "Timeout when committing the transaction for pending collaboration data"
         ))
       })??;
+    self.metrics.observe_pg_tx(start.elapsed());
 
     Ok(())
   }
@@ -255,8 +257,10 @@ impl CollabDiskCache {
     let pg_count = delete_from_s3.len() as u64;
 
     let mut transaction = self.pg_pool.begin().await?;
+    let start = Instant::now();
     insert_into_af_collab_bulk_for_user(&mut transaction, uid, workspace_id, &params_list).await?;
     transaction.commit().await?;
+    self.metrics.observe_pg_tx(start.elapsed());
 
     batch_put_collab_to_s3(&self.s3, blobs).await?;
     if !delete_from_s3.is_empty() {
@@ -288,6 +292,7 @@ impl CollabDiskCache {
       .await
       .context("Failed to acquire transaction for writing pending collaboration data")
       .map_err(AppError::from)?;
+    let start = Instant::now();
 
     // Insert each record into the database within the transaction context
     let mut action_description = String::new();
@@ -320,6 +325,7 @@ impl CollabDiskCache {
     // Commit the transaction to finalize all writes
     match tokio::time::timeout(Duration::from_secs(10), transaction.commit()).await {
       Ok(result) => {
+        self.metrics.observe_pg_tx(start.elapsed());
         result.map_err(AppError::from)?;
       },
       Err(_) => {

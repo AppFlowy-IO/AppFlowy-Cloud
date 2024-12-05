@@ -70,6 +70,10 @@ where
     }
   }
 
+  pub fn metrics(&self) -> &CollabMetrics {
+    self.cache.metrics()
+  }
+
   const PENDING_WRITE_BUF_CAPACITY: usize = 20;
   async fn periodic_write_task(cache: CollabCache, mut reader: Receiver<PendingCollabWrite>) {
     let mut buf = Vec::with_capacity(Self::PENDING_WRITE_BUF_CAPACITY);

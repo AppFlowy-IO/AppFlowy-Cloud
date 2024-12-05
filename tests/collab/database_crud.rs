@@ -1,6 +1,5 @@
 use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
 use collab_database::entity::FieldType;
-use serde_json::json;
 use shared_entity::dto::workspace_dto::AFInsertDatabaseField;
 
 #[tokio::test]
@@ -89,19 +88,10 @@ async fn database_fields_crud() {
       .unwrap();
     assert_eq!(row_details.len(), 1);
     let new_row_detail = &row_details[0];
-    assert_eq!(
-      new_row_detail.cells["Description"]["data"],
-      json!(my_description).to_string()
-    );
-    assert_eq!(new_row_detail.cells["Status"]["data"][0]["name"], my_status);
-    assert_eq!(
-      new_row_detail.cells["Multiselect"]["data"][0]["name"],
-      "social"
-    );
-    assert_eq!(
-      new_row_detail.cells["Multiselect"]["data"][1]["name"],
-      "news"
-    );
+    assert_eq!(new_row_detail.cells["Description"]["data"], my_description);
+    assert_eq!(new_row_detail.cells["Status"]["data"], my_status);
+    assert_eq!(new_row_detail.cells["Multiselect"]["data"][0], "social");
+    assert_eq!(new_row_detail.cells["Multiselect"]["data"][1], "news");
     assert_eq!(new_row_detail.cells["MyNumberColumn"]["data"], "123");
     assert_eq!(
       new_row_detail.cells["MyDateTimeColumn"]["data"]["timestamp"],
@@ -109,8 +99,8 @@ async fn database_fields_crud() {
     );
     assert_eq!(
       new_row_detail.cells["MyUrlField"]["data"],
-      json!({"data": json!("https://appflowy.io").to_string()}).to_string()
+      "https://appflowy.io"
     );
-    assert_eq!(new_row_detail.cells["MyCheckboxColumn"]["data"], "true");
+    assert_eq!(new_row_detail.cells["MyCheckboxColumn"]["data"], true);
   }
 }

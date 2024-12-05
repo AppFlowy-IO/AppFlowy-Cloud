@@ -19,12 +19,12 @@ pub struct CreateChatParams {
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct UpdateChatParams {
   #[validate(custom = "validate_not_empty_str")]
-  pub chat_id: String,
-
-  #[validate(custom = "validate_not_empty_str")]
   pub name: Option<String>,
 
+  /// Key-value pairs of metadata to be updated.
   pub metadata: Option<serde_json::Value>,
+
+  pub rag_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -306,6 +306,14 @@ pub struct RepeatedChatMessage {
   pub messages: Vec<ChatMessage>,
   pub has_more: bool,
   pub total: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSettings {
+  // Currently we have not used the `name` field in the ChatSettings
+  pub name: String,
+  pub rag_ids: Vec<String>,
+  pub metadata: serde_json::Value,
 }
 
 #[derive(Debug, Default, Clone, Serialize_repr, Deserialize_repr)]

@@ -3,23 +3,22 @@ use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing::{error, event, Level};
 
-use crate::collab::disk_cache::CollabDiskCache;
-use crate::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
-use crate::file::s3_client_impl::AwsS3BucketClientImpl;
+use super::disk_cache::CollabDiskCache;
+use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
+use crate::CollabMetrics;
 use app_error::AppError;
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
 
 #[derive(Clone)]
 pub struct CollabCache {
   disk_cache: CollabDiskCache,
   mem_cache: CollabMemCache,
-  success_attempts: Arc<AtomicU64>,
-  total_attempts: Arc<AtomicU64>,
   s3_collab_threshold: usize,
+  metrics: Arc<CollabMetrics>,
 }
 
 impl CollabCache {
@@ -27,16 +26,17 @@ impl CollabCache {
     redis_conn_manager: redis::aio::ConnectionManager,
     pg_pool: PgPool,
     s3: AwsS3BucketClientImpl,
+    metrics: Arc<CollabMetrics>,
     s3_collab_threshold: usize,
   ) -> Self {
-    let mem_cache = CollabMemCache::new(redis_conn_manager.clone());
-    let disk_cache = CollabDiskCache::new(pg_pool.clone(), s3, s3_collab_threshold);
+    let mem_cache = CollabMemCache::new(redis_conn_manager.clone(), metrics.clone());
+    let disk_cache =
+      CollabDiskCache::new(pg_pool.clone(), s3, s3_collab_threshold, metrics.clone());
     Self {
       disk_cache,
       mem_cache,
       s3_collab_threshold,
-      success_attempts: Arc::new(AtomicU64::new(0)),
-      total_attempts: Arc::new(AtomicU64::new(0)),
+      metrics,
     }
   }
 
@@ -83,7 +83,6 @@ impl CollabCache {
     workspace_id: &str,
     query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
-    self.total_attempts.fetch_add(1, Ordering::Relaxed);
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
       event!(
@@ -91,7 +90,6 @@ impl CollabCache {
         "Did get encode collab:{} from cache",
         query.object_id
       );
-      self.success_attempts.fetch_add(1, Ordering::Relaxed);
       return Ok(encoded_collab);
     }
 
@@ -178,6 +176,7 @@ impl CollabCache {
       transaction,
       s3,
       self.s3_collab_threshold,
+      &self.metrics,
     )
     .await?;
 
@@ -229,15 +228,6 @@ impl CollabCache {
     Ok(())
   }
 
-  pub fn query_state(&self) -> QueryState {
-    let success_attempts = self.success_attempts.load(Ordering::Relaxed);
-    let total_attempts = self.total_attempts.load(Ordering::Relaxed);
-    QueryState {
-      total_attempts,
-      success_attempts,
-    }
-  }
-
   pub async fn delete_collab(&self, workspace_id: &str, object_id: &str) -> Result<(), AppError> {
     self.mem_cache.remove_encode_collab(object_id).await?;
     self
@@ -261,13 +251,7 @@ impl CollabCache {
   pub async fn batch_insert_collab(
     &self,
     records: Vec<PendingCollabWrite>,
-  ) -> Result<u64, AppError> {
+  ) -> Result<(), AppError> {
     self.disk_cache.batch_insert_collab(records).await
   }
-}
-
-#[derive(Debug)]
-pub struct QueryState {
-  pub total_attempts: u64,
-  pub success_attempts: u64,
 }

@@ -2,16 +2,103 @@ use crate::ai_test::util::read_text_from_asset;
 
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use client_api::entity::{QuestionStream, QuestionStreamValue};
-use client_api_test::{local_ai_test_enabled, TestClient};
+use client_api_test::{ai_test_enabled, TestClient};
 use futures_util::StreamExt;
 use serde_json::json;
 use shared_entity::dto::chat_dto::{
   ChatMessageMetadata, ChatRAGData, CreateChatMessageParams, CreateChatParams, MessageCursor,
+  UpdateChatParams,
 };
 
 #[tokio::test]
+async fn update_chat_settings_test() {
+  if !ai_test_enabled() {
+    return;
+  }
+
+  let test_client = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = test_client.workspace_id().await;
+
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: "my first chat".to_string(),
+    rag_ids: vec![],
+  };
+
+  test_client
+    .api_client
+    .create_chat(&workspace_id, params)
+    .await
+    .unwrap();
+
+  // Update name and rag_ids
+  test_client
+    .api_client
+    .update_chat_settings(
+      &workspace_id,
+      &chat_id,
+      UpdateChatParams {
+        name: Some("my second chat".to_string()),
+        metadata: None,
+        rag_ids: Some(vec!["rag1".to_string(), "rag2".to_string()]),
+      },
+    )
+    .await
+    .unwrap();
+
+  // Get chat settings and check if the name and rag_ids are updated
+  let settings = test_client
+    .api_client
+    .get_chat_settings(&workspace_id, &chat_id)
+    .await
+    .unwrap();
+  assert_eq!(settings.name, "my second chat");
+  assert_eq!(
+    settings.rag_ids,
+    vec!["rag1".to_string(), "rag2".to_string()]
+  );
+
+  // Update chat metadata
+  test_client
+    .api_client
+    .update_chat_settings(
+      &workspace_id,
+      &chat_id,
+      UpdateChatParams {
+        name: None,
+        metadata: Some(json!({"1": "A"})),
+        rag_ids: None,
+      },
+    )
+    .await
+    .unwrap();
+  test_client
+    .api_client
+    .update_chat_settings(
+      &workspace_id,
+      &chat_id,
+      UpdateChatParams {
+        name: None,
+        metadata: Some(json!({"2": "B"})),
+        rag_ids: None,
+      },
+    )
+    .await
+    .unwrap();
+
+  // check if the metadata is updated
+  let settings = test_client
+    .api_client
+    .get_chat_settings(&workspace_id, &chat_id)
+    .await
+    .unwrap();
+  assert_eq!(settings.metadata, json!({"1": "A", "2": "B"}));
+}
+
+#[tokio::test]
 async fn create_chat_and_create_messages_test() {
-  if !local_ai_test_enabled() {
+  if !ai_test_enabled() {
     return;
   }
 
@@ -100,7 +187,7 @@ async fn create_chat_and_create_messages_test() {
 
 #[tokio::test]
 async fn chat_qa_test() {
-  if !local_ai_test_enabled() {
+  if !ai_test_enabled() {
     return;
   }
   let test_client = TestClient::new_user_without_ws_conn().await;
@@ -175,7 +262,7 @@ async fn chat_qa_test() {
 
 #[tokio::test]
 async fn generate_chat_message_answer_test() {
-  if !local_ai_test_enabled() {
+  if !ai_test_enabled() {
     return;
   }
   let test_client = TestClient::new_user_without_ws_conn().await;
@@ -209,7 +296,7 @@ async fn generate_chat_message_answer_test() {
 
 #[tokio::test]
 async fn create_chat_context_test() {
-  if !local_ai_test_enabled() {
+  if !ai_test_enabled() {
     return;
   }
   let test_client = TestClient::new_user_without_ws_conn().await;

@@ -1355,7 +1355,7 @@ async fn get_encode_collab_from_bytes(
           .map_err(|err| ImportError::Internal(err.into()))?,
       )
     },
-    Err(err) => return Err(err.into()),
+    Err(err) => Err(err.into()),
   }
 }
 

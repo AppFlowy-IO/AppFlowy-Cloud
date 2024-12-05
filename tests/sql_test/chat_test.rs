@@ -1,7 +1,7 @@
 use crate::sql_test::util::{setup_db, test_create_user};
 use database::chat::chat_ops::{
   delete_chat, get_all_chat_messages, insert_chat, insert_question_message, select_chat,
-  select_chat_messages, update_chat_settings,
+  select_chat_messages, select_chat_settings, update_chat_settings,
 };
 use serde_json::json;
 use shared_entity::dto::chat_dto::{
@@ -206,13 +206,10 @@ async fn chat_setting_test(pool: PgPool) {
     .expect("Failed to insert chat");
 
   // Validate inserted rag_ids
-  let rag_ids = sqlx::query!(r#"SELECT rag_ids FROM af_chat WHERE chat_id = $1"#, chat_id)
-    .fetch_one(&pool)
+  let settings = select_chat_settings(&pool, &chat_id)
     .await
-    .map(|row| (row.rag_ids))
-    .expect("Failed to fetch rag_ids");
-  let rag_ids: Vec<String> = serde_json::from_value(rag_ids).unwrap();
-  assert_eq!(rag_ids, vec!["rag1", "rag2"]);
+    .expect("Failed to get chat settings");
+  assert_eq!(settings.rag_ids, vec!["rag1", "rag2"]);
 
   // Update metadata
   let update_params = UpdateChatParams {
@@ -226,15 +223,10 @@ async fn chat_setting_test(pool: PgPool) {
     .expect("Failed to update chat settings");
 
   // Validate metadata update
-  let metadata = sqlx::query!(
-    r#"SELECT meta_data FROM af_chat WHERE chat_id = $1"#,
-    chat_id
-  )
-  .fetch_one(&pool)
-  .await
-  .map(|row| (row.meta_data))
-  .expect("Failed to fetch metadata");
-  assert_eq!(metadata, json!({"key": "value"}));
+  let settings = select_chat_settings(&pool, &chat_id)
+    .await
+    .expect("Failed to get chat settings");
+  assert_eq!(settings.metadata, json!({"key": "value"}));
 
   // Update rag_ids and metadata together
   let update_params = UpdateChatParams {
@@ -248,15 +240,12 @@ async fn chat_setting_test(pool: PgPool) {
     .expect("Failed to update chat settings");
 
   // Validate both rag_ids and metadata
-  let (metadata, rag_ids): (serde_json::Value, serde_json::Value) = sqlx::query!(
-    r#"SELECT meta_data, rag_ids FROM af_chat WHERE chat_id = $1"#,
-    chat_id
-  )
-  .fetch_one(&pool)
-  .await
-  .map(|row| (row.meta_data, row.rag_ids))
-  .expect("Failed to fetch metadata and rag_ids");
-  let rag_ids: Vec<String> = serde_json::from_value(rag_ids).unwrap();
-  assert_eq!(metadata, json!({"key": "value", "new_key": "new_value"}));
-  assert_eq!(rag_ids, vec!["rag3", "rag4"]);
+  let settings = select_chat_settings(&pool, &chat_id)
+    .await
+    .expect("Failed to get chat settings");
+  assert_eq!(
+    settings.metadata,
+    json!({"key": "value", "new_key": "new_value"})
+  );
+  assert_eq!(settings.rag_ids, vec!["rag3", "rag4"]);
 }

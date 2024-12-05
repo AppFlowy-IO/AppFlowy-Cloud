@@ -13,6 +13,7 @@ use shared_entity::dto::ai_dto::{
   CalculateSimilarityParams, RepeatedRelatedQuestion, SimilarityResponse, STREAM_ANSWER_KEY,
   STREAM_METADATA_KEY,
 };
+use shared_entity::dto::chat_dto::{ChatSettings, UpdateChatParams};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -35,6 +36,45 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn update_chat_settings(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    params: UpdateChatParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/settings",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+  pub async fn get_chat_settings(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+  ) -> Result<ChatSettings, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/settings",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<ChatSettings>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   /// Delete a chat for given chat_id
@@ -103,10 +143,10 @@ impl Client {
     &self,
     workspace_id: &str,
     chat_id: &str,
-    question_message_id: i64,
+    question_id: i64,
   ) -> Result<QuestionStream, AppResponseError> {
     let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/{question_message_id}/v2/answer/stream",
+      "{}/api/chat/{workspace_id}/{chat_id}/{question_id}/v2/answer/stream",
       self.base_url
     );
     let resp = self
@@ -193,7 +233,10 @@ impl Client {
     offset: MessageCursor,
     limit: u64,
   ) -> Result<RepeatedChatMessage, AppResponseError> {
-    let mut url = format!("{}/api/chat/{workspace_id}/{chat_id}", self.base_url);
+    let mut url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/message",
+      self.base_url
+    );
     let mut query_params = vec![("limit", limit.to_string())];
     match offset {
       MessageCursor::Offset(offset_value) => {

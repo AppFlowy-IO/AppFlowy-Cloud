@@ -30,9 +30,7 @@ pub(crate) async fn create_chat(
   params.validate()?;
   trace!("[Chat] create chat {:?}", params);
 
-  let mut txn = pg_pool.begin().await?;
-  insert_chat(&mut txn, workspace_id, params).await?;
-  txn.commit().await?;
+  insert_chat(pg_pool, workspace_id, params).await?;
   Ok(())
 }
 

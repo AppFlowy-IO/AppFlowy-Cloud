@@ -1,12 +1,14 @@
 use crate::sql_test::util::{setup_db, test_create_user};
 use database::chat::chat_ops::{
   delete_chat, get_all_chat_messages, insert_chat, insert_question_message, select_chat,
-  select_chat_messages,
+  select_chat_messages, select_chat_settings, update_chat_settings,
 };
 use serde_json::json;
 use shared_entity::dto::chat_dto::{
   ChatAuthor, ChatAuthorType, CreateChatParams, GetChatMessageParams,
 };
+
+use shared_entity::dto::chat_dto::UpdateChatParams;
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = false)]
@@ -23,9 +25,8 @@ async fn chat_crud_test(pool: PgPool) {
   let chat_id = uuid::Uuid::new_v4().to_string();
   // create chat
   {
-    let mut txn = pool.begin().await.unwrap();
     insert_chat(
-      &mut txn,
+      &pool,
       &user.workspace_id,
       CreateChatParams {
         chat_id: chat_id.clone(),
@@ -35,7 +36,6 @@ async fn chat_crud_test(pool: PgPool) {
     )
     .await
     .unwrap();
-    txn.commit().await.unwrap();
   }
 
   // get chat
@@ -76,9 +76,8 @@ async fn chat_message_crud_test(pool: PgPool) {
   let chat_id = uuid::Uuid::new_v4().to_string();
   // create chat
   {
-    let mut txn = pool.begin().await.unwrap();
     insert_chat(
-      &mut txn,
+      &pool,
       &user.workspace_id,
       CreateChatParams {
         chat_id: chat_id.clone(),
@@ -88,7 +87,6 @@ async fn chat_message_crud_test(pool: PgPool) {
     )
     .await
     .unwrap();
-    txn.commit().await.unwrap();
   }
 
   // create chat messages
@@ -182,4 +180,72 @@ async fn chat_message_crud_test(pool: PgPool) {
     let messages = get_all_chat_messages(&pool, &chat_id).await.unwrap();
     assert_eq!(messages.len(), 5);
   }
+}
+
+#[sqlx::test(migrations = false)]
+async fn chat_setting_test(pool: PgPool) {
+  setup_db(&pool).await.unwrap();
+  let user_uuid = uuid::Uuid::new_v4();
+  let name = user_uuid.to_string();
+  let email = format!("{}@appflowy.io", name);
+  let user = test_create_user(&pool, user_uuid, &email, &name)
+    .await
+    .unwrap();
+  let workspace_id = user.workspace_id;
+  let chat_id = uuid::Uuid::new_v4();
+
+  // Insert initial chat data with rag_ids
+  let insert_params = CreateChatParams {
+    chat_id: chat_id.to_string(),
+    name: "Initial Chat".to_string(),
+    rag_ids: vec!["rag1".to_string(), "rag2".to_string()],
+  };
+
+  insert_chat(&pool, &workspace_id, insert_params)
+    .await
+    .expect("Failed to insert chat");
+
+  // Validate inserted rag_ids
+  let settings = select_chat_settings(&pool, &chat_id)
+    .await
+    .expect("Failed to get chat settings");
+  assert_eq!(settings.rag_ids, vec!["rag1", "rag2"]);
+
+  // Update metadata
+  let update_params = UpdateChatParams {
+    name: None,
+    metadata: Some(json!({"key": "value"})),
+    rag_ids: None,
+  };
+
+  update_chat_settings(&pool, &chat_id, update_params)
+    .await
+    .expect("Failed to update chat settings");
+
+  // Validate metadata update
+  let settings = select_chat_settings(&pool, &chat_id)
+    .await
+    .expect("Failed to get chat settings");
+  assert_eq!(settings.metadata, json!({"key": "value"}));
+
+  // Update rag_ids and metadata together
+  let update_params = UpdateChatParams {
+    name: None,
+    metadata: Some(json!({"new_key": "new_value"})),
+    rag_ids: Some(vec!["rag3".to_string(), "rag4".to_string()]),
+  };
+
+  update_chat_settings(&pool, &chat_id, update_params)
+    .await
+    .expect("Failed to update chat settings");
+
+  // Validate both rag_ids and metadata
+  let settings = select_chat_settings(&pool, &chat_id)
+    .await
+    .expect("Failed to get chat settings");
+  assert_eq!(
+    settings.metadata,
+    json!({"key": "value", "new_key": "new_value"})
+  );
+  assert_eq!(settings.rag_ids, vec!["rag3", "rag4"]);
 }

@@ -1,10 +1,10 @@
 use appflowy_ai_client::dto::{AIModel, CompletionType};
-use client_api_test::{local_ai_test_enabled, TestClient};
+use client_api_test::{ai_test_enabled, TestClient};
 use shared_entity::dto::ai_dto::CompleteTextParams;
 
 #[tokio::test]
 async fn improve_writing_test() {
-  if !local_ai_test_enabled() {
+  if !ai_test_enabled() {
     return;
   }
   let test_client = TestClient::new_user().await;

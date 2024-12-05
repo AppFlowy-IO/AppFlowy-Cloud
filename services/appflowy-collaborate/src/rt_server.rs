@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::Result;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use redis::aio::ConnectionManager;
 use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, info, trace};
@@ -13,7 +14,8 @@ use tracing::{error, info, trace};
 use access_control::collab::RealtimeAccessControl;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::MessageByObjectId;
-
+use collab_stream::client::CollabRedisStream;
+use collab_stream::stream_router::StreamRouter;
 use database::collab::CollabStorage;
 
 use crate::client::client_msg_router::ClientMessageRouter;
@@ -50,9 +52,10 @@ where
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
+    redis_stream_router: Arc<StreamRouter>,
+    redis_connection_manager: ConnectionManager,
     group_persistence_interval: Duration,
-    edit_state_max_count: u32,
-    edit_state_max_secs: i64,
+    prune_grace_period: Duration,
     indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
     let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
@@ -66,14 +69,16 @@ where
     }
 
     let connect_state = ConnectState::new();
+    let collab_stream =
+      CollabRedisStream::new_with_connection_manager(redis_connection_manager, redis_stream_router);
     let group_manager = Arc::new(
       GroupManager::new(
         storage.clone(),
         access_control.clone(),
         metrics.clone(),
+        collab_stream,
         group_persistence_interval,
-        edit_state_max_count,
-        edit_state_max_secs,
+        prune_grace_period,
         indexer_provider.clone(),
       )
       .await?,
@@ -91,7 +96,7 @@ where
 
     spawn_metrics(metrics.clone(), storage.clone());
 
-    spawn_handle_unindexed_collabs(indexer_provider, storage);
+    //spawn_handle_unindexed_collabs(indexer_provider, storage);
 
     Ok(Self {
       group_manager,
@@ -258,6 +263,7 @@ where
   }
 }
 
+#[allow(dead_code)]
 fn spawn_handle_unindexed_collabs(
   indexer_provider: Arc<IndexerProvider>,
   storage: Arc<dyn CollabStorage>,

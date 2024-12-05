@@ -32,6 +32,12 @@ pub enum StreamError {
   #[error(transparent)]
   BinCodeSerde(#[from] bincode::Error),
 
+  #[error("failed to decode update: {0}")]
+  UpdateError(#[from] collab::preclude::encoding::read::Error),
+
+  #[error("I/O error: {0}")]
+  IO(#[from] std::io::Error),
+
   #[error("Internal error: {0}")]
   Internal(anyhow::Error),
 }

@@ -18,6 +18,7 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::CollabRealtimeMetrics;
+use collab_stream::stream_router::StreamRouter;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
@@ -39,6 +40,7 @@ pub struct AppState {
   pub user_cache: UserCache,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
+  pub redis_stream_router: Arc<StreamRouter>,
   pub redis_connection_manager: RedisConnectionManager,
   pub collab_cache: CollabCache,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,

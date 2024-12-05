@@ -69,7 +69,7 @@ jobs:
       matrix:
         include:
           - test_service: "appflowy_cloud"
-            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --features ai-test-enabled"
+            test_cmd: "--workspace --exclude appflowy-ai-client --features ai-test-enabled"
           - test_service: "appflowy_worker"
             test_cmd: "-p appflowy-worker"
           - test_service: "admin_frontend"

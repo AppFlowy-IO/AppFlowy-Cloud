@@ -7,6 +7,7 @@ use database_entity::dto::{
 };
 
 use collab::entity::EncodedCollab;
+use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
@@ -159,6 +160,13 @@ pub trait CollabStorage: Send + Sync + 'static {
     object_id: &str,
     snapshot_id: &i64,
   ) -> AppResult<SnapshotData>;
+
+  async fn get_latest_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> AppResult<Option<SnapshotData>>;
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
   async fn get_collab_snapshot_list(

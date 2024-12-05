@@ -12,28 +12,15 @@ use tokio::select;
 #[tokio::main]
 async fn main() -> Result<()> {
   let appflowy_cloud_bin_name = "appflowy_cloud";
-  let history = "appflowy_history";
   let worker = "appflowy_worker";
 
   kill_existing_process(appflowy_cloud_bin_name).await?;
-  kill_existing_process(history).await?;
   kill_existing_process(worker).await?;
 
   let mut appflowy_cloud_cmd = Command::new("cargo")
     .args(["run", "--features", "history"])
     .spawn()
     .context("Failed to start AppFlowy-Cloud process")?;
-
-  // let mut appflowy_history_cmd = Command::new("cargo")
-  //   .args([
-  //     "run",
-  //     // "--features",
-  //     // "verbose_log",
-  //     "--manifest-path",
-  //     "./services/appflowy-history/Cargo.toml",
-  //   ])
-  //   .spawn()
-  //   .context("Failed to start AppFlowy-History process")?;
 
   let mut appflowy_worker_cmd = Command::new("cargo")
     .args([
@@ -48,9 +35,6 @@ async fn main() -> Result<()> {
       status = appflowy_cloud_cmd.wait() => {
           handle_process_exit(status?, appflowy_cloud_bin_name)?;
       },
-      // status = appflowy_history_cmd.wait() => {
-      //     handle_process_exit(status?, history)?;
-      // }
       status = appflowy_worker_cmd.wait() => {
           handle_process_exit(status?, worker)?;
       }

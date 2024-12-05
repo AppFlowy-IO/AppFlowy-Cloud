@@ -113,19 +113,21 @@ impl GroupManagementState {
   }
 
   pub(crate) async fn contains_group(&self, object_id: &str) -> bool {
-    self.group_by_object_id.contains_key(object_id)
+    if let Some(group) = self.group_by_object_id.get(object_id) {
+      let cancelled = group.is_cancelled();
+      !cancelled
+    } else {
+      false
+    }
   }
 
   pub(crate) async fn remove_group(&self, object_id: &str) {
-    let entry = self.group_by_object_id.remove(object_id);
-
-    if let Some(entry) = entry {
-      let group = entry.1;
-      group.stop().await;
-    } else {
+    let group_not_found = self.group_by_object_id.remove(object_id).is_none();
+    if group_not_found {
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);
     }
+
     self
       .metrics_calculate
       .opening_collab_count

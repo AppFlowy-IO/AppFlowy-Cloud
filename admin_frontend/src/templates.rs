@@ -66,6 +66,14 @@ pub struct Login<'a> {
 }
 
 #[derive(Template)]
+#[template(path = "pages/login_v2.html")]
+pub struct LoginV2<'a> {
+  pub oauth_providers: &'a [&'a str],
+  pub redirect_to: Option<&'a str>,
+  pub oauth_redirect_to: Option<&'a str>,
+}
+
+#[derive(Template)]
 #[template(path = "pages/home.html")]
 pub struct Home<'a> {
   pub user: &'a User,

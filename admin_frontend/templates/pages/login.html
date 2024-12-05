@@ -84,11 +84,15 @@
     <!-- Load OAuth Providers if configured -->
     {% if oauth_providers.len() > 0 %}
     <br />
-    <table style="width: 100%">
-      <tr style="display: flex">
-        <td style="width: 100%; margin: auto"><hr /></td>
-        <td style="flex: 1; text-align: center">&nbsp;or&nbsp;</td>
-        <td style="width: 100%; margin: auto"><hr /></td>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr style="display: flex; align-items: center;">
+        <td style="width: 100%; margin: auto;">
+          <hr class="divider" />
+        </td>
+        <td style="flex: 1; text-align: center;">&nbsp;or&nbsp;</td>
+        <td style="width: 100%; margin: auto;">
+          <hr class="divider" />
+        </td>
       </tr>
     </table>
 
@@ -98,9 +102,9 @@
         {% for provider in oauth_providers %}
         <a
           href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|default("/web/login-callback")|escape }}"
-          style="text-decoration: none"
+          style="text-decoration: none; color: inherit"
         >
-          <div style="display: flex; align-items: center; border: 1px solid; margin: 4px; border-radius: 4px; height: 64px">
+          <div style="display: flex; align-items: center; border: 1px solid #384967; margin: 4px; border-radius: 4px; height: 64px">
             <div> &nbsp&nbsp{{ provider }} </div>
             <div class="oauth-icon">
               <div

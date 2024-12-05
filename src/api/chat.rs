@@ -6,18 +6,20 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 
+use crate::api::util::ai_model_from_header;
 use app_error::AppError;
 use appflowy_ai_client::dto::{CreateChatContext, RepeatedRelatedQuestion};
 use authentication::jwt::UserUuid;
 use bytes::Bytes;
+use database::chat;
 use futures::Stream;
 use futures_util::stream;
 use futures_util::{FutureExt, TryStreamExt};
 use pin_project::pin_project;
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams,
+  ChatAuthor, ChatMessage, ChatSettings, CreateAnswerMessageParams, CreateChatMessageParams,
   CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageContentParams,
+  RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
@@ -25,17 +27,12 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
 use tokio::task;
-
-use database::chat;
-
-use crate::api::util::ai_model_from_header;
-
-use database::chat::chat_ops::insert_answer_message;
 use tracing::{error, instrument, trace};
+use uuid::Uuid;
 use validator::Validate;
 pub fn chat_scope() -> Scope {
   web::scope("/api/chat/{workspace_id}")
-      // Chat management
+      // Chat CRUD
       .service(
         web::resource("")
             .route(web::post().to(create_chat_handler))
@@ -43,13 +40,22 @@ pub fn chat_scope() -> Scope {
       .service(
         web::resource("/{chat_id}")
             .route(web::delete().to(delete_chat_handler))
+            // Deprecated, use /message instead
             .route(web::get().to(get_chat_message_handler))
+      )
+
+      // Settings
+      .service(
+        web::resource("/{chat_id}/settings")
+            .route(web::get().to(get_chat_settings_handler))
+            .route(web::post().to(update_chat_settings_handler))
       )
 
       // Message management
       .service(
         web::resource("/{chat_id}/message")
             .route(web::put().to(update_question_handler))
+            .route(web::get().to(get_chat_message_handler))
       )
       .service(
         web::resource("/{chat_id}/message/question")
@@ -202,7 +208,7 @@ async fn save_answer_handler(
   payload.validate().map_err(AppError::from)?;
 
   let (_workspace_id, chat_id) = path.into_inner();
-  let message = insert_answer_message(
+  let message = database::chat::chat_ops::insert_answer_message(
     &state.pg_pool,
     ChatAuthor::ai(),
     &chat_id,
@@ -341,6 +347,28 @@ async fn get_chat_message_handler(
   let (_workspace_id, chat_id) = path.into_inner();
   let messages = get_chat_messages(&state.pg_pool, params, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(messages).into())
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn get_chat_settings_handler(
+  path: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> actix_web::Result<JsonAppResponse<ChatSettings>> {
+  let (_, chat_id) = path.into_inner();
+  let chat_id_uuid = Uuid::parse_str(&chat_id).map_err(AppError::from)?;
+  let settings = chat::chat_ops::select_chat_settings(&state.pg_pool, &chat_id_uuid).await?;
+  Ok(AppResponse::Ok().with_data(settings).into())
+}
+
+async fn update_chat_settings_handler(
+  path: web::Path<(String, String)>,
+  state: Data<AppState>,
+  payload: Json<UpdateChatParams>,
+) -> actix_web::Result<JsonAppResponse<()>> {
+  let (_workspace_id, chat_id) = path.into_inner();
+  let chat_id_uuid = Uuid::parse_str(&chat_id).map_err(AppError::from)?;
+  chat::chat_ops::update_chat_settings(&state.pg_pool, &chat_id_uuid, payload.into_inner()).await?;
+  Ok(AppResponse::Ok().into())
 }
 
 #[pin_project]

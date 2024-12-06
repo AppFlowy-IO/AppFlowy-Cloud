@@ -986,6 +986,28 @@ async fn process_unzip_file(
       ))
     })?;
 
+    match w_database_collab.encode_to_bytes() {
+      Ok(bytes) => {
+        if let Err(err) = redis_client
+          .set_ex::<String, Vec<u8>, Value>(
+            encode_collab_key(&w_database_id),
+            bytes,
+            2592000, // WorkspaceDatabase => 1 month
+          )
+          .await
+        {
+          warn!(
+            "[Import] Failed to insert workspace database to Redis: {}",
+            err
+          );
+        }
+      },
+      Err(err) => warn!(
+        "[Import] Failed to encode workspace database collab payload: {}",
+        err
+      ),
+    }
+
     trace!(
       "[Import]: {} did encode workspace database collab",
       import_task.workspace_id
@@ -1014,6 +1036,22 @@ async fn process_unzip_file(
   let folder_collab = folder
     .encode_collab_v1(|collab| CollabType::Folder.validate_require_data(collab))
     .map_err(|err| ImportError::Internal(err.into()))?;
+
+  match folder_collab.encode_to_bytes() {
+    Ok(bytes) => {
+      if let Err(err) = redis_client
+        .set_ex::<String, Vec<u8>, Value>(
+          encode_collab_key(&import_task.workspace_id),
+          bytes,
+          604800, // Folder => 1 week
+        )
+        .await
+      {
+        warn!("[Import] Failed to insert folder collab to Redis: {}", err);
+      }
+    },
+    Err(err) => warn!("[Import] Failed to encode folder collab payload: {}", err),
+  }
 
   let folder_collab_params = CollabParams {
     object_id: import_task.workspace_id.clone(),
@@ -1129,12 +1167,21 @@ async fn process_unzip_file(
     );
   }
 
-  transaction.commit().await.map_err(|err| {
+  let result = transaction.commit().await.map_err(|err| {
     ImportError::Internal(anyhow!(
       "Failed to commit transaction when importing data: {:?}",
       err
     ))
-  })?;
+  });
+
+  if result.is_err() {
+    let _: RedisResult<Value> = redis_client.del(encode_collab_key(&w_database_id)).await;
+    let _: RedisResult<Value> = redis_client
+      .del(encode_collab_key(&import_task.workspace_id))
+      .await;
+
+    return result;
+  }
 
   // 9. after inserting all collabs, upload all files to S3
   trace!("[Import]: {} upload files to s3", import_task.workspace_id,);
@@ -1552,4 +1599,8 @@ fn collab_key(workspace_id: &str, object_id: &str) -> String {
     "collabs/{}/{}/encoded_collab.v1.zstd",
     workspace_id, object_id
   )
+}
+
+fn encode_collab_key(object_id: &str) -> String {
+  format!("encode_collab_v0:{}", object_id)
 }

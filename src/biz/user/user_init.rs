@@ -130,7 +130,7 @@ pub(crate) async fn create_user_awareness(
     .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
   storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       workspace_id,
       uid,
       CollabParams {
@@ -167,7 +167,7 @@ pub(crate) async fn create_workspace_collab(
     .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
   storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       workspace_id,
       &uid,
       CollabParams {
@@ -206,7 +206,7 @@ pub(crate) async fn create_workspace_database_collab(
     .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
   storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       workspace_id,
       uid,
       CollabParams {

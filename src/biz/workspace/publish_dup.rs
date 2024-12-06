@@ -183,7 +183,7 @@ impl PublishCollabDuplicator {
       };
       let action = format!("duplicate collab: {}", params);
       collab_storage
-        .insert_new_collab_with_transaction(
+        .upsert_new_collab_with_transaction(
           &dest_workspace_id,
           &duplicator_uid,
           params,
@@ -239,7 +239,7 @@ impl PublishCollabDuplicator {
       let updated_ws_w_db_collab = updated_ws_w_db_collab?;
 
       collab_storage
-        .insert_new_collab_with_transaction(
+        .upsert_new_collab_with_transaction(
           &dest_workspace_id,
           &duplicator_uid,
           CollabParams {
@@ -331,7 +331,7 @@ impl PublishCollabDuplicator {
     .await?;
 
     collab_storage
-      .insert_new_collab_with_transaction(
+      .upsert_new_collab_with_transaction(
         &dest_workspace_id,
         &duplicator_uid,
         CollabParams {

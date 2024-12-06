@@ -295,7 +295,13 @@ pub async fn get_user_workspace_structure(
     .into_iter()
     .map(|id| id.to_string())
     .collect();
-  collab_folder_to_folder_view(root_view_id, &folder, depth, &publish_view_ids)
+  collab_folder_to_folder_view(
+    workspace_id,
+    root_view_id,
+    &folder,
+    depth,
+    &publish_view_ids,
+  )
 }
 
 pub async fn get_latest_workspace_database(

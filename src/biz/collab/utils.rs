@@ -51,10 +51,7 @@ pub fn get_row_details_by_id(
   for (field_id, field) in field_by_id_name_uniq {
     let cell: Cell = match cells.get(field_id) {
       Some(cell) => cell.clone(),
-      None => {
-        tracing::error!("Failed to get cell by field id: {}", field.id);
-        Cell::new()
-      },
+      None => Cell::new(),
     };
     let cell_value = cell_data_to_serde(cell, field, type_option_reader_by_id);
     row_details.insert(
@@ -116,7 +113,8 @@ pub fn type_option_writer_by_id(
     let field_id: String = field.id.clone();
     let type_option_reader: Box<dyn TypeOptionCellWriter> = {
       let field_type: &FieldType = &FieldType::from(field.field_type);
-      let type_option_data: TypeOptionData = match field.type_options.get(&field_type.type_id()) {
+      let type_option_data: TypeOptionData = match field.get_any_type_option(&field_type.type_id())
+      {
         Some(tod) => tod.clone(),
         None => HashMap::new(),
       };
@@ -137,7 +135,8 @@ pub fn type_option_reader_by_id(
     let field_id: String = field.id.clone();
     let type_option_reader: Box<dyn TypeOptionCellReader> = {
       let field_type: &FieldType = &FieldType::from(field.field_type);
-      let type_option_data: TypeOptionData = match field.type_options.get(&field_type.type_id()) {
+      let type_option_data: TypeOptionData = match field.get_any_type_option(&field_type.type_id())
+      {
         Some(tod) => tod.clone(),
         None => HashMap::new(),
       };
@@ -161,6 +160,9 @@ pub fn type_options_serde(
   for (key, value) in type_option {
     match field_type {
       FieldType::SingleSelect | FieldType::MultiSelect | FieldType::Media => {
+        // Certain type option are stored as stringified JSON
+        // We need to parse them back to JSON
+        // e.g. "{ \"key\": \"value\" }" -> { "key": "value" }
         if let yrs::Any::String(arc_str) = value {
           if let Ok(serde_value) = serde_json::from_str::<serde_json::Value>(arc_str) {
             result.insert(key.clone(), serde_value);
@@ -201,17 +203,6 @@ pub async fn get_database_body(
     ))
   })?;
   Ok((db_collab, db_body))
-}
-
-pub fn encode_collab_v1_bytes(
-  collab: &Collab,
-  collab_type: CollabType,
-) -> Result<Vec<u8>, AppError> {
-  let bs = collab
-    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-    .map_err(|e| AppError::Unhandled(e.to_string()))?
-    .encode_to_bytes()?;
-  Ok(bs)
 }
 
 pub async fn get_latest_collab_encoded(

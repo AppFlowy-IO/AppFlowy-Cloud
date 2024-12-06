@@ -68,7 +68,7 @@ use super::folder_view::section_items_to_trash_folder_view;
 use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
 use super::utils::collab_from_doc_state;
-use super::utils::encode_collab_v1_bytes;
+use super::utils::collab_to_bin;
 use super::utils::field_by_id_name_uniq;
 use super::utils::get_database_body;
 use super::utils::get_latest_collab;
@@ -500,6 +500,7 @@ pub async fn insert_database_row(
   let new_db_row_id = gen_row_id();
   let mut new_db_row_collab =
     Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
+
   let new_db_row_body = {
     let database_body = DatabaseRowBody::create(
       new_db_row_id.clone(),
@@ -539,8 +540,8 @@ pub async fn insert_database_row(
     }
     database_body
   };
-  let db_row_ec_v1 = encode_collab_v1_bytes(&new_db_row_collab, CollabType::DatabaseRow)?;
 
+  // Create new row order
   let ts_now = chrono::Utc::now().timestamp();
   let row_order = db_body
     .create_row(CreateRowParams {
@@ -558,6 +559,9 @@ pub async fn insert_database_row(
     .await
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create row: {:?}", e)))?;
 
+  // Prepare new row collab binary to store in postgres
+  let db_row_ec_v1 = collab_to_bin(new_db_row_collab, CollabType::DatabaseRow).await?;
+
   // For each database view, add the new row order
   let db_collab_update = {
     let mut txn = db_collab.transact_mut();
@@ -572,7 +576,7 @@ pub async fn insert_database_row(
 
     txn.encode_update_v1()
   };
-  let updated_db_collab = encode_collab_v1_bytes(&db_collab, CollabType::Database)?;
+  let updated_db_collab = collab_to_bin(db_collab, CollabType::Database).await?;
 
   let mut db_txn = pg_pool.begin().await?;
   // insert row
@@ -682,7 +686,7 @@ pub async fn add_database_field(
     );
     yrs_txn.encode_update_v1()
   };
-  let updated_db_collab = encode_collab_v1_bytes(&db_collab, CollabType::Database)?;
+  let updated_db_collab = collab_to_bin(db_collab, CollabType::Database).await?;
 
   let mut pg_txn = pg_pool.begin().await?;
   collab_storage

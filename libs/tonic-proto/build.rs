@@ -10,6 +10,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //   "history.SnapshotMeta",
     //   "#[derive(serde::Serialize, serde::Deserialize)]",
     // )
-    .compile(&["proto/history.proto"], &["proto"])?;
+    .compile_protos(&["proto/history.proto"], &["proto"])?;
   Ok(())
 }

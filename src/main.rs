@@ -24,6 +24,7 @@ async fn main() -> anyhow::Result<()> {
 
   let conf =
     get_configuration().map_err(|e| anyhow::anyhow!("Failed to read configuration: {}", e))?;
+
   init_subscriber(&conf.app_env, filters);
 
   let (tx, rx) = tokio::sync::mpsc::channel(1000);

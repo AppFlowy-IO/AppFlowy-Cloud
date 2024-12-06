@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context, Result};
-use std::env;
 use tokio::process::Command;
 use tokio::select;
 

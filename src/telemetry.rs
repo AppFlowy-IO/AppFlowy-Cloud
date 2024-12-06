@@ -45,6 +45,7 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
   }
 }
 
+#[allow(dead_code)]
 struct CustomTime;
 impl tracing_subscriber::fmt::time::FormatTime for CustomTime {
   fn format_time(&self, w: &mut Writer<'_>) -> std::fmt::Result {

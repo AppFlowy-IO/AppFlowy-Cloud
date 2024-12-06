@@ -8,7 +8,7 @@ use std::ops::Deref;
 use std::time::{Duration, SystemTime};
 
 use aws_sdk_s3::error::SdkError;
-use aws_sdk_s3::operation::delete_objects::{ DeleteObjectsOutput};
+use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 
 use aws_sdk_s3::presigning::PresigningConfig;
@@ -200,35 +200,35 @@ impl BucketClient for AwsS3BucketClientImpl {
       let mut delete_object_ids = Vec::with_capacity(CHUNK_SIZE);
       for obj in chunk {
         let obj_id = ObjectIdentifier::builder()
-            .key(obj)
-            .build()
-            .map_err(|err| {
-              AppError::Internal(anyhow!("Failed to create object identifier: {}", err))
-            })?;
+          .key(obj)
+          .build()
+          .map_err(|err| {
+            AppError::Internal(anyhow!("Failed to create object identifier: {}", err))
+          })?;
         delete_object_ids.push(obj_id);
       }
       let len = delete_object_ids.len();
       let res = self
-          .client
-          .delete_objects()
-          .bucket(&self.bucket)
-          .delete(
-            Delete::builder()
-                .set_objects(Some(delete_object_ids))
-                .build()
-                .map_err(|err| {
-                  AppError::Internal(anyhow!("Failed to create delete object request: {}", err))
-                })?,
-          )
-          .send()
-          .await;
+        .client
+        .delete_objects()
+        .bucket(&self.bucket)
+        .delete(
+          Delete::builder()
+            .set_objects(Some(delete_object_ids))
+            .build()
+            .map_err(|err| {
+              AppError::Internal(anyhow!("Failed to create delete object request: {}", err))
+            })?,
+        )
+        .send()
+        .await;
 
       match res {
         Ok(_) => deleted += len,
         Err(err) => {
           tracing::warn!("failed to deleted {} objects: {}", len, err);
           tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+        },
       }
     }
 

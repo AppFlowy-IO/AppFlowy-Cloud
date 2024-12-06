@@ -8,7 +8,7 @@ use std::ops::Deref;
 use std::time::{Duration, SystemTime};
 
 use aws_sdk_s3::error::SdkError;
-use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
+use aws_sdk_s3::operation::delete_objects::{ DeleteObjectsOutput};
 use aws_sdk_s3::operation::get_object::GetObjectError;
 
 use aws_sdk_s3::presigning::PresigningConfig;
@@ -193,38 +193,47 @@ impl BucketClient for AwsS3BucketClientImpl {
     Ok(S3ResponseData::from(output))
   }
 
-  async fn delete_blobs(&self, object_keys: Vec<String>) -> Result<Self::ResponseData, AppError> {
-    let mut delete_object_ids: Vec<ObjectIdentifier> = vec![];
-    for obj in object_keys {
-      let obj_id = ObjectIdentifier::builder()
-        .key(obj)
-        .build()
-        .map_err(|err| {
-          AppError::Internal(anyhow!("Failed to create object identifier: {}", err))
-        })?;
-      delete_object_ids.push(obj_id);
+  async fn delete_blobs(&self, object_keys: Vec<String>) -> Result<(), AppError> {
+    const CHUNK_SIZE: usize = 500;
+    let mut deleted = 0;
+    for chunk in object_keys.chunks(CHUNK_SIZE) {
+      let mut delete_object_ids = Vec::with_capacity(CHUNK_SIZE);
+      for obj in chunk {
+        let obj_id = ObjectIdentifier::builder()
+            .key(obj)
+            .build()
+            .map_err(|err| {
+              AppError::Internal(anyhow!("Failed to create object identifier: {}", err))
+            })?;
+        delete_object_ids.push(obj_id);
+      }
+      let len = delete_object_ids.len();
+      let res = self
+          .client
+          .delete_objects()
+          .bucket(&self.bucket)
+          .delete(
+            Delete::builder()
+                .set_objects(Some(delete_object_ids))
+                .build()
+                .map_err(|err| {
+                  AppError::Internal(anyhow!("Failed to create delete object request: {}", err))
+                })?,
+          )
+          .send()
+          .await;
+
+      match res {
+        Ok(_) => deleted += len,
+        Err(err) => {
+          tracing::warn!("failed to deleted {} objects: {}", len, err);
+          tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+      }
     }
 
-    let len = delete_object_ids.len();
-    let output = self
-      .client
-      .delete_objects()
-      .bucket(&self.bucket)
-      .delete(
-        Delete::builder()
-          .set_objects(Some(delete_object_ids))
-          .build()
-          .map_err(|err| {
-            AppError::Internal(anyhow!("Failed to create delete object request: {}", err))
-          })?,
-      )
-      .send()
-      .await
-      .map_err(|err| anyhow!("Failed to delete objects from S3: {}", err))?;
-
-    trace!("deleted {} objects from S3", len);
-
-    Ok(S3ResponseData::from(output))
+    trace!("deleted {} objects from S3", deleted);
+    Ok(())
   }
 
   async fn get_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError> {

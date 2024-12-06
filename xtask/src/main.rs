@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use std::env;
 use tokio::process::Command;
 use tokio::select;
 
@@ -11,32 +12,29 @@ use tokio::select;
 /// Redis, Postgres, etc.
 #[tokio::main]
 async fn main() -> Result<()> {
-  let appflowy_cloud_bin_name = "appflowy_cloud";
-  let history = "appflowy_history";
+  let appflowy = "appflowy_cloud";
   let worker = "appflowy_worker";
 
-  kill_existing_process(appflowy_cloud_bin_name).await?;
-  kill_existing_process(history).await?;
+  kill_existing_process(appflowy).await?;
   kill_existing_process(worker).await?;
 
-  let mut appflowy_cloud_cmd = Command::new("cargo")
+  let enable_runtime_profile = false;
+  let mut appflowy_cloud_cmd = Command::new("cargo");
+
+  appflowy_cloud_cmd
     .env("RUSTFLAGS", "--cfg tokio_unstable")
-    .args(["run", "--features", "history, tokio-runtime-profile"])
+    .args(["run", "--features"]);
+  if enable_runtime_profile {
+    appflowy_cloud_cmd.args(["history,tokio-runtime-profile"]);
+  } else {
+    appflowy_cloud_cmd.args(["history"]);
+  }
+
+  let mut appflowy_cloud_handle = appflowy_cloud_cmd
     .spawn()
     .context("Failed to start AppFlowy-Cloud process")?;
 
-  // let mut appflowy_history_cmd = Command::new("cargo")
-  //   .args([
-  //     "run",
-  //     // "--features",
-  //     // "verbose_log",
-  //     "--manifest-path",
-  //     "./services/appflowy-history/Cargo.toml",
-  //   ])
-  //   .spawn()
-  //   .context("Failed to start AppFlowy-History process")?;
-
-  let mut appflowy_worker_cmd = Command::new("cargo")
+  let mut appflowy_worker_handle = Command::new("cargo")
     .args([
       "run",
       "--manifest-path",
@@ -46,13 +44,10 @@ async fn main() -> Result<()> {
     .context("Failed to start AppFlowy-Worker process")?;
 
   select! {
-      status = appflowy_cloud_cmd.wait() => {
-          handle_process_exit(status?, appflowy_cloud_bin_name)?;
+      status = appflowy_cloud_handle.wait() => {
+          handle_process_exit(status?, appflowy)?;
       },
-      // status = appflowy_history_cmd.wait() => {
-      //     handle_process_exit(status?, history)?;
-      // }
-      status = appflowy_worker_cmd.wait() => {
+      status = appflowy_worker_handle.wait() => {
           handle_process_exit(status?, worker)?;
       }
   }

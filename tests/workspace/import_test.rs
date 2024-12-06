@@ -96,8 +96,11 @@ async fn import_blog_post_test() {
   }
 
   // Step 8: Ensure no expected URLs remain
-  println!("{:?}", expected_urls);
-  assert!(expected_urls.is_empty());
+  assert!(
+    expected_urls.is_empty(),
+    "expected URLs to be empty: {:?}",
+    expected_urls
+  );
 }
 
 #[tokio::test]

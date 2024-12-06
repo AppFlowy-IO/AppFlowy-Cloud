@@ -1,10 +1,11 @@
 use app_error::ErrorCode;
+use appflowy_collaborate::collab::cache::mem_cache::CollabMemCache;
+use appflowy_collaborate::CollabMetrics;
 use client_api_test::*;
 use collab::core::transaction::DocTransactionExtension;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Doc, Transact};
 use collab_entity::CollabType;
-use database::collab::mem_cache::CollabMemCache;
 use database::collab::CollabMetadata;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
@@ -231,7 +232,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
 #[tokio::test]
 async fn collab_mem_cache_read_write_test() {
   let conn = redis_connection_manager().await;
-  let mem_cache = CollabMemCache::new(conn);
+  let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
 
   let object_id = uuid::Uuid::new_v4().to_string();
@@ -254,8 +255,7 @@ async fn collab_mem_cache_read_write_test() {
 #[tokio::test]
 async fn collab_mem_cache_insert_override_test() {
   let conn = redis_connection_manager().await;
-
-  let mem_cache = CollabMemCache::new(conn);
+  let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
   let object_id = uuid::Uuid::new_v4().to_string();
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
   let mut timestamp = chrono::Utc::now().timestamp();
@@ -313,7 +313,7 @@ async fn collab_mem_cache_insert_override_test() {
 #[tokio::test]
 async fn collab_meta_redis_cache_test() {
   let conn = redis_connection_manager().await;
-  let mem_cache = CollabMemCache::new(conn);
+  let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
   mem_cache.get_collab_meta("1").await.unwrap_err();
 
   let object_id = uuid::Uuid::new_v4().to_string();

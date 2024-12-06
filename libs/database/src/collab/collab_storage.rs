@@ -59,8 +59,6 @@ pub enum GetCollabOrigin {
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
-  fn encode_collab_redis_query_state(&self) -> (u64, u64);
-
   /// Insert/update the collaboration object in the storage.
   /// # Arguments
   /// * `workspace_id` - The ID of the workspace.

@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
-use database::collab::cache::CollabCache;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::Transaction;
@@ -32,6 +31,7 @@ use database_entity::dto::{
 };
 
 use crate::collab::access_control::CollabStorageAccessControlImpl;
+use crate::collab::cache::CollabCache;
 use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
 use crate::snapshot::SnapshotControl;
@@ -47,7 +47,6 @@ pub struct CollabStorageImpl<AC> {
   snapshot_control: SnapshotControl,
   rt_cmd_sender: CLCommandSender,
   queue: Sender<PendingCollabWrite>,
-  metrics: Arc<CollabMetrics>,
 }
 
 impl<AC> CollabStorageImpl<AC>
@@ -59,30 +58,24 @@ where
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: CLCommandSender,
-    metrics: Arc<CollabMetrics>,
   ) -> Self {
     let (queue, reader) = channel(1000);
-    tokio::spawn(Self::periodic_write_task(
-      cache.clone(),
-      metrics.clone(),
-      reader,
-    ));
+    tokio::spawn(Self::periodic_write_task(cache.clone(), reader));
     Self {
       cache,
       access_control,
       snapshot_control,
       rt_cmd_sender,
       queue,
-      metrics,
     }
   }
 
+  pub fn metrics(&self) -> &CollabMetrics {
+    self.cache.metrics()
+  }
+
   const PENDING_WRITE_BUF_CAPACITY: usize = 20;
-  async fn periodic_write_task(
-    cache: CollabCache,
-    metrics: Arc<CollabMetrics>,
-    mut reader: Receiver<PendingCollabWrite>,
-  ) {
+  async fn periodic_write_task(cache: CollabCache, mut reader: Receiver<PendingCollabWrite>) {
     let mut buf = Vec::with_capacity(Self::PENDING_WRITE_BUF_CAPACITY);
     loop {
       let n = reader
@@ -92,23 +85,10 @@ where
         break;
       }
       let pending = buf.drain(..n);
-      if let Err(e) = Self::persist(&cache, &metrics, pending).await {
-        tracing::error!("failed to persist {} collabs: {}", n, e);
+      if let Err(e) = cache.batch_insert_collab(pending.collect()).await {
+        error!("failed to persist {} collabs: {}", n, e);
       }
     }
-  }
-
-  async fn persist(
-    cache: &CollabCache,
-    metrics: &CollabMetrics,
-    records: impl ExactSizeIterator<Item = PendingCollabWrite>,
-  ) -> Result<(), AppError> {
-    let total_records = records.len();
-    let successful_writes = cache.batch_insert_collab(records.collect()).await?;
-
-    metrics.record_write_collab(successful_writes, total_records as _);
-
-    Ok(())
   }
 
   async fn insert_collab(
@@ -152,8 +132,8 @@ where
     Ok(())
   }
 
-  async fn get_encode_collab_from_editing(&self, object_id: &str) -> Option<EncodedCollab> {
-    let object_id = object_id.to_string();
+  async fn get_encode_collab_from_editing(&self, oid: &str) -> Option<EncodedCollab> {
+    let object_id = oid.to_string();
     let (ret, rx) = tokio::sync::oneshot::channel();
     let timeout_duration = Duration::from_secs(5);
 
@@ -174,15 +154,21 @@ where
     match timeout(timeout_duration, rx).await {
       Ok(Ok(Some(encode_collab))) => Some(encode_collab),
       Ok(Ok(None)) => {
-        trace!("No encode collab found in editing collab");
+        trace!("Editing collab not found: `{}`", oid);
         None
       },
       Ok(Err(err)) => {
-        error!("Failed to get encode collab from realtime server: {}", err);
+        error!(
+          "Failed to get collab from realtime server `{}`: {}",
+          oid, err
+        );
         None
       },
       Err(_) => {
-        error!("Timeout waiting for encode collab from realtime server");
+        error!(
+          "Timeout trying to read collab `{}` from realtime server",
+          oid
+        );
         None
       },
     }
@@ -242,9 +228,7 @@ where
 
     let pending = PendingCollabWrite::new(workspace_id.into(), *uid, params);
     if let Err(e) = self.queue.send(pending).await {
-      tracing::error!("Failed to queue insert collab doc state: {}", e);
-    } else {
-      self.metrics.record_queue_collab(1);
+      error!("Failed to queue insert collab doc state: {}", e);
     }
     Ok(())
   }
@@ -267,11 +251,6 @@ impl<AC> CollabStorage for CollabStorageImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
-  fn encode_collab_redis_query_state(&self) -> (u64, u64) {
-    let state = self.cache.query_state();
-    (state.total_attempts, state.success_attempts)
-  }
-
   async fn queue_insert_or_update_collab(
     &self,
     workspace_id: &str,
@@ -368,7 +347,8 @@ where
     )
     .await
     {
-      Ok(result) => result,
+      Ok(Ok(())) => Ok(()),
+      Ok(Err(err)) => Err(err),
       Err(_) => {
         error!(
           "Timeout waiting for action completed: {}",

@@ -37,6 +37,7 @@ use shared_entity::dto::workspace_dto::{
 use sqlx::{PgPool, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Instant;
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::Update;
@@ -129,6 +130,7 @@ pub async fn create_space(
   )
   .await?;
   let mut transaction = pg_pool.begin().await?;
+  let start = Instant::now();
   let action = format!("Create new space: {}", view_id);
   collab_storage
     .upsert_new_collab_with_transaction(
@@ -148,6 +150,7 @@ pub async fn create_space(
   )
   .await?;
   transaction.commit().await?;
+  collab_storage.metrics().observe_pg_tx(start.elapsed());
   Ok(Space { view_id })
 }
 
@@ -724,6 +727,7 @@ async fn create_document_page(
   )
   .await?;
   let mut transaction = pg_pool.begin().await?;
+  let start = Instant::now();
   let action = format!("Create new collab: {}", view_id);
   collab_storage
     .upsert_new_collab_with_transaction(
@@ -743,6 +747,7 @@ async fn create_document_page(
   )
   .await?;
   transaction.commit().await?;
+  collab_storage.metrics().observe_pg_tx(start.elapsed());
   Ok(Page { view_id })
 }
 
@@ -874,6 +879,7 @@ async fn create_database_page(
     .collect_vec();
 
   let mut transaction = pg_pool.begin().await?;
+  let start = Instant::now();
   let action = format!("Create new database collab: {}", database_id);
   collab_storage
     .upsert_new_collab_with_transaction(
@@ -905,6 +911,7 @@ async fn create_database_page(
   )
   .await?;
   transaction.commit().await?;
+  collab_storage.metrics().observe_pg_tx(start.elapsed());
   Ok(Page {
     view_id: view_id.to_string(),
   })

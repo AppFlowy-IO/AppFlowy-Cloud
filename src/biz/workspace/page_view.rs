@@ -129,7 +129,7 @@ pub async fn create_space(
   let mut transaction = pg_pool.begin().await?;
   let action = format!("Create new space: {}", view_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       default_document_collab_params,
@@ -650,7 +650,7 @@ async fn insert_and_broadcast_workspace_database_update(
   };
   let action_description = format!("Update workspace database: {}", workspace_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       params,
@@ -682,7 +682,7 @@ async fn insert_and_broadcast_workspace_folder_update(
   };
   let action_description = format!("Update workspace folder: {}", workspace_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       params,
@@ -724,7 +724,7 @@ async fn create_document_page(
   let mut transaction = pg_pool.begin().await?;
   let action = format!("Create new collab: {}", view_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       default_document_collab_params,
@@ -874,7 +874,7 @@ async fn create_database_page(
   let mut transaction = pg_pool.begin().await?;
   let action = format!("Create new database collab: {}", database_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       database_collab_params,
@@ -1223,7 +1223,9 @@ async fn get_page_collab_data_for_document(
   })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn update_page_collab_data(
+  pg_pool: &PgPool,
   collab_access_control_storage: Arc<CollabAccessControlStorage>,
   appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
   uid: i64,
@@ -1263,9 +1265,17 @@ pub async fn update_page_collab_data(
     encoded_collab_v1: updated_encoded_collab.into(),
     embeddings: None,
   };
+  let mut transaction = pg_pool.begin().await?;
   collab_access_control_storage
-    .queue_insert_or_update_collab(&workspace_id.to_string(), &uid, params, true)
+    .upsert_new_collab_with_transaction(
+      &workspace_id.to_string(),
+      &uid,
+      params,
+      &mut transaction,
+      "upsert collab",
+    )
     .await?;
+  transaction.commit().await?;
   broadcast_update(
     &collab_access_control_storage,
     &object_id.to_string(),

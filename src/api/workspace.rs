@@ -708,7 +708,7 @@ async fn create_collab_handler(
   let action = format!("Create new collab: {}", params);
   state
     .collab_access_control_storage
-    .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction, &action)
+    .upsert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction, &action)
     .await?;
 
   transaction
@@ -914,6 +914,7 @@ async fn post_web_update_handler(
     .await
     .map_err(AppResponseError::from)?;
   update_page_collab_data(
+    &state.pg_pool,
     state.collab_access_control_storage.clone(),
     state.metrics.appflowy_web_metrics.clone(),
     uid,

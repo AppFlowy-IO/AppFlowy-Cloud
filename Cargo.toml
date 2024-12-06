@@ -73,7 +73,7 @@ redis = { workspace = true, features = [
   "connection-manager",
 ] }
 tracing = { version = "0.1.40", features = ["log"] }
-tracing-subscriber = { version = "0.3.18", features = [
+tracing-subscriber = { version = "0.3.19", features = [
   "registry",
   "env-filter",
   "ansi",
@@ -142,7 +142,7 @@ collab-rt-entity.workspace = true
 collab-stream.workspace = true
 yrs.workspace = true
 
-tonic-build = "0.11.0"
+tonic-build = "0.12.3"
 log = "0.4.20"
 lettre = { version = "0.11.7", features = ["tokio1", "tokio1-native-tls"] }
 handlebars = "5.1.2"
@@ -154,7 +154,7 @@ mailer.workspace = true
 async_zip.workspace = true
 sanitize-filename.workspace = true
 futures-lite = "2.3.0"
-
+console-subscriber = { version = "0.4.1", optional = true }
 base64.workspace = true
 md5.workspace = true
 nanoid = "0.4.0"
@@ -272,8 +272,8 @@ futures = "0.3.30"
 async-stream = "0.3.5"
 reqwest = "0.11.27"
 lazy_static = "1.4.0"
-tonic = "0.11"
-prost = "0.12"
+tonic = "0.12.3"
+prost = "0.13.3"
 tonic-proto = { path = "libs/tonic-proto" }
 appflowy-ai-client = { path = "libs/appflowy-ai-client", default-features = false }
 pgvector = { version = "0.4", features = ["sqlx"] }
@@ -312,15 +312,25 @@ lto = false          # Disable Link-Time Optimization
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "bd61aebe485c2c15328c008154021a286c6da8c3" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "bd61aebe485c2c15328c008154021a286c6da8c3" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "bd61aebe485c2c15328c008154021a286c6da8c3" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "bd61aebe485c2c15328c008154021a286c6da8c3" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "bd61aebe485c2c15328c008154021a286c6da8c3" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "bd61aebe485c2c15328c008154021a286c6da8c3" }
-collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "bd61aebe485c2c15328c008154021a286c6da8c3" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "295508f3a8c13b39ad084ec34db423ece99fb182" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "295508f3a8c13b39ad084ec34db423ece99fb182" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "295508f3a8c13b39ad084ec34db423ece99fb182" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "295508f3a8c13b39ad084ec34db423ece99fb182" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "295508f3a8c13b39ad084ec34db423ece99fb182" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "295508f3a8c13b39ad084ec34db423ece99fb182" }
+collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "295508f3a8c13b39ad084ec34db423ece99fb182" }
 
 [features]
 history = []
 # Some AI test features are not available for self-hosted AppFlowy Cloud. Therefore, AI testing is disabled by default.
 ai-test-enabled = ["client-api-test/ai-test-enabled"]
+# Enable Debugging for Tokio Runtime with Tokio Console
+# Reference: https://github.com/tokio-rs/console
+# Steps to Enable and Use Tokio Console:
+# 1. Run your application with debugging enabled:
+#      RUST_BACKTRACE=1 RUST_LOG=trace cargo run --package xtask
+# 2. Install the Tokio Console CLI (if not already installed):
+#      cargo install --locked tokio-console
+# 3. Open a new terminal and start the Tokio Console:
+#      tokio-console
+tokio-runtime-profile = ["console-subscriber", "tokio/tracing"]

@@ -577,7 +577,7 @@ pub async fn insert_database_row(
   let mut db_txn = pg_pool.begin().await?;
   // insert row
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       workspace_uuid_str,
       &uid,
       CollabParams {
@@ -593,7 +593,7 @@ pub async fn insert_database_row(
 
   // update database
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       workspace_uuid_str,
       &uid,
       CollabParams {
@@ -686,7 +686,7 @@ pub async fn add_database_field(
 
   let mut pg_txn = pg_pool.begin().await?;
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       workspace_id,
       &uid,
       CollabParams {

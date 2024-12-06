@@ -48,7 +48,7 @@ use crate::biz::collab::folder_view::{
 };
 use crate::biz::collab::ops::{collab_from_doc_state, get_latest_workspace_database};
 use crate::biz::collab::{
-  folder_view::view_is_space,
+  folder_view::check_if_view_is_space,
   ops::{get_latest_collab_encoded, get_latest_collab_folder},
 };
 
@@ -1054,7 +1054,7 @@ pub async fn get_page_view_collab(
       .icon
       .as_ref()
       .map(|icon| to_dto_view_icon(icon.clone())),
-    is_space: view_is_space(&view),
+    is_space: check_if_view_is_space(&view),
     is_private: false,
     is_published: publish_view_ids.contains(view_id),
     layout: to_dto_view_layout(&view.layout),

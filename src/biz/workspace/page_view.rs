@@ -371,7 +371,7 @@ async fn prepare_default_board_encoded_database(
   let mut rows = vec![];
   let card_status_select_option_ids = SelectOptionIds::from(vec![default_option_id.clone()]);
   for i in 0..3 {
-    let card_status_cell_data = card_status_select_option_ids.to_cell_data(FieldType::SingleSelect);
+    let card_status_cell_data = card_status_select_option_ids.to_cell(FieldType::SingleSelect);
     let mut description_cell = new_cell_builder(FieldType::RichText);
     let description_text = format!("Card {}", i + 1);
     description_cell.insert(CELL_DATA.into(), description_text.into());

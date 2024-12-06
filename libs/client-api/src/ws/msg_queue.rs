@@ -86,7 +86,7 @@ async fn handle_tick(
   maximum_payload_size: usize,
   weak_seen_ids: Weak<Mutex<HashSet<SeenId>>>,
 ) -> (usize, usize) {
-  let (did_sent_seen_ids, messages_map) = next_batch_message(20, maximum_payload_size, queue).await;
+  let (did_sent_seen_ids, messages_map) = next_batch_message(10, maximum_payload_size, queue).await;
   if messages_map.is_empty() {
     return (0, 0);
   }

@@ -41,7 +41,7 @@ tonic.workspace = true
 tonic-proto.workspace = true
 futures = "0.3.30"
 log = "0.4.20"
-prost = "0.12.3"
+prost.workspace = true
 arc-swap = "1.7.1"
 
 [dev-dependencies]

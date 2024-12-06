@@ -15,7 +15,7 @@ use futures_util::stream::BoxStream;
 
 use sqlx::postgres::PgRow;
 use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::{ops::DerefMut, str::FromStr};
 use tracing::{error, instrument};
@@ -162,8 +162,6 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let mut lengths: Vec<i32> = Vec::with_capacity(len);
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
   let mut permission_ids: Vec<i32> = Vec::with_capacity(len);
-  let uids: Vec<i64> = vec![*uid; collab_params_list.len()];
-  let workspace_ids: Vec<Uuid> = vec![workspace_uuid; collab_params_list.len()];
 
   let permission_id: i32 = sqlx::query_scalar!(
     r#"
@@ -176,14 +174,46 @@ pub async fn insert_into_af_collab_bulk_for_user(
   .fetch_one(tx.deref_mut())
   .await?;
 
+  let mut visited = HashSet::with_capacity(collab_params_list.len());
   for params in collab_params_list {
-    let partition_key = partition_key_from_collab_type(&params.collab_type);
-    object_ids.push(Uuid::from_str(&params.object_id)?);
-    blobs.push(params.encoded_collab_v1.to_vec());
-    lengths.push(params.encoded_collab_v1.len() as i32);
-    partition_keys.push(partition_key);
-    permission_ids.push(permission_id);
+    let oid = Uuid::from_str(&params.object_id)?;
+    if visited.insert(oid) {
+      let partition_key = partition_key_from_collab_type(&params.collab_type);
+      object_ids.push(oid);
+      blobs.push(params.encoded_collab_v1.to_vec());
+      lengths.push(params.encoded_collab_v1.len() as i32);
+      partition_keys.push(partition_key);
+      permission_ids.push(permission_id);
+    }
   }
+
+  let uids: Vec<i64> = vec![*uid; object_ids.len()];
+  let workspace_ids: Vec<Uuid> = vec![workspace_uuid; object_ids.len()];
+  // Bulk insert into `af_collab` for the provided collab params
+  sqlx::query!(
+      r#"
+        INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
+        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::int[], $6::bigint[], $7::uuid[])
+        ON CONFLICT (oid, partition_key)
+        DO UPDATE SET blob = excluded.blob, len = excluded.len, encrypt = excluded.encrypt where af_collab.workspace_id = excluded.workspace_id
+      "#,
+      &object_ids,
+      &blobs,
+      &lengths,
+      &partition_keys,
+      &vec![encrypt; object_ids.len()],
+      &uids,
+      &workspace_ids
+    )
+      .execute(tx.deref_mut())
+      .await
+      .map_err(|err| {
+        AppError::Internal(anyhow!(
+            "Bulk insert/update into af_collab failed for uid: {}, error details: {:?}",
+            uid,
+            err
+        ))
+      })?;
 
   // Bulk insert into `af_collab_member` for the user and provided collab params
   sqlx::query!(
@@ -206,32 +236,6 @@ pub async fn insert_into_af_collab_bulk_for_user(
       err
     ))
   })?;
-
-  // Bulk insert into `af_collab` for the provided collab params
-  sqlx::query!(
-      r#"
-        INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
-        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::int[], $6::bigint[], $7::uuid[])
-        ON CONFLICT (oid, partition_key)
-        DO UPDATE SET blob = excluded.blob, len = excluded.len, encrypt = excluded.encrypt where af_collab.workspace_id = excluded.workspace_id
-      "#,
-      &object_ids,
-      &blobs,
-      &lengths,
-      &partition_keys,
-      &vec![encrypt; collab_params_list.len()],
-      &uids,
-      &workspace_ids
-    )
-      .execute(tx.deref_mut())
-      .await
-      .map_err(|err| {
-        AppError::Internal(anyhow!(
-            "Bulk insert/update into af_collab failed for uid: {}, error details: {:?}",
-            uid,
-            err
-        ))
-      })?;
 
   Ok(())
 }

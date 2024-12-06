@@ -7,6 +7,7 @@ use anyhow::{anyhow, Context};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
 use collab::entity::EncodedCollab;
+use collab_database::entity::FieldType;
 use collab_entity::CollabType;
 use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
@@ -2042,12 +2043,23 @@ async fn list_database_row_details_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
 
+  static SUPPORTED_FIELD_TYPES: &[FieldType] = &[
+    FieldType::RichText,
+    FieldType::Number,
+    FieldType::DateTime,
+    FieldType::SingleSelect,
+    FieldType::MultiSelect,
+    FieldType::Checkbox,
+    FieldType::URL,
+  ];
+
   let db_rows = biz::collab::ops::list_database_row_details(
     &state.collab_access_control_storage,
     uid,
     workspace_id,
     db_id,
     &row_ids,
+    SUPPORTED_FIELD_TYPES,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))

@@ -735,11 +735,21 @@ pub async fn list_database_row_details(
   workspace_uuid_str: String,
   database_uuid_str: String,
   row_ids: &[&str],
+  supported_field_types: &[FieldType],
 ) -> Result<Vec<AFDatabaseRowDetail>, AppError> {
   let (database_collab, db_body) =
     get_database_body(collab_storage, &workspace_uuid_str, &database_uuid_str).await?;
 
-  let all_fields = db_body.fields.get_all_fields(&database_collab.transact());
+  let all_fields: Vec<Field> = db_body
+    .fields
+    .get_all_fields(&database_collab.transact())
+    .into_iter()
+    .filter(|field| supported_field_types.contains(&FieldType::from(field.field_type)))
+    .collect();
+  if all_fields.is_empty() {
+    return Ok(vec![]);
+  }
+
   let type_option_reader_by_id = type_option_reader_by_id(&all_fields);
   let field_by_id = field_by_id_name_uniq(all_fields);
   let query_collabs: Vec<QueryCollab> = row_ids

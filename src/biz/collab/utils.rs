@@ -176,18 +176,6 @@ pub fn type_options_serde(
   result
 }
 
-pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
-  let collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    object_id,
-    DataSource::DocStateV1(doc_state),
-    vec![],
-    false,
-  )
-  .map_err(|e| AppError::Unhandled(e.to_string()))?;
-  Ok(collab)
-}
-
 pub async fn get_database_body(
   collab_storage: &CollabAccessControlStorage,
   workspace_uuid_str: &str,
@@ -263,5 +251,28 @@ pub async fn get_latest_collab(
         e
       ))
     })?;
+  Ok(collab)
+}
+
+pub async fn collab_to_bin(collab: Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
+  tokio::task::spawn_blocking(move || {
+    let bin = collab
+      .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+      .map_err(|e| AppError::Unhandled(e.to_string()))?
+      .encode_to_bytes()?;
+    Ok(bin)
+  })
+  .await?
+}
+
+pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
+  let collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    object_id,
+    DataSource::DocStateV1(doc_state),
+    vec![],
+    false,
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
   Ok(collab)
 }

@@ -1242,6 +1242,7 @@ pub async fn update_page_collab_data(
   let encode_collab = collab_access_control_storage
     .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
     .await?;
+
   let mut collab = collab_from_doc_state(encode_collab.doc_state.to_vec(), &object_id.to_string())?;
   appflowy_web_metrics.record_update_size_bytes(doc_state.len());
   let update = Update::decode_v1(doc_state).map_err(|e| {

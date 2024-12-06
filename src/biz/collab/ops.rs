@@ -6,6 +6,8 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
 use chrono::Utc;
 use collab::preclude::Collab;
+use collab_database::database::gen_field_id;
+use collab_database::database::gen_row_id;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
 use collab_database::fields::TypeOptions;
@@ -14,7 +16,6 @@ use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
 use collab_database::rows::RowDetail;
-use collab_database::views::FieldOrder;
 use collab_database::views::OrderObjectPosition;
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
@@ -484,8 +485,6 @@ pub async fn insert_database_row(
   uid: i64,
   cell_value_by_id: HashMap<String, serde_json::Value>,
 ) -> Result<String, AppError> {
-  let mut db_txn = pg_pool.begin().await?;
-
   // get database types and type options
   let (mut db_collab, db_body) =
     get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
@@ -498,15 +497,14 @@ pub async fn insert_database_row(
   let type_option_reader_by_id = type_option_writer_by_id(&all_fields);
   let field_by_name = field_by_name_uniq(all_fields);
 
-  let new_db_row_id = uuid::Uuid::new_v4().to_string();
-
+  let new_db_row_id = gen_row_id();
   let mut new_db_row_collab =
     Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
   let new_db_row_body = {
     let database_body = DatabaseRowBody::create(
-      new_db_row_id.clone().into(),
+      new_db_row_id.clone(),
       &mut new_db_row_collab,
-      Row::empty(new_db_row_id.clone().into(), database_uuid_str),
+      Row::empty(new_db_row_id.clone(), database_uuid_str),
     );
     let mut txn = new_db_row_collab.transact_mut();
     for (id, serde_val) in cell_value_by_id {
@@ -543,26 +541,10 @@ pub async fn insert_database_row(
   };
   let db_row_ec_v1 = encode_collab_v1_bytes(&new_db_row_collab, CollabType::DatabaseRow)?;
 
-  // insert row
-  collab_storage
-    .insert_new_collab_with_transaction(
-      workspace_uuid_str,
-      &uid,
-      CollabParams {
-        object_id: new_db_row_id.clone(),
-        encoded_collab_v1: db_row_ec_v1.into(),
-        collab_type: CollabType::DatabaseRow,
-        embeddings: None,
-      },
-      &mut db_txn,
-      "inserting new database row from server",
-    )
-    .await?;
-
   let ts_now = chrono::Utc::now().timestamp();
   let row_order = db_body
     .create_row(CreateRowParams {
-      id: new_db_row_id.clone().into(),
+      id: new_db_row_id.clone(),
       database_id: database_uuid_str.to_string(),
       cells: new_db_row_body
         .cells(&new_db_row_collab.transact())
@@ -592,6 +574,24 @@ pub async fn insert_database_row(
   };
   let updated_db_collab = encode_collab_v1_bytes(&db_collab, CollabType::Database)?;
 
+  let mut db_txn = pg_pool.begin().await?;
+  // insert row
+  collab_storage
+    .insert_new_collab_with_transaction(
+      workspace_uuid_str,
+      &uid,
+      CollabParams {
+        object_id: new_db_row_id.to_string(),
+        encoded_collab_v1: db_row_ec_v1.into(),
+        collab_type: CollabType::DatabaseRow,
+        embeddings: None,
+      },
+      &mut db_txn,
+      "inserting new database row from server",
+    )
+    .await?;
+
+  // update database
   collab_storage
     .insert_new_collab_with_transaction(
       workspace_uuid_str,
@@ -609,7 +609,7 @@ pub async fn insert_database_row(
 
   db_txn.commit().await?;
   broadcast_update(collab_storage, database_uuid_str, db_collab_update).await?;
-  Ok(new_db_row_id)
+  Ok(new_db_row_id.to_string())
 }
 
 pub async fn get_database_fields(
@@ -648,12 +648,7 @@ pub async fn add_database_field(
   let (mut db_collab, db_body) =
     get_database_body(collab_storage, workspace_id, database_id).await?;
 
-  let new_id = uuid::Uuid::new_v4()
-    .to_string()
-    .chars()
-    .take(6)
-    .collect::<String>();
-
+  let new_id = gen_field_id();
   let mut type_options = TypeOptions::new();
   let type_option_data = insert_field
     .type_option_data
@@ -678,19 +673,15 @@ pub async fn add_database_field(
 
   let db_collab_update = {
     let mut yrs_txn = db_collab.transact_mut();
-    db_body.fields.insert_field(&mut yrs_txn, new_field);
-    let mut db_views = db_body.views.get_all_views(&yrs_txn);
-    for db_view in db_views.iter_mut() {
-      db_view.field_orders.push(FieldOrder { id: new_id.clone() });
-    }
-    db_body.views.clear(&mut yrs_txn);
-    for view in db_views {
-      db_body.views.insert_view(&mut yrs_txn, view);
-    }
-
+    db_body.create_field(
+      &mut yrs_txn,
+      None,
+      new_field,
+      &OrderObjectPosition::End,
+      &HashMap::new(),
+    );
     yrs_txn.encode_update_v1()
   };
-
   let updated_db_collab = encode_collab_v1_bytes(&db_collab, CollabType::Database)?;
 
   let mut pg_txn = pg_pool.begin().await?;

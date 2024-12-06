@@ -3,7 +3,6 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 
 use anyhow::anyhow;
 use bytes::Bytes;
-use collab::preclude::Collab;
 use collab_database::database::gen_row_id;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -44,6 +43,7 @@ use yrs::{Map, MapRef};
 use crate::biz::collab::folder_view::to_folder_view_icon;
 use crate::biz::collab::folder_view::to_folder_view_layout;
 use crate::biz::collab::utils::collab_from_doc_state;
+use crate::biz::collab::utils::collab_to_bin;
 use crate::biz::collab::utils::get_latest_collab_encoded;
 
 use super::ops::broadcast_update;
@@ -1170,15 +1170,4 @@ fn add_to_view_info(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[Pu
       add_to_view_info(acc, child_views);
     }
   }
-}
-
-async fn collab_to_bin(collab: Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
-  tokio::task::spawn_blocking(move || {
-    let bin = collab
-      .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-      .encode_to_bytes()?;
-    Ok(bin)
-  })
-  .await?
 }

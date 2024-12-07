@@ -439,6 +439,10 @@ where
     queries: Vec<QueryCollab>,
     from_editing_collab: bool,
   ) -> HashMap<String, QueryCollabResult> {
+    if queries.is_empty() {
+      return HashMap::new();
+    }
+
     // Partition queries based on validation into valid queries and errors (with associated error messages).
     let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
       queries

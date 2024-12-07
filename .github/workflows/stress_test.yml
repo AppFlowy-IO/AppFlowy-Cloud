@@ -59,7 +59,6 @@ jobs:
           sed -i 's|APPFLOWY_WEB_URL=.*|APPFLOWY_WEB_URL=http://localhost:3000|' .env
         shell: bash
 
-
       - name: Run Docker-Compose
         run: |
           docker compose -f docker-compose-stress-test.yml up -d

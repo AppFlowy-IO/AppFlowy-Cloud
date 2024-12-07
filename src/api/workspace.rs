@@ -2043,15 +2043,7 @@ async fn list_database_row_details_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
 
-  static SUPPORTED_FIELD_TYPES: &[FieldType] = &[
-    FieldType::RichText,
-    FieldType::Number,
-    FieldType::DateTime,
-    FieldType::SingleSelect,
-    FieldType::MultiSelect,
-    FieldType::Checkbox,
-    FieldType::URL,
-  ];
+  static UNSUPPORTED_FIELD_TYPES: &[FieldType] = &[FieldType::Relation];
 
   let db_rows = biz::collab::ops::list_database_row_details(
     &state.collab_access_control_storage,
@@ -2059,7 +2051,7 @@ async fn list_database_row_details_handler(
     workspace_id,
     db_id,
     &row_ids,
-    SUPPORTED_FIELD_TYPES,
+    UNSUPPORTED_FIELD_TYPES,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))

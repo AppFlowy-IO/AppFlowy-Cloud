@@ -735,7 +735,7 @@ pub async fn list_database_row_details(
   workspace_uuid_str: String,
   database_uuid_str: String,
   row_ids: &[&str],
-  supported_field_types: &[FieldType],
+  unsupported_field_types: &[FieldType],
 ) -> Result<Vec<AFDatabaseRowDetail>, AppError> {
   let (database_collab, db_body) =
     get_database_body(collab_storage, &workspace_uuid_str, &database_uuid_str).await?;
@@ -744,7 +744,7 @@ pub async fn list_database_row_details(
     .fields
     .get_all_fields(&database_collab.transact())
     .into_iter()
-    .filter(|field| supported_field_types.contains(&FieldType::from(field.field_type)))
+    .filter(|field| !unsupported_field_types.contains(&FieldType::from(field.field_type)))
     .collect();
   if all_fields.is_empty() {
     return Ok(vec![]);

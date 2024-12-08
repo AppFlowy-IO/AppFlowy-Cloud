@@ -1,0 +1,48 @@
+name: AppFlowy-Cloud Stress Test
+
+on: [ pull_request, push ]
+
+concurrency:
+  group: stress-test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+env:
+  POSTGRES_HOST: localhost
+  REDIS_HOST: localhost
+  MINIO_HOST: localhost
+  GOTRUE_HOST: localhost
+  SQLX_OFFLINE: true
+  RUST_TOOLCHAIN: "1.78"
+
+jobs:
+  test:
+    name: Collab Stress Tests
+    runs-on: self-hosted-appflowy3
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Copy and Rename deploy.env to .env
+        run: cp deploy.env .env
+
+      - name: Replace Values in .env
+        run: |
+          sed -i '' 's|RUST_LOG=.*|RUST_LOG=debug|' .env
+        shell: bash
+
+      - name: Start Docker Compose Services
+        run: |
+          docker compose -f docker-compose-stress-test.yml up -d 
+          docker ps -a
+
+      - name: Install Prerequisites
+        run: |
+          brew install protobuf
+
+      - name: Run Server and Test
+        run: |
+          cargo run --package xtask -- --stress-test

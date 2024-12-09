@@ -431,13 +431,8 @@ async fn handle_message(
             // send one ack back to the client.
             if ack_response.is_none() {
               ack_response = Some(
-                CollabAck::new(
-                  message_origin.clone(),
-                  object_id.to_string(),
-                  msg_id,
-                  seq_num,
-                )
-                .with_payload(payload.unwrap_or_default()),
+                CollabAck::new(CollabOrigin::Server, object_id.to_string(), msg_id, seq_num)
+                  .with_payload(payload.unwrap_or_default()),
               );
             }
           },
@@ -453,14 +448,9 @@ async fn handle_message(
             };
 
             ack_response = Some(
-              CollabAck::new(
-                message_origin.clone(),
-                object_id.to_string(),
-                msg_id,
-                seq_num,
-              )
-              .with_code(code)
-              .with_payload(payload),
+              CollabAck::new(CollabOrigin::Server, object_id.to_string(), msg_id, seq_num)
+                .with_code(code)
+                .with_payload(payload),
             );
 
             break;

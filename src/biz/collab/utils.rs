@@ -12,8 +12,9 @@ use collab_database::fields::TypeOptionCellWriter;
 use collab_database::fields::TypeOptionData;
 use collab_database::fields::TypeOptions;
 use collab_database::rows::Cell;
-use collab_database::rows::Cells;
+use collab_database::rows::RowDetail;
 use collab_database::template::entity::CELL_DATA;
+use collab_database::template::timestamp_parse::TimestampCellData;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
@@ -26,41 +27,44 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-pub fn cell_data_to_serde(
-  cell_data: Cell,
-  field: &Field,
-  type_option_reader_by_id: &HashMap<String, Box<dyn TypeOptionCellReader>>,
-) -> serde_json::Value {
-  match type_option_reader_by_id.get(&field.id) {
-    Some(tor) => tor.json_cell(&cell_data),
-    None => {
-      tracing::error!("Failed to get type option reader by id: {}", field.id);
-      serde_json::Value::Null
-    },
-  }
-}
-
-pub fn get_row_details_by_id(
-  cells: Cells,
+pub fn get_row_details_serde(
+  row_detail: RowDetail,
   field_by_id_name_uniq: &HashMap<String, Field>,
   type_option_reader_by_id: &HashMap<String, Box<dyn TypeOptionCellReader>>,
 ) -> HashMap<String, HashMap<String, serde_json::Value>> {
-  let mut row_details: HashMap<String, HashMap<String, serde_json::Value>> =
+  let mut cells = row_detail.row.cells;
+  let mut row_details_serde: HashMap<String, HashMap<String, serde_json::Value>> =
     HashMap::with_capacity(cells.len());
-
   for (field_id, field) in field_by_id_name_uniq {
-    let cell: Cell = match cells.get(field_id) {
+    let cell: Cell = match cells.remove(field_id) {
       Some(cell) => cell.clone(),
-      None => Cell::new(),
+      None => {
+        let field_type = FieldType::from(field.field_type);
+        match field_type {
+          FieldType::CreatedTime => {
+            TimestampCellData::new(Some(row_detail.row.created_at)).to_cell(field_type)
+          },
+          FieldType::LastEditedTime => {
+            TimestampCellData::new(Some(row_detail.row.modified_at)).to_cell(field_type)
+          },
+          _ => Cell::new(),
+        }
+      },
     };
-    let cell_value = cell_data_to_serde(cell, field, type_option_reader_by_id);
-    row_details.insert(
+    let cell_value = match type_option_reader_by_id.get(&field.id) {
+      Some(tor) => tor.json_cell(&cell),
+      None => {
+        tracing::error!("Failed to get type option reader by id: {}", field.id);
+        serde_json::Value::Null
+      },
+    };
+    row_details_serde.insert(
       field.name.clone(),
       HashMap::from([(CELL_DATA.to_string(), cell_value)]),
     );
   }
 
-  row_details
+  row_details_serde
 }
 
 /// create a map of field name to field

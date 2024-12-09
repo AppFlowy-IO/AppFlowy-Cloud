@@ -73,7 +73,7 @@ use super::utils::field_by_id_name_uniq;
 use super::utils::get_database_body;
 use super::utils::get_latest_collab;
 use super::utils::get_latest_collab_encoded;
-use super::utils::get_row_details_by_id;
+use super::utils::get_row_details_serde;
 use super::utils::type_option_reader_by_id;
 use super::utils::type_option_writer_by_id;
 use super::utils::type_options_serde;
@@ -787,12 +787,7 @@ pub async fn list_database_row_details(
             return None;
           },
         };
-
-        let cells = get_row_details_by_id(
-          row_detail.row.cells,
-          &field_by_id,
-          &type_option_reader_by_id,
-        );
+        let cells = get_row_details_serde(row_detail, &field_by_id, &type_option_reader_by_id);
         Some(AFDatabaseRowDetail { id, cells })
       },
       QueryCollabResult::Failed { error } => {

@@ -110,22 +110,20 @@ where
     &self,
     connected_user: RealtimeUser,
     conn_sink: impl RealtimeClientWebsocketSink,
-  ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
+  ) -> Result<(), RealtimeError> {
     let new_client_router = ClientMessageRouter::new(conn_sink);
-    let group_manager = self.group_manager.clone();
-    let connect_state = self.connect_state.clone();
-    let metrics_calculate = self.metrics.clone();
-
-    Box::pin(async move {
-      if let Some(old_user) = connect_state.handle_user_connect(connected_user, new_client_router) {
-        // Remove the old user from all collaboration groups.
-        group_manager.remove_user(&old_user).await;
-      }
-      metrics_calculate
-        .connected_users
-        .set(connect_state.number_of_connected_users() as i64);
-      Ok(())
-    })
+    if let Some(old_user) = self
+      .connect_state
+      .handle_user_connect(connected_user, new_client_router)
+    {
+      // Remove the old user from all collaboration groups.
+      self.group_manager.remove_user(&old_user);
+    }
+    self
+      .metrics
+      .connected_users
+      .set(self.connect_state.number_of_connected_users() as i64);
+    Ok(())
   }
 
   /// Handles a user's disconnection from the collaboration server.
@@ -135,27 +133,19 @@ where
   ///    - If yes, proceeds with removal.
   ///    - If not, exits without action.
   /// 2. Removes the user from collaboration groups and client streams.
-  pub fn handle_disconnect(
-    &self,
-    disconnect_user: RealtimeUser,
-  ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
-    let group_manager = self.group_manager.clone();
-    let connect_state = self.connect_state.clone();
-    let metrics_calculate = self.metrics.clone();
+  pub fn handle_disconnect(&self, disconnect_user: RealtimeUser) -> Result<(), RealtimeError> {
+    trace!("[realtime]: disconnect => {}", disconnect_user);
+    let was_removed = self.connect_state.handle_user_disconnect(&disconnect_user);
+    if was_removed.is_some() {
+      self
+        .metrics
+        .connected_users
+        .set(self.connect_state.number_of_connected_users() as i64);
 
-    Box::pin(async move {
-      trace!("[realtime]: disconnect => {}", disconnect_user);
-      let was_removed = connect_state.handle_user_disconnect(&disconnect_user);
-      if was_removed.is_some() {
-        metrics_calculate
-          .connected_users
-          .set(connect_state.number_of_connected_users() as i64);
+      self.group_manager.remove_user(&disconnect_user);
+    }
 
-        group_manager.remove_user(&disconnect_user).await;
-      }
-
-      Ok(())
-    })
+    Ok(())
   }
 
   #[inline]
@@ -281,7 +271,7 @@ fn spawn_period_check_inactive_group<S>(
     loop {
       interval.tick().await;
       if let Some(groups) = weak_groups.upgrade() {
-        let inactive_group_ids = groups.get_inactive_groups().await;
+        let inactive_group_ids = groups.get_inactive_groups();
         for id in inactive_group_ids {
           cloned_group_sender_by_object_id.remove(&id);
         }

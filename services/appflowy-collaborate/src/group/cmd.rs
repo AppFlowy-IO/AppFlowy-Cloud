@@ -145,10 +145,10 @@ where
       return Ok(());
     }
 
-    let is_group_exist = self.group_manager.contains_group(&object_id).await;
+    let is_group_exist = self.group_manager.contains_group(&object_id);
     if is_group_exist {
       // subscribe the user to the group. then the user will receive the changes from the group
-      let is_user_subscribed = self.group_manager.contains_user(&object_id, user).await;
+      let is_user_subscribed = self.group_manager.contains_user(&object_id, user);
       if !is_user_subscribed {
         // safety: messages is not empty because we have checked it before
         let first_message = messages.first().unwrap();
@@ -209,14 +209,12 @@ where
     if let Some(group) = self.group_manager.get_group(&object_id).await {
       let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
       let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
-      group
-        .subscribe(
-          &server_rt_user,
-          CollabOrigin::Server,
-          collab_message_sender,
-          message_by_oid_receiver,
-        )
-        .await;
+      group.subscribe(
+        &server_rt_user,
+        CollabOrigin::Server,
+        collab_message_sender,
+        message_by_oid_receiver,
+      );
       let message = HashMap::from([(object_id.clone(), messages)]);
       if let Err(err) = message_by_oid_sender.try_send(message) {
         tracing::error!(

@@ -63,7 +63,7 @@ impl<S> Handler<Connect> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
 {
-  type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+  type Result = anyhow::Result<(), RealtimeError>;
 
   fn handle(&mut self, new_conn: Connect, _ctx: &mut Context<Self>) -> Self::Result {
     let conn_sink = RealtimeClientWebsocketSinkImpl(new_conn.socket);
@@ -75,7 +75,7 @@ impl<S> Handler<Disconnect> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
 {
-  type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+  type Result = anyhow::Result<(), RealtimeError>;
   fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) -> Self::Result {
     self.handle_disconnect(msg.user)
   }

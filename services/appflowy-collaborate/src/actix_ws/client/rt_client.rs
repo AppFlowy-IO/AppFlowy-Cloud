@@ -28,8 +28,8 @@ pub type HandlerResult = ResponseFuture<anyhow::Result<(), RealtimeError>>;
 pub trait RealtimeServer:
   Actor<Context = Context<Self>>
   + Handler<ClientMessage, Result = HandlerResult>
-  + Handler<Connect, Result = HandlerResult>
-  + Handler<Disconnect, Result = HandlerResult>
+  + Handler<Connect, Result = anyhow::Result<(), RealtimeError>>
+  + Handler<Disconnect, Result = anyhow::Result<(), RealtimeError>>
 {
 }
 

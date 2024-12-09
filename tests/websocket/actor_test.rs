@@ -3,6 +3,7 @@ use appflowy_collaborate::actix_ws::client::rt_client::{
   HandlerResult, RealtimeClient, RealtimeServer,
 };
 use appflowy_collaborate::actix_ws::entities::{ClientMessage, Connect, Disconnect};
+use appflowy_collaborate::error::RealtimeError;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::RealtimeMessage;
 use semver::Version;
@@ -161,18 +162,18 @@ impl Handler<ClientMessage> for MockRealtimeServer {
 }
 
 impl Handler<Connect> for MockRealtimeServer {
-  type Result = HandlerResult;
+  type Result = anyhow::Result<(), RealtimeError>;
 
   fn handle(&mut self, _msg: Connect, _ctx: &mut Self::Context) -> Self::Result {
-    Box::pin(async { Ok(()) })
+    Ok(())
   }
 }
 
 impl Handler<Disconnect> for MockRealtimeServer {
-  type Result = HandlerResult;
+  type Result = anyhow::Result<(), RealtimeError>;
 
   fn handle(&mut self, _msg: Disconnect, _ctx: &mut Self::Context) -> Self::Result {
-    Box::pin(async { Ok(()) })
+    Ok(())
   }
 }
 

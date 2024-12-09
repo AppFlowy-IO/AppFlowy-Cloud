@@ -50,7 +50,7 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  create_page, create_space, get_page_view_collab, move_page_to_trash,
+  create_database_view, create_page, create_space, get_page_view_collab, move_page_to_trash,
   restore_all_pages_from_trash, restore_page_from_trash, update_page, update_page_collab_data,
   update_space,
 };
@@ -148,6 +148,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/restore-from-trash")
         .route(web::post().to(restore_page_from_trash_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/database-view")
+        .route(web::post().to(post_page_database_view_handler)),
     )
     .service(
       web::resource("/{workspace_id}/restore-all-pages-from-trash")
@@ -1040,6 +1044,27 @@ async fn restore_all_pages_from_trash_handler(
     &state.collab_access_control_storage,
     uid,
     workspace_uuid,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn post_page_database_view_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<CreatePageDatabaseViewParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  create_database_view(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_uuid,
+    &view_id,
+    &payload.layout,
+    payload.name.as_deref(),
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

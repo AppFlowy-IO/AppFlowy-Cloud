@@ -518,7 +518,6 @@ pub async fn insert_database_row(
     );
     let mut txn = new_db_row_collab.transact_mut();
 
-
     // Create a OnceCell to hold the timestamp
     let timestamp_cell: OnceCell<String> = OnceCell::new();
     let get_timestamp = || timestamp_cell.get_or_init(|| Utc::now().timestamp().to_string());

@@ -117,8 +117,7 @@ pub fn type_option_writer_by_id(
     let field_id: String = field.id.clone();
     let type_option_reader: Box<dyn TypeOptionCellWriter> = {
       let field_type: &FieldType = &FieldType::from(field.field_type);
-      let type_option_data: TypeOptionData = match field.get_any_type_option(&field_type.type_id())
-      {
+      let type_option_data: TypeOptionData = match field.get_any_type_option(field_type.type_id()) {
         Some(tod) => tod.clone(),
         None => HashMap::new(),
       };
@@ -139,8 +138,7 @@ pub fn type_option_reader_by_id(
     let field_id: String = field.id.clone();
     let type_option_reader: Box<dyn TypeOptionCellReader> = {
       let field_type: &FieldType = &FieldType::from(field.field_type);
-      let type_option_data: TypeOptionData = match field.get_any_type_option(&field_type.type_id())
-      {
+      let type_option_data: TypeOptionData = match field.get_any_type_option(field_type.type_id()) {
         Some(tod) => tod.clone(),
         None => HashMap::new(),
       };

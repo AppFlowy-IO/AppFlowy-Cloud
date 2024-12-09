@@ -2040,6 +2040,21 @@ async fn list_database_row_details_handler(
   let list_db_row_query = param.into_inner();
   let row_ids = list_db_row_query.into_ids();
 
+  if let Err(e) = Uuid::parse_str(&workspace_id) {
+    return Err(
+      AppError::InvalidRequest(format!("invalid workspace id `{}`: {}", db_id, e)).into(),
+    );
+  }
+  if let Err(e) = Uuid::parse_str(&db_id) {
+    return Err(AppError::InvalidRequest(format!("invalid database id `{}`: {}", db_id, e)).into());
+  }
+
+  for id in row_ids.iter() {
+    if let Err(e) = Uuid::parse_str(id) {
+      return Err(AppError::InvalidRequest(format!("invalid row id `{}`: {}", id, e)).into());
+    }
+  }
+
   state
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)

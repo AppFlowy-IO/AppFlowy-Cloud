@@ -129,6 +129,17 @@ pub fn workspace_scope() -> Scope {
       web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
         .route(web::post().to(post_web_update_handler)),
     )
+    .service(
+      web::resource("/{workspace_id}/collab/{object_id}/member")
+        .route(web::post().to(add_collab_member_handler))
+        .route(web::get().to(get_collab_member_handler))
+        .route(web::put().to(update_collab_member_handler))
+        .route(web::delete().to(remove_collab_member_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/collab/{object_id}/info")
+        .route(web::get().to(get_collab_info_handler)),
+    )
     .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
       web::resource("/{workspace_id}/space/{view_id}").route(web::patch().to(update_space_handler)),
@@ -168,13 +179,6 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/{object_id}/snapshot/list")
         .route(web::get().to(get_all_collab_snapshot_list_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/collab/{object_id}/member")
-        .route(web::post().to(add_collab_member_handler))
-        .route(web::get().to(get_collab_member_handler))
-        .route(web::put().to(update_collab_member_handler))
-        .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
       web::resource("/published/{publish_namespace}")
@@ -1318,7 +1322,7 @@ async fn update_collab_member_handler(
 }
 #[instrument(level = "debug", skip(state, payload), err)]
 async fn get_collab_member_handler(
-  payload: Json<CollabMemberIdentify>,
+  payload: Json<WorkspaceCollabIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabMember>>> {
   let payload = payload.into_inner();
@@ -1328,7 +1332,7 @@ async fn get_collab_member_handler(
 
 #[instrument(skip(state, payload), err)]
 async fn remove_collab_member_handler(
-  payload: Json<CollabMemberIdentify>,
+  payload: Json<WorkspaceCollabIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
@@ -2060,4 +2064,24 @@ async fn fetch_embeddings(
   }
 
   Ok(())
+}
+
+#[instrument(level = "debug", skip(state, payload), err)]
+async fn get_collab_info_handler(
+  payload: Json<WorkspaceCollabIdentify>,
+  query: web::Query<CollabTypeParam>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<AFCollabInfo>>> {
+  let payload = payload.into_inner();
+  let collab_type = query.into_inner().collab_type;
+  let info = database::collab::get_collab_info(&state.pg_pool, &payload.object_id, collab_type)
+    .await
+    .map_err(AppResponseError::from)?
+    .ok_or_else(|| {
+      AppError::RecordNotFound(format!(
+        "Collab with object_id {} not found",
+        payload.object_id
+      ))
+    })?;
+  Ok(Json(AppResponse::Ok().with_data(info)))
 }

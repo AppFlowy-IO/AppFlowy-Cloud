@@ -48,8 +48,8 @@ use validator::Validate;
 
 use access_control::collab::CollabAccessControl;
 use database_entity::dto::{
-  AFCollabMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
-  UpdateCollabMemberParams,
+  AFCollabMember, InsertCollabMemberParams, QueryCollabMembers, UpdateCollabMemberParams,
+  WorkspaceCollabIdentify,
 };
 
 use super::folder_view::collab_folder_to_folder_view;
@@ -140,7 +140,7 @@ pub async fn upsert_collab_member(
 
 pub async fn get_collab_member(
   pg_pool: &PgPool,
-  params: &CollabMemberIdentify,
+  params: &WorkspaceCollabIdentify,
 ) -> Result<AFCollabMember, AppError> {
   params.validate()?;
   let collab_member =
@@ -150,7 +150,7 @@ pub async fn get_collab_member(
 
 pub async fn delete_collab_member(
   pg_pool: &PgPool,
-  params: &CollabMemberIdentify,
+  params: &WorkspaceCollabIdentify,
   collab_access_control: Arc<dyn CollabAccessControl>,
 ) -> Result<(), AppError> {
   params.validate()?;

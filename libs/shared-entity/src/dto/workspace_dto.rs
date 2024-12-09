@@ -104,7 +104,7 @@ pub struct PatchWorkspaceParam {
   pub workspace_icon: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CollabTypeParam {
   pub collab_type: CollabType,
 }

@@ -379,7 +379,7 @@ pub struct InsertCollabMemberParams {
 pub type UpdateCollabMemberParams = InsertCollabMemberParams;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct CollabMemberIdentify {
+pub struct WorkspaceCollabIdentify {
   pub uid: i64,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
@@ -425,6 +425,13 @@ pub struct AFCollabMember {
   pub uid: i64,
   pub oid: String,
   pub permission: AFPermission,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AFCollabInfo {
+  pub object_id: String,
+  /// The timestamp when the object embeddings updated
+  pub embedding_index_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

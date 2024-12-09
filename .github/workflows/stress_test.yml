@@ -10,7 +10,6 @@ env:
   POSTGRES_HOST: localhost
   REDIS_HOST: localhost
   MINIO_HOST: localhost
-  GOTRUE_HOST: localhost
   SQLX_OFFLINE: true
   RUST_TOOLCHAIN: "1.78"
 
@@ -32,6 +31,8 @@ jobs:
       - name: Replace Values in .env
         run: |
           sed -i '' 's|RUST_LOG=.*|RUST_LOG=debug|' .env
+          sed -i '' 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=http://localhost:9999|' .env
+          sed -i '' 's|APPFLOWY_GOTRUE_BASE_URL=.*|APPFLOWY_GOTRUE_BASE_URL=http://localhost:9999|' .env
         shell: bash
 
       - name: Start Docker Compose Services

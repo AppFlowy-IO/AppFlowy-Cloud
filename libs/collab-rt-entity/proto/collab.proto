@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package collab_proto;
+
+enum PayloadCompressionType {
+    NONE = 0;
+    ZSTD = 1;
+}
+
+message CreateCollabEmbedding {
+    string object_id = 1;
+    int32 collab_type = 2;
+    PayloadCompressionType payload_compression = 3;
+    bytes payload = 4;
+}

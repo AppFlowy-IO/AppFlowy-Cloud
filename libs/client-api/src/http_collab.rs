@@ -1,3 +1,4 @@
+use crate::entity::CollabType;
 use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, brotli_compress, Client};
 use app_error::AppError;
@@ -8,7 +9,7 @@ use client_api_entity::workspace_dto::{
   ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
 };
 use client_api_entity::{
-  BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
+  AFCollabInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
   DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
 };
 use collab_rt_entity::HttpRealtimeMessage;
@@ -354,6 +355,28 @@ impl Client {
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_collab_info(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> Result<AFCollabInfo, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}/info",
+      self.base_url, workspace_id, object_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .query(&CollabTypeParam { collab_type })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<AFCollabInfo>::from_response(resp)
+      .await?
+      .into_data()
   }
 }
 

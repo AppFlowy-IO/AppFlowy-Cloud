@@ -31,6 +31,13 @@ pub trait Indexer: Send + Sync {
     collab: &Collab,
   ) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
 
+  async fn embedding_text(
+    &self,
+    object_id: String,
+    content: String,
+    collab_type: CollabType,
+  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
+
   async fn embeddings(
     &self,
     params: Vec<AFCollabEmbeddingParams>,
@@ -90,8 +97,8 @@ impl IndexerProvider {
   /// Returns indexer for a specific type of [Collab] object.
   /// If collab of given type is not supported or workspace it belongs to has indexing disabled,
   /// returns `None`.
-  pub fn indexer_for(&self, collab_type: CollabType) -> Option<Arc<dyn Indexer>> {
-    self.indexer_cache.get(&collab_type).cloned()
+  pub fn indexer_for(&self, collab_type: &CollabType) -> Option<Arc<dyn Indexer>> {
+    self.indexer_cache.get(collab_type).cloned()
   }
 
   fn get_unindexed_collabs(
@@ -179,7 +186,7 @@ impl IndexerProvider {
     let collab_type = params.collab_type.clone();
     let data = params.encoded_collab_v1.clone();
 
-    if let Some(indexer) = self.indexer_for(collab_type) {
+    if let Some(indexer) = self.indexer_for(&collab_type) {
       let encoded_collab = tokio::task::spawn_blocking(move || {
         let encode_collab = EncodedCollab::decode_from_bytes(&data)?;
         Ok::<_, AppError>(encode_collab)

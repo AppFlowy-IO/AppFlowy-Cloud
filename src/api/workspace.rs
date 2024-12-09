@@ -12,29 +12,16 @@ use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sqlx::types::uuid;
+use std::io::Cursor;
+use std::os::macos::raw::stat;
+use std::sync::Arc;
 use std::time::Instant;
 
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, event, instrument, trace};
+use tracing::{error, event, instrument, trace, warn};
 use uuid::Uuid;
 use validator::Validate;
-
-use app_error::AppError;
-use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
-use appflowy_collaborate::indexer::IndexerProvider;
-use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
-use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
-use collab_rt_entity::RealtimeMessage;
-use collab_rt_protocol::validate_encode_collab;
-use database::collab::{CollabStorage, GetCollabOrigin};
-use database::user::select_uid_from_email;
-use database_entity::dto::PublishCollabItem;
-use database_entity::dto::PublishInfo;
-use database_entity::dto::*;
-use shared_entity::dto::workspace_dto::*;
-use shared_entity::response::AppResponseError;
-use shared_entity::response::{AppResponse, JsonAppResponse};
 
 use crate::api::util::PayloadReader;
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
@@ -59,6 +46,22 @@ use crate::domain::compression::{
   blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
 };
 use crate::state::AppState;
+use app_error::AppError;
+use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
+use appflowy_collaborate::indexer::{Indexer, IndexerProvider};
+use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
+use collab_rt_entity::collab_proto::{CreateCollabEmbedding, PayloadCompressionType};
+use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
+use collab_rt_entity::RealtimeMessage;
+use collab_rt_protocol::validate_encode_collab;
+use database::collab::{CollabStorage, GetCollabOrigin};
+use database::user::select_uid_from_email;
+use database_entity::dto::PublishCollabItem;
+use database_entity::dto::PublishInfo;
+use database_entity::dto::*;
+use shared_entity::dto::workspace_dto::*;
+use shared_entity::response::AppResponseError;
+use shared_entity::response::{AppResponse, JsonAppResponse};
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
@@ -139,6 +142,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/collab/{object_id}/info")
         .route(web::get().to(get_collab_info_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/collab/{object_id}/embeddings")
+        .route(web::post().to(create_collab_embeddings_handler)),
     )
     .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
@@ -1200,10 +1207,7 @@ async fn update_collab_handler(
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
   let (mut params, workspace_id) = create_params.split();
-  if let Some(indexer) = state
-    .indexer_provider
-    .indexer_for(params.collab_type.clone())
-  {
+  if let Some(indexer) = state.indexer_provider.indexer_for(&params.collab_type) {
     if state
       .indexer_provider
       .can_index_workspace(&workspace_id)
@@ -2084,4 +2088,44 @@ async fn get_collab_info_handler(
       ))
     })?;
   Ok(Json(AppResponse::Ok().with_data(info)))
+}
+
+#[instrument(level = "debug", skip(state, payload), err)]
+async fn create_collab_embeddings_handler(
+  body: Bytes,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let params = CreateCollabEmbedding::decode(&mut Cursor::new(body)).map_err(|err| {
+    AppError::InvalidRequest(format!("Failed to parse CreateCollabEmbedding: {}", err))
+  })?;
+
+  if params.payload.is_empty() {
+    return Err(AppError::InvalidRequest("Payload is empty".to_string()).into());
+  }
+  
+  let collab_type = CollabType::from(params.collab_type);
+  match state.indexer_provider.indexer_for(&collab_type) {
+    None => warn!("No indexer found for collab type: {:?}", collab_type),
+    Some(indexer) => {
+      let compression_type =
+        PayloadCompressionType::try_from(params.payload_compression).map_err(|err| {
+          AppError::InvalidRequest(format!("Failed to parse PayloadCompressionType: {}", err))
+        })?;
+
+      let payload = match compression_type {
+        PayloadCompressionType::None => params.payload,
+        PayloadCompressionType::Zstd => zstd::decode_all(&params.payload).map_err(|err| {
+          AppError::InvalidRequest(format!("Failed to decompress payload: {}", err))
+        })?,
+      };
+
+      let text = String::from_utf8(payload)
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse payload: {}", err)))?;
+      indexer
+        .embedding_text(params.object_id, text, collab_type)
+        .await?;
+    },
+  }
+
+  Ok(Json(AppResponse::Ok()))
 }

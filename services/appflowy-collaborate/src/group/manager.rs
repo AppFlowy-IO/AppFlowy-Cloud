@@ -158,7 +158,7 @@ where
       collab_type
     );
 
-    let mut indexer = self.indexer_provider.indexer_for(collab_type.clone());
+    let mut indexer = self.indexer_provider.indexer_for(&collab_type);
     if indexer.is_some()
       && !self
         .indexer_provider

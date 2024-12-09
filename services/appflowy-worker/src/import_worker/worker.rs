@@ -44,7 +44,6 @@ use redis::{AsyncCommands, RedisResult, Value};
 use database::pg_row::AFImportTask;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
-use sqlx::types::chrono;
 use sqlx::types::chrono::{DateTime, TimeZone, Utc};
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
@@ -912,7 +911,6 @@ async fn process_unzip_file(
   let mut collab_params_list = vec![];
   let mut database_view_ids_by_database_id: HashMap<String, Vec<String>> = HashMap::new();
   let mut orphan_view_ids = HashSet::new();
-  let timestamp = chrono::Utc::now().timestamp();
 
   // 3. Collect all collabs and resources
   let mut stream = imported.into_collab_stream().await;

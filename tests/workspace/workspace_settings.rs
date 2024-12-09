@@ -67,6 +67,7 @@ async fn invite_user_to_workspace(
       vec![WorkspaceMemberInvitation {
         email: member_email.to_string(),
         role: AFRole::Member,
+        wait_email_send: true,
       }],
     )
     .await

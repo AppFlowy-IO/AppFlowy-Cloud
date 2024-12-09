@@ -30,6 +30,7 @@ async fn invite_workspace_crud() {
       vec![WorkspaceMemberInvitation {
         email: bob.email.clone(),
         role: AFRole::Member,
+        wait_email_send: true,
       }],
     )
     .await

@@ -418,7 +418,7 @@ pub async fn invite_workspace_members(
           workspace_id,
           inviter,
           invitation.email.as_str(),
-          invitation.role,
+          &invitation.role,
         )
         .await?;
         invite_id
@@ -459,7 +459,7 @@ pub async fn invite_workspace_members(
 
     // send email can be slow, so send email in background
     let cloned_mailer = mailer.clone();
-    tokio::spawn(async move {
+    let email_sent = tokio::spawn(async move {
       if let Err(err) = cloned_mailer
         .send_workspace_invite(
           &invitation.email,
@@ -475,8 +475,13 @@ pub async fn invite_workspace_members(
         .await
       {
         tracing::error!("Failed to send workspace invite email: {:?}", err);
+        return Err(err);
       };
+      return Ok(());
     });
+    if invitation.wait_email_send {
+      email_sent.await??;
+    }
   }
 
   txn

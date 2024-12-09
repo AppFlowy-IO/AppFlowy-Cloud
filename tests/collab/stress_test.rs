@@ -11,7 +11,7 @@ use client_api_test::{assert_server_collab, TestClient};
 use database_entity::dto::AFRole;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn run_multiple_text_edits() {
+async fn stress_test_run_multiple_text_edits() {
   const READER_COUNT: usize = 1;
   let test_scenario = Arc::new(TestScenario::open(
     "./tests/collab/asset/automerge-paper.json.gz",

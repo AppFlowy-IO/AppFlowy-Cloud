@@ -1,4 +1,3 @@
-use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -10,9 +9,7 @@ use collab::preclude::Collab;
 use collab_database::database::gen_field_id;
 use collab_database::database::gen_row_id;
 use collab_database::entity::FieldType;
-use collab_database::fields::timestamp_type_option::TimestampTypeOption;
 use collab_database::fields::Field;
-use collab_database::fields::TypeOptionCellWriter;
 use collab_database::fields::TypeOptions;
 use collab_database::rows::Cell;
 use collab_database::rows::CreateRowParams;
@@ -511,37 +508,19 @@ pub async fn insert_database_row(
     Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
 
   let new_db_row_body = {
-    let database_body = DatabaseRowBody::create(
+    let db_row_body = DatabaseRowBody::create(
       new_db_row_id.clone(),
       &mut new_db_row_collab,
       Row::empty(new_db_row_id.clone(), database_uuid_str),
     );
     let mut txn = new_db_row_collab.transact_mut();
 
-    // Create a OnceCell to hold the timestamp
-    let timestamp_cell: OnceCell<String> = OnceCell::new();
-    let get_timestamp = || timestamp_cell.get_or_init(|| Utc::now().timestamp().to_string());
-
-    // Insert `created_at` and `modified_at` fields (if any)
-    for (field_id, field) in &field_by_name {
-      let field_type = FieldType::from(field.field_type);
-      match field_type {
-        FieldType::LastEditedTime | FieldType::CreatedTime => {
-          let new_cell = match type_option_reader_by_id.get(field_id.as_str()) {
-            Some(cell_writer) => cell_writer.convert_json_to_cell(get_timestamp().as_str().into()),
-            None => {
-              TimestampTypeOption::default().convert_json_to_cell(get_timestamp().as_str().into())
-            },
-          };
-          database_body.update(&mut txn, |row_update| {
-            row_update.update_cells(|cells_update| {
-              cells_update.insert_cell(&field.id, new_cell);
-            });
-          });
-        },
-        _ => {},
-      }
-    }
+    // set last_modified and created_at
+    db_row_body.update(&mut txn, |row_update| {
+      row_update
+        .set_last_modified(Utc::now().timestamp())
+        .set_created_at(Utc::now().timestamp());
+    });
 
     for (id, serde_val) in cell_value_by_id {
       let field = match field_by_id.get(&id) {
@@ -567,13 +546,13 @@ pub async fn insert_database_row(
         },
       };
       let new_cell: Cell = cell_writer.convert_json_to_cell(serde_val);
-      database_body.update(&mut txn, |row_update| {
+      db_row_body.update(&mut txn, |row_update| {
         row_update.update_cells(|cells_update| {
           cells_update.insert_cell(&field.id, new_cell);
         });
       });
     }
-    database_body
+    db_row_body
   };
 
   // Create new row order

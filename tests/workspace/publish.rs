@@ -23,6 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
+use uuid::Uuid;
 
 use crate::workspace::published_data::{self};
 
@@ -973,7 +974,7 @@ async fn duplicate_to_workspace_references() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &doc_2_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -983,7 +984,12 @@ async fn duplicate_to_workspace_references() {
       .await
       .unwrap();
 
-    let doc_2_fv = fv.children.into_iter().find(|v| v.name == "doc2").unwrap();
+    let doc_2_fv = fv.children[0]
+      .children
+      .iter()
+      .find(|v| v.name == "doc2")
+      .unwrap()
+      .clone();
     assert_ne!(doc_2_fv.view_id, doc_1_view_id.to_string());
 
     let doc_1_fv = doc_2_fv
@@ -1036,6 +1042,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
   {
     let mut client_2 = TestClient::new_user().await;
     let workspace_id_2 = client_2.workspace_id().await;
+    let workspace_uuid_2 = Uuid::parse_str(&workspace_id_2).unwrap();
 
     // Open workspace to trigger group creation
     client_2
@@ -1059,7 +1066,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &doc_3_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1069,7 +1076,12 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
-      let doc_3_fv = fv.children.into_iter().find(|v| v.name == "doc3").unwrap();
+      let doc_3_fv = fv.children[0]
+        .children
+        .iter()
+        .find(|v| v.name == "doc3")
+        .unwrap()
+        .clone();
       let grid1_fv = doc_3_fv
         .children
         .into_iter()
@@ -1100,13 +1112,20 @@ async fn duplicate_to_workspace_doc_inline_database() {
     )
     .unwrap();
 
-    let folder_view =
-      collab_folder_to_folder_view(&workspace_id_2, &folder, 5, &HashSet::default()).unwrap();
-    let doc_3_fv = folder_view
+    let folder_view = collab_folder_to_folder_view(
+      workspace_uuid_2,
+      &workspace_id_2,
+      &folder,
+      5,
+      &HashSet::default(),
+    )
+    .unwrap();
+    let doc_3_fv = folder_view.children[0]
       .children
-      .into_iter()
+      .iter()
       .find(|v| v.name == "doc3")
-      .unwrap();
+      .unwrap()
+      .clone();
     assert_ne!(doc_3_fv.view_id, doc_3_view_id.to_string());
 
     let grid1_fv = doc_3_fv
@@ -1217,7 +1236,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &doc_with_embedded_db_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1227,11 +1246,12 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
         .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
-      let doc_with_embedded_db = fv
+      let doc_with_embedded_db = fv.children[0]
         .children
-        .into_iter()
+        .iter()
         .find(|v| v.name == "docwithembeddeddb")
-        .unwrap();
+        .unwrap()
+        .clone();
       let doc_collab = client_2
         .get_collab_to_collab(
           workspace_id_2.clone(),
@@ -1318,7 +1338,7 @@ async fn duplicate_to_workspace_db_with_relation() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &db_with_rel_col_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1329,12 +1349,12 @@ async fn duplicate_to_workspace_db_with_relation() {
         .await
         .unwrap();
       let db_with_rel_col = fv
-        .children
+        .children[0].children
         .iter()
         .find(|v| v.name == "grid3") // db_with_rel_col
         .unwrap();
       let related_db = fv
-        .children
+        .children[0].children
         .iter()
         .find(|v| v.name == "grid2") // related-db
         .unwrap();
@@ -1408,7 +1428,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &db_with_row_doc_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1419,7 +1439,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         .await
         .unwrap();
       let db_with_row_doc = fv
-        .children
+        .children[0].children
         .iter()
         .find(|v| v.name == "db_with_row_doc") // db_w ith_rel_col
         .unwrap();
@@ -1492,7 +1512,7 @@ async fn duplicate_to_workspace_db_rel_self() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &db_rel_self_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1503,7 +1523,7 @@ async fn duplicate_to_workspace_db_rel_self() {
       .unwrap();
     println!("{:#?}", fv);
 
-    let db_rel_self = fv
+    let db_rel_self = fv.children[0]
       .children
       .iter()
       .find(|v| v.name == "self_ref_db")
@@ -1588,7 +1608,7 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &doc_4_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1598,13 +1618,21 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
       .await
       .unwrap();
 
-    let doc_4_fv = fv.children.iter().find(|v| v.name == "doc4").unwrap();
+    let doc_4_fv = fv.children[0]
+      .children
+      .iter()
+      .find(|v| v.name == "doc4")
+      .unwrap();
     let _ = doc_4_fv
       .children
       .iter()
       .find(|v| v.name == "grid3")
       .unwrap();
-    let _ = fv.children.iter().find(|v| v.name == "grid2").unwrap();
+    let _ = fv.children[0]
+      .children
+      .iter()
+      .find(|v| v.name == "grid2")
+      .unwrap();
   }
 }
 

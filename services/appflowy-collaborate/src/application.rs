@@ -15,7 +15,6 @@ use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
-use database::collab::cache::CollabCache;
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -24,10 +23,7 @@ use tracing::info;
 use crate::actix_ws::server::RealtimeServerActor;
 use crate::api::{collab_scope, ws_scope};
 use crate::collab::access_control::CollabStorageAccessControlImpl;
-use access_control::casbin::access::AccessControl;
-use appflowy_ai_client::client::AppFlowyAIClient;
-use database::file::s3_client_impl::AwsS3BucketClientImpl;
-
+use crate::collab::cache::CollabCache;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
 use crate::config::{Config, DatabaseSetting, S3Setting};
@@ -36,6 +32,9 @@ use crate::pg_listener::PgListeners;
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
 use crate::CollaborationServer;
+use access_control::casbin::access::AccessControl;
+use appflowy_ai_client::client::AppFlowyAIClient;
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
 
 pub struct Application {
   actix_server: Server,
@@ -130,6 +129,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     redis_conn_manager.clone(),
     pg_pool.clone(),
     s3_client.clone(),
+    metrics.collab_metrics.clone(),
     config.collab.s3_collab_threshold as usize,
   );
 
@@ -149,7 +149,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_storage_access_control,
     snapshot_control,
     rt_cmd_tx,
-    metrics.collab_metrics.clone(),
   ));
   let app_state = AppState {
     config: Arc::new(config.clone()),

@@ -29,9 +29,12 @@ use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, Publ
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
 use std::collections::HashSet;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{collections::HashMap, sync::Arc};
 
+use crate::biz::collab::folder_view::to_folder_view_icon;
+use crate::biz::collab::folder_view::to_folder_view_layout;
+use crate::biz::collab::utils::collab_from_doc_state;
 use tracing::error;
 use workspace_template::gen_view_id;
 use yrs::Any;
@@ -40,9 +43,6 @@ use yrs::ArrayRef;
 use yrs::Out;
 use yrs::{Map, MapRef};
 
-use crate::biz::collab::folder_view::to_folder_view_icon;
-use crate::biz::collab::folder_view::to_folder_view_layout;
-use crate::biz::collab::utils::collab_from_doc_state;
 use crate::biz::collab::utils::collab_to_bin;
 use crate::biz::collab::utils::get_latest_collab_encoded;
 
@@ -174,6 +174,7 @@ impl PublishCollabDuplicator {
     // insert all collab object accumulated
     // for self.collabs_to_insert
     let mut txn = pg_pool.begin().await?;
+    let start = Instant::now();
     for (oid, (collab_type, encoded_collab)) in collabs_to_insert.into_iter() {
       let params = CollabParams {
         object_id: oid.clone(),
@@ -346,7 +347,10 @@ impl PublishCollabDuplicator {
       .await?;
 
     match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
-      Ok(result) => result.map_err(AppError::from),
+      Ok(result) => {
+        collab_storage.metrics().observe_pg_tx(start.elapsed());
+        result.map_err(AppError::from)
+      },
       Err(_) => {
         error!("Timeout waiting for duplicating collabs");
         Err(AppError::RequestTimeout(

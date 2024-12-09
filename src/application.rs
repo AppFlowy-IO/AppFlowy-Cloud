@@ -27,7 +27,6 @@ use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
 use collab::lock::Mutex;
-use database::collab::cache::CollabCache;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -37,6 +36,7 @@ use tracing::{error, info, warn};
 
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
+use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::indexer::IndexerProvider;
@@ -285,6 +285,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     redis_conn_manager.clone(),
     pg_pool.clone(),
     s3_client.clone(),
+    metrics.collab_metrics.clone(),
     config.collab.s3_collab_threshold as usize,
   );
 
@@ -304,7 +305,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_storage_access_control,
     snapshot_control,
     rt_cmd_tx,
-    metrics.collab_metrics.clone(),
   ));
 
   info!(

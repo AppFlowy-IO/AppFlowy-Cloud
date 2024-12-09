@@ -24,7 +24,6 @@ use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
-use crate::metrics::spawn_metrics;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
@@ -88,8 +87,6 @@ where
       &group_sender_by_object_id,
       Arc::downgrade(&group_manager),
     );
-
-    spawn_metrics(metrics.clone(), storage.clone());
 
     spawn_handle_unindexed_collabs(indexer_provider, storage);
 

@@ -151,6 +151,9 @@ services:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
     image: appflowyinc/admin_frontend:${APPFLOWY_ADMIN_FRONTEND_VERSION:-latest}
+    depends_on:
+      appflowy_cloud:
+        condition: service_healthy
     ports:
       - 3000:3000
     environment:

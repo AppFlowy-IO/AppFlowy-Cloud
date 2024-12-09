@@ -42,6 +42,7 @@ impl AdminFrontendClient {
       .send()
       .await
       .unwrap();
+    let resp = check_resp(resp).await;
     let c = resp.cookies().find(|c| c.name() == "session_id").unwrap();
     self.session_id = Some(c.value().to_string());
   }
@@ -83,4 +84,13 @@ impl AdminFrontendClient {
   fn session_id(&self) -> &str {
     self.session_id.as_ref().unwrap()
   }
+}
+
+async fn check_resp(resp: reqwest::Response) -> reqwest::Response {
+  if resp.status() != 200 {
+    println!("resp: {:#?}", resp);
+    let payload = resp.text().await.unwrap();
+    panic!("payload: {:#?}", payload)
+  }
+  resp
 }

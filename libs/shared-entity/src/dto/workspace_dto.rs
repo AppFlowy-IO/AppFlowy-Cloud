@@ -45,7 +45,20 @@ pub struct WorkspaceMemberInvitation {
   pub role: AFRole,
 
   #[serde(default)]
+  pub skip_email_send: bool,
+  #[serde(default)]
   pub wait_email_send: bool,
+}
+
+impl Default for WorkspaceMemberInvitation {
+  fn default() -> Self {
+    Self {
+      email: "".to_string(),
+      role: AFRole::Member,
+      skip_email_send: false,
+      wait_email_send: false,
+    }
+  }
 }
 
 #[derive(Deserialize)]

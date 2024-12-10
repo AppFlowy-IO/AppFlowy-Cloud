@@ -371,7 +371,8 @@ impl TestClient {
         vec![WorkspaceMemberInvitation {
           email,
           role,
-          wait_email_send: true,
+          skip_email_send: true,
+          ..Default::default()
         }],
       )
       .await?;

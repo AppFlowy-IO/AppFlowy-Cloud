@@ -101,7 +101,8 @@ async fn add_duplicate_workspace_members() {
       vec![WorkspaceMemberInvitation {
         email: c2.email().await,
         role: AFRole::Member,
-        wait_email_send: true,
+        skip_email_send: true,
+        ..Default::default()
       }],
     )
     .await
@@ -132,7 +133,8 @@ async fn add_not_exist_workspace_members() {
       vec![WorkspaceMemberInvitation {
         email: email.clone(),
         role: AFRole::Member,
-        wait_email_send: true,
+        skip_email_send: true,
+        ..Default::default()
       }],
     )
     .await

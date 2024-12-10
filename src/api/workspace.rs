@@ -1,7 +1,7 @@
 use access_control::act::Action;
 use actix_web::web::{Bytes, Path, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
-use actix_web::{web, Scope};
+use actix_web::{web, HttpResponse, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use bytes::BytesMut;
@@ -13,13 +13,11 @@ use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sqlx::types::uuid;
 use std::io::Cursor;
-use std::os::macos::raw::stat;
-use std::sync::Arc;
 use std::time::Instant;
 
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, event, instrument, trace, warn};
+use tracing::{error, event, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -29,6 +27,7 @@ use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
 use crate::biz::collab::ops::{
   get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
+  two_ways_sync_with_doc_state,
 };
 use crate::biz::user::user_verify::verify_token;
 use crate::biz::workspace;
@@ -48,9 +47,9 @@ use crate::domain::compression::{
 use crate::state::AppState;
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
-use appflowy_collaborate::indexer::{Indexer, IndexerProvider};
+use appflowy_collaborate::indexer::IndexerProvider;
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
-use collab_rt_entity::collab_proto::{CreateCollabEmbedding, PayloadCompressionType};
+use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
@@ -129,6 +128,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(v1_get_collab_handler)),
     )
     .service(
+      web::resource("/v1/{workspace_id}/collab/{object_id}/sync")
+        .route(web::get().to(collab_two_way_sync_handler)),
+    )
+    .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
         .route(web::post().to(post_web_update_handler)),
     )
@@ -142,10 +145,6 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/collab/{object_id}/info")
         .route(web::get().to(get_collab_info_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/collab/{object_id}/embeddings")
-        .route(web::post().to(create_collab_embeddings_handler)),
     )
     .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
@@ -916,6 +915,7 @@ async fn post_web_update_handler(
   payload: Json<UpdateCollabWebParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
+  let payload = payload.into_inner();
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.collab_type.clone();
   let uid = state
@@ -923,15 +923,14 @@ async fn post_web_update_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
+
   update_page_collab_data(
-    &state.pg_pool,
     state.collab_access_control_storage.clone(),
     state.metrics.appflowy_web_metrics.clone(),
     uid,
-    workspace_id,
     object_id,
     collab_type,
-    &payload.doc_state,
+    payload.doc_state,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
@@ -2090,42 +2089,64 @@ async fn get_collab_info_handler(
   Ok(Json(AppResponse::Ok().with_data(info)))
 }
 
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn create_collab_embeddings_handler(
+#[instrument(level = "debug", skip_all, err)]
+async fn collab_two_way_sync_handler(
+  user_uuid: UserUuid,
   body: Bytes,
+  path: web::Path<(Uuid, Uuid)>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<()>>> {
-  let params = CreateCollabEmbedding::decode(&mut Cursor::new(body)).map_err(|err| {
+) -> Result<HttpResponse> {
+  let (workspace_id, object_id) = path.into_inner();
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  let params = CollabDocStateParams::decode(&mut Cursor::new(body)).map_err(|err| {
     AppError::InvalidRequest(format!("Failed to parse CreateCollabEmbedding: {}", err))
   })?;
 
-  if params.payload.is_empty() {
-    return Err(AppError::InvalidRequest("Payload is empty".to_string()).into());
+  if params.doc_state.is_empty() {
+    return Err(AppError::InvalidRequest("doc state is empty".to_string()).into());
   }
-  
+
   let collab_type = CollabType::from(params.collab_type);
-  match state.indexer_provider.indexer_for(&collab_type) {
-    None => warn!("No indexer found for collab type: {:?}", collab_type),
-    Some(indexer) => {
-      let compression_type =
-        PayloadCompressionType::try_from(params.payload_compression).map_err(|err| {
-          AppError::InvalidRequest(format!("Failed to parse PayloadCompressionType: {}", err))
-        })?;
+  let compression_type = PayloadCompressionType::try_from(params.compression).map_err(|err| {
+    AppError::InvalidRequest(format!("Failed to parse PayloadCompressionType: {}", err))
+  })?;
 
-      let payload = match compression_type {
-        PayloadCompressionType::None => params.payload,
-        PayloadCompressionType::Zstd => zstd::decode_all(&params.payload).map_err(|err| {
-          AppError::InvalidRequest(format!("Failed to decompress payload: {}", err))
-        })?,
-      };
+  let doc_state = match compression_type {
+    PayloadCompressionType::None => params.doc_state,
+    PayloadCompressionType::Zstd => tokio::task::spawn_blocking(move || {
+      zstd::decode_all(&*params.doc_state)
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to decompress doc_state: {}", err)))
+    })
+    .await
+    .map_err(AppError::from)??,
+  };
 
-      let text = String::from_utf8(payload)
-        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse payload: {}", err)))?;
-      indexer
-        .embedding_text(params.object_id, text, collab_type)
-        .await?;
-    },
-  }
+  let sv = match compression_type {
+    PayloadCompressionType::None => params.sv,
+    PayloadCompressionType::Zstd => tokio::task::spawn_blocking(move || {
+      zstd::decode_all(&*params.sv)
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to decompress sv: {}", err)))
+    })
+    .await
+    .map_err(AppError::from)??,
+  };
 
-  Ok(Json(AppResponse::Ok()))
+  let missing_update = two_ways_sync_with_doc_state(
+    &state.indexer_provider,
+    uid,
+    workspace_id,
+    object_id,
+    collab_type,
+    doc_state,
+    sv,
+    true,
+    state.collab_access_control_storage.clone(),
+  )
+  .await?;
+  Ok(HttpResponse::Ok().body(missing_update))
 }

@@ -47,7 +47,7 @@ chrono = { version = "0.4.37", features = [
 derive_more = { version = "0.99" }
 secrecy.workspace = true
 rand = { version = "0.8", features = ["std_rng"] }
-anyhow = "1.0.79"
+anyhow.workspace = true
 thiserror = "1.0.56"
 reqwest = { workspace = true, features = [
   "json",
@@ -59,7 +59,7 @@ unicode-segmentation = "1.10"
 lazy_static.workspace = true
 fancy-regex = "0.11.0"
 validator = "0.16.1"
-bytes = "1.5.0"
+bytes.workspace = true
 rcgen = { version = "0.10.0", features = ["pem", "x509-parser"] }
 mime = "0.3.17"
 aws-sdk-s3 = { version = "1.63.0", features = [
@@ -245,10 +245,10 @@ secrecy = { version = "0.8", features = ["serde"] }
 serde_json = "1.0.111"
 serde_repr = "0.1.18"
 serde = { version = "1.0.195", features = ["derive"] }
-bytes = "1.5.0"
+bytes = "1.9.0"
 workspace-template = { path = "libs/workspace-template" }
 uuid = { version = "1.6.1", features = ["v4", "v5"] }
-anyhow = "1.0.79"
+anyhow = "1.0.94"
 actix = "0.13.3"
 actix-web = { version = "4.5.1", default-features = false, features = [
   "openssl",
@@ -312,13 +312,13 @@ lto = false          # Disable Link-Time Optimization
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c4e23b6d6b1ba320c74b40e557069e99dd0377e7" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c4e23b6d6b1ba320c74b40e557069e99dd0377e7" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c4e23b6d6b1ba320c74b40e557069e99dd0377e7" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c4e23b6d6b1ba320c74b40e557069e99dd0377e7" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c4e23b6d6b1ba320c74b40e557069e99dd0377e7" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c4e23b6d6b1ba320c74b40e557069e99dd0377e7" }
-collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c4e23b6d6b1ba320c74b40e557069e99dd0377e7" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "244319ce62320fc48f2b8f447f488ceb10c86451" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "244319ce62320fc48f2b8f447f488ceb10c86451" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "244319ce62320fc48f2b8f447f488ceb10c86451" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "244319ce62320fc48f2b8f447f488ceb10c86451" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "244319ce62320fc48f2b8f447f488ceb10c86451" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "244319ce62320fc48f2b8f447f488ceb10c86451" }
+collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "244319ce62320fc48f2b8f447f488ceb10c86451" }
 
 [features]
 history = []

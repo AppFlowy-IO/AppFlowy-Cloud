@@ -5,6 +5,7 @@ use crate::{
     manager::GroupManager,
   },
 };
+use appflowy_ai_client::dto::CollabType;
 use collab::entity::EncodedCollab;
 use collab_rt_entity::ClientCollabMessage;
 use dashmap::DashMap;
@@ -15,6 +16,7 @@ use std::{
   sync::{Arc, Weak},
 };
 use tracing::error;
+use yrs::Update;
 
 pub type CLCommandSender = tokio::sync::mpsc::Sender<CollaborationCommand>;
 pub type CLCommandReceiver = tokio::sync::mpsc::Receiver<CollaborationCommand>;
@@ -33,6 +35,13 @@ pub enum CollaborationCommand {
   ServerSendCollabMessage {
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,
+    ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
+  },
+  ApplyUpdate {
+    uid: i64,
+    object_id: String,
+    update: Update,
+    collab_type: CollabType,
     ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
   },
 }
@@ -114,6 +123,16 @@ pub(crate) fn spawn_collaboration_command<S>(
               tracing::error!("Send group command error: {}", err);
             };
           }
+        },
+        CollaborationCommand::ApplyUpdate {
+          uid,
+          object_id,
+          update,
+          collab_type,
+          ret,
+        } => {
+
+          //
         },
       }
     }

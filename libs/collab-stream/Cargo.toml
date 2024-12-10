@@ -10,7 +10,7 @@ redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager
 tokio = { version = "1.26", features = ["rt-multi-thread", "macros"] }
 tokio-stream = { version = "0.1.14" }
 thiserror = "1.0.58"
-anyhow = "1.0.81"
+anyhow.workspace = true
 futures = "0.3.30"
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }

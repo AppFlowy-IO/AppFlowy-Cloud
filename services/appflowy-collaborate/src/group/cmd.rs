@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use appflowy_ai_client::dto::CollabType;
 use async_stream::stream;
+use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use dashmap::DashMap;
-use futures_util::StreamExt;
-use tracing::{instrument, trace, warn};
-
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, SinkMessage};
 use collab_rt_entity::{CollabAck, RealtimeMessage};
+use dashmap::DashMap;
 use database::collab::CollabStorage;
+use futures_util::StreamExt;
+use tracing::{instrument, trace, warn};
+use yrs::Update;
 
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::error::RealtimeError;
@@ -31,6 +33,12 @@ pub enum GroupCommand {
   EncodeCollab {
     object_id: String,
     ret: tokio::sync::oneshot::Sender<Option<EncodedCollab>>,
+  },
+  ApplyUpdate {
+    uid: i64,
+    object_id: String,
+    update: Update,
+    collab_type: CollabType,
   },
   HandleServerCollabMessage {
     object_id: String,
@@ -104,6 +112,14 @@ where
             if let Err(err) = ret.send(res) {
               warn!("Send handle server collab message result fail: {:?}", err);
             }
+          },
+          GroupCommand::ApplyUpdate {
+            uid,
+            object_id,
+            update,
+            collab_type,
+          } => {
+
           },
         }
       })

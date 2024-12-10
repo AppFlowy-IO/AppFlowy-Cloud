@@ -1,10 +1,20 @@
 #![allow(unused_imports)]
 
+use crate::command::{CLCommandSender, CollaborationCommand};
 use anyhow::{anyhow, Context};
+use app_error::AppError;
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
+use database::collab::{
+  insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStorage,
+  CollabStorageAccessControl, GetCollabOrigin,
+};
+use database_entity::dto::{
+  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams,
+  PendingCollabWrite, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
+};
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::Transaction;
@@ -18,17 +28,7 @@ use tracing::warn;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
-
-use crate::command::{CLCommandSender, CollaborationCommand};
-use app_error::AppError;
-use database::collab::{
-  insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStorage,
-  CollabStorageAccessControl, GetCollabOrigin,
-};
-use database_entity::dto::{
-  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams,
-  PendingCollabWrite, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
-};
+use yrs::Update;
 
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use crate::collab::cache::CollabCache;
@@ -130,6 +130,45 @@ where
       .enforce_write_collab(workspace_id, uid, object_id)
       .await?;
     Ok(())
+  }
+  pub async fn apply_update_to_editing(
+    &self,
+    uid: i64,
+    object_id: &str,
+    update: Update,
+    collab_type: CollabType,
+  ) -> Result<(), AppError> {
+    let object_id = object_id.to_string();
+    let (ret, rx) = tokio::sync::oneshot::channel();
+    let timeout_duration = Duration::from_secs(5);
+    self
+      .rt_cmd_sender
+      .send(CollaborationCommand::ApplyUpdate {
+        uid,
+        object_id,
+        update,
+        collab_type,
+        ret,
+      })
+      .await
+      .map_err(|err| {
+        AppError::Internal(anyhow!(
+          "Failed to send apply update command to realtime server: {}",
+          err
+        ))
+      })?;
+
+    match timeout(timeout_duration, rx).await {
+      Ok(Ok(())) => Ok(()),
+      Ok(Err(err)) => Err(AppError::Internal(anyhow!(
+        "Failed to send apply update command to realtime server: {}",
+        err
+      ))),
+      Err(err) => Err(AppError::Internal(anyhow!(
+        "Failed to send apply update command to realtime server: {}",
+        err
+      ))),
+    }
   }
 
   async fn get_encode_collab_from_editing(&self, oid: &str) -> Option<EncodedCollab> {
@@ -243,6 +282,45 @@ where
       .cache
       .bulk_insert_collab(workspace_id, uid, params_list)
       .await
+  }
+
+  /// Sends a collab message to all connected clients.
+  /// # Arguments
+  /// * `object_id` - The ID of the collaboration object.
+  /// * `collab_messages` - The list of collab messages to broadcast.
+  async fn broadcast_encode_collab(
+    &self,
+    object_id: String,
+    collab_messages: Vec<ClientCollabMessage>,
+  ) -> Result<(), AppError> {
+    let (sender, recv) = tokio::sync::oneshot::channel();
+
+    self
+      .rt_cmd_sender
+      .send(CollaborationCommand::ServerSendCollabMessage {
+        object_id,
+        collab_messages,
+        ret: sender,
+      })
+      .await
+      .map_err(|err| {
+        AppError::Unhandled(format!(
+          "Failed to send encode collab command to realtime server: {}",
+          err
+        ))
+      })?;
+
+    match recv.await {
+      Ok(res) =>
+        if let Err(err) = res {
+          error!("Failed to broadcast encode collab: {}", err);
+        }
+      ,
+      // caller may have dropped the receiver
+      Err(err) => warn!("Failed to receive response from realtime server: {}", err),
+    }
+
+    Ok(())
   }
 }
 
@@ -395,41 +473,6 @@ where
       .get_encode_collab(&params.workspace_id, params.inner)
       .await?;
     Ok(encode_collab)
-  }
-
-  async fn broadcast_encode_collab(
-    &self,
-    object_id: String,
-    collab_messages: Vec<ClientCollabMessage>,
-  ) -> Result<(), AppError> {
-    let (sender, recv) = tokio::sync::oneshot::channel();
-
-    self
-      .rt_cmd_sender
-      .send(CollaborationCommand::ServerSendCollabMessage {
-        object_id,
-        collab_messages,
-        ret: sender,
-      })
-      .await
-      .map_err(|err| {
-        AppError::Unhandled(format!(
-          "Failed to send encode collab command to realtime server: {}",
-          err
-        ))
-      })?;
-
-    match recv.await {
-      Ok(res) =>
-        if let Err(err) = res {
-          error!("Failed to broadcast encode collab: {}", err);
-        }
-      ,
-      // caller may have dropped the receiver
-      Err(err) => warn!("Failed to receive response from realtime server: {}", err),
-    }
-
-    Ok(())
   }
 
   async fn batch_get_collab(

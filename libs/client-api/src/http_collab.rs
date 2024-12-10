@@ -1,6 +1,7 @@
 use crate::entity::CollabType;
 use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, brotli_compress, Client};
+use anyhow::anyhow;
 use app_error::AppError;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
@@ -12,6 +13,8 @@ use client_api_entity::{
   AFCollabInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
   DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
 };
+use collab::entity::EncodedCollab;
+use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
 use futures::Stream;
 use futures_util::stream;
@@ -22,6 +25,7 @@ use serde::Serialize;
 use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
+use std::io::Cursor;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -377,6 +381,48 @@ impl Client {
     AppResponse::<AFCollabInfo>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  pub async fn post_collab_doc_state(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+    encode_collab: EncodedCollab,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{workspace_id}/collab/{object_id}/sync",
+      self.base_url
+    );
+
+    // 3 is default level
+    let doc_state = zstd::encode_all(Cursor::new(encode_collab.doc_state), 3)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress text: {}", err)))?;
+
+    let sv = zstd::encode_all(Cursor::new(encode_collab.state_vector), 3)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress text: {}", err)))?;
+
+    let params = CollabDocStateParams {
+      object_id: object_id.to_string(),
+      collab_type: collab_type.value(),
+      compression: PayloadCompressionType::Zstd as i32,
+      sv,
+      doc_state,
+    };
+
+    let mut encoded_payload = Vec::new();
+    params.encode(&mut encoded_payload).map_err(|err| {
+      AppError::Internal(anyhow!("Failed to encode CreateCollabEmbedding: {}", err))
+    })?;
+
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .body(Bytes::from(encoded_payload))
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }
 

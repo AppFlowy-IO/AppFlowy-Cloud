@@ -1,22 +1,19 @@
-use std::sync::Arc;
-
 use anyhow::anyhow;
-use async_trait::async_trait;
-use collab::preclude::Collab;
-
-use crate::indexer::{DocumentDataExt, Indexer};
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_ai_client::dto::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
 };
+use async_trait::async_trait;
+use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, EmbeddingContentType};
+use std::sync::Arc;
 
-use crate::config::get_env_var;
-use crate::indexer::open_ai::{split_text_by_max_content_len, split_text_by_max_tokens};
+use crate::indexer::open_ai::split_text_by_max_content_len;
+use crate::indexer::Indexer;
 use tiktoken_rs::CoreBPE;
 use tracing::trace;
 use uuid::Uuid;
@@ -54,10 +51,9 @@ impl Indexer for DocumentIndexer {
       )
     })?;
 
-    let result = document.get_document_data(&collab.transact());
+    let result = document.to_plain_text(collab.transact(), false);
     match result {
-      Ok(document_data) => {
-        let content = document_data.to_plain_text();
+      Ok(content) => {
         create_embedding(
           object_id,
           content,

@@ -117,16 +117,6 @@ pub trait CollabStorage: Send + Sync + 'static {
     from_editing_collab: bool,
   ) -> AppResult<EncodedCollab>;
 
-  /// Sends a collab message to all connected clients.
-  /// # Arguments
-  /// * `object_id` - The ID of the collaboration object.
-  /// * `collab_messages` - The list of collab messages to broadcast.
-  async fn broadcast_encode_collab(
-    &self,
-    object_id: String,
-    collab_messages: Vec<ClientCollabMessage>,
-  ) -> Result<(), AppError>;
-
   async fn batch_get_collab(
     &self,
     uid: &i64,

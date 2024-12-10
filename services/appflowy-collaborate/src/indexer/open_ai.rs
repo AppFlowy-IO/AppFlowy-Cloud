@@ -30,6 +30,7 @@ use unicode_segmentation::UnicodeSegmentation;
 /// https://tokio.rs/blog/2020-04-preemption
 /// https://ryhl.io/blog/async-what-is-blocking/
 #[inline]
+#[allow(dead_code)]
 pub fn split_text_by_max_tokens(
   content: String,
   max_tokens: usize,

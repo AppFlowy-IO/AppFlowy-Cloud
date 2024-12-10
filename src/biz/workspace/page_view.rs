@@ -1,3 +1,16 @@
+use super::ops::broadcast_update;
+use crate::api::metrics::AppFlowyWebMetrics;
+use crate::biz::collab::folder_view::{
+  parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
+  to_space_permission,
+};
+use crate::biz::collab::ops::{
+  collab_from_doc_state, get_latest_workspace_database, update_collab_with_doc_state,
+};
+use crate::biz::collab::{
+  folder_view::check_if_view_is_space,
+  ops::{get_latest_collab_encoded, get_latest_collab_folder},
+};
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
@@ -27,7 +40,7 @@ use collab_folder::{timestamp, CollabOrigin, Folder};
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
-use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde_json::json;
@@ -41,19 +54,6 @@ use std::time::Instant;
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::Update;
-
-use crate::api::metrics::AppFlowyWebMetrics;
-use crate::biz::collab::folder_view::{
-  parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
-  to_space_permission,
-};
-use crate::biz::collab::ops::{collab_from_doc_state, get_latest_workspace_database};
-use crate::biz::collab::{
-  folder_view::check_if_view_is_space,
-  ops::{get_latest_collab_encoded, get_latest_collab_folder},
-};
-
-use super::ops::broadcast_update;
 
 struct WorkspaceDatabaseUpdate {
   pub updated_encoded_collab: Vec<u8>,
@@ -1234,61 +1234,26 @@ async fn get_page_collab_data_for_document(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn update_page_collab_data(
-  pg_pool: &PgPool,
   collab_access_control_storage: Arc<CollabAccessControlStorage>,
   appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
   uid: i64,
-  workspace_id: Uuid,
   object_id: Uuid,
   collab_type: CollabType,
-  doc_state: &[u8],
+  doc_state: Vec<u8>,
 ) -> Result<(), AppError> {
-  let param = QueryCollabParams {
-    workspace_id: workspace_id.to_string(),
-    inner: QueryCollab {
-      object_id: object_id.to_string(),
-      collab_type: collab_type.clone(),
-    },
-  };
-  let encode_collab = collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
-    .await?;
-  let mut collab = collab_from_doc_state(encode_collab.doc_state.to_vec(), &object_id.to_string())?;
-  appflowy_web_metrics.record_update_size_bytes(doc_state.len());
-  let update = Update::decode_v1(doc_state).map_err(|e| {
-    appflowy_web_metrics.incr_decoding_failure_count(1);
-    AppError::InvalidRequest(format!("Failed to decode update: {}", e))
-  })?;
-  collab.apply_update(update).map_err(|e| {
-    appflowy_web_metrics.incr_apply_update_failure_count(1);
-    AppError::InvalidRequest(format!("Failed to apply update: {}", e))
-  })?;
-  let updated_encoded_collab = collab
-    .encode_collab_v1(|c| collab_type.validate_require_data(c))
-    .map_err(|e| AppError::Internal(anyhow!("Failed to encode collab: {}", e)))?
-    .encode_to_bytes()?;
-  let params = CollabParams {
-    object_id: object_id.to_string(),
-    collab_type: collab_type.clone(),
-    encoded_collab_v1: updated_encoded_collab.into(),
-    embeddings: None,
-  };
-  let mut transaction = pg_pool.begin().await?;
+  let object_id = object_id.to_string();
+  let update = tokio::task::spawn_blocking(move || {
+    let update = Update::decode_v1(&doc_state).map_err(|err| {
+      appflowy_web_metrics.incr_decoding_failure_count(1);
+      AppError::DecodeUpdateError(err.to_string())
+    })?;
+    Ok::<_, AppError>(update)
+  })
+  .await??;
+
   collab_access_control_storage
-    .upsert_new_collab_with_transaction(
-      &workspace_id.to_string(),
-      &uid,
-      params,
-      &mut transaction,
-      "upsert collab",
-    )
+    .apply_update_to_editing(uid, &object_id, update, collab_type)
     .await?;
-  transaction.commit().await?;
-  broadcast_update(
-    &collab_access_control_storage,
-    &object_id.to_string(),
-    doc_state.to_vec(),
-  )
-  .await?;
+
   Ok(())
 }

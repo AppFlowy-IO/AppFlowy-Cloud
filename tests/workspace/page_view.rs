@@ -9,7 +9,7 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  CreatePageParams, CreateSpaceParams, IconType, SpacePermission, UpdatePageParams,
+  CreatePageParams, CreateSpaceParams, IconType, MovePageParams, SpacePermission, UpdatePageParams,
   UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
@@ -206,6 +206,60 @@ async fn create_new_document_page() {
   })
   .await
   .unwrap();
+}
+
+#[tokio::test]
+async fn move_page_to_another_space() {
+  let registered_user = generate_unique_registered_user().await;
+  let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let workspace_id = app_client.workspace_id().await;
+  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  app_client.open_workspace_collab(&workspace_id).await;
+  app_client
+    .wait_object_sync_complete(&workspace_id)
+    .await
+    .unwrap();
+  let folder_view = web_client
+    .api_client
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = folder_view
+    .children
+    .iter()
+    .find(|v| v.name == "General")
+    .unwrap()
+    .clone();
+  let todo_view_id = general_space
+    .children
+    .iter()
+    .find(|v| v.name == "To-dos")
+    .map(|v| v.view_id.clone())
+    .unwrap();
+  let shared_space = &folder_view
+    .children
+    .iter()
+    .find(|v| v.name == "Shared")
+    .unwrap()
+    .clone();
+  web_client
+    .api_client
+    .move_workspace_page_view(
+      workspace_uuid,
+      &todo_view_id,
+      &MovePageParams {
+        new_parent_view_id: shared_space.view_id.clone(),
+        prev_view_id: None,
+      },
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let first_children_id = folder.get_view(&shared_space.view_id).unwrap().children[0]
+    .id
+    .clone();
+  assert_eq!(first_children_id, todo_view_id);
 }
 
 #[tokio::test]

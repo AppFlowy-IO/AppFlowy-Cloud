@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use actix::{Actor, Context, Handler, ResponseFuture};
+use actix::{Actor, Context, Handler};
 use tracing::{error, info, warn};
 
 use crate::error::RealtimeError;
@@ -63,7 +63,7 @@ impl<S> Handler<Connect> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
 {
-  type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+  type Result = anyhow::Result<(), RealtimeError>;
 
   fn handle(&mut self, new_conn: Connect, _ctx: &mut Context<Self>) -> Self::Result {
     let conn_sink = RealtimeClientWebsocketSinkImpl(new_conn.socket);
@@ -75,7 +75,7 @@ impl<S> Handler<Disconnect> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
 {
-  type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+  type Result = anyhow::Result<(), RealtimeError>;
   fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) -> Self::Result {
     self.handle_disconnect(msg.user)
   }
@@ -85,7 +85,7 @@ impl<S> Handler<ClientMessage> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
 {
-  type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+  type Result = anyhow::Result<(), RealtimeError>;
 
   fn handle(&mut self, client_msg: ClientMessage, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientMessage { user, message } = client_msg;
@@ -95,7 +95,7 @@ where
         if cfg!(debug_assertions) {
           error!("parse client message error: {}", err);
         }
-        Box::pin(async { Ok(()) })
+        Ok(())
       },
     }
   }
@@ -105,7 +105,7 @@ impl<S> Handler<ClientStreamMessage> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
 {
-  type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+  type Result = anyhow::Result<(), RealtimeError>;
 
   fn handle(&mut self, client_msg: ClientStreamMessage, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientStreamMessage {
@@ -121,13 +121,13 @@ where
       (Some(user), Ok(messages)) => self.handle_client_message(user, messages),
       (None, _) => {
         warn!("Can't find the realtime user uid:{}, device:{}. User should connect via websocket before", uid,device_id);
-        Box::pin(async { Ok(()) })
+        Ok(())
       },
       (Some(_), Err(err)) => {
         if cfg!(debug_assertions) {
           error!("parse client message error: {}", err);
         }
-        Box::pin(async { Ok(()) })
+        Ok(())
       },
     }
   }

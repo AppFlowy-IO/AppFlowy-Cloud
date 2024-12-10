@@ -5,7 +5,7 @@ set -e
 if [ -n "${GOTRUE_ADMIN_EMAIL}" ] && [ -n "${GOTRUE_ADMIN_PASSWORD}" ]; then
     set +e
     echo "Creating admin user for gotrue..."
-    command_output=$(./auth admin createuser --admin "${GOTRUE_ADMIN_EMAIL}" "${GOTRUE_ADMIN_PASSWORD}" 2>&1)
+    command_output=$(./auth admin createuser --admin --confirm "${GOTRUE_ADMIN_EMAIL}" "${GOTRUE_ADMIN_PASSWORD}" 2>&1)
     command_status=$?
     # Check if the command failed
     if [ $command_status -ne 0 ]; then

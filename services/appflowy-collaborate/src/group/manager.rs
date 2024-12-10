@@ -4,7 +4,6 @@ use std::time::Duration;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use tracing::{instrument, trace};
@@ -61,20 +60,20 @@ where
     })
   }
 
-  pub async fn get_inactive_groups(&self) -> Vec<String> {
-    self.state.get_inactive_group_ids().await
+  pub fn get_inactive_groups(&self) -> Vec<String> {
+    self.state.get_inactive_group_ids()
   }
 
-  pub async fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
-    self.state.contains_user(object_id, user).await
+  pub fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
+    self.state.contains_user(object_id, user)
   }
 
-  pub async fn remove_user(&self, user: &RealtimeUser) {
-    self.state.remove_user(user).await;
+  pub fn remove_user(&self, user: &RealtimeUser) {
+    self.state.remove_user(user);
   }
 
-  pub async fn contains_group(&self, object_id: &str) -> bool {
-    self.state.contains_group(object_id).await
+  pub fn contains_group(&self, object_id: &str) -> bool {
+    self.state.contains_group(object_id)
   }
 
   pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
@@ -82,8 +81,8 @@ where
   }
 
   #[instrument(skip(self))]
-  async fn remove_group(&self, object_id: &str) {
-    self.state.remove_group(object_id).await;
+  fn remove_group(&self, object_id: &str) {
+    self.state.remove_group(object_id);
   }
 
   pub async fn subscribe_group(
@@ -102,13 +101,11 @@ where
         object_id,
         self.access_control.clone(),
       );
-      group
-        .subscribe(user, message_origin.clone(), sink, stream)
-        .await;
+      group.subscribe(user, message_origin.clone(), sink, stream);
       // explicitly drop the group to release the lock.
       drop(group);
 
-      self.state.insert_user(user, object_id).await?;
+      self.state.insert_user(user, object_id)?;
     } else {
       // When subscribing to a group, the group should exist. Otherwise, it's a bug.
       return Err(RealtimeError::GroupNotFound(object_id.to_string()));
@@ -146,7 +143,6 @@ where
       };
 
       collab.initialize();
-      let collab = Arc::new(RwLock::from(collab));
       (collab, encode_collab)
     };
 
@@ -169,24 +165,21 @@ where
       tracing::trace!("workspace {} indexing is disabled", workspace_id);
       indexer = None;
     }
-    let group = Arc::new(
-      CollabGroup::new(
-        user.uid,
-        workspace_id.to_string(),
-        object_id.to_string(),
-        collab_type,
-        collab,
-        self.metrics_calculate.clone(),
-        self.storage.clone(),
-        is_new_collab,
-        self.persistence_interval,
-        self.edit_state_max_count,
-        self.edit_state_max_secs,
-        indexer,
-      )
-      .await?,
-    );
-    self.state.insert_group(object_id, group.clone()).await;
+    let group = Arc::new(CollabGroup::new(
+      user.uid,
+      workspace_id.to_string(),
+      object_id.to_string(),
+      collab_type,
+      collab,
+      self.metrics_calculate.clone(),
+      self.storage.clone(),
+      is_new_collab,
+      self.persistence_interval,
+      self.edit_state_max_count,
+      self.edit_state_max_secs,
+      indexer,
+    )?);
+    self.state.insert_group(object_id, group.clone());
     Ok(())
   }
 }

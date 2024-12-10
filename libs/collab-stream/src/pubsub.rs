@@ -50,7 +50,7 @@ impl CollabStreamPub {
 
   #[instrument(level = "debug", skip_all, err)]
   pub async fn publish(&mut self, message: PubSubMessage) -> Result<(), StreamError> {
-    self.conn.publish(ACTIVE_COLLAB_CHANNEL, message).await?;
+    let () = self.conn.publish(ACTIVE_COLLAB_CHANNEL, message).await?;
     Ok(())
   }
 }

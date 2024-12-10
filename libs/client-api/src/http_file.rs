@@ -290,7 +290,7 @@ impl WSClientConnectURLProvider for Client {
 ///
 /// # Returns
 /// A `Result` containing the base64-encoded MD5 hash on success, or an error if the file cannot be read.
-
+///
 /// Asynchronously calculates the MD5 hash of a file using efficient buffer handling and returns it as a base64-encoded string.
 ///
 /// # Arguments

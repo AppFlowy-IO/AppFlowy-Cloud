@@ -32,7 +32,7 @@ impl CollabMemCache {
   pub async fn insert_collab_meta(&self, meta: CollabMetadata) -> Result<(), AppError> {
     let key = collab_meta_key(&meta.object_id);
     let value = serde_json::to_string(&meta)?;
-    self
+    let () = self
       .connection_manager
       .clone()
       .set_ex(key, value, ONE_MONTH)
@@ -188,7 +188,7 @@ impl CollabMemCache {
       // for executing a subsequent transaction (with MULTI/EXEC). If any of the watched keys are
       // altered by another client before the current client executes EXEC, the transaction will be
       // aborted by Redis (the EXEC will return nil indicating the transaction was not processed).
-      redis::cmd("WATCH")
+      let () = redis::cmd("WATCH")
         .arg(&cache_object_id)
         .query_async::<_, ()>(&mut conn)
         .await?;
@@ -228,7 +228,7 @@ impl CollabMemCache {
             .ignore()
             .expire(&cache_object_id, expiration_seconds.unwrap_or(SEVEN_DAYS) as i64) // Setting the expiration to 7 days
             .ignore();
-        pipeline.query_async(&mut conn).await?;
+        let () = pipeline.query_async(&mut conn).await?;
       }
       Ok::<(), redis::RedisError>(())
     }

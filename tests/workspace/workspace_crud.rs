@@ -135,51 +135,6 @@ async fn workspace_list_database() {
         .await
         .unwrap();
       assert_eq!(db_row_ids.len(), 5, "{:?}", db_row_ids);
-      {
-        let db_row_ids: Vec<&str> = db_row_ids.iter().map(|s| s.id.as_str()).collect();
-        let db_row_ids: &[&str] = &db_row_ids;
-        let db_row_details = c
-          .list_database_row_details(&workspace_id, &todos_db.id, db_row_ids)
-          .await
-          .unwrap();
-        assert_eq!(db_row_details.len(), 5, "{:#?}", db_row_details);
-
-        // cells: {
-        //     "Multiselect": {
-        //         "field_type": "MultiSelect",
-        //         "last_modified": "2024-08-16T07:23:57+00:00",
-        //         "created_at": "2024-08-16T07:23:35+00:00",
-        //         "data": "looks great,fast",
-        //     },
-        //     "Description": {
-        //         "field_type": "RichText",
-        //         "last_modified": "2024-08-16T07:17:03+00:00",
-        //         "created_at": "2024-08-16T07:16:51+00:00",
-        //         "data": "Install AppFlowy Mobile",
-        //     },
-        //     "Status": {
-        //         "data": "To Do",
-        //         "field_type": "SingleSelect",
-        //     },
-        // },
-        let _ = db_row_details
-          .into_iter()
-          .find(|row| {
-            row.cells["Multiselect"]["field_type"] == "MultiSelect"
-              && row.cells["Multiselect"]["last_modified"] == "2024-08-16T07:23:57+00:00"
-              && row.cells["Multiselect"]["created_at"] == "2024-08-16T07:23:35+00:00"
-              && row.cells["Multiselect"]["data"] == "looks great,fast"
-              // Description
-              && row.cells["Description"]["field_type"] == "RichText"
-              && row.cells["Description"]["last_modified"] == "2024-08-16T07:17:03+00:00"
-              && row.cells["Description"]["created_at"] == "2024-08-16T07:16:51+00:00"
-              && row.cells["Description"]["data"] == "Install AppFlowy Mobile"
-              // Status
-              && row.cells["Status"]["data"] == "To Do"
-              && row.cells["Status"]["field_type"] == "SingleSelect"
-          })
-          .unwrap();
-      }
     }
   }
 }

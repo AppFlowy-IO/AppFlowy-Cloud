@@ -10,6 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::select;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 use yrs::updates::decoder::DecoderV1;
@@ -164,7 +165,7 @@ impl CollabBroadcast {
   /// # Returns
   /// A `Subscription` instance that represents the active subscription. Dropping this structure or
   /// calling its `stop` method will unsubscribe the connection and cease all related activities.
-  ///
+  #[allow(clippy::too_many_arguments)]
   pub fn subscribe<Sink, Stream>(
     &self,
     user: &RealtimeUser,
@@ -173,95 +174,85 @@ impl CollabBroadcast {
     mut stream: Stream,
     collab: Weak<RwLock<Collab>>,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
+    cancel: CancellationToken,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
     Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
   {
-    let sink_stop_tx = {
-      let mut sink = sink.clone();
-      let (stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
+    // the receiver will continue to receive updates from the document observer and forward the update to
+    // connected subscriber using its Sink. The loop will break if the stop_rx receives a message.
+    let mut receiver = self.broadcast_sender.subscribe();
+    let cloned_user = user.clone();
+    let cancel_sink = cancel.clone();
+    let mut sink2 = sink.clone();
+    tokio::spawn(async move {
+      loop {
+        select! {
+          _ = cancel_sink.cancelled() => break,
+          result = receiver.recv() => {
+            match result {
+              Ok(message) => {
 
-      // the receiver will continue to receive updates from the document observer and forward the update to
-      // connected subscriber using its Sink. The loop will break if the stop_rx receives a message.
-      let mut receiver = self.broadcast_sender.subscribe();
-      let cloned_user = user.clone();
-      tokio::spawn(async move {
-        loop {
-          select! {
-            _ = stop_rx.recv() => break,
-            result = receiver.recv() => {
-              match result {
-                Ok(message) => {
-
-                  // No need to broadcast the message back to the originator
-                  if message.origin() == &subscriber_origin {
-                    continue;
-                  }
-
-                  trace!("[realtime]: send {} => {}", message, cloned_user.user_device());
-                  if let Err(err) = sink.send(message).await {
-                    warn!("fail to broadcast message:{}", err);
-                  }
+                // No need to broadcast the message back to the originator
+                if message.origin() == &subscriber_origin {
+                  continue;
                 }
-                Err(_) => {
-                  // Err(RecvError::Closed) is returned when all Sender halves have dropped,
-                  // indicating that no further values can be sent on the channel.
-                  break;
-                },
+
+                trace!("[realtime]: send {} => {}", message, cloned_user.user_device());
+                if let Err(err) = sink2.send(message).await {
+                  warn!("fail to broadcast message:{}", err);
+                }
               }
-            },
-          }
+              Err(_) => {
+                // Err(RecvError::Closed) is returned when all Sender halves have dropped,
+                // indicating that no further values can be sent on the channel.
+                break;
+              },
+            }
+          },
         }
-      });
-      stop_tx
-    };
+      }
+    });
 
     let user = user.clone();
-    let stream_stop_tx = {
-      let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
-      let object_id = self.object_id.clone();
-      let edit_state = self.edit_state.clone();
+    let cancel_stream = cancel.clone();
+    let object_id = self.object_id.clone();
+    let edit_state = self.edit_state.clone();
 
-      // the stream will continue to receive messages from the client and it will stop if the stop_rx
-      // receives a message. If the client's message alter the document state, it will trigger the
-      // document observer and broadcast the update to all connected subscribers. Check out the [observe_update_v1] and [sink_task] above.
-      tokio::spawn(async move {
-        loop {
-          select! {
-            _ = stop_rx.recv() => {
-             trace!("stop receiving {} stream from user:{} connect at:{}", object_id, user.uid, user.connect_at);
+    // the stream will continue to receive messages from the client and it will stop if the stop_rx
+    // receives a message. If the client's message alter the document state, it will trigger the
+    // document observer and broadcast the update to all connected subscribers. Check out the [observe_update_v1] and [sink_task] above.
+    tokio::spawn(async move {
+      loop {
+        select! {
+          _ = cancel_stream.cancelled() => {
+           trace!("stop receiving {} stream from user:{} connect at:{}", object_id, user.uid, user.connect_at);
+            break
+          },
+          result = stream.next() => {
+            if result.is_none() {
+              trace!("{} stop receiving user:{} messages", object_id, user.user_device());
               break
-            },
-            result = stream.next() => {
-              if result.is_none() {
-                trace!("{} stop receiving user:{} messages", object_id, user.user_device());
+            }
+            let message_map = result.unwrap();
+            match collab.upgrade() {
+              None => {
+                trace!("{} stop receiving user:{} messages because of collab is drop", user.user_device(), object_id);
+                // break the loop if the collab is dropped
                 break
-              }
-              let message_map = result.unwrap();
-              match collab.upgrade() {
-                None => {
-                  trace!("{} stop receiving user:{} messages because of collab is drop", user.user_device(), object_id);
-                  // break the loop if the collab is dropped
-                  break
-                },
-                Some(collab) => {
-                  handle_client_messages(&object_id, message_map, &mut sink, collab, &metrics_calculate, &edit_state).await;
-                }
+              },
+              Some(collab) => {
+                handle_client_messages(&object_id, message_map, &mut sink, collab, &metrics_calculate, &edit_state).await;
               }
             }
           }
         }
-      });
+      }
+    });
 
-      stream_stop_tx
-    };
-
-    Subscription {
-      sink_stop_tx: Some(sink_stop_tx),
-      stream_stop_tx: Some(stream_stop_tx),
-    }
+    Subscription { cancel }
   }
 }
 
@@ -487,32 +478,12 @@ fn ack_code_from_error(error: &RTProtocolError) -> AckCode {
 /// connection error or closed connection).
 #[derive(Debug)]
 pub struct Subscription {
-  sink_stop_tx: Option<tokio::sync::mpsc::Sender<()>>,
-  stream_stop_tx: Option<tokio::sync::mpsc::Sender<()>>,
-}
-
-impl Subscription {
-  pub async fn stop(&mut self) {
-    if let Some(sink_stop_tx) = self.sink_stop_tx.take() {
-      if let Err(err) = sink_stop_tx.send(()).await {
-        warn!("the sink might be already stop, error: {}", err);
-      }
-    }
-    if let Some(stream_stop_tx) = self.stream_stop_tx.take() {
-      if let Err(err) = stream_stop_tx.send(()).await {
-        if cfg!(debug_assertions) {
-          warn!("the stream might be already stop, error: {}", err);
-        }
-      }
-    }
-  }
+  cancel: CancellationToken,
 }
 
 impl Drop for Subscription {
   fn drop(&mut self) {
-    if self.stream_stop_tx.is_some() || self.stream_stop_tx.is_some() {
-      error!("Subscription is not stopped before dropping");
-    }
+    self.cancel.cancel();
   }
 }
 

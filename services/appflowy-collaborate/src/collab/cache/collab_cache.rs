@@ -269,6 +269,12 @@ impl CollabCache {
 
     self.disk_cache.batch_insert_collab(records).await?;
 
+    // We'll update cache in the background. The reason is that Redis
+    // doesn't have a good way to do batch insert, so we'll do it one
+    // by one which may take time if there are many records.
+    //
+    // Most of the code doesn't rely on the cache being the only source
+    // of truth and accepts possibility that its update may fail.
     let mem_cache = self.mem_cache.clone();
     tokio::spawn(async move {
       let now = chrono::Utc::now().timestamp();

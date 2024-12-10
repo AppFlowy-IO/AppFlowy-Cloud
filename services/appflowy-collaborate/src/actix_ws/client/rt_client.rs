@@ -3,7 +3,7 @@ use crate::error::RealtimeError;
 use crate::RealtimeClientWebsocketSink;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, Context, ContextFutureSpawner,
-  Handler, MailboxError, Recipient, ResponseFuture, Running, StreamHandler, WrapFuture,
+  Handler, MailboxError, Recipient, Running, StreamHandler, WrapFuture,
 };
 use actix_web_actors::ws;
 use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError, WebsocketContext};
@@ -24,7 +24,7 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{debug, error, trace, warn};
 
-pub type HandlerResult = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+pub type HandlerResult = anyhow::Result<(), RealtimeError>;
 pub trait RealtimeServer:
   Actor<Context = Context<Self>>
   + Handler<ClientMessage, Result = HandlerResult>

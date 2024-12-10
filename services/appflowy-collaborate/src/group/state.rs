@@ -38,11 +38,11 @@ impl GroupManagementState {
 
   /// Performs a periodic check to remove groups based on the following conditions:
   /// Groups that have been inactive for a specified period of time.
-  pub async fn get_inactive_group_ids(&self) -> Vec<String> {
+  pub fn get_inactive_group_ids(&self) -> Vec<String> {
     let mut inactive_group_ids = vec![];
     for entry in self.group_by_object_id.iter() {
       let (object_id, group) = (entry.key(), entry.value());
-      if group.is_inactive().await {
+      if group.is_inactive() {
         inactive_group_ids.push(object_id.clone());
         if inactive_group_ids.len() > self.remove_batch_size {
           break;
@@ -53,7 +53,7 @@ impl GroupManagementState {
       trace!("inactive group ids:{:?}", inactive_group_ids);
     }
     for object_id in &inactive_group_ids {
-      self.remove_group(object_id).await;
+      self.remove_group(object_id);
     }
     inactive_group_ids
   }
@@ -107,22 +107,19 @@ impl GroupManagementState {
     }
   }
 
-  pub(crate) async fn insert_group(&self, object_id: &str, group: Arc<CollabGroup>) {
+  pub(crate) fn insert_group(&self, object_id: &str, group: Arc<CollabGroup>) {
     self.group_by_object_id.insert(object_id.to_string(), group);
     self.metrics_calculate.opening_collab_count.inc();
   }
 
-  pub(crate) async fn contains_group(&self, object_id: &str) -> bool {
+  pub(crate) fn contains_group(&self, object_id: &str) -> bool {
     self.group_by_object_id.contains_key(object_id)
   }
 
-  pub(crate) async fn remove_group(&self, object_id: &str) {
+  pub(crate) fn remove_group(&self, object_id: &str) {
     let entry = self.group_by_object_id.remove(object_id);
 
-    if let Some(entry) = entry {
-      let group = entry.1;
-      group.stop().await;
-    } else {
+    if entry.is_none() {
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);
     }
@@ -131,7 +128,7 @@ impl GroupManagementState {
       .opening_collab_count
       .set(self.group_by_object_id.len() as i64);
   }
-  pub(crate) async fn insert_user(
+  pub(crate) fn insert_user(
     &self,
     user: &RealtimeUser,
     object_id: &str,
@@ -152,7 +149,7 @@ impl GroupManagementState {
     Ok(())
   }
 
-  pub(crate) async fn remove_user(&self, user: &RealtimeUser) {
+  pub(crate) fn remove_user(&self, user: &RealtimeUser) {
     let entry = self.editing_by_user.remove(user);
     if entry.is_some() {
       self.metrics_calculate.num_of_editing_users.dec();
@@ -161,7 +158,7 @@ impl GroupManagementState {
       for editing in editing_objects {
         match self.group_by_object_id.try_get(&editing.object_id) {
           TryResult::Present(group) => {
-            group.remove_user(user).await;
+            group.remove_user(user);
 
             if cfg!(debug_assertions) {
               event!(
@@ -184,7 +181,7 @@ impl GroupManagementState {
     }
   }
 
-  pub async fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
+  pub fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
     match self.group_by_object_id.try_get(object_id) {
       TryResult::Present(entry) => entry.value().contains_user(user),
       TryResult::Absent => false,

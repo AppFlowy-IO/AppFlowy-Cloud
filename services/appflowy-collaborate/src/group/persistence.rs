@@ -5,8 +5,8 @@ use anyhow::anyhow;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::{validate_data_for_folder, CollabType};
-use tokio::sync::mpsc;
 use tokio::time::interval;
+use tokio_util::sync::CancellationToken;
 use tracing::{trace, warn};
 
 use app_error::AppError;
@@ -26,6 +26,7 @@ pub(crate) struct GroupPersistence<S> {
   collab_type: CollabType,
   persistence_interval: Duration,
   indexer: Option<Arc<dyn Indexer>>,
+  cancel: CancellationToken,
 }
 
 impl<S> GroupPersistence<S>
@@ -43,6 +44,7 @@ where
     collab_type: CollabType,
     persistence_interval: Duration,
     ai_client: Option<Arc<dyn Indexer>>,
+    cancel: CancellationToken,
   ) -> Self {
     Self {
       workspace_id,
@@ -54,10 +56,11 @@ where
       collab_type,
       persistence_interval,
       indexer: ai_client,
+      cancel,
     }
   }
 
-  pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<Arc<RwLock<Collab>>>) {
+  pub async fn run(self) {
     let mut interval = interval(self.persistence_interval);
     loop {
       // delay 30 seconds before the first save. We don't want to save immediately after the collab is created
@@ -69,7 +72,7 @@ where
             break;
           }
         },
-        _collab = destroy_group_rx.recv() => {
+        _ = self.cancel.cancelled() => {
           self.force_save().await;
           break;
         }

@@ -10,7 +10,7 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::{event, info, trace};
 
 use collab_rt_entity::user::RealtimeUser;
@@ -40,23 +40,17 @@ pub struct CollabGroup {
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
-  destroy_group_tx: mpsc::Sender<Arc<RwLock<Collab>>>,
-}
-
-impl Drop for CollabGroup {
-  fn drop(&mut self) {
-    trace!("Drop collab group:{}", self.object_id);
-  }
+  cancel: CancellationToken,
 }
 
 impl CollabGroup {
   #[allow(clippy::too_many_arguments)]
-  pub async fn new<S>(
+  pub fn new<S>(
     uid: i64,
     workspace_id: String,
     object_id: String,
     collab_type: CollabType,
-    collab: Arc<RwLock<Collab>>,
+    collab: Collab,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
     storage: Arc<S>,
     is_new_collab: bool,
@@ -73,12 +67,10 @@ impl CollabGroup {
       edit_state_max_secs,
       is_new_collab,
     ));
-    let broadcast = {
-      let lock = collab.read().await;
-      CollabBroadcast::new(&object_id, 1000, edit_state.clone(), &lock)
-    };
-    let (destroy_group_tx, rx) = mpsc::channel(1);
+    let broadcast = CollabBroadcast::new(&object_id, 1000, edit_state.clone(), &collab);
+    let cancel = CancellationToken::new();
 
+    let collab = Arc::new(RwLock::new(collab));
     tokio::spawn(
       GroupPersistence::new(
         workspace_id.clone(),
@@ -90,8 +82,9 @@ impl CollabGroup {
         collab_type.clone(),
         persistence_interval,
         indexer,
+        cancel.clone(),
       )
-      .run(rx),
+      .run(),
     );
 
     Ok(Self {
@@ -102,7 +95,7 @@ impl CollabGroup {
       broadcast,
       subscribers: Default::default(),
       metrics_calculate,
-      destroy_group_tx,
+      cancel,
     })
   }
 
@@ -121,10 +114,9 @@ impl CollabGroup {
     self.subscribers.contains_key(user)
   }
 
-  pub async fn remove_user(&self, user: &RealtimeUser) {
-    if let Some((_, mut old_sub)) = self.subscribers.remove(user) {
+  pub fn remove_user(&self, user: &RealtimeUser) {
+    if self.subscribers.remove(user).is_some() {
       trace!("{} remove subscriber from group: {}", self.object_id, user);
-      old_sub.stop().await;
     }
   }
 
@@ -133,8 +125,7 @@ impl CollabGroup {
   }
 
   /// Subscribes a new connection to the broadcast group for collaborative activities.
-  ///
-  pub async fn subscribe<Sink, Stream>(
+  pub fn subscribe<Sink, Stream>(
     &self,
     user: &RealtimeUser,
     subscriber_origin: CollabOrigin,
@@ -153,11 +144,12 @@ impl CollabGroup {
       stream,
       Arc::downgrade(&self.collab),
       self.metrics_calculate.clone(),
+      self.cancel.child_token(),
     );
 
-    if let Some(mut old) = self.subscribers.insert((*user).clone(), sub) {
+    if let Some(old) = self.subscribers.insert((*user).clone(), sub) {
       tracing::warn!("{}: remove old subscriber: {}", &self.object_id, user);
-      old.stop().await;
+      drop(old);
     }
 
     if cfg!(debug_assertions) {
@@ -180,8 +172,8 @@ impl CollabGroup {
 
   /// Check if the group is active. A group is considered active if it has at least one
   /// subscriber
-  pub async fn is_inactive(&self) -> bool {
-    let modified_at = self.broadcast.modified_at.lock();
+  pub fn is_inactive(&self) -> bool {
+    let modified_at = *self.broadcast.modified_at.lock();
 
     // In debug mode, we set the timeout to 60 seconds
     if cfg!(debug_assertions) {
@@ -219,13 +211,6 @@ impl CollabGroup {
     }
   }
 
-  pub async fn stop(&self) {
-    for mut entry in self.subscribers.iter_mut() {
-      entry.value_mut().stop().await;
-    }
-    let _ = self.destroy_group_tx.send(self.collab.clone()).await;
-  }
-
   /// Returns the timeout duration in seconds for different collaboration types.
   ///
   /// Collaborative entities vary in their activity and interaction patterns, necessitating
@@ -245,6 +230,12 @@ impl CollabGroup {
         10 * 60 // 10 minutes
       },
     }
+  }
+}
+
+impl Drop for CollabGroup {
+  fn drop(&mut self) {
+    self.cancel.cancel();
   }
 }
 

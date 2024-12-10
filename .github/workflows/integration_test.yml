@@ -132,6 +132,12 @@ jobs:
           echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
 
+      - name: Server Logs
+        if: failure()
+        run: |
+          docker ps -a
+          docker compose -f docker-compose-ci.yml logs
+
       - name: Docker Logs
         if: always()
         run: |

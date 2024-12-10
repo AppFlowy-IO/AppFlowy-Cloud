@@ -477,7 +477,7 @@ pub async fn invite_workspace_members(
         tracing::error!("Failed to send workspace invite email: {:?}", err);
         return Err(err);
       };
-      return Ok(());
+      Ok(())
     });
     if invitation.wait_email_send {
       email_sent.await??;

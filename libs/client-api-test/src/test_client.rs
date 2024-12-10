@@ -368,7 +368,11 @@ impl TestClient {
       .api_client
       .invite_workspace_members(
         workspace_id,
-        vec![WorkspaceMemberInvitation { email, role }],
+        vec![WorkspaceMemberInvitation {
+          email,
+          role,
+          wait_email_send: true,
+        }],
       )
       .await?;
 

@@ -299,7 +299,7 @@ pub async fn insert_workspace_invitation(
   workspace_id: &uuid::Uuid,
   inviter_uuid: &Uuid,
   invitee_email: &str,
-  invitee_role: AFRole,
+  invitee_role: &AFRole,
 ) -> Result<(), AppError> {
   let role_id: i32 = invitee_role.into();
   sqlx::query!(

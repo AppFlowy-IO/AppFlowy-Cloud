@@ -43,6 +43,9 @@ pub struct CreateWorkspaceMember {
 pub struct WorkspaceMemberInvitation {
   pub email: String,
   pub role: AFRole,
+
+  #[serde(default)]
+  pub wait_email_send: bool,
 }
 
 #[derive(Deserialize)]

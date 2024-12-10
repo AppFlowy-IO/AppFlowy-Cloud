@@ -59,7 +59,7 @@ impl<S> GroupCommandRunner<S>
 where
   S: CollabStorage,
 {
-  pub async fn run(mut self, object_id: String, notify: Arc<tokio::sync::Notify>) {
+  pub async fn run(mut self, object_id: String) {
     let mut receiver = self.recv.take().expect("Only take once");
     let stream = stream! {
       while let Some(msg) = receiver.recv().await {
@@ -67,7 +67,6 @@ where
       }
       trace!("Collab group:{} command runner is stopped", object_id);
     };
-    notify.notify_one();
     stream
       .for_each(|command| async {
         match command {

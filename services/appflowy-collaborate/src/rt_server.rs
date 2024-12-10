@@ -1,12 +1,9 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use anyhow::Result;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, info, trace};
 
@@ -153,87 +150,80 @@ where
     &self,
     user: RealtimeUser,
     message_by_oid: MessageByObjectId,
-  ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
+  ) -> Result<(), RealtimeError> {
     let group_sender_by_object_id = self.group_sender_by_object_id.clone();
     let client_msg_router_by_user = self.connect_state.client_message_routers.clone();
     let group_manager = self.group_manager.clone();
     let enable_custom_runtime = self.enable_custom_runtime;
 
-    Box::pin(async move {
-      for (object_id, collab_messages) in message_by_oid {
-        let old_sender = group_sender_by_object_id
-          .get(&object_id)
-          .map(|entry| entry.value().clone());
+    for (object_id, collab_messages) in message_by_oid {
+      let old_sender = group_sender_by_object_id
+        .get(&object_id)
+        .map(|entry| entry.value().clone());
 
-        let sender = match old_sender {
-          Some(sender) => sender,
-          None => match group_sender_by_object_id.entry(object_id.clone()) {
-            Entry::Occupied(entry) => entry.get().clone(),
-            Entry::Vacant(entry) => {
-              let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
-              let notify = Arc::new(Notify::new());
-              let runner = GroupCommandRunner {
-                group_manager: group_manager.clone(),
-                msg_router_by_user: client_msg_router_by_user.clone(),
-                recv: Some(recv),
-              };
+      let sender = match old_sender {
+        Some(sender) => sender,
+        None => match group_sender_by_object_id.entry(object_id.clone()) {
+          Entry::Occupied(entry) => entry.get().clone(),
+          Entry::Vacant(entry) => {
+            let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
+            let runner = GroupCommandRunner {
+              group_manager: group_manager.clone(),
+              msg_router_by_user: client_msg_router_by_user.clone(),
+              recv: Some(recv),
+            };
 
-              let object_id = entry.key().clone();
-              let clone_notify = notify.clone();
-              if enable_custom_runtime {
-                COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
-              } else {
-                tokio::spawn(runner.run(object_id, clone_notify));
-              }
+            let object_id = entry.key().clone();
+            if enable_custom_runtime {
+              COLLAB_RUNTIME.spawn(runner.run(object_id));
+            } else {
+              tokio::spawn(runner.run(object_id));
+            }
 
-              entry.insert(new_sender.clone());
-
-              // wait for the runner to be ready to handle the message.
-              notify.notified().await;
-              new_sender
-            },
+            entry.insert(new_sender.clone());
+            new_sender
           },
-        };
+        },
+      };
 
-        let cloned_user = user.clone();
-        // Create a new task to send a message to the group command runner without waiting for the
-        // result. This approach is used to prevent potential issues with the actor's mailbox in
-        // single-threaded runtimes (like actix-web actors). By spawning a task, the actor can
-        // immediately proceed to process the next message.
-        tokio::spawn(async move {
-          let (tx, rx) = tokio::sync::oneshot::channel();
-          match sender
-            .send(GroupCommand::HandleClientCollabMessage {
-              user: cloned_user,
-              object_id,
-              collab_messages,
-              ret: tx,
-            })
-            .await
-          {
-            Ok(_) => {
-              if let Ok(Err(err)) = rx.await {
-                if !matches!(
-                  err,
-                  RealtimeError::CreateGroupFailed(
-                    CreateGroupFailedReason::CollabWorkspaceIdNotMatch { .. }
-                  )
-                ) {
-                  error!("Handle client collab message fail: {}", err);
-                }
+      let cloned_user = user.clone();
+      // Create a new task to send a message to the group command runner without waiting for the
+      // result. This approach is used to prevent potential issues with the actor's mailbox in
+      // single-threaded runtimes (like actix-web actors). By spawning a task, the actor can
+      // immediately proceed to process the next message.
+      tokio::spawn(async move {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        match sender
+          .send(GroupCommand::HandleClientCollabMessage {
+            user: cloned_user,
+            object_id,
+            collab_messages,
+            ret: tx,
+          })
+          .await
+        {
+          Ok(_) => {
+            if let Ok(Err(err)) = rx.await {
+              if !matches!(
+                err,
+                RealtimeError::CreateGroupFailed(
+                  CreateGroupFailedReason::CollabWorkspaceIdNotMatch { .. }
+                )
+              ) {
+                error!("Handle client collab message fail: {}", err);
               }
-            },
-            Err(err) => {
-              // it should not happen. Because the receiver is always running before acquiring the sender.
-              // Otherwise, the GroupCommandRunner might not be ready to handle the message.
-              error!("Send message to group fail: {}", err);
-            },
-          }
-        });
-      }
+            }
+          },
+          Err(err) => {
+            // it should not happen. Because the receiver is always running before acquiring the sender.
+            // Otherwise, the GroupCommandRunner might not be ready to handle the message.
+            error!("Send message to group fail: {}", err);
+          },
+        }
+      });
+    }
 
-      Ok(())
-    })
+    Ok(())
   }
 
   pub fn get_user_by_device(&self, user_device: &UserDevice) -> Option<RealtimeUser> {

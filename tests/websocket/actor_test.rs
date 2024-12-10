@@ -9,7 +9,6 @@ use collab_rt_entity::RealtimeMessage;
 use semver::Version;
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::sleep;
 
 #[actix_rt::test]
 async fn test_handle_message() {
@@ -153,11 +152,7 @@ impl Handler<ClientMessage> for MockRealtimeServer {
   type Result = HandlerResult;
 
   fn handle(&mut self, _msg: ClientMessage, _ctx: &mut Self::Context) -> Self::Result {
-    Box::pin(async {
-      // simulate some work
-      sleep(Duration::from_millis(500)).await;
-      Ok(())
-    })
+    Ok(())
   }
 }
 

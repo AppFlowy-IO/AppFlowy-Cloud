@@ -204,6 +204,8 @@ pub async fn invite_user_to_workspace(
   let invi = vec![WorkspaceMemberInvitation {
     email: user_email.to_string(),
     role: AFRole::Member,
+    skip_email_send: true,
+    ..Default::default()
   }];
 
   let http_client = reqwest::Client::new();

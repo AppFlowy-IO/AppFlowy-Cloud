@@ -388,7 +388,7 @@ async fn post_workspace_invite_handler(
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
 
-  let invited_members = payload.into_inner();
+  let invitations = payload.into_inner();
   workspace::ops::invite_workspace_members(
     &state.mailer,
     &state.gotrue_admin,
@@ -396,7 +396,7 @@ async fn post_workspace_invite_handler(
     &state.gotrue_client,
     &user_uuid,
     &workspace_id,
-    invited_members,
+    invitations,
     state.config.appflowy_web_url.as_deref(),
   )
   .await?;

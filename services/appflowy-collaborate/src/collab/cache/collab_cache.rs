@@ -256,6 +256,41 @@ impl CollabCache {
     &self,
     records: Vec<PendingCollabWrite>,
   ) -> Result<(), AppError> {
-    self.disk_cache.batch_insert_collab(records).await
+    let mem_cache_params: Vec<_> = records
+      .iter()
+      .map(|r| {
+        (
+          r.params.object_id.clone(),
+          r.params.encoded_collab_v1.clone(),
+          cache_exp_secs_from_collab_type(&r.params.collab_type),
+        )
+      })
+      .collect();
+
+    self.disk_cache.batch_insert_collab(records).await?;
+
+    // We'll update cache in the background. The reason is that Redis
+    // doesn't have a good way to do batch insert, so we'll do it one
+    // by one which may take time if there are many records.
+    //
+    // Most of the code doesn't rely on the cache being the only source
+    // of truth and accepts possibility that its update may fail.
+    let mem_cache = self.mem_cache.clone();
+    tokio::spawn(async move {
+      let now = chrono::Utc::now().timestamp();
+      for (oid, data, expire) in mem_cache_params {
+        if let Err(err) = mem_cache
+          .insert_encode_collab_data(&oid, &data, now, Some(expire))
+          .await
+        {
+          error!(
+            "Failed to insert collab `{}` into memory cache: {}",
+            oid, err
+          );
+        }
+      }
+    });
+
+    Ok(())
   }
 }

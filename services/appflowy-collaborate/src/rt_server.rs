@@ -294,7 +294,7 @@ where
   #[inline]
   pub fn handle_client_generate_embedding_request(
     &self,
-    message: ClientHttpUpdateMessage,
+    _message: ClientHttpUpdateMessage,
   ) -> Result<(), RealtimeError> {
     Ok(())
   }

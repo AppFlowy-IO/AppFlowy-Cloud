@@ -43,6 +43,22 @@ pub struct CreateWorkspaceMember {
 pub struct WorkspaceMemberInvitation {
   pub email: String,
   pub role: AFRole,
+
+  #[serde(default)]
+  pub skip_email_send: bool,
+  #[serde(default)]
+  pub wait_email_send: bool,
+}
+
+impl Default for WorkspaceMemberInvitation {
+  fn default() -> Self {
+    Self {
+      email: "".to_string(),
+      role: AFRole::Member,
+      skip_email_send: false,
+      wait_email_send: false,
+    }
+  }
 }
 
 #[derive(Deserialize)]
@@ -375,4 +391,11 @@ pub struct AFDatabaseField {
   pub field_type: String,
   pub type_option: HashMap<String, serde_json::Value>,
   pub is_primary: bool,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct AFInsertDatabaseField {
+  pub name: String,
+  pub field_type: i64,                             // FieldType ID
+  pub type_option_data: Option<serde_json::Value>, // TypeOptionData
 }

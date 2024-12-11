@@ -25,7 +25,12 @@ database.workspace = true
 database-entity.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager", "streams"] }
+redis = { workspace = true, features = [
+  "aio",
+  "tokio-comp",
+  "connection-manager",
+  "streams",
+] }
 dotenvy = "0.15.0"
 axum = "0.7.4"
 thiserror = "1.0.58"
@@ -33,7 +38,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 serde_repr = "0.1.18"
 futures = "0.3.30"
 infra = { workspace = true, features = ["request_util"] }
-sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
+sqlx = { workspace = true, default-features = false, features = [
+  "runtime-tokio-rustls",
+  "macros",
+  "postgres",
+  "uuid",
+  "chrono",
+  "migrate",
+] }
 secrecy = { version = "0.8", features = ["serde"] }
 aws-sdk-s3 = { version = "1.36.0", features = [
   "behavior-version-latest",
@@ -51,4 +63,3 @@ base64.workspace = true
 prometheus-client = "0.22.3"
 reqwest = "0.12.5"
 zstd.workspace = true
-

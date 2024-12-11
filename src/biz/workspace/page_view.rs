@@ -1,14 +1,12 @@
 use super::ops::broadcast_update;
+use crate::api::metrics::AppFlowyWebMetrics;
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz::collab::folder_view::{
-  parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
-  to_space_permission,
+  check_if_view_is_space, parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
+  to_folder_view_icon, to_space_permission,
 };
-use crate::biz::collab::ops::{collab_from_doc_state, get_latest_workspace_database};
-use crate::biz::collab::{
-  folder_view::check_if_view_is_space,
-  ops::{get_latest_collab_encoded, get_latest_collab_folder},
-};
+use crate::biz::collab::ops::{get_latest_collab_folder, get_latest_workspace_database};
+use crate::biz::collab::utils::{collab_from_doc_state, get_latest_collab_encoded};
 use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;
@@ -55,6 +53,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
+
 struct WorkspaceDatabaseUpdate {
   pub updated_encoded_collab: Vec<u8>,
   pub encoded_updates: Vec<u8>,
@@ -1234,6 +1233,7 @@ async fn get_page_collab_data_for_document(
 
 #[instrument(level = "debug", skip_all)]
 pub async fn update_page_collab_data(
+  appflowy_web_metrics: &Arc<AppFlowyWebMetrics>,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   workspace_id: Uuid,
@@ -1242,6 +1242,7 @@ pub async fn update_page_collab_data(
   doc_state: Vec<u8>,
 ) -> Result<(), AppError> {
   let object_id = object_id.to_string();
+  appflowy_web_metrics.record_update_size_bytes(doc_state.len());
 
   let message = ClientHttpUpdateMessage {
     user,

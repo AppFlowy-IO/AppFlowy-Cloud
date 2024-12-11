@@ -167,7 +167,7 @@ where
 
   fn handle(
     &mut self,
-    msg: ClientGenerateEmbeddingMessage,
+    _msg: ClientGenerateEmbeddingMessage,
     _ctx: &mut Self::Context,
   ) -> Self::Result {
     Ok(())

@@ -2,7 +2,7 @@ use crate::error::StreamError;
 use crate::model::{MessageId, StreamBinary, StreamMessage, StreamMessageByStreamKey};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamMaxlen, StreamReadOptions};
-use redis::{pipe, AsyncCommands, RedisError};
+use redis::{pipe, AsyncCommands, Pipeline, RedisError};
 
 pub struct CollabStream {
   connection_manager: ConnectionManager,
@@ -34,9 +34,9 @@ impl CollabStream {
     let mut pipe = pipe();
     for message in messages {
       let tuple = message.into_tuple_array();
-      pipe.xadd(&self.stream_key, "*", tuple.as_slice());
+      let _: &mut Pipeline = pipe.xadd(&self.stream_key, "*", tuple.as_slice());
     }
-    pipe.query_async(&mut self.connection_manager).await?;
+    let () = pipe.query_async(&mut self.connection_manager).await?;
     Ok(())
   }
 
@@ -90,7 +90,7 @@ impl CollabStream {
   }
 
   pub async fn clear(&mut self) -> Result<(), RedisError> {
-    self
+    let () = self
       .connection_manager
       .xtrim(&self.stream_key, StreamMaxlen::Equals(0))
       .await?;

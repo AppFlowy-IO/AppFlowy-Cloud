@@ -179,7 +179,7 @@ where
       self.edit_state_max_secs,
       indexer,
     )?);
-    self.state.insert_group(object_id, group.clone());
+    self.state.insert_group(object_id, group);
     Ok(())
   }
 }

@@ -320,7 +320,7 @@ impl Stream for QuestionStream {
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let this = self.project();
 
-    return match ready!(this.stream.as_mut().poll_next(cx)) {
+    match ready!(this.stream.as_mut().poll_next(cx)) {
       Some(Ok(value)) => match value {
         Value::Object(mut value) => {
           if let Some(metadata) = value.remove(STREAM_METADATA_KEY) {
@@ -344,6 +344,6 @@ impl Stream for QuestionStream {
       },
       Some(Err(err)) => Poll::Ready(Some(Err(err))),
       None => Poll::Ready(None),
-    };
+    }
   }
 }

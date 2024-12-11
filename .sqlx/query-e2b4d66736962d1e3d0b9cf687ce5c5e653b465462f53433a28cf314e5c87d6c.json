@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    WITH ins_user AS (\n        INSERT INTO af_user (uid, uuid, email, name)\n        VALUES ($1, $2, $3, $4)\n        RETURNING uid\n    ),\n    owner_role AS (\n        SELECT id FROM af_roles WHERE name = 'Owner'\n    ),\n    ins_workspace AS (\n        INSERT INTO af_workspace (owner_uid)\n        SELECT uid FROM ins_user\n        RETURNING workspace_id, owner_uid\n    )\n    SELECT workspace_id FROM ins_workspace;\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e2b4d66736962d1e3d0b9cf687ce5c5e653b465462f53433a28cf314e5c87d6c"
+}

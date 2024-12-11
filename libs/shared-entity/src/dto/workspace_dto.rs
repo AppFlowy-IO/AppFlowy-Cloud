@@ -180,6 +180,12 @@ pub struct UpdatePageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MovePageParams {
+  pub new_parent_view_id: String,
+  pub prev_view_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageCollabData {
   pub encoded_collab: Vec<u8>,
   pub row_data: HashMap<String, Vec<u8>>,

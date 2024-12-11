@@ -1250,6 +1250,8 @@ pub async fn update_page_collab_data(
     object_id: object_id.to_string(),
     collab_type,
     update: Bytes::from(doc_state),
+    state_vector: None,
+    return_tx: None,
   };
 
   server

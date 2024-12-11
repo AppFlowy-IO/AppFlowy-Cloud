@@ -51,8 +51,15 @@ pub struct ClientHttpUpdateMessage {
   pub user: RealtimeUser,
   pub workspace_id: String,
   pub object_id: String,
+  /// Encoded yrs::Update or doc state
   pub update: Bytes,
+  /// If the state_vector is not None, it will calculate missing updates base on
+  /// given state_vector after apply the update
+  pub state_vector: Option<Bytes>,
   pub collab_type: CollabType,
+  /// If return_tx is Some, calling await on its receiver will wait until the update was applied
+  /// to the collab. The return value will be None if the input state_vector is None.
+  pub return_tx: Option<tokio::sync::oneshot::Sender<Result<Option<Vec<u8>>, AppError>>>,
 }
 
 #[derive(Message)]
@@ -60,5 +67,5 @@ pub struct ClientHttpUpdateMessage {
 pub struct ClientGenerateEmbeddingMessage {
   pub workspace_id: String,
   pub object_id: String,
-  pub collab_type: CollabType,
+  pub return_tx: Option<tokio::sync::oneshot::Sender<Result<(), AppError>>>,
 }

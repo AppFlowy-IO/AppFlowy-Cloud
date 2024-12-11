@@ -28,9 +28,9 @@ use database::collab::select_workspace_database_oid;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
+use database_entity::dto::QueryCollab;
 use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{CollabParams, WorkspaceCollabIdentify};
-use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
@@ -44,11 +44,10 @@ use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
 use std::ops::DerefMut;
 
+use crate::biz::collab::utils::field_by_name_uniq;
+use crate::biz::workspace::ops::broadcast_update;
 use access_control::collab::CollabAccessControl;
-use anyhow::{anyhow, Context};
-use appflowy_collaborate::indexer::IndexerProvider;
-use bytes::Bytes;
-use collab_document::document::DocumentBody;
+use anyhow::Context;
 use database_entity::dto::{
   AFCollabMember, InsertCollabMemberParams, QueryCollabMembers, UpdateCollabMemberParams,
 };
@@ -57,11 +56,6 @@ use sqlx::types::Uuid;
 use std::collections::HashSet;
 use tracing::{event, trace};
 use validator::Validate;
-use yrs::updates::decoder::Decode;
-use yrs::{ReadTxn, StateVector, Update};
-
-use crate::biz::collab::utils::field_by_name_uniq;
-use crate::biz::workspace::ops::broadcast_update;
 
 use super::folder_view::collab_folder_to_folder_view;
 use super::folder_view::section_items_to_favorite_folder_view;
@@ -814,82 +808,4 @@ pub async fn list_database_row_details(
     .collect::<Vec<AFDatabaseRowDetail>>();
 
   Ok(database_row_details)
-}
-
-#[allow(clippy::too_many_arguments)]
-#[inline]
-/// Apply client doc state to the server collab and return the missing update that client
-/// needs to apply.
-pub async fn two_ways_sync_with_doc_state<T: Into<Bytes>>(
-  indexer_provider: &Arc<IndexerProvider>,
-  uid: i64,
-  workspace_id: Uuid,
-  object_id: Uuid,
-  collab_type: CollabType,
-  client_doc_state: T,
-  client_sv: Vec<u8>,
-  create_embedding: bool,
-  collab_access_control_storage: Arc<CollabAccessControlStorage>,
-) -> Result<Vec<u8>, AppError> {
-  let doc_state = client_doc_state.into();
-  let object_id = object_id.to_string();
-  let param = QueryCollabParams {
-    workspace_id: workspace_id.to_string(),
-    inner: QueryCollab {
-      object_id: object_id.clone(),
-      collab_type: collab_type.clone(),
-    },
-  };
-  let encode_collab = collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
-    .await?;
-
-  let cloned_object_id = object_id.clone();
-  let cloned_doc_state = doc_state.clone();
-  let (embedding_content, missing_update) = tokio::task::spawn_blocking(move || {
-    let mut collab = collab_from_doc_state(encode_collab.doc_state.to_vec(), &cloned_object_id)?;
-    let update = Update::decode_v1(&cloned_doc_state)
-      .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
-    collab
-      .apply_update(update)
-      .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
-
-    let sv = StateVector::decode_v1(&client_sv).map_err(|err| {
-      AppError::Internal(anyhow!(
-        "Failed to decode state vector from client state vector: {}",
-        err
-      ))
-    })?;
-
-    let txn = collab.transact();
-    let missing_update = txn.encode_state_as_update_v1(&sv);
-    drop(txn);
-
-    let mut embedding_content = None;
-    if create_embedding {
-      if let Some(document) = DocumentBody::from_collab(&collab) {
-        if let Ok(text) = document.to_plain_text(collab.transact(), true) {
-          embedding_content = Some(text);
-        }
-      }
-    }
-
-    Ok::<_, AppError>((embedding_content, missing_update))
-  })
-  .await??;
-
-  if let Some(_) = embedding_content {
-    // if let Some(indexer) = indexer_provider.indexer_for(&collab_type) {
-    //   if let Ok(params) = indexer
-    //     .embedding_text(object_id.clone(), embedding_content, collab_type.clone())
-    //     .await
-    //   {
-    //     if let Ok(data) = indexer.embeddings(params).await {
-    //       embeddings = data
-    //     }
-    //   }
-    // }
-  }
-
-  Ok(missing_update)
 }

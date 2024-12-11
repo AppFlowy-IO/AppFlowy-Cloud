@@ -1,28 +1,25 @@
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::error::RealtimeError;
 use crate::group::manager::GroupManager;
-use crate::RealtimeClientWebsocketSink;
+use crate::group::null_sender::NullSender;
 use async_stream::stream;
 use bytes::Bytes;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::CollabAck;
 use collab_rt_entity::{
   AckCode, ClientCollabMessage, MessageByObjectId, ServerCollabMessage, SinkMessage, UpdateSync,
 };
-use collab_rt_entity::{CollabAck, RealtimeMessage};
 use collab_rt_protocol::{Message, SyncMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-use futures::Sink;
 use futures_util::StreamExt;
-use std::marker::PhantomData;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use tracing::{error, instrument, trace, warn};
 use yrs::updates::encoder::Encode;
+use yrs::StateVector;
 
 /// Using [GroupCommand] to interact with the group
 /// - HandleClientCollabMessage: Handle the client message
@@ -51,6 +48,15 @@ pub enum GroupCommand {
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,
     ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
+  },
+  GenerateCollabEmbedding {
+    object_id: String,
+    ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
+  },
+  CalculateMissingUpdate {
+    object_id: String,
+    state_vector: StateVector,
+    ret: tokio::sync::oneshot::Sender<Result<Vec<u8>, RealtimeError>>,
   },
 }
 
@@ -138,6 +144,27 @@ where
               .await;
             if let Err(err) = ret.send(result) {
               warn!("Send handle client update message result fail: {:?}", err);
+            }
+          },
+          GroupCommand::GenerateCollabEmbedding { object_id, ret } => {
+            // TODO(nathan): generate embedding
+            trace!("Generate embedding for group:{}", object_id);
+            let _ = ret.send(Ok(()));
+          },
+          GroupCommand::CalculateMissingUpdate {
+            object_id,
+            state_vector,
+            ret,
+          } => {
+            let group = self.group_manager.get_group(&object_id).await;
+            match group {
+              None => {
+                let _ = ret.send(Err(RealtimeError::GroupNotFound(object_id.clone())));
+              },
+              Some(group) => {
+                let result = group.calculate_missing_update(state_vector).await;
+                let _ = ret.send(result);
+              },
             }
           },
         }
@@ -240,7 +267,9 @@ where
     });
 
     // Create message router for user if it's not exist
-    if self.msg_router_by_user.get(user).is_none() {
+    let should_sub = self.msg_router_by_user.get(user).is_none();
+    if should_sub {
+      trace!("create a new client message router for user:{}", user);
       let new_client_router = ClientMessageRouter::new(NullSender::<()>::default());
       self
         .msg_router_by_user
@@ -250,12 +279,15 @@ where
     // Create group if it's not exist
     let is_group_exist = self.group_manager.contains_group(object_id);
     if !is_group_exist {
+      trace!("The group:{} is not found, create a new group", object_id);
       self
         .create_group(user, workspace_id, object_id, collab_type)
         .await?;
-      self.subscribe_group(user, object_id, &origin).await?;
     }
 
+    if should_sub {
+      self.subscribe_group(user, object_id, &origin).await?;
+    }
     if let Some(client_stream) = self.msg_router_by_user.get(user) {
       let payload = Message::Sync(SyncMessage::Update(update.to_vec())).encode_v1();
       let msg = ClientCollabMessage::ClientUpdateSync {
@@ -269,7 +301,7 @@ where
       let message = MessageByObjectId::new_with_message(object_id.to_string(), vec![msg]);
       let err = client_stream.stream_tx.send(message);
       if let Err(err) = err {
-        warn!("Send user:{} message to group:{}", user.uid, err);
+        warn!("Send user:{} http update message to group:{}", user, err);
         self.msg_router_by_user.remove(user);
       }
     } else {
@@ -424,50 +456,4 @@ pub async fn forward_message_to_group(
       client_msg_router.remove(user);
     }
   }
-}
-
-/// Futures [Sink] compatible sender, that always throws the input away.
-/// Essentially: a `/dev/null` equivalent.
-#[derive(Clone)]
-struct NullSender<T> {
-  _marker: PhantomData<T>,
-}
-
-impl<T> Default for NullSender<T> {
-  fn default() -> Self {
-    NullSender {
-      _marker: PhantomData,
-    }
-  }
-}
-
-impl<T> Sink<T> for NullSender<T> {
-  type Error = RealtimeError;
-
-  #[inline]
-  fn poll_ready(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-    Poll::Ready(Ok(()))
-  }
-
-  #[inline]
-  fn start_send(self: Pin<&mut Self>, _: T) -> Result<(), Self::Error> {
-    Ok(())
-  }
-
-  #[inline]
-  fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-    Poll::Ready(Ok(()))
-  }
-
-  #[inline]
-  fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-    Poll::Ready(Ok(()))
-  }
-}
-
-impl<T> RealtimeClientWebsocketSink for NullSender<T>
-where
-  T: Send + Sync + 'static,
-{
-  fn do_send(&self, _message: RealtimeMessage) {}
 }

@@ -1,35 +1,9 @@
-use access_control::act::Action;
-use actix_web::web::{Bytes, Path, Payload};
-use actix_web::web::{Data, Json, PayloadConfig};
-use actix_web::{web, HttpResponse, Scope};
-use actix_web::{HttpRequest, Result};
-use anyhow::{anyhow, Context};
-use bytes::BytesMut;
-use chrono::{DateTime, Duration, Utc};
-use collab::entity::EncodedCollab;
-use collab_database::entity::FieldType;
-use collab_entity::CollabType;
-use collab_folder::timestamp;
-use futures_util::future::try_join_all;
-use prost::Message as ProstMessage;
-use rayon::prelude::*;
-use sqlx::types::uuid;
-use std::collections::HashMap;
-use std::io::Cursor;
-use std::time::Instant;
-use tokio_stream::StreamExt;
-use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, event, instrument, trace};
-use uuid::Uuid;
-use validator::Validate;
-
 use crate::api::util::{client_version_from_headers, PayloadReader};
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
 use crate::biz::collab::ops::{
   get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
-  two_ways_sync_with_doc_state,
 };
 use crate::biz::user::user_verify::verify_token;
 use crate::biz::workspace;
@@ -47,10 +21,22 @@ use crate::domain::compression::{
   blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
 };
 use crate::state::AppState;
+use access_control::act::Action;
+use actix_web::web::{Bytes, Path, Payload};
+use actix_web::web::{Data, Json, PayloadConfig};
+use actix_web::{web, HttpResponse, Scope};
+use actix_web::{HttpRequest, Result};
+use anyhow::{anyhow, Context};
 use app_error::AppError;
-use appflowy_collaborate::actix_ws::entities::ClientHttpStreamMessage;
+use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
 use appflowy_collaborate::indexer::IndexerProvider;
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
+use bytes::BytesMut;
+use chrono::{DateTime, Duration, Utc};
+use collab::entity::EncodedCollab;
+use collab_database::entity::FieldType;
+use collab_entity::CollabType;
+use collab_folder::timestamp;
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::user::RealtimeUser;
@@ -61,10 +47,21 @@ use database::user::select_uid_from_email;
 use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
 use database_entity::dto::*;
+use futures_util::future::try_join_all;
+use prost::Message as ProstMessage;
+use rayon::prelude::*;
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
-
+use sqlx::types::uuid;
+use std::collections::HashMap;
+use std::io::Cursor;
+use std::time::Instant;
+use tokio_stream::StreamExt;
+use tokio_tungstenite::tungstenite::Message;
+use tracing::{error, event, instrument, trace};
+use uuid::Uuid;
+use validator::Validate;
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
@@ -914,6 +911,7 @@ async fn v1_get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(resp)))
 }
 
+#[instrument(level = "debug", skip_all)]
 async fn post_web_update_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, Uuid)>,
@@ -923,8 +921,10 @@ async fn post_web_update_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
-  let app_version = client_version_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let onetime_session_id = uuid::Uuid::new_v4().to_string();
+  let onetime_device_id = onetime_session_id.clone();
+  let app_version =
+    client_version_from_headers(req.headers()).unwrap_or_else(|_| "web".to_string());
 
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.collab_type.clone();
@@ -936,11 +936,12 @@ async fn post_web_update_handler(
 
   let user = RealtimeUser {
     uid,
-    device_id,
+    device_id: onetime_device_id,
     connect_at: timestamp(),
-    session_id: uuid::Uuid::new_v4().to_string(),
+    session_id: onetime_session_id,
     app_version,
   };
+  trace!("create onetime web realtime user: {}", user);
 
   update_page_collab_data(
     &state.metrics.appflowy_web_metrics,
@@ -2183,14 +2184,10 @@ async fn collab_two_way_sync_handler(
   body: Bytes,
   path: web::Path<(Uuid, Uuid)>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<HttpResponse> {
   let (workspace_id, object_id) = path.into_inner();
-  let uid = state
-    .user_cache
-    .get_user_uid(&user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
-
   let params = CollabDocStateParams::decode(&mut Cursor::new(body)).map_err(|err| {
     AppError::InvalidRequest(format!("Failed to parse CreateCollabEmbedding: {}", err))
   })?;
@@ -2224,17 +2221,40 @@ async fn collab_two_way_sync_handler(
     .map_err(AppError::from)??,
   };
 
-  let missing_update = two_ways_sync_with_doc_state(
-    &state.indexer_provider,
+  let app_version = client_version_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  let user = RealtimeUser {
     uid,
-    workspace_id,
-    object_id,
+    device_id,
+    connect_at: timestamp(),
+    session_id: uuid::Uuid::new_v4().to_string(),
+    app_version,
+  };
+
+  let (tx, rx) = tokio::sync::oneshot::channel();
+  let message = ClientHttpUpdateMessage {
+    user,
+    workspace_id: workspace_id.to_string(),
+    object_id: object_id.to_string(),
     collab_type,
-    doc_state,
-    sv,
-    true,
-    state.collab_access_control_storage.clone(),
-  )
-  .await?;
-  Ok(HttpResponse::Ok().body(missing_update))
+    update: Bytes::from(doc_state),
+    state_vector: Some(Bytes::from(sv)),
+    return_tx: Some(tx),
+  };
+
+  server
+    .try_send(message)
+    .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
+
+  let missing_update = rx.await.map_err(|err| {
+    AppError::Internal(anyhow!("Failed to receive message from server: {}", err))
+  })??;
+
+  Ok(HttpResponse::Ok().body(missing_update.unwrap_or_default()))
 }

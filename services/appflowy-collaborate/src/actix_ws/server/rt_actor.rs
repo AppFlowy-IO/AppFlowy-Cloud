@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use app_error::AppError;
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, warn};
 
 use crate::actix_ws::client::rt_client::{RealtimeClientWebsocketSinkImpl, RealtimeServer};
 use crate::actix_ws::entities::{
@@ -152,6 +152,7 @@ where
   type Result = Result<(), AppError>;
 
   fn handle(&mut self, msg: ClientHttpUpdateMessage, _ctx: &mut Self::Context) -> Self::Result {
+    trace!("Receive client http update message");
     self
       .handle_client_http_update(msg)
       .map_err(|err| AppError::Internal(anyhow!("handle client http message error: {}", err)))?;
@@ -167,9 +168,17 @@ where
 
   fn handle(
     &mut self,
-    _msg: ClientGenerateEmbeddingMessage,
+    msg: ClientGenerateEmbeddingMessage,
     _ctx: &mut Self::Context,
   ) -> Self::Result {
+    self
+      .handle_client_generate_embedding_request(msg)
+      .map_err(|err| {
+        AppError::Internal(anyhow!(
+          "handle client generate embedding request error: {}",
+          err
+        ))
+      })?;
     Ok(())
   }
 }

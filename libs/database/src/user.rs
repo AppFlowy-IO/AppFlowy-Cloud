@@ -130,13 +130,6 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
         INSERT INTO af_workspace (owner_uid)
         SELECT uid FROM ins_user
         RETURNING workspace_id, owner_uid
-    ),
-    ins_collab_member AS (
-        INSERT INTO af_collab_member (uid, oid, permission_id)
-        SELECT ins_workspace.owner_uid,
-               ins_workspace.workspace_id::TEXT,
-               (SELECT permission_id FROM af_role_permissions WHERE role_id = owner_role.id)
-        FROM ins_workspace, owner_role
     )
     SELECT workspace_id FROM ins_workspace;
     "#,

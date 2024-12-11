@@ -24,7 +24,7 @@ use crate::state::AppState;
 use access_control::act::Action;
 use actix_web::web::{Bytes, Path, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{web, HttpResponse, ResponseError, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
@@ -129,7 +129,7 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}/sync")
-        .route(web::get().to(collab_two_way_sync_handler)),
+        .route(web::post().to(collab_two_way_sync_handler)),
     )
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
@@ -2252,9 +2252,17 @@ async fn collab_two_way_sync_handler(
     .try_send(message)
     .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
 
-  let missing_update = rx.await.map_err(|err| {
-    AppError::Internal(anyhow!("Failed to receive message from server: {}", err))
-  })??;
-
-  Ok(HttpResponse::Ok().body(missing_update.unwrap_or_default()))
+  match rx
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to receive message from server: {}", err)))?
+  {
+    Ok(Some(data)) => {
+      let encoded = tokio::task::spawn_blocking(move || zstd::encode_all(Cursor::new(data), 3))
+        .await
+        .map_err(|err| AppError::Internal(anyhow!("Failed to compress data: {}", err)))??;
+      Ok(HttpResponse::Ok().body(encoded))
+    },
+    Ok(None) => Ok(HttpResponse::InternalServerError().finish()),
+    Err(err) => Ok(err.error_response()),
+  }
 }

@@ -612,44 +612,77 @@ async fn simulate_10_offline_user_connect_and_then_sync_document_test() {
   }
 }
 
-// #[tokio::test]
-// async fn simulate_50_user_connect_and_then_sync_document_test() {
-//   let users = Arc::new(RwLock::new(vec![]));
-//   let mut tasks = vec![];
-//   for i in 0..50 {
-//     let task = tokio::spawn(async move {
-//       let new_user = TestClient::new_user().await;
-//       // sleep to make sure it do not trigger register user too fast in gotrue
-//       sleep(Duration::from_secs(i % 5)).await;
-//       new_user
-//     });
-//     tasks.push(task);
-//   }
-//   let results = futures::future::join_all(tasks).await;
-//   for result in results {
-//     users.write().await.push(result.unwrap());
-//   }
-//
-//   let text = generate_random_string(1024 * 1024 * 3);
-//   let mut tasks = Vec::new();
-//   for i in 0..100 {
-//     let cloned_text = text.clone();
-//     let cloned_users = users.clone();
-//     let task = tokio::spawn(async move {
-//       let object_id = Uuid::new_v4().to_string();
-//       sleep(Duration::from_secs(1)).await;
-//       let workspace_id = cloned_users.read().await[i % 50].workspace_id().await;
-//       let doc_state = make_big_collab_doc_state(&object_id, "text", cloned_text);
-//       cloned_users.write().await[i % 50]
-//         .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Unknown, doc_state)
-//         .await;
-//       sleep(Duration::from_secs(6)).await;
-//     });
-//     tasks.push(task);
-//   }
-//
-//   let results = futures::future::join_all(tasks).await;
-//   for result in results {
-//     result.unwrap();
-//   }
-// }
+#[tokio::test]
+async fn offline_and_then_sync_through_http_request() {
+  let mut test_client = TestClient::new_user().await;
+  let object_id = Uuid::new_v4().to_string();
+  let workspace_id = test_client.workspace_id().await;
+  let doc_state = make_big_collab_doc_state(&object_id, "content", "".to_string());
+  test_client
+    .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Unknown, doc_state)
+    .await;
+
+  test_client
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+
+  // make sure it was sync to server
+  assert_server_collab(
+    &workspace_id,
+    &mut test_client.api_client,
+    &object_id,
+    &CollabType::Unknown,
+    10,
+    json!({"content":""}),
+  )
+  .await
+  .unwrap();
+
+  // insert text
+  let text = generate_random_string(1024);
+  test_client.disconnect().await;
+  test_client
+    .insert_into(&object_id, "content", text.clone())
+    .await;
+
+  // server should not receive the update
+  assert_server_collab(
+    &workspace_id,
+    &mut test_client.api_client,
+    &object_id,
+    &CollabType::Unknown,
+    10,
+    json!({"content":""}),
+  )
+  .await
+  .unwrap();
+
+  let encode_collab = test_client
+    .collabs
+    .get(&object_id)
+    .unwrap()
+    .encode_collab()
+    .await;
+  test_client
+    .api_client
+    .post_collab_doc_state(
+      &workspace_id,
+      &object_id,
+      CollabType::Unknown,
+      encode_collab,
+    )
+    .await
+    .unwrap();
+
+  assert_server_collab(
+    &workspace_id,
+    &mut test_client.api_client,
+    &object_id,
+    &CollabType::Unknown,
+    10,
+    json!({"content":text}),
+  )
+  .await
+  .unwrap();
+}

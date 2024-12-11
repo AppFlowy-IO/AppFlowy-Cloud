@@ -437,9 +437,9 @@ impl Client {
     object_id: &str,
     collab_type: CollabType,
     encode_collab: EncodedCollab,
-  ) -> Result<(), AppResponseError> {
+  ) -> Result<Vec<u8>, AppResponseError> {
     let url = format!(
-      "{}/api/workspace/{workspace_id}/collab/{object_id}/sync",
+      "{}/api/workspace/v1/{workspace_id}/collab/{object_id}/sync",
       self.base_url
     );
 
@@ -460,7 +460,7 @@ impl Client {
 
     let mut encoded_payload = Vec::new();
     params.encode(&mut encoded_payload).map_err(|err| {
-      AppError::Internal(anyhow!("Failed to encode CreateCollabEmbedding: {}", err))
+      AppError::Internal(anyhow!("Failed to encode CollabDocStateParams: {}", err))
     })?;
 
     let resp = self
@@ -470,7 +470,13 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    if resp.status().is_success() {
+      let body = resp.bytes().await?;
+      let decompressed_body = zstd::decode_all(Cursor::new(body))?;
+      Ok(decompressed_body)
+    } else {
+      AppResponse::from_response(resp).await?.into_data()
+    }
   }
 }
 

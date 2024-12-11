@@ -65,6 +65,17 @@ pub struct TestCollab {
   pub origin: CollabOrigin,
   pub collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
 }
+
+impl TestCollab {
+  pub async fn encode_collab(&self) -> EncodedCollab {
+    let lock = self.collab.read().await;
+    let collab = (*lock).borrow();
+    collab
+      .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
+      .unwrap()
+  }
+}
+
 impl TestClient {
   pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
     load_env();

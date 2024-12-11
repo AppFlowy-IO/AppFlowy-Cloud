@@ -52,7 +52,7 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  create_page, create_space, get_page_view_collab, move_page_to_trash,
+  create_page, create_space, get_page_view_collab, move_page, move_page_to_trash,
   restore_all_pages_from_trash, restore_page_from_trash, update_page, update_page_collab_data,
   update_space,
 };
@@ -142,6 +142,10 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/page-view/{view_id}")
         .route(web::get().to(get_page_view_handler))
         .route(web::patch().to(update_page_view_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/move")
+        .route(web::post().to(move_page_handler)),
     )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/move-to-trash")
@@ -994,6 +998,27 @@ async fn post_page_view_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))
+}
+
+async fn move_page_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<MovePageParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  move_page(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_uuid,
+    &view_id,
+    &payload.new_parent_view_id,
+    payload.prev_view_id.clone(),
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn move_page_to_trash_handler(

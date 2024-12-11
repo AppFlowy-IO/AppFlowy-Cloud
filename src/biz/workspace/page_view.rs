@@ -60,7 +60,7 @@ struct WorkspaceDatabaseUpdate {
 
 struct FolderUpdate {
   pub updated_encoded_collab: Vec<u8>,
-  pub encoded_updates: Vec<u8>,
+  pub encoded_update: Vec<u8>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -436,7 +436,7 @@ async fn add_new_space_to_folder(
   };
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -470,7 +470,7 @@ async fn update_space_properties(
   };
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -513,7 +513,7 @@ async fn add_new_view_to_folder(
   };
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -538,7 +538,26 @@ async fn update_view_properties(
   };
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
+  })
+}
+
+async fn move_view(
+  view_id: &str,
+  new_parent_view_id: &str,
+  prev_view_id: Option<String>,
+  folder: &mut Folder,
+) -> Result<FolderUpdate, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    folder
+      .body
+      .move_nested_view(&mut txn, view_id, new_parent_view_id, prev_view_id);
+    txn.encode_update_v1()
+  };
+  Ok(FolderUpdate {
+    updated_encoded_collab: folder_to_encoded_collab(folder)?,
+    encoded_update,
   })
 }
 
@@ -566,7 +585,7 @@ async fn move_view_to_trash(view_id: &str, folder: &mut Folder) -> Result<Folder
 
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -585,7 +604,7 @@ async fn move_view_out_from_trash(
 
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -604,7 +623,7 @@ async fn move_all_views_out_from_trash(folder: &mut Folder) -> Result<FolderUpda
 
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -696,7 +715,7 @@ async fn insert_and_broadcast_workspace_folder_update(
   broadcast_update(
     collab_storage,
     &workspace_id.to_string(),
-    folder_update.encoded_updates.clone(),
+    folder_update.encoded_update.clone(),
   )
   .await?;
   Ok(())
@@ -913,6 +932,32 @@ async fn create_database_page(
   Ok(Page {
     view_id: view_id.to_string(),
   })
+}
+
+pub async fn move_page(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+  view_id: &str,
+  new_parent_view_id: &str,
+  prev_view_id: Option<String>,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = move_view(view_id, new_parent_view_id, prev_view_id, &mut folder).await?;
+  let mut transaction = pg_pool.begin().await?;
+  insert_and_broadcast_workspace_folder_update(
+    uid,
+    workspace_id,
+    folder_update,
+    collab_storage,
+    &mut transaction,
+  )
+  .await?;
+  transaction.commit().await?;
+  Ok(())
 }
 
 pub async fn move_page_to_trash(

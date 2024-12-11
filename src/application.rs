@@ -27,6 +27,7 @@ use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
 use collab::lock::Mutex;
+use mailer::config::MailerSetting;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -316,7 +317,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     .connect_lazy();
 
   let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
-  let mailer = get_mailer(config).await?;
+  let mailer = get_mailer(&config.mailer).await?;
 
   info!("Application state initialized");
   Ok(AppState {
@@ -446,13 +447,14 @@ async fn create_bucket_if_not_exists(
   }
 }
 
-async fn get_mailer(config: &Config) -> Result<AFCloudMailer, Error> {
+async fn get_mailer(mailer: &MailerSetting) -> Result<AFCloudMailer, Error> {
+  info!("Connecting to mailer with setting: {:?}", mailer);
   let mailer = Mailer::new(
-    config.mailer.smtp_username.clone(),
-    config.mailer.smtp_email.clone(),
-    config.mailer.smtp_password.clone(),
-    &config.mailer.smtp_host,
-    config.mailer.smtp_port,
+    mailer.smtp_username.clone(),
+    mailer.smtp_email.clone(),
+    mailer.smtp_password.clone(),
+    &mailer.smtp_host,
+    mailer.smtp_port,
   )
   .await?;
 

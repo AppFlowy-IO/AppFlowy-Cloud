@@ -24,13 +24,13 @@ pub const ZSTD_COMPRESSION_LEVEL: i32 = 3;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
 
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
 
-  #[validate(custom = "validate_not_empty_payload")]
+  #[validate(custom(function = "validate_not_empty_payload"))]
   pub encoded_collab_v1: Vec<u8>,
 
   pub collab_type: CollabType,
@@ -88,9 +88,9 @@ impl PendingCollabWrite {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize, PartialEq)]
 pub struct CollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
-  #[validate(custom = "validate_not_empty_payload")]
+  #[validate(custom(function = "validate_not_empty_payload"))]
   pub encoded_collab_v1: Bytes,
   pub collab_type: CollabType,
   #[serde(default)]
@@ -196,7 +196,7 @@ struct CollabParamsV0 {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct BatchCreateCollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
   pub params_list: Vec<CollabParams>,
 }
@@ -219,19 +219,19 @@ pub struct UpdateCollabWebParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct DeleteCollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
 }
 
 #[derive(Debug, Clone, Validate)]
 pub struct InsertSnapshotParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
-  #[validate(custom = "validate_not_empty_payload")]
+  #[validate(custom(function = "validate_not_empty_payload"))]
   pub data: Bytes,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
   pub collab_type: CollabType,
 }
@@ -250,9 +250,9 @@ pub struct QuerySnapshotParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  #[validate]
+  #[validate(nested)]
   pub inner: QueryCollab,
 }
 
@@ -295,7 +295,7 @@ impl Deref for QueryCollabParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollab {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
   pub collab_type: CollabType,
 }
@@ -369,9 +369,9 @@ pub struct WorkspaceUsage {
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct InsertCollabMemberParams {
   pub uid: i64,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
   pub access_level: AFAccessLevel,
 }
@@ -381,9 +381,9 @@ pub type UpdateCollabMemberParams = InsertCollabMemberParams;
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CollabMemberIdentify {
   pub uid: i64,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
 }
 
@@ -406,15 +406,15 @@ pub struct DefaultPublishViewInfoMeta {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabMembers {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryWorkspaceMember {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
 
   pub uid: i64,
@@ -1207,7 +1207,7 @@ pub struct ApproveAccessRequestParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateImportTask {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_name: String,
   pub content_length: u64,
 }

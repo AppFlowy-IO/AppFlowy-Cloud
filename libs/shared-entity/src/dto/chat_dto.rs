@@ -10,7 +10,7 @@ use validator::Validate;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateChatParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub chat_id: String,
   pub name: String,
   pub rag_ids: Vec<String>,
@@ -18,7 +18,7 @@ pub struct CreateChatParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct UpdateChatParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub name: Option<String>,
 
   /// Key-value pairs of metadata to be updated.
@@ -29,7 +29,7 @@ pub struct UpdateChatParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateChatMessageParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
   pub message_type: ChatMessageType,
   #[serde(deserialize_with = "deserialize_metadata")]
@@ -40,7 +40,7 @@ pub struct CreateChatMessageParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateChatMessageParamsV2 {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
   pub message_type: ChatMessageType,
   #[serde(deserialize_with = "deserialize_metadata")]
@@ -361,7 +361,7 @@ pub struct UpdateChatMessageResponse {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateAnswerMessageParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
 
   #[serde(skip_serializing_if = "Option::is_none")]

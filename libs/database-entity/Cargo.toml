@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 serde.workspace = true
 serde_json.workspace = true
 collab-entity = { workspace = true }
-validator = { version = "0.16", features = ["validator_derive", "derive"] }
+validator = { workspace = true, features = ["validator_derive", "derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { workspace = true, features = ["serde", "v4"] }
 thiserror = "1.0.56"

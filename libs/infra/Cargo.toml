@@ -15,10 +15,7 @@ bytes = { workspace = true }
 tokio = { workspace = true, optional = true }
 pin-project.workspace = true
 futures = "0.3.30"
-validator = { version = "0.16", features = [
-  "validator_derive",
-  "derive",
-] }
+validator = { workspace = true, features = ["validator_derive", "derive"] }
 
 [features]
 file_util = ["tokio/fs"]

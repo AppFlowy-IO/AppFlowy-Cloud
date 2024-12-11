@@ -7,7 +7,7 @@ use redis::streams::{
   StreamClaimOptions, StreamClaimReply, StreamMaxlen, StreamPendingData, StreamPendingReply,
   StreamReadOptions,
 };
-use redis::{pipe, AsyncCommands, ErrorKind, RedisResult};
+use redis::{pipe, AsyncCommands, ErrorKind, Pipeline, RedisResult};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace, warn};
 
@@ -119,7 +119,7 @@ impl StreamGroup {
       .into_iter()
       .map(|m| m.to_string())
       .collect::<Vec<String>>();
-    self
+    let () = self
       .connection_manager
       .xack(&self.stream_key, &self.group_name, &message_ids)
       .await?;
@@ -164,7 +164,7 @@ impl StreamGroup {
       let message = message.into();
       let tuple = message.into_tuple_array();
       if let Some(len) = self.config.max_len {
-        pipe
+        let _: &mut Pipeline = pipe
           .cmd("XADD")
           .arg(&self.stream_key)
           .arg("MAXLEN")
@@ -177,7 +177,7 @@ impl StreamGroup {
       }
     }
 
-    pipe.query_async(&mut self.connection_manager).await?;
+    let () = pipe.query_async(&mut self.connection_manager).await?;
     if let Err(err) = self.set_expiration().await {
       error!("set expiration fail: {:?}", err);
     }
@@ -197,13 +197,13 @@ impl StreamGroup {
     let tuple = message.into_tuple_array();
     match self.config.max_len {
       Some(max_len) => {
-        self
+        let () = self
           .connection_manager
           .xadd_maxlen(&self.stream_key, StreamMaxlen::Approx(max_len), "*", &tuple)
           .await?;
       },
       None => {
-        self
+        let () = self
           .connection_manager
           .xadd(&self.stream_key, "*", tuple.as_slice())
           .await?;
@@ -369,7 +369,7 @@ impl StreamGroup {
   /// Use the `XTRIM` command to truncate the Redis stream to a maximum length of zero, effectively
   /// removing all entries from the stream.
   pub async fn clear(&mut self) -> Result<(), StreamError> {
-    self
+    let () = self
       .connection_manager
       .xtrim(&self.stream_key, StreamMaxlen::Equals(0))
       .await?;
@@ -393,7 +393,7 @@ impl StreamGroup {
       };
 
       if should_set_expiration {
-        self
+        let () = self
           .connection_manager
           .expire(&self.stream_key, expire_time)
           .await?;

@@ -7,11 +7,13 @@ use anyhow::{anyhow, Context};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
 use collab::entity::EncodedCollab;
+use collab_database::entity::FieldType;
 use collab_entity::CollabType;
 use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sqlx::types::uuid;
+use std::collections::HashMap;
 use std::time::Instant;
 
 use tokio_stream::StreamExt;
@@ -259,11 +261,13 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("/{workspace_id}/database").route(web::get().to(list_database_handler)))
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row")
-        .route(web::get().to(list_database_row_id_handler)),
+        .route(web::get().to(list_database_row_id_handler))
+        .route(web::post().to(post_database_row_handler)),
     )
     .service(
       web::resource("/{workspace_id}/database/{database_id}/fields")
-        .route(web::get().to(get_database_fields_handler)),
+        .route(web::get().to(get_database_fields_handler))
+        .route(web::post().to(post_database_fields_handler)),
     )
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row/updated")
@@ -1922,6 +1926,31 @@ async fn list_database_row_id_handler(
   Ok(Json(AppResponse::Ok().with_data(db_rows)))
 }
 
+async fn post_database_row_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+  cells_by_id: Json<HashMap<String, serde_json::Value>>,
+) -> Result<Json<AppResponse<String>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  let new_db_row_id = biz::collab::ops::insert_database_row(
+    &state.collab_access_control_storage,
+    &state.pg_pool,
+    &workspace_id,
+    &db_id,
+    uid,
+    cells_by_id.into_inner(),
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
+}
+
 async fn get_database_fields_handler(
   user_uuid: UserUuid,
   path_param: web::Path<(String, String)>,
@@ -1942,6 +1971,32 @@ async fn get_database_fields_handler(
   .await?;
 
   Ok(Json(AppResponse::Ok().with_data(db_fields)))
+}
+
+async fn post_database_fields_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+  field: Json<AFInsertDatabaseField>,
+) -> Result<Json<AppResponse<String>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  let field_id = biz::collab::ops::add_database_field(
+    uid,
+    &state.collab_access_control_storage,
+    &state.pg_pool,
+    &workspace_id,
+    &db_id,
+    field.into_inner(),
+  )
+  .await?;
+
+  Ok(Json(AppResponse::Ok().with_data(field_id)))
 }
 
 async fn list_database_row_id_updated_handler(
@@ -2005,12 +2060,15 @@ async fn list_database_row_details_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
 
+  static UNSUPPORTED_FIELD_TYPES: &[FieldType] = &[FieldType::Relation];
+
   let db_rows = biz::collab::ops::list_database_row_details(
     &state.collab_access_control_storage,
     uid,
     workspace_id,
     db_id,
     &row_ids,
+    UNSUPPORTED_FIELD_TYPES,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))

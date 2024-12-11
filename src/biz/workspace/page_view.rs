@@ -47,11 +47,9 @@ use crate::biz::collab::folder_view::{
   parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
   to_space_permission,
 };
-use crate::biz::collab::ops::{collab_from_doc_state, get_latest_workspace_database};
-use crate::biz::collab::{
-  folder_view::check_if_view_is_space,
-  ops::{get_latest_collab_encoded, get_latest_collab_folder},
-};
+use crate::biz::collab::ops::get_latest_workspace_database;
+use crate::biz::collab::utils::{collab_from_doc_state, get_latest_collab_encoded};
+use crate::biz::collab::{folder_view::check_if_view_is_space, ops::get_latest_collab_folder};
 
 use super::ops::broadcast_update;
 
@@ -1253,6 +1251,7 @@ pub async fn update_page_collab_data(
   let encode_collab = collab_access_control_storage
     .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
     .await?;
+
   let mut collab = collab_from_doc_state(encode_collab.doc_state.to_vec(), &object_id.to_string())?;
   appflowy_web_metrics.record_update_size_bytes(doc_state.len());
   let update = Update::decode_v1(doc_state).map_err(|e| {

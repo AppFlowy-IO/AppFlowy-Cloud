@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
-
 use actix::dev::Stream;
 use async_stream::try_stream;
 use async_trait::async_trait;
@@ -11,6 +7,10 @@ use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use sqlx::PgPool;
+use std::collections::HashMap;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Instant;
 use tokio_stream::StreamExt;
 use tracing::info;
 use uuid::Uuid;
@@ -103,7 +103,7 @@ impl IndexerProvider {
     Box::pin(try_stream! {
       let collabs = get_collabs_without_embeddings(&db).await?;
       if !collabs.is_empty() {
-        tracing::trace!("found {} unindexed collabs", collabs.len());
+        tracing::info!("found {} unindexed collabs", collabs.len());
       }
       for cid in collabs {
         match &cid.collab_type {
@@ -131,6 +131,8 @@ impl IndexerProvider {
   }
 
   pub async fn handle_unindexed_collabs(indexer: Arc<Self>, storage: Arc<dyn CollabStorage>) {
+    let start = Instant::now();
+    let mut i = 0;
     let mut stream = indexer.get_unindexed_collabs(storage);
     while let Some(result) = stream.next().await {
       match result {
@@ -142,6 +144,8 @@ impl IndexerProvider {
             if cfg!(debug_assertions) {
               tracing::warn!("failed to index collab {}/{}: {}", workspace, oid, err);
             }
+          } else {
+            i += 1;
           }
         },
         Err(err) => {
@@ -149,6 +153,11 @@ impl IndexerProvider {
         },
       }
     }
+    tracing::info!(
+      "indexed {} unindexed collabs in {:?} after restart",
+      i,
+      start.elapsed()
+    );
   }
 
   async fn index_collab(&self, unindexed: UnindexedCollab) -> Result<(), AppError> {

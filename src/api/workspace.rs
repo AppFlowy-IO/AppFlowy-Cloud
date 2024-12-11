@@ -8,20 +8,20 @@ use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use collab_folder::timestamp;
 use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sqlx::types::uuid;
 use std::io::Cursor;
 use std::time::Instant;
-
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, event, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::util::PayloadReader;
+use crate::api::util::{client_version_from_headers, PayloadReader};
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
@@ -46,11 +46,12 @@ use crate::domain::compression::{
 };
 use crate::state::AppState;
 use app_error::AppError;
-use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
+use appflowy_collaborate::actix_ws::entities::ClientHttpStreamMessage;
 use appflowy_collaborate::indexer::IndexerProvider;
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
+use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
 use database::collab::{CollabStorage, GetCollabOrigin};
@@ -914,8 +915,13 @@ async fn post_web_update_handler(
   path: web::Path<(Uuid, Uuid)>,
   payload: Json<UpdateCollabWebParams>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
+  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let app_version = client_version_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.collab_type.clone();
   let uid = state
@@ -924,10 +930,18 @@ async fn post_web_update_handler(
     .await
     .map_err(AppResponseError::from)?;
 
-  update_page_collab_data(
-    state.collab_access_control_storage.clone(),
-    state.metrics.appflowy_web_metrics.clone(),
+  let user = RealtimeUser {
     uid,
+    device_id,
+    connect_at: timestamp(),
+    session_id: uuid::Uuid::new_v4().to_string(),
+    app_version,
+  };
+
+  update_page_collab_data(
+    server,
+    user,
+    workspace_id,
     object_id,
     collab_type,
     payload.doc_state,
@@ -1745,7 +1759,7 @@ async fn post_realtime_message_stream_handler(
   let device_id = device_id.to_string();
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let stream_message = ClientStreamMessage {
+  let stream_message = ClientHttpStreamMessage {
     uid,
     device_id,
     message,

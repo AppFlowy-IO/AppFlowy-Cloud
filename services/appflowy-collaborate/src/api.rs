@@ -24,7 +24,7 @@ use collab_rt_entity::{HttpRealtimeMessage, RealtimeMessage};
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::actix_ws::client::RealtimeClient;
-use crate::actix_ws::entities::ClientStreamMessage;
+use crate::actix_ws::entities::ClientHttpStreamMessage;
 use crate::actix_ws::server::RealtimeServerActor;
 use crate::collab::storage::CollabAccessControlStorage;
 use crate::compression::{
@@ -117,7 +117,7 @@ async fn post_realtime_message_stream_handler(
   let device_id = device_id.to_string();
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let stream_message = ClientStreamMessage {
+  let stream_message = ClientHttpStreamMessage {
     uid,
     device_id,
     message,

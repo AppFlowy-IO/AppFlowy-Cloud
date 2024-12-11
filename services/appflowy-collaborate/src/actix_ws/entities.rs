@@ -1,12 +1,13 @@
 use crate::error::RealtimeError;
 use actix::{Message, Recipient};
+use app_error::AppError;
 
-use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::fmt::Debug;
-
+use bytes::Bytes;
+use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
 pub use collab_rt_entity::RealtimeMessage;
-
+use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::fmt::Debug;
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct Connect {
@@ -31,15 +32,33 @@ pub enum BusinessID {
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct ClientMessage {
+pub struct ClientWebSocketMessage {
   pub user: RealtimeUser,
   pub message: RealtimeMessage,
 }
 
 #[derive(Message)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct ClientStreamMessage {
+pub struct ClientHttpStreamMessage {
   pub uid: i64,
   pub device_id: String,
   pub message: RealtimeMessage,
+}
+
+#[derive(Message)]
+#[rtype(result = "Result<(), AppError>")]
+pub struct ClientHttpUpdateMessage {
+  pub user: RealtimeUser,
+  pub workspace_id: String,
+  pub object_id: String,
+  pub update: Bytes,
+  pub collab_type: CollabType,
+}
+
+#[derive(Message)]
+#[rtype(result = "Result<(), AppError>")]
+pub struct ClientGenerateEmbeddingMessage {
+  pub workspace_id: String,
+  pub object_id: String,
+  pub collab_type: CollabType,
 }

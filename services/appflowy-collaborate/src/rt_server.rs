@@ -23,6 +23,7 @@ use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 
+use crate::actix_ws::entities::ClientHttpUpdateMessage;
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
@@ -156,7 +157,7 @@ where
     let group_manager = self.group_manager.clone();
     let enable_custom_runtime = self.enable_custom_runtime;
 
-    for (object_id, collab_messages) in message_by_oid {
+    for (object_id, collab_messages) in message_by_oid.into_inner() {
       let old_sender = group_sender_by_object_id
         .get(&object_id)
         .map(|entry| entry.value().clone());
@@ -223,6 +224,78 @@ where
       });
     }
 
+    Ok(())
+  }
+
+  #[inline]
+  pub fn handle_client_http_update(
+    &self,
+    message: ClientHttpUpdateMessage,
+  ) -> Result<(), RealtimeError> {
+    let group_sender_by_object_id = self.group_sender_by_object_id.clone();
+    let client_msg_router_by_user = self.connect_state.client_message_routers.clone();
+    let group_manager = self.group_manager.clone();
+    let enable_custom_runtime = self.enable_custom_runtime;
+
+    let old_sender = group_sender_by_object_id
+      .get(&message.object_id)
+      .map(|entry| entry.value().clone());
+
+    let sender = match old_sender {
+      Some(sender) => sender,
+      None => match group_sender_by_object_id.entry(message.object_id.clone()) {
+        Entry::Occupied(entry) => entry.get().clone(),
+        Entry::Vacant(entry) => {
+          let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
+          let runner = GroupCommandRunner {
+            group_manager: group_manager.clone(),
+            msg_router_by_user: client_msg_router_by_user.clone(),
+            recv: Some(recv),
+          };
+
+          let object_id = entry.key().clone();
+          if enable_custom_runtime {
+            COLLAB_RUNTIME.spawn(runner.run(object_id));
+          } else {
+            tokio::spawn(runner.run(object_id));
+          }
+
+          entry.insert(new_sender.clone());
+          new_sender
+        },
+      },
+    };
+
+    tokio::spawn(async move {
+      let (tx, rx) = tokio::sync::oneshot::channel();
+      match sender
+        .send(GroupCommand::HandleClientHttpUpdate {
+          user: message.user,
+          workspace_id: message.workspace_id,
+          object_id: message.object_id,
+          update: message.update,
+          collab_type: message.collab_type,
+          ret: tx,
+        })
+        .await
+      {
+        Ok(_) => {
+          if let Ok(Err(err)) = rx.await {
+            error!("Handle client update message fail: {}", err);
+          }
+        },
+        Err(err) => error!("Send update to group fail: {}", err),
+      }
+    });
+
+    Ok(())
+  }
+
+  #[inline]
+  pub fn handle_client_generate_embedding_request(
+    &self,
+    message: ClientHttpUpdateMessage,
+  ) -> Result<(), RealtimeError> {
     Ok(())
   }
 

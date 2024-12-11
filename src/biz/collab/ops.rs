@@ -24,7 +24,7 @@ use database::collab::select_workspace_database_oid;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
-use database_entity::dto::{CollabParams, QueryCollabResult};
+use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
@@ -44,7 +44,6 @@ use super::folder_view::section_items_to_recent_folder_view;
 use super::folder_view::section_items_to_trash_folder_view;
 use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
-use crate::biz::workspace::ops::broadcast_update;
 use access_control::collab::CollabAccessControl;
 use anyhow::{anyhow, Context};
 use appflowy_collaborate::indexer::IndexerProvider;
@@ -852,35 +851,6 @@ fn type_options_serde(
 }
 
 #[allow(clippy::too_many_arguments)]
-/// This function only used in Web and will be deprecated soon.
-/// Use a doc state as update to update the collab.
-///
-pub async fn update_collab_with_doc_state<T: Into<Bytes>>(
-  pg_pool: &PgPool,
-  uid: i64,
-  workspace_id: Uuid,
-  object_id: Uuid,
-  collab_type: CollabType,
-  doc_state: T,
-  collab_access_control_storage: Arc<CollabAccessControlStorage>,
-) -> Result<(), AppError> {
-  let doc_state = doc_state.into();
-  let object_id = object_id.to_string();
-
-  let update = tokio::task::spawn_blocking(move || {
-    let update =
-      Update::decode_v1(&doc_state).map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
-    Ok::<_, AppError>(update)
-  })
-  .await??;
-
-  collab_access_control_storage
-    .apply_update_to_editing(&object_id, update)
-    .await?;
-  Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
 #[inline]
 /// Apply client doc state to the server collab and return the missing update that client
 /// needs to apply.
@@ -908,7 +878,6 @@ pub async fn two_ways_sync_with_doc_state<T: Into<Bytes>>(
     .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
     .await?;
 
-  let mut embeddings = None;
   let cloned_object_id = object_id.clone();
   let cloned_doc_state = doc_state.clone();
   let (embedding_content, missing_update) = tokio::task::spawn_blocking(move || {
@@ -943,17 +912,17 @@ pub async fn two_ways_sync_with_doc_state<T: Into<Bytes>>(
   })
   .await??;
 
-  if let Some(embedding_content) = embedding_content {
-    if let Some(indexer) = indexer_provider.indexer_for(&collab_type) {
-      if let Ok(params) = indexer
-        .embedding_text(object_id.clone(), embedding_content, collab_type.clone())
-        .await
-      {
-        if let Ok(data) = indexer.embeddings(params).await {
-          embeddings = data
-        }
-      }
-    }
+  if let Some(_) = embedding_content {
+    // if let Some(indexer) = indexer_provider.indexer_for(&collab_type) {
+    //   if let Ok(params) = indexer
+    //     .embedding_text(object_id.clone(), embedding_content, collab_type.clone())
+    //     .await
+    //   {
+    //     if let Ok(data) = indexer.embeddings(params).await {
+    //       embeddings = data
+    //     }
+    //   }
+    // }
   }
 
   Ok(missing_update)

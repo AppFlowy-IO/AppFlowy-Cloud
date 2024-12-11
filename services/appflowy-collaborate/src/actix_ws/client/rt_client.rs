@@ -1,4 +1,4 @@
-use crate::actix_ws::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
+use crate::actix_ws::entities::{ClientWebSocketMessage, Connect, Disconnect, RealtimeMessage};
 use crate::error::RealtimeError;
 use crate::RealtimeClientWebsocketSink;
 use actix::{
@@ -27,7 +27,7 @@ use tracing::{debug, error, trace, warn};
 pub type HandlerResult = anyhow::Result<(), RealtimeError>;
 pub trait RealtimeServer:
   Actor<Context = Context<Self>>
-  + Handler<ClientMessage, Result = HandlerResult>
+  + Handler<ClientWebSocketMessage, Result = HandlerResult>
   + Handler<Connect, Result = HandlerResult>
   + Handler<Disconnect, Result = HandlerResult>
 {
@@ -103,7 +103,7 @@ where
 
     self
       .server
-      .try_send(ClientMessage {
+      .try_send(ClientWebSocketMessage {
         user: self.user.clone(),
         message,
       })
@@ -127,7 +127,7 @@ where
     let fut = async move {
       match tokio::task::spawn_blocking(move || RealtimeMessage::decode(&bytes)).await {
         Ok(Ok(decoded_message)) => {
-          let mut client_message = Some(ClientMessage {
+          let mut client_message = Some(ClientWebSocketMessage {
             user,
             message: decoded_message,
           });

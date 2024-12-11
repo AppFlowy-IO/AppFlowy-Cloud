@@ -1,19 +1,20 @@
 use super::ops::broadcast_update;
-use crate::api::metrics::AppFlowyWebMetrics;
+use crate::api::ws::RealtimeServerAddr;
 use crate::biz::collab::folder_view::{
   parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
   to_space_permission,
 };
-use crate::biz::collab::ops::{
-  collab_from_doc_state, get_latest_workspace_database, update_collab_with_doc_state,
-};
+use crate::biz::collab::ops::{collab_from_doc_state, get_latest_workspace_database};
 use crate::biz::collab::{
   folder_view::check_if_view_is_space,
   ops::{get_latest_collab_encoded, get_latest_collab_folder},
 };
+use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;
+use appflowy_collaborate::actix_ws::entities::ClientHttpUpdateMessage;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use bytes::Bytes;
 use chrono::DateTime;
 use collab::core::collab::Collab;
 use collab_database::database::{
@@ -37,6 +38,7 @@ use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
 use collab_folder::{timestamp, CollabOrigin, Folder};
+use collab_rt_entity::user::RealtimeUser;
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
@@ -51,10 +53,8 @@ use sqlx::{PgPool, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::instrument;
 use uuid::Uuid;
-use yrs::updates::decoder::Decode;
-use yrs::Update;
-
 struct WorkspaceDatabaseUpdate {
   pub updated_encoded_collab: Vec<u8>,
   pub encoded_updates: Vec<u8>,
@@ -1232,28 +1232,28 @@ async fn get_page_collab_data_for_document(
   })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[instrument(level = "debug", skip_all)]
 pub async fn update_page_collab_data(
-  collab_access_control_storage: Arc<CollabAccessControlStorage>,
-  appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
-  uid: i64,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  workspace_id: Uuid,
   object_id: Uuid,
   collab_type: CollabType,
   doc_state: Vec<u8>,
 ) -> Result<(), AppError> {
   let object_id = object_id.to_string();
-  let update = tokio::task::spawn_blocking(move || {
-    let update = Update::decode_v1(&doc_state).map_err(|err| {
-      appflowy_web_metrics.incr_decoding_failure_count(1);
-      AppError::DecodeUpdateError(err.to_string())
-    })?;
-    Ok::<_, AppError>(update)
-  })
-  .await??;
 
-  collab_access_control_storage
-    .apply_update_to_editing(uid, &object_id, update, collab_type)
-    .await?;
+  let message = ClientHttpUpdateMessage {
+    user,
+    workspace_id: workspace_id.to_string(),
+    object_id: object_id.to_string(),
+    collab_type,
+    update: Bytes::from(doc_state),
+  };
+
+  server
+    .try_send(message)
+    .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
 
   Ok(())
 }

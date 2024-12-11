@@ -1,15 +1,19 @@
 use std::ops::Deref;
 
-use actix::{Actor, Context, Handler};
-use tracing::{error, info, warn};
-
 use crate::error::RealtimeError;
 use crate::CollaborationServer;
+use actix::{Actor, Context, Handler};
+use anyhow::anyhow;
+use app_error::AppError;
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
+use tracing::{error, info, warn};
 
 use crate::actix_ws::client::rt_client::{RealtimeClientWebsocketSinkImpl, RealtimeServer};
-use crate::actix_ws::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
+use crate::actix_ws::entities::{
+  ClientGenerateEmbeddingMessage, ClientHttpStreamMessage, ClientHttpUpdateMessage,
+  ClientWebSocketMessage, Connect, Disconnect,
+};
 
 #[derive(Clone)]
 pub struct RealtimeServerActor<S>(pub CollaborationServer<S>);
@@ -81,15 +85,19 @@ where
   }
 }
 
-impl<S> Handler<ClientMessage> for RealtimeServerActor<S>
+impl<S> Handler<ClientWebSocketMessage> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
 {
   type Result = anyhow::Result<(), RealtimeError>;
 
-  fn handle(&mut self, client_msg: ClientMessage, _ctx: &mut Context<Self>) -> Self::Result {
-    let ClientMessage { user, message } = client_msg;
-    match message.transform() {
+  fn handle(
+    &mut self,
+    client_msg: ClientWebSocketMessage,
+    _ctx: &mut Context<Self>,
+  ) -> Self::Result {
+    let ClientWebSocketMessage { user, message } = client_msg;
+    match message.split_messages_by_object_id() {
       Ok(message_by_object_id) => self.handle_client_message(user, message_by_object_id),
       Err(err) => {
         if cfg!(debug_assertions) {
@@ -101,14 +109,18 @@ where
   }
 }
 
-impl<S> Handler<ClientStreamMessage> for RealtimeServerActor<S>
+impl<S> Handler<ClientHttpStreamMessage> for RealtimeServerActor<S>
 where
   S: CollabStorage + Unpin,
 {
   type Result = anyhow::Result<(), RealtimeError>;
 
-  fn handle(&mut self, client_msg: ClientStreamMessage, _ctx: &mut Context<Self>) -> Self::Result {
-    let ClientStreamMessage {
+  fn handle(
+    &mut self,
+    client_msg: ClientHttpStreamMessage,
+    _ctx: &mut Context<Self>,
+  ) -> Self::Result {
+    let ClientHttpStreamMessage {
       uid,
       device_id,
       message,
@@ -117,7 +129,7 @@ where
     // Get the real-time user by the device ID and user ID. If the user is not found, which means
     // the user is not connected to the real-time server via websocket.
     let user = self.get_user_by_device(&UserDevice::new(&device_id, uid));
-    match (user, message.transform()) {
+    match (user, message.split_messages_by_object_id()) {
       (Some(user), Ok(messages)) => self.handle_client_message(user, messages),
       (None, _) => {
         warn!("Can't find the realtime user uid:{}, device:{}. User should connect via websocket before", uid,device_id);
@@ -130,5 +142,34 @@ where
         Ok(())
       },
     }
+  }
+}
+
+impl<S> Handler<ClientHttpUpdateMessage> for RealtimeServerActor<S>
+where
+  S: CollabStorage + Unpin,
+{
+  type Result = Result<(), AppError>;
+
+  fn handle(&mut self, msg: ClientHttpUpdateMessage, _ctx: &mut Self::Context) -> Self::Result {
+    self
+      .handle_client_http_update(msg)
+      .map_err(|err| AppError::Internal(anyhow!("handle client http message error: {}", err)))?;
+    Ok(())
+  }
+}
+
+impl<S> Handler<ClientGenerateEmbeddingMessage> for RealtimeServerActor<S>
+where
+  S: CollabStorage + Unpin,
+{
+  type Result = Result<(), AppError>;
+
+  fn handle(
+    &mut self,
+    msg: ClientGenerateEmbeddingMessage,
+    _ctx: &mut Self::Context,
+  ) -> Self::Result {
+    Ok(())
   }
 }

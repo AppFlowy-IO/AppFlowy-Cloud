@@ -52,18 +52,39 @@ pub fn compress_type_from_header_value(headers: &HeaderMap) -> Result<Compressio
   }
 }
 
-pub fn device_id_from_headers(headers: &HeaderMap) -> Result<String, AppError> {
-  headers
-    .get("device_id")
-    .ok_or(AppError::InvalidRequest(
-      "Missing device_id header".to_string(),
-    ))
+fn value_from_headers(
+  headers: &HeaderMap,
+  keys: &[&str],
+  missing_msg: &str,
+) -> Result<String, AppError> {
+  keys
+    .iter()
+    .find_map(|key| headers.get(*key))
+    .ok_or_else(|| AppError::InvalidRequest(missing_msg.to_string()))
     .and_then(|header| {
       header
         .to_str()
-        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse device_id: {}", err)))
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse header: {}", err)))
     })
     .map(|s| s.to_string())
+}
+
+/// Retrieve client version from headers
+pub fn client_version_from_headers(headers: &HeaderMap) -> Result<String, AppError> {
+  value_from_headers(
+    headers,
+    &["Client-Version", "client-version"],
+    "Missing Client-Version or client-version header",
+  )
+}
+
+/// Retrieve device ID from headers
+pub fn device_id_from_headers(headers: &HeaderMap) -> Result<String, AppError> {
+  value_from_headers(
+    headers,
+    &["Device-Id", "device_id", "device-id"],
+    "Missing Device-Id or device_id header",
+  )
 }
 
 #[async_trait]

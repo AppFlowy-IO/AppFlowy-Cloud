@@ -7,7 +7,6 @@ use database_entity::dto::{
 };
 
 use collab::entity::EncodedCollab;
-use collab_rt_entity::ClientCollabMessage;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 use std::collections::HashMap;

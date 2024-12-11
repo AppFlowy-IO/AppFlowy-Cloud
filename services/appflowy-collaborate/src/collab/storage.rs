@@ -131,46 +131,6 @@ where
       .await?;
     Ok(())
   }
-  pub async fn apply_update_to_editing(
-    &self,
-    uid: i64,
-    object_id: &str,
-    update: Update,
-    collab_type: CollabType,
-  ) -> Result<(), AppError> {
-    let object_id = object_id.to_string();
-    let (ret, rx) = tokio::sync::oneshot::channel();
-    let timeout_duration = Duration::from_secs(5);
-    self
-      .rt_cmd_sender
-      .send(CollaborationCommand::ApplyUpdate {
-        uid,
-        object_id,
-        update,
-        collab_type,
-        ret,
-      })
-      .await
-      .map_err(|err| {
-        AppError::Internal(anyhow!(
-          "Failed to send apply update command to realtime server: {}",
-          err
-        ))
-      })?;
-
-    match timeout(timeout_duration, rx).await {
-      Ok(Ok(())) => Ok(()),
-      Ok(Err(err)) => Err(AppError::Internal(anyhow!(
-        "Failed to send apply update command to realtime server: {}",
-        err
-      ))),
-      Err(err) => Err(AppError::Internal(anyhow!(
-        "Failed to send apply update command to realtime server: {}",
-        err
-      ))),
-    }
-  }
-
   async fn get_encode_collab_from_editing(&self, oid: &str) -> Option<EncodedCollab> {
     let object_id = oid.to_string();
     let (ret, rx) = tokio::sync::oneshot::channel();
@@ -288,7 +248,7 @@ where
   /// # Arguments
   /// * `object_id` - The ID of the collaboration object.
   /// * `collab_messages` - The list of collab messages to broadcast.
-  async fn broadcast_encode_collab(
+  pub async fn broadcast_encode_collab(
     &self,
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,

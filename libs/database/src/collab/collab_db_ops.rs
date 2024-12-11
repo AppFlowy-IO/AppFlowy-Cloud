@@ -43,7 +43,6 @@ use uuid::Uuid;
 /// * There's a database operation failure.
 /// * There's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
 ///
-
 #[inline]
 #[instrument(level = "trace", skip(tx, params), fields(oid=%params.object_id), err)]
 pub async fn insert_into_af_collab(

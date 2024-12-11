@@ -4,8 +4,8 @@ use app_error::AppError;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use client_api_entity::workspace_dto::{
-  AFDatabase, AFDatabaseField, AFDatabaseRow, AFDatabaseRowDetail, DatabaseRowUpdatedItem,
-  ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
+  AFDatabase, AFDatabaseField, AFDatabaseRow, AFDatabaseRowDetail, AFInsertDatabaseField,
+  DatabaseRowUpdatedItem, ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
 };
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
@@ -210,6 +210,28 @@ impl Client {
     AppResponse::from_response(resp).await?.into_data()
   }
 
+  // Adds a database field to the specified database.
+  // Returns the field id of the newly created field.
+  pub async fn add_database_field(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    insert_field: &AFInsertDatabaseField,
+  ) -> Result<String, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/fields",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(insert_field)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
   pub async fn list_database_row_ids_updated(
     &self,
     workspace_id: &str,
@@ -244,6 +266,32 @@ impl Client {
       .http_client_with_auth(Method::GET, &url)
       .await?
       .query(&ListDatabaseRowDetailParam::from(row_ids))
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  /// Example payload:
+  /// {
+  ///   "Name": "some_data",        # using column name
+  ///   "_pIkG": "some other data"  # using field_id (can be obtained from [get_database_fields])
+  /// }
+  /// Upon success, returns the row id for the newly created row.
+  pub async fn add_database_item(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    payload: &serde_json::Value,
+  ) -> Result<String, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&payload)
       .send()
       .await?;
     log_request_id(&resp);

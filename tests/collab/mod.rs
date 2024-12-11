@@ -1,5 +1,6 @@
 mod awareness_test;
 mod collab_curd_test;
+mod database_crud;
 mod member_crud;
 mod missing_update_test;
 mod multi_devices_edit;

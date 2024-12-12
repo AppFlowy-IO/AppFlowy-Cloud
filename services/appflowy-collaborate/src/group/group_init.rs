@@ -8,14 +8,14 @@ use collab::entity::EncodedCollab;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::CollabMessage;
+use collab_rt_entity::MessageByObjectId;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{event, info, trace};
-
-use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::CollabMessage;
-use collab_rt_entity::MessageByObjectId;
+use yrs::{ReadTxn, StateVector};
 
 use collab_stream::error::StreamError;
 
@@ -78,7 +78,7 @@ impl CollabGroup {
         uid,
         storage,
         edit_state.clone(),
-        Arc::downgrade(&collab),
+        collab.clone(),
         collab_type.clone(),
         persistence_interval,
         indexer,
@@ -97,6 +97,19 @@ impl CollabGroup {
       metrics_calculate,
       cancel,
     })
+  }
+
+  pub async fn calculate_missing_update(
+    &self,
+    state_vector: StateVector,
+  ) -> Result<Vec<u8>, RealtimeError> {
+    let guard = self.collab.read().await;
+    let txn = guard.transact();
+    let update = txn.encode_state_as_update_v1(&state_vector);
+    drop(txn);
+    drop(guard);
+
+    Ok(update)
   }
 
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {

@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-x25519-dalek = { version = "2.0.0" , features = ["getrandom"] }
+x25519-dalek = { version = "2.0.0", features = ["getrandom"] }
 rand = "0.8.5"
 hex = "0.4.3"
-anyhow = "1.0.79"
+anyhow.workspace = true
 aes-gcm = { version = "0.10.3" }
 base64 = "0.21.7"
 hkdf = { version = "0.12.4" }

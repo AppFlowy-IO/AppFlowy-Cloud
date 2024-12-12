@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas, CollabParams,
-  QueryCollab, QueryCollabResult, RawData,
+  AFAccessLevel, AFCollabInfo, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas,
+  CollabParams, QueryCollab, QueryCollabResult, RawData,
 };
 use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
 
@@ -748,4 +748,34 @@ pub async fn select_last_updated_database_row_ids(
   .fetch_all(pg_pool)
   .await?;
   Ok(updated_row_items)
+}
+
+pub async fn get_collab_info<'a, E>(
+  tx: E,
+  object_id: &str,
+  collab_type: CollabType,
+) -> Result<Option<AFCollabInfo>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let partition_key = crate::collab::partition_key_from_collab_type(&collab_type);
+  let result = sqlx::query!(
+    r#"
+        SELECT
+            oid AS object_id,
+            indexed_at
+        FROM af_collab_embeddings
+        WHERE oid = $1 AND partition_key = $2
+        "#,
+    object_id,
+    partition_key
+  )
+  .fetch_optional(tx)
+  .await?
+  .map(|row| AFCollabInfo {
+    object_id: row.object_id,
+    embedding_index_at: DateTime::<Utc>::from_naive_utc_and_offset(row.indexed_at, Utc),
+  });
+
+  Ok(result)
 }

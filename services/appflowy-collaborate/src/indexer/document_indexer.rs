@@ -1,45 +1,38 @@
-use std::sync::Arc;
-
 use anyhow::anyhow;
-use async_trait::async_trait;
-use collab::preclude::Collab;
-
-use crate::indexer::{DocumentDataExt, Indexer};
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_ai_client::dto::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
 };
+use async_trait::async_trait;
+use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, EmbeddingContentType};
+use std::sync::Arc;
 
-use crate::config::get_env_var;
-use crate::indexer::open_ai::{split_text_by_max_content_len, split_text_by_max_tokens};
+use crate::indexer::open_ai::split_text_by_max_content_len;
+use crate::indexer::Indexer;
 use tiktoken_rs::CoreBPE;
 use tracing::trace;
 use uuid::Uuid;
 
 pub struct DocumentIndexer {
   ai_client: AppFlowyAIClient,
+  #[allow(dead_code)]
   tokenizer: Arc<CoreBPE>,
   embedding_model: EmbeddingModel,
-  use_tiktoken: bool,
 }
 
 impl DocumentIndexer {
   pub fn new(ai_client: AppFlowyAIClient) -> Arc<Self> {
     let tokenizer = tiktoken_rs::cl100k_base().unwrap();
-    let use_tiktoken = get_env_var("APPFLOWY_AI_CONTENT_SPLITTER_TIKTOKEN", "false")
-      .parse::<bool>()
-      .unwrap_or(false);
 
     Arc::new(Self {
       ai_client,
       tokenizer: Arc::new(tokenizer),
       embedding_model: EmbeddingModel::TextEmbedding3Small,
-      use_tiktoken,
     })
   }
 }
@@ -58,17 +51,14 @@ impl Indexer for DocumentIndexer {
       )
     })?;
 
-    let result = document.get_document_data(&collab.transact());
+    let result = document.to_plain_text(collab.transact(), false);
     match result {
-      Ok(document_data) => {
-        let content = document_data.to_plain_text();
+      Ok(content) => {
         create_embedding(
           object_id,
           content,
           CollabType::Document,
           &self.embedding_model,
-          self.tokenizer.clone(),
-          self.use_tiktoken,
         )
         .await
       },
@@ -80,6 +70,15 @@ impl Indexer for DocumentIndexer {
         }
       },
     }
+  }
+
+  async fn embedding_text(
+    &self,
+    object_id: String,
+    content: String,
+    collab_type: CollabType,
+  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+    create_embedding(object_id, content, collab_type, &self.embedding_model).await
   }
 
   async fn embeddings(
@@ -142,29 +141,14 @@ async fn create_embedding(
   content: String,
   collab_type: CollabType,
   embedding_model: &EmbeddingModel,
-  tokenizer: Arc<CoreBPE>,
-  use_tiktoken: bool,
 ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
-  let split_contents = if use_tiktoken {
-    let max_tokens = embedding_model.default_dimensions() as usize;
-    if content.len() < 500 {
-      split_text_by_max_tokens(content, max_tokens, tokenizer.as_ref())?
-    } else {
-      tokio::task::spawn_blocking(move || {
-        split_text_by_max_tokens(content, max_tokens, tokenizer.as_ref())
-      })
-      .await??
-    }
-  } else {
-    debug_assert!(matches!(
-      embedding_model,
-      EmbeddingModel::TextEmbedding3Small
-    ));
-    // We assume that every token is ~4 bytes. We're going to split document content into fragments
-    // of ~2000 tokens each.
-    split_text_by_max_content_len(content, 8000)?
-  };
-
+  debug_assert!(matches!(
+    embedding_model,
+    EmbeddingModel::TextEmbedding3Small
+  ));
+  // We assume that every token is ~4 bytes. We're going to split document content into fragments
+  // of ~2000 tokens each.
+  let split_contents = split_text_by_max_content_len(content, 8000)?;
   Ok(
     split_contents
       .into_iter()

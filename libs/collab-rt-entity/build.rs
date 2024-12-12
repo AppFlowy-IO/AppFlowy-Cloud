@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   prost_build::Config::new()
     .out_dir("src/")
-    .compile_protos(&["proto/realtime.proto"], &["proto/"])?;
+    .compile_protos(&["proto/realtime.proto", "proto/collab.proto"], &["proto/"])?;
 
   // Run rustfmt on the generated files.
   let files = std::fs::read_dir("src/")?

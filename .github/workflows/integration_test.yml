@@ -29,7 +29,7 @@ env:
   POSTGRES_PASSWORD: password
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
   SQLX_OFFLINE: true
-  RUST_TOOLCHAIN: "1.78"
+  RUST_TOOLCHAIN: "1.80"
 
 jobs:
   setup:

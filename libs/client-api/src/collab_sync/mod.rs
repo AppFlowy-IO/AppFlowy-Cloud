@@ -1,7 +1,6 @@
 mod collab_sink;
 mod collab_stream;
 mod error;
-mod period_state_check;
 mod plugin;
 mod sync_control;
 

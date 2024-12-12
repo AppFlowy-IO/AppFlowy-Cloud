@@ -61,7 +61,7 @@ where
   }
 
   pub fn get_inactive_groups(&self) -> Vec<String> {
-    self.state.get_inactive_group_ids()
+    self.state.remove_inactive_groups()
   }
 
   pub fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
@@ -78,11 +78,6 @@ where
 
   pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
     self.state.get_group(object_id).await
-  }
-
-  #[instrument(skip(self))]
-  fn remove_group(&self, object_id: &str) {
-    self.state.remove_group(object_id);
   }
 
   pub async fn subscribe_group(
@@ -154,7 +149,7 @@ where
       collab_type
     );
 
-    let mut indexer = self.indexer_provider.indexer_for(collab_type.clone());
+    let mut indexer = self.indexer_provider.indexer_for(&collab_type);
     if indexer.is_some()
       && !self
         .indexer_provider

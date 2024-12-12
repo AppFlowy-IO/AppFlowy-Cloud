@@ -12,7 +12,9 @@ use collab_database::fields::TypeOptionCellWriter;
 use collab_database::fields::TypeOptionData;
 use collab_database::fields::TypeOptions;
 use collab_database::rows::Cell;
+use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::RowDetail;
+use collab_database::rows::RowId;
 use collab_database::template::entity::CELL_DATA;
 use collab_database::template::timestamp_parse::TimestampCellData;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
@@ -178,6 +180,32 @@ pub fn type_options_serde(
   }
 
   result
+}
+
+pub async fn get_database_row_body(
+  collab_storage: &CollabAccessControlStorage,
+  workspace_uuid_str: &str,
+  db_row_uuid_str: &str,
+) -> Result<(Collab, DatabaseRowBody), AppError> {
+  let mut db_row_collab = get_latest_collab(
+    collab_storage,
+    GetCollabOrigin::Server,
+    workspace_uuid_str,
+    db_row_uuid_str,
+    CollabType::DatabaseRow,
+  )
+  .await?;
+
+  let row_id: RowId = db_row_uuid_str.to_string().into();
+  let db_row_body = DatabaseRowBody::open(row_id, &mut db_row_collab).map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create database row body from collab, db_row_id: {}, err: {}",
+      db_row_uuid_str,
+      err
+    ))
+  })?;
+
+  Ok((db_row_collab, db_row_body))
 }
 
 pub async fn get_database_body(

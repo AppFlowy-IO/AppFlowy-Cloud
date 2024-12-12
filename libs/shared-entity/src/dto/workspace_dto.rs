@@ -405,3 +405,9 @@ pub struct AFInsertDatabaseField {
   pub field_type: i64,                             // FieldType ID
   pub type_option_data: Option<serde_json::Value>, // TypeOptionData
 }
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct UpsertDatatabaseRow {
+  pub pre_hash: String, // input which will be hashed into database row id
+  pub cells_by_id: HashMap<String, serde_json::Value>,
+}

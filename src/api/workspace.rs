@@ -12,6 +12,7 @@ use collab_entity::CollabType;
 use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use sqlx::types::uuid;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -266,7 +267,8 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row")
         .route(web::get().to(list_database_row_id_handler))
-        .route(web::post().to(post_database_row_handler)),
+        .route(web::post().to(post_database_row_handler))
+        .route(web::put().to(put_database_row_handler)),
     )
     .service(
       web::resource("/{workspace_id}/database/{database_id}/fields")
@@ -1970,10 +1972,56 @@ async fn post_database_row_handler(
     &workspace_id,
     &db_id,
     uid,
+    None,
     cells_by_id.into_inner(),
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
+}
+
+async fn put_database_row_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+  upsert_db_row: Json<UpsertDatatabaseRow>,
+) -> Result<Json<AppResponse<String>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  let UpsertDatatabaseRow {
+    pre_hash,
+    cells_by_id,
+  } = upsert_db_row.into_inner();
+
+  let row_id = {
+    let mut hasher = Sha256::new();
+    hasher.update(workspace_id.clone());
+    hasher.update(db_id.clone());
+    hasher.update(pre_hash);
+    let hash = hasher.finalize();
+    Uuid::from_bytes([
+      // take 16 out of 32 bytes
+      hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9],
+      hash[10], hash[11], hash[12], hash[13], hash[14], hash[15],
+    ])
+  };
+  let row_id_str = row_id.to_string();
+
+  biz::collab::ops::upsert_database_row(
+    &state.collab_access_control_storage,
+    &state.pg_pool,
+    &workspace_id,
+    &db_id,
+    uid,
+    &row_id_str,
+    cells_by_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(row_id_str)))
 }
 
 async fn get_database_fields_handler(

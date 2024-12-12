@@ -8,6 +8,7 @@ use chrono::Utc;
 use collab::preclude::Collab;
 use collab_database::database::gen_field_id;
 use collab_database::database::gen_row_id;
+use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
 use collab_database::fields::TypeOptions;
@@ -16,6 +17,7 @@ use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
 use collab_database::rows::RowDetail;
+use collab_database::rows::RowId;
 use collab_database::views::OrderObjectPosition;
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
@@ -71,6 +73,7 @@ use super::utils::collab_from_doc_state;
 use super::utils::collab_to_bin;
 use super::utils::field_by_id_name_uniq;
 use super::utils::get_database_body;
+use super::utils::get_database_row_body;
 use super::utils::get_latest_collab;
 use super::utils::get_latest_collab_encoded;
 use super::utils::get_row_details_serde;
@@ -489,74 +492,41 @@ pub async fn insert_database_row(
   workspace_uuid_str: &str,
   database_uuid_str: &str,
   uid: i64,
+  new_db_row_id: Option<&str>,
   cell_value_by_id: HashMap<String, serde_json::Value>,
 ) -> Result<String, AppError> {
-  // get database types and type options
-  let (mut db_collab, db_body) =
-    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+  let new_db_row_id: RowId = new_db_row_id
+    .map(|id| RowId::from(id.to_string()))
+    .unwrap_or_else(gen_row_id);
 
-  let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
-  let field_by_id = all_fields.iter().fold(HashMap::new(), |mut acc, field| {
-    acc.insert(field.id.clone(), field.clone());
-    acc
-  });
-  let type_option_reader_by_id = type_option_writer_by_id(&all_fields);
-  let field_by_name = field_by_name_uniq(all_fields);
+  let creation_time = Utc::now();
 
-  let new_db_row_id = gen_row_id();
   let mut new_db_row_collab =
     Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
+  let new_db_row_body = DatabaseRowBody::create(
+    new_db_row_id.clone(),
+    &mut new_db_row_collab,
+    Row::empty(new_db_row_id.clone(), database_uuid_str),
+  );
+  new_db_row_body.update(&mut new_db_row_collab.transact_mut(), |row_update| {
+    row_update.set_created_at(Utc::now().timestamp());
+  });
 
-  let new_db_row_body = {
-    let db_row_body = DatabaseRowBody::create(
-      new_db_row_id.clone(),
-      &mut new_db_row_collab,
-      Row::empty(new_db_row_id.clone(), database_uuid_str),
-    );
-    let mut txn = new_db_row_collab.transact_mut();
-
-    // set last_modified and created_at
-    db_row_body.update(&mut txn, |row_update| {
-      row_update
-        .set_last_modified(Utc::now().timestamp())
-        .set_created_at(Utc::now().timestamp());
-    });
-
-    for (id, serde_val) in cell_value_by_id {
-      let field = match field_by_id.get(&id) {
-        Some(f) => f,
-        // try use field name if id not found
-        None => match field_by_name.get(&id) {
-          Some(f) => f,
-          None => {
-            tracing::warn!(
-              "field not found: {} for database: {}",
-              id,
-              database_uuid_str
-            );
-            continue;
-          },
-        },
-      };
-      let cell_writer = match type_option_reader_by_id.get(&field.id) {
-        Some(cell_writer) => cell_writer,
-        None => {
-          tracing::error!("Failed to get type option writer for field: {}", field.id);
-          continue;
-        },
-      };
-      let new_cell: Cell = cell_writer.convert_json_to_cell(serde_val);
-      db_row_body.update(&mut txn, |row_update| {
-        row_update.update_cells(|cells_update| {
-          cells_update.insert_cell(&field.id, new_cell);
-        });
-      });
-    }
-    db_row_body
-  };
+  let (mut db_collab, db_body) =
+    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+  let _row_updates = write_to_database_row(
+    &db_collab,
+    &db_body,
+    database_uuid_str,
+    &mut new_db_row_collab,
+    &new_db_row_body,
+    cell_value_by_id,
+    creation_time.timestamp(),
+  )
+  .await?;
 
   // Create new row order
-  let ts_now = chrono::Utc::now().timestamp();
+  let ts_now = creation_time.timestamp();
   let row_order = db_body
     .create_row(CreateRowParams {
       id: new_db_row_id.clone(),
@@ -573,8 +543,7 @@ pub async fn insert_database_row(
     .await
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create row: {:?}", e)))?;
 
-  // Prepare new row collab binary to store in postgres
-  let db_row_ec_v1 = collab_to_bin(new_db_row_collab, CollabType::DatabaseRow).await?;
+  let new_db_row_ec_v1 = collab_to_bin(new_db_row_collab, CollabType::DatabaseRow).await?;
 
   // For each database view, add the new row order
   let db_collab_update = {
@@ -600,7 +569,7 @@ pub async fn insert_database_row(
       &uid,
       CollabParams {
         object_id: new_db_row_id.to_string(),
-        encoded_collab_v1: db_row_ec_v1.into(),
+        encoded_collab_v1: new_db_row_ec_v1.into(),
         collab_type: CollabType::DatabaseRow,
         embeddings: None,
       },
@@ -628,6 +597,136 @@ pub async fn insert_database_row(
   db_txn.commit().await?;
   broadcast_update(collab_storage, database_uuid_str, db_collab_update).await?;
   Ok(new_db_row_id.to_string())
+}
+
+/// Base on values given by [cell_value_by_id], write to fields of DatabaseRowBody.
+/// Returns encoded collab updates to the database row
+async fn write_to_database_row(
+  db_collab: &Collab,
+  db_body: &DatabaseBody,
+  database_uuid_str: &str,
+  db_row_collab: &mut Collab,
+  db_row_body: &DatabaseRowBody,
+  cell_value_by_id: HashMap<String, serde_json::Value>,
+  modified_ts: i64,
+) -> Result<Vec<u8>, AppError> {
+  let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
+  let field_by_id = all_fields.iter().fold(HashMap::new(), |mut acc, field| {
+    acc.insert(field.id.clone(), field.clone());
+    acc
+  });
+  let type_option_reader_by_id = type_option_writer_by_id(&all_fields);
+  let field_by_name = field_by_name_uniq(all_fields);
+
+  let db_row_collab_updates = {
+    let mut yrs_txn = db_row_collab.transact_mut();
+    // set last_modified
+    db_row_body.update(&mut yrs_txn, |row_update| {
+      row_update.set_last_modified(modified_ts);
+    });
+
+    // for each field given by user input, overwrite existing data
+    for (id, serde_val) in cell_value_by_id {
+      let field = match field_by_id.get(&id) {
+        Some(f) => f,
+        // try use field name if id not found
+        None => match field_by_name.get(&id) {
+          Some(f) => f,
+          None => {
+            tracing::warn!(
+              "field not found: {} for database: {}",
+              id,
+              database_uuid_str
+            );
+            continue;
+          },
+        },
+      };
+      let cell_writer = match type_option_reader_by_id.get(&field.id) {
+        Some(cell_writer) => cell_writer,
+        None => {
+          tracing::error!("Failed to get type option writer for field: {}", field.id);
+          continue;
+        },
+      };
+      let new_cell: Cell = cell_writer.convert_json_to_cell(serde_val);
+      db_row_body.update(&mut yrs_txn, |row_update| {
+        row_update.update_cells(|cells_update| {
+          cells_update.insert_cell(&field.id, new_cell);
+        });
+      });
+    }
+    yrs_txn.encode_update_v1()
+  };
+  Ok(db_row_collab_updates)
+}
+
+pub async fn upsert_database_row(
+  collab_storage: &CollabAccessControlStorage,
+  pg_pool: &PgPool,
+  workspace_uuid_str: &str,
+  database_uuid_str: &str,
+  uid: i64,
+  row_id: &str,
+  cell_value_by_id: HashMap<String, serde_json::Value>,
+) -> Result<(), AppError> {
+  let (mut db_row_collab, db_row_body) =
+    match get_database_row_body(collab_storage, workspace_uuid_str, database_uuid_str).await {
+      Ok(res) => res,
+      Err(err) => match err {
+        AppError::RecordNotFound(_) => {
+          return insert_database_row(
+            collab_storage,
+            pg_pool,
+            workspace_uuid_str,
+            database_uuid_str,
+            uid,
+            Some(row_id),
+            cell_value_by_id,
+          )
+          .await
+          .map(|_id| {});
+        },
+        _ => return Err(err),
+      },
+    };
+
+  // At this point, db row exists,
+  // so we modify it, put into storage and broadcast change
+  let (db_collab, db_body) =
+    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+  let db_row_collab_updates = write_to_database_row(
+    &db_collab,
+    &db_body,
+    database_uuid_str,
+    &mut db_row_collab,
+    &db_row_body,
+    cell_value_by_id,
+    Utc::now().timestamp(),
+  )
+  .await?;
+  let db_row_ec_v1 = collab_to_bin(db_row_collab, CollabType::DatabaseRow).await?;
+
+  // write to disk and broadcast changes
+  let mut db_txn = pg_pool.begin().await?;
+  collab_storage
+    .upsert_new_collab_with_transaction(
+      workspace_uuid_str,
+      &uid,
+      CollabParams {
+        object_id: row_id.to_string(),
+        encoded_collab_v1: db_row_ec_v1.into(),
+        collab_type: CollabType::DatabaseRow,
+        embeddings: None,
+      },
+      &mut db_txn,
+      "inserting new database row from server",
+    )
+    .await?;
+  db_txn.commit().await?;
+  broadcast_update(collab_storage, database_uuid_str, db_row_collab_updates).await?;
+
+  Ok(())
 }
 
 pub async fn get_database_fields(

@@ -24,7 +24,7 @@ use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
-use crate::indexer::IndexerProvider;
+use crate::indexer::{IndexerProvider, IndexerScheduler};
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 
 use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
@@ -54,7 +54,7 @@ where
     group_persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
-    indexer_provider: Arc<IndexerProvider>,
+    indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
     let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
       .parse::<bool>()
@@ -75,7 +75,7 @@ where
         group_persistence_interval,
         edit_state_max_count,
         edit_state_max_secs,
-        indexer_provider.clone(),
+        indexer_scheduler.clone(),
       )
       .await?,
     );
@@ -89,8 +89,6 @@ where
       &group_sender_by_object_id,
       Arc::downgrade(&group_manager),
     );
-
-    spawn_handle_unindexed_collabs(indexer_provider, storage);
 
     Ok(Self {
       group_manager,
@@ -403,16 +401,6 @@ where
       .get(user_device)
       .map(|entry| entry.value().clone())
   }
-}
-
-fn spawn_handle_unindexed_collabs(
-  indexer_provider: Arc<IndexerProvider>,
-  storage: Arc<dyn CollabStorage>,
-) {
-  tokio::spawn(IndexerProvider::handle_unindexed_collabs(
-    indexer_provider,
-    storage,
-  ));
 }
 
 fn spawn_period_check_inactive_group<S>(

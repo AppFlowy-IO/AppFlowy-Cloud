@@ -138,7 +138,7 @@ impl CollabDiskCache {
       );
       let workspace_id = Uuid::parse_str(workspace_id)?;
       upsert_collab_embeddings(
-        transaction,
+        transaction.deref_mut(),
         &workspace_id,
         em.tokens_consumed,
         em.params.clone(),

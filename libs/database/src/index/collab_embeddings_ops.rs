@@ -84,18 +84,20 @@ impl PgHasArrayType for Fragment {
   }
 }
 
-pub async fn upsert_collab_embeddings(
-  tx: &mut Transaction<'_, sqlx::Postgres>,
+pub async fn upsert_collab_embeddings<'a, E>(
+  executor: E,
   workspace_id: &Uuid,
   tokens_used: u32,
   records: Vec<AFCollabEmbeddingParams>,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
   if records.is_empty() {
     return Ok(());
   }
   let object_id = records[0].object_id.clone();
   let collab_type = records[0].collab_type.clone();
-
   let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
 
   sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4, $5::af_fragment[])"#)
@@ -104,7 +106,7 @@ pub async fn upsert_collab_embeddings(
     .bind(crate::collab::partition_key_from_collab_type(&collab_type))
     .bind(tokens_used as i32)
     .bind(fragments)
-    .execute(tx.deref_mut())
+    .execute(executor)
     .await?;
   Ok(())
 }

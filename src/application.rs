@@ -40,7 +40,7 @@ use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
-use appflowy_collaborate::indexer::IndexerProvider;
+use appflowy_collaborate::indexer::{IndexerProvider, IndexerScheduler};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
@@ -135,7 +135,7 @@ pub async fn run_actix_server(
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     config.collab.edit_state_max_count,
     config.collab.edit_state_max_secs,
-    state.indexer_provider.clone(),
+    state.indexer_scheduler.clone(),
   )
   .await
   .unwrap();
@@ -248,8 +248,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!("Setup AppFlowy AI: {}", config.appflowy_ai.url());
   let appflowy_ai_client = AppFlowyAIClient::new(&config.appflowy_ai.url());
-  let indexer_provider = IndexerProvider::new(pg_pool.clone(), appflowy_ai_client.clone());
-
   // Pg listeners
   info!("Setting up Pg listeners...");
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
@@ -319,6 +317,15 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
   let mailer = get_mailer(&config.mailer).await?;
 
+  info!("Setting up Indexer scheduler...");
+
+  let indexer_scheduler = IndexerScheduler::new(
+    IndexerProvider::new(appflowy_ai_client.clone()),
+    redis_conn_manager.clone(),
+    pg_pool.clone(),
+    collab_access_control_storage.clone(),
+  );
+
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
@@ -341,7 +348,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     mailer,
     ai_client: appflowy_ai_client,
     grpc_history_client,
-    indexer_provider,
+    indexer_scheduler,
   })
 }
 

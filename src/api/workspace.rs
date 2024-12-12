@@ -29,7 +29,7 @@ use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
-use appflowy_collaborate::indexer::IndexerProvider;
+use appflowy_collaborate::indexer::{IndexerProvider, UnindexedCollab};
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
@@ -693,12 +693,12 @@ async fn create_collab_handler(
   }
 
   if state
-    .indexer_provider
+    .indexer_scheduler
     .can_index_workspace(&workspace_id)
     .await?
   {
     match state
-      .indexer_provider
+      .indexer_scheduler
       .create_collab_embeddings(&params)
       .await
     {
@@ -823,17 +823,20 @@ async fn batch_create_collab_handler(
   );
 
   if state
-    .indexer_provider
+    .indexer_scheduler
     .can_index_workspace(&workspace_id)
     .await?
   {
-    if let Err(err) = fetch_embeddings(&state.indexer_provider, &mut collab_params_list).await {
-      tracing::warn!(
-        "failed to fetch embeddings for {} new documents: {}",
-        collab_params_list.len(),
-        err
-      );
-    }
+    state
+      .indexer_scheduler
+      .index_encoded_collab(
+        &workspace_id,
+        collab_params_list
+          .iter()
+          .map(UnindexedCollab::from)
+          .collect(),
+      )
+      .await?;
   }
 
   let start = Instant::now();
@@ -1254,9 +1257,9 @@ async fn update_collab_handler(
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
   let (mut params, workspace_id) = create_params.split();
-  if let Some(indexer) = state.indexer_provider.indexer_for(&params.collab_type) {
+  if let Some(indexer) = state.indexer_scheduler.indexer_for(&params.collab_type) {
     if state
-      .indexer_provider
+      .indexer_scheduler
       .can_index_workspace(&workspace_id)
       .await?
     {

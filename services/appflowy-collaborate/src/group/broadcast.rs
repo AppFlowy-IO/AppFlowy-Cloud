@@ -404,11 +404,9 @@ async fn handle_message(
   let reader = MessageReader::new(&mut decoder);
   let seq_num = edit_state.edit_count();
   let mut ack_response = None;
-  let mut is_sync_step2 = false;
   for msg in reader {
     match msg {
       Ok(msg) => {
-        is_sync_step2 = matches!(msg, Message::Sync(SyncMessage::SyncStep2(_)));
         match ServerSyncProtocol::new(metrics_calculate.clone())
           .handle_message(message_origin, collab, msg)
           .await
@@ -452,9 +450,6 @@ async fn handle_message(
     }
   }
 
-  if is_sync_step2 {
-    edit_state.set_ready_to_save();
-  }
   Ok(ack_response)
 }
 

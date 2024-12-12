@@ -147,9 +147,16 @@ where
             }
           },
           GroupCommand::GenerateCollabEmbedding { object_id, ret } => {
-            // TODO(nathan): generate embedding
-            trace!("Generate embedding for group:{}", object_id);
-            let _ = ret.send(Ok(()));
+            let group = self.group_manager.get_group(&object_id).await;
+            match group {
+              None => {
+                let _ = ret.send(Err(RealtimeError::GroupNotFound(object_id.clone())));
+              },
+              Some(group) => {
+                group.generate_embeddings().await;
+                let _ = ret.send(Ok(()));
+              },
+            }
           },
           GroupCommand::CalculateMissingUpdate {
             object_id,

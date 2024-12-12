@@ -101,7 +101,7 @@ async fn post_realtime_message_stream_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   // TODO(nathan): after upgrade the client application, then the device_id should not be empty
-  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "");
+  let device_id = device_id_from_headers(req.headers()).unwrap_or("");
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)
@@ -154,7 +154,7 @@ fn value_from_headers<'a>(
 }
 
 /// Retrieve device ID from headers
-pub fn device_id_from_headers<'a>(headers: &'a HeaderMap) -> Result<&'a str, AppError> {
+pub fn device_id_from_headers(headers: &HeaderMap) -> Result<&str, AppError> {
   value_from_headers(
     headers,
     &["Device-Id", "device-id", "device_id", "Device-ID"],

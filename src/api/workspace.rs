@@ -2220,6 +2220,15 @@ async fn collab_two_way_sync_handler(
     return Err(AppError::InvalidRequest("body is empty".to_string()).into());
   }
 
+  // when the payload size exceeds the limit, we consider it as an invalid payload.
+  const MAX_BODY_SIZE: usize = 1024 * 1024 * 50; // 50MB
+  if body.len() > MAX_BODY_SIZE {
+    error!("Unexpected large body size: {}", body.len());
+    return Err(
+      AppError::InvalidRequest(format!("body size exceeds limit: {}", MAX_BODY_SIZE)).into(),
+    );
+  }
+
   let (workspace_id, object_id) = path.into_inner();
   let params = CollabDocStateParams::decode(&mut Cursor::new(body)).map_err(|err| {
     AppError::InvalidRequest(format!("Failed to parse CreateCollabEmbedding: {}", err))

@@ -69,7 +69,7 @@ fn value_from_headers<'a>(
 }
 
 /// Retrieve client version from headers
-pub fn client_version_from_headers<'a>(headers: &'a HeaderMap) -> Result<&'a str, AppError> {
+pub fn client_version_from_headers(headers: &HeaderMap) -> Result<&str, AppError> {
   value_from_headers(
     headers,
     &["Client-Version", "client-version", "client_version"],
@@ -78,7 +78,7 @@ pub fn client_version_from_headers<'a>(headers: &'a HeaderMap) -> Result<&'a str
 }
 
 /// Retrieve device ID from headers
-pub fn device_id_from_headers<'a>(headers: &'a HeaderMap) -> Result<&'a str, AppError> {
+pub fn device_id_from_headers(headers: &HeaderMap) -> Result<&str, AppError> {
   value_from_headers(
     headers,
     &["Device-Id", "device-id", "device_id", "Device-ID"],

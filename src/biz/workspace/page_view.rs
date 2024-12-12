@@ -1,6 +1,18 @@
+use super::ops::broadcast_update;
+use crate::api::metrics::AppFlowyWebMetrics;
+use crate::api::ws::RealtimeServerAddr;
+use crate::biz::collab::folder_view::{
+  check_if_view_is_space, parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
+  to_folder_view_icon, to_space_permission,
+};
+use crate::biz::collab::ops::{get_latest_collab_folder, get_latest_workspace_database};
+use crate::biz::collab::utils::{collab_from_doc_state, get_latest_collab_encoded};
+use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;
+use appflowy_collaborate::actix_ws::entities::ClientHttpUpdateMessage;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use bytes::Bytes;
 use chrono::DateTime;
 use collab::core::collab::Collab;
 use collab_database::database::{
@@ -24,10 +36,11 @@ use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
 use collab_folder::{timestamp, CollabOrigin, Folder};
+use collab_rt_entity::user::RealtimeUser;
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
-use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde_json::json;
@@ -38,20 +51,8 @@ use sqlx::{PgPool, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::instrument;
 use uuid::Uuid;
-use yrs::updates::decoder::Decode;
-use yrs::Update;
-
-use crate::api::metrics::AppFlowyWebMetrics;
-use crate::biz::collab::folder_view::{
-  parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
-  to_space_permission,
-};
-use crate::biz::collab::ops::get_latest_workspace_database;
-use crate::biz::collab::utils::{collab_from_doc_state, get_latest_collab_encoded};
-use crate::biz::collab::{folder_view::check_if_view_is_space, ops::get_latest_collab_folder};
-
-use super::ops::broadcast_update;
 
 struct WorkspaceDatabaseUpdate {
   pub updated_encoded_collab: Vec<u8>,
@@ -1275,64 +1276,32 @@ async fn get_page_collab_data_for_document(
   })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[instrument(level = "debug", skip_all)]
 pub async fn update_page_collab_data(
-  pg_pool: &PgPool,
-  collab_access_control_storage: Arc<CollabAccessControlStorage>,
-  appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
-  uid: i64,
+  appflowy_web_metrics: &Arc<AppFlowyWebMetrics>,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
   workspace_id: Uuid,
   object_id: Uuid,
   collab_type: CollabType,
-  doc_state: &[u8],
+  doc_state: Vec<u8>,
 ) -> Result<(), AppError> {
-  let param = QueryCollabParams {
-    workspace_id: workspace_id.to_string(),
-    inner: QueryCollab {
-      object_id: object_id.to_string(),
-      collab_type: collab_type.clone(),
-    },
-  };
-  let encode_collab = collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
-    .await?;
-
-  let mut collab = collab_from_doc_state(encode_collab.doc_state.to_vec(), &object_id.to_string())?;
+  let object_id = object_id.to_string();
   appflowy_web_metrics.record_update_size_bytes(doc_state.len());
-  let update = Update::decode_v1(doc_state).map_err(|e| {
-    appflowy_web_metrics.incr_decoding_failure_count(1);
-    AppError::InvalidRequest(format!("Failed to decode update: {}", e))
-  })?;
-  collab.apply_update(update).map_err(|e| {
-    appflowy_web_metrics.incr_apply_update_failure_count(1);
-    AppError::InvalidRequest(format!("Failed to apply update: {}", e))
-  })?;
-  let updated_encoded_collab = collab
-    .encode_collab_v1(|c| collab_type.validate_require_data(c))
-    .map_err(|e| AppError::Internal(anyhow!("Failed to encode collab: {}", e)))?
-    .encode_to_bytes()?;
-  let params = CollabParams {
+
+  let message = ClientHttpUpdateMessage {
+    user,
+    workspace_id: workspace_id.to_string(),
     object_id: object_id.to_string(),
-    collab_type: collab_type.clone(),
-    encoded_collab_v1: updated_encoded_collab.into(),
-    embeddings: None,
+    collab_type,
+    update: Bytes::from(doc_state),
+    state_vector: None,
+    return_tx: None,
   };
-  let mut transaction = pg_pool.begin().await?;
-  collab_access_control_storage
-    .upsert_new_collab_with_transaction(
-      &workspace_id.to_string(),
-      &uid,
-      params,
-      &mut transaction,
-      "upsert collab",
-    )
-    .await?;
-  transaction.commit().await?;
-  broadcast_update(
-    &collab_access_control_storage,
-    &object_id.to_string(),
-    doc_state.to_vec(),
-  )
-  .await?;
+
+  server
+    .try_send(message)
+    .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
+
   Ok(())
 }

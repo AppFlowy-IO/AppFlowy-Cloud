@@ -13,7 +13,7 @@ collab-entity = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 bytes = { version = "1.5", features = ["serde"] }
-anyhow = "1.0.79"
+anyhow.workspace = true
 actix = { version = "0.13", optional = true }
 bincode.workspace = true
 tokio-tungstenite = { version = "0.20.1", optional = true }

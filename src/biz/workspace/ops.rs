@@ -19,7 +19,7 @@ use yrs::updates::encoder::Encode;
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use database::collab::{upsert_collab_member_with_txn, CollabStorage};
+use database::collab::upsert_collab_member_with_txn;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
 

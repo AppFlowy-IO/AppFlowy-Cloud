@@ -2,7 +2,7 @@ use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use collab_rt_entity::user::UserMessage;
-use collab_rt_entity::{ClientCollabMessage, CollabMessage, InitSync, MsgId};
+use collab_rt_entity::{CollabMessage, InitSync, MsgId};
 use collab_rt_entity::{RealtimeMessage, SystemMessage};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -47,24 +47,6 @@ fn decode_0149_realtime_message_test() {
     assert_eq!(update.object_id, "object id 1");
     assert_eq!(update.msg_id, 10);
     assert_eq!(update.payload, Bytes::from(vec![5, 6, 7, 8]));
-  } else {
-    panic!("Failed to decode RealtimeMessage from file");
-  }
-
-  let client_collab_v1 = read_message_from_file("migration/0149/client_collab_v1").unwrap();
-  assert!(matches!(
-    client_collab_v1,
-    RealtimeMessage::ClientCollabV1(_)
-  ));
-  if let RealtimeMessage::ClientCollabV1(messages) = client_collab_v1 {
-    assert_eq!(messages.len(), 1);
-    if let ClientCollabMessage::ClientUpdateSync { data } = &messages[0] {
-      assert_eq!(data.object_id, "object id 1");
-      assert_eq!(data.msg_id, 10);
-      assert_eq!(data.payload, Bytes::from(vec![5, 6, 7, 8]));
-    } else {
-      panic!("Failed to decode RealtimeMessage from file");
-    }
   } else {
     panic!("Failed to decode RealtimeMessage from file");
   }

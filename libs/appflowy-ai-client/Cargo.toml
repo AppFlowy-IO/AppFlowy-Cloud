@@ -15,11 +15,11 @@ reqwest = { version = "0.12", features = [
 serde = { version = "1.0.199", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 thiserror = "1.0.58"
-anyhow = "1.0.81"
+anyhow.workspace = true
 tracing = { version = "0.1", optional = true }
 serde_repr = { version = "0.1", optional = true }
 futures = "0.3.30"
-bytes = "1.6.0"
+bytes.workspace = true
 pin-project = "1.1.5"
 
 [dev-dependencies]

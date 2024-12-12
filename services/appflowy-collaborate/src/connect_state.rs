@@ -43,10 +43,8 @@ impl ConnectState {
           let old_user = e.insert(new_user.clone());
           trace!("[realtime]: new connection replaces old => {}", new_user);
           if let Some((_, old_stream)) = self.client_message_routers.remove(&old_user) {
-            info!(
-              "Removing old stream for same user and device: {}",
-              old_user.uid
-            );
+            info!("Removing old stream for same user and device: {}", old_user);
+
             old_stream
               .sink
               .do_send(RealtimeMessage::System(SystemMessage::DuplicateConnection));

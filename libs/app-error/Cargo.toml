@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 thiserror = "1.0.56"
 serde_repr = "0.1.18"
 serde.workspace = true
-anyhow = "1.0.79"
+anyhow.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 sqlx = { workspace = true, default-features = false, features = [
   "postgres",

@@ -258,7 +258,7 @@ impl CollabBroadcast {
 
 async fn handle_client_messages<Sink>(
   object_id: &str,
-  message_map: MessageByObjectId,
+  message_by_object_id: MessageByObjectId,
   sink: &mut Sink,
   collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
   metrics_calculate: &Arc<CollabRealtimeMetrics>,
@@ -267,7 +267,7 @@ async fn handle_client_messages<Sink>(
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
 {
-  for (message_object_id, collab_messages) in message_map {
+  for (message_object_id, collab_messages) in message_by_object_id.into_inner() {
     // Ignore messages where the object_id does not match. This situation should not occur, as
     // [ClientMessageRouter::init_client_communication] is expected to filter out such messages. However,
     // as a precautionary measure, we perform this check to handle any unexpected cases.
@@ -328,9 +328,6 @@ async fn handle_one_client_message(
   // If the payload is empty, we don't need to apply any updates .
   // Currently, only the ping message should has an empty payload.
   if collab_msg.payload().is_empty() {
-    if !matches!(collab_msg, ClientCollabMessage::ClientCollabStateCheck(_)) {
-      error!("receive unexpected empty payload message:{}", collab_msg);
-    }
     return Ok(CollabAck::new(
       message_origin,
       object_id.to_string(),

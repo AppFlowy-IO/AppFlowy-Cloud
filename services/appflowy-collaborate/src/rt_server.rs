@@ -1,15 +1,19 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use anyhow::Result;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
-use tokio::time::interval;
-use tracing::{error, info, trace};
-
 use access_control::collab::RealtimeAccessControl;
+use anyhow::{anyhow, Result};
+use app_error::AppError;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::MessageByObjectId;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
+use tokio::sync::mpsc::Sender;
+use tokio::task::yield_now;
+use tokio::time::interval;
+use tracing::{error, info, trace, warn};
+use yrs::updates::decoder::Decode;
+use yrs::StateVector;
 
 use database::collab::CollabStorage;
 
@@ -23,6 +27,7 @@ use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 
+use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
@@ -151,41 +156,8 @@ where
     user: RealtimeUser,
     message_by_oid: MessageByObjectId,
   ) -> Result<(), RealtimeError> {
-    let group_sender_by_object_id = self.group_sender_by_object_id.clone();
-    let client_msg_router_by_user = self.connect_state.client_message_routers.clone();
-    let group_manager = self.group_manager.clone();
-    let enable_custom_runtime = self.enable_custom_runtime;
-
-    for (object_id, collab_messages) in message_by_oid {
-      let old_sender = group_sender_by_object_id
-        .get(&object_id)
-        .map(|entry| entry.value().clone());
-
-      let sender = match old_sender {
-        Some(sender) => sender,
-        None => match group_sender_by_object_id.entry(object_id.clone()) {
-          Entry::Occupied(entry) => entry.get().clone(),
-          Entry::Vacant(entry) => {
-            let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
-            let runner = GroupCommandRunner {
-              group_manager: group_manager.clone(),
-              msg_router_by_user: client_msg_router_by_user.clone(),
-              recv: Some(recv),
-            };
-
-            let object_id = entry.key().clone();
-            if enable_custom_runtime {
-              COLLAB_RUNTIME.spawn(runner.run(object_id));
-            } else {
-              tokio::spawn(runner.run(object_id));
-            }
-
-            entry.insert(new_sender.clone());
-            new_sender
-          },
-        },
-      };
-
+    for (object_id, collab_messages) in message_by_oid.into_inner() {
+      let group_cmd_sender = self.create_group_if_not_exist(&object_id);
       let cloned_user = user.clone();
       // Create a new task to send a message to the group command runner without waiting for the
       // result. This approach is used to prevent potential issues with the actor's mailbox in
@@ -193,7 +165,7 @@ where
       // immediately proceed to process the next message.
       tokio::spawn(async move {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        match sender
+        match group_cmd_sender
           .send(GroupCommand::HandleClientCollabMessage {
             user: cloned_user,
             object_id,
@@ -223,6 +195,204 @@ where
       });
     }
 
+    Ok(())
+  }
+
+  #[inline]
+  pub fn handle_client_http_update(
+    &self,
+    message: ClientHttpUpdateMessage,
+  ) -> Result<(), RealtimeError> {
+    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
+    tokio::spawn(async move {
+      let object_id = message.object_id.clone();
+      let (tx, rx) = tokio::sync::oneshot::channel();
+      let result = group_cmd_sender
+        .send(GroupCommand::HandleClientHttpUpdate {
+          user: message.user,
+          workspace_id: message.workspace_id,
+          object_id: message.object_id,
+          update: message.update,
+          collab_type: message.collab_type,
+          ret: tx,
+        })
+        .await;
+
+      let return_tx = message.return_tx;
+      if let Err(err) = result {
+        if let Some(return_rx) = return_tx {
+          let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+            "send update to group fail: {}",
+            err
+          ))));
+          return;
+        } else {
+          error!("send http update to group fail: {}", err);
+        }
+      }
+
+      match rx.await {
+        Ok(Ok(())) => {
+          if message.state_vector.is_some() && return_tx.is_none() {
+            warn!(
+              "state_vector is not None, but return_tx is None, object_id: {}",
+              object_id
+            );
+          }
+
+          if let Some(return_rx) = return_tx {
+            if let Some(state_vector) = message
+              .state_vector
+              .and_then(|data| StateVector::decode_v1(&data).ok())
+            {
+              // yield
+              yield_now().await;
+
+              // Calculate missing update
+              let (tx, rx) = tokio::sync::oneshot::channel();
+              let _ = group_cmd_sender
+                .send(GroupCommand::CalculateMissingUpdate {
+                  object_id,
+                  state_vector,
+                  ret: tx,
+                })
+                .await;
+              match rx.await {
+                Ok(missing_update_result) => {
+                  let result = missing_update_result
+                    .map_err(|err| {
+                      AppError::Internal(anyhow!("fail to calculate missing update: {}", err))
+                    })
+                    .map(Some);
+                  let _ = return_rx.send(result);
+                },
+                Err(err) => {
+                  let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+                    "fail to calculate missing update: {}",
+                    err
+                  ))));
+                },
+              }
+            } else {
+              let _ = return_rx.send(Ok(None));
+            }
+          }
+        },
+        Ok(Err(err)) => {
+          if let Some(return_rx) = return_tx {
+            let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+              "apply http update to group fail: {}",
+              err
+            ))));
+          } else {
+            error!("apply http update to group fail: {}", err);
+          }
+        },
+        Err(err) => {
+          if let Some(return_rx) = return_tx {
+            let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+              "fail to receive applied result: {}",
+              err
+            ))));
+          } else {
+            error!("fail to receive applied result: {}", err);
+          }
+        },
+      }
+    });
+
+    Ok(())
+  }
+
+  #[inline]
+  fn create_group_if_not_exist(&self, object_id: &str) -> Sender<GroupCommand> {
+    let old_sender = self
+      .group_sender_by_object_id
+      .get(object_id)
+      .map(|entry| entry.value().clone());
+
+    let sender = match old_sender {
+      Some(sender) => sender,
+      None => match self.group_sender_by_object_id.entry(object_id.to_string()) {
+        Entry::Occupied(entry) => entry.get().clone(),
+        Entry::Vacant(entry) => {
+          let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
+          let runner = GroupCommandRunner {
+            group_manager: self.group_manager.clone(),
+            msg_router_by_user: self.connect_state.client_message_routers.clone(),
+            recv: Some(recv),
+          };
+
+          let object_id = entry.key().clone();
+          if self.enable_custom_runtime {
+            COLLAB_RUNTIME.spawn(runner.run(object_id));
+          } else {
+            tokio::spawn(runner.run(object_id));
+          }
+
+          entry.insert(new_sender.clone());
+          new_sender
+        },
+      },
+    };
+    sender
+  }
+
+  #[inline]
+  pub fn handle_client_generate_embedding_request(
+    &self,
+    message: ClientGenerateEmbeddingMessage,
+  ) -> Result<(), RealtimeError> {
+    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
+    tokio::spawn(async move {
+      let (tx, rx) = tokio::sync::oneshot::channel();
+      let result = group_cmd_sender
+        .send(GroupCommand::GenerateCollabEmbedding {
+          object_id: message.object_id,
+          ret: tx,
+        })
+        .await;
+
+      if let Err(err) = result {
+        if let Some(return_tx) = message.return_tx {
+          let _ = return_tx.send(Err(AppError::Internal(anyhow!(
+            "send generate embedding to group fail: {}",
+            err
+          ))));
+          return;
+        } else {
+          error!("send generate embedding to group fail: {}", err);
+        }
+      }
+
+      match rx.await {
+        Ok(Ok(())) => {
+          if let Some(return_tx) = message.return_tx {
+            let _ = return_tx.send(Ok(()));
+          }
+        },
+        Ok(Err(err)) => {
+          if let Some(return_tx) = message.return_tx {
+            let _ = return_tx.send(Err(AppError::Internal(anyhow!(
+              "generate embedding fail: {}",
+              err
+            ))));
+          } else {
+            error!("generate embedding fail: {}", err);
+          }
+        },
+        Err(err) => {
+          if let Some(return_tx) = message.return_tx {
+            let _ = return_tx.send(Err(AppError::Internal(anyhow!(
+              "fail to receive generate embedding result: {}",
+              err
+            ))));
+          } else {
+            error!("fail to receive generate embedding result: {}", err);
+          }
+        },
+      }
+    });
     Ok(())
   }
 

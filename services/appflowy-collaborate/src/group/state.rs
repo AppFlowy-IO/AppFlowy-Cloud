@@ -36,9 +36,8 @@ impl GroupManagementState {
     }
   }
 
-  /// Performs a periodic check to remove groups based on the following conditions:
-  /// Groups that have been inactive for a specified period of time.
-  pub fn get_inactive_group_ids(&self) -> Vec<String> {
+  /// Returns group ids of inactive groups.
+  pub fn remove_inactive_groups(&self) -> Vec<String> {
     let mut inactive_group_ids = vec![];
     for entry in self.group_by_object_id.iter() {
       let (object_id, group) = (entry.key(), entry.value());

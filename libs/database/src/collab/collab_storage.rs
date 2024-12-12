@@ -63,7 +63,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// * `workspace_id` - The ID of the workspace.
   /// * `uid` - The ID of the user.
   /// * `params` - The parameters containing the data of the collaboration.
-  /// * `write_immediately` - A boolean value that indicates whether the data should be written immediately.
+  /// * `flush_to_disk` - A boolean value that indicates whether the data should be written immediately.
   /// if write_immediately is true, the data will be written to disk immediately. Otherwise, the data will
   /// be scheduled to be written to disk later.
   ///
@@ -72,7 +72,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    write_immediately: bool,
+    flush_to_disk: bool,
   ) -> AppResult<()>;
 
   async fn batch_insert_new_collab(

@@ -78,7 +78,7 @@ impl CollabGroup {
         uid,
         storage,
         edit_state.clone(),
-        Arc::downgrade(&collab),
+        collab.clone(),
         collab_type.clone(),
         persistence_interval,
         indexer,

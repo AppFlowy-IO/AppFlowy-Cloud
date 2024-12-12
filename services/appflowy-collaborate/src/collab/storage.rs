@@ -294,7 +294,7 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    write_immediately: bool,
+    flush_to_disk: bool,
   ) -> AppResult<()> {
     params.validate()?;
     let is_exist = self.cache.is_exist(workspace_id, &params.object_id).await?;
@@ -318,7 +318,7 @@ where
         .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
         .await?;
     }
-    if write_immediately {
+    if flush_to_disk {
       self.insert_collab(workspace_id, uid, params).await?;
     } else {
       self.queue_insert_collab(workspace_id, uid, params).await?;

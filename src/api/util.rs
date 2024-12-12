@@ -73,7 +73,7 @@ fn value_from_headers(
 pub fn client_version_from_headers(headers: &HeaderMap) -> Result<String, AppError> {
   value_from_headers(
     headers,
-    &["Client-Version", "client-version"],
+    &["Client-Version", "client-version", "client_version"],
     "Missing Client-Version or client-version header",
   )
 }
@@ -82,7 +82,7 @@ pub fn client_version_from_headers(headers: &HeaderMap) -> Result<String, AppErr
 pub fn device_id_from_headers(headers: &HeaderMap) -> Result<String, AppError> {
   value_from_headers(
     headers,
-    &["Device-Id", "device_id", "device-id"],
+    &["Device-Id", "device-id", "device_id", "Device-ID"],
     "Missing Device-Id or device_id header",
   )
 }

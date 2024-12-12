@@ -925,10 +925,11 @@ async fn post_web_update_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  let onetime_session_id = uuid::Uuid::new_v4().to_string();
-  let onetime_device_id = onetime_session_id.clone();
   let app_version =
     client_version_from_headers(req.headers()).unwrap_or_else(|_| "web".to_string());
+  let device_id =
+    device_id_from_headers(req.headers()).unwrap_or_else(|_| Uuid::new_v4().to_string());
+  let session_id = device_id.clone();
 
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.collab_type.clone();
@@ -940,9 +941,9 @@ async fn post_web_update_handler(
 
   let user = RealtimeUser {
     uid,
-    device_id: onetime_device_id,
+    device_id,
     connect_at: timestamp(),
-    session_id: onetime_session_id,
+    session_id,
     app_version,
   };
   trace!("create onetime web realtime user: {}", user);

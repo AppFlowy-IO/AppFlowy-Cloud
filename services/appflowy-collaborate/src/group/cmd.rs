@@ -285,6 +285,7 @@ where
         .await?;
     }
 
+    // Only subscribe when the user is not subscribed to the group
     if should_sub {
       self.subscribe_group(user, object_id, &origin).await?;
     }

@@ -13,7 +13,6 @@ use client_api_entity::{
   AFCollabInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
   DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
 };
-use collab::entity::EncodedCollab;
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
 use futures::Stream;
@@ -436,7 +435,8 @@ impl Client {
     workspace_id: &str,
     object_id: &str,
     collab_type: CollabType,
-    encode_collab: EncodedCollab,
+    doc_state: Vec<u8>,
+    state_vector: Vec<u8>,
   ) -> Result<Vec<u8>, AppResponseError> {
     let url = format!(
       "{}/api/workspace/v1/{workspace_id}/collab/{object_id}/sync",
@@ -444,10 +444,10 @@ impl Client {
     );
 
     // 3 is default level
-    let doc_state = zstd::encode_all(Cursor::new(encode_collab.doc_state), 3)
+    let doc_state = zstd::encode_all(Cursor::new(doc_state), 3)
       .map_err(|err| AppError::InvalidRequest(format!("Failed to compress text: {}", err)))?;
 
-    let sv = zstd::encode_all(Cursor::new(encode_collab.state_vector), 3)
+    let sv = zstd::encode_all(Cursor::new(state_vector), 3)
       .map_err(|err| AppError::InvalidRequest(format!("Failed to compress text: {}", err)))?;
 
     let params = CollabDocStateParams {

@@ -670,7 +670,8 @@ async fn offline_and_then_sync_through_http_request() {
       &workspace_id,
       &object_id,
       CollabType::Unknown,
-      encode_collab,
+      encode_collab.doc_state.to_vec(),
+      encode_collab.state_vector.to_vec(),
     )
     .await
     .unwrap();

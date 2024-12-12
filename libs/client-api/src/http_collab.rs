@@ -1,5 +1,7 @@
+use crate::entity::CollabType;
 use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, brotli_compress, Client};
+use anyhow::anyhow;
 use app_error::AppError;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
@@ -8,9 +10,10 @@ use client_api_entity::workspace_dto::{
   DatabaseRowUpdatedItem, ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
 };
 use client_api_entity::{
-  BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
+  AFCollabInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
   DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
 };
+use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
 use futures::Stream;
 use futures_util::stream;
@@ -21,6 +24,7 @@ use serde::Serialize;
 use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
+use std::io::Cursor;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -402,6 +406,77 @@ impl Client {
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_collab_info(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> Result<AFCollabInfo, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}/info",
+      self.base_url, workspace_id, object_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .query(&CollabTypeParam { collab_type })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<AFCollabInfo>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn post_collab_doc_state(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+    doc_state: Vec<u8>,
+    state_vector: Vec<u8>,
+  ) -> Result<Vec<u8>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/v1/{workspace_id}/collab/{object_id}/sync",
+      self.base_url
+    );
+
+    // 3 is default level
+    let doc_state = zstd::encode_all(Cursor::new(doc_state), 3)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress text: {}", err)))?;
+
+    let sv = zstd::encode_all(Cursor::new(state_vector), 3)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress text: {}", err)))?;
+
+    let params = CollabDocStateParams {
+      object_id: object_id.to_string(),
+      collab_type: collab_type.value(),
+      compression: PayloadCompressionType::Zstd as i32,
+      sv,
+      doc_state,
+    };
+
+    let mut encoded_payload = Vec::new();
+    params.encode(&mut encoded_payload).map_err(|err| {
+      AppError::Internal(anyhow!("Failed to encode CollabDocStateParams: {}", err))
+    })?;
+
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .body(Bytes::from(encoded_payload))
+      .send()
+      .await?;
+    log_request_id(&resp);
+    if resp.status().is_success() {
+      let body = resp.bytes().await?;
+      let decompressed_body = zstd::decode_all(Cursor::new(body))?;
+      Ok(decompressed_body)
+    } else {
+      AppResponse::from_response(resp).await?.into_data()
+    }
   }
 }
 

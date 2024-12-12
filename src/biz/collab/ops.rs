@@ -28,9 +28,9 @@ use database::collab::select_workspace_database_oid;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
-use database_entity::dto::CollabParams;
 use database_entity::dto::QueryCollab;
 use database_entity::dto::QueryCollabResult;
+use database_entity::dto::{CollabParams, WorkspaceCollabIdentify};
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
@@ -44,22 +44,18 @@ use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
 use std::ops::DerefMut;
 
+use crate::biz::collab::utils::field_by_name_uniq;
+use crate::biz::workspace::ops::broadcast_update;
+use access_control::collab::CollabAccessControl;
 use anyhow::Context;
+use database_entity::dto::{
+  AFCollabMember, InsertCollabMemberParams, QueryCollabMembers, UpdateCollabMemberParams,
+};
 use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
 use std::collections::HashSet;
-
 use tracing::{event, trace};
 use validator::Validate;
-
-use access_control::collab::CollabAccessControl;
-use database_entity::dto::{
-  AFCollabMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
-  UpdateCollabMemberParams,
-};
-
-use crate::biz::collab::utils::field_by_name_uniq;
-use crate::biz::workspace::ops::broadcast_update;
 
 use super::folder_view::collab_folder_to_folder_view;
 use super::folder_view::section_items_to_favorite_folder_view;
@@ -159,7 +155,7 @@ pub async fn upsert_collab_member(
 
 pub async fn get_collab_member(
   pg_pool: &PgPool,
-  params: &CollabMemberIdentify,
+  params: &WorkspaceCollabIdentify,
 ) -> Result<AFCollabMember, AppError> {
   params.validate()?;
   let collab_member =
@@ -169,7 +165,7 @@ pub async fn get_collab_member(
 
 pub async fn delete_collab_member(
   pg_pool: &PgPool,
-  params: &CollabMemberIdentify,
+  params: &WorkspaceCollabIdentify,
   collab_access_control: Arc<dyn CollabAccessControl>,
 ) -> Result<(), AppError> {
   params.validate()?;

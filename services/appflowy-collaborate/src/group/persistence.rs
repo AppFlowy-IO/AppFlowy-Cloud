@@ -1,4 +1,4 @@
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -22,7 +22,9 @@ pub(crate) struct GroupPersistence<S> {
   storage: Arc<S>,
   uid: i64,
   edit_state: Arc<EditState>,
-  collab: Weak<RwLock<Collab>>,
+  /// Use Arc<RwLock<Collab>> instead of Weak<RwLock<Collab>> to make sure the collab is not dropped
+  /// when saving collab data to disk
+  collab: Arc<RwLock<Collab>>,
   collab_type: CollabType,
   persistence_interval: Duration,
   indexer: Option<Arc<dyn Indexer>>,
@@ -40,7 +42,7 @@ where
     uid: i64,
     storage: Arc<S>,
     edit_state: Arc<EditState>,
-    collab: Weak<RwLock<Collab>>,
+    collab: Arc<RwLock<Collab>>,
     collab_type: CollabType,
     persistence_interval: Duration,
     ai_client: Option<Arc<dyn Indexer>>,
@@ -65,7 +67,6 @@ where
     loop {
       // delay 30 seconds before the first save. We don't want to save immediately after the collab is created
       tokio::time::sleep(Duration::from_secs(30)).await;
-
       tokio::select! {
         _ = interval.tick() => {
           if self.attempt_save().await.is_err() {
@@ -117,17 +118,13 @@ where
     Ok(())
   }
 
-  async fn save(&self, write_immediately: bool) -> Result<(), AppError> {
+  async fn save(&self, flush_to_disk: bool) -> Result<(), AppError> {
     let object_id = self.object_id.clone();
     let workspace_id = self.workspace_id.clone();
     let collab_type = self.collab_type.clone();
-    let collab = match self.collab.upgrade() {
-      Some(collab) => collab,
-      None => return Err(AppError::Internal(anyhow!("collab has been dropped"))),
-    };
 
     let params = {
-      let cloned_collab = collab.clone();
+      let cloned_collab = self.collab.clone();
       let (workspace_id, mut params, object_id) = tokio::task::spawn_blocking(move || {
         let collab = cloned_collab.blocking_read();
         let params = get_encode_collab(&workspace_id, &object_id, &collab, &collab_type)?;
@@ -135,7 +132,7 @@ where
       })
       .await??;
 
-      let lock = collab.read().await;
+      let lock = self.collab.read().await;
       if let Some(indexer) = &self.indexer {
         match indexer.embedding_params(&lock).await {
           Ok(embedding_params) => {
@@ -165,7 +162,7 @@ where
 
     self
       .storage
-      .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
+      .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, flush_to_disk)
       .await?;
     // Update the edit state on successful save
     self.edit_state.tick();

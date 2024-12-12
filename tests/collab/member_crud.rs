@@ -3,8 +3,8 @@ use client_api_test::{generate_unique_registered_user_client, workspace_id_from_
 
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, CollabMemberIdentify, CreateCollabParams, InsertCollabMemberParams,
-  QueryCollabMembers, UpdateCollabMemberParams,
+  AFAccessLevel, CreateCollabParams, InsertCollabMemberParams, QueryCollabMembers,
+  UpdateCollabMemberParams, WorkspaceCollabIdentify,
 };
 use uuid::Uuid;
 
@@ -28,7 +28,7 @@ async fn collab_owner_permission_test() {
   .unwrap();
 
   let member = c
-    .get_collab_member(CollabMemberIdentify {
+    .get_collab_member(WorkspaceCollabIdentify {
       uid,
       object_id,
       workspace_id,
@@ -68,7 +68,7 @@ async fn update_collab_member_permission_test() {
   .unwrap();
 
   let member = c
-    .get_collab_member(CollabMemberIdentify {
+    .get_collab_member(WorkspaceCollabIdentify {
       uid,
       object_id,
       workspace_id,
@@ -112,7 +112,7 @@ async fn add_collab_member_test() {
 
   // check the member is added and its permission is correct
   let member = c_1
-    .get_collab_member(CollabMemberIdentify {
+    .get_collab_member(WorkspaceCollabIdentify {
       uid: uid_2,
       object_id,
       workspace_id,
@@ -167,7 +167,7 @@ async fn add_collab_member_then_remove_test() {
 
   // Delete the member
   c_1
-    .remove_collab_member(CollabMemberIdentify {
+    .remove_collab_member(WorkspaceCollabIdentify {
       uid: uid_2,
       object_id: object_id.clone(),
       workspace_id: workspace_id.clone(),

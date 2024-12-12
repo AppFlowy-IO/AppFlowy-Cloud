@@ -52,18 +52,38 @@ pub fn compress_type_from_header_value(headers: &HeaderMap) -> Result<Compressio
   }
 }
 
-pub fn device_id_from_headers(headers: &HeaderMap) -> Result<String, AppError> {
-  headers
-    .get("device_id")
-    .ok_or(AppError::InvalidRequest(
-      "Missing device_id header".to_string(),
-    ))
+fn value_from_headers<'a>(
+  headers: &'a HeaderMap,
+  keys: &[&str],
+  missing_msg: &str,
+) -> Result<&'a str, AppError> {
+  keys
+    .iter()
+    .find_map(|key| headers.get(*key))
+    .ok_or_else(|| AppError::InvalidRequest(missing_msg.to_string()))
     .and_then(|header| {
       header
         .to_str()
-        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse device_id: {}", err)))
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse header: {}", err)))
     })
-    .map(|s| s.to_string())
+}
+
+/// Retrieve client version from headers
+pub fn client_version_from_headers(headers: &HeaderMap) -> Result<&str, AppError> {
+  value_from_headers(
+    headers,
+    &["Client-Version", "client-version", "client_version"],
+    "Missing Client-Version or client-version header",
+  )
+}
+
+/// Retrieve device ID from headers
+pub fn device_id_from_headers(headers: &HeaderMap) -> Result<&str, AppError> {
+  value_from_headers(
+    headers,
+    &["Device-Id", "device-id", "device_id", "Device-ID"],
+    "Missing Device-Id or device_id header",
+  )
 }
 
 #[async_trait]
@@ -180,4 +200,115 @@ pub(crate) fn ai_model_from_header(req: &HttpRequest) -> AIModel {
       AIModel::from_str(header).ok()
     })
     .unwrap_or(AIModel::GPT4oMini)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use actix_http::header::{HeaderMap, HeaderName, HeaderValue};
+
+  fn setup_headers(key: &str, value: &str) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+      HeaderName::from_str(key).unwrap(),
+      HeaderValue::from_str(value).unwrap(),
+    );
+    headers
+  }
+
+  #[test]
+  fn test_client_version_valid_variations() {
+    let test_cases = [
+      ("Client-Version", "1.0.0"),
+      ("client-version", "2.0.0"),
+      ("client_version", "3.0.0"),
+    ];
+
+    for (key, value) in test_cases.iter() {
+      let headers = setup_headers(key, value);
+      let result = client_version_from_headers(&headers);
+      assert!(result.is_ok());
+      assert_eq!(result.unwrap(), *value);
+    }
+  }
+
+  #[test]
+  fn test_device_id_valid_variations() {
+    let test_cases = [
+      ("Device-Id", "device123"),
+      ("device-id", "device456"),
+      ("device_id", "device789"),
+      ("Device-ID", "device000"),
+    ];
+
+    for (key, value) in test_cases.iter() {
+      let headers = setup_headers(key, value);
+      let result = device_id_from_headers(&headers);
+      assert!(result.is_ok());
+      assert_eq!(result.unwrap(), *value);
+    }
+  }
+
+  #[test]
+  fn test_missing_client_version() {
+    let headers = HeaderMap::new();
+    let result = client_version_from_headers(&headers);
+    assert!(result.is_err());
+    match result {
+      Err(AppError::InvalidRequest(msg)) => {
+        assert_eq!(msg, "Missing Client-Version or client-version header");
+      },
+      _ => panic!("Expected InvalidRequest error"),
+    }
+  }
+
+  #[test]
+  fn test_missing_device_id() {
+    let headers = HeaderMap::new();
+    let result = device_id_from_headers(&headers);
+    assert!(result.is_err());
+    match result {
+      Err(AppError::InvalidRequest(msg)) => {
+        assert_eq!(msg, "Missing Device-Id or device_id header");
+      },
+      _ => panic!("Expected InvalidRequest error"),
+    }
+  }
+
+  #[test]
+  fn test_invalid_header_value() {
+    let mut headers = HeaderMap::new();
+    // Create an invalid UTF-8 header value
+    headers.insert(
+      HeaderName::from_str("Client-Version").unwrap(),
+      HeaderValue::from_bytes(&[0xFF, 0xFF]).unwrap(),
+    );
+
+    let result = client_version_from_headers(&headers);
+    assert!(result.is_err());
+    match result {
+      Err(AppError::InvalidRequest(msg)) => {
+        assert!(msg.starts_with("Failed to parse header:"));
+      },
+      _ => panic!("Expected InvalidRequest error"),
+    }
+  }
+
+  #[test]
+  fn test_value_from_headers_multiple_keys_present() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+      HeaderName::from_str("key1").unwrap(),
+      HeaderValue::from_static("value1"),
+    );
+    headers.insert(
+      HeaderName::from_str("key2").unwrap(),
+      HeaderValue::from_static("value2"),
+    );
+
+    let result = value_from_headers(&headers, &["key1", "key2"], "Missing key");
+    assert!(result.is_ok());
+    // Should return the first matching key's value
+    assert_eq!(result.unwrap(), "value1");
+  }
 }

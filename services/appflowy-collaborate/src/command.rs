@@ -15,7 +15,6 @@ use std::{
   sync::{Arc, Weak},
 };
 use tracing::error;
-
 pub type CLCommandSender = tokio::sync::mpsc::Sender<CollaborationCommand>;
 pub type CLCommandReceiver = tokio::sync::mpsc::Receiver<CollaborationCommand>;
 

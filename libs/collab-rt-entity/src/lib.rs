@@ -8,6 +8,7 @@ mod client_message;
 //  cargo clean
 //  cargo build
 // ```
+pub mod collab_proto;
 pub mod realtime_proto;
 mod server_message;
 

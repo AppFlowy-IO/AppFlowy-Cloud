@@ -1,9 +1,8 @@
-use std::ops::DerefMut;
-
 use collab_entity::CollabType;
 use pgvector::Vector;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
 use sqlx::{Error, Executor, Postgres, Transaction};
+use std::ops::DerefMut;
 use uuid::Uuid;
 
 use database_entity::dto::{

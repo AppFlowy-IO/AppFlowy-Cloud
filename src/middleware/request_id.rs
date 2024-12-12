@@ -2,6 +2,7 @@ use actix_http::header::{HeaderName, HeaderValue};
 use std::future::{ready, Ready};
 use tracing::{span, Instrument, Level};
 
+use crate::api::util::{client_version_from_headers, device_id_from_headers};
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use futures_util::future::LocalBoxFuture;
@@ -106,15 +107,8 @@ fn get_client_info(req: &ServiceRequest) -> ClientInfo {
     .and_then(|val| val.parse::<usize>().ok())
     .unwrap_or_default();
 
-  let client_version = req
-    .headers()
-    .get("client-version")
-    .and_then(|val| val.to_str().ok());
-
-  let device_id = req
-    .headers()
-    .get("device_id")
-    .and_then(|val| val.to_str().ok());
+  let client_version = client_version_from_headers(req.headers()).ok();
+  let device_id = device_id_from_headers(req.headers()).ok();
 
   ClientInfo {
     payload_size,

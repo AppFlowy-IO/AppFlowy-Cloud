@@ -59,7 +59,7 @@ sqlx = { workspace = true, default-features = false, features = [
 ] }
 thiserror = "1.0.56"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-anyhow = "1"
+anyhow.workspace = true
 bytes.workspace = true
 
 collab = { workspace = true }

@@ -12,14 +12,18 @@ gotrue-entity = { path = "../libs/gotrue-entity" }
 database-entity = { path = "../libs/database-entity" }
 shared-entity = { path = "../libs/shared-entity" }
 
-anyhow = "1.0.79"
+anyhow.workspace = true
 axum = { version = "0.7", features = ["json"] }
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros"] }
 askama = "0.12"
 axum-extra = { version = "0.9", features = ["cookie"] }
 serde.workspace = true
 serde_json.workspace = true
-redis = { version = "0.25.2", features = ["aio", "tokio-comp", "connection-manager"] }
+redis = { version = "0.25.2", features = [
+  "aio",
+  "tokio-comp",
+  "connection-manager",
+] }
 uuid = { workspace = true, features = ["v4"] }
 dotenvy = "0.15"
 reqwest = "0.11.27"

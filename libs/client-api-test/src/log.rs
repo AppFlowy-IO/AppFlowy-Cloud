@@ -25,7 +25,7 @@ pub fn load_env() {
   });
 }
 
-pub fn local_ai_test_enabled() -> bool {
+pub fn ai_test_enabled() -> bool {
   // In appflowy GitHub CI, we enable 'ai-test-enabled' feature by default, so even if the env var is not set,
   // we still enable the local ai test.
   if cfg!(feature = "ai-test-enabled") {

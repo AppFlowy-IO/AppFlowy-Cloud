@@ -17,7 +17,6 @@ use collab_importer::imported_collab::ImportType;
 use collab_importer::notion::page::CollabResource;
 use collab_importer::notion::NotionImporter;
 use collab_importer::util::FileId;
-use database::collab::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
 use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
 use database::workspace::{
@@ -45,7 +44,6 @@ use redis::{AsyncCommands, RedisResult, Value};
 use database::pg_row::AFImportTask;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
-use sqlx::types::chrono;
 use sqlx::types::chrono::{DateTime, TimeZone, Utc};
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
@@ -913,8 +911,6 @@ async fn process_unzip_file(
   let mut collab_params_list = vec![];
   let mut database_view_ids_by_database_id: HashMap<String, Vec<String>> = HashMap::new();
   let mut orphan_view_ids = HashSet::new();
-  let mem_cache = CollabMemCache::new(redis_client.clone());
-  let timestamp = chrono::Utc::now().timestamp();
 
   // 3. Collect all collabs and resources
   let mut stream = imported.into_collab_stream().await;
@@ -987,15 +983,28 @@ async fn process_unzip_file(
         err
       ))
     })?;
-    // Update the workspace database cache because newly created workspace databases are cached in Redis.
-    mem_cache
-      .insert_encode_collab(
-        &w_database_id,
-        w_database_collab.clone(),
-        timestamp,
-        cache_exp_secs_from_collab_type(&CollabType::WorkspaceDatabase),
-      )
-      .await;
+
+    match w_database_collab.encode_to_bytes() {
+      Ok(bytes) => {
+        if let Err(err) = redis_client
+          .set_ex::<String, Vec<u8>, Value>(
+            encode_collab_key(&w_database_id),
+            bytes,
+            2592000, // WorkspaceDatabase => 1 month
+          )
+          .await
+        {
+          warn!(
+            "[Import] Failed to insert workspace database to Redis: {}",
+            err
+          );
+        }
+      },
+      Err(err) => warn!(
+        "[Import] Failed to encode workspace database collab payload: {}",
+        err
+      ),
+    }
 
     trace!(
       "[Import]: {} did encode workspace database collab",
@@ -1026,16 +1035,21 @@ async fn process_unzip_file(
     .encode_collab_v1(|collab| CollabType::Folder.validate_require_data(collab))
     .map_err(|err| ImportError::Internal(err.into()))?;
 
-  // Update the folder cache because newly created folders are cached in Redis.
-  // Other collaboration objects do not use caching yet, so there is no need to insert them into Redis.
-  mem_cache
-    .insert_encode_collab(
-      &import_task.workspace_id,
-      folder_collab.clone(),
-      timestamp,
-      cache_exp_secs_from_collab_type(&CollabType::Folder),
-    )
-    .await;
+  match folder_collab.encode_to_bytes() {
+    Ok(bytes) => {
+      if let Err(err) = redis_client
+        .set_ex::<String, Vec<u8>, Value>(
+          encode_collab_key(&import_task.workspace_id),
+          bytes,
+          604800, // Folder => 1 week
+        )
+        .await
+      {
+        warn!("[Import] Failed to insert folder collab to Redis: {}", err);
+      }
+    },
+    Err(err) => warn!("[Import] Failed to encode folder collab payload: {}", err),
+  }
 
   let folder_collab_params = CollabParams {
     object_id: import_task.workspace_id.clone(),
@@ -1159,9 +1173,9 @@ async fn process_unzip_file(
   });
 
   if result.is_err() {
-    let _ = mem_cache.remove_encode_collab(&w_database_id).await;
-    let _ = mem_cache
-      .remove_encode_collab(&import_task.workspace_id)
+    let _: RedisResult<Value> = redis_client.del(encode_collab_key(&w_database_id)).await;
+    let _: RedisResult<Value> = redis_client
+      .del(encode_collab_key(&import_task.workspace_id))
       .await;
 
     return result;
@@ -1355,7 +1369,7 @@ async fn get_encode_collab_from_bytes(
           .map_err(|err| ImportError::Internal(err.into()))?,
       )
     },
-    Err(err) => return Err(err.into()),
+    Err(err) => Err(err.into()),
   }
 }
 
@@ -1583,4 +1597,8 @@ fn collab_key(workspace_id: &str, object_id: &str) -> String {
     "collabs/{}/{}/encoded_collab.v1.zstd",
     workspace_id, object_id
   )
+}
+
+fn encode_collab_key(object_id: &str) -> String {
+  format!("encode_collab_v0:{}", object_id)
 }

@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
   // Step 4: Monitor all processes
   select! {
       status = appflowy_cloud_cmd.wait() => {
-          handle_process_exit(status?, appflowy_cloud_bin_name)?;
+          handle_process_exit(status?, worker_bin_name)?;
       },
       status = appflowy_worker_cmd.wait() => {
           handle_process_exit(status?, worker_bin_name)?;

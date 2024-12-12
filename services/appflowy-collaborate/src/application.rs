@@ -15,7 +15,6 @@ use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
-use database::collab::cache::CollabCache;
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -29,6 +28,7 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 
+use crate::collab::cache::CollabCache;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
 use crate::config::{Config, DatabaseSetting, S3Setting};
@@ -133,6 +133,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     redis_conn_manager.clone(),
     pg_pool.clone(),
     s3_client.clone(),
+    metrics.collab_metrics.clone(),
     config.collab.s3_collab_threshold as usize,
   );
 
@@ -152,7 +153,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_storage_access_control,
     snapshot_control,
     rt_cmd_tx,
-    metrics.collab_metrics.clone(),
   ));
   let app_state = AppState {
     config: Arc::new(config.clone()),

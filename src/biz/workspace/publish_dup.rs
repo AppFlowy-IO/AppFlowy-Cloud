@@ -3,7 +3,6 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 
 use anyhow::anyhow;
 use bytes::Bytes;
-use collab::preclude::Collab;
 use collab_database::database::gen_row_id;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -30,9 +29,12 @@ use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, Publ
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
 use std::collections::HashSet;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{collections::HashMap, sync::Arc};
 
+use crate::biz::collab::folder_view::to_folder_view_icon;
+use crate::biz::collab::folder_view::to_folder_view_layout;
+use crate::biz::collab::utils::collab_from_doc_state;
 use tracing::error;
 use workspace_template::gen_view_id;
 use yrs::Any;
@@ -41,10 +43,8 @@ use yrs::ArrayRef;
 use yrs::Out;
 use yrs::{Map, MapRef};
 
-use crate::biz::collab::folder_view::to_folder_view_icon;
-use crate::biz::collab::folder_view::to_folder_view_layout;
-use crate::biz::collab::ops::collab_from_doc_state;
-use crate::biz::collab::ops::get_latest_collab_encoded;
+use crate::biz::collab::utils::collab_to_bin;
+use crate::biz::collab::utils::get_latest_collab_encoded;
 
 use super::ops::broadcast_update;
 
@@ -174,6 +174,7 @@ impl PublishCollabDuplicator {
     // insert all collab object accumulated
     // for self.collabs_to_insert
     let mut txn = pg_pool.begin().await?;
+    let start = Instant::now();
     for (oid, (collab_type, encoded_collab)) in collabs_to_insert.into_iter() {
       let params = CollabParams {
         object_id: oid.clone(),
@@ -183,7 +184,7 @@ impl PublishCollabDuplicator {
       };
       let action = format!("duplicate collab: {}", params);
       collab_storage
-        .insert_new_collab_with_transaction(
+        .upsert_new_collab_with_transaction(
           &dest_workspace_id,
           &duplicator_uid,
           params,
@@ -239,7 +240,7 @@ impl PublishCollabDuplicator {
       let updated_ws_w_db_collab = updated_ws_w_db_collab?;
 
       collab_storage
-        .insert_new_collab_with_transaction(
+        .upsert_new_collab_with_transaction(
           &dest_workspace_id,
           &duplicator_uid,
           CollabParams {
@@ -331,7 +332,7 @@ impl PublishCollabDuplicator {
     .await?;
 
     collab_storage
-      .insert_new_collab_with_transaction(
+      .upsert_new_collab_with_transaction(
         &dest_workspace_id,
         &duplicator_uid,
         CollabParams {
@@ -346,7 +347,10 @@ impl PublishCollabDuplicator {
       .await?;
 
     match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
-      Ok(result) => result.map_err(AppError::from),
+      Ok(result) => {
+        collab_storage.metrics().observe_pg_tx(start.elapsed());
+        result.map_err(AppError::from)
+      },
       Err(_) => {
         error!("Timeout waiting for duplicating collabs");
         Err(AppError::RequestTimeout(
@@ -1170,15 +1174,4 @@ fn add_to_view_info(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[Pu
       add_to_view_info(acc, child_views);
     }
   }
-}
-
-async fn collab_to_bin(collab: Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
-  tokio::task::spawn_blocking(move || {
-    let bin = collab
-      .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-      .encode_to_bytes()?;
-    Ok(bin)
-  })
-  .await?
 }

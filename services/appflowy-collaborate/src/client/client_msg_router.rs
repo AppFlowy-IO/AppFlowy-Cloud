@@ -31,7 +31,7 @@ pub struct ClientMessageRouter {
   ///
   /// The message flow:
   /// ClientSession(websocket) -> [CollabRealtimeServer] -> [ClientMessageRouter] -> [CollabBroadcast] 1->* websocket(client)
-  pub(crate) stream_tx: tokio::sync::broadcast::Sender<RealtimeMessage>,
+  pub(crate) stream_tx: tokio::sync::broadcast::Sender<MessageByObjectId>,
 }
 
 impl ClientMessageRouter {
@@ -104,60 +104,54 @@ impl ClientMessageRouter {
     let (client_msg_rx, rx) = tokio::sync::mpsc::channel(100);
     let client_stream = ReceiverStream::new(rx);
     tokio::spawn(async move {
-      while let Some(Ok(realtime_msg)) = stream_rx.next().await {
-        match realtime_msg.transform() {
-          Ok(messages_by_oid) => {
-            for (message_object_id, original_messages) in messages_by_oid {
-              // if the message is not for the target object, skip it. The stream_rx receives different
-              // objects' messages, so we need to filter out the messages that are not for the target object.
-              if target_object_id != message_object_id {
-                continue;
-              }
+      while let Some(Ok(messages_by_oid)) = stream_rx.next().await {
+        for (message_object_id, original_messages) in messages_by_oid.into_inner() {
+          // if the message is not for the target object, skip it. The stream_rx receives different
+          // objects' messages, so we need to filter out the messages that are not for the target object.
+          if target_object_id != message_object_id {
+            continue;
+          }
 
-              // before applying user messages, we need to check if the user has the permission
-              // valid_messages contains the messages that the user is allowed to apply
-              // invalid_message contains the messages that the user is not allowed to apply
-              let (valid_messages, invalid_message) = Self::access_control(
-                &stream_workspace_id,
-                &user.uid,
-                &message_object_id,
-                access_control.clone(),
-                original_messages,
-              )
-              .await;
-              trace!(
-                "{} receive client:{}, device:{}, message: valid:{} invalid:{}",
-                message_object_id,
-                user.uid,
-                user.device_id,
-                valid_messages.len(),
-                invalid_message.len()
-              );
+          // before applying user messages, we need to check if the user has the permission
+          // valid_messages contains the messages that the user is allowed to apply
+          // invalid_message contains the messages that the user is not allowed to apply
+          let (valid_messages, invalid_message) = Self::access_control(
+            &stream_workspace_id,
+            &user.uid,
+            &message_object_id,
+            access_control.clone(),
+            original_messages,
+          )
+          .await;
+          trace!(
+            "{} receive client:{}, device:{}, message: valid:{} invalid:{}",
+            message_object_id,
+            user.uid,
+            user.device_id,
+            valid_messages.len(),
+            invalid_message.len()
+          );
 
-              if valid_messages.is_empty() {
-                continue;
-              }
+          if valid_messages.is_empty() {
+            continue;
+          }
 
-              // if tx.send return error, it means the client is disconnected from the group
-              if let Err(err) = client_msg_rx
-                .send([(message_object_id, valid_messages)].into())
-                .await
-              {
-                trace!(
-                  "{} send message to user:{} stream fail with error: {}, break the loop",
-                  target_object_id,
-                  user.user_device(),
-                  err,
-                );
-                return;
-              }
-            }
-          },
-          Err(err) => {
-            if cfg!(debug_assertions) {
-              error!("parse client message error: {}", err);
-            }
-          },
+          // if tx.send return error, it means the client is disconnected from the group
+          if let Err(err) = client_msg_rx
+            .send(MessageByObjectId::new_with_message(
+              message_object_id,
+              valid_messages,
+            ))
+            .await
+          {
+            trace!(
+              "{} send message to user:{} stream fail with error: {}, break the loop",
+              target_object_id,
+              user.user_device(),
+              err,
+            );
+            return;
+          }
         }
       }
     });

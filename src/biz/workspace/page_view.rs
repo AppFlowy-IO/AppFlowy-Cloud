@@ -1,6 +1,18 @@
+use super::ops::broadcast_update;
+use crate::api::metrics::AppFlowyWebMetrics;
+use crate::api::ws::RealtimeServerAddr;
+use crate::biz::collab::folder_view::{
+  check_if_view_is_space, parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
+  to_folder_view_icon, to_space_permission,
+};
+use crate::biz::collab::ops::{get_latest_collab_folder, get_latest_workspace_database};
+use crate::biz::collab::utils::{collab_from_doc_state, get_latest_collab_encoded};
+use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;
+use appflowy_collaborate::actix_ws::entities::ClientHttpUpdateMessage;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use bytes::Bytes;
 use chrono::DateTime;
 use collab::core::collab::Collab;
 use collab_database::database::{
@@ -24,10 +36,11 @@ use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
 use collab_folder::{timestamp, CollabOrigin, Folder};
+use collab_rt_entity::user::RealtimeUser;
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
-use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde_json::json;
@@ -37,22 +50,9 @@ use shared_entity::dto::workspace_dto::{
 use sqlx::{PgPool, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Instant;
+use tracing::instrument;
 use uuid::Uuid;
-use yrs::updates::decoder::Decode;
-use yrs::Update;
-
-use crate::api::metrics::AppFlowyWebMetrics;
-use crate::biz::collab::folder_view::{
-  parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout, to_folder_view_icon,
-  to_space_permission,
-};
-use crate::biz::collab::ops::{collab_from_doc_state, get_latest_workspace_database};
-use crate::biz::collab::{
-  folder_view::view_is_space,
-  ops::{get_latest_collab_encoded, get_latest_collab_folder},
-};
-
-use super::ops::broadcast_update;
 
 struct WorkspaceDatabaseUpdate {
   pub updated_encoded_collab: Vec<u8>,
@@ -61,7 +61,7 @@ struct WorkspaceDatabaseUpdate {
 
 struct FolderUpdate {
   pub updated_encoded_collab: Vec<u8>,
-  pub encoded_updates: Vec<u8>,
+  pub encoded_update: Vec<u8>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -129,9 +129,10 @@ pub async fn create_space(
   )
   .await?;
   let mut transaction = pg_pool.begin().await?;
+  let start = Instant::now();
   let action = format!("Create new space: {}", view_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       default_document_collab_params,
@@ -148,6 +149,7 @@ pub async fn create_space(
   )
   .await?;
   transaction.commit().await?;
+  collab_storage.metrics().observe_pg_tx(start.elapsed());
   Ok(Space { view_id })
 }
 
@@ -371,7 +373,7 @@ async fn prepare_default_board_encoded_database(
   let mut rows = vec![];
   let card_status_select_option_ids = SelectOptionIds::from(vec![default_option_id.clone()]);
   for i in 0..3 {
-    let card_status_cell_data = card_status_select_option_ids.to_cell_data(FieldType::SingleSelect);
+    let card_status_cell_data = card_status_select_option_ids.to_cell(FieldType::SingleSelect);
     let mut description_cell = new_cell_builder(FieldType::RichText);
     let description_text = format!("Card {}", i + 1);
     description_cell.insert(CELL_DATA.into(), description_text.into());
@@ -435,7 +437,7 @@ async fn add_new_space_to_folder(
   };
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -469,7 +471,7 @@ async fn update_space_properties(
   };
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -512,7 +514,7 @@ async fn add_new_view_to_folder(
   };
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -537,7 +539,26 @@ async fn update_view_properties(
   };
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
+  })
+}
+
+async fn move_view(
+  view_id: &str,
+  new_parent_view_id: &str,
+  prev_view_id: Option<String>,
+  folder: &mut Folder,
+) -> Result<FolderUpdate, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    folder
+      .body
+      .move_nested_view(&mut txn, view_id, new_parent_view_id, prev_view_id);
+    txn.encode_update_v1()
+  };
+  Ok(FolderUpdate {
+    updated_encoded_collab: folder_to_encoded_collab(folder)?,
+    encoded_update,
   })
 }
 
@@ -565,7 +586,7 @@ async fn move_view_to_trash(view_id: &str, folder: &mut Folder) -> Result<Folder
 
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -584,7 +605,7 @@ async fn move_view_out_from_trash(
 
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -603,7 +624,7 @@ async fn move_all_views_out_from_trash(folder: &mut Folder) -> Result<FolderUpda
 
   Ok(FolderUpdate {
     updated_encoded_collab: folder_to_encoded_collab(folder)?,
-    encoded_updates: encoded_update,
+    encoded_update,
   })
 }
 
@@ -652,7 +673,7 @@ async fn insert_and_broadcast_workspace_database_update(
   };
   let action_description = format!("Update workspace database: {}", workspace_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       params,
@@ -684,7 +705,7 @@ async fn insert_and_broadcast_workspace_folder_update(
   };
   let action_description = format!("Update workspace folder: {}", workspace_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       params,
@@ -695,7 +716,7 @@ async fn insert_and_broadcast_workspace_folder_update(
   broadcast_update(
     collab_storage,
     &workspace_id.to_string(),
-    folder_update.encoded_updates.clone(),
+    folder_update.encoded_update.clone(),
   )
   .await?;
   Ok(())
@@ -724,9 +745,10 @@ async fn create_document_page(
   )
   .await?;
   let mut transaction = pg_pool.begin().await?;
+  let start = Instant::now();
   let action = format!("Create new collab: {}", view_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       default_document_collab_params,
@@ -743,6 +765,7 @@ async fn create_document_page(
   )
   .await?;
   transaction.commit().await?;
+  collab_storage.metrics().observe_pg_tx(start.elapsed());
   Ok(Page { view_id })
 }
 
@@ -874,9 +897,10 @@ async fn create_database_page(
     .collect_vec();
 
   let mut transaction = pg_pool.begin().await?;
+  let start = Instant::now();
   let action = format!("Create new database collab: {}", database_id);
   collab_storage
-    .insert_new_collab_with_transaction(
+    .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &uid,
       database_collab_params,
@@ -905,9 +929,36 @@ async fn create_database_page(
   )
   .await?;
   transaction.commit().await?;
+  collab_storage.metrics().observe_pg_tx(start.elapsed());
   Ok(Page {
     view_id: view_id.to_string(),
   })
+}
+
+pub async fn move_page(
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  uid: i64,
+  workspace_id: Uuid,
+  view_id: &str,
+  new_parent_view_id: &str,
+  prev_view_id: Option<String>,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = move_view(view_id, new_parent_view_id, prev_view_id, &mut folder).await?;
+  let mut transaction = pg_pool.begin().await?;
+  insert_and_broadcast_workspace_folder_update(
+    uid,
+    workspace_id,
+    folder_update,
+    collab_storage,
+    &mut transaction,
+  )
+  .await?;
+  transaction.commit().await?;
+  Ok(())
 }
 
 pub async fn move_page_to_trash(
@@ -1054,7 +1105,7 @@ pub async fn get_page_view_collab(
       .icon
       .as_ref()
       .map(|icon| to_dto_view_icon(icon.clone())),
-    is_space: view_is_space(&view),
+    is_space: check_if_view_is_space(&view),
     is_private: false,
     is_published: publish_view_ids.contains(view_id),
     layout: to_dto_view_layout(&view.layout),
@@ -1225,53 +1276,32 @@ async fn get_page_collab_data_for_document(
   })
 }
 
+#[instrument(level = "debug", skip_all)]
 pub async fn update_page_collab_data(
-  collab_access_control_storage: Arc<CollabAccessControlStorage>,
-  appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
-  uid: i64,
+  appflowy_web_metrics: &Arc<AppFlowyWebMetrics>,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
   workspace_id: Uuid,
   object_id: Uuid,
   collab_type: CollabType,
-  doc_state: &[u8],
+  doc_state: Vec<u8>,
 ) -> Result<(), AppError> {
-  let param = QueryCollabParams {
-    workspace_id: workspace_id.to_string(),
-    inner: QueryCollab {
-      object_id: object_id.to_string(),
-      collab_type: collab_type.clone(),
-    },
-  };
-  let encode_collab = collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
-    .await?;
-  let mut collab = collab_from_doc_state(encode_collab.doc_state.to_vec(), &object_id.to_string())?;
+  let object_id = object_id.to_string();
   appflowy_web_metrics.record_update_size_bytes(doc_state.len());
-  let update = Update::decode_v1(doc_state).map_err(|e| {
-    appflowy_web_metrics.incr_decoding_failure_count(1);
-    AppError::InvalidRequest(format!("Failed to decode update: {}", e))
-  })?;
-  collab.apply_update(update).map_err(|e| {
-    appflowy_web_metrics.incr_apply_update_failure_count(1);
-    AppError::InvalidRequest(format!("Failed to apply update: {}", e))
-  })?;
-  let updated_encoded_collab = collab
-    .encode_collab_v1(|c| collab_type.validate_require_data(c))
-    .map_err(|e| AppError::Internal(anyhow!("Failed to encode collab: {}", e)))?
-    .encode_to_bytes()?;
-  let params = CollabParams {
+
+  let message = ClientHttpUpdateMessage {
+    user,
+    workspace_id: workspace_id.to_string(),
     object_id: object_id.to_string(),
-    collab_type: collab_type.clone(),
-    encoded_collab_v1: updated_encoded_collab.into(),
-    embeddings: None,
+    collab_type,
+    update: Bytes::from(doc_state),
+    state_vector: None,
+    return_tx: None,
   };
-  collab_access_control_storage
-    .queue_insert_or_update_collab(&workspace_id.to_string(), &uid, params, true)
-    .await?;
-  broadcast_update(
-    &collab_access_control_storage,
-    &object_id.to_string(),
-    doc_state.to_vec(),
-  )
-  .await?;
+
+  server
+    .try_send(message)
+    .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
+
   Ok(())
 }

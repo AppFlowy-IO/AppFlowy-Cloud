@@ -33,6 +33,15 @@ impl AFCloudMailer {
         &subject,
       )
       .await
+      .map(|_| tracing::info!("Sent workspace invite email to {}", email))
+      .map_err(|err| {
+        tracing::error!(
+          "Failed to send workspace invite email to {}: {}",
+          email,
+          err
+        );
+        err
+      })
   }
 
   pub async fn send_workspace_access_request(

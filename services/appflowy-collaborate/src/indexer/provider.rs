@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
-
 use actix::dev::Stream;
 use async_stream::try_stream;
 use async_trait::async_trait;
@@ -11,6 +7,10 @@ use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use sqlx::PgPool;
+use std::collections::HashMap;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Instant;
 use tokio_stream::StreamExt;
 use tracing::info;
 use uuid::Uuid;
@@ -29,6 +29,13 @@ pub trait Indexer: Send + Sync {
   async fn embedding_params(
     &self,
     collab: &Collab,
+  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
+
+  async fn embedding_text(
+    &self,
+    object_id: String,
+    content: String,
+    collab_type: CollabType,
   ) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
 
   async fn embeddings(
@@ -90,8 +97,8 @@ impl IndexerProvider {
   /// Returns indexer for a specific type of [Collab] object.
   /// If collab of given type is not supported or workspace it belongs to has indexing disabled,
   /// returns `None`.
-  pub fn indexer_for(&self, collab_type: CollabType) -> Option<Arc<dyn Indexer>> {
-    self.indexer_cache.get(&collab_type).cloned()
+  pub fn indexer_for(&self, collab_type: &CollabType) -> Option<Arc<dyn Indexer>> {
+    self.indexer_cache.get(collab_type).cloned()
   }
 
   fn get_unindexed_collabs(
@@ -103,7 +110,7 @@ impl IndexerProvider {
     Box::pin(try_stream! {
       let collabs = get_collabs_without_embeddings(&db).await?;
       if !collabs.is_empty() {
-        tracing::trace!("found {} unindexed collabs", collabs.len());
+        tracing::info!("found {} unindexed collabs", collabs.len());
       }
       for cid in collabs {
         match &cid.collab_type {
@@ -137,6 +144,8 @@ impl IndexerProvider {
   }
 
   pub async fn handle_unindexed_collabs(indexer: Arc<Self>, storage: Arc<dyn CollabStorage>) {
+    let start = Instant::now();
+    let mut i = 0;
     let mut stream = indexer.get_unindexed_collabs(storage);
     while let Some(result) = stream.next().await {
       match result {
@@ -148,6 +157,8 @@ impl IndexerProvider {
             if cfg!(debug_assertions) {
               tracing::warn!("failed to index collab {}/{}: {}", workspace, oid, err);
             }
+          } else {
+            i += 1;
           }
         },
         Err(err) => {
@@ -155,6 +166,11 @@ impl IndexerProvider {
         },
       }
     }
+    tracing::info!(
+      "indexed {} unindexed collabs in {:?} after restart",
+      i,
+      start.elapsed()
+    );
   }
 
   async fn index_collab(&self, unindexed: UnindexedCollab) -> Result<(), AppError> {
@@ -185,7 +201,7 @@ impl IndexerProvider {
     let collab_type = params.collab_type.clone();
     let data = params.encoded_collab_v1.clone();
 
-    if let Some(indexer) = self.indexer_for(collab_type) {
+    if let Some(indexer) = self.indexer_for(&collab_type) {
       let encoded_collab = tokio::task::spawn_blocking(move || {
         let encode_collab = EncodedCollab::decode_from_bytes(&data)?;
         Ok::<_, AppError>(encode_collab)

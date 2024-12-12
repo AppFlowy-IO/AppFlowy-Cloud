@@ -2,8 +2,8 @@ use crate::http::log_request_id;
 use crate::Client;
 use client_api_entity::{
   AFCollabMember, AFCollabMembers, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
-  AFWorkspaceMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
-  QueryWorkspaceMember, UpdateCollabMemberParams,
+  AFWorkspaceMember, InsertCollabMemberParams, QueryCollabMembers, QueryWorkspaceMember,
+  UpdateCollabMemberParams, WorkspaceCollabIdentify,
 };
 use reqwest::Method;
 use shared_entity::dto::workspace_dto::{
@@ -205,7 +205,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_collab_member(
     &self,
-    params: CollabMemberIdentify,
+    params: WorkspaceCollabIdentify,
   ) -> Result<AFCollabMember, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}/member",
@@ -245,7 +245,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn remove_collab_member(
     &self,
-    params: CollabMemberIdentify,
+    params: WorkspaceCollabIdentify,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}/member",

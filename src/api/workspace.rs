@@ -1,42 +1,4 @@
-use access_control::act::Action;
-use actix_web::web::{Bytes, Path, Payload};
-use actix_web::web::{Data, Json, PayloadConfig};
-use actix_web::{web, Scope};
-use actix_web::{HttpRequest, Result};
-use anyhow::{anyhow, Context};
-use bytes::BytesMut;
-use chrono::{DateTime, Duration, Utc};
-use collab::entity::EncodedCollab;
-use collab_entity::CollabType;
-use futures_util::future::try_join_all;
-use prost::Message as ProstMessage;
-use rayon::prelude::*;
-use sqlx::types::uuid;
-use std::time::Instant;
-
-use tokio_stream::StreamExt;
-use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, event, instrument, trace};
-use uuid::Uuid;
-use validator::Validate;
-
-use app_error::AppError;
-use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
-use appflowy_collaborate::indexer::IndexerProvider;
-use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
-use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
-use collab_rt_entity::RealtimeMessage;
-use collab_rt_protocol::validate_encode_collab;
-use database::collab::{CollabStorage, GetCollabOrigin};
-use database::user::select_uid_from_email;
-use database_entity::dto::PublishCollabItem;
-use database_entity::dto::PublishInfo;
-use database_entity::dto::*;
-use shared_entity::dto::workspace_dto::*;
-use shared_entity::response::AppResponseError;
-use shared_entity::response::{AppResponse, JsonAppResponse};
-
-use crate::api::util::PayloadReader;
+use crate::api::util::{client_version_from_headers, PayloadReader};
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
@@ -50,7 +12,7 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  create_page, create_space, get_page_view_collab, move_page_to_trash,
+  create_page, create_space, get_page_view_collab, move_page, move_page_to_trash,
   restore_all_pages_from_trash, restore_page_from_trash, update_page, update_page_collab_data,
   update_space,
 };
@@ -59,7 +21,47 @@ use crate::domain::compression::{
   blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
 };
 use crate::state::AppState;
-
+use access_control::act::Action;
+use actix_web::web::{Bytes, Path, Payload};
+use actix_web::web::{Data, Json, PayloadConfig};
+use actix_web::{web, HttpResponse, ResponseError, Scope};
+use actix_web::{HttpRequest, Result};
+use anyhow::{anyhow, Context};
+use app_error::AppError;
+use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
+use appflowy_collaborate::indexer::IndexerProvider;
+use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
+use bytes::BytesMut;
+use chrono::{DateTime, Duration, Utc};
+use collab::entity::EncodedCollab;
+use collab_database::entity::FieldType;
+use collab_entity::CollabType;
+use collab_folder::timestamp;
+use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
+use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::RealtimeMessage;
+use collab_rt_protocol::validate_encode_collab;
+use database::collab::{CollabStorage, GetCollabOrigin};
+use database::user::select_uid_from_email;
+use database_entity::dto::PublishCollabItem;
+use database_entity::dto::PublishInfo;
+use database_entity::dto::*;
+use futures_util::future::try_join_all;
+use prost::Message as ProstMessage;
+use rayon::prelude::*;
+use shared_entity::dto::workspace_dto::*;
+use shared_entity::response::AppResponseError;
+use shared_entity::response::{AppResponse, JsonAppResponse};
+use sqlx::types::uuid;
+use std::collections::HashMap;
+use std::io::Cursor;
+use std::time::Instant;
+use tokio_stream::StreamExt;
+use tokio_tungstenite::tungstenite::Message;
+use tracing::{error, event, instrument, trace};
+use uuid::Uuid;
+use validator::Validate;
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
@@ -126,8 +128,23 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(v1_get_collab_handler)),
     )
     .service(
+      web::resource("/v1/{workspace_id}/collab/{object_id}/sync")
+        .route(web::post().to(collab_two_way_sync_handler)),
+    )
+    .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
         .route(web::post().to(post_web_update_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/collab/{object_id}/member")
+        .route(web::post().to(add_collab_member_handler))
+        .route(web::get().to(get_collab_member_handler))
+        .route(web::put().to(update_collab_member_handler))
+        .route(web::delete().to(remove_collab_member_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/collab/{object_id}/info")
+        .route(web::get().to(get_collab_info_handler)),
     )
     .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
@@ -140,6 +157,10 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/page-view/{view_id}")
         .route(web::get().to(get_page_view_handler))
         .route(web::patch().to(update_page_view_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/move")
+        .route(web::post().to(move_page_handler)),
     )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/move-to-trash")
@@ -168,13 +189,6 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/{object_id}/snapshot/list")
         .route(web::get().to(get_all_collab_snapshot_list_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/collab/{object_id}/member")
-        .route(web::post().to(add_collab_member_handler))
-        .route(web::get().to(get_collab_member_handler))
-        .route(web::put().to(update_collab_member_handler))
-        .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
       web::resource("/published/{publish_namespace}")
@@ -259,11 +273,13 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("/{workspace_id}/database").route(web::get().to(list_database_handler)))
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row")
-        .route(web::get().to(list_database_row_id_handler)),
+        .route(web::get().to(list_database_row_id_handler))
+        .route(web::post().to(post_database_row_handler)),
     )
     .service(
       web::resource("/{workspace_id}/database/{database_id}/fields")
-        .route(web::get().to(get_database_fields_handler)),
+        .route(web::get().to(get_database_fields_handler))
+        .route(web::post().to(post_database_fields_handler)),
     )
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row/updated")
@@ -388,7 +404,7 @@ async fn post_workspace_invite_handler(
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
 
-  let invited_members = payload.into_inner();
+  let invitations = payload.into_inner();
   workspace::ops::invite_workspace_members(
     &state.mailer,
     &state.gotrue_admin,
@@ -396,7 +412,7 @@ async fn post_workspace_invite_handler(
     &state.gotrue_client,
     &user_uuid,
     &workspace_id,
-    invited_members,
+    invitations,
     state.config.appflowy_web_url.as_deref(),
   )
   .await?;
@@ -701,11 +717,12 @@ async fn create_collab_handler(
     .await
     .context("acquire transaction to upsert collab")
     .map_err(AppError::from)?;
+  let start = Instant::now();
 
   let action = format!("Create new collab: {}", params);
   state
     .collab_access_control_storage
-    .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction, &action)
+    .upsert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction, &action)
     .await?;
 
   transaction
@@ -713,6 +730,7 @@ async fn create_collab_handler(
     .await
     .context("fail to commit the transaction to upsert collab")
     .map_err(AppError::from)?;
+  state.metrics.collab_metrics.observe_pg_tx(start.elapsed());
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -897,12 +915,24 @@ async fn v1_get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(resp)))
 }
 
+#[instrument(level = "debug", skip_all)]
 async fn post_web_update_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, Uuid)>,
   payload: Json<UpdateCollabWebParams>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  let payload = payload.into_inner();
+  let app_version = client_version_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "web".to_string());
+  let device_id = device_id_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| Uuid::new_v4().to_string());
+  let session_id = device_id.clone();
+
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.collab_type.clone();
   let uid = state
@@ -910,14 +940,24 @@ async fn post_web_update_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
-  update_page_collab_data(
-    state.collab_access_control_storage.clone(),
-    state.metrics.appflowy_web_metrics.clone(),
+
+  let user = RealtimeUser {
     uid,
+    device_id,
+    connect_at: timestamp(),
+    session_id,
+    app_version,
+  };
+  trace!("create onetime web realtime user: {}", user);
+
+  update_page_collab_data(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     workspace_id,
     object_id,
     collab_type,
-    &payload.doc_state,
+    payload.doc_state,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
@@ -987,6 +1027,27 @@ async fn post_page_view_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))
+}
+
+async fn move_page_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<MovePageParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  move_page(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    uid,
+    workspace_uuid,
+    &view_id,
+    &payload.new_parent_view_id,
+    payload.prev_view_id.clone(),
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn move_page_to_trash_handler(
@@ -1193,10 +1254,7 @@ async fn update_collab_handler(
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
   let (mut params, workspace_id) = create_params.split();
-  if let Some(indexer) = state
-    .indexer_provider
-    .indexer_for(params.collab_type.clone())
-  {
+  if let Some(indexer) = state.indexer_provider.indexer_for(&params.collab_type) {
     if state
       .indexer_provider
       .can_index_workspace(&workspace_id)
@@ -1315,7 +1373,7 @@ async fn update_collab_member_handler(
 }
 #[instrument(level = "debug", skip(state, payload), err)]
 async fn get_collab_member_handler(
-  payload: Json<CollabMemberIdentify>,
+  payload: Json<WorkspaceCollabIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabMember>>> {
   let payload = payload.into_inner();
@@ -1325,7 +1383,7 @@ async fn get_collab_member_handler(
 
 #[instrument(skip(state, payload), err)]
 async fn remove_collab_member_handler(
-  payload: Json<CollabMemberIdentify>,
+  payload: Json<WorkspaceCollabIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
@@ -1718,8 +1776,9 @@ async fn post_realtime_message_stream_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  // TODO(nathan): after upgrade the client application, then the device_id should not be empty
-  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let device_id = device_id_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "".to_string());
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)
@@ -1735,7 +1794,7 @@ async fn post_realtime_message_stream_handler(
   let device_id = device_id.to_string();
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let stream_message = ClientStreamMessage {
+  let stream_message = ClientHttpStreamMessage {
     uid,
     device_id,
     message,
@@ -1919,6 +1978,31 @@ async fn list_database_row_id_handler(
   Ok(Json(AppResponse::Ok().with_data(db_rows)))
 }
 
+async fn post_database_row_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+  cells_by_id: Json<HashMap<String, serde_json::Value>>,
+) -> Result<Json<AppResponse<String>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  let new_db_row_id = biz::collab::ops::insert_database_row(
+    &state.collab_access_control_storage,
+    &state.pg_pool,
+    &workspace_id,
+    &db_id,
+    uid,
+    cells_by_id.into_inner(),
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
+}
+
 async fn get_database_fields_handler(
   user_uuid: UserUuid,
   path_param: web::Path<(String, String)>,
@@ -1939,6 +2023,32 @@ async fn get_database_fields_handler(
   .await?;
 
   Ok(Json(AppResponse::Ok().with_data(db_fields)))
+}
+
+async fn post_database_fields_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+  field: Json<AFInsertDatabaseField>,
+) -> Result<Json<AppResponse<String>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  let field_id = biz::collab::ops::add_database_field(
+    uid,
+    &state.collab_access_control_storage,
+    &state.pg_pool,
+    &workspace_id,
+    &db_id,
+    field.into_inner(),
+  )
+  .await?;
+
+  Ok(Json(AppResponse::Ok().with_data(field_id)))
 }
 
 async fn list_database_row_id_updated_handler(
@@ -1982,10 +2092,27 @@ async fn list_database_row_details_handler(
   let list_db_row_query = param.into_inner();
   let row_ids = list_db_row_query.into_ids();
 
+  if let Err(e) = Uuid::parse_str(&workspace_id) {
+    return Err(
+      AppError::InvalidRequest(format!("invalid workspace id `{}`: {}", db_id, e)).into(),
+    );
+  }
+  if let Err(e) = Uuid::parse_str(&db_id) {
+    return Err(AppError::InvalidRequest(format!("invalid database id `{}`: {}", db_id, e)).into());
+  }
+
+  for id in row_ids.iter() {
+    if let Err(e) = Uuid::parse_str(id) {
+      return Err(AppError::InvalidRequest(format!("invalid row id `{}`: {}", id, e)).into());
+    }
+  }
+
   state
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
+
+  static UNSUPPORTED_FIELD_TYPES: &[FieldType] = &[FieldType::Relation];
 
   let db_rows = biz::collab::ops::list_database_row_details(
     &state.collab_access_control_storage,
@@ -1993,6 +2120,7 @@ async fn list_database_row_details_handler(
     workspace_id,
     db_id,
     &row_ids,
+    UNSUPPORTED_FIELD_TYPES,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))
@@ -2057,4 +2185,131 @@ async fn fetch_embeddings(
   }
 
   Ok(())
+}
+
+#[instrument(level = "debug", skip(state, payload), err)]
+async fn get_collab_info_handler(
+  payload: Json<WorkspaceCollabIdentify>,
+  query: web::Query<CollabTypeParam>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<AFCollabInfo>>> {
+  let payload = payload.into_inner();
+  let collab_type = query.into_inner().collab_type;
+  let info = database::collab::get_collab_info(&state.pg_pool, &payload.object_id, collab_type)
+    .await
+    .map_err(AppResponseError::from)?
+    .ok_or_else(|| {
+      AppError::RecordNotFound(format!(
+        "Collab with object_id {} not found",
+        payload.object_id
+      ))
+    })?;
+  Ok(Json(AppResponse::Ok().with_data(info)))
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn collab_two_way_sync_handler(
+  user_uuid: UserUuid,
+  body: Bytes,
+  path: web::Path<(Uuid, Uuid)>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<HttpResponse> {
+  if body.is_empty() {
+    return Err(AppError::InvalidRequest("body is empty".to_string()).into());
+  }
+
+  // when the payload size exceeds the limit, we consider it as an invalid payload.
+  const MAX_BODY_SIZE: usize = 1024 * 1024 * 50; // 50MB
+  if body.len() > MAX_BODY_SIZE {
+    error!("Unexpected large body size: {}", body.len());
+    return Err(
+      AppError::InvalidRequest(format!("body size exceeds limit: {}", MAX_BODY_SIZE)).into(),
+    );
+  }
+
+  let (workspace_id, object_id) = path.into_inner();
+  let params = CollabDocStateParams::decode(&mut Cursor::new(body)).map_err(|err| {
+    AppError::InvalidRequest(format!("Failed to parse CreateCollabEmbedding: {}", err))
+  })?;
+
+  if params.doc_state.is_empty() {
+    return Err(AppError::InvalidRequest("doc state is empty".to_string()).into());
+  }
+
+  let collab_type = CollabType::from(params.collab_type);
+  let compression_type = PayloadCompressionType::try_from(params.compression).map_err(|err| {
+    AppError::InvalidRequest(format!("Failed to parse PayloadCompressionType: {}", err))
+  })?;
+
+  let doc_state = match compression_type {
+    PayloadCompressionType::None => params.doc_state,
+    PayloadCompressionType::Zstd => tokio::task::spawn_blocking(move || {
+      zstd::decode_all(&*params.doc_state)
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to decompress doc_state: {}", err)))
+    })
+    .await
+    .map_err(AppError::from)??,
+  };
+
+  let sv = match compression_type {
+    PayloadCompressionType::None => params.sv,
+    PayloadCompressionType::Zstd => tokio::task::spawn_blocking(move || {
+      zstd::decode_all(&*params.sv)
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to decompress sv: {}", err)))
+    })
+    .await
+    .map_err(AppError::from)??,
+  };
+
+  let app_version = client_version_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "".to_string());
+  let device_id = device_id_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "".to_string());
+
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  let user = RealtimeUser {
+    uid,
+    device_id,
+    connect_at: timestamp(),
+    session_id: uuid::Uuid::new_v4().to_string(),
+    app_version,
+  };
+
+  let (tx, rx) = tokio::sync::oneshot::channel();
+  let message = ClientHttpUpdateMessage {
+    user,
+    workspace_id: workspace_id.to_string(),
+    object_id: object_id.to_string(),
+    collab_type,
+    update: Bytes::from(doc_state),
+    state_vector: Some(Bytes::from(sv)),
+    return_tx: Some(tx),
+  };
+
+  server
+    .try_send(message)
+    .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
+
+  match rx
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to receive message from server: {}", err)))?
+  {
+    Ok(Some(data)) => {
+      let encoded = tokio::task::spawn_blocking(move || zstd::encode_all(Cursor::new(data), 3))
+        .await
+        .map_err(|err| AppError::Internal(anyhow!("Failed to compress data: {}", err)))??;
+      Ok(HttpResponse::Ok().body(encoded))
+    },
+    Ok(None) => Ok(HttpResponse::InternalServerError().finish()),
+    Err(err) => Ok(err.error_response()),
+  }
 }

@@ -9,14 +9,14 @@ edition = "2021"
 collab = { workspace = true }
 collab-entity = { workspace = true }
 collab-rt-entity = { workspace = true }
-validator = { version = "0.16", features = ["validator_derive", "derive"] }
+validator = { workspace = true, features = ["validator_derive", "derive"] }
 database-entity.workspace = true
 shared-entity.workspace = true
 app-error = { workspace = true, features = ["sqlx_error", "validation_error"] }
 
 tokio = { workspace = true, features = ["sync"] }
 async-trait.workspace = true
-anyhow = "1.0.79"
+anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tonic-proto.workspace = true
@@ -40,7 +40,7 @@ redis = { workspace = true, features = [
   "connection-manager",
 ] }
 futures-util = "0.3.30"
-bytes = "1.5"
+bytes.workspace = true
 aws-sdk-s3 = { version = "1.36.0", features = [
   "behavior-version-latest",
   "rt-tokio",

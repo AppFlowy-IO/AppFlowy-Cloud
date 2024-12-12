@@ -2,28 +2,37 @@ use anyhow::anyhow;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use redis::{pipe, AsyncCommands};
+use std::sync::Arc;
 use tracing::{error, instrument, trace};
 
-use crate::collab::util::encode_collab_from_bytes;
-use crate::collab::CollabMetadata;
+use crate::collab::cache::encode_collab_from_bytes;
+use crate::CollabMetrics;
 use app_error::AppError;
+use database::collab::CollabMetadata;
 
 const SEVEN_DAYS: u64 = 604800;
 const ONE_MONTH: u64 = 2592000;
 #[derive(Clone)]
 pub struct CollabMemCache {
   connection_manager: redis::aio::ConnectionManager,
+  metrics: Arc<CollabMetrics>,
 }
 
 impl CollabMemCache {
-  pub fn new(connection_manager: redis::aio::ConnectionManager) -> Self {
-    Self { connection_manager }
+  pub fn new(
+    connection_manager: redis::aio::ConnectionManager,
+    metrics: Arc<CollabMetrics>,
+  ) -> Self {
+    Self {
+      connection_manager,
+      metrics,
+    }
   }
 
   pub async fn insert_collab_meta(&self, meta: CollabMetadata) -> Result<(), AppError> {
     let key = collab_meta_key(&meta.object_id);
     let value = serde_json::to_string(&meta)?;
-    self
+    let () = self
       .connection_manager
       .clone()
       .set_ex(key, value, ONE_MONTH)
@@ -85,7 +94,8 @@ impl CollabMemCache {
 
   pub async fn get_encode_collab_data(&self, object_id: &str) -> Option<Vec<u8>> {
     match self.get_data_with_timestamp(object_id).await {
-      Ok(data) => data.map(|(_, bytes)| bytes),
+      Ok(None) => None,
+      Ok(Some((_, bytes))) => Some(bytes),
       Err(err) => {
         error!("Failed to get encoded collab from redis: {:?}", err);
         None
@@ -178,7 +188,7 @@ impl CollabMemCache {
       // for executing a subsequent transaction (with MULTI/EXEC). If any of the watched keys are
       // altered by another client before the current client executes EXEC, the transaction will be
       // aborted by Redis (the EXEC will return nil indicating the transaction was not processed).
-      redis::cmd("WATCH")
+      let () = redis::cmd("WATCH")
         .arg(&cache_object_id)
         .query_async::<_, ()>(&mut conn)
         .await?;
@@ -218,7 +228,7 @@ impl CollabMemCache {
             .ignore()
             .expire(&cache_object_id, expiration_seconds.unwrap_or(SEVEN_DAYS) as i64) // Setting the expiration to 7 days
             .ignore();
-        pipeline.query_async(&mut conn).await?;
+        let () = pipeline.query_async(&mut conn).await?;
       }
       Ok::<(), redis::RedisError>(())
     }
@@ -229,6 +239,7 @@ impl CollabMemCache {
       .query_async::<_, ()>(&mut conn)
       .await?;
 
+    self.metrics.redis_write_collab_count.inc();
     result
   }
 
@@ -261,6 +272,7 @@ impl CollabMemCache {
         // Extract timestamp and payload from the retrieved data
         match data[0..8].try_into() {
           Ok(ts_bytes) => {
+            self.metrics.redis_read_collab_count.inc();
             let timestamp = i64::from_be_bytes(ts_bytes);
             let payload = data[8..].to_vec();
             Ok(Some((timestamp, payload)))

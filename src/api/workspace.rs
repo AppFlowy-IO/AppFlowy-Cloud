@@ -925,10 +925,12 @@ async fn post_web_update_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  let app_version =
-    client_version_from_headers(req.headers()).unwrap_or_else(|_| "web".to_string());
-  let device_id =
-    device_id_from_headers(req.headers()).unwrap_or_else(|_| Uuid::new_v4().to_string());
+  let app_version = client_version_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "web".to_string());
+  let device_id = device_id_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| Uuid::new_v4().to_string());
   let session_id = device_id.clone();
 
   let (workspace_id, object_id) = path.into_inner();
@@ -1774,8 +1776,9 @@ async fn post_realtime_message_stream_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  // TODO(nathan): after upgrade the client application, then the device_id should not be empty
-  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let device_id = device_id_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "".to_string());
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)
@@ -2213,6 +2216,10 @@ async fn collab_two_way_sync_handler(
   server: Data<RealtimeServerAddr>,
   req: HttpRequest,
 ) -> Result<HttpResponse> {
+  if body.is_empty() {
+    return Err(AppError::InvalidRequest("body is empty".to_string()).into());
+  }
+
   let (workspace_id, object_id) = path.into_inner();
   let params = CollabDocStateParams::decode(&mut Cursor::new(body)).map_err(|err| {
     AppError::InvalidRequest(format!("Failed to parse CreateCollabEmbedding: {}", err))
@@ -2247,8 +2254,13 @@ async fn collab_two_way_sync_handler(
     .map_err(AppError::from)??,
   };
 
-  let app_version = client_version_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
-  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let app_version = client_version_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "".to_string());
+  let device_id = device_id_from_headers(req.headers())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "".to_string());
+
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)

@@ -1037,7 +1037,7 @@ pub async fn assert_server_collab(
   };
 
   if timeout(duration, operation).await.is_err() {
-    eprintln!("json : {}, expected: {}", final_json.lock().await, expected);
+    eprintln!("json:{}\nexpected:{}", final_json.lock().await, expected);
     return Err(anyhow!("time out for the action"));
   }
   Ok(())

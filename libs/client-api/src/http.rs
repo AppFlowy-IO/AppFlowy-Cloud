@@ -1086,7 +1086,7 @@ impl Client {
     let headers = [
       ("client-version", self.client_version.to_string()),
       ("client-timestamp", ts_now.to_string()),
-      ("device_id", self.device_id.clone()),
+      ("device-id", self.device_id.clone()),
       ("ai-model", self.ai_model.read().to_str().to_string()),
     ];
     trace!(

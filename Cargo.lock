@@ -645,6 +645,7 @@ dependencies = [
  "governor",
  "handlebars",
  "hex",
+ "http 0.2.12",
  "image",
  "infra",
  "itertools 0.11.0",

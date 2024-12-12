@@ -157,7 +157,7 @@ where
     message_by_oid: MessageByObjectId,
   ) -> Result<(), RealtimeError> {
     for (object_id, collab_messages) in message_by_oid.into_inner() {
-      let group_cmd_sender = self.create_group_if_need(&object_id);
+      let group_cmd_sender = self.create_group_if_not_exist(&object_id);
       let cloned_user = user.clone();
       // Create a new task to send a message to the group command runner without waiting for the
       // result. This approach is used to prevent potential issues with the actor's mailbox in
@@ -203,7 +203,7 @@ where
     &self,
     message: ClientHttpUpdateMessage,
   ) -> Result<(), RealtimeError> {
-    let group_cmd_sender = self.create_group_if_need(&message.object_id);
+    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
     tokio::spawn(async move {
       let object_id = message.object_id.clone();
       let (tx, rx) = tokio::sync::oneshot::channel();
@@ -305,30 +305,26 @@ where
   }
 
   #[inline]
-  fn create_group_if_need(&self, object_id: &str) -> Sender<GroupCommand> {
-    let group_sender_by_object_id = self.group_sender_by_object_id.clone();
-    let client_msg_router_by_user = self.connect_state.client_message_routers.clone();
-    let group_manager = self.group_manager.clone();
-    let enable_custom_runtime = self.enable_custom_runtime;
-
-    let old_sender = group_sender_by_object_id
+  fn create_group_if_not_exist(&self, object_id: &str) -> Sender<GroupCommand> {
+    let old_sender = self
+      .group_sender_by_object_id
       .get(object_id)
       .map(|entry| entry.value().clone());
 
     let sender = match old_sender {
       Some(sender) => sender,
-      None => match group_sender_by_object_id.entry(object_id.to_string()) {
+      None => match self.group_sender_by_object_id.entry(object_id.to_string()) {
         Entry::Occupied(entry) => entry.get().clone(),
         Entry::Vacant(entry) => {
           let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
           let runner = GroupCommandRunner {
-            group_manager: group_manager.clone(),
-            msg_router_by_user: client_msg_router_by_user.clone(),
+            group_manager: self.group_manager.clone(),
+            msg_router_by_user: self.connect_state.client_message_routers.clone(),
             recv: Some(recv),
           };
 
           let object_id = entry.key().clone();
-          if enable_custom_runtime {
+          if self.enable_custom_runtime {
             COLLAB_RUNTIME.spawn(runner.run(object_id));
           } else {
             tokio::spawn(runner.run(object_id));
@@ -347,7 +343,7 @@ where
     &self,
     message: ClientGenerateEmbeddingMessage,
   ) -> Result<(), RealtimeError> {
-    let group_cmd_sender = self.create_group_if_need(&message.object_id);
+    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
     tokio::spawn(async move {
       let (tx, rx) = tokio::sync::oneshot::channel();
       let result = group_cmd_sender

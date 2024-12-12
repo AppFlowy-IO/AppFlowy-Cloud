@@ -5,21 +5,23 @@ use collab_entity::CollabType;
 use sqlx::{Error, PgPool, Transaction};
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 use tracing::{error, instrument};
 use uuid::Uuid;
 
-use crate::collab::util::encode_collab_from_bytes;
-use crate::collab::{
+use crate::collab::cache::encode_collab_from_bytes;
+use crate::CollabMetrics;
+use app_error::AppError;
+use database::collab::{
   batch_select_collab_blob, insert_into_af_collab, insert_into_af_collab_bulk_for_user,
   is_collab_exists, select_blob_from_af_collab, AppResult,
 };
-use crate::file::s3_client_impl::AwsS3BucketClientImpl;
-use crate::file::{BucketClient, ResponseBlob};
-use crate::index::upsert_collab_embeddings;
-use app_error::AppError;
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
+use database::file::{BucketClient, ResponseBlob};
+use database::index::upsert_collab_embeddings;
 use database_entity::dto::{
   CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, ZSTD_COMPRESSION_LEVEL,
 };
@@ -29,14 +31,21 @@ pub struct CollabDiskCache {
   pg_pool: PgPool,
   s3: AwsS3BucketClientImpl,
   s3_collab_threshold: usize,
+  metrics: Arc<CollabMetrics>,
 }
 
 impl CollabDiskCache {
-  pub fn new(pg_pool: PgPool, s3: AwsS3BucketClientImpl, s3_collab_threshold: usize) -> Self {
+  pub fn new(
+    pg_pool: PgPool,
+    s3: AwsS3BucketClientImpl,
+    s3_collab_threshold: usize,
+    metrics: Arc<CollabMetrics>,
+  ) -> Self {
     Self {
       pg_pool,
       s3,
       s3_collab_threshold,
+      metrics,
     }
   }
 
@@ -65,6 +74,7 @@ impl CollabDiskCache {
       .context("Failed to acquire transaction for writing pending collaboration data")
       .map_err(AppError::from)?;
 
+    let start = Instant::now();
     Self::upsert_collab_with_transaction(
       workspace_id,
       uid,
@@ -72,6 +82,7 @@ impl CollabDiskCache {
       &mut transaction,
       self.s3.clone(),
       self.s3_collab_threshold,
+      &self.metrics,
     )
     .await?;
 
@@ -82,6 +93,7 @@ impl CollabDiskCache {
           "Timeout when committing the transaction for pending collaboration data"
         ))
       })??;
+    self.metrics.observe_pg_tx(start.elapsed());
 
     Ok(())
   }
@@ -97,6 +109,7 @@ impl CollabDiskCache {
     transaction: &mut Transaction<'_, sqlx::Postgres>,
     s3: AwsS3BucketClientImpl,
     s3_collab_threshold: usize,
+    metrics: &CollabMetrics,
   ) -> AppResult<()> {
     let mut delete_from_s3 = Vec::new();
     let key = collab_key(workspace_id, &params.object_id);
@@ -109,8 +122,10 @@ impl CollabDiskCache {
         encoded_collab,
         3,
       ));
+      metrics.s3_write_collab_count.inc();
     } else {
       // put collab into Postgres (and remove outdated version from S3)
+      metrics.pg_write_collab_count.inc();
       delete_from_s3.push(key);
     }
 
@@ -153,6 +168,7 @@ impl CollabDiskCache {
     let key = collab_key(workspace_id, &query.object_id);
     match self.s3.get_blob(&key).await {
       Ok(resp) => {
+        self.metrics.s3_read_collab_count.inc();
         let blob = resp.to_blob();
         let now = Instant::now();
         let decompressed = zstd::decode_all(&*blob)?;
@@ -189,6 +205,7 @@ impl CollabDiskCache {
 
       match result {
         Ok(data) => {
+          self.metrics.pg_read_collab_count.inc();
           return encode_collab_from_bytes(data).await;
         },
         Err(e) => {
@@ -236,24 +253,35 @@ impl CollabDiskCache {
         delete_from_s3.push(key);
       }
     }
+    let s3_count = blobs.len() as u64;
+    let pg_count = delete_from_s3.len() as u64;
 
     let mut transaction = self.pg_pool.begin().await?;
+    let start = Instant::now();
     insert_into_af_collab_bulk_for_user(&mut transaction, uid, workspace_id, &params_list).await?;
     transaction.commit().await?;
+    self.metrics.observe_pg_tx(start.elapsed());
 
     batch_put_collab_to_s3(&self.s3, blobs).await?;
     if !delete_from_s3.is_empty() {
-      self.s3.delete_blobs(delete_from_s3).await?;
+      let s3 = self.s3.clone();
+      tokio::spawn(async move {
+        if let Err(err) = s3.delete_blobs(delete_from_s3).await {
+          tracing::warn!("failed to delete outdated collabs from S3: {}", err);
+        }
+      });
     }
+    self.metrics.s3_write_collab_count.inc_by(s3_count);
+    self.metrics.pg_write_collab_count.inc_by(pg_count);
     Ok(())
   }
 
   pub async fn batch_insert_collab(
     &self,
     records: Vec<PendingCollabWrite>,
-  ) -> Result<u64, AppError> {
+  ) -> Result<(), AppError> {
     if records.is_empty() {
-      return Ok(0);
+      return Ok(());
     }
 
     let s3 = self.s3.clone();
@@ -264,8 +292,8 @@ impl CollabDiskCache {
       .await
       .context("Failed to acquire transaction for writing pending collaboration data")
       .map_err(AppError::from)?;
+    let start = Instant::now();
 
-    let mut successful_writes = 0;
     // Insert each record into the database within the transaction context
     let mut action_description = String::new();
     for (index, record) in records.into_iter().enumerate() {
@@ -284,20 +312,20 @@ impl CollabDiskCache {
         &mut transaction,
         s3.clone(),
         self.s3_collab_threshold,
+        &self.metrics,
       )
       .await
       {
         sqlx::query(&format!("ROLLBACK TO SAVEPOINT {}", savepoint_name))
           .execute(transaction.deref_mut())
           .await?;
-      } else {
-        successful_writes += 1;
       }
     }
 
     // Commit the transaction to finalize all writes
     match tokio::time::timeout(Duration::from_secs(10), transaction.commit()).await {
       Ok(result) => {
+        self.metrics.observe_pg_tx(start.elapsed());
         result.map_err(AppError::from)?;
       },
       Err(_) => {
@@ -310,7 +338,7 @@ impl CollabDiskCache {
         )));
       },
     }
-    Ok(successful_writes)
+    Ok(())
   }
 
   pub async fn batch_get_collab(
@@ -320,7 +348,11 @@ impl CollabDiskCache {
   ) -> HashMap<String, QueryCollabResult> {
     let mut results = HashMap::new();
     let not_found = batch_get_collab_from_s3(&self.s3, workspace_id, queries, &mut results).await;
+    let s3_fetch = results.len() as u64;
     batch_select_collab_blob(&self.pg_pool, not_found, &mut results).await;
+    let pg_fetch = results.len() as u64 - s3_fetch;
+    self.metrics.s3_read_collab_count.inc_by(s3_fetch);
+    self.metrics.pg_read_collab_count.inc_by(pg_fetch);
     results
   }
 

@@ -5,13 +5,13 @@ use collab_rt_protocol::{Message, SyncMessage};
 use database_entity::dto::AFWorkspaceSettingsChange;
 use std::collections::HashMap;
 
-use std::ops::DerefMut;
-use std::sync::Arc;
-
 use anyhow::{anyhow, Context};
 use redis::AsyncCommands;
 use serde_json::json;
 use sqlx::{types::uuid, PgPool};
+use std::ops::DerefMut;
+use std::sync::Arc;
+use std::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 use yrs::updates::encoder::Encode;
@@ -19,7 +19,7 @@ use yrs::updates::encoder::Encode;
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use database::collab::{upsert_collab_member_with_txn, CollabStorage};
+use database::collab::upsert_collab_member_with_txn;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
 
@@ -83,6 +83,7 @@ pub async fn create_empty_workspace(
 
   // create CollabType::Folder
   let mut txn = pg_pool.begin().await?;
+  let start = Instant::now();
   create_workspace_collab(
     user_uid,
     &workspace_id,
@@ -117,6 +118,7 @@ pub async fn create_empty_workspace(
   .await?;
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
   txn.commit().await?;
+  collab_storage.metrics().observe_pg_tx(start.elapsed());
   Ok(new_workspace)
 }
 
@@ -136,6 +138,7 @@ pub async fn create_workspace_for_user(
 
   // add create initial collab for user
   let mut txn = pg_pool.begin().await?;
+  let start = Instant::now();
   initialize_workspace_for_user(
     user_uid,
     user_uuid,
@@ -146,6 +149,7 @@ pub async fn create_workspace_for_user(
   )
   .await?;
   txn.commit().await?;
+  collab_storage.metrics().observe_pg_tx(start.elapsed());
 
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
   Ok(new_workspace)
@@ -414,7 +418,7 @@ pub async fn invite_workspace_members(
           workspace_id,
           inviter,
           invitation.email.as_str(),
-          invitation.role,
+          &invitation.role,
         )
         .await?;
         invite_id
@@ -453,26 +457,32 @@ pub async fn invite_workspace_members(
       }
     };
 
-    // send email can be slow, so send email in background
-    let cloned_mailer = mailer.clone();
-    tokio::spawn(async move {
-      if let Err(err) = cloned_mailer
-        .send_workspace_invite(
-          &invitation.email,
-          WorkspaceInviteMailerParam {
-            user_icon_url,
-            username: inviter_name,
-            workspace_name,
-            workspace_icon_url,
-            workspace_member_count,
-            accept_url,
-          },
-        )
-        .await
-      {
-        tracing::error!("Failed to send workspace invite email: {:?}", err);
-      };
-    });
+    if !invitation.skip_email_send {
+      let cloned_mailer = mailer.clone();
+      let email_sending = tokio::spawn(async move {
+        cloned_mailer
+          .send_workspace_invite(
+            &invitation.email,
+            WorkspaceInviteMailerParam {
+              user_icon_url,
+              username: inviter_name,
+              workspace_name,
+              workspace_icon_url,
+              workspace_member_count,
+              accept_url,
+            },
+          )
+          .await
+      });
+      if invitation.wait_email_send {
+        email_sending.await??;
+      }
+    } else {
+      tracing::info!(
+        "Skipping email send for workspace invite to {}",
+        invitation.email
+      );
+    }
   }
 
   txn

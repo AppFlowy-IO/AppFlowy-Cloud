@@ -145,6 +145,7 @@ pub struct AppState {
   pub redis_client: ConnectionManager,
   pub pg_pool: PgPool,
   pub s3_client: S3ClientImpl,
+  #[allow(dead_code)]
   pub mailer: AFWorkerMailer,
   pub metrics: AppMetrics,
 }

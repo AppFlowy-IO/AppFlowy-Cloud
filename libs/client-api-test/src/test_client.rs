@@ -65,6 +65,17 @@ pub struct TestCollab {
   pub origin: CollabOrigin,
   pub collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
 }
+
+impl TestCollab {
+  pub async fn encode_collab(&self) -> EncodedCollab {
+    let lock = self.collab.read().await;
+    let collab = (*lock).borrow();
+    collab
+      .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
+      .unwrap()
+  }
+}
+
 impl TestClient {
   pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
     load_env();
@@ -368,7 +379,12 @@ impl TestClient {
       .api_client
       .invite_workspace_members(
         workspace_id,
-        vec![WorkspaceMemberInvitation { email, role }],
+        vec![WorkspaceMemberInvitation {
+          email,
+          role,
+          skip_email_send: true,
+          ..Default::default()
+        }],
       )
       .await?;
 
@@ -1021,7 +1037,7 @@ pub async fn assert_server_collab(
   };
 
   if timeout(duration, operation).await.is_err() {
-    eprintln!("json : {}, expected: {}", final_json.lock().await, expected);
+    eprintln!("json:{}\nexpected:{}", final_json.lock().await, expected);
     return Err(anyhow!("time out for the action"));
   }
   Ok(())

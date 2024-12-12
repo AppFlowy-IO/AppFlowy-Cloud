@@ -8,8 +8,8 @@ use tokio::time::{sleep_until, Instant};
 use tracing::{error, trace};
 
 use client_websocket::Message;
-use collab_rt_entity::RealtimeMessage;
 use collab_rt_entity::{ClientCollabMessage, MsgId};
+use collab_rt_entity::{MessageByObjectId, RealtimeMessage};
 
 pub type AggregateMessagesSender = mpsc::Sender<Message>;
 pub type AggregateMessagesReceiver = mpsc::Receiver<Message>;
@@ -86,7 +86,7 @@ async fn handle_tick(
   maximum_payload_size: usize,
   weak_seen_ids: Weak<Mutex<HashSet<SeenId>>>,
 ) -> (usize, usize) {
-  let (did_sent_seen_ids, messages_map) = next_batch_message(20, maximum_payload_size, queue).await;
+  let (did_sent_seen_ids, messages_map) = next_batch_message(10, maximum_payload_size, queue).await;
   if messages_map.is_empty() {
     return (0, 0);
   }
@@ -115,7 +115,7 @@ async fn send_batch_message(
   sender: &AggregateMessagesSender,
   messages_map: HashMap<String, Vec<ClientCollabMessage>>,
 ) {
-  match RealtimeMessage::ClientCollabV2(messages_map).encode() {
+  match RealtimeMessage::ClientCollabV2(MessageByObjectId(messages_map)).encode() {
     Ok(data) => {
       if let Err(e) = sender.send(Message::Binary(data)).await {
         trace!("websocket channel close:{}, stop sending messages", e);

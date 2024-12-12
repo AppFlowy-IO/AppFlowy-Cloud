@@ -8,7 +8,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-anyhow = "1.0.79"
+anyhow.workspace = true
 serde = "1.0.195"
 serde_json.workspace = true
 serde_repr = "0.1.18"
@@ -29,12 +29,9 @@ pin-project = "1.1.5"
 actix-web = { version = "4.4.1", default-features = false, features = [
   "http2",
 ], optional = true }
-validator = { version = "0.16", features = [
-  "validator_derive",
-  "derive",
-] }
+validator = { workspace = true, features = ["validator_derive", "derive"] }
 futures = "0.3.30"
-bytes = "1.6.0"
+bytes.workspace = true
 log = "0.4.21"
 tracing = { workspace = true }
 

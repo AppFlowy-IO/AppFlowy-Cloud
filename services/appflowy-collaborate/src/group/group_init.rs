@@ -18,6 +18,7 @@ use collab_rt_entity::{ClientCollabMessage, CollabMessage};
 use collab_rt_protocol::{Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
 use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
+
 use collab_stream::error::StreamError;
 use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
@@ -71,7 +72,7 @@ impl Drop for CollabGroup {
 
 impl CollabGroup {
   #[allow(clippy::too_many_arguments)]
-  pub async fn new<S>(
+  pub fn new<S>(
     uid: i64,
     workspace_id: String,
     object_id: String,
@@ -331,6 +332,30 @@ impl CollabGroup {
     }
   }
 
+  pub async fn calculate_missing_update(
+    &self,
+    state_vector: StateVector,
+  ) -> Result<Vec<u8>, RealtimeError> {
+    {
+      // first check if we need to send any updates
+      let collab_sv = self.state.state_vector.read().await;
+      if &*collab_sv <= &state_vector {
+        return Ok(vec![]);
+      }
+    }
+
+    let encoded_collab = self.encode_collab().await?;
+    let collab = Collab::new_with_source(
+      CollabOrigin::Server,
+      self.object_id(),
+      DataSource::DocStateV1(encoded_collab.doc_state.into()),
+      vec![],
+      false,
+    )?;
+    let update = collab.transact().encode_state_as_update_v1(&state_vector);
+    Ok(update)
+  }
+
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
     let snapshot = self.state.persister.load_compact().await?;
     let encode_collab = snapshot.collab.encode_collab_v1(|collab| {
@@ -454,7 +479,7 @@ impl CollabGroup {
   where
     Sink: SubscriptionSink + 'static,
   {
-    for (message_object_id, messages) in msg {
+    for (message_object_id, messages) in msg.0 {
       if state.object_id != message_object_id {
         error!(
           "Expect object id:{} but got:{}",
@@ -741,7 +766,7 @@ impl CollabGroup {
 
   /// Check if the group is active. A group is considered active if it has at least one
   /// subscriber
-  pub async fn is_inactive(&self) -> bool {
+  pub fn is_inactive(&self) -> bool {
     let modified_at = self.modified_at();
 
     // In debug mode, we set the timeout to 60 seconds

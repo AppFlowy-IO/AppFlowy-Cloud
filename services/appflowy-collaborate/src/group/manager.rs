@@ -61,29 +61,24 @@ where
     })
   }
 
-  pub async fn get_inactive_groups(&self) -> Vec<String> {
-    self.state.get_inactive_group_ids().await
+  pub fn get_inactive_groups(&self) -> Vec<String> {
+    self.state.remove_inactive_groups()
   }
 
-  pub async fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
-    self.state.contains_user(object_id, user).await
+  pub fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
+    self.state.contains_user(object_id, user)
   }
 
-  pub async fn remove_user(&self, user: &RealtimeUser) {
-    self.state.remove_user(user).await;
+  pub fn remove_user(&self, user: &RealtimeUser) {
+    self.state.remove_user(user);
   }
 
-  pub async fn contains_group(&self, object_id: &str) -> bool {
-    self.state.contains_group(object_id).await
+  pub fn contains_group(&self, object_id: &str) -> bool {
+    self.state.contains_group(object_id)
   }
 
   pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
     self.state.get_group(object_id).await
-  }
-
-  #[instrument(skip(self))]
-  async fn remove_group(&self, object_id: &str) {
-    self.state.remove_group(object_id).await;
   }
 
   pub async fn subscribe_group(
@@ -107,7 +102,7 @@ where
       // explicitly drop the group to release the lock.
       drop(e);
 
-      self.state.insert_user(user, object_id).await?;
+      self.state.insert_user(user, object_id)?;
     } else {
       // When subscribing to a group, the group should exist. Otherwise, it's a bug.
       return Err(RealtimeError::GroupNotFound(object_id.to_string()));
@@ -150,7 +145,7 @@ where
       collab_type
     );
 
-    let mut indexer = self.indexer_provider.indexer_for(collab_type.clone());
+    let mut indexer = self.indexer_provider.indexer_for(&collab_type);
     if indexer.is_some()
       && !self
         .indexer_provider
@@ -161,23 +156,20 @@ where
       tracing::trace!("workspace {} indexing is disabled", workspace_id);
       indexer = None;
     }
-    let group = Arc::new(
-      CollabGroup::new(
-        user.uid,
-        workspace_id.to_string(),
-        object_id.to_string(),
-        collab_type,
-        self.metrics_calculate.clone(),
-        self.storage.clone(),
-        self.collab_redis_stream.clone(),
-        self.persistence_interval,
-        self.prune_grace_period,
-        indexer,
-        state_vector,
-      )
-      .await?,
-    );
-    self.state.insert_group(object_id, group.clone()).await;
+    let group = CollabGroup::new(
+      user.uid,
+      workspace_id.to_string(),
+      object_id.to_string(),
+      collab_type,
+      self.metrics_calculate.clone(),
+      self.storage.clone(),
+      self.collab_redis_stream.clone(),
+      self.persistence_interval,
+      self.prune_grace_period,
+      indexer,
+      state_vector,
+    )?;
+    self.state.insert_group(object_id, group);
     Ok(())
   }
 }

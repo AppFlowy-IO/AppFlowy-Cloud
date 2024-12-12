@@ -177,6 +177,12 @@ pub enum AppError {
 
   #[error("{0}")]
   ServiceTemporaryUnavailable(String),
+
+  #[error("Decode update error: {0}")]
+  DecodeUpdateError(String),
+
+  #[error("Apply update error:{0}")]
+  ApplyUpdateError(String),
 }
 
 impl AppError {
@@ -254,6 +260,8 @@ impl AppError {
         ErrorCode::CustomNamespaceInvalidCharacter
       },
       AppError::ServiceTemporaryUnavailable(_) => ErrorCode::ServiceTemporaryUnavailable,
+      AppError::DecodeUpdateError(_) => ErrorCode::DecodeUpdateError,
+      AppError::ApplyUpdateError(_) => ErrorCode::ApplyUpdateError,
     }
   }
 }
@@ -394,6 +402,8 @@ pub enum ErrorCode {
   PublishNameTooLong = 1052,
   CustomNamespaceInvalidCharacter = 1053,
   ServiceTemporaryUnavailable = 1054,
+  DecodeUpdateError = 1055,
+  ApplyUpdateError = 1056,
 }
 
 impl ErrorCode {

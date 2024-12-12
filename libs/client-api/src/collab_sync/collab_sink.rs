@@ -244,7 +244,6 @@ where
         }
       }
     }
-
     // Check if all non-ping messages have been sent
     let all_non_ping_messages_sent = !message_queue
       .iter()

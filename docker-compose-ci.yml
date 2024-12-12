@@ -33,6 +33,11 @@ services:
     image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
@@ -50,14 +55,28 @@ services:
 
   gotrue:
     restart: on-failure
-    image: supabase/gotrue:v2.159.1
+    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9999"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
     environment:
       # There are a lot of options to configure GoTrue. You can reference the example config:
       # https://github.com/supabase/gotrue/blob/master/example.env
+      - GOTRUE_ADMIN_EMAIL=${GOTRUE_ADMIN_EMAIL}
+      - GOTRUE_ADMIN_PASSWORD=${GOTRUE_ADMIN_PASSWORD}
+      - GOTRUE_DISABLE_SIGNUP=${GOTRUE_DISABLE_SIGNUP:-false}
       - GOTRUE_SITE_URL=appflowy-flutter://                           # redirected to AppFlowy application
       - URI_ALLOW_LIST=*                                              # adjust restrict if necessary
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_JWT_EXP=${GOTRUE_JWT_EXP}
+      # Without this environment variable, the createuser command will create an admin
+      # with the `admin` role as opposed to `supabase_admin`
+      - GOTRUE_JWT_ADMIN_GROUP_NAME=supabase_admin
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=${API_EXTERNAL_URL}
       - DATABASE_URL=${GOTRUE_DATABASE_URL}
@@ -115,6 +134,11 @@ services:
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
       - APPFLOWY_WEB_URL=${APPFLOWY_WEB_URL}
+      - APPFLOWY_MAILER_SMTP_HOST=${APPFLOWY_MAILER_SMTP_HOST}
+      - APPFLOWY_MAILER_SMTP_PORT=${APPFLOWY_MAILER_SMTP_PORT}
+      - APPFLOWY_MAILER_SMTP_USERNAME=${APPFLOWY_MAILER_SMTP_USERNAME}
+      - APPFLOWY_MAILER_SMTP_EMAIL=${APPFLOWY_MAILER_SMTP_EMAIL}
+      - APPFLOWY_MAILER_SMTP_PASSWORD=${APPFLOWY_MAILER_SMTP_PASSWORD}
     build:
       context: .
       dockerfile: Dockerfile
@@ -122,6 +146,9 @@ services:
         FEATURES: ""
         PROFILE: ci
     image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
+    depends_on:
+      gotrue:
+        condition: service_healthy
 
   admin_frontend:
     restart: on-failure
@@ -170,7 +197,9 @@ services:
       - APPFLOWY_S3_BUCKET=${APPFLOWY_S3_BUCKET}
       - APPFLOWY_S3_REGION=${APPFLOWY_S3_REGION}
       - APPFLOWY_MAILER_SMTP_HOST=${APPFLOWY_MAILER_SMTP_HOST}
+      - APPFLOWY_MAILER_SMTP_PORT=${APPFLOWY_MAILER_SMTP_PORT}
       - APPFLOWY_MAILER_SMTP_USERNAME=${APPFLOWY_MAILER_SMTP_USERNAME}
+      - APPFLOWY_MAILER_SMTP_EMAIL=${APPFLOWY_MAILER_SMTP_EMAIL}
       - APPFLOWY_MAILER_SMTP_PASSWORD=${APPFLOWY_MAILER_SMTP_PASSWORD}
 
 volumes:

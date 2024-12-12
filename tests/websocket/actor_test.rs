@@ -2,13 +2,12 @@ use actix::{Actor, Context, Handler};
 use appflowy_collaborate::actix_ws::client::rt_client::{
   HandlerResult, RealtimeClient, RealtimeServer,
 };
-use appflowy_collaborate::actix_ws::entities::{ClientMessage, Connect, Disconnect};
+use appflowy_collaborate::actix_ws::entities::{ClientWebSocketMessage, Connect, Disconnect};
+use appflowy_collaborate::error::RealtimeError;
 use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::RealtimeMessage;
+use collab_rt_entity::{MessageByObjectId, RealtimeMessage};
 use semver::Version;
-use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::sleep;
 
 #[actix_rt::test]
 async fn test_handle_message() {
@@ -29,9 +28,10 @@ async fn test_handle_message() {
     10,
   );
 
-  let mut message_by_oid = HashMap::new();
-  message_by_oid.insert("object_id".to_string(), vec![]);
-  let message = RealtimeMessage::ClientCollabV2(message_by_oid);
+  let message = RealtimeMessage::ClientCollabV2(MessageByObjectId::new_with_message(
+    "object_id".to_string(),
+    vec![],
+  ));
   client.try_send(message).unwrap();
 }
 
@@ -64,9 +64,10 @@ async fn server_mailbox_full_test() {
         10,
       );
       for _ in 0..10 {
-        let mut message_by_oid = HashMap::new();
-        message_by_oid.insert("object_id".to_string(), vec![]);
-        let message = RealtimeMessage::ClientCollabV2(message_by_oid);
+        let message = RealtimeMessage::ClientCollabV2(MessageByObjectId::new_with_message(
+          "object_id".to_string(),
+          vec![],
+        ));
         client.try_send(message).unwrap();
       }
     });
@@ -110,9 +111,10 @@ async fn client_rate_limit_hit_test() {
         1,
       );
       for _ in 0..10 {
-        let mut message_by_oid = HashMap::new();
-        message_by_oid.insert("object_id".to_string(), vec![]);
-        let message = RealtimeMessage::ClientCollabV2(message_by_oid);
+        let message = RealtimeMessage::ClientCollabV2(MessageByObjectId::new_with_message(
+          "object_id".to_string(),
+          vec![],
+        ));
         if let Err(err) = client.try_send(message) {
           if err.is_too_many_message() {
             continue;
@@ -148,31 +150,27 @@ impl Actor for MockRealtimeServer {
   }
 }
 
-impl Handler<ClientMessage> for MockRealtimeServer {
+impl Handler<ClientWebSocketMessage> for MockRealtimeServer {
   type Result = HandlerResult;
 
-  fn handle(&mut self, _msg: ClientMessage, _ctx: &mut Self::Context) -> Self::Result {
-    Box::pin(async {
-      // simulate some work
-      sleep(Duration::from_millis(500)).await;
-      Ok(())
-    })
+  fn handle(&mut self, _msg: ClientWebSocketMessage, _ctx: &mut Self::Context) -> Self::Result {
+    Ok(())
   }
 }
 
 impl Handler<Connect> for MockRealtimeServer {
-  type Result = HandlerResult;
+  type Result = anyhow::Result<(), RealtimeError>;
 
   fn handle(&mut self, _msg: Connect, _ctx: &mut Self::Context) -> Self::Result {
-    Box::pin(async { Ok(()) })
+    Ok(())
   }
 }
 
 impl Handler<Disconnect> for MockRealtimeServer {
-  type Result = HandlerResult;
+  type Result = anyhow::Result<(), RealtimeError>;
 
   fn handle(&mut self, _msg: Disconnect, _ctx: &mut Self::Context) -> Self::Result {
-    Box::pin(async { Ok(()) })
+    Ok(())
   }
 }
 

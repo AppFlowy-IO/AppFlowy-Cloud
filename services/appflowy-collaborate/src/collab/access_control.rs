@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use database::collab::cache::CollabCache;
 use std::sync::Arc;
 
+use crate::collab::cache::CollabCache;
 use access_control::act::Action;
 use access_control::collab::CollabAccessControl;
 use access_control::workspace::WorkspaceAccessControl;

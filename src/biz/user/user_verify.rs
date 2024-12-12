@@ -1,7 +1,7 @@
-use std::ops::DerefMut;
-
 use anyhow::{Context, Result};
 use sqlx::types::uuid;
+use std::ops::DerefMut;
+use std::time::Instant;
 use tracing::{event, instrument, trace};
 
 use app_error::AppError;
@@ -51,6 +51,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
 
     // Create a workspace with the GetStarted template
     let mut txn2 = state.pg_pool.begin().await?;
+    let start = Instant::now();
     initialize_workspace_for_user(
       new_uid,
       &user_uuid,
@@ -64,6 +65,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
       .commit()
       .await
       .context("fail to commit transaction to initialize workspace")?;
+    state.metrics.collab_metrics.observe_pg_tx(start.elapsed());
   } else {
     trace!("user already exists:{},{}", user.id, user.email);
   }

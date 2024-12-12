@@ -407,7 +407,14 @@ pub struct AFInsertDatabaseField {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct AddDatatabaseRow {
+  pub cells_by_id: HashMap<String, serde_json::Value>,
+  pub row_doc_content: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct UpsertDatatabaseRow {
   pub pre_hash: String, // input which will be hashed into database row id
   pub cells_by_id: HashMap<String, serde_json::Value>,
+  pub row_doc_content: Option<String>,
 }

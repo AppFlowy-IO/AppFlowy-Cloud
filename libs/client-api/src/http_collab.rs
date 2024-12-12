@@ -7,7 +7,8 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use client_api_entity::workspace_dto::{
   AFDatabase, AFDatabaseField, AFDatabaseRow, AFDatabaseRowDetail, AFInsertDatabaseField,
-  DatabaseRowUpdatedItem, ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
+  AddDatatabaseRow, DatabaseRowUpdatedItem, ListDatabaseRowDetailParam,
+  ListDatabaseRowUpdatedParam, UpsertDatatabaseRow,
 };
 use client_api_entity::{
   AFCollabInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
@@ -23,6 +24,7 @@ use reqwest::{Body, Method};
 use serde::Serialize;
 use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
 use shared_entity::response::{AppResponse, AppResponseError};
+use std::collections::HashMap;
 use std::future::Future;
 use std::io::Cursor;
 use std::pin::Pin;
@@ -286,7 +288,8 @@ impl Client {
     &self,
     workspace_id: &str,
     database_id: &str,
-    payload: &serde_json::Value,
+    cells_by_id: HashMap<String, serde_json::Value>,
+    row_doc_content: Option<String>,
   ) -> Result<String, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/database/{}/row",
@@ -295,7 +298,39 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&payload)
+      .json(&AddDatatabaseRow {
+        cells_by_id,
+        row_doc_content,
+      })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  /// Like [add_database_item], but use a [pre_hash] as identifier of the row
+  /// Given the same `pre_hash` value will result in the same row
+  /// Creates the row if now exists, else row will be modified
+  pub async fn upsert_database_item(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    pre_hash: String,
+    cells_by_id: HashMap<String, serde_json::Value>,
+    row_doc_content: Option<String>,
+  ) -> Result<String, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(&UpsertDatatabaseRow {
+        pre_hash,
+        cells_by_id,
+        row_doc_content,
+      })
       .send()
       .await?;
     log_request_id(&resp);

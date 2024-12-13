@@ -8,11 +8,9 @@ use chrono::Utc;
 use collab::preclude::Collab;
 use collab_database::database::gen_field_id;
 use collab_database::database::gen_row_id;
-use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
 use collab_database::fields::TypeOptions;
-use collab_database::rows::Cell;
 use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
@@ -46,7 +44,6 @@ use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
 use std::ops::DerefMut;
 
-use crate::biz::collab::utils::field_by_name_uniq;
 use crate::biz::workspace::ops::broadcast_update;
 use access_control::collab::CollabAccessControl;
 use anyhow::Context;
@@ -74,8 +71,8 @@ use super::utils::get_latest_collab;
 use super::utils::get_latest_collab_encoded;
 use super::utils::get_row_details_serde;
 use super::utils::type_option_reader_by_id;
-use super::utils::type_option_writer_by_id;
 use super::utils::type_options_serde;
+use super::utils::write_to_database_row;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -513,7 +510,6 @@ pub async fn insert_database_row(
   let _row_updates = write_to_database_row(
     &db_collab,
     &db_body,
-    database_uuid_str,
     &mut new_db_row_collab,
     &new_db_row_body,
     cell_value_by_id,
@@ -595,68 +591,6 @@ pub async fn insert_database_row(
   Ok(new_db_row_id.to_string())
 }
 
-/// Base on values given by [cell_value_by_id], write to fields of DatabaseRowBody.
-/// Returns encoded collab updates to the database row
-async fn write_to_database_row(
-  db_collab: &Collab,
-  db_body: &DatabaseBody,
-  database_uuid_str: &str,
-  db_row_collab: &mut Collab,
-  db_row_body: &DatabaseRowBody,
-  cell_value_by_id: HashMap<String, serde_json::Value>,
-  modified_ts: i64,
-) -> Result<Vec<u8>, AppError> {
-  let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
-  let field_by_id = all_fields.iter().fold(HashMap::new(), |mut acc, field| {
-    acc.insert(field.id.clone(), field.clone());
-    acc
-  });
-  let type_option_reader_by_id = type_option_writer_by_id(&all_fields);
-  let field_by_name = field_by_name_uniq(all_fields);
-
-  let db_row_collab_updates = {
-    let mut yrs_txn = db_row_collab.transact_mut();
-    // set last_modified
-    db_row_body.update(&mut yrs_txn, |row_update| {
-      row_update.set_last_modified(modified_ts);
-    });
-
-    // for each field given by user input, overwrite existing data
-    for (id, serde_val) in cell_value_by_id {
-      let field = match field_by_id.get(&id) {
-        Some(f) => f,
-        // try use field name if id not found
-        None => match field_by_name.get(&id) {
-          Some(f) => f,
-          None => {
-            tracing::warn!(
-              "field not found: {} for database: {}",
-              id,
-              database_uuid_str
-            );
-            continue;
-          },
-        },
-      };
-      let cell_writer = match type_option_reader_by_id.get(&field.id) {
-        Some(cell_writer) => cell_writer,
-        None => {
-          tracing::error!("Failed to get type option writer for field: {}", field.id);
-          continue;
-        },
-      };
-      let new_cell: Cell = cell_writer.convert_json_to_cell(serde_val);
-      db_row_body.update(&mut yrs_txn, |row_update| {
-        row_update.update_cells(|cells_update| {
-          cells_update.insert_cell(&field.id, new_cell);
-        });
-      });
-    }
-    yrs_txn.encode_update_v1()
-  };
-  Ok(db_row_collab_updates)
-}
-
 pub async fn upsert_database_row(
   collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
@@ -694,7 +628,6 @@ pub async fn upsert_database_row(
   let db_row_collab_updates = write_to_database_row(
     &db_collab,
     &db_body,
-    database_uuid_str,
     &mut db_row_collab,
     &db_row_body,
     cell_value_by_id,

@@ -299,8 +299,8 @@ impl Client {
       .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&AddDatatabaseRow {
-        cells_by_id,
-        row_doc_content,
+        cells: cells_by_id,
+        document: row_doc_content,
       })
       .send()
       .await?;
@@ -328,8 +328,8 @@ impl Client {
       .await?
       .json(&UpsertDatatabaseRow {
         pre_hash,
-        cells_by_id,
-        row_doc_content,
+        cells: cells_by_id,
+        document: row_doc_content,
       })
       .send()
       .await?;

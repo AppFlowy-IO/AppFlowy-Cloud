@@ -1993,8 +1993,8 @@ async fn post_database_row_handler(
     .await?;
 
   let AddDatatabaseRow {
-    cells_by_id,
-    row_doc_content,
+    cells: cells_by_id,
+    document: row_doc_content,
   } = add_database_row.into_inner();
 
   let new_db_row_id = biz::collab::ops::insert_database_row(
@@ -2026,8 +2026,8 @@ async fn put_database_row_handler(
 
   let UpsertDatatabaseRow {
     pre_hash,
-    cells_by_id,
-    row_doc_content,
+    cells: cells_by_id,
+    document: row_doc_content,
   } = upsert_db_row.into_inner();
 
   let row_id = {

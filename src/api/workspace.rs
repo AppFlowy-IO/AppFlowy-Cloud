@@ -1996,7 +1996,6 @@ async fn post_database_row_handler(
     cells_by_id,
     row_doc_content,
   } = add_database_row.into_inner();
-  _ = row_doc_content; // TODO
 
   let new_db_row_id = biz::collab::ops::insert_database_row(
     &state.collab_access_control_storage,
@@ -2006,6 +2005,7 @@ async fn post_database_row_handler(
     uid,
     None,
     cells_by_id,
+    row_doc_content,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
@@ -2029,7 +2029,6 @@ async fn put_database_row_handler(
     cells_by_id,
     row_doc_content,
   } = upsert_db_row.into_inner();
-  _ = row_doc_content; // TODO
 
   let row_id = {
     let mut hasher = Sha256::new();
@@ -2053,6 +2052,7 @@ async fn put_database_row_handler(
     uid,
     &row_id_str,
     cells_by_id,
+    row_doc_content,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(row_id_str)))

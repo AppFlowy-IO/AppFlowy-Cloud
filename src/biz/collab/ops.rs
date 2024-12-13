@@ -11,14 +11,18 @@ use collab_database::database::gen_row_id;
 use collab_database::entity::FieldType;
 use collab_database::fields::Field;
 use collab_database::fields::TypeOptions;
+use collab_database::rows::meta_id_from_row_id;
 use collab_database::rows::CreateRowParams;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::Row;
 use collab_database::rows::RowDetail;
 use collab_database::rows::RowId;
+use collab_database::rows::RowMetaKey;
 use collab_database::views::OrderObjectPosition;
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
+use collab_document::document::Document;
+use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::SectionItem;
@@ -43,6 +47,7 @@ use shared_entity::dto::workspace_dto::RecentFolderView;
 use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
 use std::ops::DerefMut;
+use yrs::Map;
 
 use crate::biz::workspace::ops::broadcast_update;
 use access_control::collab::CollabAccessControl;
@@ -479,6 +484,7 @@ pub async fn list_database_row_ids(
   Ok(db_rows)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_database_row(
   collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
@@ -487,6 +493,7 @@ pub async fn insert_database_row(
   uid: i64,
   new_db_row_id: Option<&str>,
   cell_value_by_id: HashMap<String, serde_json::Value>,
+  row_doc_content: Option<String>,
 ) -> Result<String, AppError> {
   let new_db_row_id: RowId = new_db_row_id
     .map(|id| RowId::from(id.to_string()))
@@ -504,6 +511,39 @@ pub async fn insert_database_row(
   new_db_row_body.update(&mut new_db_row_collab.transact_mut(), |row_update| {
     row_update.set_created_at(Utc::now().timestamp());
   });
+
+  let doc_ec_bytes: Option<(String, Vec<u8>)> = {
+    if let Some(row_doc_content) = row_doc_content {
+      let is_document_empty_id =
+        meta_id_from_row_id(&new_db_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
+      new_db_row_body.get_meta().insert(
+        &mut new_db_row_collab.transact_mut(),
+        is_document_empty_id,
+        false,
+      );
+      let doc_id = new_db_row_body
+        .document_id(&new_db_row_collab.transact())
+        .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err)))?
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to get document id")))?;
+      let new_doc_collab =
+        Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
+      let md_importer = MDImporter::new(None);
+      let doc_data = md_importer
+        .import(&new_db_row_id, row_doc_content)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e)))?;
+      let doc = Document::create_with_data(new_doc_collab, doc_data)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create document: {:?}", e)))?;
+      let doc_ec = doc.encode_collab().map_err(|e| {
+        AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
+      })?;
+      let doc_ec_bytes = doc_ec
+        .encode_to_bytes()
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode db doc: {:?}", e)))?;
+      Some((doc_id, doc_ec_bytes))
+    } else {
+      None
+    }
+  };
 
   let (mut db_collab, db_body) =
     get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
@@ -554,6 +594,25 @@ pub async fn insert_database_row(
   let updated_db_collab = collab_to_bin(db_collab, CollabType::Database).await?;
 
   let mut db_txn = pg_pool.begin().await?;
+
+  // insert row document (if provided)
+  if let Some((document_id, doc_ec_bytes)) = doc_ec_bytes {
+    collab_storage
+      .upsert_new_collab_with_transaction(
+        workspace_uuid_str,
+        &uid,
+        CollabParams {
+          object_id: document_id,
+          encoded_collab_v1: doc_ec_bytes.into(),
+          collab_type: CollabType::Document,
+          embeddings: None,
+        },
+        &mut db_txn,
+        "inserting new database row document from server",
+      )
+      .await?;
+  };
+
   // insert row
   collab_storage
     .upsert_new_collab_with_transaction(
@@ -591,6 +650,7 @@ pub async fn insert_database_row(
   Ok(new_db_row_id.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn upsert_database_row(
   collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
@@ -599,6 +659,7 @@ pub async fn upsert_database_row(
   uid: i64,
   row_id: &str,
   cell_value_by_id: HashMap<String, serde_json::Value>,
+  row_doc_content: Option<String>,
 ) -> Result<(), AppError> {
   let (mut db_row_collab, db_row_body) =
     match get_database_row_body(collab_storage, workspace_uuid_str, row_id).await {
@@ -613,6 +674,7 @@ pub async fn upsert_database_row(
             uid,
             Some(row_id),
             cell_value_by_id,
+            row_doc_content,
           )
           .await
           .map(|_id| {});

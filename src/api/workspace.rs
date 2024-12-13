@@ -2142,6 +2142,7 @@ async fn list_database_row_details_handler(
   let (workspace_id, db_id) = path_param.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let list_db_row_query = param.into_inner();
+  let with_doc = list_db_row_query.with_doc;
   let row_ids = list_db_row_query.into_ids();
 
   if let Err(e) = Uuid::parse_str(&workspace_id) {

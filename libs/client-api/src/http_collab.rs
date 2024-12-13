@@ -263,6 +263,7 @@ impl Client {
     workspace_id: &str,
     database_id: &str,
     row_ids: &[&str],
+    with_doc: bool,
   ) -> Result<Vec<AFDatabaseRowDetail>, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/database/{}/row/detail",
@@ -271,7 +272,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .query(&ListDatabaseRowDetailParam::from(row_ids))
+      .query(&ListDatabaseRowDetailParam::new(row_ids, with_doc))
       .send()
       .await?;
     log_request_id(&resp);

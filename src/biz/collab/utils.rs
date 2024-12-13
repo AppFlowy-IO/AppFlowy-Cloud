@@ -15,7 +15,6 @@ use collab_database::rows::Cell;
 use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::RowDetail;
 use collab_database::rows::RowId;
-use collab_database::template::entity::CELL_DATA;
 use collab_database::template::timestamp_parse::TimestampCellData;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_entity::CollabType;
@@ -33,9 +32,9 @@ pub fn get_row_details_serde(
   row_detail: RowDetail,
   field_by_id_name_uniq: &HashMap<String, Field>,
   type_option_reader_by_id: &HashMap<String, Box<dyn TypeOptionCellReader>>,
-) -> HashMap<String, HashMap<String, serde_json::Value>> {
+) -> HashMap<String, serde_json::Value> {
   let mut cells = row_detail.row.cells;
-  let mut row_details_serde: HashMap<String, HashMap<String, serde_json::Value>> =
+  let mut row_details_serde: HashMap<String, serde_json::Value> =
     HashMap::with_capacity(cells.len());
   for (field_id, field) in field_by_id_name_uniq {
     let cell: Cell = match cells.remove(field_id) {
@@ -60,10 +59,7 @@ pub fn get_row_details_serde(
         serde_json::Value::Null
       },
     };
-    row_details_serde.insert(
-      field.name.clone(),
-      HashMap::from([(CELL_DATA.to_string(), cell_value)]),
-    );
+    row_details_serde.insert(field.name.clone(), cell_value);
   }
 
   row_details_serde

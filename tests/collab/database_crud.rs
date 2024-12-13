@@ -36,13 +36,13 @@ async fn database_row_upsert() {
   {
     // Get row and check data
     let row_details = &c
-      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id])
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], false)
       .await
       .unwrap()[0];
-    assert_eq!(row_details.cells["Description"]["data"], "description_1");
-    assert_eq!(row_details.cells["Status"]["data"], "To Do");
-    assert_eq!(row_details.cells["Multiselect"]["data"][0], "social");
-    assert_eq!(row_details.cells["Multiselect"]["data"][1], "news");
+    assert_eq!(row_details.cells["Description"], "description_1");
+    assert_eq!(row_details.cells["Status"], "To Do");
+    assert_eq!(row_details.cells["Multiselect"][0], "social");
+    assert_eq!(row_details.cells["Multiselect"][1], "news");
   }
 
   {
@@ -67,13 +67,13 @@ async fn database_row_upsert() {
   {
     // Get row and check data, it should be modified
     let row_details = &c
-      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id])
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], false)
       .await
       .unwrap()[0];
-    assert_eq!(row_details.cells["Description"]["data"], "description_2");
-    assert_eq!(row_details.cells["Status"]["data"], "Doing");
-    assert_eq!(row_details.cells["Multiselect"]["data"][0], "fast");
-    assert_eq!(row_details.cells["Multiselect"]["data"][1], "self-host");
+    assert_eq!(row_details.cells["Description"], "description_2");
+    assert_eq!(row_details.cells["Status"], "Doing");
+    assert_eq!(row_details.cells["Multiselect"][0], "fast");
+    assert_eq!(row_details.cells["Multiselect"][1], "self-host");
   }
 }
 
@@ -159,18 +159,18 @@ async fn database_fields_crud() {
       .unwrap();
 
     let row_details = c
-      .list_database_row_details(&workspace_id, &todo_db.id, &[&new_row_id])
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&new_row_id], false)
       .await
       .unwrap();
     assert_eq!(row_details.len(), 1);
     let new_row_detail = &row_details[0];
-    assert_eq!(new_row_detail.cells["Description"]["data"], my_description);
-    assert_eq!(new_row_detail.cells["Status"]["data"], my_status);
-    assert_eq!(new_row_detail.cells["Multiselect"]["data"][0], "social");
-    assert_eq!(new_row_detail.cells["Multiselect"]["data"][1], "news");
-    assert_eq!(new_row_detail.cells["MyNumberColumn"]["data"], "123");
+    assert_eq!(new_row_detail.cells["Description"], my_description);
+    assert_eq!(new_row_detail.cells["Status"], my_status);
+    assert_eq!(new_row_detail.cells["Multiselect"][0], "social");
+    assert_eq!(new_row_detail.cells["Multiselect"][1], "news");
+    assert_eq!(new_row_detail.cells["MyNumberColumn"], "123");
     assert_eq!(
-      new_row_detail.cells["MyDateTimeColumn"]["data"],
+      new_row_detail.cells["MyDateTimeColumn"],
       json!({
         "end": serde_json::Value::Null,
         "pretty_end_date": serde_json::Value::Null,
@@ -183,11 +183,8 @@ async fn database_fields_crud() {
         "timezone": "UTC",
       }),
     );
-    assert_eq!(
-      new_row_detail.cells["MyUrlField"]["data"],
-      "https://appflowy.io"
-    );
-    assert_eq!(new_row_detail.cells["MyCheckboxColumn"]["data"], true);
+    assert_eq!(new_row_detail.cells["MyUrlField"], "https://appflowy.io");
+    assert_eq!(new_row_detail.cells["MyCheckboxColumn"], true);
   }
 }
 
@@ -231,11 +228,27 @@ async fn database_fields_unsupported_field_type() {
       .unwrap();
 
     let row_details = c
-      .list_database_row_details(&workspace_id, &todo_db.id, &[&new_row_id])
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&new_row_id], false)
       .await
       .unwrap();
     assert_eq!(row_details.len(), 1);
     let new_row_detail = &row_details[0];
     assert!(!new_row_detail.cells.contains_key("MyRelationCol"));
+  }
+}
+
+#[tokio::test]
+async fn database_insert_row_with_doc() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c).await;
+  let databases = c.list_databases(&workspace_id).await.unwrap();
+  assert_eq!(databases.len(), 1);
+  let todo_db = &databases[0];
+
+  {
+    let new_row_id = c
+      .add_database_item(&workspace_id, &todo_db.id, HashMap::from([]), None)
+      .await
+      .unwrap();
   }
 }

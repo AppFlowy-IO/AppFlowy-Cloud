@@ -324,7 +324,7 @@ impl Client {
       self.base_url, workspace_id, database_id
     );
     let resp = self
-      .http_client_with_auth(Method::PATCH, &url)
+      .http_client_with_auth(Method::PUT, &url)
       .await?
       .json(&UpsertDatatabaseRow {
         pre_hash,

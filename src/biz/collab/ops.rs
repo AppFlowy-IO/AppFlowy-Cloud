@@ -667,7 +667,7 @@ pub async fn upsert_database_row(
   cell_value_by_id: HashMap<String, serde_json::Value>,
 ) -> Result<(), AppError> {
   let (mut db_row_collab, db_row_body) =
-    match get_database_row_body(collab_storage, workspace_uuid_str, database_uuid_str).await {
+    match get_database_row_body(collab_storage, workspace_uuid_str, row_id).await {
       Ok(res) => res,
       Err(err) => match err {
         AppError::RecordNotFound(_) => {

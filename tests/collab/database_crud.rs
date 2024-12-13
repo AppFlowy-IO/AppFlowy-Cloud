@@ -13,9 +13,68 @@ async fn database_row_upsert() {
   assert_eq!(databases.len(), 1);
 
   let todo_db = &databases[0];
-  _ = todo_db;
-  // TODO: test for upserting a row
-  // c.upsert_database_item
+
+  // predefined string to be used to identify the row
+  let pre_hash = String::from("my_id_123");
+
+  // Upsert row
+  let row_id = c
+    .upsert_database_item(
+      &workspace_id,
+      &todo_db.id,
+      pre_hash.clone(),
+      HashMap::from([
+        (String::from("Description"), json!("description_1")),
+        (String::from("Status"), json!("To Do")),
+        (String::from("Multiselect"), json!(["social", "news"])),
+      ]),
+      None,
+    )
+    .await
+    .unwrap();
+
+  {
+    // Get row and check data
+    let row_details = &c
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id])
+      .await
+      .unwrap()[0];
+    assert_eq!(row_details.cells["Description"]["data"], "description_1");
+    assert_eq!(row_details.cells["Status"]["data"], "To Do");
+    assert_eq!(row_details.cells["Multiselect"]["data"][0], "social");
+    assert_eq!(row_details.cells["Multiselect"]["data"][1], "news");
+  }
+
+  {
+    // Upsert row again with different data, using same pre_hash
+    // row_id return should be the same as previous
+    let row_id_2 = c
+      .upsert_database_item(
+        &workspace_id,
+        &todo_db.id,
+        pre_hash,
+        HashMap::from([
+          (String::from("Description"), json!("description_2")),
+          (String::from("Status"), json!("Doing")),
+          (String::from("Multiselect"), json!(["fast", "self-host"])),
+        ]),
+        None,
+      )
+      .await
+      .unwrap();
+    assert_eq!(row_id, row_id_2);
+  }
+  {
+    // Get row and check data, it should be modified
+    let row_details = &c
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id])
+      .await
+      .unwrap()[0];
+    assert_eq!(row_details.cells["Description"]["data"], "description_2");
+    assert_eq!(row_details.cells["Status"]["data"], "Doing");
+    assert_eq!(row_details.cells["Multiselect"]["data"][0], "fast");
+    assert_eq!(row_details.cells["Multiselect"]["data"][1], "self-host");
+  }
 }
 
 #[tokio::test]

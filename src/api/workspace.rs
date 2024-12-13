@@ -29,7 +29,7 @@ use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
-use appflowy_collaborate::indexer::UnindexedCollab;
+use appflowy_collaborate::indexer::IndexedCollab;
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
@@ -697,7 +697,7 @@ async fn create_collab_handler(
   {
     state
       .indexer_scheduler
-      .index_encoded_collab_one(&workspace_id, UnindexedCollab::from(&params))?;
+      .index_encoded_collab_one(&workspace_id, IndexedCollab::from(&params))?;
   }
 
   let mut transaction = state
@@ -818,10 +818,7 @@ async fn batch_create_collab_handler(
   {
     state.indexer_scheduler.index_encoded_collabs(
       &workspace_id,
-      collab_params_list
-        .iter()
-        .map(UnindexedCollab::from)
-        .collect(),
+      collab_params_list.iter().map(IndexedCollab::from).collect(),
     )?;
   }
 
@@ -1250,7 +1247,7 @@ async fn update_collab_handler(
   {
     state
       .indexer_scheduler
-      .index_encoded_collab_one(&workspace_id, UnindexedCollab::from(&params))?;
+      .index_encoded_collab_one(&workspace_id, IndexedCollab::from(&params))?;
   }
 
   state

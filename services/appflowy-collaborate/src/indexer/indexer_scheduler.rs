@@ -14,13 +14,14 @@ use collab_entity::CollabType;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
-use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, CollabParams};
+use database_entity::dto::{AFCollabEmbeddingParams, CollabParams};
 use futures_util::StreamExt;
 use rayon::prelude::*;
 use sqlx::PgPool;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::oneshot;
 use tracing::{error, warn};
 use uuid::Uuid;
 
@@ -61,19 +62,19 @@ impl IndexerScheduler {
   pub fn index_encoded_collab_one(
     &self,
     workspace_id: &str,
-    unindexed_collab: UnindexedCollab,
+    indexed_collab: IndexedCollab,
   ) -> Result<(), AppError> {
     let workspace_id = Uuid::parse_str(workspace_id)?;
     let indexer_provider = self.indexer_provider.clone();
     let pg_pool = self.pg_pool.clone();
     rayon::spawn(move || {
-      if let Some((tokens_used, params)) = process_collab(&indexer_provider, &unindexed_collab) {
+      if let Some((tokens_used, params)) = process_collab(&indexer_provider, &indexed_collab) {
         tokio::spawn(async move {
           let result = upsert_collab_embeddings(&pg_pool, &workspace_id, tokens_used, params).await;
           if let Err(err) = result {
             warn!(
               "failed to index collab {}/{}: {}",
-              workspace_id, unindexed_collab.object_id, err
+              workspace_id, indexed_collab.object_id, err
             );
           }
         });
@@ -87,7 +88,7 @@ impl IndexerScheduler {
   pub fn index_encoded_collabs(
     &self,
     workspace_id: &str,
-    unindexed_collabs: Vec<UnindexedCollab>,
+    indexed_collabs: Vec<IndexedCollab>,
   ) -> Result<(), AppError> {
     let workspace_id = Uuid::parse_str(workspace_id)?;
     let indexer_provider = self.indexer_provider.clone();
@@ -96,7 +97,7 @@ impl IndexerScheduler {
 
     rayon::spawn(move || {
       let results = threads.install(|| {
-        unindexed_collabs
+        indexed_collabs
           .into_par_iter()
           .filter_map(|collab| process_collab(&indexer_provider, &collab))
           .collect::<Vec<_>>()
@@ -187,7 +188,7 @@ async fn handle_unindexed_collabs(scheduler: Arc<IndexerScheduler>) {
         if let Err(err) = index_unindexd_collab(
           &scheduler.pg_pool,
           &scheduler.indexer_provider,
-          &scheduler.threads,
+          scheduler.threads.clone(),
           collab,
         )
         .await
@@ -215,7 +216,7 @@ async fn handle_unindexed_collabs(scheduler: Arc<IndexerScheduler>) {
 fn get_unindexed_collabs(
   pg_pool: &PgPool,
   storage: Arc<dyn CollabStorage>,
-) -> Pin<Box<dyn Stream<Item = Result<WorkspaceUnindexedCollab, anyhow::Error>> + Send>> {
+) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab, anyhow::Error>> + Send>> {
   let db = pg_pool.clone();
   Box::pin(try_stream! {
     let collabs = get_collabs_without_embeddings(&db).await?;
@@ -229,7 +230,7 @@ fn get_unindexed_collabs(
             .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
             .await?;
 
-          yield WorkspaceUnindexedCollab {
+          yield UnindexedCollab {
             workspace_id: cid.workspace_id,
             object_id: cid.object_id,
             collab_type: cid.collab_type,
@@ -250,23 +251,32 @@ fn get_unindexed_collabs(
 async fn index_unindexd_collab(
   pg_pool: &PgPool,
   indexer_provider: &Arc<IndexerProvider>,
-  threads: &ThreadPoolNoAbort,
-  unindexed: WorkspaceUnindexedCollab,
+  threads: Arc<ThreadPoolNoAbort>,
+  unindexed: UnindexedCollab,
 ) -> Result<(), AppError> {
   if let Some(indexer) = indexer_provider.indexer_for(&unindexed.collab_type) {
     let workspace_id = unindexed.workspace_id;
-    let collab = Collab::new_with_source(
-      CollabOrigin::Empty,
-      &unindexed.object_id,
-      DataSource::DocStateV1(unindexed.collab.doc_state.into()),
-      vec![],
-      false,
-    )
-    .map_err(|err| AppError::Internal(err.into()))?;
+    let (tx, rx) = oneshot::channel();
 
-    let embedding_params = indexer.embedding_collab(&collab)?;
-    let embeddings = indexer.embed_in_thread_pool(embedding_params, threads)?;
-    if let Some(embeddings) = embeddings {
+    rayon::spawn(move || {
+      let result = || {
+        let collab = Collab::new_with_source(
+          CollabOrigin::Empty,
+          &unindexed.object_id,
+          DataSource::DocStateV1(unindexed.collab.doc_state.into()),
+          vec![],
+          false,
+        )
+        .map_err(|err| AppError::Internal(err.into()))?;
+
+        let embedding_params = indexer.embedding_collab(&collab)?;
+        let embeddings = indexer.embed_in_thread_pool(embedding_params, &threads)?;
+        Ok::<_, AppError>(embeddings)
+      };
+      let _ = tx.send(result());
+    });
+
+    if let Ok(Ok(Some(embeddings))) = rx.await {
       upsert_collab_embeddings(
         pg_pool,
         &workspace_id,
@@ -281,13 +291,13 @@ async fn index_unindexd_collab(
 
 fn process_collab(
   indexer_provider: &IndexerProvider,
-  unindexed_collab: &UnindexedCollab,
+  indexed_collab: &IndexedCollab,
 ) -> Option<(u32, Vec<AFCollabEmbeddingParams>)> {
-  let indexer = indexer_provider.indexer_for(&unindexed_collab.collab_type)?;
-  let encode_collab = EncodedCollab::decode_from_bytes(&unindexed_collab.encoded_collab).ok()?;
+  let indexer = indexer_provider.indexer_for(&indexed_collab.collab_type)?;
+  let encode_collab = EncodedCollab::decode_from_bytes(&indexed_collab.encoded_collab).ok()?;
   let collab = Collab::new_with_source(
     CollabOrigin::Empty,
-    &unindexed_collab.object_id,
+    &indexed_collab.object_id,
     DataSource::DocStateV1(encode_collab.doc_state.into()),
     vec![],
     false,
@@ -299,20 +309,20 @@ fn process_collab(
   Some((embeddings.tokens_consumed, embeddings.params))
 }
 
-pub struct WorkspaceUnindexedCollab {
+pub struct UnindexedCollab {
   pub workspace_id: Uuid,
   pub object_id: String,
   pub collab_type: CollabType,
   pub collab: EncodedCollab,
 }
 
-pub struct UnindexedCollab {
+pub struct IndexedCollab {
   pub object_id: String,
   pub collab_type: CollabType,
   pub encoded_collab: Bytes,
 }
 
-impl From<&CollabParams> for UnindexedCollab {
+impl From<&CollabParams> for IndexedCollab {
   fn from(params: &CollabParams) -> Self {
     Self {
       object_id: params.object_id.clone(),

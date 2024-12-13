@@ -512,7 +512,11 @@ pub async fn insert_database_row(
     row_update.set_created_at(Utc::now().timestamp());
   });
 
-  let doc_ec_bytes: Option<(String, Vec<u8>)> = {
+  // If a document is provided, we need to create a new document and update the folder
+  // (updated_folder_collab, folder_updates)
+  let mut require_folder_update: Option<(Vec<u8>, Vec<u8>)> = None;
+
+  let doc_id_ec_bytes: Option<(String, Vec<u8>)> = {
     if let Some(row_doc_content) = row_doc_content {
       let is_document_empty_id =
         meta_id_from_row_id(&new_db_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
@@ -521,25 +525,46 @@ pub async fn insert_database_row(
         is_document_empty_id,
         false,
       );
-      let doc_id = new_db_row_body
+      let new_doc_id = new_db_row_body
         .document_id(&new_db_row_collab.transact())
         .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err)))?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to get document id")))?;
-      let new_doc_collab =
-        Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
       let md_importer = MDImporter::new(None);
       let doc_data = md_importer
         .import(&new_db_row_id, row_doc_content)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e)))?;
-      let doc = Document::create_with_data(new_doc_collab, doc_data)
+      let doc = Document::create(&new_doc_id, doc_data)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create document: {:?}", e)))?;
       let doc_ec = doc.encode_collab().map_err(|e| {
         AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
       })?;
+
+      {
+        let mut folder =
+          get_latest_collab_folder(collab_storage, GetCollabOrigin::Server, workspace_uuid_str)
+            .await?;
+        let folder_updates = {
+          let mut folder_txn = folder.collab.transact_mut();
+          folder.body.views.insert(
+            &mut folder_txn,
+            collab_folder::View::orphan_view(
+              &new_doc_id,
+              collab_folder::ViewLayout::Document,
+              Some(uid),
+            ),
+            None,
+          );
+          folder_txn.encode_update_v1()
+        };
+
+        let updated_folder = collab_to_bin(folder.collab, CollabType::Folder).await?;
+        require_folder_update = Some((updated_folder, folder_updates));
+      };
+
       let doc_ec_bytes = doc_ec
         .encode_to_bytes()
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode db doc: {:?}", e)))?;
-      Some((doc_id, doc_ec_bytes))
+      Some((new_doc_id, doc_ec_bytes))
     } else {
       None
     }
@@ -595,14 +620,15 @@ pub async fn insert_database_row(
 
   let mut db_txn = pg_pool.begin().await?;
 
-  // insert row document (if provided)
-  if let Some((document_id, doc_ec_bytes)) = doc_ec_bytes {
+  // handle row document (if provided)
+  if let Some((doc_id, doc_ec_bytes)) = doc_id_ec_bytes {
+    // insert document
     collab_storage
       .upsert_new_collab_with_transaction(
         workspace_uuid_str,
         &uid,
         CollabParams {
-          object_id: document_id,
+          object_id: doc_id,
           encoded_collab_v1: doc_ec_bytes.into(),
           collab_type: CollabType::Document,
           embeddings: None,
@@ -611,6 +637,24 @@ pub async fn insert_database_row(
         "inserting new database row document from server",
       )
       .await?;
+    // update folder and broadcast
+    if let Some((updated_folder, folder_updates)) = require_folder_update {
+      collab_storage
+        .upsert_new_collab_with_transaction(
+          workspace_uuid_str,
+          &uid,
+          CollabParams {
+            object_id: workspace_uuid_str.to_string(),
+            encoded_collab_v1: updated_folder.into(),
+            collab_type: CollabType::Folder,
+            embeddings: None,
+          },
+          &mut db_txn,
+          "inserting updated folder from server",
+        )
+        .await?;
+      broadcast_update(collab_storage, workspace_uuid_str, folder_updates).await?;
+    }
   };
 
   // insert row

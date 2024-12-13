@@ -1992,10 +1992,7 @@ async fn post_database_row_handler(
     .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
 
-  let AddDatatabaseRow {
-    cells: cells_by_id,
-    document: row_doc_content,
-  } = add_database_row.into_inner();
+  let AddDatatabaseRow { cells, document } = add_database_row.into_inner();
 
   let new_db_row_id = biz::collab::ops::insert_database_row(
     &state.collab_access_control_storage,
@@ -2004,8 +2001,8 @@ async fn post_database_row_handler(
     &db_id,
     uid,
     None,
-    cells_by_id,
-    row_doc_content,
+    cells,
+    document,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
@@ -2026,8 +2023,8 @@ async fn put_database_row_handler(
 
   let UpsertDatatabaseRow {
     pre_hash,
-    cells: cells_by_id,
-    document: row_doc_content,
+    cells,
+    document,
   } = upsert_db_row.into_inner();
 
   let row_id = {
@@ -2051,8 +2048,8 @@ async fn put_database_row_handler(
     &db_id,
     uid,
     &row_id_str,
-    cells_by_id,
-    row_doc_content,
+    cells,
+    document,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(row_id_str)))

@@ -136,10 +136,14 @@ impl CollabDiskCache {
         params.object_id,
         em.tokens_consumed
       );
+      if em.params.is_empty() {
+        return Ok(());
+      }
       let workspace_id = Uuid::parse_str(workspace_id)?;
       upsert_collab_embeddings(
         transaction.deref_mut(),
         &workspace_id,
+        &em.params[0].object_id,
         em.tokens_consumed,
         em.params.clone(),
       )

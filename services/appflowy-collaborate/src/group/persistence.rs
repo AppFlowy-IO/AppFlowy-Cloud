@@ -14,6 +14,8 @@ use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
 
 use crate::group::group_init::EditState;
+use crate::indexer::IndexerScheduler;
+
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
   object_id: String,
@@ -25,6 +27,7 @@ pub(crate) struct GroupPersistence<S> {
   collab: Arc<RwLock<Collab>>,
   collab_type: CollabType,
   persistence_interval: Duration,
+  indexer_scheduler: Arc<IndexerScheduler>,
   cancel: CancellationToken,
 }
 
@@ -42,6 +45,7 @@ where
     collab: Arc<RwLock<Collab>>,
     collab_type: CollabType,
     persistence_interval: Duration,
+    indexer_scheduler: Arc<IndexerScheduler>,
     cancel: CancellationToken,
   ) -> Self {
     Self {
@@ -53,6 +57,7 @@ where
       collab,
       collab_type,
       persistence_interval,
+      indexer_scheduler,
       cancel,
     }
   }
@@ -125,6 +130,10 @@ where
       Ok::<_, AppError>(params)
     })
     .await??;
+
+    self
+      .indexer_scheduler
+      .index_encoded_collab_one(&self.workspace_id, &params)?;
 
     self
       .storage

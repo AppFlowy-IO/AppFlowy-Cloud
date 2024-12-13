@@ -2,10 +2,11 @@ use collab_entity::CollabType;
 use pgvector::Vector;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
 use sqlx::{Error, Executor, Postgres};
+use tracing::info;
 use uuid::Uuid;
 
 use database_entity::dto::{
-  AFCollabEmbeddingParams, IndexingStatus, QueryCollab, QueryCollabParams,
+  AFCollabEmbeddedContent, IndexingStatus, QueryCollab, QueryCollabParams,
 };
 
 pub async fn get_index_status<'a, E>(
@@ -66,8 +67,8 @@ struct Fragment {
   embedding: Option<Vector>,
 }
 
-impl From<AFCollabEmbeddingParams> for Fragment {
-  fn from(value: AFCollabEmbeddingParams) -> Self {
+impl From<AFCollabEmbeddedContent> for Fragment {
+  fn from(value: AFCollabEmbeddedContent) -> Self {
     Fragment {
       fragment_id: value.fragment_id,
       content_type: value.content_type as i32,
@@ -86,12 +87,20 @@ impl PgHasArrayType for Fragment {
 pub async fn upsert_collab_embeddings<'a, E>(
   executor: E,
   workspace_id: &Uuid,
+  object_id: &str,
   tokens_used: u32,
-  records: Vec<AFCollabEmbeddingParams>,
+  records: Vec<AFCollabEmbeddedContent>,
 ) -> Result<(), sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
 {
+  info!(
+    "upserting embeddings for object:{} with {} fragments in workspace {}",
+    object_id,
+    records.len(),
+    workspace_id
+  );
+
   if records.is_empty() {
     return Ok(());
   }

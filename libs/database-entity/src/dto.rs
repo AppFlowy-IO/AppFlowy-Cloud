@@ -747,7 +747,7 @@ impl From<i16> for AFWorkspaceInvitationStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AFCollabEmbeddingParams {
+pub struct AFCollabEmbeddedContent {
   pub fragment_id: String,
   pub object_id: String,
   pub collab_type: CollabType,
@@ -756,7 +756,7 @@ pub struct AFCollabEmbeddingParams {
   pub embedding: Option<Vec<f32>>,
 }
 
-impl AFCollabEmbeddingParams {
+impl AFCollabEmbeddedContent {
   pub fn from_proto(proto: &proto::collab::CollabEmbeddingsParams) -> Result<Self, EntityError> {
     let collab_type_proto = proto::collab::CollabType::try_from(proto.collab_type).unwrap();
     let collab_type = CollabType::from_proto(&collab_type_proto);
@@ -797,14 +797,14 @@ impl AFCollabEmbeddingParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AFCollabEmbeddings {
   pub tokens_consumed: u32,
-  pub params: Vec<AFCollabEmbeddingParams>,
+  pub params: Vec<AFCollabEmbeddedContent>,
 }
 
 impl AFCollabEmbeddings {
   pub fn from_proto(proto: proto::collab::CollabEmbeddings) -> Result<Self, EntityError> {
     let mut params = vec![];
     for param in proto.embeddings {
-      params.push(AFCollabEmbeddingParams::from_proto(&param)?);
+      params.push(AFCollabEmbeddedContent::from_proto(&param)?);
     }
     Ok(Self {
       tokens_consumed: proto.tokens_consumed,
@@ -1237,7 +1237,7 @@ pub struct WorkspaceNamespace {
 #[cfg(test)]
 mod test {
   use crate::dto::{
-    AFCollabEmbeddingParams, AFCollabEmbeddings, CollabParams, CollabParamsV0, EmbeddingContentType,
+    AFCollabEmbeddedContent, AFCollabEmbeddings, CollabParams, CollabParamsV0, EmbeddingContentType,
   };
   use crate::error::EntityError;
   use bytes::Bytes;
@@ -1321,7 +1321,7 @@ mod test {
       encoded_collab_v1: Bytes::default(),
       embeddings: Some(AFCollabEmbeddings {
         tokens_consumed: 100,
-        params: vec![AFCollabEmbeddingParams {
+        params: vec![AFCollabEmbeddedContent {
           fragment_id: "fragment_id".to_string(),
           object_id: "object_id".to_string(),
           collab_type: CollabType::Document,
@@ -1345,7 +1345,7 @@ mod test {
       encoded_collab_v1: Bytes::from(vec![1, 2, 3]),
       embeddings: Some(AFCollabEmbeddings {
         tokens_consumed: 100,
-        params: vec![AFCollabEmbeddingParams {
+        params: vec![AFCollabEmbeddedContent {
           fragment_id: "fragment_id".to_string(),
           object_id: "object_id".to_string(),
           collab_type: CollabType::Document,

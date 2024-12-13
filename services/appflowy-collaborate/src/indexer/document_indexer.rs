@@ -9,7 +9,7 @@ use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
-use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, EmbeddingContentType};
+use database_entity::dto::{AFCollabEmbeddedContent, AFCollabEmbeddings, EmbeddingContentType};
 use std::sync::Arc;
 
 use crate::indexer::open_ai::split_text_by_max_content_len;
@@ -40,7 +40,10 @@ impl DocumentIndexer {
 
 #[async_trait]
 impl Indexer for DocumentIndexer {
-  fn embedding_collab(&self, collab: &Collab) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+  fn create_embedded_content(
+    &self,
+    collab: &Collab,
+  ) -> Result<Vec<AFCollabEmbeddedContent>, AppError> {
     let object_id = collab.object_id().to_string();
     let document = DocumentBody::from_collab(collab).ok_or_else(|| {
       anyhow!(
@@ -69,14 +72,14 @@ impl Indexer for DocumentIndexer {
 
   fn embed(
     &self,
-    mut params: Vec<AFCollabEmbeddingParams>,
+    mut content: Vec<AFCollabEmbeddedContent>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    let object_id = match params.first() {
+    let object_id = match content.first() {
       None => return Ok(None),
       Some(first) => first.object_id.clone(),
     };
 
-    let contents: Vec<_> = params
+    let contents: Vec<_> = content
       .iter()
       .map(|fragment| fragment.content.clone())
       .collect();
@@ -90,12 +93,12 @@ impl Indexer for DocumentIndexer {
 
     trace!(
       "[Embedding] request {} embeddings, received {} embeddings",
-      params.len(),
+      content.len(),
       resp.data.len()
     );
 
     for embedding in resp.data {
-      let param = &mut params[embedding.index as usize];
+      let param = &mut content[embedding.index as usize];
       let embedding: Vec<f32> = match embedding.embedding {
         EmbeddingOutput::Float(embedding) => embedding.into_iter().map(|f| f as f32).collect(),
         EmbeddingOutput::Base64(_) => {
@@ -109,23 +112,23 @@ impl Indexer for DocumentIndexer {
 
     tracing::info!(
       "received {} embeddings for document {} - tokens used: {}",
-      params.len(),
+      content.len(),
       object_id,
       resp.total_tokens
     );
     Ok(Some(AFCollabEmbeddings {
       tokens_consumed: resp.total_tokens as u32,
-      params,
+      params: content,
     }))
   }
 
   fn embed_in_thread_pool(
     &self,
-    params: Vec<AFCollabEmbeddingParams>,
+    content: Vec<AFCollabEmbeddedContent>,
     thread_pool: &ThreadPoolNoAbort,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
     thread_pool
-      .install(|| self.embed(params))
+      .install(|| self.embed(content))
       .map_err(|e| AppError::Unhandled(e.to_string()))?
   }
 }
@@ -135,7 +138,7 @@ fn create_embedding(
   content: String,
   collab_type: CollabType,
   embedding_model: &EmbeddingModel,
-) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+) -> Result<Vec<AFCollabEmbeddedContent>, AppError> {
   debug_assert!(matches!(
     embedding_model,
     EmbeddingModel::TextEmbedding3Small
@@ -146,7 +149,7 @@ fn create_embedding(
   Ok(
     split_contents
       .into_iter()
-      .map(|content| AFCollabEmbeddingParams {
+      .map(|content| AFCollabEmbeddedContent {
         fragment_id: Uuid::new_v4().to_string(),
         object_id: object_id.clone(),
         collab_type: collab_type.clone(),

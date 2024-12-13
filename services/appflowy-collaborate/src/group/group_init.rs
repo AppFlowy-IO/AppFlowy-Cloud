@@ -81,6 +81,7 @@ impl CollabGroup {
         collab.clone(),
         collab_type.clone(),
         persistence_interval,
+        indexer_scheduler.clone(),
         cancel.clone(),
       )
       .run(),
@@ -136,12 +137,11 @@ impl CollabGroup {
     &self,
     state_vector: StateVector,
   ) -> Result<Vec<u8>, RealtimeError> {
-    let guard = self.collab.read().await;
-    let txn = guard.transact();
-    let update = txn.encode_state_as_update_v1(&state_vector);
-    drop(txn);
-    drop(guard);
-
+    let update = {
+      let guard = self.collab.read().await;
+      let txn = guard.transact();
+      txn.encode_state_as_update_v1(&state_vector)
+    };
     Ok(update)
   }
 

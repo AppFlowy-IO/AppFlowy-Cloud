@@ -1,10 +1,9 @@
-use crate::indexer::{Indexer, IndexerProvider};
+use crate::indexer::IndexerProvider;
 use crate::state::RedisConnectionManager;
 use actix::dev::Stream;
 use anyhow::anyhow;
 use app_error::AppError;
 use async_stream::try_stream;
-use async_trait::async_trait;
 use bytes::Bytes;
 use collab::entity::EncodedCollab;
 use collab::lock::RwLock;
@@ -13,11 +12,10 @@ use collab_entity::CollabType;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
-use database_entity::dto::{AFCollabEmbeddings, CollabParams};
+use database_entity::dto::CollabParams;
 use futures_util::future::try_join_all;
 use futures_util::StreamExt;
 use redis::AsyncCommands;
-use serde_json::json;
 use sqlx::PgPool;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -27,7 +25,6 @@ use uuid::Uuid;
 
 pub struct IndexerScheduler {
   indexer_provider: Arc<IndexerProvider>,
-  redis_client: RedisConnectionManager,
   pg_pool: PgPool,
   storage: Arc<dyn CollabStorage>,
 }
@@ -35,49 +32,17 @@ pub struct IndexerScheduler {
 impl IndexerScheduler {
   pub fn new(
     indexer_provider: Arc<IndexerProvider>,
-    redis_client: RedisConnectionManager,
     pg_pool: PgPool,
     storage: Arc<dyn CollabStorage>,
   ) -> Arc<Self> {
     let this = Arc::new(Self {
       indexer_provider,
-      redis_client,
       pg_pool,
       storage,
     });
 
     tokio::spawn(handle_unindexed_collabs(this.clone()));
     this
-  }
-
-  pub async fn schedule_index(
-    &self,
-    workspace_id: &str,
-    object_id: &str,
-    content: String,
-    collab_type: CollabType,
-  ) -> Result<(), AppError> {
-    let task = EmbeddingTask {
-      workspace_id: workspace_id.to_string(),
-      object_id: object_id.to_string(),
-      content,
-      collab_type,
-      compression: "zstd".to_string(),
-    };
-    trace!(
-      "Scheduling indexing task for workspace {}, object_id:{}",
-      workspace_id,
-      object_id
-    );
-
-    let task = serde_json::to_string(&task)?;
-    let _: () = self
-      .redis_client
-      .clone()
-      .xadd("embeddings_task_stream", "*", &[("task", task)])
-      .await
-      .map_err(|err| AppError::Internal(anyhow!("Failed to push task to Redis stream: {}", err)))?;
-    Ok(())
   }
 
   pub async fn index_encoded_collab(
@@ -110,16 +75,17 @@ impl IndexerScheduler {
       futures.push(future);
     }
 
-    let results = try_join_all(futures).await?;
-    for embeddings in results.into_iter() {
-      if let Some(embeddings) = embeddings {
-        upsert_collab_embeddings(
-          &self.pg_pool,
-          &workspace_id,
-          embeddings.tokens_consumed,
-          embeddings.params,
-        )
-        .await?;
+    if let Ok(results) = try_join_all(futures).await {
+      for embeddings in results.into_iter() {
+        if let Some(embeddings) = embeddings {
+          upsert_collab_embeddings(
+            &self.pg_pool,
+            &workspace_id,
+            embeddings.tokens_consumed,
+            embeddings.params,
+          )
+          .await?;
+        }
       }
     }
 
@@ -268,15 +234,6 @@ async fn index_unindexd_collab(
   }
   Ok(())
 }
-#[derive(Debug, Clone, serde::Serialize)]
-struct EmbeddingTask {
-  workspace_id: String,
-  object_id: String,
-  content: String,
-  collab_type: CollabType,
-  compression: String,
-}
-
 pub struct WorkspaceUnindexedCollab {
   pub workspace_id: Uuid,
   pub object_id: String,

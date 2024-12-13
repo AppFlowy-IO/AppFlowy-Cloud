@@ -24,7 +24,7 @@ use database::collab::CollabStorage;
 use crate::error::RealtimeError;
 use crate::group::broadcast::{CollabBroadcast, Subscription};
 use crate::group::persistence::GroupPersistence;
-use crate::indexer::{Indexer, IndexerScheduler};
+use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabRealtimeMetrics;
 
 /// A group used to manage a single [Collab] object

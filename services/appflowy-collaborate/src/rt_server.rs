@@ -24,7 +24,7 @@ use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
-use crate::indexer::{IndexerProvider, IndexerScheduler};
+use crate::indexer::IndexerScheduler;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 
 use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};

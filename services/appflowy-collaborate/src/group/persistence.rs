@@ -14,8 +14,6 @@ use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
 
 use crate::group::group_init::EditState;
-use crate::indexer::{Indexer, IndexerScheduler};
-
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
   object_id: String,

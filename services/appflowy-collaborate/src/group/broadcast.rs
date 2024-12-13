@@ -23,8 +23,8 @@ use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
+use collab_rt_protocol::RTProtocolError;
 use collab_rt_protocol::{CollabSyncProtocol, Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
-use collab_rt_protocol::{RTProtocolError, SyncMessage};
 
 use crate::error::RealtimeError;
 use crate::group::group_init::EditState;

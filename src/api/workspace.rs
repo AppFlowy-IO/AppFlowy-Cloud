@@ -697,18 +697,10 @@ async fn create_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
-    match state
+    state
       .indexer_scheduler
-      .create_collab_embeddings(&params)
-      .await
-    {
-      Ok(embeddings) => params.embeddings = embeddings,
-      Err(err) => tracing::warn!(
-        "failed to fetch embeddings for document {}: {}",
-        params.object_id,
-        err
-      ),
-    }
+      .index_encoded_collab(&workspace_id, vec![UnindexedCollab::from(params)])
+      .await?;
   }
 
   let mut transaction = state
@@ -1256,32 +1248,16 @@ async fn update_collab_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
-  let (mut params, workspace_id) = create_params.split();
-  if let Some(indexer) = state.indexer_scheduler.indexer_for(&params.collab_type) {
-    if state
+  let (params, workspace_id) = create_params.split();
+  if state
+    .indexer_scheduler
+    .can_index_workspace(&workspace_id)
+    .await?
+  {
+    state
       .indexer_scheduler
-      .can_index_workspace(&workspace_id)
-      .await?
-    {
-      let (encoded, mut mut_params) = tokio::task::spawn_blocking(move || {
-        EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)
-          .map(|encoded_collab| (encoded_collab, params))
-          .map_err(|err| AppError::InvalidRequest(format!("Failed to decode collab `{}", err)))
-      })
-      .await
-      .map_err(|err| AppError::Internal(err.into()))??;
-
-      match indexer.index(&mut_params.object_id, encoded).await {
-        Ok(embeddings) => mut_params.embeddings = embeddings,
-        Err(err) => tracing::warn!(
-          "failed to fetch embeddings for document {}: {}",
-          mut_params.object_id,
-          err
-        ),
-      }
-
-      params = mut_params;
-    }
+      .index_encoded_collab(&workspace_id, vec![UnindexedCollab::from(&params)])
+      .await?;
   }
 
   state

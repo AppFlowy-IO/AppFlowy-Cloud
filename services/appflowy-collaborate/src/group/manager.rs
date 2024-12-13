@@ -20,7 +20,7 @@ use crate::client::client_msg_router::ClientMessageRouter;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
-use crate::indexer::{IndexerProvider, IndexerScheduler};
+use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabRealtimeMetrics;
 
 pub struct GroupManager<S> {

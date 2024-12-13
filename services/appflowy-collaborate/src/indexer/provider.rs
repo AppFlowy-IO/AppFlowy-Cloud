@@ -1,28 +1,17 @@
-use actix::dev::Stream;
-use async_stream::try_stream;
+use crate::config::get_env_var;
+use crate::indexer::DocumentIndexer;
+use app_error::AppError;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use async_trait::async_trait;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use sqlx::PgPool;
+use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings};
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Instant;
-use tokio_stream::StreamExt;
 use tracing::info;
-use uuid::Uuid;
-
-use crate::config::get_env_var;
-use crate::indexer::DocumentIndexer;
-use app_error::AppError;
-use appflowy_ai_client::client::AppFlowyAIClient;
-use database::collab::{CollabStorage, GetCollabOrigin};
-use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
-use database::workspace::select_workspace_settings;
-use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, CollabParams};
 
 #[async_trait]
 pub trait Indexer: Send + Sync {

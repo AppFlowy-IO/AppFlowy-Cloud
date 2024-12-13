@@ -321,7 +321,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   let indexer_scheduler = IndexerScheduler::new(
     IndexerProvider::new(appflowy_ai_client.clone()),
-    redis_conn_manager.clone(),
     pg_pool.clone(),
     collab_access_control_storage.clone(),
   );

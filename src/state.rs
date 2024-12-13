@@ -15,7 +15,7 @@ use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::indexer::{IndexerProvider, IndexerScheduler};
+use appflowy_collaborate::indexer::IndexerScheduler;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};

@@ -153,7 +153,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   info!("Setting up Indexer provider...");
   let indexer_scheduler = IndexerScheduler::new(
     IndexerProvider::new(ai_client),
-    redis_conn_manager.clone(),
     pg_pool.clone(),
     collab_storage.clone(),
   );

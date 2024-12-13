@@ -29,11 +29,10 @@ use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
-use appflowy_collaborate::indexer::{IndexerProvider, UnindexedCollab};
+use appflowy_collaborate::indexer::UnindexedCollab;
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
-use collab::entity::EncodedCollab;
 use collab_database::entity::FieldType;
 use collab_entity::CollabType;
 use collab_folder::timestamp;
@@ -47,7 +46,6 @@ use database::user::select_uid_from_email;
 use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
 use database_entity::dto::*;
-use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use shared_entity::dto::workspace_dto::*;
@@ -672,7 +670,7 @@ async fn create_collab_handler(
     },
   };
 
-  let (mut params, workspace_id) = params.split();
+  let (params, workspace_id) = params.split();
 
   if params.object_id == workspace_id {
     // Only the object with [CollabType::Folder] can have the same object_id as workspace_id. But
@@ -699,8 +697,7 @@ async fn create_collab_handler(
   {
     state
       .indexer_scheduler
-      .index_encoded_collab(&workspace_id, vec![UnindexedCollab::from(params)])
-      .await?;
+      .index_encoded_collab_one(&workspace_id, UnindexedCollab::from(&params))?;
   }
 
   let mut transaction = state
@@ -768,7 +765,7 @@ async fn batch_create_collab_handler(
     }
   }
   // Perform decompression and processing in a Rayon thread pool
-  let mut collab_params_list = tokio::task::spawn_blocking(move || match compress_type {
+  let collab_params_list = tokio::task::spawn_blocking(move || match compress_type {
     CompressionType::Brotli { buffer_size } => offset_len_list
       .into_par_iter()
       .filter_map(|(offset, len)| {
@@ -819,16 +816,13 @@ async fn batch_create_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
-    state
-      .indexer_scheduler
-      .index_encoded_collab(
-        &workspace_id,
-        collab_params_list
-          .iter()
-          .map(UnindexedCollab::from)
-          .collect(),
-      )
-      .await?;
+    state.indexer_scheduler.index_encoded_collabs(
+      &workspace_id,
+      collab_params_list
+        .iter()
+        .map(UnindexedCollab::from)
+        .collect(),
+    )?;
   }
 
   let start = Instant::now();
@@ -1256,8 +1250,7 @@ async fn update_collab_handler(
   {
     state
       .indexer_scheduler
-      .index_encoded_collab(&workspace_id, vec![UnindexedCollab::from(&params)])
-      .await?;
+      .index_encoded_collab_one(&workspace_id, UnindexedCollab::from(&params))?;
   }
 
   state
@@ -2146,24 +2139,6 @@ async fn parser_realtime_msg(
       message
     ))),
   }
-}
-
-async fn fetch_embeddings(
-  indexer_provider: &IndexerProvider,
-  params: &mut [CollabParams],
-) -> Result<(), AppError> {
-  let mut futures = Vec::with_capacity(params.len());
-  for param in params.iter() {
-    let future = indexer_provider.create_collab_embeddings(param);
-    futures.push(future);
-  }
-
-  let results = try_join_all(futures).await?;
-  for (i, embeddings) in results.into_iter().enumerate() {
-    params[i].embeddings = embeddings;
-  }
-
-  Ok(())
 }
 
 #[instrument(level = "debug", skip(state, payload), err)]

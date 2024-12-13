@@ -1,11 +1,8 @@
 use crate::config::get_env_var;
 use crate::indexer::DocumentIndexer;
+use crate::thread_pool_no_abort::ThreadPoolNoAbort;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
-use async_trait::async_trait;
-use collab::core::collab::DataSource;
-use collab::core::origin::CollabOrigin;
-use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings};
@@ -13,41 +10,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
 
-#[async_trait]
 pub trait Indexer: Send + Sync {
-  async fn embedding_params(
-    &self,
-    collab: &Collab,
-  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
+  fn embedding_collab(&self, collab: &Collab) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
 
-  async fn embedding_text(
-    &self,
-    object_id: String,
-    content: String,
-    collab_type: CollabType,
-  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError>;
-
-  async fn embeddings(
+  fn embed(
     &self,
     params: Vec<AFCollabEmbeddingParams>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError>;
 
-  async fn index(
+  fn embed_in_thread_pool(
     &self,
-    object_id: &str,
-    encoded_collab: EncodedCollab,
-  ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    let collab = Collab::new_with_source(
-      CollabOrigin::Empty,
-      object_id,
-      DataSource::DocStateV1(encoded_collab.doc_state.into()),
-      vec![],
-      false,
-    )
-    .map_err(|err| AppError::Internal(err.into()))?;
-    let embedding_params = self.embedding_params(&collab).await?;
-    self.embeddings(embedding_params).await
-  }
+    params: Vec<AFCollabEmbeddingParams>,
+    thread_pool: &ThreadPoolNoAbort,
+  ) -> Result<Option<AFCollabEmbeddings>, AppError>;
 }
 
 /// A structure responsible for resolving different [Indexer] types for different [CollabType]s,

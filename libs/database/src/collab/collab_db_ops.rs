@@ -7,11 +7,10 @@ use database_entity::dto::{
 use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
 
 use crate::collab::{partition_key_from_collab_type, SNAPSHOT_PER_HOUR};
+use crate::pg_row::AFCollabRowMeta;
 use crate::pg_row::AFSnapshotRow;
-use crate::pg_row::{AFCollabMemberAccessLevelRow, AFCollabRowMeta};
 use app_error::AppError;
 use chrono::{DateTime, Duration, Utc};
-use futures_util::stream::BoxStream;
 
 use sqlx::postgres::PgRow;
 use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
@@ -61,24 +60,24 @@ pub async fn insert_into_af_collab(
   );
 
   sqlx::query!(
-    r#"CALL af_collab_upsert($1, $2, $3, $4, $5, $6)"#,
-    workspace_id,
+    r#"
+      INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (oid, partition_key)
+      DO UPDATE SET blob = $2, len = $3, encrypt = $5, owner_uid = $6 WHERE excluded.workspace_id = af_collab.workspace_id;
+    "#,
     params.object_id,
-    partition_key,
-    *uid,
-    encrypt,
     params.encoded_collab_v1.as_ref(),
+    params.encoded_collab_v1.len() as i32,
+    partition_key,
+    encrypt,
+    uid,
+    workspace_id,
   )
   .execute(tx.deref_mut())
-  .await
-  .map_err(|err| {
+  .await.map_err(|err| {
     AppError::Internal(anyhow!(
       "Update af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}. error: {:?}",
-      workspace_id,
-      uid,
-      params.object_id,
-      params.collab_type,
-      err,
+      workspace_id, uid, params.object_id, params.collab_type, err,
     ))
   })?;
 
@@ -154,25 +153,12 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let encrypt = 0;
   let workspace_uuid = Uuid::from_str(workspace_id)?;
 
-  // Insert values into the `af_collab_member` and `af_collab` tables in bulk
+  // Insert values into `af_collab` tables in bulk
   let len = collab_params_list.len();
   let mut object_ids: Vec<Uuid> = Vec::with_capacity(len);
   let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(len);
   let mut lengths: Vec<i32> = Vec::with_capacity(len);
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
-  let mut permission_ids: Vec<i32> = Vec::with_capacity(len);
-
-  let permission_id: i32 = sqlx::query_scalar!(
-    r#"
-      SELECT rp.permission_id
-      FROM af_role_permissions rp
-      JOIN af_roles ON rp.role_id = af_roles.id
-      WHERE af_roles.name = 'Owner';
-    "#
-  )
-  .fetch_one(tx.deref_mut())
-  .await?;
-
   let mut visited = HashSet::with_capacity(collab_params_list.len());
   for params in collab_params_list {
     let oid = Uuid::from_str(&params.object_id)?;
@@ -182,7 +168,6 @@ pub async fn insert_into_af_collab_bulk_for_user(
       blobs.push(params.encoded_collab_v1.to_vec());
       lengths.push(params.encoded_collab_v1.len() as i32);
       partition_keys.push(partition_key);
-      permission_ids.push(permission_id);
     }
   }
 
@@ -213,28 +198,6 @@ pub async fn insert_into_af_collab_bulk_for_user(
             err
         ))
       })?;
-
-  // Bulk insert into `af_collab_member` for the user and provided collab params
-  sqlx::query!(
-    r#"
-      INSERT INTO af_collab_member (uid, oid, permission_id)
-      SELECT * FROM UNNEST($1::bigint[], $2::uuid[], $3::int[])
-      ON CONFLICT (uid, oid)
-      DO NOTHING;
-    "#,
-    &uids,
-    &object_ids,
-    &permission_ids
-  )
-  .execute(tx.deref_mut())
-  .await
-  .map_err(|err| {
-    AppError::Internal(anyhow!(
-      "Bulk insert/update into af_collab_member failed for uid: {}, error details: {:?}",
-      uid,
-      err
-    ))
-  })?;
 
   Ok(())
 }
@@ -569,21 +532,6 @@ pub async fn delete_collab_member(
     .execute(txn.deref_mut())
     .await?;
   Ok(())
-}
-
-pub fn select_collab_member_access_level(
-  pg_pool: &PgPool,
-) -> BoxStream<'_, sqlx::Result<AFCollabMemberAccessLevelRow>> {
-  sqlx::query_as!(
-    AFCollabMemberAccessLevelRow,
-    r#"
-      SELECT uid, oid, access_level
-      FROM af_collab_member
-      INNER JOIN af_permissions
-        ON af_collab_member.permission_id = af_permissions.id
-    "#
-  )
-  .fetch(pg_pool)
 }
 
 #[inline]

@@ -111,11 +111,31 @@ async fn document_full_sync_then_search_test() {
   let local_plain_text = local_document.to_plain_text();
   assert_eq!(local_plain_text, remote_plain_text);
 
-  let search_result = test_client
-    .api_client
-    .search_documents(&workspace_id, "workflows", 1, 200)
-    .await
-    .unwrap();
-  assert_eq!(search_result.len(), 1);
-  assert_eq!(search_result[0].preview, Some("".to_string()));
+  // Retry until the result is ok, with a timeout of 30 seconds
+  let result = timeout(Duration::from_secs(30), async {
+    loop {
+      let response = test_client
+        .api_client
+        .search_documents(&workspace_id, "workflows", 1, 200)
+        .await
+        .unwrap();
+
+      if response.is_empty() {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        continue;
+      } else {
+        return response;
+      }
+    }
+  })
+  .await;
+
+  // Ensure the timeout didn't occur and the result is ok
+  match result {
+    Ok(search_result) => {
+      assert_eq!(search_result.len(), 1);
+      assert_eq!(search_result[0].preview, Some("AppFlowy is an open-source project.It is an alternative to tools like Notion.AppFlowy provides full control of your data.The project is built using Flutter for the frontend.Rust powers AppFlowy's back".to_string()));
+    },
+    Err(_) => panic!("Test failed: Timeout after 30 seconds."),
+  }
 }

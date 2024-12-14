@@ -432,7 +432,7 @@ impl Client {
       .into_data()
   }
 
-  pub async fn post_collab_doc_state(
+  pub async fn collab_full_sync(
     &self,
     workspace_id: &str,
     object_id: &str,
@@ -441,7 +441,7 @@ impl Client {
     state_vector: Vec<u8>,
   ) -> Result<Vec<u8>, AppResponseError> {
     let url = format!(
-      "{}/api/workspace/v1/{workspace_id}/collab/{object_id}/sync",
+      "{}/api/workspace/v1/{workspace_id}/collab/{object_id}/full-sync",
       self.base_url
     );
 

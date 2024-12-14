@@ -126,8 +126,8 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(v1_get_collab_handler)),
     )
     .service(
-      web::resource("/v1/{workspace_id}/collab/{object_id}/sync")
-        .route(web::post().to(collab_two_way_sync_handler)),
+      web::resource("/v1/{workspace_id}/collab/{object_id}/full-sync")
+        .route(web::post().to(collab_full_sync_handler)),
     )
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
@@ -2156,7 +2156,7 @@ async fn get_collab_embed_info_handler(
 }
 
 #[instrument(level = "debug", skip_all, err)]
-async fn collab_two_way_sync_handler(
+async fn collab_full_sync_handler(
   user_uuid: UserUuid,
   body: Bytes,
   path: web::Path<(Uuid, Uuid)>,
@@ -2179,7 +2179,7 @@ async fn collab_two_way_sync_handler(
 
   let (workspace_id, object_id) = path.into_inner();
   let params = CollabDocStateParams::decode(&mut Cursor::new(body)).map_err(|err| {
-    AppError::InvalidRequest(format!("Failed to parse CreateCollabEmbedding: {}", err))
+    AppError::InvalidRequest(format!("Failed to parse CollabDocStateParams: {}", err))
   })?;
 
   if params.doc_state.is_empty() {

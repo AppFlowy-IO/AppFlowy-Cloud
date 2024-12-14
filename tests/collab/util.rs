@@ -87,7 +87,7 @@ impl TestDocumentEditor {
 }
 
 pub fn empty_document_editor(object_id: &str) -> TestDocumentEditor {
-  let doc_state = default_document_collab_data(&object_id)
+  let doc_state = default_document_collab_data(object_id)
     .unwrap()
     .doc_state
     .to_vec();
@@ -104,9 +104,10 @@ pub fn empty_document_editor(object_id: &str) -> TestDocumentEditor {
   }
 }
 
+#[allow(dead_code)]
 pub fn empty_collab_doc_state(object_id: &str, collab_type: CollabType) -> Vec<u8> {
   match collab_type {
-    CollabType::Document => default_document_collab_data(&object_id)
+    CollabType::Document => default_document_collab_data(object_id)
       .unwrap()
       .doc_state
       .to_vec(),

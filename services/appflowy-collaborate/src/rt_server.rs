@@ -250,13 +250,17 @@ where
               let (tx, rx) = tokio::sync::oneshot::channel();
               let _ = group_cmd_sender
                 .send(GroupCommand::CalculateMissingUpdate {
-                  object_id,
+                  object_id: object_id.clone(),
                   state_vector,
                   ret: tx,
                 })
                 .await;
               match rx.await {
                 Ok(missing_update_result) => {
+                  let _ = group_cmd_sender
+                    .send(GroupCommand::GenerateCollabEmbedding { object_id })
+                    .await;
+
                   let result = missing_update_result
                     .map_err(|err| {
                       AppError::Internal(anyhow!("fail to calculate missing update: {}", err))
@@ -343,11 +347,9 @@ where
   ) -> Result<(), RealtimeError> {
     let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
     tokio::spawn(async move {
-      let (tx, rx) = tokio::sync::oneshot::channel();
       let result = group_cmd_sender
         .send(GroupCommand::GenerateCollabEmbedding {
           object_id: message.object_id,
-          ret: tx,
         })
         .await;
 
@@ -357,38 +359,9 @@ where
             "send generate embedding to group fail: {}",
             err
           ))));
-          return;
         } else {
           error!("send generate embedding to group fail: {}", err);
         }
-      }
-
-      match rx.await {
-        Ok(Ok(())) => {
-          if let Some(return_tx) = message.return_tx {
-            let _ = return_tx.send(Ok(()));
-          }
-        },
-        Ok(Err(err)) => {
-          if let Some(return_tx) = message.return_tx {
-            let _ = return_tx.send(Err(AppError::Internal(anyhow!(
-              "generate embedding fail: {}",
-              err
-            ))));
-          } else {
-            error!("generate embedding fail: {}", err);
-          }
-        },
-        Err(err) => {
-          if let Some(return_tx) = message.return_tx {
-            let _ = return_tx.send(Err(AppError::Internal(anyhow!(
-              "fail to receive generate embedding result: {}",
-              err
-            ))));
-          } else {
-            error!("fail to receive generate embedding result: {}", err);
-          }
-        },
       }
     });
     Ok(())

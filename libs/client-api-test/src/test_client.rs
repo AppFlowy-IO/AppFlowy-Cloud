@@ -296,6 +296,26 @@ impl TestClient {
     .unwrap()
   }
 
+  pub async fn create_document_collab(&self, workspace_id: &str, object_id: &str) -> Document {
+    let collab_resp = self
+      .get_collab(
+        workspace_id.to_string(),
+        object_id.to_string(),
+        CollabType::Document,
+      )
+      .await
+      .unwrap();
+    let collab = Collab::new_with_source(
+      CollabOrigin::Server,
+      object_id,
+      collab_resp.encode_collab.into(),
+      vec![],
+      false,
+    )
+    .unwrap();
+    Document::open(collab).unwrap()
+  }
+
   pub async fn get_db_collab_from_view(&mut self, workspace_id: &str, view_id: &str) -> Collab {
     let ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
     let ws_db_body = WorkspaceDatabase::open(ws_db_collab).unwrap();

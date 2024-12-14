@@ -32,6 +32,7 @@ pub struct IndexerScheduler {
   pg_pool: PgPool,
   storage: Arc<dyn CollabStorage>,
   threads: Arc<ThreadPoolNoAbort>,
+  #[allow(dead_code)]
   metrics: Arc<EmbeddingMetrics>,
   schedule_tx: UnboundedSender<EmbeddingRecord>,
 }
@@ -176,18 +177,22 @@ impl IndexerScheduler {
     let threads = self.threads.clone();
     let tx = self.schedule_tx.clone();
     let object_id = object_id.to_string();
-    rayon::spawn(move || {
-      if let Ok(Some(data)) = indexer.embed_in_thread_pool(contents, &threads) {
-        if let Err(err) = tx.send(EmbeddingRecord {
-          workspace_id,
-          object_id: object_id.to_string(),
-          tokens_used: data.tokens_consumed,
-          contents: data.params,
-        }) {
-          error!("Failed to send embedding record: {}", err);
-        }
-      }
-    });
+    rayon::spawn(
+      move || match indexer.embed_in_thread_pool(contents, &threads) {
+        Ok(Some(data)) => {
+          if let Err(err) = tx.send(EmbeddingRecord {
+            workspace_id,
+            object_id: object_id.to_string(),
+            tokens_used: data.tokens_consumed,
+            contents: data.params,
+          }) {
+            error!("Failed to send embedding record: {}", err);
+          }
+        },
+        Ok(None) => warn!("No embedding for collab:{}", object_id),
+        Err(err) => error!("Failed to embed collab: {}", err),
+      },
+    );
 
     Ok(())
   }

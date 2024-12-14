@@ -10,13 +10,11 @@ use serde_json::json;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use client_api_test::*;
-use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
-
 use crate::collab::util::{
   generate_random_bytes, generate_random_string, make_big_collab_doc_state,
 };
-
+use client_api_test::*;
+use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
   let collab_type = CollabType::Unknown;
@@ -654,7 +652,7 @@ async fn offline_and_then_sync_through_http_request() {
     .await;
   test_client
     .api_client
-    .post_collab_doc_state(
+    .collab_full_sync(
       &workspace_id,
       &object_id,
       CollabType::Unknown,
@@ -691,7 +689,7 @@ async fn offline_and_then_sync_through_http_request() {
     .await;
   test_client
     .api_client
-    .post_collab_doc_state(
+    .collab_full_sync(
       &workspace_id,
       &object_id,
       CollabType::Unknown,
@@ -750,7 +748,7 @@ async fn insert_text_through_http_post_request() {
     .await;
   test_client
     .api_client
-    .post_collab_doc_state(
+    .collab_full_sync(
       &workspace_id,
       &object_id,
       CollabType::Unknown,

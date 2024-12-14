@@ -4,7 +4,7 @@ use client_api::entity::{QueryCollab, QueryCollabParams};
 use client_api_test::{
   generate_unique_registered_user, generate_unique_registered_user_client, TestClient,
 };
-use collab::{core::origin::CollabClient, preclude::Collab};
+use collab::core::origin::CollabClient;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};

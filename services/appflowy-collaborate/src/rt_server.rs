@@ -1,9 +1,6 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use redis::aio::ConnectionManager;
-use tokio::sync::Notify;
-
 use access_control::collab::RealtimeAccessControl;
 use anyhow::{anyhow, Result};
 use app_error::AppError;
@@ -13,6 +10,7 @@ use collab_stream::client::CollabRedisStream;
 use collab_stream::stream_router::StreamRouter;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use redis::aio::ConnectionManager;
 use tokio::sync::mpsc::Sender;
 use tokio::task::yield_now;
 use tokio::time::interval;

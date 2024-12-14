@@ -2142,7 +2142,7 @@ async fn list_database_row_details_handler(
   let (workspace_id, db_id) = path_param.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let list_db_row_query = param.into_inner();
-  let with_doc = list_db_row_query.with_doc;
+  let with_doc = list_db_row_query.with_doc.unwrap_or_default();
   let row_ids = list_db_row_query.into_ids();
 
   if let Err(e) = Uuid::parse_str(&workspace_id) {
@@ -2174,6 +2174,7 @@ async fn list_database_row_details_handler(
     db_id,
     &row_ids,
     UNSUPPORTED_FIELD_TYPES,
+    with_doc,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))

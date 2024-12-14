@@ -335,7 +335,7 @@ pub struct ListDatabaseRowDetailParam {
   pub ids: String,
   // if set to true, document data will be fetched (if exist)
   // as markdown
-  pub with_doc: bool,
+  pub with_doc: Option<bool>,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
@@ -353,7 +353,7 @@ impl ListDatabaseRowDetailParam {
   pub fn new(ids: &[&str], with_doc: bool) -> Self {
     Self {
       ids: ids.join(","),
-      with_doc,
+      with_doc: Some(with_doc),
     }
   }
   pub fn into_ids(&self) -> Vec<&str> {
@@ -395,6 +395,9 @@ pub struct AFDatabaseRowDetail {
   pub id: String,
   // database field id -> cell data
   pub cells: HashMap<String, serde_json::Value>,
+  pub has_doc: bool,
+  /// available if rows has doc and client request for it in [ListDatabaseRowDetailParam]
+  pub doc: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

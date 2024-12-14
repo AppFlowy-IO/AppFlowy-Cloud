@@ -25,8 +25,8 @@ use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
+use collab_folder::CollabOrigin;
 use collab_folder::SectionItem;
-use collab_folder::{CollabOrigin, Folder};
 use database::collab::select_last_updated_database_row_ids;
 use database::collab::select_workspace_database_oid;
 use database::collab::{CollabStorage, GetCollabOrigin};
@@ -70,10 +70,11 @@ use super::publish_outline::collab_folder_to_published_outline;
 use super::utils::collab_from_doc_state;
 use super::utils::collab_to_bin;
 use super::utils::field_by_id_name_uniq;
-use super::utils::get_database_body;
-use super::utils::get_database_row_body;
 use super::utils::get_latest_collab;
+use super::utils::get_latest_collab_database_body;
+use super::utils::get_latest_collab_database_row_body;
 use super::utils::get_latest_collab_encoded;
+use super::utils::get_latest_collab_folder;
 use super::utils::get_row_details_serde;
 use super::utils::type_option_reader_by_id;
 use super::utils::type_options_serde;
@@ -348,36 +349,6 @@ pub async fn get_latest_workspace_database(
   Ok((workspace_database_oid, workspace_database))
 }
 
-pub async fn get_latest_collab_folder(
-  collab_storage: &CollabAccessControlStorage,
-  collab_origin: GetCollabOrigin,
-  workspace_id: &str,
-) -> Result<Folder, AppError> {
-  let folder_uid = if let GetCollabOrigin::User { uid } = collab_origin {
-    uid
-  } else {
-    // Dummy uid to open the collab folder if the request does not originate from user
-    0
-  };
-  let encoded_collab = get_latest_collab_encoded(
-    collab_storage,
-    collab_origin,
-    workspace_id,
-    workspace_id,
-    CollabType::Folder,
-  )
-  .await?;
-  let folder = Folder::from_collab_doc_state(
-    folder_uid,
-    CollabOrigin::Server,
-    encoded_collab.into(),
-    workspace_id,
-    vec![],
-  )
-  .map_err(|e| AppError::Unhandled(e.to_string()))?;
-  Ok(folder)
-}
-
 pub async fn get_published_view(
   collab_storage: &CollabAccessControlStorage,
   publish_namespace: String,
@@ -464,7 +435,7 @@ pub async fn list_database_row_ids(
   database_uuid_str: &str,
 ) -> Result<Vec<AFDatabaseRow>, AppError> {
   let (db_collab, db_body) =
-    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+    get_latest_collab_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
   // get any view_id
   let txn = db_collab.transact();
   let iid = db_body.get_inline_view_id(&txn);
@@ -571,7 +542,7 @@ pub async fn insert_database_row(
   };
 
   let (mut db_collab, db_body) =
-    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+    get_latest_collab_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
   let _row_updates = write_to_database_row(
     &db_collab,
     &db_body,
@@ -706,7 +677,7 @@ pub async fn upsert_database_row(
   row_doc_content: Option<String>,
 ) -> Result<(), AppError> {
   let (mut db_row_collab, db_row_body) =
-    match get_database_row_body(collab_storage, workspace_uuid_str, row_id).await {
+    match get_latest_collab_database_row_body(collab_storage, workspace_uuid_str, row_id).await {
       Ok(res) => res,
       Err(err) => match err {
         AppError::RecordNotFound(_) => {
@@ -730,7 +701,7 @@ pub async fn upsert_database_row(
   // At this point, db row exists,
   // so we modify it, put into storage and broadcast change
   let (db_collab, db_body) =
-    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+    get_latest_collab_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
   let db_row_collab_updates = write_to_database_row(
     &db_collab,
     &db_body,
@@ -770,7 +741,7 @@ pub async fn get_database_fields(
   database_uuid_str: &str,
 ) -> Result<Vec<AFDatabaseField>, AppError> {
   let (db_collab, db_body) =
-    get_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+    get_latest_collab_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
 
   let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
   let mut acc = Vec::with_capacity(all_fields.len());
@@ -798,7 +769,7 @@ pub async fn add_database_field(
   insert_field: AFInsertDatabaseField,
 ) -> Result<String, AppError> {
   let (mut db_collab, db_body) =
-    get_database_body(collab_storage, workspace_id, database_id).await?;
+    get_latest_collab_database_body(collab_storage, workspace_id, database_id).await?;
 
   let new_id = gen_field_id();
   let mut type_options = TypeOptions::new();
@@ -884,9 +855,11 @@ pub async fn list_database_row_details(
   database_uuid_str: String,
   row_ids: &[&str],
   unsupported_field_types: &[FieldType],
+  with_doc: bool,
 ) -> Result<Vec<AFDatabaseRowDetail>, AppError> {
   let (database_collab, db_body) =
-    get_database_body(collab_storage, &workspace_uuid_str, &database_uuid_str).await?;
+    get_latest_collab_database_body(collab_storage, &workspace_uuid_str, &database_uuid_str)
+      .await?;
 
   let all_fields: Vec<Field> = db_body
     .fields
@@ -907,7 +880,7 @@ pub async fn list_database_row_details(
       collab_type: CollabType::DatabaseRow,
     })
     .collect();
-  let database_row_details = collab_storage
+  let mut db_row_details = collab_storage
     .batch_get_collab(&uid, &workspace_uuid_str, query_collabs, true)
     .await
     .into_iter()
@@ -935,8 +908,15 @@ pub async fn list_database_row_details(
             return None;
           },
         };
+
+        let has_doc = !row_detail.meta.is_document_empty;
         let cells = get_row_details_serde(row_detail, &field_by_id, &type_option_reader_by_id);
-        Some(AFDatabaseRowDetail { id, cells })
+        Some(AFDatabaseRowDetail {
+          id,
+          cells,
+          has_doc,
+          doc: None,
+        })
       },
       QueryCollabResult::Failed { error } => {
         tracing::warn!("Failed to get collab: {:?}", error);
@@ -945,5 +925,74 @@ pub async fn list_database_row_details(
     })
     .collect::<Vec<AFDatabaseRowDetail>>();
 
-  Ok(database_row_details)
+  // Fill in the document content if requested and exists
+  if with_doc {
+    let doc_id_by_row_id = db_row_details
+      .iter()
+      .filter(|row| row.has_doc)
+      .flat_map(|row| {
+        row.id.parse::<Uuid>().ok().map(|row_uuid| {
+          (
+            row.id.clone(),
+            meta_id_from_row_id(&row_uuid, RowMetaKey::DocumentId),
+          )
+        })
+      })
+      .collect::<HashMap<_, _>>();
+
+    let query_db_docs = doc_id_by_row_id
+      .values()
+      .map(|doc_id| QueryCollab {
+        object_id: doc_id.to_string(),
+        collab_type: CollabType::Document,
+      })
+      .collect::<Vec<_>>();
+
+    let mut query_res = collab_storage
+      .batch_get_collab(&uid, &workspace_uuid_str, query_db_docs, true)
+      .await;
+
+    for row_detail in &mut db_row_details {
+      let doc_id = match doc_id_by_row_id.get(&row_detail.id) {
+        Some(doc_id) => doc_id,
+        None => continue,
+      };
+
+      let res = match query_res.remove(doc_id.as_str()) {
+        Some(res) => res,
+        None => continue,
+      };
+
+      match res {
+        QueryCollabResult::Success { encode_collab_v1 } => {
+          let ec = match EncodedCollab::decode_from_bytes(&encode_collab_v1) {
+            Ok(ec) => ec,
+            Err(err) => {
+              tracing::error!("Failed to decode encoded collab: {:?}", err);
+              continue;
+            },
+          };
+          match Collab::new_with_source(CollabOrigin::Server, doc_id, ec.into(), vec![], false) {
+            Ok(doc_collab) => match Document::open(doc_collab) {
+              Ok(doc) => match doc.to_plain_text(false) {
+                Ok(plain_text) => {
+                  row_detail.doc = Some(plain_text);
+                },
+                Err(err) => {
+                  tracing::error!("Failed to convert document to plain text: {:?}", err);
+                },
+              },
+              Err(err) => tracing::error!("Failed to open document: {:?}", err),
+            },
+            Err(err) => tracing::error!("Failed to create collab: {:?}", err),
+          }
+        },
+        QueryCollabResult::Failed { error } => {
+          tracing::warn!("Failed to get document collab: {:?}", error)
+        },
+      }
+    }
+  }
+
+  Ok(db_row_details)
 }

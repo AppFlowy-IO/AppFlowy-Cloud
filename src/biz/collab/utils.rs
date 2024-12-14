@@ -17,9 +17,11 @@ use collab_database::rows::RowDetail;
 use collab_database::rows::RowId;
 use collab_database::template::timestamp_parse::TimestampCellData;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
+use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::CollabOrigin;
+use collab_folder::Folder;
 use database::collab::CollabStorage;
 use database::collab::GetCollabOrigin;
 use database_entity::dto::QueryCollab;
@@ -178,7 +180,7 @@ pub fn type_options_serde(
   result
 }
 
-pub async fn get_database_row_body(
+pub async fn get_latest_collab_database_row_body(
   collab_storage: &CollabAccessControlStorage,
   workspace_uuid_str: &str,
   db_row_uuid_str: &str,
@@ -204,7 +206,7 @@ pub async fn get_database_row_body(
   Ok((db_row_collab, db_row_body))
 }
 
-pub async fn get_database_body(
+pub async fn get_latest_collab_database_body(
   collab_storage: &CollabAccessControlStorage,
   workspace_uuid_str: &str,
   database_uuid_str: &str,
@@ -269,6 +271,54 @@ pub async fn get_latest_collab(
       ))
     })?;
   Ok(collab)
+}
+
+pub async fn get_latest_collab_folder(
+  collab_storage: &CollabAccessControlStorage,
+  collab_origin: GetCollabOrigin,
+  workspace_id: &str,
+) -> Result<Folder, AppError> {
+  let folder_uid = if let GetCollabOrigin::User { uid } = collab_origin {
+    uid
+  } else {
+    // Dummy uid to open the collab folder if the request does not originate from user
+    0
+  };
+  let encoded_collab = get_latest_collab_encoded(
+    collab_storage,
+    collab_origin,
+    workspace_id,
+    workspace_id,
+    CollabType::Folder,
+  )
+  .await?;
+  let folder = Folder::from_collab_doc_state(
+    folder_uid,
+    CollabOrigin::Server,
+    encoded_collab.into(),
+    workspace_id,
+    vec![],
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok(folder)
+}
+
+pub async fn get_latest_collab_document(
+  collab_storage: &CollabAccessControlStorage,
+  collab_origin: GetCollabOrigin,
+  workspace_id: &str,
+  doc_oid: &str,
+) -> Result<Document, AppError> {
+  let doc_collab = get_latest_collab(
+    collab_storage,
+    collab_origin,
+    workspace_id,
+    doc_oid,
+    CollabType::Document,
+  )
+  .await?;
+  let document = Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok(document)
 }
 
 pub async fn collab_to_bin(collab: Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {

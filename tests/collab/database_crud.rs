@@ -246,9 +246,12 @@ async fn database_insert_row_with_doc() {
   let todo_db = &databases[0];
 
   {
-    let new_row_id = c
+    let _new_row_id = c
       .add_database_item(&workspace_id, &todo_db.id, HashMap::from([]), None)
       .await
       .unwrap();
   }
+
+
+  // TODO: add test for doc content
 }

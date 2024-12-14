@@ -23,6 +23,7 @@ const AI_MODEL_HEADER_KEY: &str = "ai-model";
 #[derive(Clone, Debug)]
 pub struct AppFlowyAIClient {
   async_client: reqwest::Client,
+  #[allow(dead_code)]
   sync_client: ureq::Agent,
   url: String,
 }
@@ -371,6 +372,7 @@ impl AppFlowyAIClient {
     Ok(request_builder)
   }
 
+  #[allow(dead_code)]
   fn sync_http_client(&self, method: Method, url: &str) -> Result<ureq::Request, AIError> {
     let request = self.sync_client.request(method.as_str(), url);
     Ok(request)

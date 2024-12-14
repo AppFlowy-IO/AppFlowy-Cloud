@@ -21,7 +21,7 @@ serde_repr = { version = "0.1", optional = true }
 futures = "0.3.30"
 bytes.workspace = true
 pin-project = "1.1.5"
-ureq = { version = "2.12.1", features = ["json"] }
+ureq = { version = "2.12.1", optional = true, features = ["json"] }
 
 [dev-dependencies]
 appflowy-ai-client = { path = ".", features = ["dto", "client-api"] }
@@ -44,6 +44,6 @@ client-api = [
   "serde_json",
   "tracing",
   "serde_repr",
-  "infra/request_util",
+  "infra/request_util", "ureq"
 ]
 dto = ["serde", "serde_json", "serde_repr"]

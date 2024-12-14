@@ -64,7 +64,7 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    By default, no authentication is needed to sign in.
 
 4. **Authentication Setup**:
-    Configure `docker-compose.yml` by removing unneeded services such as `tunnel` (cloudflare tunnel). More details: [here](https://github.com/AppFlowy-IO/AppFlowy-Cloud/blob/main/doc/DEPLOYMENT.md#3-optional-services)
+    Configure `docker-compose-extras.yml` by removing unneeded services such as `tunnel` (cloudflare tunnel). More details: [here](https://github.com/AppFlowy-IO/AppFlowy-Cloud/blob/main/doc/DEPLOYMENT.md#3-optional-services)
 
 5. **Start AppFlowy Services**:
    Launch the services using Docker Compose:

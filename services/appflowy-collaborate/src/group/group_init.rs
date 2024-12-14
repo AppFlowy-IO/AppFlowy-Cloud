@@ -339,7 +339,7 @@ impl CollabGroup {
     {
       // first check if we need to send any updates
       let collab_sv = self.state.state_vector.read().await;
-      if &*collab_sv <= &state_vector {
+      if *collab_sv <= state_vector {
         return Ok(vec![]);
       }
     }
@@ -372,7 +372,7 @@ impl CollabGroup {
     self.state.subscribers.contains_key(user)
   }
 
-  pub async fn remove_user(&self, user: &RealtimeUser) {
+  pub fn remove_user(&self, user: &RealtimeUser) {
     if self.state.subscribers.remove(user).is_some() {
       trace!(
         "{} remove subscriber from group: {}",

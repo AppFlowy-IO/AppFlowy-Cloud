@@ -63,14 +63,13 @@ pub struct TestClient {
 pub struct TestCollab {
   #[allow(dead_code)]
   pub origin: CollabOrigin,
-  pub collab: Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
+  pub collab: Arc<RwLock<Collab>>,
 }
 
 impl TestCollab {
   pub async fn encode_collab(&self) -> EncodedCollab {
     let lock = self.collab.read().await;
-    let collab = (*lock).borrow();
-    collab
+    lock
       .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
       .unwrap()
   }
@@ -215,8 +214,7 @@ impl TestClient {
     }
 
     let lock = self.collabs.get(object_id).unwrap().collab.read().await;
-    let collab = (*lock).borrow();
-    collab
+    lock
       .get_awareness()
       .iter()
       .flat_map(|(_a, client)| match &client.data {
@@ -469,8 +467,7 @@ impl TestClient {
   ) -> Result<(), Error> {
     let mut sync_state = {
       let lock = self.collabs.get(object_id).unwrap().collab.read().await;
-      let collab = (*lock).borrow();
-      collab.subscribe_sync_state()
+      lock.subscribe_sync_state()
     };
 
     let duration = Duration::from_secs(secs);
@@ -712,7 +709,8 @@ impl TestClient {
       .await
       .unwrap();
 
-    let collab = Arc::new(RwLock::from(collab)) as CollabRef;
+    let collab = Arc::new(RwLock::from(collab));
+    let collab_ref = collab.clone() as CollabRef;
     #[cfg(feature = "collab-sync")]
     {
       let handler = self
@@ -725,7 +723,7 @@ impl TestClient {
       let sync_plugin = SyncPlugin::new(
         origin.clone(),
         object,
-        Arc::downgrade(&collab),
+        Arc::downgrade(&collab_ref),
         sink,
         SinkConfig::default(),
         stream,
@@ -734,8 +732,7 @@ impl TestClient {
         Some(Duration::from_secs(10)),
       );
       let lock = collab.read().await;
-      let collab = (*lock).borrow();
-      collab.add_plugin(Box::new(sync_plugin));
+      lock.add_plugin(Box::new(sync_plugin));
     }
     {
       let mut lock = collab.write().await;
@@ -784,7 +781,8 @@ impl TestClient {
     )
     .unwrap();
     collab.emit_awareness_state();
-    let collab = Arc::new(RwLock::from(collab)) as CollabRef;
+    let collab = Arc::new(RwLock::from(collab));
+    let collab_ref = collab.clone() as CollabRef;
 
     #[cfg(feature = "collab-sync")]
     {
@@ -798,7 +796,7 @@ impl TestClient {
       let sync_plugin = SyncPlugin::new(
         origin.clone(),
         object,
-        Arc::downgrade(&collab),
+        Arc::downgrade(&collab_ref),
         sink,
         SinkConfig::default(),
         stream,
@@ -808,8 +806,7 @@ impl TestClient {
       );
 
       let lock = collab.read().await;
-      let collab = (*lock).borrow();
-      collab.add_plugin(Box::new(sync_plugin));
+      lock.add_plugin(Box::new(sync_plugin));
     }
     {
       let mut lock = collab.write().await;
@@ -875,8 +872,7 @@ impl TestClient {
 
   pub async fn get_edit_collab_json(&self, object_id: &str) -> Value {
     let lock = self.collabs.get(object_id).unwrap().collab.read().await;
-    let collab = (*lock).borrow();
-    collab.to_json_value()
+    lock.to_json_value()
   }
 
   /// data: [(view_id, meta_json, blob_hex)]
@@ -1065,8 +1061,7 @@ pub async fn assert_client_collab_within_secs(
           .collab
           .read()
           .await;
-        let collab = (*lock).borrow();
-        collab.to_json_value()
+        lock.to_json_value()
       } => {
         retry_count += 1;
         if retry_count > 60 {
@@ -1103,8 +1098,7 @@ pub async fn assert_client_collab_include_value(
           .collab
           .read()
           .await;
-        let collab = (*lock).borrow();
-        collab.to_json_value()
+        lock.to_json_value()
       } => {
         retry_count += 1;
         if retry_count > 30 {

@@ -1,5 +1,6 @@
 mod document_indexer;
 mod indexer_scheduler;
+pub mod metrics;
 mod open_ai;
 mod provider;
 

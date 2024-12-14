@@ -155,6 +155,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     IndexerProvider::new(ai_client),
     pg_pool.clone(),
     collab_storage.clone(),
+    metrics.embedding_metrics.clone(),
   );
 
   let app_state = AppState {

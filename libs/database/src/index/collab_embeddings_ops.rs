@@ -1,8 +1,8 @@
 use collab_entity::CollabType;
 use pgvector::Vector;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
-use sqlx::{Error, Executor, Postgres};
-use tracing::info;
+use sqlx::{Error, Executor, Postgres, Transaction};
+use std::ops::DerefMut;
 use uuid::Uuid;
 
 use database_entity::dto::{
@@ -84,26 +84,17 @@ impl PgHasArrayType for Fragment {
   }
 }
 
-pub async fn upsert_collab_embeddings<'a, E>(
-  executor: E,
+pub async fn upsert_collab_embeddings(
+  transaction: &mut Transaction<'_, Postgres>,
   workspace_id: &Uuid,
-  object_id: &str,
+  _object_id: &str,
   tokens_used: u32,
   records: Vec<AFCollabEmbeddedContent>,
-) -> Result<(), sqlx::Error>
-where
-  E: Executor<'a, Database = Postgres>,
-{
-  info!(
-    "upserting embeddings for object:{} with {} fragments in workspace {}",
-    object_id,
-    records.len(),
-    workspace_id
-  );
-
+) -> Result<(), sqlx::Error> {
   if records.is_empty() {
     return Ok(());
   }
+
   let object_id = records[0].object_id.clone();
   let collab_type = records[0].collab_type.clone();
   let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
@@ -114,7 +105,7 @@ where
     .bind(crate::collab::partition_key_from_collab_type(&collab_type))
     .bind(tokens_used as i32)
     .bind(fragments)
-    .execute(executor)
+    .execute(transaction.deref_mut())
     .await?;
   Ok(())
 }

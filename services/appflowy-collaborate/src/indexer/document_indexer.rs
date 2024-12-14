@@ -74,6 +74,10 @@ impl Indexer for DocumentIndexer {
     &self,
     mut content: Vec<AFCollabEmbeddedContent>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
+    if content.is_empty() {
+      return Ok(None);
+    }
+
     let object_id = match content.first() {
       None => return Ok(None),
       Some(first) => first.object_id.clone(),
@@ -127,6 +131,10 @@ impl Indexer for DocumentIndexer {
     content: Vec<AFCollabEmbeddedContent>,
     thread_pool: &ThreadPoolNoAbort,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
+    if content.is_empty() {
+      return Ok(None);
+    }
+
     thread_pool
       .install(|| self.embed(content))
       .map_err(|e| AppError::Unhandled(e.to_string()))?

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context};
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, AFCollabInfo, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas,
+  AFAccessLevel, AFCollabEmbedInfo, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas,
   CollabParams, QueryCollab, QueryCollabResult, RawData,
 };
 use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
@@ -750,20 +750,23 @@ pub async fn select_last_updated_database_row_ids(
   Ok(updated_row_items)
 }
 
-pub async fn get_collab_info<'a, E>(
+pub async fn select_collab_embed_info<'a, E>(
   tx: E,
   object_id: &str,
   collab_type: CollabType,
-) -> Result<Option<AFCollabInfo>, sqlx::Error>
+) -> Result<Option<AFCollabEmbedInfo>, sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
 {
-  let partition_key = crate::collab::partition_key_from_collab_type(&collab_type);
-  let result = sqlx::query!(
+  tracing::info!(
+    "select_collab_embed_info: object_id: {}, collab_type: {:?}",
+    object_id,
+    collab_type
+  );
+  let partition_key = partition_key_from_collab_type(&collab_type);
+  let record = sqlx::query!(
     r#"
-        SELECT
-            oid AS object_id,
-            indexed_at
+        SELECT oid AS object_id,indexed_at
         FROM af_collab_embeddings
         WHERE oid = $1 AND partition_key = $2
         "#,
@@ -771,10 +774,13 @@ where
     partition_key
   )
   .fetch_optional(tx)
-  .await?
-  .map(|row| AFCollabInfo {
+  .await?;
+
+  tracing::info!("select_collab_embed_info: {:?}", record);
+
+  let result = record.map(|row| AFCollabEmbedInfo {
     object_id: row.object_id,
-    embedding_index_at: DateTime::<Utc>::from_naive_utc_and_offset(row.indexed_at, Utc),
+    indexed_at: DateTime::<Utc>::from_naive_utc_and_offset(row.indexed_at, Utc),
   });
 
   Ok(result)

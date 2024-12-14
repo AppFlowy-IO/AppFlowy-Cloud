@@ -141,8 +141,8 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/collab/{object_id}/info")
-        .route(web::get().to(get_collab_info_handler)),
+      web::resource("/{workspace_id}/collab/{object_id}/embed-info")
+        .route(web::get().to(get_collab_embed_info_handler)),
     )
     .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
@@ -2138,22 +2138,19 @@ async fn parser_realtime_msg(
   }
 }
 
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn get_collab_info_handler(
-  payload: Json<WorkspaceCollabIdentify>,
+#[instrument(level = "debug", skip_all, err)]
+async fn get_collab_embed_info_handler(
+  path: web::Path<(String, String)>,
   query: web::Query<CollabTypeParam>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<AFCollabInfo>>> {
-  let payload = payload.into_inner();
+) -> Result<Json<AppResponse<AFCollabEmbedInfo>>> {
+  let (_, object_id) = path.into_inner();
   let collab_type = query.into_inner().collab_type;
-  let info = database::collab::get_collab_info(&state.pg_pool, &payload.object_id, collab_type)
+  let info = database::collab::select_collab_embed_info(&state.pg_pool, &object_id, collab_type)
     .await
     .map_err(AppResponseError::from)?
     .ok_or_else(|| {
-      AppError::RecordNotFound(format!(
-        "Collab with object_id {} not found",
-        payload.object_id
-      ))
+      AppError::RecordNotFound(format!("Collab with object_id {} not found", object_id))
     })?;
   Ok(Json(AppResponse::Ok().with_data(info)))
 }

@@ -323,6 +323,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     IndexerProvider::new(appflowy_ai_client.clone()),
     pg_pool.clone(),
     collab_access_control_storage.clone(),
+    metrics.embedding_metrics.clone(),
   );
 
   info!("Application state initialized");

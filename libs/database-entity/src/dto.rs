@@ -427,11 +427,11 @@ pub struct AFCollabMember {
   pub permission: AFPermission,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct AFCollabInfo {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AFCollabEmbedInfo {
   pub object_id: String,
   /// The timestamp when the object embeddings updated
-  pub embedding_index_at: DateTime<Utc>,
+  pub indexed_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

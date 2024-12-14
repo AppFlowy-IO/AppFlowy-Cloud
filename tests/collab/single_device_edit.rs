@@ -461,7 +461,6 @@ async fn simulate_multiple_user_edit_collab_test() {
         .collab
         .read()
         .await)
-        .borrow()
         .to_json_value();
 
       (expected_json, json)

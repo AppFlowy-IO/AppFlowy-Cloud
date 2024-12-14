@@ -10,8 +10,9 @@ use client_api_entity::workspace_dto::{
   DatabaseRowUpdatedItem, ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
 };
 use client_api_entity::{
-  AFCollabInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
-  DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
+  AFCollabEmbedInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams,
+  CreateCollabParams, DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams,
+  UpdateCollabWebParams,
 };
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
@@ -408,24 +409,25 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn get_collab_info(
+  pub async fn get_collab_embed_info(
     &self,
     workspace_id: &str,
     object_id: &str,
     collab_type: CollabType,
-  ) -> Result<AFCollabInfo, AppResponseError> {
+  ) -> Result<AFCollabEmbedInfo, AppResponseError> {
     let url = format!(
-      "{}/api/workspace/{}/collab/{}/info",
-      self.base_url, workspace_id, object_id
+      "{}/api/workspace/{workspace_id}/collab/{object_id}/embed-info",
+      self.base_url
     );
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
+      .header("Content-Type", "application/json")
       .query(&CollabTypeParam { collab_type })
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<AFCollabInfo>::from_response(resp)
+    AppResponse::<AFCollabEmbedInfo>::from_response(resp)
       .await?
       .into_data()
   }

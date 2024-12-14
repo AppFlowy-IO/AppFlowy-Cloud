@@ -116,7 +116,7 @@ impl IndexerProvider {
         match &cid.collab_type {
           CollabType::Document => {
             let collab = match storage
-              .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
+              .get_encode_collab(GetCollabOrigin::Server, cid.clone().into())
               .await {
               Ok(collab) => collab,
               Err(err) => {

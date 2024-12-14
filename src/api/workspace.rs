@@ -867,7 +867,7 @@ async fn get_collab_handler(
   let object_id = params.object_id.clone();
   let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, params, true)
+    .get_encode_collab(GetCollabOrigin::User { uid }, params)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -903,7 +903,7 @@ async fn v1_get_collab_handler(
 
   let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
+    .get_encode_collab(GetCollabOrigin::User { uid }, param)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -1188,7 +1188,6 @@ async fn create_collab_snapshot_handler(
     .get_encode_collab(
       GetCollabOrigin::User { uid },
       QueryCollabParams::new(&object_id, collab_type.clone(), &workspace_id),
-      true,
     )
     .await?
     .doc_state;

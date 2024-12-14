@@ -15,7 +15,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::borrow::Cow;
-
 use std::time::Duration;
 use tracing::{info, trace};
 
@@ -33,7 +32,11 @@ impl AppFlowyAIClient {
     info!("Creating AppFlowyAIClient with url: {}", url);
     let url = url.to_string();
     let async_client = reqwest::Client::new();
-    let sync_client = ureq::Agent::new();
+    let sync_client = ureq::AgentBuilder::new()
+      .max_idle_connections(10)
+      .max_idle_connections_per_host(10)
+      .timeout(Duration::from_secs(30))
+      .build();
     Self {
       async_client,
       sync_client,
@@ -154,12 +157,38 @@ impl AppFlowyAIClient {
   }
 
   pub fn embeddings(&self, params: EmbeddingRequest) -> Result<EmbeddingResponse, AIError> {
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY: Duration = Duration::from_secs(2);
     let url = format!("{}/embeddings", self.url);
-    let resp = self
-      .sync_http_client(Method::POST, &url)?
-      .send_json(params)
-      .map_err(|err| AIError::Internal(err.into()))?;
-    AIResponse::<EmbeddingResponse>::from_ur_response(resp)?.into_data()
+    let mut retries = 0;
+
+    loop {
+      let result = ureq::post(&url).send_json(params.clone());
+      // let result = self
+      //   .sync_http_client(Method::POST, &url)?
+      //   .send_json(params.clone());
+      match result {
+        Ok(resp) => {
+          return AIResponse::<EmbeddingResponse>::from_ur_response(resp)?.into_data();
+        },
+        Err(err) => {
+          if matches!(err, ureq::Error::Transport(_)) {
+            return Err(AIError::InvalidRequest(err.to_string()));
+          }
+
+          retries += 1;
+          if retries >= MAX_RETRIES {
+            tracing::error!(
+              "embeddings request failed after {} retries: {:?}",
+              retries,
+              err
+            );
+            return Err(AIError::Internal(err.into()));
+          }
+          std::thread::sleep(RETRY_DELAY);
+        },
+      }
+    }
   }
 
   pub async fn search_documents(

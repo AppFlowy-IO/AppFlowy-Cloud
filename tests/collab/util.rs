@@ -46,7 +46,7 @@ pub fn make_big_collab_doc_state(object_id: &str, key: &str, value: String) -> V
 }
 
 pub struct TestDocumentEditor {
-  document: Document,
+  pub document: Document,
 }
 
 impl TestDocumentEditor {
@@ -82,7 +82,7 @@ impl TestDocumentEditor {
   }
 
   pub fn to_plain_text(&self) -> String {
-    self.document.to_plain_text(false).unwrap()
+    self.document.to_plain_text(false, false).unwrap()
   }
 }
 

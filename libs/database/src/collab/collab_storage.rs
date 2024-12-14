@@ -114,7 +114,6 @@ pub trait CollabStorage: Send + Sync + 'static {
     &self,
     origin: GetCollabOrigin,
     params: QueryCollabParams,
-    from_editing_collab: bool,
   ) -> AppResult<EncodedCollab>;
 
   async fn batch_get_collab(

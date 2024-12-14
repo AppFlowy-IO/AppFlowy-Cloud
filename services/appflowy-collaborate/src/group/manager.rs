@@ -121,7 +121,7 @@ where
     let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
     let res = self
       .storage
-      .get_encode_collab(GetCollabOrigin::Server, params, false)
+      .get_encode_collab(GetCollabOrigin::Server, params)
       .await;
     let state_vector = match res {
       Ok(collab) => Collab::new_with_source(
@@ -186,7 +186,7 @@ where
   S: CollabStorage,
 {
   let encode_collab = storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, params.clone(), false)
+    .get_encode_collab(GetCollabOrigin::User { uid }, params.clone())
     .await?;
   let result = Collab::new_with_source(
     CollabOrigin::Server,

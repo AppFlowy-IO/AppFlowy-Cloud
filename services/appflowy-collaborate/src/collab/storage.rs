@@ -131,47 +131,6 @@ where
       .await?;
     Ok(())
   }
-  async fn get_encode_collab_from_editing(&self, oid: &str) -> Option<EncodedCollab> {
-    let object_id = oid.to_string();
-    let (ret, rx) = tokio::sync::oneshot::channel();
-    let timeout_duration = Duration::from_secs(5);
-
-    // Attempt to send the command to the realtime server
-    if let Err(err) = self
-      .rt_cmd_sender
-      .send(CollaborationCommand::GetEncodeCollab { object_id, ret })
-      .await
-    {
-      error!(
-        "Failed to send get encode collab command to realtime server: {}",
-        err
-      );
-      return None;
-    }
-
-    // Await the response from the realtime server with a timeout
-    match timeout(timeout_duration, rx).await {
-      Ok(Ok(Some(encode_collab))) => Some(encode_collab),
-      Ok(Ok(None)) => {
-        trace!("Editing collab not found: `{}`", oid);
-        None
-      },
-      Ok(Err(err)) => {
-        error!(
-          "Failed to get collab from realtime server `{}`: {}",
-          oid, err
-        );
-        None
-      },
-      Err(_) => {
-        error!(
-          "Timeout trying to read collab `{}` from realtime server",
-          oid
-        );
-        None
-      },
-    }
-  }
 
   async fn batch_get_encode_collab_from_editing(
     &self,
@@ -397,12 +356,11 @@ where
     }
   }
 
-  #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, from_editing_collab = %from_editing_collab))]
+  #[instrument(level = "trace", skip_all, fields(oid = %params.object_id))]
   async fn get_encode_collab(
     &self,
     origin: GetCollabOrigin,
     params: QueryCollabParams,
-    from_editing_collab: bool,
   ) -> AppResult<EncodedCollab> {
     params.validate()?;
     match origin {
@@ -414,18 +372,6 @@ where
           .await?;
       },
       GetCollabOrigin::Server => {},
-    }
-
-    // Early return if editing collab is initialized, as it indicates no need to query further.
-    if from_editing_collab {
-      // Attempt to retrieve encoded collab from the editing collab
-      if let Some(value) = self.get_encode_collab_from_editing(&params.object_id).await {
-        trace!(
-          "Did get encode collab {} from editing collab",
-          params.object_id
-        );
-        return Ok(value);
-      }
     }
 
     let encode_collab = self

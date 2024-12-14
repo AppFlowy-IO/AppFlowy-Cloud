@@ -1226,7 +1226,7 @@ impl CollabPersister {
         );
         let result = self
           .storage
-          .get_encode_collab(GetCollabOrigin::Server, params, false)
+          .get_encode_collab(GetCollabOrigin::Server, params)
           .await;
         match result {
           Ok(encoded_collab) => encoded_collab.doc_state,

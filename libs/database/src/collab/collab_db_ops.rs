@@ -776,8 +776,6 @@ where
   .fetch_optional(tx)
   .await?;
 
-  tracing::info!("select_collab_embed_info: {:?}", record);
-
   let result = record.map(|row| AFCollabEmbedInfo {
     object_id: row.object_id,
     indexed_at: DateTime::<Utc>::from_naive_utc_and_offset(row.indexed_at, Utc),

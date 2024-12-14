@@ -26,39 +26,16 @@ async fn query_collab_embedding_after_create_test() {
 
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-  let doc_state = editor.encode_collab().encode_to_bytes().unwrap();
   let params = CreateCollabParams {
     workspace_id: workspace_id.clone(),
     object_id: object_id.clone(),
-    encoded_collab_v1: doc_state,
+    encoded_collab_v1: editor.encode_collab().encode_to_bytes().unwrap(),
     collab_type: CollabType::Document,
   };
   test_client.api_client.create_collab(params).await.unwrap();
-
-  // Retry until the result is ok, with a timeout of 30 seconds
-  let result = timeout(Duration::from_secs(30), async {
-    loop {
-      let response = test_client
-        .api_client
-        .get_collab_embed_info(&workspace_id, &object_id, CollabType::Document)
-        .await;
-
-      if response.is_ok() {
-        return response; // Return the successful response
-      }
-
-      println!("error: {:?}", response.unwrap_err());
-      tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-  })
-  .await;
-
-  // Ensure the timeout didn't occur and the result is ok
-  match result {
-    Ok(Ok(_)) => println!("Test passed: Collab info retrieved successfully."),
-    Ok(Err(e)) => panic!("Test failed: API returned an error: {:?}", e),
-    Err(_) => panic!("Test failed: Timeout after 30 seconds."),
-  }
+  test_client
+    .wait_until_object_embedding(&workspace_id, &object_id)
+    .await;
 }
 
 #[tokio::test]

@@ -104,6 +104,22 @@ pub fn empty_document_editor(object_id: &str) -> TestDocumentEditor {
   }
 }
 
+pub fn nathan_document_encode_collab(object_id: &str) -> EncodedCollab {
+  let mut editor = empty_document_editor(object_id);
+  let contents = vec![
+    "Nathan is a software programmer who spends his days coding and solving problems.",
+    "Outside of work, he enjoys staying active with sports like tennis, basketball, cycling, badminton, and snowboarding.",
+    "He learned tennis while living in Singapore and now enjoys playing with his friends on weekends.",
+    "Nathan had an unforgettable experience trying two diamond slopes in Lake Tahoe, which challenged his snowboarding skills.",
+    "He brought his bike with him when he moved to Singapore, excited to explore the city on two wheels.",
+    "Although he hasn’t ridden his bike in Singapore yet, Nathan looks forward to cycling through the city’s famous parks and scenic routes.",
+    "Nathan enjoys the thrill of playing different sports, finding balance between his work and physical activities.",
+    "From the adrenaline of snowboarding to the strategic moves on the tennis court, each sport gives him a sense of freedom and excitement.",
+  ];
+  editor.insert_paragraphs(contents.into_iter().map(|s| s.to_string()).collect());
+  editor.encode_collab()
+}
+
 #[allow(dead_code)]
 pub fn empty_collab_doc_state(object_id: &str, collab_type: CollabType) -> Vec<u8> {
   match collab_type {

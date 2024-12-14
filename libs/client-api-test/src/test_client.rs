@@ -553,6 +553,30 @@ impl TestClient {
     self.api_client.get_profile().await.unwrap()
   }
 
+  pub async fn wait_until_object_embedding(&self, workspace_id: &str, object_id: &str) {
+    let result = timeout(Duration::from_secs(30), async {
+      while self
+        .api_client
+        .get_collab_embed_info(workspace_id, object_id, CollabType::Document)
+        .await
+        .is_err()
+      {
+        tokio::time::sleep(Duration::from_millis(2000)).await;
+      }
+      self
+        .api_client
+        .get_collab_embed_info(workspace_id, object_id, CollabType::Document)
+        .await
+    })
+    .await;
+
+    match result {
+      Ok(Ok(_)) => {},
+      Ok(Err(e)) => panic!("Test failed: API returned an error: {:?}", e),
+      Err(_) => panic!("Test failed: Timeout after 30 seconds."),
+    }
+  }
+
   pub async fn get_snapshot(
     &self,
     workspace_id: &str,

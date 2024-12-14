@@ -21,10 +21,12 @@ use futures_util::StreamExt;
 use rayon::prelude::*;
 use sqlx::PgPool;
 use std::pin::Pin;
+use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tracing::{error, trace, warn};
+use tokio::time::interval;
+use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 pub struct IndexerScheduler {
@@ -67,7 +69,11 @@ impl IndexerScheduler {
       schedule_tx,
     });
 
-    tokio::spawn(spawn_write_indexing(rx, this.pg_pool.clone()));
+    tokio::spawn(spawn_write_indexing(
+      rx,
+      this.pg_pool.clone(),
+      this.metrics.clone(),
+    ));
     tokio::spawn(handle_unindexed_collabs(this.clone()));
     this
   }
@@ -256,7 +262,7 @@ fn get_unindexed_collabs(
   Box::pin(try_stream! {
     let collabs = get_collabs_without_embeddings(&db).await?;
     if !collabs.is_empty() {
-      tracing::info!("found {} unindexed collabs", collabs.len());
+      info!("found {} unindexed collabs", collabs.len());
     }
     for cid in collabs {
       match &cid.collab_type {
@@ -320,16 +326,35 @@ async fn index_unindexd_collab(
 }
 
 const EMBEDDING_RECORD_BUFFER_SIZE: usize = 5;
-async fn spawn_write_indexing(mut rx: UnboundedReceiver<EmbeddingRecord>, pg_pool: PgPool) {
+async fn spawn_write_indexing(
+  mut rx: UnboundedReceiver<EmbeddingRecord>,
+  pg_pool: PgPool,
+  metrics: Arc<EmbeddingMetrics>,
+) {
+  let total_insert_count = Arc::new(AtomicU32::new(0));
+  let clone_total_insert_count = total_insert_count.clone();
+  tokio::spawn(async move {
+    let mut interval = interval(Duration::from_secs(30));
+    loop {
+      interval.tick().await;
+      metrics.record_total_embed_count(
+        clone_total_insert_count.load(std::sync::atomic::Ordering::Relaxed) as i64,
+      );
+    }
+  });
+
   let mut buf = Vec::with_capacity(EMBEDDING_RECORD_BUFFER_SIZE);
   loop {
     let n = rx.recv_many(&mut buf, EMBEDDING_RECORD_BUFFER_SIZE).await;
     if n == 0 {
+      info!("Stop writing embeddings");
       break;
     }
+
+    total_insert_count.fetch_add(n as u32, std::sync::atomic::Ordering::Relaxed);
     let records = buf.drain(..n).collect::<Vec<_>>();
     match batch_insert_records(&pg_pool, records).await {
-      Ok(_) => tracing::info!("wrote {} embedding records", n),
+      Ok(_) => info!("wrote {} embedding records", n),
       Err(err) => error!("Failed to index collab {}", err),
     }
   }

@@ -26,14 +26,13 @@ use crate::collab::access_control::CollabStorageAccessControlImpl;
 use crate::collab::cache::CollabCache;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
-use crate::config::{Config, DatabaseSetting, S3Setting};
-use crate::indexer::{IndexerProvider, IndexerScheduler};
+use crate::config::{get_env_var, Config, DatabaseSetting, S3Setting};
+use crate::indexer::{IndexerConfiguration, IndexerProvider, IndexerScheduler};
 use crate::pg_listener::PgListeners;
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
 use crate::CollaborationServer;
 use access_control::casbin::access::AccessControl;
-use appflowy_ai_client::client::AppFlowyAIClient;
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 
 pub struct Application {
@@ -102,7 +101,6 @@ pub async fn run_actix_server(
 pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<AppState, Error> {
   let metrics = AppMetrics::new();
   let pg_pool = get_connection_pool(&config.db_settings).await?;
-  let ai_client = AppFlowyAIClient::new(&config.ai.url());
 
   // User cache
   let user_cache = UserCache::new(pg_pool.clone()).await;
@@ -151,11 +149,18 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   ));
 
   info!("Setting up Indexer provider...");
+  let embedder_config = IndexerConfiguration {
+    enable: crate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+      .parse::<bool>()
+      .unwrap_or(true),
+    openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+  };
   let indexer_scheduler = IndexerScheduler::new(
-    IndexerProvider::new(ai_client),
+    IndexerProvider::new(),
     pg_pool.clone(),
     collab_storage.clone(),
     metrics.embedding_metrics.clone(),
+    embedder_config,
   );
 
   let app_state = AppState {

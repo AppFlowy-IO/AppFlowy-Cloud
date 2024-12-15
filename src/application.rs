@@ -40,10 +40,11 @@ use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
-use appflowy_collaborate::indexer::{IndexerProvider, IndexerScheduler};
+use appflowy_collaborate::indexer::{IndexerConfiguration, IndexerProvider, IndexerScheduler};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
+use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
@@ -318,12 +319,18 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let mailer = get_mailer(&config.mailer).await?;
 
   info!("Setting up Indexer scheduler...");
-
+  let embedder_config = IndexerConfiguration {
+    enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+      .parse::<bool>()
+      .unwrap_or(true),
+    openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+  };
   let indexer_scheduler = IndexerScheduler::new(
-    IndexerProvider::new(appflowy_ai_client.clone()),
+    IndexerProvider::new(),
     pg_pool.clone(),
     collab_access_control_storage.clone(),
     metrics.embedding_metrics.clone(),
+    embedder_config,
   );
 
   info!("Application state initialized");

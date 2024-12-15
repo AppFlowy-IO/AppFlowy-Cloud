@@ -152,6 +152,7 @@ pub struct Embedding {
   pub embedding: EmbeddingOutput,
 }
 
+/// https://platform.openai.com/docs/api-reference/embeddings
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EmbeddingResponse {
   /// A string that is always set to "embedding".
@@ -161,6 +162,13 @@ pub struct EmbeddingResponse {
   /// A string representing the model used to generate the embeddings.
   pub model: String,
   /// An integer representing the total number of tokens used.
+  pub usage: EmbeddingUsage,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct EmbeddingUsage {
+  #[serde(default)]
+  pub prompt_tokens: i32,
   pub total_tokens: i32,
 }
 
@@ -177,15 +185,13 @@ pub struct EmbeddingRequest {
   pub input: EmbeddingInput,
   /// A string representing the model to use for generating embeddings.
   pub model: String,
-  /// An integer representing the chunk size for processing.
-  pub chunk_size: i32,
   /// An instance of `EmbeddingEncodingFormat` representing the format of the embedding.
   pub encoding_format: EmbeddingEncodingFormat,
   /// An integer representing the number of dimensions for the embedding.
   pub dimensions: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EmbeddingModel {
   #[serde(rename = "text-embedding-3-small")]
   TextEmbedding3Small,

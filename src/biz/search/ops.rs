@@ -26,12 +26,11 @@ pub async fn search_document(
     .embeddings(EmbeddingRequest {
       input: EmbeddingInput::String(request.query.clone()),
       model: EmbeddingModel::TextEmbedding3Small.to_string(),
-      chunk_size: 500,
       encoding_format: EmbeddingEncodingFormat::Float,
       dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
     })
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
-  let total_tokens = embeddings.total_tokens as u32;
+  let total_tokens = embeddings.usage.total_tokens as u32;
   metrics.record_search_tokens_used(&workspace_id, total_tokens);
   tracing::info!(
     "workspace {} OpenAI API search tokens used: {}",

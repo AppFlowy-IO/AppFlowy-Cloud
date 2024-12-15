@@ -245,13 +245,22 @@ async fn database_insert_row_with_doc() {
   assert_eq!(databases.len(), 1);
   let todo_db = &databases[0];
 
-  {
-    let _new_row_id = c
-      .add_database_item(&workspace_id, &todo_db.id, HashMap::from([]), None)
-      .await
-      .unwrap();
-  }
+  let row_doc = "This is a document of a database row";
+  let new_row_id = c
+    .add_database_item(
+      &workspace_id,
+      &todo_db.id,
+      HashMap::from([]),
+      row_doc.to_string().into(),
+    )
+    .await
+    .unwrap();
 
-
-  // TODO: add test for doc content
+  let row_details = c
+    .list_database_row_details(&workspace_id, &todo_db.id, &[&new_row_id], true)
+    .await
+    .unwrap();
+  let row_detail = &row_details[0];
+  assert!(row_detail.has_doc);
+  assert_eq!(row_detail.doc, Some("\nThis is a document of a database row".to_string()));
 }

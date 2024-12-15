@@ -974,7 +974,7 @@ pub async fn list_database_row_details(
           };
           match Collab::new_with_source(CollabOrigin::Server, doc_id, ec.into(), vec![], false) {
             Ok(doc_collab) => match Document::open(doc_collab) {
-              Ok(doc) => match doc.to_plain_text(false) {
+              Ok(doc) => match doc.to_plain_text(true, false) {
                 Ok(plain_text) => {
                   row_detail.doc = Some(plain_text);
                 },

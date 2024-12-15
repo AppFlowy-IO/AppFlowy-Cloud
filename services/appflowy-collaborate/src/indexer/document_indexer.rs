@@ -51,7 +51,7 @@ impl Indexer for DocumentIndexer {
       )
     })?;
 
-    let result = document.to_plain_text(collab.transact(), false);
+    let result = document.to_plain_text(collab.transact(), false, true);
     match result {
       Ok(content) => {
         create_embedding(

@@ -1,9 +1,8 @@
 use crate::dto::{
   AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextResponse,
-  CompletionType, CreateChatContext, CustomPrompt, Document, EmbeddingRequest, LocalAIConfig,
-  MessageData, OpenAIEmbeddingResponse, RepeatedLocalAIPackage, RepeatedRelatedQuestion,
-  SearchDocumentsRequest, SimilarityResponse, SummarizeRowResponse, TranslateRowData,
-  TranslateRowResponse,
+  CompletionType, CreateChatContext, CustomPrompt, Document, LocalAIConfig, MessageData,
+  RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SimilarityResponse,
+  SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 

@@ -1,7 +1,7 @@
+use crate::indexer::vector::rest::check_response;
+use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_ai_client::client::AIResponse;
 use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
-use appflowy_ai_client::error::AIError;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 
@@ -27,40 +27,29 @@ impl Embedder {
   }
 
   pub fn embed(&self, params: EmbeddingRequest) -> Result<OpenAIEmbeddingResponse, AppError> {
-    const MAX_RETRIES: u32 = 2;
-    const RETRY_DELAY: Duration = Duration::from_secs(2);
-    let mut retries = 0;
-
-    loop {
+    for attempt in 0..3 {
       let request = self
         .client
         .post(OPENAI_EMBEDDINGS_URL)
         .set("Authorization", &self.bearer)
         .set("Content-Type", "application/json");
 
-      match request.send_json(&params) {
+      let result = check_response(request.send_json(&params));
+      let retry_duration = match result {
         Ok(response) => {
           let data = from_response::<OpenAIEmbeddingResponse>(response)?;
           return Ok(data);
         },
-        Err(err) => {
-          if matches!(err, ureq::Error::Transport(_)) {
-            return Err(AppError::InvalidRequest(err.to_string()));
-          }
-
-          retries += 1;
-          if retries >= MAX_RETRIES {
-            tracing::error!(
-              "embeddings request failed after {} retries: {:?}",
-              retries,
-              err
-            );
-            return Err(AppError::Internal(err.into()));
-          }
-          std::thread::sleep(RETRY_DELAY);
-        },
+        Err(retry) => retry.into_duration(attempt),
       }
+      .map_err(|err| AppError::Internal(err.into()))?;
+      let retry_duration = retry_duration.min(Duration::from_secs(10));
+      std::thread::sleep(retry_duration);
     }
+
+    Err(AppError::Internal(anyhow!(
+      "Failed to generate embeddings after 3 attempts"
+    )))
   }
 }
 

@@ -762,6 +762,7 @@ dependencies = [
  "tracing-subscriber",
  "unicode-normalization",
  "unicode-segmentation",
+ "ureq",
  "uuid",
  "validator",
  "workspace-template",

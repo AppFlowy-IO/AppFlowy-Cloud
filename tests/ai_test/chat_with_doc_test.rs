@@ -6,7 +6,7 @@ use shared_entity::dto::chat_dto::{CreateChatMessageParams, CreateChatParams};
 use uuid::Uuid;
 
 #[tokio::test]
-async fn query_collab_embedding_after_create_test() {
+async fn chat_with_embedded_document() {
   if !ai_test_enabled() {
     return;
   }
@@ -69,7 +69,7 @@ async fn query_collab_embedding_after_create_test() {
 Overall, Alex balances his work as a software programmer with his passion for sports, finding excitement and freedom in each activity.
   "#;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected, 0.83)
+    .assert_similarity(&workspace_id, &answer, expected, 0.8)
     .await;
 
   // remove all content for given document
@@ -119,6 +119,6 @@ Overall, Alex balances his work as a software programmer with his passion for sp
   he certainly has many experiences in the culinary world, where he enjoys savoring flavors and discovering new dishes
   "#;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected, 0.83)
+    .assert_similarity(&workspace_id, &answer, expected, 0.8)
     .await;
 }

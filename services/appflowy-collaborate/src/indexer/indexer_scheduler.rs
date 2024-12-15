@@ -1,10 +1,13 @@
 use crate::config::get_env_var;
 use crate::indexer::metrics::EmbeddingMetrics;
+use crate::indexer::vector::embedder::Embedder;
+use crate::indexer::vector::open_ai;
 use crate::indexer::IndexerProvider;
 use crate::thread_pool_no_abort::{ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 use actix::dev::Stream;
 use anyhow::anyhow;
 use app_error::AppError;
+use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
 use async_stream::try_stream;
 use bytes::Bytes;
 use collab::core::collab::DataSource;
@@ -21,11 +24,9 @@ use futures_util::StreamExt;
 use rayon::prelude::*;
 use sqlx::PgPool;
 use std::pin::Pin;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::time::interval;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
@@ -37,6 +38,12 @@ pub struct IndexerScheduler {
   #[allow(dead_code)]
   metrics: Arc<EmbeddingMetrics>,
   schedule_tx: UnboundedSender<EmbeddingRecord>,
+  config: IndexerConfiguration,
+}
+
+pub struct IndexerConfiguration {
+  pub enable: bool,
+  pub openai_api_key: String,
 }
 
 impl IndexerScheduler {
@@ -45,6 +52,7 @@ impl IndexerScheduler {
     pg_pool: PgPool,
     storage: Arc<dyn CollabStorage>,
     metrics: Arc<EmbeddingMetrics>,
+    config: IndexerConfiguration,
   ) -> Arc<Self> {
     let (schedule_tx, rx) = unbounded_channel::<EmbeddingRecord>();
     // Since threads often block while waiting for I/O, you can use more threads than CPU cores to improve concurrency.
@@ -67,15 +75,48 @@ impl IndexerScheduler {
       threads,
       metrics,
       schedule_tx,
+      config,
     });
 
-    tokio::spawn(spawn_write_indexing(
-      rx,
-      this.pg_pool.clone(),
-      this.metrics.clone(),
-    ));
-    tokio::spawn(handle_unindexed_collabs(this.clone()));
+    info!("Indexer scheduler is enabled: {}", this.index_enabled());
+    if this.index_enabled() {
+      tokio::spawn(spawn_write_indexing(rx, this.pg_pool.clone()));
+      tokio::spawn(handle_unindexed_collabs(this.clone()));
+    }
+
     this
+  }
+
+  fn index_enabled(&self) -> bool {
+    // if indexing is disabled, return false
+    if !self.config.enable {
+      return false;
+    }
+
+    // if openai api key is empty, return false
+    if self.config.openai_api_key.is_empty() {
+      return false;
+    }
+
+    true
+  }
+
+  fn create_embedder(&self) -> Result<Embedder, AppError> {
+    if self.config.openai_api_key.is_empty() {
+      return Err(AppError::AIServiceUnavailable(
+        "OpenAI API key is empty".to_string(),
+      ));
+    }
+
+    Ok(Embedder::OpenAI(open_ai::Embedder::new(
+      self.config.openai_api_key.clone(),
+    )))
+  }
+
+  pub fn embeddings(&self, request: EmbeddingRequest) -> Result<OpenAIEmbeddingResponse, AppError> {
+    let embedder = self.create_embedder()?;
+    let embeddings = embedder.embed(request)?;
+    Ok(embeddings)
   }
 
   pub fn index_encoded_collab_one<T>(
@@ -86,12 +127,19 @@ impl IndexerScheduler {
   where
     T: Into<IndexedCollab>,
   {
+    if !self.index_enabled() {
+      return Ok(());
+    }
+
+    let embedder = self.create_embedder()?;
     let indexed_collab = indexed_collab.into();
     let workspace_id = Uuid::parse_str(workspace_id)?;
     let indexer_provider = self.indexer_provider.clone();
     let tx = self.schedule_tx.clone();
-    rayon::spawn(
-      move || match process_collab(&indexer_provider, &indexed_collab) {
+
+    let metrics = self.metrics.clone();
+    rayon::spawn(move || {
+      match process_collab(&embedder, &indexer_provider, &indexed_collab, &metrics) {
         Ok(Some((tokens_used, contents))) => {
           if let Err(err) = tx.send(EmbeddingRecord {
             workspace_id,
@@ -109,8 +157,8 @@ impl IndexerScheduler {
             indexed_collab.object_id, err
           );
         },
-      },
-    );
+      }
+    });
     Ok(())
   }
 
@@ -119,15 +167,21 @@ impl IndexerScheduler {
     workspace_id: &str,
     indexed_collabs: Vec<IndexedCollab>,
   ) -> Result<(), AppError> {
+    if !self.index_enabled() {
+      return Ok(());
+    }
+
+    let embedder = self.create_embedder()?;
     let workspace_id = Uuid::parse_str(workspace_id)?;
     let indexer_provider = self.indexer_provider.clone();
     let threads = self.threads.clone();
     let tx = self.schedule_tx.clone();
+    let metrics = self.metrics.clone();
     rayon::spawn(move || {
       let results = threads.install(|| {
         indexed_collabs
           .into_par_iter()
-          .filter_map(|collab| process_collab(&indexer_provider, &collab).ok())
+          .filter_map(|collab| process_collab(&embedder, &indexer_provider, &collab, &metrics).ok())
           .filter_map(|result| result.map(|r| (r.0, r.1)))
           .collect::<Vec<_>>()
       });
@@ -165,7 +219,12 @@ impl IndexerScheduler {
     collab: &Arc<RwLock<Collab>>,
     collab_type: &CollabType,
   ) -> Result<(), AppError> {
+    if !self.index_enabled() {
+      return Ok(());
+    }
+
     let workspace_id = Uuid::parse_str(workspace_id)?;
+    let embedder = self.create_embedder()?;
     let indexer = self
       .indexer_provider
       .indexer_for(collab_type)
@@ -177,14 +236,22 @@ impl IndexerScheduler {
       })?;
 
     let lock = collab.read().await;
-    let chunks = indexer.create_embedded_chunks(&lock)?;
+    let chunks = indexer.create_embedded_chunks(&lock, embedder.model())?;
     drop(lock); // release the read lock ASAP
 
     let threads = self.threads.clone();
     let tx = self.schedule_tx.clone();
     let object_id = object_id.to_string();
-    rayon::spawn(
-      move || match indexer.embed_in_thread_pool(chunks, &threads) {
+    let metrics = self.metrics.clone();
+    rayon::spawn(move || {
+      let start = Instant::now();
+      metrics.record_embed_count(1);
+
+      let result = indexer.embed_in_thread_pool(&embedder, chunks, &threads);
+      let duration = start.elapsed();
+      metrics.record_processing_time(duration.as_millis());
+
+      match result {
         Ok(Some(data)) => {
           if let Err(err) = tx.send(EmbeddingRecord {
             workspace_id,
@@ -196,14 +263,24 @@ impl IndexerScheduler {
           }
         },
         Ok(None) => warn!("No embedding for collab:{}", object_id),
-        Err(err) => error!("Failed to embed collab: {}", err),
-      },
-    );
+        Err(err) => {
+          metrics.record_failed_embed_count(1);
+          error!(
+            "Failed to create embeddings content for collab:{}, error:{}",
+            object_id, err
+          );
+        },
+      }
+    });
 
     Ok(())
   }
 
   pub async fn can_index_workspace(&self, workspace_id: &str) -> Result<bool, AppError> {
+    if !self.index_enabled() {
+      return Ok(false);
+    }
+
     let uuid = Uuid::parse_str(workspace_id)?;
     let settings = select_workspace_settings(&self.pg_pool, &uuid).await?;
     match settings {
@@ -217,41 +294,44 @@ async fn handle_unindexed_collabs(scheduler: Arc<IndexerScheduler>) {
   // wait for 30 seconds before starting indexing
   tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
 
-  let start = Instant::now();
   let mut i = 0;
   let mut stream = get_unindexed_collabs(&scheduler.pg_pool, scheduler.storage.clone());
   let record_tx = scheduler.schedule_tx.clone();
+  let start = Instant::now();
   while let Some(result) = stream.next().await {
-    match result {
-      Ok(collab) => {
-        let workspace = collab.workspace_id;
-        let oid = collab.object_id.clone();
-        if let Err(err) = index_unindexd_collab(
-          &scheduler.indexer_provider,
-          scheduler.threads.clone(),
-          collab,
-          record_tx.clone(),
-        )
-        .await
-        {
-          // only logging error in debug mode. Will be enabled in production if needed.
-          if cfg!(debug_assertions) {
-            warn!("failed to index collab {}/{}: {}", workspace, oid, err);
+    if let Ok(embedder) = scheduler.create_embedder() {
+      match result {
+        Ok(collab) => {
+          let workspace = collab.workspace_id;
+          let oid = collab.object_id.clone();
+          if let Err(err) = index_unindexd_collab(
+            embedder,
+            &scheduler.indexer_provider,
+            scheduler.threads.clone(),
+            collab,
+            record_tx.clone(),
+          )
+          .await
+          {
+            // only logging error in debug mode. Will be enabled in production if needed.
+            if cfg!(debug_assertions) {
+              warn!("failed to index collab {}/{}: {}", workspace, oid, err);
+            }
+          } else {
+            i += 1;
           }
-        } else {
-          i += 1;
-        }
-      },
-      Err(err) => {
-        error!("failed to get unindexed document: {}", err);
-      },
+        },
+        Err(err) => {
+          error!("failed to get unindexed document: {}", err);
+        },
+      }
     }
   }
-  tracing::info!(
+  info!(
     "indexed {} unindexed collabs in {:?} after restart",
     i,
     start.elapsed()
-  );
+  )
 }
 
 fn get_unindexed_collabs(
@@ -290,6 +370,7 @@ fn get_unindexed_collabs(
 }
 
 async fn index_unindexd_collab(
+  embedder: Embedder,
   indexer_provider: &Arc<IndexerProvider>,
   threads: Arc<ThreadPoolNoAbort>,
   unindexed: UnindexedCollab,
@@ -307,8 +388,8 @@ async fn index_unindexd_collab(
         vec![],
         false,
       ) {
-        if let Ok(chunks) = indexer.create_embedded_chunks(&collab) {
-          if let Ok(Some(embeddings)) = indexer.embed_in_thread_pool(chunks, &threads) {
+        if let Ok(chunks) = indexer.create_embedded_chunks(&collab, embedder.model()) {
+          if let Ok(Some(embeddings)) = indexer.embed_in_thread_pool(&embedder, chunks, &threads) {
             if let Err(err) = record_tx.send(EmbeddingRecord {
               workspace_id,
               object_id: object_id.clone(),
@@ -326,23 +407,7 @@ async fn index_unindexd_collab(
 }
 
 const EMBEDDING_RECORD_BUFFER_SIZE: usize = 5;
-async fn spawn_write_indexing(
-  mut rx: UnboundedReceiver<EmbeddingRecord>,
-  pg_pool: PgPool,
-  metrics: Arc<EmbeddingMetrics>,
-) {
-  let total_insert_count = Arc::new(AtomicU32::new(0));
-  let clone_total_insert_count = total_insert_count.clone();
-  tokio::spawn(async move {
-    let mut interval = interval(Duration::from_secs(30));
-    loop {
-      interval.tick().await;
-      metrics.record_total_embed_count(
-        clone_total_insert_count.load(std::sync::atomic::Ordering::Relaxed) as i64,
-      );
-    }
-  });
-
+async fn spawn_write_indexing(mut rx: UnboundedReceiver<EmbeddingRecord>, pg_pool: PgPool) {
   let mut buf = Vec::with_capacity(EMBEDDING_RECORD_BUFFER_SIZE);
   loop {
     let n = rx.recv_many(&mut buf, EMBEDDING_RECORD_BUFFER_SIZE).await;
@@ -351,7 +416,6 @@ async fn spawn_write_indexing(
       break;
     }
 
-    total_insert_count.fetch_add(n as u32, std::sync::atomic::Ordering::Relaxed);
     let records = buf.drain(..n).collect::<Vec<_>>();
     match batch_insert_records(&pg_pool, records).await {
       Ok(_) => info!("wrote {} embedding records", n),
@@ -389,10 +453,15 @@ async fn batch_insert_records(
 }
 
 fn process_collab(
+  embdder: &Embedder,
   indexer_provider: &IndexerProvider,
   indexed_collab: &IndexedCollab,
+  metrics: &EmbeddingMetrics,
 ) -> Result<Option<(u32, Vec<AFCollabEmbeddedChunk>)>, AppError> {
   if let Some(indexer) = indexer_provider.indexer_for(&indexed_collab.collab_type) {
+    let start_time = Instant::now();
+    metrics.record_embed_count(1);
+
     let encode_collab = EncodedCollab::decode_from_bytes(&indexed_collab.encoded_collab)?;
     let collab = Collab::new_with_source(
       CollabOrigin::Empty,
@@ -403,9 +472,13 @@ fn process_collab(
     )
     .map_err(|err| AppError::Internal(err.into()))?;
 
-    let chunks = indexer.create_embedded_chunks(&collab)?;
-    match indexer.embed(chunks)? {
-      Some(embeddings) => {
+    let chunks = indexer.create_embedded_chunks(&collab, embdder.model())?;
+    let result = indexer.embed(embdder, chunks);
+    let duration = start_time.elapsed();
+    metrics.record_processing_time(duration.as_millis());
+
+    match result {
+      Ok(Some(embeddings)) => {
         trace!(
           "Indexed collab {}, tokens: {}",
           indexed_collab.object_id,
@@ -413,7 +486,11 @@ fn process_collab(
         );
         Ok(Some((embeddings.tokens_consumed, embeddings.params)))
       },
-      None => Ok(None),
+      Ok(None) => Ok(None),
+      Err(err) => {
+        metrics.record_failed_embed_count(1);
+        Err(err)
+      },
     }
   } else {
     Ok(None)

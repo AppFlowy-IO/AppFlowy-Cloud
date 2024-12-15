@@ -54,7 +54,6 @@ impl CreateCollabParams {
         object_id: self.object_id,
         encoded_collab_v1: Bytes::from(self.encoded_collab_v1),
         collab_type: self.collab_type,
-        embeddings: None,
       },
       self.workspace_id,
     )
@@ -93,8 +92,6 @@ pub struct CollabParams {
   #[validate(custom(function = "validate_not_empty_payload"))]
   pub encoded_collab_v1: Bytes,
   pub collab_type: CollabType,
-  #[serde(default)]
-  pub embeddings: Option<AFCollabEmbeddings>,
 }
 
 impl Display for CollabParams {
@@ -120,7 +117,6 @@ impl CollabParams {
       object_id,
       collab_type,
       encoded_collab_v1: Bytes::from(encoded_collab_v1),
-      embeddings: None,
     }
   }
 
@@ -138,7 +134,6 @@ impl CollabParams {
           object_id: old.object_id,
           encoded_collab_v1: old.encoded_collab_v1.into(),
           collab_type: old.collab_type,
-          embeddings: None,
         })
       },
     }
@@ -149,10 +144,7 @@ impl CollabParams {
       object_id: self.object_id.clone(),
       encoded_collab: self.encoded_collab_v1.to_vec(),
       collab_type: self.collab_type.to_proto() as i32,
-      embeddings: self
-        .embeddings
-        .as_ref()
-        .map(|embeddings| embeddings.to_proto()),
+      embeddings: None,
     }
   }
 
@@ -174,15 +166,10 @@ impl TryFrom<proto::collab::CollabParams> for CollabParams {
   fn try_from(proto: proto::collab::CollabParams) -> Result<Self, Self::Error> {
     let collab_type_proto = proto::collab::CollabType::try_from(proto.collab_type).unwrap();
     let collab_type = CollabType::from_proto(&collab_type_proto);
-    let embeddings = proto
-      .embeddings
-      .map(AFCollabEmbeddings::from_proto)
-      .transpose()?;
     Ok(Self {
       object_id: proto.object_id,
       encoded_collab_v1: Bytes::from(proto.encoded_collab),
       collab_type,
-      embeddings,
     })
   }
 }
@@ -1236,9 +1223,7 @@ pub struct WorkspaceNamespace {
 
 #[cfg(test)]
 mod test {
-  use crate::dto::{
-    AFCollabEmbeddedChunk, AFCollabEmbeddings, CollabParams, CollabParamsV0, EmbeddingContentType,
-  };
+  use crate::dto::{CollabParams, CollabParamsV0};
   use crate::error::EntityError;
   use bytes::Bytes;
   use collab_entity::{proto, CollabType};
@@ -1319,17 +1304,6 @@ mod test {
       object_id: "object_id".to_string(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::default(),
-      embeddings: Some(AFCollabEmbeddings {
-        tokens_consumed: 100,
-        params: vec![AFCollabEmbeddedChunk {
-          fragment_id: "fragment_id".to_string(),
-          object_id: "object_id".to_string(),
-          collab_type: CollabType::Document,
-          content_type: EmbeddingContentType::PlainText,
-          content: "content".to_string(),
-          embedding: Some(vec![1.0, 2.0, 3.0]),
-        }],
-      }),
     };
 
     let protobuf_encoded = collab_params_with_embeddings.to_protobuf_bytes();
@@ -1343,46 +1317,10 @@ mod test {
       object_id: "object_id".to_string(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::from(vec![1, 2, 3]),
-      embeddings: Some(AFCollabEmbeddings {
-        tokens_consumed: 100,
-        params: vec![AFCollabEmbeddedChunk {
-          fragment_id: "fragment_id".to_string(),
-          object_id: "object_id".to_string(),
-          collab_type: CollabType::Document,
-          content_type: EmbeddingContentType::PlainText,
-          content: "content".to_string(),
-          embedding: None,
-        }],
-      }),
     };
 
     let protobuf_encoded = collab_params.to_protobuf_bytes();
     let collab_params_decoded = CollabParams::from_protobuf_bytes(&protobuf_encoded).unwrap();
     assert_eq!(collab_params, collab_params_decoded);
-  }
-
-  #[test]
-  fn deserialize_collab_params_with_unknown_embedding_type() {
-    let invalid_serialization = proto::collab::CollabParams {
-      object_id: "object_id".to_string(),
-      encoded_collab: vec![1, 2, 3],
-      collab_type: proto::collab::CollabType::Document as i32,
-      embeddings: Some(proto::collab::CollabEmbeddings {
-        tokens_consumed: 100,
-        embeddings: vec![proto::collab::CollabEmbeddingsParams {
-          fragment_id: "fragment_id".to_string(),
-          object_id: "object_id".to_string(),
-          collab_type: proto::collab::CollabType::Document as i32,
-          content_type: proto::collab::EmbeddingContentType::Unknown as i32,
-          content: "content".to_string(),
-          embedding: vec![1.0, 2.0, 3.0],
-        }],
-      }),
-    }
-    .encode_to_vec();
-
-    let result = CollabParams::from_protobuf_bytes(&invalid_serialization);
-    assert!(result.is_err());
-    assert!(matches!(result, Err(EntityError::InvalidData(_))));
   }
 }

@@ -161,10 +161,6 @@ impl Retry {
       },
     }
   }
-
-  pub fn into_error(self) -> EmbedError {
-    self.error
-  }
 }
 
 #[allow(clippy::result_large_err)]

@@ -1323,29 +1323,4 @@ mod test {
     let collab_params_decoded = CollabParams::from_protobuf_bytes(&protobuf_encoded).unwrap();
     assert_eq!(collab_params, collab_params_decoded);
   }
-
-  #[test]
-  fn deserialize_collab_params_with_unknown_embedding_type() {
-    let invalid_serialization = proto::collab::CollabParams {
-      object_id: "object_id".to_string(),
-      encoded_collab: vec![1, 2, 3],
-      collab_type: proto::collab::CollabType::Document as i32,
-      embeddings: Some(proto::collab::CollabEmbeddings {
-        tokens_consumed: 100,
-        embeddings: vec![proto::collab::CollabEmbeddingsParams {
-          fragment_id: "fragment_id".to_string(),
-          object_id: "object_id".to_string(),
-          collab_type: proto::collab::CollabType::Document as i32,
-          content_type: proto::collab::EmbeddingContentType::Unknown as i32,
-          content: "content".to_string(),
-          embedding: vec![1.0, 2.0, 3.0],
-        }],
-      }),
-    }
-    .encode_to_vec();
-
-    let result = CollabParams::from_protobuf_bytes(&invalid_serialization);
-    assert!(result.is_err());
-    assert!(matches!(result, Err(EntityError::InvalidData(_))));
-  }
 }

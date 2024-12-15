@@ -7,6 +7,7 @@ use crate::thread_pool_no_abort::{ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 use actix::dev::Stream;
 use anyhow::anyhow;
 use app_error::AppError;
+use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
 use async_stream::try_stream;
 use bytes::Bytes;
 use collab::core::collab::DataSource;
@@ -116,6 +117,12 @@ impl IndexerScheduler {
     Ok(Embedder::OpenAI(open_ai::Embedder::new(
       self.config.openai_api_key.clone(),
     )))
+  }
+
+  pub fn embeddings(&self, request: EmbeddingRequest) -> Result<OpenAIEmbeddingResponse, AppError> {
+    let embedder = self.create_embedder()?;
+    let embeddings = embedder.embed(request)?;
+    Ok(embeddings)
   }
 
   pub fn index_encoded_collab_one<T>(

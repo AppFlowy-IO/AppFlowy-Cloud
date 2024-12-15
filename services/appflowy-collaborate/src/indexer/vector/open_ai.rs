@@ -1,6 +1,9 @@
 use app_error::AppError;
-use appflowy_ai_client::dto::{EmbeddingRequest, EmbeddingResponse};
+use appflowy_ai_client::client::AIResponse;
+use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
+use appflowy_ai_client::error::AIError;
 use serde::de::DeserializeOwned;
+use std::time::Duration;
 
 pub const OPENAI_EMBEDDINGS_URL: &str = "https://api.openai.com/v1/embeddings";
 
@@ -23,18 +26,41 @@ impl Embedder {
     Self { bearer, client }
   }
 
-  pub fn embed(&self, params: EmbeddingRequest) -> Result<EmbeddingResponse, AppError> {
-    let request = self
-      .client
-      .post(OPENAI_EMBEDDINGS_URL)
-      .set("Authorization", &self.bearer)
-      .set("Content-Type", "application/json");
+  pub fn embed(&self, params: EmbeddingRequest) -> Result<OpenAIEmbeddingResponse, AppError> {
+    const MAX_RETRIES: u32 = 2;
+    const RETRY_DELAY: Duration = Duration::from_secs(2);
+    let mut retries = 0;
 
-    let response = request
-      .send_json(params)
-      .map_err(|err| AppError::InvalidRequest(err.to_string()))?;
-    let data = from_response::<EmbeddingResponse>(response)?;
-    Ok(data)
+    loop {
+      let request = self
+        .client
+        .post(OPENAI_EMBEDDINGS_URL)
+        .set("Authorization", &self.bearer)
+        .set("Content-Type", "application/json");
+
+      match request.send_json(&params) {
+        Ok(response) => {
+          let data = from_response::<OpenAIEmbeddingResponse>(response)?;
+          return Ok(data);
+        },
+        Err(err) => {
+          if matches!(err, ureq::Error::Transport(_)) {
+            return Err(AppError::InvalidRequest(err.to_string()));
+          }
+
+          retries += 1;
+          if retries >= MAX_RETRIES {
+            tracing::error!(
+              "embeddings request failed after {} retries: {:?}",
+              retries,
+              err
+            );
+            return Err(AppError::Internal(err.into()));
+          }
+          std::thread::sleep(RETRY_DELAY);
+        },
+      }
+    }
   }
 }
 

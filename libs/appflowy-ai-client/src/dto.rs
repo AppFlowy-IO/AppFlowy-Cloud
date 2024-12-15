@@ -154,7 +154,7 @@ pub struct Embedding {
 
 /// https://platform.openai.com/docs/api-reference/embeddings
 #[derive(Serialize, Deserialize, Debug)]
-pub struct EmbeddingResponse {
+pub struct OpenAIEmbeddingResponse {
   /// A string that is always set to "embedding".
   pub object: String,
   /// A list of `Embedding` objects.

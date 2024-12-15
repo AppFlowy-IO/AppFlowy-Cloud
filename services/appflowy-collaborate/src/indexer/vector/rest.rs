@@ -103,7 +103,6 @@ impl std::fmt::Display for FaultSource {
   }
 }
 
-// retrying in case of failure
 pub struct Retry {
   pub error: EmbedError,
   strategy: RetryStrategy,
@@ -153,9 +152,9 @@ impl Retry {
   ///   a fixed delay of 100 milliseconds to the exponential backoff calculation. For example,
   ///   for the first retry, the delay will be `100 + 10^1 = 110` milliseconds, and for the second
   ///   retry, it will be `100 + 10^2 = 200` milliseconds.
-  pub fn into_duration(self, attempt: u32) -> Result<std::time::Duration, EmbedError> {
+  pub fn into_duration(self, attempt: u32) -> Result<std::time::Duration, Box<EmbedError>> {
     match self.strategy {
-      RetryStrategy::GiveUp => Err(self.error),
+      RetryStrategy::GiveUp => Err(Box::new(self.error)),
       RetryStrategy::Retry => Ok(std::time::Duration::from_millis((10u64).pow(attempt))),
       RetryStrategy::RetryAfterRateLimit => {
         Ok(std::time::Duration::from_millis(100 + 10u64.pow(attempt)))
@@ -168,6 +167,7 @@ impl Retry {
   }
 }
 
+#[allow(clippy::result_large_err)]
 pub(crate) fn check_response(
   response: Result<ureq::Response, ureq::Error>,
 ) -> Result<ureq::Response, Retry> {

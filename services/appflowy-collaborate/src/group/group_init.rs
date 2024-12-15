@@ -24,7 +24,7 @@ use database::collab::CollabStorage;
 use crate::error::RealtimeError;
 use crate::group::broadcast::{CollabBroadcast, Subscription};
 use crate::group::persistence::GroupPersistence;
-use crate::indexer::Indexer;
+use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabRealtimeMetrics;
 
 /// A group used to manage a single [Collab] object
@@ -40,6 +40,7 @@ pub struct CollabGroup {
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
+  indexer_scheduler: Arc<IndexerScheduler>,
   cancel: CancellationToken,
 }
 
@@ -57,7 +58,7 @@ impl CollabGroup {
     persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
-    indexer: Option<Arc<dyn Indexer>>,
+    indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, StreamError>
   where
     S: CollabStorage,
@@ -69,7 +70,6 @@ impl CollabGroup {
     ));
     let broadcast = CollabBroadcast::new(&object_id, 1000, edit_state.clone(), &collab);
     let cancel = CancellationToken::new();
-
     let collab = Arc::new(RwLock::new(collab));
     tokio::spawn(
       GroupPersistence::new(
@@ -81,7 +81,7 @@ impl CollabGroup {
         collab.clone(),
         collab_type.clone(),
         persistence_interval,
-        indexer,
+        indexer_scheduler.clone(),
         cancel.clone(),
       )
       .run(),
@@ -96,19 +96,52 @@ impl CollabGroup {
       subscribers: Default::default(),
       metrics_calculate,
       cancel,
+      indexer_scheduler,
     })
+  }
+
+  /// Generate embedding for the current Collab immediately
+  ///
+  pub async fn generate_embeddings(&self) {
+    let result = self
+      .indexer_scheduler
+      .index_collab(
+        &self.workspace_id,
+        &self.object_id,
+        &self.collab,
+        &self.collab_type,
+      )
+      .await;
+    match result {
+      Ok(_) => {
+        trace!(
+          "successfully indexed embeddings for {} {}/{}",
+          self.collab_type,
+          self.workspace_id,
+          self.object_id
+        );
+      },
+      Err(err) => {
+        trace!(
+          "failed to index embeddings for document {} {}/{}: {}",
+          self.collab_type,
+          self.workspace_id,
+          self.object_id,
+          err
+        );
+      },
+    }
   }
 
   pub async fn calculate_missing_update(
     &self,
     state_vector: StateVector,
   ) -> Result<Vec<u8>, RealtimeError> {
-    let guard = self.collab.read().await;
-    let txn = guard.transact();
-    let update = txn.encode_state_as_update_v1(&state_vector);
-    drop(txn);
-    drop(guard);
-
+    let update = {
+      let guard = self.collab.read().await;
+      let txn = guard.transact();
+      txn.encode_state_as_update_v1(&state_vector)
+    };
     Ok(update)
   }
 
@@ -264,37 +297,32 @@ pub(crate) struct EditState {
   max_edit_count: u32,
   max_secs: i64,
   /// Indicate the collab object is just created in the client and not exist in server database.
-  is_new: AtomicBool,
-  /// Indicate the collab is ready to save to disk.
-  /// If is_ready_to_save is true, which means the collab contains the requirement data and ready to save to disk.
-  is_ready_to_save: AtomicBool,
+  is_new_create: AtomicBool,
 }
 
 impl Display for EditState {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
-        f,
-        "EditState {{ edit_counter: {}, prev_edit_count: {},  max_edit_count: {}, max_secs: {}, is_new: {}, is_ready_to_save: {}",
-        self.edit_counter.load(Ordering::SeqCst),
-        self.prev_edit_count.load(Ordering::SeqCst),
-        self.max_edit_count,
-        self.max_secs,
-        self.is_new.load(Ordering::SeqCst),
-        self.is_ready_to_save.load(Ordering::SeqCst),
-        )
+      f,
+      "EditState {{ edit_counter: {}, prev_edit_count: {},  max_edit_count: {}, max_secs: {}, is_new: {}",
+      self.edit_counter.load(Ordering::SeqCst),
+      self.prev_edit_count.load(Ordering::SeqCst),
+      self.max_edit_count,
+      self.max_secs,
+      self.is_new_create.load(Ordering::SeqCst),
+    )
   }
 }
 
 impl EditState {
-  fn new(max_edit_count: u32, max_secs: i64, is_new: bool) -> Self {
+  fn new(max_edit_count: u32, max_secs: i64, is_new_create: bool) -> Self {
     Self {
       edit_counter: AtomicU32::new(0),
       prev_edit_count: Default::default(),
       prev_flush_timestamp: AtomicI64::new(chrono::Utc::now().timestamp()),
       max_edit_count,
       max_secs,
-      is_new: AtomicBool::new(is_new),
-      is_ready_to_save: AtomicBool::new(false),
+      is_new_create: AtomicBool::new(is_new_create),
     }
   }
 
@@ -326,24 +354,16 @@ impl EditState {
     self.edit_counter.load(Ordering::SeqCst) != self.prev_edit_count.load(Ordering::SeqCst)
   }
 
-  pub(crate) fn is_new(&self) -> bool {
-    self.is_new.load(Ordering::SeqCst)
+  pub(crate) fn is_new_create(&self) -> bool {
+    self.is_new_create.load(Ordering::SeqCst)
   }
 
-  pub(crate) fn set_is_new(&self, is_new: bool) {
-    self.is_new.store(is_new, Ordering::SeqCst);
-  }
-
-  pub(crate) fn set_ready_to_save(&self) {
-    self.is_ready_to_save.store(true, Ordering::Relaxed);
+  pub(crate) fn set_is_new_create(&self, is_new: bool) {
+    self.is_new_create.store(is_new, Ordering::SeqCst);
   }
 
   pub(crate) fn should_save_to_disk(&self) -> bool {
-    if !self.is_ready_to_save.load(Ordering::Relaxed) {
-      return false;
-    }
-
-    if self.is_new.load(Ordering::Relaxed) {
+    if self.is_new_create.load(Ordering::Relaxed) {
       return true;
     }
 
@@ -351,7 +371,7 @@ impl EditState {
     let prev_edit_count = self.prev_edit_count.load(Ordering::SeqCst);
 
     // If the collab is new, save it to disk and reset the flag
-    if self.is_new.load(Ordering::SeqCst) {
+    if self.is_new_create.load(Ordering::SeqCst) {
       return true;
     }
 
@@ -371,25 +391,5 @@ impl EditState {
 
     // Determine if we should save based on either condition being met
     edit_count_exceeded || (current_edit_count != prev_edit_count && time_exceeded)
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use crate::group::group_init::EditState;
-
-  #[test]
-  fn edit_state_test() {
-    let edit_state = EditState::new(10, 10, false);
-    edit_state.set_ready_to_save();
-    edit_state.increment_edit_count();
-
-    for _ in 0..10 {
-      edit_state.increment_edit_count();
-    }
-    assert!(edit_state.should_save_to_disk());
-    assert!(edit_state.should_save_to_disk());
-    edit_state.tick();
-    assert!(!edit_state.should_save_to_disk());
   }
 }

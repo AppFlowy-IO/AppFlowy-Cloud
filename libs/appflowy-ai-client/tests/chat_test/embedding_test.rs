@@ -14,7 +14,7 @@ async fn embedding_test() {
     encoding_format: EmbeddingEncodingFormat::Float,
     dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
   };
-  let result = client.embeddings(request).await.unwrap();
+  let result = client.embeddings(request).unwrap();
   assert!(result.total_tokens > 0);
   assert!(!result.data.is_empty());
 }

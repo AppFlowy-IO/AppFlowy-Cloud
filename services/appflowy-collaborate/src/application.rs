@@ -27,7 +27,7 @@ use crate::collab::cache::CollabCache;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
 use crate::config::{Config, DatabaseSetting, S3Setting};
-use crate::indexer::IndexerProvider;
+use crate::indexer::{IndexerProvider, IndexerScheduler};
 use crate::pg_listener::PgListeners;
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
@@ -81,7 +81,7 @@ pub async fn run_actix_server(
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     config.collab.edit_state_max_count,
     config.collab.edit_state_max_secs,
-    state.indexer_provider.clone(),
+    state.indexer_scheduler.clone(),
   )
   .await
   .unwrap();
@@ -103,7 +103,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let metrics = AppMetrics::new();
   let pg_pool = get_connection_pool(&config.db_settings).await?;
   let ai_client = AppFlowyAIClient::new(&config.ai.url());
-  let indexer_provider = IndexerProvider::new(pg_pool.clone(), ai_client);
 
   // User cache
   let user_cache = UserCache::new(pg_pool.clone()).await;
@@ -150,6 +149,15 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     snapshot_control,
     rt_cmd_tx,
   ));
+
+  info!("Setting up Indexer provider...");
+  let indexer_scheduler = IndexerScheduler::new(
+    IndexerProvider::new(ai_client),
+    pg_pool.clone(),
+    collab_storage.clone(),
+    metrics.embedding_metrics.clone(),
+  );
+
   let app_state = AppState {
     config: Arc::new(config.clone()),
     pg_listeners,
@@ -158,7 +166,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     access_control,
     collab_access_control_storage: collab_storage,
     metrics,
-    indexer_provider,
+    indexer_scheduler,
   };
   Ok(app_state)
 }

@@ -41,6 +41,8 @@ use database_entity::dto::{
   AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult, CollabParams,
   CreateCollabParams, QueryCollab, QueryCollabParams, QuerySnapshotParams, SnapshotData,
 };
+use shared_entity::dto::ai_dto::CalculateSimilarityParams;
+use shared_entity::dto::search_dto::SearchDocumentResponseItem;
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CollabResponse, PublishedDuplicate, WorkspaceMemberChangeset,
   WorkspaceMemberInvitation, WorkspaceSpaceUsage,
@@ -553,7 +555,7 @@ impl TestClient {
     self.api_client.get_profile().await.unwrap()
   }
 
-  pub async fn wait_until_object_embedding(&self, workspace_id: &str, object_id: &str) {
+  pub async fn wait_until_get_embedding(&self, workspace_id: &str, object_id: &str) {
     let result = timeout(Duration::from_secs(30), async {
       while self
         .api_client
@@ -575,6 +577,54 @@ impl TestClient {
       Ok(Err(e)) => panic!("Test failed: API returned an error: {:?}", e),
       Err(_) => panic!("Test failed: Timeout after 30 seconds."),
     }
+  }
+
+  pub async fn wait_unit_get_search_result(
+    &self,
+    workspace_id: &str,
+    query: &str,
+    limit: u32,
+  ) -> Vec<SearchDocumentResponseItem> {
+    timeout(Duration::from_secs(30), async {
+      loop {
+        let response = self
+          .api_client
+          .search_documents(workspace_id, query, limit, 200)
+          .await
+          .unwrap();
+
+        if response.is_empty() {
+          tokio::time::sleep(Duration::from_millis(1500)).await;
+          continue;
+        } else {
+          return response;
+        }
+      }
+    })
+    .await
+    .unwrap()
+  }
+
+  pub async fn assert_similarity(
+    &self,
+    workspace_id: &str,
+    input: &str,
+    expected: &str,
+    score: f64,
+  ) {
+    let params = CalculateSimilarityParams {
+      workspace_id: workspace_id.to_string(),
+      input: input.to_string(),
+      expected: expected.to_string(),
+    };
+    let resp = self.api_client.calculate_similarity(params).await.unwrap();
+    assert!(
+      resp.score > score,
+      "Similarity score is too low: {}.\nexpected: {},\ninput: {}",
+      resp.score,
+      score,
+      input
+    );
   }
 
   pub async fn get_snapshot(

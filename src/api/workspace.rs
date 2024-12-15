@@ -2138,7 +2138,7 @@ async fn parser_realtime_msg(
   }
 }
 
-#[instrument(level = "debug", skip_all, err)]
+#[instrument(level = "debug", skip_all)]
 async fn get_collab_embed_info_handler(
   path: web::Path<(String, String)>,
   query: web::Query<CollabTypeParam>,

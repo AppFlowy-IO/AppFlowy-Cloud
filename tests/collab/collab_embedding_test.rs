@@ -2,8 +2,6 @@ use crate::collab::util::empty_document_editor;
 use client_api_test::TestClient;
 use collab_entity::CollabType;
 use database_entity::dto::CreateCollabParams;
-use std::time::Duration;
-use tokio::time::timeout;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -34,7 +32,7 @@ async fn query_collab_embedding_after_create_test() {
   };
   test_client.api_client.create_collab(params).await.unwrap();
   test_client
-    .wait_until_object_embedding(&workspace_id, &object_id)
+    .wait_until_get_embedding(&workspace_id, &object_id)
     .await;
 }
 
@@ -88,31 +86,9 @@ async fn document_full_sync_then_search_test() {
   let local_plain_text = local_document.document.to_plain_text(false, false).unwrap();
   assert_eq!(local_plain_text, remote_plain_text);
 
-  // Retry until the result is ok, with a timeout of 30 seconds
-  let result = timeout(Duration::from_secs(20), async {
-    loop {
-      let response = test_client
-        .api_client
-        .search_documents(&workspace_id, "workflows", 1, 200)
-        .await
-        .unwrap();
-
-      if response.is_empty() {
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-        continue;
-      } else {
-        return response;
-      }
-    }
-  })
-  .await;
-
-  // Ensure the timeout didn't occur and the result is ok
-  match result {
-    Ok(search_result) => {
-      assert_eq!(search_result.len(), 1);
-      assert_eq!(search_result[0].preview, Some("AppFlowy is an open-source project. It is an alternative to tools like Notion. AppFlowy provides full control of your data. The project is built using Flutter for the frontend. Rust powers AppFlowy's ".to_string()));
-    },
-    Err(_) => panic!("Test failed: Timeout after 30 seconds."),
-  }
+  let search_result = test_client
+    .wait_unit_get_search_result(&workspace_id, "workflows", 1)
+    .await;
+  assert_eq!(search_result.len(), 1);
+  assert_eq!(search_result[0].preview, Some("AppFlowy is an open-source project. It is an alternative to tools like Notion. AppFlowy provides full control of your data. The project is built using Flutter for the frontend. Rust powers AppFlowy's ".to_string()));
 }

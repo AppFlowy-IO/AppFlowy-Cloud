@@ -5,25 +5,23 @@ use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use database_entity::dto::{AFCollabEmbeddedContent, AFCollabEmbeddings};
+use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
 
 pub trait Indexer: Send + Sync {
-  fn create_embedded_content(
-    &self,
-    collab: &Collab,
-  ) -> Result<Vec<AFCollabEmbeddedContent>, AppError>;
+  fn create_embedded_chunks(&self, collab: &Collab)
+    -> Result<Vec<AFCollabEmbeddedChunk>, AppError>;
 
   fn embed(
     &self,
-    content: Vec<AFCollabEmbeddedContent>,
+    content: Vec<AFCollabEmbeddedChunk>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError>;
 
   fn embed_in_thread_pool(
     &self,
-    content: Vec<AFCollabEmbeddedContent>,
+    content: Vec<AFCollabEmbeddedChunk>,
     thread_pool: &ThreadPoolNoAbort,
   ) -> Result<Option<AFCollabEmbeddings>, AppError>;
 }

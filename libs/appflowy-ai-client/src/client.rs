@@ -23,8 +23,6 @@ const AI_MODEL_HEADER_KEY: &str = "ai-model";
 #[derive(Clone, Debug)]
 pub struct AppFlowyAIClient {
   async_client: reqwest::Client,
-  #[allow(dead_code)]
-  sync_client: ureq::Agent,
   url: String,
 }
 
@@ -33,16 +31,7 @@ impl AppFlowyAIClient {
     info!("Creating AppFlowyAIClient with url: {}", url);
     let url = url.to_string();
     let async_client = reqwest::Client::new();
-    let sync_client = ureq::AgentBuilder::new()
-      .max_idle_connections(10)
-      .max_idle_connections_per_host(10)
-      .timeout(Duration::from_secs(30))
-      .build();
-    Self {
-      async_client,
-      sync_client,
-      url,
-    }
+    Self { async_client, url }
   }
 
   pub async fn health_check(&self) -> Result<(), AIError> {
@@ -158,16 +147,13 @@ impl AppFlowyAIClient {
   }
 
   pub fn embeddings(&self, params: EmbeddingRequest) -> Result<EmbeddingResponse, AIError> {
-    const MAX_RETRIES: u32 = 3;
+    const MAX_RETRIES: u32 = 2;
     const RETRY_DELAY: Duration = Duration::from_secs(2);
     let url = format!("{}/embeddings", self.url);
     let mut retries = 0;
 
     loop {
       let result = ureq::post(&url).send_json(params.clone());
-      // let result = self
-      //   .sync_http_client(Method::POST, &url)?
-      //   .send_json(params.clone());
       match result {
         Ok(resp) => {
           return AIResponse::<EmbeddingResponse>::from_ur_response(resp)?.into_data();
@@ -370,12 +356,6 @@ impl AppFlowyAIClient {
   fn async_http_client(&self, method: Method, url: &str) -> Result<RequestBuilder, AIError> {
     let request_builder = self.async_client.request(method, url);
     Ok(request_builder)
-  }
-
-  #[allow(dead_code)]
-  fn sync_http_client(&self, method: Method, url: &str) -> Result<ureq::Request, AIError> {
-    let request = self.sync_client.request(method.as_str(), url);
-    Ok(request)
   }
 }
 

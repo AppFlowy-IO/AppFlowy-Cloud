@@ -1,5 +1,4 @@
-use crate::collab::util::nathan_document_encode_collab;
-use appflowy_ai_client::dto::CalculateSimilarityParams;
+use crate::collab::util::{alex_banker_story, alex_software_engineer_story, empty_document_editor};
 use client_api_test::{ai_test_enabled, collect_answer, TestClient};
 use collab_entity::CollabType;
 use database_entity::dto::CreateCollabParams;
@@ -11,9 +10,11 @@ async fn query_collab_embedding_after_create_test() {
   if !ai_test_enabled() {
     return;
   }
-
   let object_id = Uuid::new_v4().to_string();
-  let encode_collab = nathan_document_encode_collab(&object_id);
+  let mut editor = empty_document_editor(&object_id);
+  let contents = alex_software_engineer_story();
+  editor.insert_paragraphs(contents.into_iter().map(|s| s.to_string()).collect());
+  let encode_collab = editor.encode_collab();
 
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
@@ -25,7 +26,7 @@ async fn query_collab_embedding_after_create_test() {
   };
   test_client.api_client.create_collab(params).await.unwrap();
   test_client
-    .wait_until_object_embedding(&workspace_id, &object_id)
+    .wait_until_get_embedding(&workspace_id, &object_id)
     .await;
 
   // chat with document
@@ -33,17 +34,19 @@ async fn query_collab_embedding_after_create_test() {
   let params = CreateChatParams {
     chat_id: chat_id.clone(),
     name: "my first chat".to_string(),
-    rag_ids: vec![object_id],
+    rag_ids: vec![object_id.clone()],
   };
 
+  // create a chat
   test_client
     .api_client
     .create_chat(&workspace_id, params)
     .await
     .unwrap();
 
+  // ask question to check the chat is using document embedding or not
   let params = CreateChatMessageParams::new_user(
-    "What are some of the sports Nathan enjoys, and what are his experiences with them",
+    "What are some of the sports Alex enjoys, and what are his experiences with them",
   );
   let question = test_client
     .api_client
@@ -56,52 +59,66 @@ async fn query_collab_embedding_after_create_test() {
     .await
     .unwrap();
   let answer = collect_answer(answer_stream).await;
-
   let expected = r#"
-### Sports Nathan Enjoys:
-1. **Tennis**
-   - **Experience**: Nathan learned tennis while living in Singapore. He enjoys playing with friends
-     on weekends, which offers him both a social and competitive outlet.
+  Alex enjoys a variety of sports that keep him active and engaged:
+	1.	Tennis: Learned in Singapore, he plays on weekends with friends.
+	2.	Basketball: Enjoys casual play, though specific details aren’t provided.
+	3.	Cycling: Brought his bike to Singapore and looks forward to exploring parks.
+	4.	Badminton: Enjoys it, though details aren’t given.
+	5.	Snowboarding: Had an unforgettable experience on challenging slopes in Lake Tahoe.
+Overall, Alex balances his work as a software programmer with his passion for sports, finding excitement and freedom in each activity.
+  "#;
+  test_client
+    .assert_similarity(&workspace_id, &answer, expected, 0.83)
+    .await;
 
-2. **Basketball**
-   - **Experience**: While specific experiences with basketball are not detailed, it is one of the
-     sports he enjoys, likely providing him with team play and excitement.
+  // remove all content for given document
+  editor.clear();
 
-3. **Cycling**
-   - **Experience**: Nathan brought his bike with him when he moved to Singapore, eager to explore
-     the city's parks and scenic routes. Although he hasn't had the chance to ride in Singapore yet,
-     he looks forward to it.
+  // Simulate insert new content
+  let contents = alex_banker_story();
+  editor.insert_paragraphs(contents.into_iter().map(|s| s.to_string()).collect());
+  let text = editor.document.to_plain_text(false, false).unwrap();
+  let expected = alex_banker_story().join("");
+  assert_eq!(text, expected);
 
-4. **Badminton**
-   - **Experience**: Like basketball, specific experiences in badminton are not mentioned, but it is
-     another sport Nathan enjoys, indicating his love for racquet sports.
-
-5. **Snowboarding**
-   - **Experience**: Nathan had an unforgettable experience trying two diamond slopes in Lake Tahoe,
-     which challenged his snowboarding skills. This indicates a willingness to take on challenges
-     and enjoy the thrill of the sport.
-
-### Overview of Nathan's Approach to Sports:
-Nathan finds a balance between his work as a software programmer and his physical activities. He
-enjoys the adrenaline from snowboarding and the strategic nature of tennis, which together provide
-him with a sense of freedom and excitement in his life
-"#;
-
-  let params = CalculateSimilarityParams {
-    workspace_id: workspace_id.clone(),
-    input: answer,
-    expected: expected.to_string(),
-  };
-
-  let resp = test_client
+  // full sync
+  let encode_collab = editor.encode_collab();
+  test_client
     .api_client
-    .calculate_similarity(params)
+    .collab_full_sync(
+      &workspace_id,
+      &object_id,
+      CollabType::Document,
+      encode_collab.doc_state.to_vec(),
+      encode_collab.state_vector.to_vec(),
+    )
     .await
     .unwrap();
 
-  assert!(
-    resp.score > 0.8,
-    "Similarity score is too low: {}",
-    resp.score
+  // after full sync, chat with the same question. After update the document content, the chat
+  // should not reply with previous context.
+  let params = CreateChatMessageParams::new_user(
+    "What are some of the sports Alex enjoys, and what are his experiences with them",
   );
+  let question = test_client
+    .api_client
+    .create_question(&workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+  let answer_stream = test_client
+    .api_client
+    .stream_answer_v2(&workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+  let answer = collect_answer(answer_stream).await;
+  let expected = r#"
+ Alex does not enjoy sports or physical activities. Instead, he prefers to relax and finds joy in
+ exploring delicious food and trying new restaurants. For Alex, food is a form of relaxation and self-care,
+ making it his favorite way to unwind rather than engaging in sports. While he may not have experiences with sports,
+  he certainly has many experiences in the culinary world, where he enjoys savoring flavors and discovering new dishes
+  "#;
+  test_client
+    .assert_similarity(&workspace_id, &answer, expected, 0.83)
+    .await;
 }

@@ -16,7 +16,7 @@ use collab_entity::CollabType;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
-use database_entity::dto::{AFCollabEmbeddedContent, CollabParams};
+use database_entity::dto::{AFCollabEmbeddedChunk, CollabParams};
 use futures_util::StreamExt;
 use rayon::prelude::*;
 use sqlx::PgPool;
@@ -177,14 +177,14 @@ impl IndexerScheduler {
       })?;
 
     let lock = collab.read().await;
-    let contents = indexer.create_embedded_content(&lock)?;
+    let chunks = indexer.create_embedded_chunks(&lock)?;
     drop(lock); // release the read lock ASAP
 
     let threads = self.threads.clone();
     let tx = self.schedule_tx.clone();
     let object_id = object_id.to_string();
     rayon::spawn(
-      move || match indexer.embed_in_thread_pool(contents, &threads) {
+      move || match indexer.embed_in_thread_pool(chunks, &threads) {
         Ok(Some(data)) => {
           if let Err(err) = tx.send(EmbeddingRecord {
             workspace_id,
@@ -307,8 +307,8 @@ async fn index_unindexd_collab(
         vec![],
         false,
       ) {
-        if let Ok(embedding_params) = indexer.create_embedded_content(&collab) {
-          if let Ok(Some(embeddings)) = indexer.embed_in_thread_pool(embedding_params, &threads) {
+        if let Ok(chunks) = indexer.create_embedded_chunks(&collab) {
+          if let Ok(Some(embeddings)) = indexer.embed_in_thread_pool(chunks, &threads) {
             if let Err(err) = record_tx.send(EmbeddingRecord {
               workspace_id,
               object_id: object_id.clone(),
@@ -391,7 +391,7 @@ async fn batch_insert_records(
 fn process_collab(
   indexer_provider: &IndexerProvider,
   indexed_collab: &IndexedCollab,
-) -> Result<Option<(u32, Vec<AFCollabEmbeddedContent>)>, AppError> {
+) -> Result<Option<(u32, Vec<AFCollabEmbeddedChunk>)>, AppError> {
   if let Some(indexer) = indexer_provider.indexer_for(&indexed_collab.collab_type) {
     let encode_collab = EncodedCollab::decode_from_bytes(&indexed_collab.encoded_collab)?;
     let collab = Collab::new_with_source(
@@ -403,8 +403,8 @@ fn process_collab(
     )
     .map_err(|err| AppError::Internal(err.into()))?;
 
-    let params = indexer.create_embedded_content(&collab)?;
-    match indexer.embed(params)? {
+    let chunks = indexer.create_embedded_chunks(&collab)?;
+    match indexer.embed(chunks)? {
       Some(embeddings) => {
         trace!(
           "Indexed collab {}, tokens: {}",
@@ -437,7 +437,7 @@ struct EmbeddingRecord {
   workspace_id: Uuid,
   object_id: String,
   tokens_used: u32,
-  contents: Vec<AFCollabEmbeddedContent>,
+  contents: Vec<AFCollabEmbeddedChunk>,
 }
 
 impl From<&CollabParams> for IndexedCollab {

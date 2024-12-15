@@ -50,6 +50,14 @@ pub struct TestDocumentEditor {
 }
 
 impl TestDocumentEditor {
+  pub(crate) fn clear(&mut self) {
+    let page_id = self.document.get_page_id().unwrap();
+    let blocks = self.document.get_block_children_ids(&page_id);
+    for block in blocks {
+      self.document.delete_block(&block).unwrap();
+    }
+  }
+
   pub(crate) fn insert_paragraphs(&mut self, paragraphs: Vec<String>) {
     let page_id = self.document.get_page_id().unwrap();
     let mut prev_id = "".to_string();
@@ -80,10 +88,6 @@ impl TestDocumentEditor {
   pub fn encode_collab(&self) -> EncodedCollab {
     self.document.encode_collab().unwrap()
   }
-
-  pub fn to_plain_text(&self) -> String {
-    self.document.to_plain_text(false, false).unwrap()
-  }
 }
 
 pub fn empty_document_editor(object_id: &str) -> TestDocumentEditor {
@@ -104,20 +108,33 @@ pub fn empty_document_editor(object_id: &str) -> TestDocumentEditor {
   }
 }
 
-pub fn nathan_document_encode_collab(object_id: &str) -> EncodedCollab {
-  let mut editor = empty_document_editor(object_id);
-  let contents = vec![
-    "Nathan is a software programmer who spends his days coding and solving problems.",
+pub fn alex_software_engineer_story() -> Vec<&'static str> {
+  vec![
+    "Alex is a software programmer who spends his days coding and solving problems.",
     "Outside of work, he enjoys staying active with sports like tennis, basketball, cycling, badminton, and snowboarding.",
     "He learned tennis while living in Singapore and now enjoys playing with his friends on weekends.",
-    "Nathan had an unforgettable experience trying two diamond slopes in Lake Tahoe, which challenged his snowboarding skills.",
+    "Alex had an unforgettable experience trying two diamond slopes in Lake Tahoe, which challenged his snowboarding skills.",
     "He brought his bike with him when he moved to Singapore, excited to explore the city on two wheels.",
-    "Although he hasn’t ridden his bike in Singapore yet, Nathan looks forward to cycling through the city’s famous parks and scenic routes.",
-    "Nathan enjoys the thrill of playing different sports, finding balance between his work and physical activities.",
+    "Although he hasn’t ridden his bike in Singapore yet, Alex looks forward to cycling through the city’s famous parks and scenic routes.",
+    "Alex enjoys the thrill of playing different sports, finding balance between his work and physical activities.",
     "From the adrenaline of snowboarding to the strategic moves on the tennis court, each sport gives him a sense of freedom and excitement.",
-  ];
-  editor.insert_paragraphs(contents.into_iter().map(|s| s.to_string()).collect());
-  editor.encode_collab()
+  ]
+}
+
+pub fn alex_banker_story() -> Vec<&'static str> {
+  vec![
+    "Alex is a banker who spends most of their time working with numbers.",
+    "They don't enjoy sports or physical activities, preferring to relax.",
+    "Instead of exercise, Alex finds joy in eating delicious food and",
+    "exploring new restaurants. They love trying different cuisines and",
+    "discovering new dishes that excite their taste buds.",
+    "For Alex, food is a form of relaxation and self-care, a break from",
+    "the hectic world of banking. A perfect meal brings them comfort.",
+    "Whether dining out or cooking at home, Alex enjoys savoring flavors",
+    "and experiencing the joy of good food. It’s their favorite way to unwind.",
+    "Though they don’t share the same passion for sports, Alex finds",
+    "happiness in the culinary world, where each new dish is an adventure.",
+  ]
 }
 
 #[allow(dead_code)]

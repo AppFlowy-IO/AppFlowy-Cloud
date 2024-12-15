@@ -9,7 +9,7 @@ use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
-use database_entity::dto::{AFCollabEmbeddedContent, AFCollabEmbeddings, EmbeddingContentType};
+use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
 use std::sync::Arc;
 
 use crate::indexer::open_ai::split_text_by_max_content_len;
@@ -40,10 +40,10 @@ impl DocumentIndexer {
 
 #[async_trait]
 impl Indexer for DocumentIndexer {
-  fn create_embedded_content(
+  fn create_embedded_chunks(
     &self,
     collab: &Collab,
-  ) -> Result<Vec<AFCollabEmbeddedContent>, AppError> {
+  ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
     let object_id = collab.object_id().to_string();
     let document = DocumentBody::from_collab(collab).ok_or_else(|| {
       anyhow!(
@@ -54,7 +54,7 @@ impl Indexer for DocumentIndexer {
 
     let result = document.to_plain_text(collab.transact(), false, true);
     match result {
-      Ok(content) => create_embedding(
+      Ok(content) => split_text_into_chunks(
         object_id,
         content,
         CollabType::Document,
@@ -72,7 +72,7 @@ impl Indexer for DocumentIndexer {
 
   fn embed(
     &self,
-    mut content: Vec<AFCollabEmbeddedContent>,
+    mut content: Vec<AFCollabEmbeddedChunk>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
     if content.is_empty() {
       return Ok(None);
@@ -128,7 +128,7 @@ impl Indexer for DocumentIndexer {
 
   fn embed_in_thread_pool(
     &self,
-    content: Vec<AFCollabEmbeddedContent>,
+    content: Vec<AFCollabEmbeddedChunk>,
     thread_pool: &ThreadPoolNoAbort,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
     if content.is_empty() {
@@ -141,12 +141,12 @@ impl Indexer for DocumentIndexer {
   }
 }
 
-fn create_embedding(
+fn split_text_into_chunks(
   object_id: String,
   content: String,
   collab_type: CollabType,
   embedding_model: &EmbeddingModel,
-) -> Result<Vec<AFCollabEmbeddedContent>, AppError> {
+) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
   debug_assert!(matches!(
     embedding_model,
     EmbeddingModel::TextEmbedding3Small
@@ -157,7 +157,7 @@ fn create_embedding(
   Ok(
     split_contents
       .into_iter()
-      .map(|content| AFCollabEmbeddedContent {
+      .map(|content| AFCollabEmbeddedChunk {
         fragment_id: Uuid::new_v4().to_string(),
         object_id: object_id.clone(),
         collab_type: collab_type.clone(),

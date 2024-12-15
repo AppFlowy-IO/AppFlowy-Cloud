@@ -5,9 +5,7 @@ use sqlx::{Error, Executor, Postgres, Transaction};
 use std::ops::DerefMut;
 use uuid::Uuid;
 
-use database_entity::dto::{
-  AFCollabEmbeddedContent, IndexingStatus, QueryCollab, QueryCollabParams,
-};
+use database_entity::dto::{AFCollabEmbeddedChunk, IndexingStatus, QueryCollab, QueryCollabParams};
 
 pub async fn get_index_status<'a, E>(
   tx: E,
@@ -67,8 +65,8 @@ struct Fragment {
   embedding: Option<Vector>,
 }
 
-impl From<AFCollabEmbeddedContent> for Fragment {
-  fn from(value: AFCollabEmbeddedContent) -> Self {
+impl From<AFCollabEmbeddedChunk> for Fragment {
+  fn from(value: AFCollabEmbeddedChunk) -> Self {
     Fragment {
       fragment_id: value.fragment_id,
       content_type: value.content_type as i32,
@@ -89,7 +87,7 @@ pub async fn upsert_collab_embeddings(
   workspace_id: &Uuid,
   _object_id: &str,
   tokens_used: u32,
-  records: Vec<AFCollabEmbeddedContent>,
+  records: Vec<AFCollabEmbeddedChunk>,
 ) -> Result<(), sqlx::Error> {
   if records.is_empty() {
     return Ok(());

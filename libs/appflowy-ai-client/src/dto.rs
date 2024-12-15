@@ -164,14 +164,14 @@ pub struct EmbeddingResponse {
   pub total_tokens: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum EmbeddingEncodingFormat {
   Float,
   Base64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EmbeddingRequest {
   /// An instance of `EmbeddingInput` containing the data to be embedded.
   pub input: EmbeddingInput,

@@ -24,7 +24,7 @@ use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
-use crate::indexer::IndexerProvider;
+use crate::indexer::IndexerScheduler;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
 
 use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
@@ -54,7 +54,7 @@ where
     group_persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
-    indexer_provider: Arc<IndexerProvider>,
+    indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
     let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
       .parse::<bool>()
@@ -75,7 +75,7 @@ where
         group_persistence_interval,
         edit_state_max_count,
         edit_state_max_secs,
-        indexer_provider.clone(),
+        indexer_scheduler.clone(),
       )
       .await?,
     );
@@ -89,8 +89,6 @@ where
       &group_sender_by_object_id,
       Arc::downgrade(&group_manager),
     );
-
-    spawn_handle_unindexed_collabs(indexer_provider, storage);
 
     Ok(Self {
       group_manager,
@@ -252,13 +250,17 @@ where
               let (tx, rx) = tokio::sync::oneshot::channel();
               let _ = group_cmd_sender
                 .send(GroupCommand::CalculateMissingUpdate {
-                  object_id,
+                  object_id: object_id.clone(),
                   state_vector,
                   ret: tx,
                 })
                 .await;
               match rx.await {
                 Ok(missing_update_result) => {
+                  let _ = group_cmd_sender
+                    .send(GroupCommand::GenerateCollabEmbedding { object_id })
+                    .await;
+
                   let result = missing_update_result
                     .map_err(|err| {
                       AppError::Internal(anyhow!("fail to calculate missing update: {}", err))
@@ -345,11 +347,9 @@ where
   ) -> Result<(), RealtimeError> {
     let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
     tokio::spawn(async move {
-      let (tx, rx) = tokio::sync::oneshot::channel();
       let result = group_cmd_sender
         .send(GroupCommand::GenerateCollabEmbedding {
           object_id: message.object_id,
-          ret: tx,
         })
         .await;
 
@@ -359,38 +359,9 @@ where
             "send generate embedding to group fail: {}",
             err
           ))));
-          return;
         } else {
           error!("send generate embedding to group fail: {}", err);
         }
-      }
-
-      match rx.await {
-        Ok(Ok(())) => {
-          if let Some(return_tx) = message.return_tx {
-            let _ = return_tx.send(Ok(()));
-          }
-        },
-        Ok(Err(err)) => {
-          if let Some(return_tx) = message.return_tx {
-            let _ = return_tx.send(Err(AppError::Internal(anyhow!(
-              "generate embedding fail: {}",
-              err
-            ))));
-          } else {
-            error!("generate embedding fail: {}", err);
-          }
-        },
-        Err(err) => {
-          if let Some(return_tx) = message.return_tx {
-            let _ = return_tx.send(Err(AppError::Internal(anyhow!(
-              "fail to receive generate embedding result: {}",
-              err
-            ))));
-          } else {
-            error!("fail to receive generate embedding result: {}", err);
-          }
-        },
       }
     });
     Ok(())
@@ -403,16 +374,6 @@ where
       .get(user_device)
       .map(|entry| entry.value().clone())
   }
-}
-
-fn spawn_handle_unindexed_collabs(
-  indexer_provider: Arc<IndexerProvider>,
-  storage: Arc<dyn CollabStorage>,
-) {
-  tokio::spawn(IndexerProvider::handle_unindexed_collabs(
-    indexer_provider,
-    storage,
-  ));
 }
 
 fn spawn_period_check_inactive_group<S>(

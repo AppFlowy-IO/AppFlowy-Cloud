@@ -5,9 +5,7 @@ use sqlx::{Error, Executor, Postgres, Transaction};
 use std::ops::DerefMut;
 use uuid::Uuid;
 
-use database_entity::dto::{
-  AFCollabEmbeddingParams, IndexingStatus, QueryCollab, QueryCollabParams,
-};
+use database_entity::dto::{AFCollabEmbeddedChunk, IndexingStatus, QueryCollab, QueryCollabParams};
 
 pub async fn get_index_status<'a, E>(
   tx: E,
@@ -67,8 +65,8 @@ struct Fragment {
   embedding: Option<Vector>,
 }
 
-impl From<AFCollabEmbeddingParams> for Fragment {
-  fn from(value: AFCollabEmbeddingParams) -> Self {
+impl From<AFCollabEmbeddedChunk> for Fragment {
+  fn from(value: AFCollabEmbeddedChunk) -> Self {
     Fragment {
       fragment_id: value.fragment_id,
       content_type: value.content_type as i32,
@@ -85,17 +83,18 @@ impl PgHasArrayType for Fragment {
 }
 
 pub async fn upsert_collab_embeddings(
-  tx: &mut Transaction<'_, sqlx::Postgres>,
+  transaction: &mut Transaction<'_, Postgres>,
   workspace_id: &Uuid,
+  _object_id: &str,
   tokens_used: u32,
-  records: Vec<AFCollabEmbeddingParams>,
+  records: Vec<AFCollabEmbeddedChunk>,
 ) -> Result<(), sqlx::Error> {
   if records.is_empty() {
     return Ok(());
   }
+
   let object_id = records[0].object_id.clone();
   let collab_type = records[0].collab_type.clone();
-
   let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
 
   sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4, $5::af_fragment[])"#)
@@ -104,7 +103,7 @@ pub async fn upsert_collab_embeddings(
     .bind(crate::collab::partition_key_from_collab_type(&collab_type))
     .bind(tokens_used as i32)
     .bind(fragments)
-    .execute(tx.deref_mut())
+    .execute(transaction.deref_mut())
     .await?;
   Ok(())
 }

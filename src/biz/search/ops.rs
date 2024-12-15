@@ -30,7 +30,6 @@ pub async fn search_document(
       encoding_format: EmbeddingEncodingFormat::Float,
       dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
     })
-    .await
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
   let total_tokens = embeddings.total_tokens as u32;
   metrics.record_search_tokens_used(&workspace_id, total_tokens);

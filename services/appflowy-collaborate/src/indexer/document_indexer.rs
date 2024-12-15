@@ -9,11 +9,12 @@ use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
-use database_entity::dto::{AFCollabEmbeddingParams, AFCollabEmbeddings, EmbeddingContentType};
+use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
 use std::sync::Arc;
 
 use crate::indexer::open_ai::split_text_by_max_content_len;
 use crate::indexer::Indexer;
+use crate::thread_pool_no_abort::ThreadPoolNoAbort;
 use tiktoken_rs::CoreBPE;
 use tracing::trace;
 use uuid::Uuid;
@@ -39,10 +40,10 @@ impl DocumentIndexer {
 
 #[async_trait]
 impl Indexer for DocumentIndexer {
-  async fn embedding_params(
+  fn create_embedded_chunks(
     &self,
     collab: &Collab,
-  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+  ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
     let object_id = collab.object_id().to_string();
     let document = DocumentBody::from_collab(collab).ok_or_else(|| {
       anyhow!(
@@ -53,15 +54,12 @@ impl Indexer for DocumentIndexer {
 
     let result = document.to_plain_text(collab.transact(), false, true);
     match result {
-      Ok(content) => {
-        create_embedding(
-          object_id,
-          content,
-          CollabType::Document,
-          &self.embedding_model,
-        )
-        .await
-      },
+      Ok(content) => split_text_into_chunks(
+        object_id,
+        content,
+        CollabType::Document,
+        &self.embedding_model,
+      ),
       Err(err) => {
         if matches!(err, DocumentError::NoRequiredData) {
           Ok(vec![])
@@ -72,46 +70,39 @@ impl Indexer for DocumentIndexer {
     }
   }
 
-  async fn embedding_text(
+  fn embed(
     &self,
-    object_id: String,
-    content: String,
-    collab_type: CollabType,
-  ) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
-    create_embedding(object_id, content, collab_type, &self.embedding_model).await
-  }
-
-  async fn embeddings(
-    &self,
-    mut params: Vec<AFCollabEmbeddingParams>,
+    mut content: Vec<AFCollabEmbeddedChunk>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    let object_id = match params.first() {
+    if content.is_empty() {
+      return Ok(None);
+    }
+
+    let object_id = match content.first() {
       None => return Ok(None),
       Some(first) => first.object_id.clone(),
     };
-    let contents: Vec<_> = params
+
+    let contents: Vec<_> = content
       .iter()
       .map(|fragment| fragment.content.clone())
       .collect();
+    let resp = self.ai_client.embeddings(EmbeddingRequest {
+      input: EmbeddingInput::StringArray(contents),
+      model: EmbeddingModel::TextEmbedding3Small.to_string(),
+      chunk_size: 2000,
+      encoding_format: EmbeddingEncodingFormat::Float,
+      dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
+    })?;
 
-    let resp = self
-      .ai_client
-      .embeddings(EmbeddingRequest {
-        input: EmbeddingInput::StringArray(contents),
-        model: EmbeddingModel::TextEmbedding3Small.to_string(),
-        chunk_size: 2000,
-        encoding_format: EmbeddingEncodingFormat::Float,
-        dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
-      })
-      .await?;
     trace!(
       "[Embedding] request {} embeddings, received {} embeddings",
-      params.len(),
+      content.len(),
       resp.data.len()
     );
 
     for embedding in resp.data {
-      let param = &mut params[embedding.index as usize];
+      let param = &mut content[embedding.index as usize];
       let embedding: Vec<f32> = match embedding.embedding {
         EmbeddingOutput::Float(embedding) => embedding.into_iter().map(|f| f as f32).collect(),
         EmbeddingOutput::Base64(_) => {
@@ -125,23 +116,37 @@ impl Indexer for DocumentIndexer {
 
     tracing::info!(
       "received {} embeddings for document {} - tokens used: {}",
-      params.len(),
+      content.len(),
       object_id,
       resp.total_tokens
     );
     Ok(Some(AFCollabEmbeddings {
       tokens_consumed: resp.total_tokens as u32,
-      params,
+      params: content,
     }))
+  }
+
+  fn embed_in_thread_pool(
+    &self,
+    content: Vec<AFCollabEmbeddedChunk>,
+    thread_pool: &ThreadPoolNoAbort,
+  ) -> Result<Option<AFCollabEmbeddings>, AppError> {
+    if content.is_empty() {
+      return Ok(None);
+    }
+
+    thread_pool
+      .install(|| self.embed(content))
+      .map_err(|e| AppError::Unhandled(e.to_string()))?
   }
 }
 
-async fn create_embedding(
+fn split_text_into_chunks(
   object_id: String,
   content: String,
   collab_type: CollabType,
   embedding_model: &EmbeddingModel,
-) -> Result<Vec<AFCollabEmbeddingParams>, AppError> {
+) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
   debug_assert!(matches!(
     embedding_model,
     EmbeddingModel::TextEmbedding3Small
@@ -152,7 +157,7 @@ async fn create_embedding(
   Ok(
     split_contents
       .into_iter()
-      .map(|content| AFCollabEmbeddingParams {
+      .map(|content| AFCollabEmbeddedChunk {
         fragment_id: Uuid::new_v4().to_string(),
         object_id: object_id.clone(),
         collab_type: collab_type.clone(),

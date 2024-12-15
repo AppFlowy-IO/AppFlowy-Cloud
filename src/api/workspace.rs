@@ -29,11 +29,10 @@ use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
-use appflowy_collaborate::indexer::IndexerProvider;
+use appflowy_collaborate::indexer::IndexedCollab;
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
-use collab::entity::EncodedCollab;
 use collab_database::entity::FieldType;
 use collab_entity::CollabType;
 use collab_folder::timestamp;
@@ -47,7 +46,6 @@ use database::user::select_uid_from_email;
 use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
 use database_entity::dto::*;
-use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use shared_entity::dto::workspace_dto::*;
@@ -128,8 +126,8 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(v1_get_collab_handler)),
     )
     .service(
-      web::resource("/v1/{workspace_id}/collab/{object_id}/sync")
-        .route(web::post().to(collab_two_way_sync_handler)),
+      web::resource("/v1/{workspace_id}/collab/{object_id}/full-sync")
+        .route(web::post().to(collab_full_sync_handler)),
     )
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
@@ -143,8 +141,8 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/collab/{object_id}/info")
-        .route(web::get().to(get_collab_info_handler)),
+      web::resource("/{workspace_id}/collab/{object_id}/embed-info")
+        .route(web::get().to(get_collab_embed_info_handler)),
     )
     .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
@@ -672,7 +670,7 @@ async fn create_collab_handler(
     },
   };
 
-  let (mut params, workspace_id) = params.split();
+  let (params, workspace_id) = params.split();
 
   if params.object_id == workspace_id {
     // Only the object with [CollabType::Folder] can have the same object_id as workspace_id. But
@@ -693,22 +691,13 @@ async fn create_collab_handler(
   }
 
   if state
-    .indexer_provider
+    .indexer_scheduler
     .can_index_workspace(&workspace_id)
     .await?
   {
-    match state
-      .indexer_provider
-      .create_collab_embeddings(&params)
-      .await
-    {
-      Ok(embeddings) => params.embeddings = embeddings,
-      Err(err) => tracing::warn!(
-        "failed to fetch embeddings for document {}: {}",
-        params.object_id,
-        err
-      ),
-    }
+    state
+      .indexer_scheduler
+      .index_encoded_collab_one(&workspace_id, IndexedCollab::from(&params))?;
   }
 
   let mut transaction = state
@@ -776,7 +765,7 @@ async fn batch_create_collab_handler(
     }
   }
   // Perform decompression and processing in a Rayon thread pool
-  let mut collab_params_list = tokio::task::spawn_blocking(move || match compress_type {
+  let collab_params_list = tokio::task::spawn_blocking(move || match compress_type {
     CompressionType::Brotli { buffer_size } => offset_len_list
       .into_par_iter()
       .filter_map(|(offset, len)| {
@@ -823,17 +812,14 @@ async fn batch_create_collab_handler(
   );
 
   if state
-    .indexer_provider
+    .indexer_scheduler
     .can_index_workspace(&workspace_id)
     .await?
   {
-    if let Err(err) = fetch_embeddings(&state.indexer_provider, &mut collab_params_list).await {
-      tracing::warn!(
-        "failed to fetch embeddings for {} new documents: {}",
-        collab_params_list.len(),
-        err
-      );
-    }
+    state.indexer_scheduler.index_encoded_collabs(
+      &workspace_id,
+      collab_params_list.iter().map(IndexedCollab::from).collect(),
+    )?;
   }
 
   let start = Instant::now();
@@ -1253,32 +1239,15 @@ async fn update_collab_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
-  let (mut params, workspace_id) = create_params.split();
-  if let Some(indexer) = state.indexer_provider.indexer_for(&params.collab_type) {
-    if state
-      .indexer_provider
-      .can_index_workspace(&workspace_id)
-      .await?
-    {
-      let (encoded, mut mut_params) = tokio::task::spawn_blocking(move || {
-        EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)
-          .map(|encoded_collab| (encoded_collab, params))
-          .map_err(|err| AppError::InvalidRequest(format!("Failed to decode collab `{}", err)))
-      })
-      .await
-      .map_err(|err| AppError::Internal(err.into()))??;
-
-      match indexer.index(&mut_params.object_id, encoded).await {
-        Ok(embeddings) => mut_params.embeddings = embeddings,
-        Err(err) => tracing::warn!(
-          "failed to fetch embeddings for document {}: {}",
-          mut_params.object_id,
-          err
-        ),
-      }
-
-      params = mut_params;
-    }
+  let (params, workspace_id) = create_params.split();
+  if state
+    .indexer_scheduler
+    .can_index_workspace(&workspace_id)
+    .await?
+  {
+    state
+      .indexer_scheduler
+      .index_encoded_collab_one(&workspace_id, IndexedCollab::from(&params))?;
   }
 
   state
@@ -2169,46 +2138,25 @@ async fn parser_realtime_msg(
   }
 }
 
-async fn fetch_embeddings(
-  indexer_provider: &IndexerProvider,
-  params: &mut [CollabParams],
-) -> Result<(), AppError> {
-  let mut futures = Vec::with_capacity(params.len());
-  for param in params.iter() {
-    let future = indexer_provider.create_collab_embeddings(param);
-    futures.push(future);
-  }
-
-  let results = try_join_all(futures).await?;
-  for (i, embeddings) in results.into_iter().enumerate() {
-    params[i].embeddings = embeddings;
-  }
-
-  Ok(())
-}
-
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn get_collab_info_handler(
-  payload: Json<WorkspaceCollabIdentify>,
+#[instrument(level = "debug", skip_all)]
+async fn get_collab_embed_info_handler(
+  path: web::Path<(String, String)>,
   query: web::Query<CollabTypeParam>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<AFCollabInfo>>> {
-  let payload = payload.into_inner();
+) -> Result<Json<AppResponse<AFCollabEmbedInfo>>> {
+  let (_, object_id) = path.into_inner();
   let collab_type = query.into_inner().collab_type;
-  let info = database::collab::get_collab_info(&state.pg_pool, &payload.object_id, collab_type)
+  let info = database::collab::select_collab_embed_info(&state.pg_pool, &object_id, collab_type)
     .await
     .map_err(AppResponseError::from)?
     .ok_or_else(|| {
-      AppError::RecordNotFound(format!(
-        "Collab with object_id {} not found",
-        payload.object_id
-      ))
+      AppError::RecordNotFound(format!("Collab with object_id {} not found", object_id))
     })?;
   Ok(Json(AppResponse::Ok().with_data(info)))
 }
 
 #[instrument(level = "debug", skip_all, err)]
-async fn collab_two_way_sync_handler(
+async fn collab_full_sync_handler(
   user_uuid: UserUuid,
   body: Bytes,
   path: web::Path<(Uuid, Uuid)>,
@@ -2231,7 +2179,7 @@ async fn collab_two_way_sync_handler(
 
   let (workspace_id, object_id) = path.into_inner();
   let params = CollabDocStateParams::decode(&mut Cursor::new(body)).map_err(|err| {
-    AppError::InvalidRequest(format!("Failed to parse CreateCollabEmbedding: {}", err))
+    AppError::InvalidRequest(format!("Failed to parse CollabDocStateParams: {}", err))
   })?;
 
   if params.doc_state.is_empty() {

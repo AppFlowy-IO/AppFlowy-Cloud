@@ -12,7 +12,8 @@ use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 
 use crate::collab::storage::CollabAccessControlStorage;
 use crate::config::Config;
-use crate::indexer::IndexerProvider;
+use crate::indexer::metrics::EmbeddingMetrics;
+use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabMetrics;
 use crate::pg_listener::PgListeners;
 use crate::CollabRealtimeMetrics;
@@ -28,7 +29,7 @@ pub struct AppState {
   pub access_control: AccessControl,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
   pub metrics: AppMetrics,
-  pub indexer_provider: Arc<IndexerProvider>,
+  pub indexer_scheduler: Arc<IndexerScheduler>,
 }
 
 #[derive(Clone)]
@@ -38,6 +39,7 @@ pub struct AppMetrics {
   pub access_control_metrics: Arc<AccessControlMetrics>,
   pub realtime_metrics: Arc<CollabRealtimeMetrics>,
   pub collab_metrics: Arc<CollabMetrics>,
+  pub embedding_metrics: Arc<EmbeddingMetrics>,
 }
 
 impl Default for AppMetrics {
@@ -52,11 +54,13 @@ impl AppMetrics {
     let access_control_metrics = Arc::new(AccessControlMetrics::register(&mut registry));
     let realtime_metrics = Arc::new(CollabRealtimeMetrics::register(&mut registry));
     let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
+    let embedding_metrics = Arc::new(EmbeddingMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       access_control_metrics,
       realtime_metrics,
       collab_metrics,
+      embedding_metrics,
     }
   }
 }

@@ -30,6 +30,10 @@ async fn test_embedding_when_create_document() {
     .await
     .unwrap();
 
+  test_client
+    .wait_until_get_embedding(&workspace_id, &object_id_1)
+    .await;
+
   let object_id_2 = uuid::Uuid::new_v4().to_string();
   let tennis_player = create_document_collab(&object_id_2, "kathryn_tennis_story.md").await;
   let encoded_collab = tennis_player.encode_collab().unwrap();
@@ -42,6 +46,10 @@ async fn test_embedding_when_create_document() {
     )
     .await
     .unwrap();
+
+  test_client
+    .wait_until_get_embedding(&workspace_id, &object_id_2)
+    .await;
 
   let search_resp = test_client
     .api_client

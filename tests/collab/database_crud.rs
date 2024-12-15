@@ -6,6 +6,40 @@ use serde_json::json;
 use shared_entity::dto::workspace_dto::AFInsertDatabaseField;
 
 #[tokio::test]
+async fn database_row_upsert_with_doc() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c).await;
+  let databases = c.list_databases(&workspace_id).await.unwrap();
+  assert_eq!(databases.len(), 1);
+
+  let todo_db = &databases[0];
+
+  // Upsert row
+  let row_id = c
+    .upsert_database_item(
+      &workspace_id,
+      &todo_db.id,
+      "my_pre_hash_123".to_string(),
+      HashMap::from([]),
+      Some("This is a document of a database row".to_string().into()),
+    )
+    .await
+    .unwrap();
+
+  {
+    // Get row and check data
+    let row_detail = &c
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], false)
+      .await
+      .unwrap()[0];
+    assert!(row_detail.has_doc);
+    assert_eq!(row_detail.doc, None);
+  }
+
+  // TODO: test with doc modification
+}
+
+#[tokio::test]
 async fn database_row_upsert() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
@@ -35,14 +69,15 @@ async fn database_row_upsert() {
 
   {
     // Get row and check data
-    let row_details = &c
+    let row_detail = &c
       .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], false)
       .await
       .unwrap()[0];
-    assert_eq!(row_details.cells["Description"], "description_1");
-    assert_eq!(row_details.cells["Status"], "To Do");
-    assert_eq!(row_details.cells["Multiselect"][0], "social");
-    assert_eq!(row_details.cells["Multiselect"][1], "news");
+    assert_eq!(row_detail.cells["Description"], "description_1");
+    assert_eq!(row_detail.cells["Status"], "To Do");
+    assert_eq!(row_detail.cells["Multiselect"][0], "social");
+    assert_eq!(row_detail.cells["Multiselect"][1], "news");
+    assert!(!row_detail.has_doc);
   }
 
   {
@@ -58,7 +93,7 @@ async fn database_row_upsert() {
           (String::from("Status"), json!("Doing")),
           (String::from("Multiselect"), json!(["fast", "self-host"])),
         ]),
-        None,
+        Some("This is a document of a database row".to_string().into()),
       )
       .await
       .unwrap();
@@ -66,14 +101,19 @@ async fn database_row_upsert() {
   }
   {
     // Get row and check data, it should be modified
-    let row_details = &c
-      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], false)
+    let row_detail = &c
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], true)
       .await
       .unwrap()[0];
-    assert_eq!(row_details.cells["Description"], "description_2");
-    assert_eq!(row_details.cells["Status"], "Doing");
-    assert_eq!(row_details.cells["Multiselect"][0], "fast");
-    assert_eq!(row_details.cells["Multiselect"][1], "self-host");
+    assert_eq!(row_detail.cells["Description"], "description_2");
+    assert_eq!(row_detail.cells["Status"], "Doing");
+    assert_eq!(row_detail.cells["Multiselect"][0], "fast");
+    assert_eq!(row_detail.cells["Multiselect"][1], "self-host");
+    assert!(row_detail.has_doc);
+    assert_eq!(
+      row_detail.doc,
+      Some("\nThis is a document of a database row".to_string())
+    );
   }
 }
 
@@ -262,5 +302,8 @@ async fn database_insert_row_with_doc() {
     .unwrap();
   let row_detail = &row_details[0];
   assert!(row_detail.has_doc);
-  assert_eq!(row_detail.doc, Some("\nThis is a document of a database row".to_string()));
+  assert_eq!(
+    row_detail.doc,
+    Some("\nThis is a document of a database row".to_string())
+  );
 }

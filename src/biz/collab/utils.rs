@@ -18,6 +18,7 @@ use collab_database::rows::RowId;
 use collab_database::template::timestamp_parse::TimestampCellData;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_document::document::Document;
+use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::CollabOrigin;
@@ -347,14 +348,13 @@ pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Coll
 /// Base on values given by [cell_value_by_id], write to fields of DatabaseRowBody.
 /// Returns encoded collab updates to the database row
 pub async fn write_to_database_row(
-  db_collab: &Collab,
   db_body: &DatabaseBody,
-  db_row_collab: &mut Collab,
+  db_row_txn: &mut yrs::TransactionMut<'_>,
   db_row_body: &DatabaseRowBody,
   cell_value_by_id: HashMap<String, serde_json::Value>,
   modified_ts: i64,
-) -> Result<Vec<u8>, AppError> {
-  let all_fields = db_body.fields.get_all_fields(&db_collab.transact());
+) -> Result<(), AppError> {
+  let all_fields = db_body.fields.get_all_fields(db_row_txn);
   let field_by_id = all_fields.iter().fold(HashMap::new(), |mut acc, field| {
     acc.insert(field.id.clone(), field.clone());
     acc
@@ -362,41 +362,85 @@ pub async fn write_to_database_row(
   let type_option_reader_by_id = type_option_writer_by_id(&all_fields);
   let field_by_name = field_by_name_uniq(all_fields);
 
-  let db_row_collab_updates = {
-    let mut yrs_txn = db_row_collab.transact_mut();
-    // set last_modified
-    db_row_body.update(&mut yrs_txn, |row_update| {
-      row_update.set_last_modified(modified_ts);
-    });
+  // set last_modified
+  db_row_body.update(db_row_txn, |row_update| {
+    row_update.set_last_modified(modified_ts);
+  });
 
-    // for each field given by user input, overwrite existing data
-    for (id, serde_val) in cell_value_by_id {
-      let field = match field_by_id.get(&id) {
+  // for each field given by user input, overwrite existing data
+  for (id, serde_val) in cell_value_by_id {
+    let field = match field_by_id.get(&id) {
+      Some(f) => f,
+      // try use field name if id not found
+      None => match field_by_name.get(&id) {
         Some(f) => f,
-        // try use field name if id not found
-        None => match field_by_name.get(&id) {
-          Some(f) => f,
-          None => {
-            tracing::warn!("Failed to get field by id or name for field: {}", id);
-            continue;
-          },
-        },
-      };
-      let cell_writer = match type_option_reader_by_id.get(&field.id) {
-        Some(cell_writer) => cell_writer,
         None => {
-          tracing::error!("Failed to get type option writer for field: {}", field.id);
+          tracing::warn!("Failed to get field by id or name for field: {}", id);
           continue;
         },
-      };
-      let new_cell: Cell = cell_writer.convert_json_to_cell(serde_val);
-      db_row_body.update(&mut yrs_txn, |row_update| {
-        row_update.update_cells(|cells_update| {
-          cells_update.insert_cell(&field.id, new_cell);
-        });
+      },
+    };
+    let cell_writer = match type_option_reader_by_id.get(&field.id) {
+      Some(cell_writer) => cell_writer,
+      None => {
+        tracing::error!("Failed to get type option writer for field: {}", field.id);
+        continue;
+      },
+    };
+    let new_cell: Cell = cell_writer.convert_json_to_cell(serde_val);
+    db_row_body.update(db_row_txn, |row_update| {
+      row_update.update_cells(|cells_update| {
+        cells_update.insert_cell(&field.id, new_cell);
       });
-    }
-    yrs_txn.encode_update_v1()
+    });
+  }
+  Ok(())
+}
+
+pub async fn create_row_document(
+  workspace_id: &str,
+  uid: i64,
+  new_doc_id: &str,
+  collab_storage: &CollabAccessControlStorage,
+  row_doc_content: String,
+) -> Result<CreatedRowDocument, AppError> {
+  let md_importer = MDImporter::new(None);
+  let doc_data = md_importer
+    .import(&new_doc_id, row_doc_content)
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e)))?;
+  let doc = Document::create(&new_doc_id, doc_data)
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create document: {:?}", e)))?;
+  let doc_ec = doc.encode_collab().map_err(|e| {
+    AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
+  })?;
+
+  let mut folder =
+    get_latest_collab_folder(collab_storage, GetCollabOrigin::Server, workspace_id).await?;
+  let folder_updates = {
+    let mut folder_txn = folder.collab.transact_mut();
+    folder.body.views.insert(
+      &mut folder_txn,
+      collab_folder::View::orphan_view(&new_doc_id, collab_folder::ViewLayout::Document, Some(uid)),
+      None,
+    );
+    folder_txn.encode_update_v1()
   };
-  Ok(db_row_collab_updates)
+
+  let updated_folder = collab_to_bin(folder.collab, CollabType::Folder).await?;
+
+  let doc_ec_bytes = doc_ec
+    .encode_to_bytes()
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode db doc: {:?}", e)))?;
+
+  Ok(CreatedRowDocument {
+    updated_folder,
+    folder_updates,
+    doc_ec_bytes,
+  })
+}
+
+pub struct CreatedRowDocument {
+  pub updated_folder: Vec<u8>,
+  pub folder_updates: Vec<u8>,
+  pub doc_ec_bytes: Vec<u8>,
 }

@@ -22,7 +22,6 @@ use collab_database::views::OrderObjectPosition;
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::document::Document;
-use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::CollabOrigin;
@@ -69,6 +68,7 @@ use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
 use super::utils::collab_from_doc_state;
 use super::utils::collab_to_bin;
+use super::utils::create_row_document;
 use super::utils::field_by_id_name_uniq;
 use super::utils::get_latest_collab;
 use super::utils::get_latest_collab_database_body;
@@ -79,6 +79,7 @@ use super::utils::get_row_details_serde;
 use super::utils::type_option_reader_by_id;
 use super::utils::type_options_serde;
 use super::utils::write_to_database_row;
+use super::utils::CreatedRowDocument;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -483,12 +484,9 @@ pub async fn insert_database_row(
     row_update.set_created_at(Utc::now().timestamp());
   });
 
-  // If a document is provided, we need to create a new document and update the folder
-  // (updated_folder_collab, folder_updates)
-  let mut require_folder_update: Option<(Vec<u8>, Vec<u8>)> = None;
-
-  let doc_id_ec_bytes: Option<(String, Vec<u8>)> = {
+  let new_row_doc_creation: Option<(String, CreatedRowDocument)> = {
     if let Some(row_doc_content) = row_doc_content {
+      // update row to indicate that the document is not empty
       let is_document_empty_id =
         meta_id_from_row_id(&new_db_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
       new_db_row_body.get_meta().insert(
@@ -496,46 +494,22 @@ pub async fn insert_database_row(
         is_document_empty_id,
         false,
       );
+
+      // get document id
       let new_doc_id = new_db_row_body
         .document_id(&new_db_row_collab.transact())
         .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err)))?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to get document id")))?;
-      let md_importer = MDImporter::new(None);
-      let doc_data = md_importer
-        .import(&new_db_row_id, row_doc_content)
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e)))?;
-      let doc = Document::create(&new_doc_id, doc_data)
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create document: {:?}", e)))?;
-      let doc_ec = doc.encode_collab().map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
-      })?;
 
-      {
-        let mut folder =
-          get_latest_collab_folder(collab_storage, GetCollabOrigin::Server, workspace_uuid_str)
-            .await?;
-        let folder_updates = {
-          let mut folder_txn = folder.collab.transact_mut();
-          folder.body.views.insert(
-            &mut folder_txn,
-            collab_folder::View::orphan_view(
-              &new_doc_id,
-              collab_folder::ViewLayout::Document,
-              Some(uid),
-            ),
-            None,
-          );
-          folder_txn.encode_update_v1()
-        };
-
-        let updated_folder = collab_to_bin(folder.collab, CollabType::Folder).await?;
-        require_folder_update = Some((updated_folder, folder_updates));
-      };
-
-      let doc_ec_bytes = doc_ec
-        .encode_to_bytes()
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode db doc: {:?}", e)))?;
-      Some((new_doc_id, doc_ec_bytes))
+      let created_row_doc = create_row_document(
+        workspace_uuid_str,
+        uid,
+        &new_doc_id,
+        collab_storage,
+        row_doc_content,
+      )
+      .await?;
+      Some((new_doc_id, created_row_doc))
     } else {
       None
     }
@@ -543,10 +517,9 @@ pub async fn insert_database_row(
 
   let (mut db_collab, db_body) =
     get_latest_collab_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
-  let _row_updates = write_to_database_row(
-    &db_collab,
+  write_to_database_row(
     &db_body,
-    &mut new_db_row_collab,
+    &mut new_db_row_collab.transact_mut(),
     &new_db_row_body,
     cell_value_by_id,
     creation_time.timestamp(),
@@ -592,7 +565,7 @@ pub async fn insert_database_row(
   let mut db_txn = pg_pool.begin().await?;
 
   // handle row document (if provided)
-  if let Some((doc_id, doc_ec_bytes)) = doc_id_ec_bytes {
+  if let Some((doc_id, created_doc)) = new_row_doc_creation {
     // insert document
     collab_storage
       .upsert_new_collab_with_transaction(
@@ -600,7 +573,7 @@ pub async fn insert_database_row(
         &uid,
         CollabParams {
           object_id: doc_id,
-          encoded_collab_v1: doc_ec_bytes.into(),
+          encoded_collab_v1: created_doc.doc_ec_bytes.into(),
           collab_type: CollabType::Document,
           embeddings: None,
         },
@@ -608,24 +581,28 @@ pub async fn insert_database_row(
         "inserting new database row document from server",
       )
       .await?;
+
     // update folder and broadcast
-    if let Some((updated_folder, folder_updates)) = require_folder_update {
-      collab_storage
-        .upsert_new_collab_with_transaction(
-          workspace_uuid_str,
-          &uid,
-          CollabParams {
-            object_id: workspace_uuid_str.to_string(),
-            encoded_collab_v1: updated_folder.into(),
-            collab_type: CollabType::Folder,
-            embeddings: None,
-          },
-          &mut db_txn,
-          "inserting updated folder from server",
-        )
-        .await?;
-      broadcast_update(collab_storage, workspace_uuid_str, folder_updates).await?;
-    }
+    collab_storage
+      .upsert_new_collab_with_transaction(
+        workspace_uuid_str,
+        &uid,
+        CollabParams {
+          object_id: workspace_uuid_str.to_string(),
+          encoded_collab_v1: created_doc.updated_folder.into(),
+          collab_type: CollabType::Folder,
+          embeddings: None,
+        },
+        &mut db_txn,
+        "inserting updated folder from server",
+      )
+      .await?;
+    broadcast_update(
+      collab_storage,
+      workspace_uuid_str,
+      created_doc.folder_updates,
+    )
+    .await?;
   };
 
   // insert row
@@ -700,17 +677,71 @@ pub async fn upsert_database_row(
 
   // At this point, db row exists,
   // so we modify it, put into storage and broadcast change
-  let (db_collab, db_body) =
+  let (_db_collab, db_body) =
     get_latest_collab_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
-  let db_row_collab_updates = write_to_database_row(
-    &db_collab,
+  let mut db_row_txn = db_row_collab.transact_mut();
+  write_to_database_row(
     &db_body,
-    &mut db_row_collab,
+    &mut db_row_txn,
     &db_row_body,
     cell_value_by_id,
     Utc::now().timestamp(),
   )
   .await?;
+
+  enum DocChanges {
+    Update(Vec<u8>, Vec<u8>), // (updated_doc, doc_update)
+    Insert(CreatedRowDocument),
+  }
+
+  // replace the entire doc content
+  // if the doc is new, there will be no doc_update
+  // (doc_id, updated_doc, doc_update)
+  let doc_changes: Option<(String, DocChanges)> = {
+    match row_doc_content {
+      Some(row_doc_content) => {
+        let doc_id = db_row_body.document_id(&db_row_txn).map_err(|err| {
+          AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err))
+        })?;
+        match doc_id {
+          Some(doc_id) => {
+            todo!()
+          },
+          None => {
+            // update row to indicate that the document is not empty
+            let is_document_empty_id =
+              meta_id_from_row_id(&row_id.parse()?, RowMetaKey::IsDocumentEmpty);
+            db_row_body
+              .get_meta()
+              .insert(&mut db_row_txn, is_document_empty_id, false);
+
+            // get document id
+            let new_doc_id = db_row_body
+              .document_id(&db_row_txn)
+              .map_err(|err| {
+                AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err))
+              })?
+              .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to get document id")))?;
+
+            let created_row_doc: CreatedRowDocument = create_row_document(
+              workspace_uuid_str,
+              uid,
+              &new_doc_id,
+              collab_storage,
+              row_doc_content,
+            )
+            .await?;
+            Some((new_doc_id, DocChanges::Insert(created_row_doc)))
+          },
+        }
+      },
+      None => None,
+    }
+  };
+
+  // finalize update for database row
+  let db_row_collab_updates = db_row_txn.encode_update_v1();
+  drop(db_row_txn);
   let db_row_ec_v1 = collab_to_bin(db_row_collab, CollabType::DatabaseRow).await?;
 
   // write to disk and broadcast changes
@@ -729,9 +760,55 @@ pub async fn upsert_database_row(
       "inserting new database row from server",
     )
     .await?;
-  db_txn.commit().await?;
   broadcast_update(collab_storage, database_uuid_str, db_row_collab_updates).await?;
 
+  // handle document changes
+  if let Some((doc_id, doc_changes)) = doc_changes {
+    match doc_changes {
+      DocChanges::Update(_vec, _vec1) => todo!(),
+      DocChanges::Insert(created_doc) => {
+        let CreatedRowDocument {
+          updated_folder,
+          folder_updates,
+          doc_ec_bytes,
+        } = created_doc;
+
+        // new document creation
+        collab_storage
+          .upsert_new_collab_with_transaction(
+            workspace_uuid_str,
+            &uid,
+            CollabParams {
+              object_id: doc_id.to_string(),
+              encoded_collab_v1: doc_ec_bytes.into(),
+              collab_type: CollabType::Document,
+              embeddings: None,
+            },
+            &mut db_txn,
+            "updating database row document from server",
+          )
+          .await?;
+        // folder update
+        collab_storage
+          .upsert_new_collab_with_transaction(
+            workspace_uuid_str,
+            &uid,
+            CollabParams {
+              object_id: workspace_uuid_str.to_string(),
+              encoded_collab_v1: updated_folder.into(),
+              collab_type: CollabType::Document,
+              embeddings: None,
+            },
+            &mut db_txn,
+            "updating database row document from server",
+          )
+          .await?;
+        broadcast_update(collab_storage, workspace_uuid_str, folder_updates).await?;
+      },
+    }
+  }
+
+  db_txn.commit().await?;
   Ok(())
 }
 

@@ -21,7 +21,7 @@ async fn database_row_upsert_with_doc() {
       &todo_db.id,
       "my_pre_hash_123".to_string(),
       HashMap::from([]),
-      Some("This is a document of a database row".to_string().into()),
+      Some("This is a document of a database row".to_string()),
     )
     .await
     .unwrap();
@@ -29,14 +29,37 @@ async fn database_row_upsert_with_doc() {
   {
     // Get row and check data
     let row_detail = &c
-      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], false)
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], true)
       .await
       .unwrap()[0];
     assert!(row_detail.has_doc);
-    assert_eq!(row_detail.doc, None);
+    assert_eq!(
+      row_detail.doc,
+      Some(String::from("\nThis is a document of a database row"))
+    );
   }
-
-  // TODO: test with doc modification
+  // Upsert row with another doc
+  let _ = c
+    .upsert_database_item(
+      &workspace_id,
+      &todo_db.id,
+      "my_pre_hash_123".to_string(),
+      HashMap::from([]),
+      Some("This is a another document".to_string()),
+    )
+    .await
+    .unwrap();
+  {
+    // Get row and check that doc has been modified
+    let row_detail = &c
+      .list_database_row_details(&workspace_id, &todo_db.id, &[&row_id], true)
+      .await
+      .unwrap()[0];
+    assert_eq!(
+      row_detail.doc,
+      Some(String::from("\nThis is a another document"))
+    );
+  }
 }
 
 #[tokio::test]
@@ -93,7 +116,7 @@ async fn database_row_upsert() {
           (String::from("Status"), json!("Doing")),
           (String::from("Multiselect"), json!(["fast", "self-host"])),
         ]),
-        Some("This is a document of a database row".to_string().into()),
+        Some("This is a document of a database row".to_string()),
       )
       .await
       .unwrap();

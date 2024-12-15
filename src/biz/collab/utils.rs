@@ -18,6 +18,7 @@ use collab_database::rows::RowId;
 use collab_database::template::timestamp_parse::TimestampCellData;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use collab_document::document::Document;
+use collab_document::document::DocumentBody;
 use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
@@ -309,7 +310,7 @@ pub async fn get_latest_collab_document(
   collab_origin: GetCollabOrigin,
   workspace_id: &str,
   doc_oid: &str,
-) -> Result<Document, AppError> {
+) -> Result<(Collab, DocumentBody), AppError> {
   let doc_collab = get_latest_collab(
     collab_storage,
     collab_origin,
@@ -318,8 +319,13 @@ pub async fn get_latest_collab_document(
     CollabType::Document,
   )
   .await?;
-  let document = Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
-  Ok(document)
+  let document = DocumentBody::from_collab(&doc_collab).ok_or_else(|| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create document body from collab, doc_oid: {}",
+      doc_oid
+    ))
+  })?;
+  Ok((doc_collab, document))
 }
 
 pub async fn collab_to_bin(collab: Collab, collab_type: CollabType) -> Result<Vec<u8>, AppError> {
@@ -406,9 +412,9 @@ pub async fn create_row_document(
 ) -> Result<CreatedRowDocument, AppError> {
   let md_importer = MDImporter::new(None);
   let doc_data = md_importer
-    .import(&new_doc_id, row_doc_content)
+    .import(new_doc_id, row_doc_content)
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e)))?;
-  let doc = Document::create(&new_doc_id, doc_data)
+  let doc = Document::create(new_doc_id, doc_data)
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create document: {:?}", e)))?;
   let doc_ec = doc.encode_collab().map_err(|e| {
     AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
@@ -420,7 +426,7 @@ pub async fn create_row_document(
     let mut folder_txn = folder.collab.transact_mut();
     folder.body.views.insert(
       &mut folder_txn,
-      collab_folder::View::orphan_view(&new_doc_id, collab_folder::ViewLayout::Document, Some(uid)),
+      collab_folder::View::orphan_view(new_doc_id, collab_folder::ViewLayout::Document, Some(uid)),
       None,
     );
     folder_txn.encode_update_v1()

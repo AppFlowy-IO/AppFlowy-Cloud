@@ -186,7 +186,6 @@ fn get_encode_collab(
     object_id: object_id.to_string(),
     encoded_collab_v1: encoded_collab.into(),
     collab_type: collab_type.clone(),
-    embeddings: None,
   };
   Ok(params)
 }

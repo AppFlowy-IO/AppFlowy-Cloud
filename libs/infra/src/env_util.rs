@@ -1,7 +1,8 @@
 pub fn get_env_var(key: &str, default: &str) -> String {
   std::env::var(key).unwrap_or_else(|e| {
-    tracing::warn!(
-      "failed to read environment variable: {}, using default value: {}",
+    tracing::debug!(
+      "failed to read environment variable:{}:{}, using default value: {}",
+      key,
       e,
       default
     );
@@ -21,7 +22,11 @@ pub fn get_env_var_opt(key: &str) -> Option<String> {
       }
     },
     Err(e) => {
-      tracing::warn!("failed to read environment variable: {}, None set", e);
+      tracing::warn!(
+        "failed to read environment variable {}:{}, None set",
+        key,
+        e
+      );
       None
     },
   }

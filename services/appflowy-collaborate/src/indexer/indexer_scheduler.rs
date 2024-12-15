@@ -24,11 +24,9 @@ use futures_util::StreamExt;
 use rayon::prelude::*;
 use sqlx::PgPool;
 use std::pin::Pin;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::time::interval;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
@@ -82,11 +80,7 @@ impl IndexerScheduler {
 
     info!("Indexer scheduler is enabled: {}", this.index_enabled());
     if this.index_enabled() {
-      tokio::spawn(spawn_write_indexing(
-        rx,
-        this.pg_pool.clone(),
-        this.metrics.clone(),
-      ));
+      tokio::spawn(spawn_write_indexing(rx, this.pg_pool.clone()));
       tokio::spawn(handle_unindexed_collabs(this.clone()));
     }
 
@@ -142,8 +136,10 @@ impl IndexerScheduler {
     let workspace_id = Uuid::parse_str(workspace_id)?;
     let indexer_provider = self.indexer_provider.clone();
     let tx = self.schedule_tx.clone();
-    rayon::spawn(
-      move || match process_collab(&embedder, &indexer_provider, &indexed_collab) {
+
+    let metrics = self.metrics.clone();
+    rayon::spawn(move || {
+      match process_collab(&embedder, &indexer_provider, &indexed_collab, &metrics) {
         Ok(Some((tokens_used, contents))) => {
           if let Err(err) = tx.send(EmbeddingRecord {
             workspace_id,
@@ -161,8 +157,8 @@ impl IndexerScheduler {
             indexed_collab.object_id, err
           );
         },
-      },
-    );
+      }
+    });
     Ok(())
   }
 
@@ -180,11 +176,12 @@ impl IndexerScheduler {
     let indexer_provider = self.indexer_provider.clone();
     let threads = self.threads.clone();
     let tx = self.schedule_tx.clone();
+    let metrics = self.metrics.clone();
     rayon::spawn(move || {
       let results = threads.install(|| {
         indexed_collabs
           .into_par_iter()
-          .filter_map(|collab| process_collab(&embedder, &indexer_provider, &collab).ok())
+          .filter_map(|collab| process_collab(&embedder, &indexer_provider, &collab, &metrics).ok())
           .filter_map(|result| result.map(|r| (r.0, r.1)))
           .collect::<Vec<_>>()
       });
@@ -245,8 +242,16 @@ impl IndexerScheduler {
     let threads = self.threads.clone();
     let tx = self.schedule_tx.clone();
     let object_id = object_id.to_string();
-    rayon::spawn(
-      move || match indexer.embed_in_thread_pool(&embedder, chunks, &threads) {
+    let metrics = self.metrics.clone();
+    rayon::spawn(move || {
+      let start = Instant::now();
+      metrics.record_embed_count(1);
+
+      let result = indexer.embed_in_thread_pool(&embedder, chunks, &threads);
+      let duration = start.elapsed();
+      metrics.record_processing_time(duration.as_millis());
+
+      match result {
         Ok(Some(data)) => {
           if let Err(err) = tx.send(EmbeddingRecord {
             workspace_id,
@@ -258,9 +263,15 @@ impl IndexerScheduler {
           }
         },
         Ok(None) => warn!("No embedding for collab:{}", object_id),
-        Err(err) => error!("Failed to embed collab: {}", err),
-      },
-    );
+        Err(err) => {
+          metrics.record_failed_embed_count(1);
+          error!(
+            "Failed to create embeddings content for collab:{}, error:{}",
+            object_id, err
+          );
+        },
+      }
+    });
 
     Ok(())
   }
@@ -396,23 +407,7 @@ async fn index_unindexd_collab(
 }
 
 const EMBEDDING_RECORD_BUFFER_SIZE: usize = 5;
-async fn spawn_write_indexing(
-  mut rx: UnboundedReceiver<EmbeddingRecord>,
-  pg_pool: PgPool,
-  metrics: Arc<EmbeddingMetrics>,
-) {
-  let total_insert_count = Arc::new(AtomicU32::new(0));
-  let clone_total_insert_count = total_insert_count.clone();
-  tokio::spawn(async move {
-    let mut interval = interval(Duration::from_secs(30));
-    loop {
-      interval.tick().await;
-      metrics.record_total_embed_count(
-        clone_total_insert_count.load(std::sync::atomic::Ordering::Relaxed) as i64,
-      );
-    }
-  });
-
+async fn spawn_write_indexing(mut rx: UnboundedReceiver<EmbeddingRecord>, pg_pool: PgPool) {
   let mut buf = Vec::with_capacity(EMBEDDING_RECORD_BUFFER_SIZE);
   loop {
     let n = rx.recv_many(&mut buf, EMBEDDING_RECORD_BUFFER_SIZE).await;
@@ -421,7 +416,6 @@ async fn spawn_write_indexing(
       break;
     }
 
-    total_insert_count.fetch_add(n as u32, std::sync::atomic::Ordering::Relaxed);
     let records = buf.drain(..n).collect::<Vec<_>>();
     match batch_insert_records(&pg_pool, records).await {
       Ok(_) => info!("wrote {} embedding records", n),
@@ -462,8 +456,12 @@ fn process_collab(
   embdder: &Embedder,
   indexer_provider: &IndexerProvider,
   indexed_collab: &IndexedCollab,
+  metrics: &EmbeddingMetrics,
 ) -> Result<Option<(u32, Vec<AFCollabEmbeddedChunk>)>, AppError> {
   if let Some(indexer) = indexer_provider.indexer_for(&indexed_collab.collab_type) {
+    let start_time = Instant::now();
+    metrics.record_embed_count(1);
+
     let encode_collab = EncodedCollab::decode_from_bytes(&indexed_collab.encoded_collab)?;
     let collab = Collab::new_with_source(
       CollabOrigin::Empty,
@@ -475,8 +473,12 @@ fn process_collab(
     .map_err(|err| AppError::Internal(err.into()))?;
 
     let chunks = indexer.create_embedded_chunks(&collab, embdder.model())?;
-    match indexer.embed(embdder, chunks)? {
-      Some(embeddings) => {
+    let result = indexer.embed(embdder, chunks);
+    let duration = start_time.elapsed();
+    metrics.record_processing_time(duration.as_millis());
+
+    match result {
+      Ok(Some(embeddings)) => {
         trace!(
           "Indexed collab {}, tokens: {}",
           indexed_collab.object_id,
@@ -484,7 +486,11 @@ fn process_collab(
         );
         Ok(Some((embeddings.tokens_consumed, embeddings.params)))
       },
-      None => Ok(None),
+      Ok(None) => Ok(None),
+      Err(err) => {
+        metrics.record_failed_embed_count(1);
+        Err(err)
+      },
     }
   } else {
     Ok(None)

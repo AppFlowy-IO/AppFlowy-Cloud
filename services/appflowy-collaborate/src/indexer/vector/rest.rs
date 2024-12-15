@@ -74,9 +74,6 @@ pub enum EmbedErrorKind {
   #[error("could not reach embedding server:\n  - {0}")]
   RestNetwork(ureq::Transport),
 
-  #[error("no embedding was produced")]
-  MissingEmbedding,
-
   #[error(transparent)]
   PanicInThreadPool(#[from] CatchedPanic),
 }
@@ -110,12 +107,6 @@ impl std::fmt::Display for FaultSource {
 pub struct Retry {
   pub error: EmbedError,
   strategy: RetryStrategy,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConfigurationSource {
-  OpenAi,
-  User,
 }
 
 pub enum RetryStrategy {

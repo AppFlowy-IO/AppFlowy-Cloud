@@ -85,7 +85,7 @@ async fn database_row_upsert() {
         (String::from("Status"), json!("To Do")),
         (String::from("Multiselect"), json!(["social", "news"])),
       ]),
-      None,
+      Some("".to_string()),
     )
     .await
     .unwrap();

@@ -14,24 +14,6 @@ use yrs::{ReadTxn, StateVector, Transact, Update};
 
 use crate::message::{CustomMessage, Message, RTProtocolError, SyncMessage, SyncMeta};
 
-// ***************************
-// Client A  Client B  Server
-// |          |             |
-// |---(1)--Sync Step1----->|
-// |          |             |
-// |<--(2)--Sync Step2------|
-// |<-------Sync Step1------|
-// |          |             |
-// |---(3)--Sync Step2----->|
-// |          |             |
-// **************************
-// |---(1)-- Update-------->|
-// |          |             |
-// |          |  (2) Apply->|
-// |          |             |
-// |          |<-(3) Broadcast
-// |          |             |
-// |          |< (4) Apply  |
 /// A implementation of [CollabSyncProtocol].
 #[derive(Clone)]
 pub struct ClientSyncProtocol;

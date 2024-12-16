@@ -53,7 +53,6 @@ pub enum GroupCommand {
   },
   GenerateCollabEmbedding {
     object_id: String,
-    ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
   },
   CalculateMissingUpdate {
     object_id: String,
@@ -148,10 +147,10 @@ where
               warn!("Send handle client update message result fail: {:?}", err);
             }
           },
-          GroupCommand::GenerateCollabEmbedding { object_id, ret } => {
-            // TODO(nathan): generate embedding
-            trace!("Generate embedding for group:{}", object_id);
-            let _ = ret.send(Ok(()));
+          GroupCommand::GenerateCollabEmbedding { object_id } => {
+            if let Some(group) = self.group_manager.get_group(&object_id).await {
+              group.generate_embeddings().await;
+            }
           },
           GroupCommand::CalculateMissingUpdate {
             object_id,

@@ -38,6 +38,16 @@ use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Update};
 
+use collab_stream::error::StreamError;
+
+use database::collab::CollabStorage;
+
+use crate::error::RealtimeError;
+use crate::group::broadcast::{CollabBroadcast, Subscription};
+use crate::group::persistence::GroupPersistence;
+use crate::indexer::IndexerScheduler;
+use crate::metrics::CollabRealtimeMetrics;
+
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
   state: Arc<CollabGroupState>,
@@ -56,6 +66,7 @@ struct CollabGroupState {
   metrics: Arc<CollabRealtimeMetrics>,
   /// Cancellation token triggered when current collab group is about to be stopped.
   /// This will also shut down all subsequent [Subscription]s.
+  indexer_scheduler: Arc<IndexerScheduler>,
   shutdown: CancellationToken,
   last_activity: ArcSwap<Instant>,
   seq_no: AtomicU32,
@@ -82,8 +93,8 @@ impl CollabGroup {
     collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
     prune_grace_period: Duration,
-    indexer: Option<Arc<dyn Indexer>>,
     state_vector: StateVector,
+    indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, StreamError>
   where
     S: CollabStorage,
@@ -99,6 +110,7 @@ impl CollabGroup {
       indexer,
       metrics.clone(),
       prune_grace_period,
+      indexer_scheduler
     );
 
     let state = Arc::new(CollabGroupState {
@@ -329,6 +341,39 @@ impl CollabGroup {
           break;
         }
       }
+    }
+  }
+
+  /// Generate embedding for the current Collab immediately
+  ///
+  pub async fn generate_embeddings(&self) {
+    let result = self
+      .indexer_scheduler
+      .index_collab(
+        &self.workspace_id,
+        &self.object_id,
+        &self.collab,
+        &self.collab_type,
+      )
+      .await;
+    match result {
+      Ok(_) => {
+        trace!(
+          "successfully indexed embeddings for {} {}/{}",
+          self.collab_type,
+          self.workspace_id,
+          self.object_id
+        );
+      },
+      Err(err) => {
+        trace!(
+          "failed to index embeddings for document {} {}/{}: {}",
+          self.collab_type,
+          self.workspace_id,
+          self.object_id,
+          err
+        );
+      },
     }
   }
 

@@ -38,7 +38,6 @@ async fn insert_collab_sql_test(pool: PgPool) {
       object_id,
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encoded_collab_v1.into(),
-      embeddings: None,
     };
     insert_into_af_collab(&mut txn, &user.uid, &user.workspace_id, &params)
       .await
@@ -92,7 +91,6 @@ async fn insert_bulk_collab_sql_test(pool: PgPool) {
       object_id,
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encoded_collab_v1.clone().into(), // Store the original data for validation
-      embeddings: None,
     };
 
     collab_params_list.push(params);
@@ -170,13 +168,11 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
       object_id: object_id.clone(),
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encoded_collab_v1.clone().into(),
-      embeddings: None,
     },
     CollabParams {
       object_id: object_id.clone(), // Duplicate oid
       collab_type: CollabType::Unknown,
       encoded_collab_v1: generate_random_bytes(2048).into(), // Different data to test update
-      embeddings: None,
     },
   ];
 
@@ -217,7 +213,6 @@ async fn test_batch_insert_comparison(pool: PgPool) {
           object_id: uuid::Uuid::new_v4().to_string(),
           collab_type: CollabType::Unknown,
           encoded_collab_v1: generate_random_bytes(row_size).into(), // Generate random bytes for the given row size
-          embeddings: None,
         })
         .collect();
 

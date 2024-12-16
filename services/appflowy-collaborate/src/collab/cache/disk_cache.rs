@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
 use collab::entity::{EncodedCollab, EncoderVersion};
-use collab_entity::CollabType;
 use sqlx::{Error, PgPool, Transaction};
 use std::collections::HashMap;
 use std::ops::DerefMut;
@@ -10,7 +9,6 @@ use std::time::{Duration, Instant};
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 use tracing::{error, instrument};
-use uuid::Uuid;
 
 use crate::collab::cache::encode_collab_from_bytes;
 use crate::CollabMetrics;
@@ -21,7 +19,6 @@ use database::collab::{
 };
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::file::{BucketClient, ResponseBlob};
-use database::index::upsert_collab_embeddings;
 use database_entity::dto::{
   CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, ZSTD_COMPRESSION_LEVEL,
 };
@@ -130,31 +127,6 @@ impl CollabDiskCache {
     }
 
     insert_into_af_collab(transaction, uid, workspace_id, &params).await?;
-    if let Some(em) = &params.embeddings {
-      tracing::info!(
-        "saving collab {} embeddings (cost: {} tokens)",
-        params.object_id,
-        em.tokens_consumed
-      );
-      let workspace_id = Uuid::parse_str(workspace_id)?;
-      upsert_collab_embeddings(
-        transaction,
-        &workspace_id,
-        em.tokens_consumed,
-        em.params.clone(),
-      )
-      .await?;
-      if !delete_from_s3.is_empty() {
-        tokio::spawn(async move {
-          if let Err(err) = s3.delete_blobs(delete_from_s3).await {
-            tracing::warn!("failed to delete outdated collab from S3: {}", err);
-          }
-        });
-      }
-    } else if params.collab_type == CollabType::Document {
-      tracing::info!("no embeddings to save for collab {}", params.object_id);
-    }
-
     Ok(())
   }
 

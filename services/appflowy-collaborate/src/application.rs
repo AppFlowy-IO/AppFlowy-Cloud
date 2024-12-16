@@ -31,8 +31,8 @@ use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use crate::collab::cache::CollabCache;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
-use crate::config::{Config, DatabaseSetting, S3Setting};
-use crate::indexer::IndexerProvider;
+use crate::config::{get_env_var, Config, DatabaseSetting, S3Setting};
+use crate::indexer::{IndexerConfiguration, IndexerProvider, IndexerScheduler};
 use crate::pg_listener::PgListeners;
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
@@ -84,7 +84,7 @@ pub async fn run_actix_server(
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     Duration::from_secs(config.collab.group_prune_grace_period_secs),
-    state.indexer_provider.clone(),
+    state.indexer_scheduler.clone(),
   )
   .await
   .unwrap();
@@ -105,8 +105,6 @@ pub async fn run_actix_server(
 pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<AppState, Error> {
   let metrics = AppMetrics::new();
   let pg_pool = get_connection_pool(&config.db_settings).await?;
-  let ai_client = AppFlowyAIClient::new(&config.ai.url());
-  let indexer_provider = IndexerProvider::new(pg_pool.clone(), ai_client);
 
   // User cache
   let user_cache = UserCache::new(pg_pool.clone()).await;
@@ -154,6 +152,22 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     snapshot_control,
     rt_cmd_tx,
   ));
+
+  info!("Setting up Indexer provider...");
+  let embedder_config = IndexerConfiguration {
+    enable: crate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+      .parse::<bool>()
+      .unwrap_or(true),
+    openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+  };
+  let indexer_scheduler = IndexerScheduler::new(
+    IndexerProvider::new(),
+    pg_pool.clone(),
+    collab_storage.clone(),
+    metrics.embedding_metrics.clone(),
+    embedder_config,
+  );
+
   let app_state = AppState {
     config: Arc::new(config.clone()),
     pg_listeners,
@@ -163,7 +177,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     access_control,
     collab_access_control_storage: collab_storage,
     metrics,
-    indexer_provider,
+    indexer_scheduler,
   };
   Ok(app_state)
 }

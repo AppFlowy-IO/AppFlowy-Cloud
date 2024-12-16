@@ -40,11 +40,12 @@ use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
-use appflowy_collaborate::indexer::IndexerProvider;
+use appflowy_collaborate::indexer::{IndexerConfiguration, IndexerProvider, IndexerScheduler};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
+use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
@@ -137,7 +138,7 @@ pub async fn run_actix_server(
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     Duration::from_secs(config.collab.group_prune_grace_period_secs),
-    state.indexer_provider.clone(),
+    state.indexer_scheduler.clone(),
   )
   .await
   .unwrap();
@@ -251,8 +252,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!("Setup AppFlowy AI: {}", config.appflowy_ai.url());
   let appflowy_ai_client = AppFlowyAIClient::new(&config.appflowy_ai.url());
-  let indexer_provider = IndexerProvider::new(pg_pool.clone(), appflowy_ai_client.clone());
-
   // Pg listeners
   info!("Setting up Pg listeners...");
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
@@ -322,6 +321,21 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
   let mailer = get_mailer(&config.mailer).await?;
 
+  info!("Setting up Indexer scheduler...");
+  let embedder_config = IndexerConfiguration {
+    enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+      .parse::<bool>()
+      .unwrap_or(true),
+    openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+  };
+  let indexer_scheduler = IndexerScheduler::new(
+    IndexerProvider::new(),
+    pg_pool.clone(),
+    collab_access_control_storage.clone(),
+    metrics.embedding_metrics.clone(),
+    embedder_config,
+  );
+
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
@@ -345,7 +359,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     mailer,
     ai_client: appflowy_ai_client,
     grpc_history_client,
-    indexer_provider,
+    indexer_scheduler,
   })
 }
 

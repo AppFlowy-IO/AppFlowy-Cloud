@@ -20,8 +20,7 @@ async fn client_apply_update_find_missing_update_test() {
       .collab
       .write()
       .await;
-    let collab = (*lock).borrow_mut();
-    collab.insert("content", "hello world");
+    lock.insert("content", "hello world");
   }
 
   expected_json["content"] = Value::String("hello world".to_string());
@@ -79,8 +78,7 @@ async fn make_clients() -> (TestClient, TestClient, String, Value) {
       .collab
       .write()
       .await;
-    let collab = (*lock).borrow_mut();
-    collab.insert("title", "hello world");
+    lock.insert("title", "hello world");
   }
   client_1
     .wait_object_sync_complete(&object_id)

@@ -1,9 +1,15 @@
 use std::time::Duration;
 
 use anyhow::Context;
+use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
+use collab_document::blocks::Block;
+use collab_document::document::Document;
+use collab_document::document_data::default_document_collab_data;
+use collab_entity::CollabType;
+use nanoid::nanoid;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use redis::aio::ConnectionManager;
@@ -37,6 +43,117 @@ pub fn make_big_collab_doc_state(object_id: &str, key: &str, value: String) -> V
     .unwrap()
     .doc_state
     .to_vec()
+}
+
+pub struct TestDocumentEditor {
+  pub document: Document,
+}
+
+impl TestDocumentEditor {
+  pub(crate) fn clear(&mut self) {
+    let page_id = self.document.get_page_id().unwrap();
+    let blocks = self.document.get_block_children_ids(&page_id);
+    for block in blocks {
+      self.document.delete_block(&block).unwrap();
+    }
+  }
+
+  pub(crate) fn insert_paragraphs(&mut self, paragraphs: Vec<String>) {
+    let page_id = self.document.get_page_id().unwrap();
+    let mut prev_id = "".to_string();
+    for paragraph in paragraphs {
+      let block_id = nanoid!(6);
+      let text_id = nanoid!(6);
+      let block = Block {
+        id: block_id.clone(),
+        ty: "paragraph".to_owned(),
+        parent: page_id.clone(),
+        children: "".to_string(),
+        external_id: Some(text_id.clone()),
+        external_type: Some("text".to_owned()),
+        data: Default::default(),
+      };
+
+      self
+        .document
+        .insert_block(block, Some(prev_id.clone()))
+        .unwrap();
+      prev_id.clone_from(&block_id);
+      self
+        .document
+        .apply_text_delta(&text_id, format!(r#"[{{"insert": "{}"}}]"#, paragraph));
+    }
+  }
+
+  pub fn encode_collab(&self) -> EncodedCollab {
+    self.document.encode_collab().unwrap()
+  }
+}
+
+pub fn empty_document_editor(object_id: &str) -> TestDocumentEditor {
+  let doc_state = default_document_collab_data(object_id)
+    .unwrap()
+    .doc_state
+    .to_vec();
+  let collab = Collab::new_with_source(
+    CollabOrigin::Empty,
+    object_id,
+    DataSource::DocStateV1(doc_state),
+    vec![],
+    false,
+  )
+  .unwrap();
+  TestDocumentEditor {
+    document: Document::open(collab).unwrap(),
+  }
+}
+
+pub fn alex_software_engineer_story() -> Vec<&'static str> {
+  vec![
+    "Alex is a software programmer who spends his days coding and solving problems.",
+    "Outside of work, he enjoys staying active with sports like tennis, basketball, cycling, badminton, and snowboarding.",
+    "He learned tennis while living in Singapore and now enjoys playing with his friends on weekends.",
+    "Alex had an unforgettable experience trying two diamond slopes in Lake Tahoe, which challenged his snowboarding skills.",
+    "He brought his bike with him when he moved to Singapore, excited to explore the city on two wheels.",
+    "Although he hasn’t ridden his bike in Singapore yet, Alex looks forward to cycling through the city’s famous parks and scenic routes.",
+    "Alex enjoys the thrill of playing different sports, finding balance between his work and physical activities.",
+    "From the adrenaline of snowboarding to the strategic moves on the tennis court, each sport gives him a sense of freedom and excitement.",
+  ]
+}
+
+pub fn alex_banker_story() -> Vec<&'static str> {
+  vec![
+    "Alex is a banker who spends most of their time working with numbers.",
+    "They don't enjoy sports or physical activities, preferring to relax.",
+    "Instead of exercise, Alex finds joy in eating delicious food and",
+    "exploring new restaurants. They love trying different cuisines and",
+    "discovering new dishes that excite their taste buds.",
+    "For Alex, food is a form of relaxation and self-care, a break from",
+    "the hectic world of banking. A perfect meal brings them comfort.",
+    "Whether dining out or cooking at home, Alex enjoys savoring flavors",
+    "and experiencing the joy of good food. It’s their favorite way to unwind.",
+    "Though they don’t share the same passion for sports, Alex finds",
+    "happiness in the culinary world, where each new dish is an adventure.",
+  ]
+}
+
+#[allow(dead_code)]
+pub fn empty_collab_doc_state(object_id: &str, collab_type: CollabType) -> Vec<u8> {
+  match collab_type {
+    CollabType::Document => default_document_collab_data(object_id)
+      .unwrap()
+      .doc_state
+      .to_vec(),
+    CollabType::Unknown => {
+      let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+      collab
+        .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
+        .unwrap()
+        .doc_state
+        .to_vec()
+    },
+    _ => panic!("collab type not supported"),
+  }
 }
 
 pub fn test_encode_collab_v1(object_id: &str, key: &str, value: &str) -> EncodedCollab {

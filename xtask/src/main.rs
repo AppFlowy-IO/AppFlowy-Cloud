@@ -14,6 +14,8 @@ use tokio::time::{sleep, Duration};
 #[tokio::main]
 async fn main() -> Result<()> {
   let is_stress_test = std::env::args().any(|arg| arg == "--stress-test");
+  let target_dir = "./target";
+  std::env::set_var("CARGO_TARGET_DIR", target_dir);
 
   let appflowy_cloud_bin_name = "appflowy_cloud";
   let worker_bin_name = "appflowy_worker";
@@ -120,11 +122,11 @@ async fn kill_existing_process(process_identifier: &str) -> Result<()> {
 
 fn handle_process_exit(status: std::process::ExitStatus, process_name: &str) -> Result<()> {
   if status.success() {
-    println!("{} exited normally.", process_name);
+    println!("handle_process_exit: {} exited normally.", process_name);
     Ok(())
   } else {
     Err(anyhow!(
-      "{} process failed with code {}",
+      "handle_process_exit: {} process failed: {}",
       process_name,
       status
     ))

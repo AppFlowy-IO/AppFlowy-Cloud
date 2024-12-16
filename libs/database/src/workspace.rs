@@ -210,60 +210,6 @@ pub async fn select_user_role<'a, E: Executor<'a, Database = Postgres>>(
   Ok(AFRole::from(row))
 }
 
-/// Checks the user's permission to edit a collab object.
-/// user can edit collab if:
-/// 1. user is the member of the workspace
-/// 2. the collab object is not exist
-/// 3. the collab object is exist and the user is the member of the collab and the role is owner or member
-#[allow(dead_code)]
-pub async fn select_user_can_edit_collab(
-  pg_pool: &PgPool,
-  user_uuid: &Uuid,
-  workspace_id: &Uuid,
-  object_id: &str,
-) -> Result<bool, AppError> {
-  let permission_check = sqlx::query_scalar!(
-    r#"
-    WITH workspace_check AS (
-        SELECT EXISTS(
-            SELECT 1
-            FROM af_workspace_member
-            WHERE af_workspace_member.uid = (SELECT uid FROM af_user WHERE uuid = $1) AND
-            af_workspace_member.workspace_id = $3
-        ) AS "workspace_exists"
-    ),
-    collab_check AS (
-        SELECT EXISTS(
-            SELECT 1
-            FROM af_collab_member
-            WHERE oid = $2
-        ) AS "collab_exists"
-    )
-    SELECT
-        NOT collab_check.collab_exists OR (
-            workspace_check.workspace_exists AND
-            EXISTS(
-                SELECT 1
-                FROM af_collab_member
-                JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
-                WHERE
-                    af_collab_member.uid = (SELECT uid FROM af_user WHERE uuid = $1) AND
-                    af_collab_member.oid = $2 AND
-                    af_permissions.access_level > 20
-            )
-        ) AS "permission_check"
-    FROM workspace_check, collab_check;
-     "#,
-    user_uuid,
-    object_id,
-    workspace_id,
-  )
-  .fetch_one(pg_pool)
-  .await?;
-
-  Ok(permission_check.unwrap_or(false))
-}
-
 #[inline]
 pub async fn upsert_workspace_member_with_txn(
   txn: &mut Transaction<'_, sqlx::Postgres>,

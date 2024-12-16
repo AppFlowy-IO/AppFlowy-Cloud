@@ -20,7 +20,7 @@ use crate::client::client_msg_router::ClientMessageRouter;
 use crate::error::RealtimeError;
 use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
-use crate::indexer::IndexerProvider;
+use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabRealtimeMetrics;
 
 pub struct GroupManager<S> {
@@ -31,7 +31,7 @@ pub struct GroupManager<S> {
   collab_redis_stream: Arc<CollabRedisStream>,
   persistence_interval: Duration,
   prune_grace_period: Duration,
-  indexer_provider: Arc<IndexerProvider>,
+  indexer_scheduler: Arc<IndexerScheduler>,
 }
 
 impl<S> GroupManager<S>
@@ -46,7 +46,7 @@ where
     collab_stream: CollabRedisStream,
     persistence_interval: Duration,
     prune_grace_period: Duration,
-    indexer_provider: Arc<IndexerProvider>,
+    indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
     let collab_stream = Arc::new(collab_stream);
     Ok(Self {
@@ -57,7 +57,7 @@ where
       collab_redis_stream: collab_stream,
       persistence_interval,
       prune_grace_period,
-      indexer_provider,
+      indexer_scheduler,
     })
   }
 
@@ -145,18 +145,7 @@ where
       collab_type
     );
 
-    let mut indexer = self.indexer_provider.indexer_for(&collab_type);
-    if indexer.is_some()
-      && !self
-        .indexer_provider
-        .can_index_workspace(workspace_id)
-        .await
-        .map_err(|e| RealtimeError::Internal(e.into()))?
-    {
-      tracing::trace!("workspace {} indexing is disabled", workspace_id);
-      indexer = None;
-    }
-    let group = CollabGroup::new(
+    let group = Arc::new(CollabGroup::new(
       user.uid,
       workspace_id.to_string(),
       object_id.to_string(),
@@ -166,8 +155,8 @@ where
       self.collab_redis_stream.clone(),
       self.persistence_interval,
       self.prune_grace_period,
-      indexer,
       state_vector,
+      self.indexer_scheduler.clone(),
     )?;
     self.state.insert_group(object_id, group);
     Ok(())

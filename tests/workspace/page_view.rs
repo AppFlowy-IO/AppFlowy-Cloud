@@ -4,7 +4,7 @@ use client_api::entity::{QueryCollab, QueryCollabParams};
 use client_api_test::{
   generate_unique_registered_user, generate_unique_registered_user_client, TestClient,
 };
-use collab::{core::origin::CollabClient, preclude::Collab};
+use collab::core::origin::CollabClient;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
@@ -25,9 +25,8 @@ async fn get_latest_folder(test_client: &TestClient, workspace_id: &str) -> Fold
     .collab
     .read()
     .await;
-  let collab: &Collab = (*lock).borrow();
   let collab_type = CollabType::Folder;
-  let encoded_collab = collab
+  let encoded_collab = lock
     .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
     .unwrap();
   let uid = test_client.uid().await;

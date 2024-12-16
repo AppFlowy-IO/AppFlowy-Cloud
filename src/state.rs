@@ -15,7 +15,8 @@ use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::indexer::IndexerProvider;
+use appflowy_collaborate::indexer::metrics::EmbeddingMetrics;
+use appflowy_collaborate::indexer::IndexerScheduler;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use collab_stream::stream_router::StreamRouter;
@@ -56,7 +57,7 @@ pub struct AppState {
   pub mailer: AFCloudMailer,
   pub ai_client: AppFlowyAIClient,
   pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
-  pub indexer_provider: Arc<IndexerProvider>,
+  pub indexer_scheduler: Arc<IndexerScheduler>,
 }
 
 impl AppState {
@@ -127,6 +128,7 @@ pub struct AppMetrics {
   pub collab_metrics: Arc<CollabMetrics>,
   pub published_collab_metrics: Arc<PublishedCollabMetrics>,
   pub appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
+  pub embedding_metrics: Arc<EmbeddingMetrics>,
 }
 
 impl Default for AppMetrics {
@@ -144,6 +146,7 @@ impl AppMetrics {
     let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
     let published_collab_metrics = Arc::new(PublishedCollabMetrics::register(&mut registry));
     let appflowy_web_metrics = Arc::new(AppFlowyWebMetrics::register(&mut registry));
+    let embedding_metrics = Arc::new(EmbeddingMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       request_metrics,
@@ -152,6 +155,7 @@ impl AppMetrics {
       collab_metrics,
       published_collab_metrics,
       appflowy_web_metrics,
+      embedding_metrics,
     }
   }
 }

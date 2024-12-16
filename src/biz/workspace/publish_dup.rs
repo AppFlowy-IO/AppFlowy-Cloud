@@ -180,7 +180,6 @@ impl PublishCollabDuplicator {
         object_id: oid.clone(),
         encoded_collab_v1: encoded_collab.into(),
         collab_type,
-        embeddings: None,
       };
       let action = format!("duplicate collab: {}", params);
       collab_storage
@@ -247,7 +246,6 @@ impl PublishCollabDuplicator {
             object_id: ws_db_oid.clone(),
             encoded_collab_v1: Bytes::from(updated_ws_w_db_collab),
             collab_type: CollabType::WorkspaceDatabase,
-            embeddings: None,
           },
           &mut txn,
           "duplicate workspace database collab",
@@ -339,7 +337,6 @@ impl PublishCollabDuplicator {
           object_id: dest_workspace_id.clone(),
           encoded_collab_v1: updated_encoded_collab.await?.into(),
           collab_type: CollabType::Folder,
-          embeddings: None,
         },
         &mut txn,
         "duplicate folder collab",

@@ -1,9 +1,9 @@
 use crate::api::metrics::RequestMetrics;
 use app_error::ErrorCode;
-use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_ai_client::dto::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
 };
+use std::sync::Arc;
 
 use database::index::{search_documents, SearchDocumentParams};
 use shared_entity::dto::search_dto::{
@@ -12,27 +12,24 @@ use shared_entity::dto::search_dto::{
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
 
+use appflowy_collaborate::indexer::IndexerScheduler;
 use uuid::Uuid;
 
 pub async fn search_document(
   pg_pool: &PgPool,
-  ai_client: &AppFlowyAIClient,
+  indexer_scheduler: &Arc<IndexerScheduler>,
   uid: i64,
   workspace_id: Uuid,
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
-  let embeddings = ai_client
-    .embeddings(EmbeddingRequest {
-      input: EmbeddingInput::String(request.query.clone()),
-      model: EmbeddingModel::TextEmbedding3Small.to_string(),
-      chunk_size: 500,
-      encoding_format: EmbeddingEncodingFormat::Float,
-      dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
-    })
-    .await
-    .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
-  let total_tokens = embeddings.total_tokens as u32;
+  let embeddings = indexer_scheduler.embeddings(EmbeddingRequest {
+    input: EmbeddingInput::String(request.query.clone()),
+    model: EmbeddingModel::TextEmbedding3Small.to_string(),
+    encoding_format: EmbeddingEncodingFormat::Float,
+    dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
+  })?;
+  let total_tokens = embeddings.usage.total_tokens as u32;
   metrics.record_search_tokens_used(&workspace_id, total_tokens);
   tracing::info!(
     "workspace {} OpenAI API search tokens used: {}",

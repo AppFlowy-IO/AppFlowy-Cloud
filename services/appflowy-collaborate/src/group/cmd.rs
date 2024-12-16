@@ -149,7 +149,10 @@ where
           },
           GroupCommand::GenerateCollabEmbedding { object_id } => {
             if let Some(group) = self.group_manager.get_group(&object_id).await {
-              group.generate_embeddings().await;
+              match group.generate_embeddings().await {
+                Ok(_) => trace!("successfully created embeddings for {}", object_id),
+                Err(err) => trace!("failed to create embeddings for {}: {}", object_id, err),
+              }
             }
           },
           GroupCommand::CalculateMissingUpdate {

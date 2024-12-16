@@ -1,6 +1,5 @@
 use crate::error::RealtimeError;
-use crate::indexer::Indexer;
-use crate::metrics::CollabRealtimeMetrics;
+use crate::indexer::IndexedCollab;
 use anyhow::anyhow;
 use app_error::AppError;
 use arc_swap::ArcSwap;
@@ -19,13 +18,13 @@ use collab_rt_protocol::{Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
 use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
 
+use crate::indexer::IndexerScheduler;
+use crate::metrics::CollabRealtimeMetrics;
 use collab_stream::error::StreamError;
 use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
 use database::collab::{CollabStorage, GetCollabOrigin};
-use database_entity::dto::{
-  AFCollabEmbeddings, CollabParams, InsertSnapshotParams, QueryCollabParams,
-};
+use database_entity::dto::{CollabParams, InsertSnapshotParams, QueryCollabParams};
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -37,16 +36,6 @@ use tracing::{error, info, trace};
 use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Update};
-
-use collab_stream::error::StreamError;
-
-use database::collab::CollabStorage;
-
-use crate::error::RealtimeError;
-use crate::group::broadcast::{CollabBroadcast, Subscription};
-use crate::group::persistence::GroupPersistence;
-use crate::indexer::IndexerScheduler;
-use crate::metrics::CollabRealtimeMetrics;
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
@@ -66,7 +55,6 @@ struct CollabGroupState {
   metrics: Arc<CollabRealtimeMetrics>,
   /// Cancellation token triggered when current collab group is about to be stopped.
   /// This will also shut down all subsequent [Subscription]s.
-  indexer_scheduler: Arc<IndexerScheduler>,
   shutdown: CancellationToken,
   last_activity: ArcSwap<Instant>,
   seq_no: AtomicU32,
@@ -107,10 +95,9 @@ impl CollabGroup {
       collab_type.clone(),
       storage,
       collab_redis_stream,
-      indexer,
+      indexer_scheduler,
       metrics.clone(),
       prune_grace_period,
-      indexer_scheduler
     );
 
     let state = Arc::new(CollabGroupState {
@@ -346,35 +333,28 @@ impl CollabGroup {
 
   /// Generate embedding for the current Collab immediately
   ///
-  pub async fn generate_embeddings(&self) {
-    let result = self
+  pub async fn generate_embeddings(&self) -> Result<(), AppError> {
+    let collab = self
+      .encode_collab()
+      .await
+      .map_err(|e| AppError::Internal(e.into()))?;
+    let collab = Collab::new_with_source(
+      CollabOrigin::Server,
+      self.object_id(),
+      DataSource::DocStateV1(collab.doc_state.into()),
+      vec![],
+      false,
+    )
+    .map_err(|e| AppError::Internal(e.into()))?;
+    let workspace_id = &self.state.workspace_id;
+    let object_id = &self.state.object_id;
+    let collab_type = &self.state.collab_type;
+    self
+      .state
+      .persister
       .indexer_scheduler
-      .index_collab(
-        &self.workspace_id,
-        &self.object_id,
-        &self.collab,
-        &self.collab_type,
-      )
-      .await;
-    match result {
-      Ok(_) => {
-        trace!(
-          "successfully indexed embeddings for {} {}/{}",
-          self.collab_type,
-          self.workspace_id,
-          self.object_id
-        );
-      },
-      Err(err) => {
-        trace!(
-          "failed to index embeddings for document {} {}/{}: {}",
-          self.collab_type,
-          self.workspace_id,
-          self.object_id,
-          err
-        );
-      },
-    }
+      .index_collab(workspace_id, object_id, &collab, collab_type)
+      .await
   }
 
   pub async fn calculate_missing_update(
@@ -917,7 +897,7 @@ struct CollabPersister {
   collab_type: CollabType,
   storage: Arc<dyn CollabStorage>,
   collab_redis_stream: Arc<CollabRedisStream>,
-  indexer: Option<Arc<dyn Indexer>>,
+  indexer_scheduler: Arc<IndexerScheduler>,
   metrics: Arc<CollabRealtimeMetrics>,
   update_sink: CollabUpdateSink,
   awareness_sink: AwarenessUpdateSink,
@@ -935,7 +915,7 @@ impl CollabPersister {
     collab_type: CollabType,
     storage: Arc<dyn CollabStorage>,
     collab_redis_stream: Arc<CollabRedisStream>,
-    indexer: Option<Arc<dyn Indexer>>,
+    indexer_scheduler: Arc<IndexerScheduler>,
     metrics: Arc<CollabRealtimeMetrics>,
     prune_grace_period: Duration,
   ) -> Self {
@@ -948,7 +928,7 @@ impl CollabPersister {
       collab_type,
       storage,
       collab_redis_stream,
-      indexer,
+      indexer_scheduler,
       metrics,
       update_sink,
       awareness_sink,
@@ -1188,12 +1168,8 @@ impl CollabPersister {
         .metrics
         .collab_size
         .observe(encoded_collab.len() as f64);
-      let mut params = CollabParams::new(&self.object_id, self.collab_type.clone(), encoded_collab);
-
-      match self.embeddings(collab).await {
-        Ok(embeddings) => params.embeddings = embeddings,
-        Err(err) => tracing::warn!("failed to fetch embeddings `{}`: {}", self.object_id, err),
-      }
+      let params = CollabParams::new(&self.object_id, self.collab_type.clone(), encoded_collab);
+      let encoded_collab = params.encoded_collab_v1.clone();
 
       self
         .storage
@@ -1208,6 +1184,23 @@ impl CollabPersister {
         full_len,
         light_len
       );
+
+      let indexed_collab = IndexedCollab {
+        object_id: self.object_id.clone(),
+        collab_type: self.collab_type.clone(),
+        encoded_collab,
+      };
+      if let Err(err) = self
+        .indexer_scheduler
+        .index_encoded_collab_one(&self.workspace_id, indexed_collab)
+      {
+        tracing::warn!(
+          "failed to index collab `{}/{}`: {}",
+          self.workspace_id,
+          self.object_id,
+          err
+        );
+      }
 
       // 3. finally we can drop Redis messages
       let now = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis();
@@ -1225,16 +1218,6 @@ impl CollabPersister {
     }
 
     Ok(())
-  }
-
-  async fn embeddings(&self, collab: &Collab) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    if let Some(indexer) = self.indexer.clone() {
-      let params = indexer.embedding_params(collab).await?;
-      let embeddings = indexer.embeddings(params).await?;
-      Ok(embeddings)
-    } else {
-      Ok(None)
-    }
   }
 
   async fn load_collab_full(&self, keep_history: bool) -> Result<Option<Collab>, RealtimeError> {

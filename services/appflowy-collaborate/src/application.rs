@@ -24,7 +24,6 @@ use crate::actix_ws::server::RealtimeServerActor;
 use crate::api::{collab_scope, ws_scope};
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use access_control::casbin::access::AccessControl;
-use appflowy_ai_client::client::AppFlowyAIClient;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 

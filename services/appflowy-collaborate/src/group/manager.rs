@@ -145,7 +145,7 @@ where
       collab_type
     );
 
-    let group = Arc::new(CollabGroup::new(
+    let group = CollabGroup::new(
       user.uid,
       workspace_id.to_string(),
       object_id.to_string(),

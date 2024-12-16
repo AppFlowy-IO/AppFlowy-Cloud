@@ -13,7 +13,6 @@ use bytes::Bytes;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database::collab::{CollabStorage, GetCollabOrigin};
@@ -216,7 +215,7 @@ impl IndexerScheduler {
     &self,
     workspace_id: &str,
     object_id: &str,
-    collab: &Arc<RwLock<Collab>>,
+    collab: &Collab,
     collab_type: &CollabType,
   ) -> Result<(), AppError> {
     if !self.index_enabled() {
@@ -235,9 +234,7 @@ impl IndexerScheduler {
         ))
       })?;
 
-    let lock = collab.read().await;
-    let chunks = indexer.create_embedded_chunks(&lock, embedder.model())?;
-    drop(lock); // release the read lock ASAP
+    let chunks = indexer.create_embedded_chunks(collab, embedder.model())?;
 
     let threads = self.threads.clone();
     let tx = self.schedule_tx.clone();
@@ -348,7 +345,7 @@ fn get_unindexed_collabs(
       match &cid.collab_type {
         CollabType::Document => {
           let collab = storage
-            .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
+            .get_encode_collab(GetCollabOrigin::Server, cid.clone().into())
             .await?;
 
           yield UnindexedCollab {

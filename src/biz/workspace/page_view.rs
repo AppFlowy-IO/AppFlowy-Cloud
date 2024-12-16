@@ -229,7 +229,6 @@ fn prepare_default_document_collab_param() -> Result<CollabParams, AppError> {
     object_id: object_id.clone(),
     encoded_collab_v1: encoded_collab_v1.into(),
     collab_type: CollabType::Document,
-    embeddings: None,
   })
 }
 
@@ -671,7 +670,6 @@ async fn insert_and_broadcast_workspace_database_update(
     object_id: workspace_database_id.to_string(),
     encoded_collab_v1: workspace_database_update.updated_encoded_collab.into(),
     collab_type: CollabType::WorkspaceDatabase,
-    embeddings: None,
   };
   let action_description = format!("Update workspace database: {}", workspace_id);
   collab_storage
@@ -703,7 +701,6 @@ async fn insert_and_broadcast_workspace_folder_update(
     object_id: workspace_id.to_string(),
     encoded_collab_v1: folder_update.updated_encoded_collab.into(),
     collab_type: CollabType::Folder,
-    embeddings: None,
   };
   let action_description = format!("Update workspace folder: {}", workspace_id);
   collab_storage
@@ -885,7 +882,6 @@ async fn create_database_page(
       .encode_to_bytes()?
       .into(),
     collab_type: CollabType::Database,
-    embeddings: None,
   };
   let row_collab_params_list = encoded_database
     .encoded_row_collabs
@@ -894,7 +890,6 @@ async fn create_database_page(
       object_id: row_collab.object_id.clone(),
       encoded_collab_v1: row_collab.encoded_collab.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::DatabaseRow,
-      embeddings: None,
     })
     .collect_vec();
 

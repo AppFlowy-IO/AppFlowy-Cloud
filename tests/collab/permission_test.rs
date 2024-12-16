@@ -425,14 +425,11 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
       .collab
       .write()
       .await)
-      .borrow()
       .to_json_value()
   );
 
   for client in clients {
-    let expected = (*client.collabs.get(&object_id).unwrap().collab.read().await)
-      .borrow()
-      .to_json_value();
+    let expected = (*client.collabs.get(&object_id).unwrap().collab.read().await).to_json_value();
     assert_json_include!(
       actual: json!(expected_json),
       expected: expected
@@ -486,9 +483,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let results = futures::future::join_all(tasks).await;
   for (index, result) in results.into_iter().enumerate() {
     let (s, client) = result.unwrap();
-    let value = (*client.collabs.get(&object_id).unwrap().collab.read().await)
-      .borrow()
-      .to_json_value();
+    let value = (*client.collabs.get(&object_id).unwrap().collab.read().await).to_json_value();
 
     assert_json_eq!(json!({index.to_string(): s}), value,);
   }
@@ -500,7 +495,6 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
     .collab
     .read()
     .await)
-    .borrow()
     .to_json_value();
   assert_json_eq!(json!({}), expected);
 }

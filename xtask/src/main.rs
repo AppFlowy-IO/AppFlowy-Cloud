@@ -13,6 +13,8 @@ use tokio::select;
 async fn main() -> Result<()> {
   let appflowy = "appflowy_cloud";
   let worker = "appflowy_worker";
+  let target_dir = "./target";
+  std::env::set_var("CARGO_TARGET_DIR", target_dir);
 
   kill_existing_process(appflowy).await?;
   kill_existing_process(worker).await?;
@@ -67,9 +69,13 @@ async fn kill_existing_process(process_identifier: &str) -> Result<()> {
 
 fn handle_process_exit(status: std::process::ExitStatus, process_name: &str) -> Result<()> {
   if status.success() {
-    println!("{} exited normally.", process_name);
+    println!("handle_process_exit: {} exited normally.", process_name);
     Ok(())
   } else {
-    Err(anyhow!("{} process failed", process_name))
+    Err(anyhow!(
+      "handle_process_exit: {} process failed: {}",
+      process_name,
+      status
+    ))
   }
 }

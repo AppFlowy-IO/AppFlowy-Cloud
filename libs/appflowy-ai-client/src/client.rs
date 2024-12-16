@@ -1,9 +1,8 @@
 use crate::dto::{
   AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextResponse,
-  CompletionType, CreateChatContext, CustomPrompt, Document, EmbeddingRequest, EmbeddingResponse,
-  LocalAIConfig, MessageData, RepeatedLocalAIPackage, RepeatedRelatedQuestion,
-  SearchDocumentsRequest, SimilarityResponse, SummarizeRowResponse, TranslateRowData,
-  TranslateRowResponse,
+  CompletionType, CreateChatContext, CustomPrompt, Document, LocalAIConfig, MessageData,
+  RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SimilarityResponse,
+  SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -15,7 +14,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::borrow::Cow;
-
 use std::time::Duration;
 use tracing::{info, trace};
 
@@ -23,7 +21,7 @@ const AI_MODEL_HEADER_KEY: &str = "ai-model";
 
 #[derive(Clone, Debug)]
 pub struct AppFlowyAIClient {
-  client: reqwest::Client,
+  async_client: reqwest::Client,
   url: String,
 }
 
@@ -31,13 +29,13 @@ impl AppFlowyAIClient {
   pub fn new(url: &str) -> Self {
     info!("Creating AppFlowyAIClient with url: {}", url);
     let url = url.to_string();
-    let client = reqwest::Client::new();
-    Self { client, url }
+    let async_client = reqwest::Client::new();
+    Self { async_client, url }
   }
 
   pub async fn health_check(&self) -> Result<(), AIError> {
     let url = format!("{}/health", self.url);
-    let resp = self.http_client(Method::GET, &url)?.send().await?;
+    let resp = self.async_http_client(Method::GET, &url)?.send().await?;
     let text = resp.text().await?;
     info!("health response: {:?}", text);
     Ok(())
@@ -70,12 +68,12 @@ impl AppFlowyAIClient {
 
     let url = format!("{}/completion", self.url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&params)
       .send()
       .await?;
-    AIResponse::<CompleteTextResponse>::from_response(resp)
+    AIResponse::<CompleteTextResponse>::from_reqwest_response(resp)
       .await?
       .into_data()
   }
@@ -100,7 +98,7 @@ impl AppFlowyAIClient {
 
     let url = format!("{}/completion/stream", self.url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&params)
       .send()
@@ -120,12 +118,12 @@ impl AppFlowyAIClient {
     let url = format!("{}/summarize_row", self.url);
     trace!("summarize_row url: {}", url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(params)
       .send()
       .await?;
-    AIResponse::<SummarizeRowResponse>::from_response(resp)
+    AIResponse::<SummarizeRowResponse>::from_reqwest_response(resp)
       .await?
       .into_data()
   }
@@ -137,41 +135,14 @@ impl AppFlowyAIClient {
   ) -> Result<TranslateRowResponse, AIError> {
     let url = format!("{}/translate_row", self.url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&data)
       .send()
       .await?;
-    AIResponse::<TranslateRowResponse>::from_response(resp)
+    AIResponse::<TranslateRowResponse>::from_reqwest_response(resp)
       .await?
       .into_data()
-  }
-
-  pub async fn embeddings(&self, params: EmbeddingRequest) -> Result<EmbeddingResponse, AIError> {
-    let url = format!("{}/embeddings", self.url);
-    let resp = self
-      .http_client(Method::POST, &url)?
-      .json(&params)
-      .send()
-      .await?;
-    AIResponse::<EmbeddingResponse>::from_response(resp)
-      .await?
-      .into_data()
-  }
-
-  pub async fn index_documents(&self, documents: &[Document]) -> Result<(), AIError> {
-    let url = format!("{}/index_documents", self.url);
-    let resp = self
-      .http_client(Method::POST, &url)?
-      .json(&documents)
-      .send()
-      .await?;
-    let status_code = resp.status();
-    if !status_code.is_success() {
-      let body = resp.text().await?;
-      return Err(anyhow::anyhow!("error: {}, {}", status_code, body).into());
-    }
-    Ok(())
   }
 
   pub async fn search_documents(
@@ -180,11 +151,11 @@ impl AppFlowyAIClient {
   ) -> Result<Vec<Document>, AIError> {
     let url = format!("{}/search", self.url);
     let resp = self
-      .http_client(Method::GET, &url)?
+      .async_http_client(Method::GET, &url)?
       .query(&request)
       .send()
       .await?;
-    AIResponse::<Vec<Document>>::from_response(resp)
+    AIResponse::<Vec<Document>>::from_reqwest_response(resp)
       .await?
       .into_data()
   }
@@ -192,11 +163,11 @@ impl AppFlowyAIClient {
   pub async fn create_chat_text_context(&self, context: CreateChatContext) -> Result<(), AIError> {
     let url = format!("{}/chat/context/text", self.url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .json(&context)
       .send()
       .await?;
-    let _ = AIResponse::<()>::from_response(resp).await?;
+    let _ = AIResponse::<()>::from_reqwest_response(resp).await?;
     Ok(())
   }
 
@@ -219,12 +190,12 @@ impl AppFlowyAIClient {
     };
     let url = format!("{}/chat/message", self.url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&json)
       .send()
       .await?;
-    AIResponse::<ChatAnswer>::from_response(resp)
+    AIResponse::<ChatAnswer>::from_reqwest_response(resp)
       .await?
       .into_data()
   }
@@ -248,7 +219,7 @@ impl AppFlowyAIClient {
     };
     let url = format!("{}/chat/message/stream", self.url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .timeout(Duration::from_secs(30))
       .json(&json)
@@ -277,7 +248,7 @@ impl AppFlowyAIClient {
     };
     let url = format!("{}/v2/chat/message/stream", self.url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&json)
       .timeout(Duration::from_secs(30))
@@ -294,12 +265,12 @@ impl AppFlowyAIClient {
   ) -> Result<RepeatedRelatedQuestion, AIError> {
     let url = format!("{}/chat/{chat_id}/{message_id}/related_question", self.url);
     let resp = self
-      .http_client(Method::GET, &url)?
+      .async_http_client(Method::GET, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .timeout(Duration::from_secs(30))
       .send()
       .await?;
-    AIResponse::<RepeatedRelatedQuestion>::from_response(resp)
+    AIResponse::<RepeatedRelatedQuestion>::from_reqwest_response(resp)
       .await?
       .into_data()
   }
@@ -309,8 +280,8 @@ impl AppFlowyAIClient {
     platform: &str,
   ) -> Result<RepeatedLocalAIPackage, AIError> {
     let url = format!("{}/local_ai/plugin?platform={platform}", self.url);
-    let resp = self.http_client(Method::GET, &url)?.send().await?;
-    AIResponse::<RepeatedLocalAIPackage>::from_response(resp)
+    let resp = self.async_http_client(Method::GET, &url)?.send().await?;
+    AIResponse::<RepeatedLocalAIPackage>::from_reqwest_response(resp)
       .await?
       .into_data()
   }
@@ -328,8 +299,8 @@ impl AppFlowyAIClient {
       url = format!("{}&app_version={}", url, version);
     }
 
-    let resp = self.http_client(Method::GET, &url)?.send().await?;
-    AIResponse::<LocalAIConfig>::from_response(resp)
+    let resp = self.async_http_client(Method::GET, &url)?.send().await?;
+    AIResponse::<LocalAIConfig>::from_reqwest_response(resp)
       .await?
       .into_data()
   }
@@ -340,17 +311,17 @@ impl AppFlowyAIClient {
   ) -> Result<SimilarityResponse, AIError> {
     let url = format!("{}/similarity", self.url);
     let resp = self
-      .http_client(Method::POST, &url)?
+      .async_http_client(Method::POST, &url)?
       .json(&params)
       .send()
       .await?;
-    AIResponse::<SimilarityResponse>::from_response(resp)
+    AIResponse::<SimilarityResponse>::from_reqwest_response(resp)
       .await?
       .into_data()
   }
 
-  fn http_client(&self, method: Method, url: &str) -> Result<RequestBuilder, AIError> {
-    let request_builder = self.client.request(method, url);
+  fn async_http_client(&self, method: Method, url: &str) -> Result<RequestBuilder, AIError> {
+    let request_builder = self.async_client.request(method, url);
     Ok(request_builder)
   }
 }
@@ -368,7 +339,7 @@ impl<T> AIResponse<T>
 where
   T: DeserializeOwned + 'static,
 {
-  pub async fn from_response(resp: reqwest::Response) -> Result<Self, anyhow::Error> {
+  pub async fn from_reqwest_response(resp: reqwest::Response) -> Result<Self, anyhow::Error> {
     let status_code = resp.status();
     if !status_code.is_success() {
       let body = resp.text().await?;
@@ -377,6 +348,17 @@ where
 
     let bytes = resp.bytes().await?;
     let resp = serde_json::from_slice(&bytes)?;
+    Ok(resp)
+  }
+
+  pub fn from_ur_response(resp: ureq::Response) -> Result<Self, anyhow::Error> {
+    let status_code = resp.status();
+    if status_code != 200 {
+      let body = resp.into_string()?;
+      anyhow::bail!("error code: {}, {}", status_code, body)
+    }
+
+    let resp = resp.into_json()?;
     Ok(resp)
   }
 

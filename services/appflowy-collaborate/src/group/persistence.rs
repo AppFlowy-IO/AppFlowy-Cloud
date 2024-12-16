@@ -14,7 +14,7 @@ use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
 
 use crate::group::group_init::EditState;
-use crate::indexer::Indexer;
+use crate::indexer::IndexerScheduler;
 
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
@@ -27,7 +27,7 @@ pub(crate) struct GroupPersistence<S> {
   collab: Arc<RwLock<Collab>>,
   collab_type: CollabType,
   persistence_interval: Duration,
-  indexer: Option<Arc<dyn Indexer>>,
+  indexer_scheduler: Arc<IndexerScheduler>,
   cancel: CancellationToken,
 }
 
@@ -45,7 +45,7 @@ where
     collab: Arc<RwLock<Collab>>,
     collab_type: CollabType,
     persistence_interval: Duration,
-    ai_client: Option<Arc<dyn Indexer>>,
+    indexer_scheduler: Arc<IndexerScheduler>,
     cancel: CancellationToken,
   ) -> Self {
     Self {
@@ -57,7 +57,7 @@ where
       collab,
       collab_type,
       persistence_interval,
-      indexer: ai_client,
+      indexer_scheduler,
       cancel,
     }
   }
@@ -82,8 +82,8 @@ where
   }
 
   async fn force_save(&self) {
-    if self.edit_state.is_new() && self.save(true).await.is_ok() {
-      self.edit_state.set_is_new(false);
+    if self.edit_state.is_new_create() && self.save(true).await.is_ok() {
+      self.edit_state.set_is_new_create(false);
       return;
     }
 
@@ -92,7 +92,7 @@ where
       return;
     }
 
-    if let Err(err) = self.save(false).await {
+    if let Err(err) = self.save(true).await {
       warn!("fail to force save: {}:{:?}", self.object_id, err);
     }
   }
@@ -102,12 +102,12 @@ where
     trace!("collab:{} edit state: {}", self.object_id, self.edit_state);
 
     // Check if conditions for saving to disk are not met
-    let is_new = self.edit_state.is_new();
+    let is_new = self.edit_state.is_new_create();
     if self.edit_state.should_save_to_disk() {
       match self.save(is_new).await {
         Ok(_) => {
           if is_new {
-            self.edit_state.set_is_new(false);
+            self.edit_state.set_is_new_create(false);
           }
         },
         Err(err) => {
@@ -123,42 +123,17 @@ where
     let workspace_id = self.workspace_id.clone();
     let collab_type = self.collab_type.clone();
 
-    let params = {
-      let cloned_collab = self.collab.clone();
-      let (workspace_id, mut params, object_id) = tokio::task::spawn_blocking(move || {
-        let collab = cloned_collab.blocking_read();
-        let params = get_encode_collab(&workspace_id, &object_id, &collab, &collab_type)?;
-        Ok::<_, AppError>((workspace_id, params, object_id))
-      })
-      .await??;
+    let cloned_collab = self.collab.clone();
+    let params = tokio::task::spawn_blocking(move || {
+      let collab = cloned_collab.blocking_read();
+      let params = get_encode_collab(&workspace_id, &object_id, &collab, &collab_type)?;
+      Ok::<_, AppError>(params)
+    })
+    .await??;
 
-      let lock = self.collab.read().await;
-      if let Some(indexer) = &self.indexer {
-        match indexer.embedding_params(&lock).await {
-          Ok(embedding_params) => {
-            drop(lock); // we no longer need the lock
-            match indexer.embeddings(embedding_params).await {
-              Ok(embeddings) => {
-                params.embeddings = embeddings;
-              },
-              Err(err) => {
-                warn!(
-                  "failed to index embeddings from remote service for document {}/{}: {}",
-                  workspace_id, object_id, err
-                );
-              },
-            }
-          },
-          Err(err) => {
-            warn!(
-              "failed to get embedding params for document {}/{}: {}",
-              workspace_id, object_id, err
-            );
-          },
-        }
-      }
-      params
-    };
+    self
+      .indexer_scheduler
+      .index_encoded_collab_one(&self.workspace_id, &params)?;
 
     self
       .storage
@@ -211,7 +186,6 @@ fn get_encode_collab(
     object_id: object_id.to_string(),
     encoded_collab_v1: encoded_collab.into(),
     collab_type: collab_type.clone(),
-    embeddings: None,
   };
   Ok(params)
 }

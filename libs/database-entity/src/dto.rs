@@ -1224,10 +1224,10 @@ pub struct WorkspaceNamespace {
 #[cfg(test)]
 mod test {
   use crate::dto::{CollabParams, CollabParamsV0};
-  use crate::error::EntityError;
+
   use bytes::Bytes;
-  use collab_entity::{proto, CollabType};
-  use prost::Message;
+  use collab_entity::CollabType;
+
   use uuid::Uuid;
 
   #[test]

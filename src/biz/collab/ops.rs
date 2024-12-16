@@ -22,7 +22,6 @@ use collab_database::views::OrderObjectPosition;
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::document::Document;
-use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::CollabOrigin;
@@ -49,7 +48,7 @@ use sqlx::PgPool;
 use std::ops::DerefMut;
 use yrs::Map;
 
-use crate::biz::collab::utils::get_latest_collab_document;
+use crate::biz::collab::utils::get_database_row_doc_changes;
 use crate::biz::workspace::ops::broadcast_update;
 use access_control::collab::CollabAccessControl;
 use anyhow::Context;
@@ -82,6 +81,7 @@ use super::utils::type_option_reader_by_id;
 use super::utils::type_options_serde;
 use super::utils::write_to_database_row;
 use super::utils::CreatedRowDocument;
+use super::utils::DocChanges;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -686,76 +686,17 @@ pub async fn upsert_database_row(
   )
   .await?;
 
-  enum DocChanges {
-    Update(Vec<u8>, Vec<u8>), // (updated_doc, doc_update)
-    Insert(CreatedRowDocument),
-  }
-
-  // replace the entire doc content
-  // if the doc is new, there will be no doc_update
-  // (doc_id, updated_doc, doc_update)
-  let doc_changes: Option<(String, DocChanges)> = match row_doc_content {
-    Some(row_doc_content) if !row_doc_content.is_empty() => {
-      let doc_id = db_row_body.document_id(&db_row_txn).map_err(|err| {
-        AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err))
-      })?;
-      match doc_id {
-        Some(doc_id) => {
-          let (mut cur_doc_collab, mut cur_doc_body) = get_latest_collab_document(
-            collab_storage,
-            GetCollabOrigin::Server,
-            workspace_uuid_str,
-            &doc_id,
-          )
-          .await?;
-
-          let md_importer = MDImporter::new(None);
-          let new_doc_data = md_importer.import(&doc_id, row_doc_content).map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e))
-          })?;
-
-          let doc_update = {
-            let mut txn = cur_doc_collab.context.transact_mut();
-            cur_doc_body
-              .reset_with_data(&mut txn, Some(new_doc_data))
-              .map_err(|e| {
-                AppError::Internal(anyhow::anyhow!("Failed to reset document: {:?}", e))
-              })?;
-            txn.encode_update_v1()
-          };
-          let updated_doc = collab_to_bin(cur_doc_collab, CollabType::Document).await?;
-          Some((doc_id, DocChanges::Update(updated_doc, doc_update)))
-        },
-        None => {
-          // update row to indicate that the document is not empty
-          let is_document_empty_id =
-            meta_id_from_row_id(&row_id.parse()?, RowMetaKey::IsDocumentEmpty);
-          db_row_body
-            .get_meta()
-            .insert(&mut db_row_txn, is_document_empty_id, false);
-
-          // get document id
-          let new_doc_id = db_row_body
-            .document_id(&db_row_txn)
-            .map_err(|err| {
-              AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err))
-            })?
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to get document id")))?;
-
-          let created_row_doc: CreatedRowDocument = create_row_document(
-            workspace_uuid_str,
-            uid,
-            &new_doc_id,
-            collab_storage,
-            row_doc_content,
-          )
-          .await?;
-          Some((new_doc_id, DocChanges::Insert(created_row_doc)))
-        },
-      }
-    },
-    _ => None,
-  };
+  // determine if there are any document changes
+  let doc_changes: Option<(String, DocChanges)> = get_database_row_doc_changes(
+    collab_storage,
+    workspace_uuid_str,
+    row_doc_content,
+    &db_row_body,
+    &mut db_row_txn,
+    row_id,
+    uid,
+  )
+  .await?;
 
   // finalize update for database row
   let db_row_collab_updates = db_row_txn.encode_update_v1();

@@ -4,4 +4,4 @@ mod complete_text;
 mod summarize_row;
 mod util;
 
-mod chat_with_doc_test;
+mod chat_with_selected_doc_test;

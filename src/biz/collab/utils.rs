@@ -224,6 +224,7 @@ pub async fn get_latest_collab_encoded(
           collab_type,
         },
       },
+      true,
     )
     .await
 }

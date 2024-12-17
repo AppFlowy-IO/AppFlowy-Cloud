@@ -56,6 +56,7 @@ impl Config {
         // Adapted from: https://github.com/AppFlowy-IO/AppFlowy-Cloud/issues/984
         smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
         smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
+        smtp_tls_kind: get_env_var("APPFLOWY_MAILER_SMTP_TLS_KIND", "wrapper").into(),
       },
     })
   }

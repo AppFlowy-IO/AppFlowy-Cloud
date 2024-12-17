@@ -127,7 +127,7 @@ pub async fn delete_blob_metadata(
   .execute(tx.deref_mut())
   .await?;
   let n = result.rows_affected();
-  assert_eq!(n, 1);
+  tracing::info!("delete_blob_metadata: rows_affected: {}", n);
   Ok(())
 }
 

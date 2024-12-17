@@ -1,7 +1,6 @@
 use crate::config::get_env_var;
 use crate::indexer::vector::embedder::Embedder;
 use crate::indexer::DocumentIndexer;
-use crate::thread_pool_no_abort::ThreadPoolNoAbort;
 use app_error::AppError;
 use appflowy_ai_client::dto::EmbeddingModel;
 use collab::preclude::Collab;
@@ -22,13 +21,6 @@ pub trait Indexer: Send + Sync {
     &self,
     embedder: &Embedder,
     content: Vec<AFCollabEmbeddedChunk>,
-  ) -> Result<Option<AFCollabEmbeddings>, AppError>;
-
-  fn embed_in_thread_pool(
-    &self,
-    embedder: &Embedder,
-    content: Vec<AFCollabEmbeddedChunk>,
-    thread_pool: &ThreadPoolNoAbort,
   ) -> Result<Option<AFCollabEmbeddings>, AppError>;
 }
 

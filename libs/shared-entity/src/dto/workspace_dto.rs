@@ -125,6 +125,15 @@ pub struct CollabTypeParam {
   pub collab_type: CollabType,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepeatedEmbeddedCollabQuery(pub Vec<EmbeddedCollabQuery>);
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmbeddedCollabQuery {
+  pub collab_type: CollabType,
+  pub object_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollabResponse {
   #[serde(flatten)]

@@ -7,10 +7,13 @@ use actix_web::HttpRequest;
 use appflowy_ai_client::dto::AIModel;
 use async_trait::async_trait;
 use byteorder::{ByteOrder, LittleEndian};
+use chrono::Utc;
+use collab_rt_entity::user::RealtimeUser;
 use collab_rt_protocol::spawn_blocking_validate_encode_collab;
 use database_entity::dto::CollabParams;
 use std::str::FromStr;
 use tokio_stream::StreamExt;
+use uuid::Uuid;
 
 #[inline]
 pub fn compress_type_from_header_value(headers: &HeaderMap) -> Result<CompressionType, AppError> {
@@ -84,6 +87,28 @@ pub fn device_id_from_headers(headers: &HeaderMap) -> Result<&str, AppError> {
     &["Device-Id", "device-id", "device_id", "Device-ID"],
     "Missing Device-Id or device_id header",
   )
+}
+
+/// Create new realtime user for requests from appflowy web
+pub fn realtime_user_for_web_request(
+  headers: &HeaderMap,
+  uid: i64,
+) -> Result<RealtimeUser, AppError> {
+  let app_version = client_version_from_headers(headers)
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| "web".to_string());
+  let device_id = device_id_from_headers(headers)
+    .map(|s| s.to_string())
+    .unwrap_or_else(|_| Uuid::new_v4().to_string());
+  let session_id = device_id.clone();
+  let user = RealtimeUser {
+    uid,
+    device_id,
+    connect_at: Utc::now().timestamp(),
+    session_id,
+    app_version,
+  };
+  Ok(user)
 }
 
 #[async_trait]

@@ -417,9 +417,14 @@ pub struct AFCollabMember {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AFCollabEmbedInfo {
   pub object_id: String,
-  /// The timestamp when the object embeddings updated
+  /// The timestamp when the object's embeddings updated
   pub indexed_at: DateTime<Utc>,
+  /// The timestamp when the object's data updated
+  pub updated_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepeatedAFCollabEmbedInfo(pub Vec<AFCollabEmbedInfo>);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PublishInfo {

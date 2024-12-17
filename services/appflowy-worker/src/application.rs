@@ -157,6 +157,7 @@ async fn get_worker_mailer(config: &Config) -> Result<AFWorkerMailer, Error> {
     config.mailer.smtp_password.clone(),
     &config.mailer.smtp_host,
     config.mailer.smtp_port,
+    config.mailer.smtp_tls_kind.as_str(),
   )
   .await?;
 

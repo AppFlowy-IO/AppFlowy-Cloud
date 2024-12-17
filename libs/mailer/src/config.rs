@@ -7,4 +7,5 @@ pub struct MailerSetting {
   pub smtp_username: String,
   pub smtp_email: String,
   pub smtp_password: Secret<String>,
+  pub smtp_tls_kind: String,
 }

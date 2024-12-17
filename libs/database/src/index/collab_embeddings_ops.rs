@@ -85,7 +85,6 @@ impl PgHasArrayType for Fragment {
 pub async fn upsert_collab_embeddings(
   transaction: &mut Transaction<'_, Postgres>,
   workspace_id: &Uuid,
-  _object_id: &str,
   tokens_used: u32,
   records: Vec<AFCollabEmbeddedChunk>,
 ) -> Result<(), sqlx::Error> {

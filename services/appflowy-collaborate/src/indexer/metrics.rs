@@ -49,6 +49,7 @@ impl EmbeddingMetrics {
   }
 
   pub fn record_processing_time(&self, millis: u128) {
+    tracing::trace!("[Embedding]: processing time: {}ms", millis);
     self.processing_time_histogram.observe(millis as f64);
   }
 }

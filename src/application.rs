@@ -487,6 +487,7 @@ async fn get_mailer(mailer: &MailerSetting) -> Result<AFCloudMailer, Error> {
     mailer.smtp_password.clone(),
     &mailer.smtp_host,
     mailer.smtp_port,
+    mailer.smtp_tls_kind.as_str(),
   )
   .await?;
 

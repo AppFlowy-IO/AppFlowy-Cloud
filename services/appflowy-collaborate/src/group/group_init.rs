@@ -203,9 +203,21 @@ impl CollabGroup {
 
   async fn handle_inbound_update(state: &CollabGroupState, update: CollabStreamUpdate) {
     // update state vector based on incoming message
-    let mut sv = state.state_vector.write().await;
-    sv.merge(update.state_vector);
-    drop(sv);
+    match Update::decode_v1(&update.data) {
+      Ok(update) => state
+        .state_vector
+        .write()
+        .await
+        .merge(update.state_vector()),
+      Err(err) => {
+        tracing::error!(
+          "received malformed update for collab `{}`: {}",
+          state.object_id,
+          err
+        );
+        return;
+      },
+    }
 
     let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
     tracing::trace!(
@@ -740,10 +752,9 @@ impl CollabGroup {
       tracing::debug!("subscriber {} send update with missing data", origin);
       Ok(Some(msg.encode_v1()))
     } else {
-      let upper_state_vector = decoded_update.state_vector();
       state
         .persister
-        .send_update(origin.clone(), update, upper_state_vector)
+        .send_update(origin.clone(), update)
         .await
         .map_err(|err| RTProtocolError::Internal(err.into()))?;
       let elapsed = start.elapsed();
@@ -940,11 +951,10 @@ impl CollabPersister {
     &self,
     sender: CollabOrigin,
     update: Vec<u8>,
-    state_vector: StateVector,
   ) -> Result<MessageId, StreamError> {
     let len = update.len();
     // send updates to redis queue
-    let update = CollabStreamUpdate::new(update, state_vector, sender, UpdateFlags::default());
+    let update = CollabStreamUpdate::new(update, sender, UpdateFlags::default());
     let msg_id = self.update_sink.send(&update).await?;
     tracing::trace!(
       "persisted update from {} ({} bytes) - msg id: {}",
@@ -979,6 +989,7 @@ impl CollabPersister {
 
   /// Loads collab without its history. Used for handling y-sync protocol messages.
   async fn load_compact(&self) -> Result<CollabSnapshot, RealtimeError> {
+    tracing::trace!("requested to load compact collab {}", self.object_id);
     // 1. Try to load the latest snapshot from storage
     let start = Instant::now();
     let mut collab = match self.load_collab_full(false).await? {

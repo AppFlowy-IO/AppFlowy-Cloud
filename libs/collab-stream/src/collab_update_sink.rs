@@ -1,6 +1,5 @@
 use crate::error::StreamError;
 use crate::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId};
-use collab::preclude::updates::encoder::Encode;
 use redis::aio::ConnectionManager;
 use redis::cmd;
 use tokio::sync::Mutex;
@@ -19,7 +18,6 @@ impl CollabUpdateSink {
   }
 
   pub async fn send(&self, msg: &CollabStreamUpdate) -> Result<MessageId, StreamError> {
-    let sv = msg.state_vector.encode_v1();
     let mut lock = self.conn.lock().await;
     let msg_id: MessageId = cmd("XADD")
       .arg(&self.stream_key)
@@ -28,8 +26,6 @@ impl CollabUpdateSink {
       .arg(msg.flags)
       .arg("sender")
       .arg(msg.sender.to_string())
-      .arg("sv")
-      .arg(&sv)
       .arg("data")
       .arg(&*msg.data)
       .query_async(&mut *lock)

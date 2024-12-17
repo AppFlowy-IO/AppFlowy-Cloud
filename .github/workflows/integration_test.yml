@@ -138,7 +138,7 @@ jobs:
           docker ps -a
           docker compose -f docker-compose-ci.yml logs
 
-      - name: Docker Logs
+      - name: AI Logs
         if: always()
         run: |
           docker logs appflowy-cloud-ai-1

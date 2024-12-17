@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT oid AS object_id, partition_key, indexed_at\n    FROM af_collab_embeddings\n    WHERE oid = ANY($1) AND partition_key = ANY($2)\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "object_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "partition_key",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "indexed_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4b5a37ce1dd4ee51375cf8fdda42ddf05abfe022f17f00d07276b70ac317b1e3"
+}

@@ -144,6 +144,10 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/collab/{object_id}/embed-info")
         .route(web::get().to(get_collab_embed_info_handler)),
     )
+    .service(
+      web::resource("/{workspace_id}/collab/embed-info/list")
+        .route(web::post().to(batch_get_collab_embed_info_handler)),
+    )
     .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
       web::resource("/{workspace_id}/space/{view_id}").route(web::patch().to(update_space_handler)),
@@ -2150,8 +2154,23 @@ async fn get_collab_embed_info_handler(
     .await
     .map_err(AppResponseError::from)?
     .ok_or_else(|| {
-      AppError::RecordNotFound(format!("Collab with object_id {} not found", object_id))
+      AppError::RecordNotFound(format!(
+        "Embedding for given object:{} not found",
+        object_id
+      ))
     })?;
+  Ok(Json(AppResponse::Ok().with_data(info)))
+}
+
+#[instrument(level = "debug", skip_all)]
+async fn batch_get_collab_embed_info_handler(
+  state: Data<AppState>,
+  payload: Json<RepeatedEmbeddedCollabQuery>,
+) -> Result<Json<AppResponse<RepeatedAFCollabEmbedInfo>>> {
+  let payload = payload.into_inner();
+  let info = database::collab::batch_select_collab_embed(&state.pg_pool, payload.0)
+    .await
+    .map_err(AppResponseError::from)?;
   Ok(Json(AppResponse::Ok().with_data(info)))
 }
 

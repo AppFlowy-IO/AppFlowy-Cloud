@@ -987,7 +987,6 @@ pub async fn list_database_row_details(
         })
       })
       .collect::<HashMap<_, _>>();
-
     let query_db_docs = doc_id_by_row_id
       .values()
       .map(|doc_id| QueryCollab {
@@ -995,52 +994,57 @@ pub async fn list_database_row_details(
         collab_type: CollabType::Document,
       })
       .collect::<Vec<_>>();
-
     let mut query_res = collab_storage
       .batch_get_collab(&uid, &workspace_uuid_str, query_db_docs, true)
       .await;
-
     for row_detail in &mut db_row_details {
-      let doc_id = match doc_id_by_row_id.get(&row_detail.id) {
-        Some(doc_id) => doc_id,
-        None => continue,
+      if let Err(err) = fill_in_db_row_doc(row_detail, &doc_id_by_row_id, &mut query_res) {
+        tracing::error!("Failed to fill in document content: {:?}", err);
       };
-
-      let res = match query_res.remove(doc_id.as_str()) {
-        Some(res) => res,
-        None => continue,
-      };
-
-      match res {
-        QueryCollabResult::Success { encode_collab_v1 } => {
-          let ec = match EncodedCollab::decode_from_bytes(&encode_collab_v1) {
-            Ok(ec) => ec,
-            Err(err) => {
-              tracing::error!("Failed to decode encoded collab: {:?}", err);
-              continue;
-            },
-          };
-          match Collab::new_with_source(CollabOrigin::Server, doc_id, ec.into(), vec![], false) {
-            Ok(doc_collab) => match Document::open(doc_collab) {
-              Ok(doc) => match doc.to_plain_text(true, false) {
-                Ok(plain_text) => {
-                  row_detail.doc = Some(plain_text);
-                },
-                Err(err) => {
-                  tracing::error!("Failed to convert document to plain text: {:?}", err);
-                },
-              },
-              Err(err) => tracing::error!("Failed to open document: {:?}", err),
-            },
-            Err(err) => tracing::error!("Failed to create collab: {:?}", err),
-          }
-        },
-        QueryCollabResult::Failed { error } => {
-          tracing::warn!("Failed to get document collab: {:?}", error)
-        },
-      }
     }
   }
 
   Ok(db_row_details)
+}
+
+fn fill_in_db_row_doc(
+  row_detail: &mut AFDatabaseRowDetail,
+  doc_id_by_row_id: &HashMap<String, String>,
+  query_res: &mut HashMap<String, QueryCollabResult>,
+) -> Result<(), AppError> {
+  let doc_id = doc_id_by_row_id.get(&row_detail.id).ok_or_else(|| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to get document id for row id: {}",
+      row_detail.id
+    ))
+  })?;
+  let res = query_res.remove(doc_id.as_str()).ok_or_else(|| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to get document collab for row id: {}",
+      row_detail.id
+    ))
+  })?;
+
+  let ec_bytes = match res {
+    QueryCollabResult::Success { encode_collab_v1 } => encode_collab_v1,
+    QueryCollabResult::Failed { error } => return Err(AppError::Internal(anyhow::anyhow!(error))),
+  };
+  let ec = EncodedCollab::decode_from_bytes(&ec_bytes)?;
+  let doc_collab = Collab::new_with_source(CollabOrigin::Server, doc_id, ec.into(), vec![], false)
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to create document collab: {:?}",
+        err
+      ))
+    })?;
+  let doc = Document::open(doc_collab)
+    .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to open document: {:?}", err)))?;
+  let plain_text = doc.to_plain_text(true, false).map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to convert document to plain text: {:?}",
+      err
+    ))
+  })?;
+  row_detail.doc = Some(plain_text);
+  Ok(())
 }

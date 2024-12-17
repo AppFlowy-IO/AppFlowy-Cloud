@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n          ac.oid AS object_id,\n          ac.partition_key,\n          ac.indexed_at,\n          ace.updated_at\n      FROM af_collab_embeddings ac\n      JOIN af_collab ace\n          ON ac.oid = ace.oid\n          AND ac.partition_key = ace.partition_key\n      WHERE ac.oid = ANY($1) AND ac.partition_key = ANY($2)\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "object_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "partition_key",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "indexed_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "cdbbea42600d61b6541808867397de29e2e5df569faefa098254f1afd3aa662d"
+}

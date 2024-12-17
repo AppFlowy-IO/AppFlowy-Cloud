@@ -52,7 +52,8 @@ use shared_entity::dto::workspace_dto::{
 use sqlx::{PgPool, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use tokio::time::timeout_at;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -629,6 +630,43 @@ async fn move_all_views_out_from_trash(folder: &mut Folder) -> Result<FolderUpda
   })
 }
 
+async fn delete_view_from_trash(view_id: &str, folder: &mut Folder) -> Result<Vec<u8>, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    folder
+      .body
+      .views
+      .update_view(&mut txn, view_id, |update| update.set_trash(false).done());
+    folder.body.views.delete_views(&mut txn, vec![view_id]);
+    txn.encode_update_v1()
+  };
+
+  Ok(encoded_update)
+}
+
+async fn delete_all_views_from_trash(folder: &mut Folder) -> Result<Vec<u8>, AppError> {
+  let all_trash_ids: Vec<String> = folder
+    .get_all_trash_sections()
+    .iter()
+    .map(|s| s.id.clone())
+    .collect();
+
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    if let Some(op) = folder
+      .body
+      .section
+      .section_op(&txn, collab_folder::Section::Trash)
+    {
+      op.clear(&mut txn);
+    };
+    folder.body.views.delete_views(&mut txn, all_trash_ids);
+    txn.encode_update_v1()
+  };
+
+  Ok(encoded_update)
+}
+
 fn folder_to_encoded_collab(folder: &Folder) -> Result<Vec<u8>, AppError> {
   let collab_type = CollabType::Folder;
   let encoded_folder_collab = folder
@@ -1033,6 +1071,39 @@ pub async fn restore_all_pages_from_trash(
   Ok(())
 }
 
+pub async fn delete_trash(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  view_id: &str,
+) -> Result<(), AppError> {
+  let uid = user.uid;
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let update = delete_view_from_trash(view_id, &mut folder).await?;
+  update_workspace_folder_data(appflowy_web_metrics, server, user, workspace_id, update).await?;
+  Ok(())
+}
+
+pub async fn delete_all_pages_from_trash(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+) -> Result<(), AppError> {
+  let uid = user.uid;
+  let collab_origin = GetCollabOrigin::User { uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let update = delete_all_views_from_trash(&mut folder).await?;
+  update_workspace_folder_data(appflowy_web_metrics, server, user, workspace_id, update).await?;
+  Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn update_page(
   pg_pool: &PgPool,
@@ -1275,7 +1346,7 @@ async fn get_page_collab_data_for_document(
 
 #[instrument(level = "debug", skip_all)]
 pub async fn update_page_collab_data(
-  appflowy_web_metrics: &Arc<AppFlowyWebMetrics>,
+  appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   workspace_id: Uuid,
@@ -1301,4 +1372,55 @@ pub async fn update_page_collab_data(
     .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
 
   Ok(())
+}
+
+#[instrument(level = "debug", skip_all)]
+pub async fn update_workspace_folder_data(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  workspace_id: Uuid,
+  update: Vec<u8>,
+) -> Result<(), AppError> {
+  appflowy_web_metrics.record_update_size_bytes(update.len());
+
+  let (tx, rx) = tokio::sync::oneshot::channel();
+  let message = ClientHttpUpdateMessage {
+    user,
+    workspace_id: workspace_id.to_string(),
+    object_id: workspace_id.to_string(),
+    collab_type: CollabType::Folder,
+    update: Bytes::from(update),
+    state_vector: None,
+    return_tx: Some(tx),
+  };
+
+  server
+    .try_send(message)
+    .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
+
+  let resp = timeout_at(
+    tokio::time::Instant::now() + Duration::from_millis(2000),
+    rx,
+  )
+  .await
+  .map_err(|err| {
+    appflowy_web_metrics.incr_apply_update_timeout_count(1);
+    AppError::Internal(anyhow!(
+      "Failed to receive apply update within timeout: {}",
+      err
+    ))
+  })?
+  .map_err(|err| AppError::Internal(anyhow!("Unable to receive folder update reply: {}", err)))?;
+
+  match resp {
+    Ok(_) => Ok(()),
+    Err(err) => {
+      appflowy_web_metrics.incr_apply_update_failure_count(1);
+      Err(AppError::Internal(anyhow!(
+        "Failed to apply folder update: {}",
+        err
+      )))
+    },
+  }
 }

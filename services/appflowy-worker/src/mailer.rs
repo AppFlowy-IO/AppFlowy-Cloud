@@ -63,6 +63,7 @@ mod tests {
       "smtp_password".to_string().into(),
       "localhost",
       465,
+      "none",
     )
     .await
     .unwrap();

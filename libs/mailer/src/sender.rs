@@ -2,6 +2,8 @@ use handlebars::Handlebars;
 use lettre::message::header::ContentType;
 use lettre::message::Message;
 use lettre::transport::smtp::authentication::Credentials;
+use lettre::transport::smtp::client::Tls;
+use lettre::transport::smtp::client::TlsParameters;
 use lettre::Address;
 use lettre::AsyncSmtpTransport;
 use lettre::AsyncTransport;
@@ -20,9 +22,19 @@ impl Mailer {
     smtp_password: secrecy::Secret<String>,
     smtp_host: &str,
     smtp_port: u16,
+    smtp_tls_kind: &str,
   ) -> Result<Self, anyhow::Error> {
     let creds = Credentials::new(smtp_username, smtp_password.expose_secret().to_string());
-    let smtp_transport = AsyncSmtpTransport::<lettre::Tokio1Executor>::relay(smtp_host)?
+    let tls: Tls = match smtp_tls_kind {
+      "none" => Tls::None,
+      "wrapper" => Tls::Wrapper(TlsParameters::new(smtp_host.into())?),
+      "required" => Tls::Required(TlsParameters::new(smtp_host.into())?),
+      "opportunistic" => Tls::Opportunistic(TlsParameters::new(smtp_host.into())?),
+      _ => return Err(anyhow::anyhow!("Invalid TLS kind")),
+    };
+
+    let smtp_transport = AsyncSmtpTransport::<lettre::Tokio1Executor>::builder_dangerous(smtp_host)
+      .tls(tls)
       .credentials(creds)
       .port(smtp_port)
       .build();

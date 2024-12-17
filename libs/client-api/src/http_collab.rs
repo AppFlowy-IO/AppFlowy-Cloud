@@ -13,7 +13,7 @@ use client_api_entity::workspace_dto::{
 use client_api_entity::{
   AFCollabEmbedInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams,
   CreateCollabParams, DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams,
-  UpdateCollabWebParams,
+  RepeatedAFCollabEmbedInfo, UpdateCollabWebParams,
 };
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
@@ -23,7 +23,7 @@ use prost::Message;
 use rayon::prelude::*;
 use reqwest::{Body, Method};
 use serde::Serialize;
-use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
+use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam, EmbeddedCollabQuery};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::collections::HashMap;
 use std::future::Future;
@@ -466,6 +466,28 @@ impl Client {
     AppResponse::<AFCollabEmbedInfo>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  pub async fn batch_get_collab_embed_info(
+    &self,
+    workspace_id: &str,
+    params: Vec<EmbeddedCollabQuery>,
+  ) -> Result<Vec<AFCollabEmbedInfo>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{workspace_id}/collab/embed-info/list",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    let data = AppResponse::<RepeatedAFCollabEmbedInfo>::from_response(resp)
+      .await?
+      .into_data()?;
+    Ok(data.0)
   }
 
   pub async fn collab_full_sync(

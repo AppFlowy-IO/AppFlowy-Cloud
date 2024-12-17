@@ -37,14 +37,15 @@ use client_api::entity::{
 };
 use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
-  AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
-  AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult, CollabParams,
-  CreateCollabParams, QueryCollab, QueryCollabParams, QuerySnapshotParams, SnapshotData,
+  AFCollabEmbedInfo, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
+  AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
+  CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams, QuerySnapshotParams,
+  SnapshotData,
 };
 use shared_entity::dto::ai_dto::CalculateSimilarityParams;
 use shared_entity::dto::search_dto::SearchDocumentResponseItem;
 use shared_entity::dto::workspace_dto::{
-  BlobMetadata, CollabResponse, PublishedDuplicate, WorkspaceMemberChangeset,
+  BlobMetadata, CollabResponse, EmbeddedCollabQuery, PublishedDuplicate, WorkspaceMemberChangeset,
   WorkspaceMemberInvitation, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
@@ -555,6 +556,34 @@ impl TestClient {
     self.api_client.get_profile().await.unwrap()
   }
 
+  pub async fn wait_until_all_embedding(
+    &self,
+    workspace_id: &str,
+    query: Vec<EmbeddedCollabQuery>,
+  ) -> Vec<AFCollabEmbedInfo> {
+    let timeout_duration = Duration::from_secs(30);
+    let poll_interval = Duration::from_millis(2000);
+    let poll_fut = async {
+      loop {
+        match self
+          .api_client
+          .batch_get_collab_embed_info(workspace_id, query.clone())
+          .await
+        {
+          Ok(items) if items.len() == query.len() => return Ok::<_, Error>(items),
+          _ => tokio::time::sleep(poll_interval).await,
+        }
+      }
+    };
+
+    // Enforce timeout
+    match timeout(timeout_duration, poll_fut).await {
+      Ok(Ok(items)) => items,
+      Ok(Err(e)) => panic!("Test failed: {}", e),
+      Err(_) => panic!("Test failed: Timeout after 30 seconds."),
+    }
+  }
+
   pub async fn wait_until_get_embedding(&self, workspace_id: &str, object_id: &str) {
     let result = timeout(Duration::from_secs(30), async {
       while self
@@ -620,10 +649,11 @@ impl TestClient {
     let resp = self.api_client.calculate_similarity(params).await.unwrap();
     assert!(
       resp.score > score,
-      "Similarity score is too low: {}.\nexpected: {},\ninput: {}",
+      "Similarity score is too low: {}.\nexpected: {},\ninput: {},\nexpected:{}",
       resp.score,
       score,
-      input
+      input,
+      expected
     );
   }
 

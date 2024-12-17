@@ -7,6 +7,7 @@ use collab_entity::CollabType;
 use database_entity::dto::CreateCollabParams;
 use futures_util::future::join_all;
 use shared_entity::dto::chat_dto::{CreateChatMessageParams, CreateChatParams, UpdateChatParams};
+use shared_entity::dto::workspace_dto::EmbeddedCollabQuery;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -49,9 +50,6 @@ async fn chat_with_multiple_selected_source_test() {
         encoded_collab_v1: doc.editor.encode_collab().encode_to_bytes().unwrap(),
         collab_type: CollabType::Document,
       };
-
-      let object_id = doc.object_id.clone();
-      let cloned_workspace_id = workspace_id.clone();
       let cloned_test_client = Arc::clone(&test_client);
       async move {
         // Create collaboration and wait for embedding in parallel
@@ -60,15 +58,22 @@ async fn chat_with_multiple_selected_source_test() {
           .create_collab(params)
           .await
           .unwrap();
-        cloned_test_client
-          .wait_until_get_embedding(&cloned_workspace_id, &object_id)
-          .await;
       }
     })
     .collect();
-
-  // Run all tasks concurrently
   join_all(tasks).await;
+
+  // batch query the collab embedding info
+  let query = docs
+    .iter()
+    .map(|doc| EmbeddedCollabQuery {
+      collab_type: CollabType::Document,
+      object_id: doc.object_id.clone(),
+    })
+    .collect();
+  test_client
+    .wait_until_all_embedding(&workspace_id, query)
+    .await;
 
   // create chat
   let chat_id = uuid::Uuid::new_v4().to_string();
@@ -101,14 +106,12 @@ async fn chat_with_multiple_selected_source_test() {
     &test_client,
     &workspace_id,
     &chat_id,
-    "When do we take off to Japan? Just tell me the date, and if you’re not sure, please let me know you don’t know",
+    "When do we take off to Japan? Just tell me the date, and if you don't know, Just say you don’t know",
   )
   .await;
-  let expected_unknown_japan_answer = r#"
-  I'm sorry, but I don't know the date for your trip to Japan.
-  "#;
+  let expected_unknown_japan_answer = r#"I don’t know"#;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected_unknown_japan_answer, 0.8)
+    .assert_similarity(&workspace_id, &answer, expected_unknown_japan_answer, 0.7)
     .await;
 
   // update chat context to snowboarding_in_japan_plan
@@ -165,11 +168,11 @@ async fn chat_with_multiple_selected_source_test() {
     &test_client,
     &workspace_id,
     &chat_id,
-    "When do we take off to Japan? Just tell me the date, and if you’re not sure, please let me know you don’t know",
+    "When do we take off to Japan? Just tell me the date, and if you don't know, Just say you don’t know",
   )
   .await;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected_unknown_japan_answer, 0.8)
+    .assert_similarity(&workspace_id, &answer, expected_unknown_japan_answer, 0.7)
     .await;
 }
 

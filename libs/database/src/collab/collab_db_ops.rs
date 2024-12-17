@@ -2,9 +2,9 @@ use anyhow::{anyhow, Context};
 use collab_entity::CollabType;
 use database_entity::dto::{
   AFAccessLevel, AFCollabEmbedInfo, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas,
-  CollabParams, QueryCollab, QueryCollabResult, RawData,
+  CollabParams, QueryCollab, QueryCollabResult, RawData, RepeatedAFCollabEmbedInfo,
 };
-use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
+use shared_entity::dto::workspace_dto::{DatabaseRowUpdatedItem, EmbeddedCollabQuery};
 
 use crate::collab::{partition_key_from_collab_type, SNAPSHOT_PER_HOUR};
 use crate::pg_row::AFCollabRowMeta;
@@ -714,10 +714,17 @@ where
   let partition_key = partition_key_from_collab_type(&collab_type);
   let record = sqlx::query!(
     r#"
-        SELECT oid AS object_id,indexed_at
-        FROM af_collab_embeddings
-        WHERE oid = $1 AND partition_key = $2
-        "#,
+      SELECT
+          ac.oid AS object_id,
+          ac.partition_key,
+          ac.indexed_at,
+          ace.updated_at
+      FROM af_collab_embeddings ac
+      JOIN af_collab ace
+          ON ac.oid = ace.oid
+          AND ac.partition_key = ace.partition_key
+      WHERE ac.oid = $1 AND ac.partition_key = $2
+    "#,
     object_id,
     partition_key
   )
@@ -727,7 +734,63 @@ where
   let result = record.map(|row| AFCollabEmbedInfo {
     object_id: row.object_id,
     indexed_at: DateTime::<Utc>::from_naive_utc_and_offset(row.indexed_at, Utc),
+    updated_at: row.updated_at,
   });
 
   Ok(result)
+}
+
+pub async fn batch_select_collab_embed<'a, E>(
+  executor: E,
+  embedded_collab: Vec<EmbeddedCollabQuery>,
+) -> Result<RepeatedAFCollabEmbedInfo, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let collab_types: Vec<CollabType> = embedded_collab
+    .iter()
+    .map(|query| query.collab_type.clone())
+    .collect();
+  let object_ids: Vec<String> = embedded_collab
+    .into_iter()
+    .map(|query| query.object_id)
+    .collect();
+
+  // Collect the partition keys for each collab_type
+  let partition_keys: Vec<i32> = collab_types
+    .iter()
+    .map(partition_key_from_collab_type)
+    .collect();
+
+  // Execute the query to fetch all matching rows
+  let records = sqlx::query!(
+    r#"
+      SELECT
+          ac.oid AS object_id,
+          ac.partition_key,
+          ac.indexed_at,
+          ace.updated_at
+      FROM af_collab_embeddings ac
+      JOIN af_collab ace
+          ON ac.oid = ace.oid
+          AND ac.partition_key = ace.partition_key
+      WHERE ac.oid = ANY($1) AND ac.partition_key = ANY($2)
+    "#,
+    &object_ids,
+    &partition_keys
+  )
+  .fetch_all(executor)
+  .await?;
+
+  // Organize the results by object_id
+  let mut items = vec![];
+  for row in records {
+    let embed_info = AFCollabEmbedInfo {
+      object_id: row.object_id.clone(),
+      indexed_at: DateTime::<Utc>::from_naive_utc_and_offset(row.indexed_at, Utc),
+      updated_at: row.updated_at,
+    };
+    items.push(embed_info);
+  }
+  Ok(RepeatedAFCollabEmbedInfo(items))
 }

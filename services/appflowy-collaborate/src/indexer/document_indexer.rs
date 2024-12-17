@@ -1,7 +1,6 @@
 use crate::indexer::open_ai::split_text_by_max_content_len;
 use crate::indexer::vector::embedder::Embedder;
 use crate::indexer::Indexer;
-use crate::thread_pool_no_abort::ThreadPoolNoAbort;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::{
@@ -57,11 +56,6 @@ impl Indexer for DocumentIndexer {
       return Ok(None);
     }
 
-    let object_id = match content.first() {
-      None => return Ok(None),
-      Some(first) => first.object_id.clone(),
-    };
-
     let contents: Vec<_> = content
       .iter()
       .map(|fragment| fragment.content.clone())
@@ -92,31 +86,10 @@ impl Indexer for DocumentIndexer {
       param.embedding = Some(embedding);
     }
 
-    tracing::info!(
-      "received {} embeddings for document {} - tokens used: {}",
-      content.len(),
-      object_id,
-      resp.usage.total_tokens
-    );
     Ok(Some(AFCollabEmbeddings {
       tokens_consumed: resp.usage.total_tokens as u32,
       params: content,
     }))
-  }
-
-  fn embed_in_thread_pool(
-    &self,
-    embedder: &Embedder,
-    content: Vec<AFCollabEmbeddedChunk>,
-    thread_pool: &ThreadPoolNoAbort,
-  ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    if content.is_empty() {
-      return Ok(None);
-    }
-
-    thread_pool
-      .install(|| self.embed(embedder, content))
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
   }
 }
 

@@ -97,13 +97,7 @@ impl RealtimeMessage {
   fn object_id(&self) -> Option<String> {
     match self {
       RealtimeMessage::Collab(msg) => Some(msg.object_id().to_string()),
-      RealtimeMessage::ClientCollabV1(msgs) => {
-        if let Some(msg) = msgs.first() {
-          Some(msg.object_id().to_string())
-        } else {
-          None
-        }
-      },
+      RealtimeMessage::ClientCollabV1(msgs) => msgs.first().map(|msg| msg.object_id().to_string()),
       RealtimeMessage::ClientCollabV2(msgs) => {
         if let Some((object_id, _)) = msgs.iter().next() {
           Some(object_id.to_string())

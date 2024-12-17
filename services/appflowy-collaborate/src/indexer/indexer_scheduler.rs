@@ -345,7 +345,7 @@ fn get_unindexed_collabs(
       match &cid.collab_type {
         CollabType::Document => {
           let collab = storage
-            .get_encode_collab(GetCollabOrigin::Server, cid.clone().into())
+            .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
             .await?;
 
           yield UnindexedCollab {

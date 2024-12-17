@@ -233,6 +233,7 @@ pub struct AppFlowyWebMetrics {
   pub update_size_bytes: Histogram,
   pub decoding_failure_count: Gauge,
   pub apply_update_failure_count: Gauge,
+  pub apply_update_timeout_count: Gauge,
 }
 
 impl AppFlowyWebMetrics {
@@ -243,6 +244,7 @@ impl AppFlowyWebMetrics {
       update_size_bytes: Histogram::new(update_size_buckets),
       decoding_failure_count: Default::default(),
       apply_update_failure_count: Default::default(),
+      apply_update_timeout_count: Default::default(),
     }
   }
 
@@ -264,6 +266,11 @@ impl AppFlowyWebMetrics {
       "Number of updates that failed to apply",
       metrics.apply_update_failure_count.clone(),
     );
+    web_update_registry.register(
+      "apply_update_timeout_count",
+      "Number of updates that failed to apply within timeout",
+      metrics.apply_update_timeout_count.clone(),
+    );
     metrics
   }
 
@@ -277,5 +284,9 @@ impl AppFlowyWebMetrics {
 
   pub fn incr_apply_update_failure_count(&self, count: i64) {
     self.apply_update_failure_count.inc_by(count);
+  }
+
+  pub fn incr_apply_update_timeout_count(&self, count: i64) {
+    self.apply_update_timeout_count.inc_by(count);
   }
 }

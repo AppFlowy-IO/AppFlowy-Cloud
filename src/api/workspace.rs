@@ -1,4 +1,4 @@
-use crate::api::util::{client_version_from_headers, PayloadReader};
+use crate::api::util::{client_version_from_headers, realtime_user_for_web_request, PayloadReader};
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
@@ -12,9 +12,9 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  create_page, create_space, get_page_view_collab, move_page, move_page_to_trash,
-  restore_all_pages_from_trash, restore_page_from_trash, update_page, update_page_collab_data,
-  update_space,
+  create_page, create_space, delete_all_pages_from_trash, delete_trash, get_page_view_collab,
+  move_page, move_page_to_trash, restore_all_pages_from_trash, restore_page_from_trash,
+  update_page, update_page_collab_data, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::domain::compression::{
@@ -173,6 +173,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::post().to(restore_all_pages_from_trash_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/delete-all-pages-from-trash")
+        .route(web::post().to(delete_all_pages_from_trash_handler)),
+    )
+    .service(
       web::resource("/{workspace_id}/batch/collab")
         .route(web::post().to(batch_create_collab_handler)),
     )
@@ -254,6 +258,10 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/favorite").route(web::get().to(get_favorite_views_handler)),
     )
     .service(web::resource("/{workspace_id}/trash").route(web::get().to(get_trash_views_handler)))
+    .service(
+      web::resource("/{workspace_id}/trash/{view_id}")
+        .route(web::delete().to(delete_page_from_trash_handler)),
+    )
     .service(
       web::resource("/published-outline/{publish_namespace}")
         .route(web::get().to(get_workspace_publish_outline_handler)),
@@ -910,31 +918,26 @@ async fn post_web_update_handler(
   server: Data<RealtimeServerAddr>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let payload = payload.into_inner();
-  let app_version = client_version_from_headers(req.headers())
-    .map(|s| s.to_string())
-    .unwrap_or_else(|_| "web".to_string());
-  let device_id = device_id_from_headers(req.headers())
-    .map(|s| s.to_string())
-    .unwrap_or_else(|_| Uuid::new_v4().to_string());
-  let session_id = device_id.clone();
-
-  let (workspace_id, object_id) = path.into_inner();
-  let collab_type = payload.collab_type.clone();
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
-
-  let user = RealtimeUser {
-    uid,
-    device_id,
-    connect_at: timestamp(),
-    session_id,
-    app_version,
-  };
+  let (workspace_id, object_id) = path.into_inner();
+  state
+    .collab_access_control
+    .enforce_action(
+      &workspace_id.to_string(),
+      &uid,
+      &object_id.to_string(),
+      Action::Write,
+    )
+    .await?;
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   trace!("create onetime web realtime user: {}", user);
+
+  let payload = payload.into_inner();
+  let collab_type = payload.collab_type.clone();
 
   update_page_collab_data(
     &state.metrics.appflowy_web_metrics,
@@ -1084,6 +1087,65 @@ async fn restore_all_pages_from_trash_handler(
     &state.collab_access_control_storage,
     uid,
     workspace_uuid,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_page_from_trash_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  let (workspace_id, view_id) = path.into_inner();
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  delete_trash(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_id,
+    &view_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_all_pages_from_trash_handler(
+  user_uuid: UserUuid,
+  path: web::Path<Uuid>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  let workspace_id = path.into_inner();
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .await?;
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  delete_all_pages_from_trash(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_id,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

@@ -97,6 +97,40 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  pub async fn delete_workspace_page_view_from_trash(
+    &self,
+    workspace_id: Uuid,
+    view_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/trash/{}",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn delete_all_workspace_page_views_from_trash(
+    &self,
+    workspace_id: Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/delete-all-pages-from-trash",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&json!({}))
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
   pub async fn update_workspace_page_view(
     &self,
     workspace_id: Uuid,

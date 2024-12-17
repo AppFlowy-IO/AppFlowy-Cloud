@@ -94,13 +94,35 @@ impl RealtimeMessage {
     }
   }
 
+  fn object_id(&self) -> Option<String> {
+    match self {
+      RealtimeMessage::Collab(msg) => Some(msg.object_id().to_string()),
+      RealtimeMessage::ClientCollabV1(msgs) => msgs.first().map(|msg| msg.object_id().to_string()),
+      RealtimeMessage::ClientCollabV2(msgs) => {
+        if let Some((object_id, _)) = msgs.iter().next() {
+          Some(object_id.to_string())
+        } else {
+          None
+        }
+      },
+      _ => None,
+    }
+  }
+
   #[cfg(feature = "rt_compress")]
   pub fn encode(&self) -> Result<Vec<u8>, Error> {
     let data = DefaultOptions::new()
       .with_fixint_encoding()
       .allow_trailing_bytes()
       .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
-      .serialize(self)?;
+      .serialize(self)
+      .map_err(|e| {
+        anyhow!(
+          "Failed to encode realtime message: {}, object_id:{:?}",
+          e,
+          self.object_id()
+        )
+      })?;
 
     let mut compressor = CompressorReader::new(&*data, 4096, 4, 22);
     let mut compressed_data = Vec::new();
@@ -117,7 +139,14 @@ impl RealtimeMessage {
       .with_fixint_encoding()
       .allow_trailing_bytes()
       .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
-      .serialize(self)?;
+      .serialize(self)
+      .map_err(|e| {
+        anyhow!(
+          "Failed to encode realtime message: {}, object_id:{:?}",
+          e,
+          self.object_id()
+        )
+      })?;
     Ok(data)
   }
 

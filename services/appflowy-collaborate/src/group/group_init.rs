@@ -123,7 +123,7 @@ impl CollabGroup {
       },
       Err(err) => {
         trace!(
-          "failed to index embeddings for document {} {}/{}: {}",
+          "failed to index embeddings for collab {} {}/{}: {}",
           self.collab_type,
           self.workspace_id,
           self.object_id,

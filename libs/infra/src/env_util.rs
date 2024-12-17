@@ -1,11 +1,19 @@
+use std::env::VarError;
+
 pub fn get_env_var(key: &str, default: &str) -> String {
-  std::env::var(key).unwrap_or_else(|e| {
-    tracing::debug!(
-      "failed to read environment variable:{}:{}, using default value: {}",
-      key,
-      e,
-      default
-    );
+  std::env::var(key).unwrap_or_else(|err| {
+    match err {
+      VarError::NotPresent => {
+        tracing::info!("using default environment variable {}:{}", key, default)
+      },
+      VarError::NotUnicode(_) => {
+        tracing::error!(
+          "{} is not a valid UTF-8 string, use default value:{}",
+          key,
+          default
+        );
+      },
+    }
     default.to_owned()
   })
 }
@@ -21,12 +29,8 @@ pub fn get_env_var_opt(key: &str) -> Option<String> {
         Some(val)
       }
     },
-    Err(e) => {
-      tracing::warn!(
-        "failed to read environment variable {}:{}, None set",
-        key,
-        e
-      );
+    Err(_) => {
+      tracing::info!("using default environment variable {}:None", key);
       None
     },
   }

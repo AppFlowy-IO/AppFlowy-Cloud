@@ -1145,16 +1145,13 @@ impl CollabPersister {
       let sv = tx.state_vector().encode_v1();
       let doc_state_full = tx.encode_state_as_update_v1(&StateVector::default());
       let full_len = doc_state_full.len();
-      let encoded_collab = EncodedCollab::new_v1(sv.clone(), doc_state_full)
-        .encode_to_bytes()
-        .map_err(|err| RealtimeError::Internal(err.into()))?;
       self
         .metrics
         .full_collab_size
-        .observe(encoded_collab.len() as f64);
+        .observe(doc_state_full.len() as f64);
       let params = InsertSnapshotParams {
         object_id: self.object_id.clone(),
-        data: encoded_collab.into(),
+        data: doc_state_full.into(),
         workspace_id: self.workspace_id.clone(),
         collab_type: self.collab_type.clone(),
       };

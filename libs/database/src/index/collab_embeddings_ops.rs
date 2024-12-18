@@ -57,12 +57,13 @@ WHERE w.workspace_id = $1"#,
 }
 
 #[derive(sqlx::Type)]
-#[sqlx(type_name = "af_fragment", no_pg_array)]
+#[sqlx(type_name = "af_fragment_v2", no_pg_array)]
 struct Fragment {
   fragment_id: String,
   content_type: i32,
   contents: String,
   embedding: Option<Vector>,
+  metadata: serde_json::Value,
 }
 
 impl From<AFCollabEmbeddedChunk> for Fragment {
@@ -72,13 +73,14 @@ impl From<AFCollabEmbeddedChunk> for Fragment {
       content_type: value.content_type as i32,
       contents: value.content,
       embedding: value.embedding.map(Vector::from),
+      metadata: value.metadata,
     }
   }
 }
 
 impl PgHasArrayType for Fragment {
   fn array_type_info() -> PgTypeInfo {
-    PgTypeInfo::with_name("af_fragment[]")
+    PgTypeInfo::with_name("af_fragment_v2[]")
   }
 }
 
@@ -96,7 +98,7 @@ pub async fn upsert_collab_embeddings(
   let collab_type = records[0].collab_type.clone();
   let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
 
-  sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4, $5::af_fragment[])"#)
+  sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4, $5::af_fragment_v2[])"#)
     .bind(*workspace_id)
     .bind(object_id)
     .bind(crate::collab::partition_key_from_collab_type(&collab_type))

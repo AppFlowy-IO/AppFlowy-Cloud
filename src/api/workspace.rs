@@ -2397,7 +2397,7 @@ async fn collab_full_sync_handler(
     uid,
     device_id,
     connect_at: timestamp(),
-    session_id: uuid::Uuid::new_v4().to_string(),
+    session_id: Uuid::new_v4().to_string(),
     app_version,
   };
 

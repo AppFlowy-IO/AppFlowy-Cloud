@@ -961,13 +961,18 @@ async fn post_space_handler(
   path: web::Path<Uuid>,
   payload: Json<CreateSpaceParams>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<Space>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_uuid = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   let space = create_space(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     &state.pg_pool,
     &state.collab_access_control_storage,
-    uid,
     workspace_uuid,
     &payload.space_permission,
     &payload.name,
@@ -983,13 +988,17 @@ async fn update_space_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<UpdateSpaceParams>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<Space>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   update_space(
-    &state.pg_pool,
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     &state.collab_access_control_storage,
-    uid,
     workspace_uuid,
     &view_id,
     &payload.space_permission,
@@ -1006,13 +1015,18 @@ async fn post_page_view_handler(
   path: web::Path<Uuid>,
   payload: Json<CreatePageParams>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<Page>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_uuid = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   let page = create_page(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     &state.pg_pool,
     &state.collab_access_control_storage,
-    uid,
     workspace_uuid,
     &payload.parent_view_id,
     &payload.layout,
@@ -1027,13 +1041,17 @@ async fn move_page_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<MovePageParams>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   move_page(
-    &state.pg_pool,
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     &state.collab_access_control_storage,
-    uid,
     workspace_uuid,
     &view_id,
     &payload.new_parent_view_id,
@@ -1047,13 +1065,17 @@ async fn move_page_to_trash_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, String)>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   move_page_to_trash(
-    &state.pg_pool,
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     &state.collab_access_control_storage,
-    uid,
     workspace_uuid,
     &view_id,
   )
@@ -1065,13 +1087,17 @@ async fn restore_page_from_trash_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, String)>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   restore_page_from_trash(
-    &state.pg_pool,
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     &state.collab_access_control_storage,
-    uid,
     workspace_uuid,
     &view_id,
   )
@@ -1083,13 +1109,17 @@ async fn restore_all_pages_from_trash_handler(
   user_uuid: UserUuid,
   path: web::Path<Uuid>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_uuid = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   restore_all_pages_from_trash(
-    &state.pg_pool,
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     &state.collab_access_control_storage,
-    uid,
     workspace_uuid,
   )
   .await?;
@@ -1160,6 +1190,8 @@ async fn update_page_view_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<UpdatePageParams>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
@@ -1168,10 +1200,12 @@ async fn update_page_view_handler(
     .extra
     .as_ref()
     .map(|json_value| json_value.to_string());
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   update_page(
-    &state.pg_pool,
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
     &state.collab_access_control_storage,
-    uid,
     workspace_uuid,
     &view_id,
     &payload.name,

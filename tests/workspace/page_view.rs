@@ -287,7 +287,7 @@ async fn move_page_to_trash_then_restore() {
     .await
     .unwrap();
   for view_id in view_ids_to_be_deleted.iter() {
-    app_client
+    web_client
       .api_client
       .move_workspace_page_view_to_trash(Uuid::parse_str(&workspace_id).unwrap(), view_id)
       .await
@@ -379,7 +379,7 @@ async fn move_page_with_child_to_trash_then_restore() {
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  app_client
+  web_client
     .api_client
     .move_workspace_page_view_to_trash(
       Uuid::parse_str(&workspace_id).unwrap(),
@@ -453,7 +453,7 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  app_client
+  web_client
     .api_client
     .move_workspace_page_view_to_trash(
       Uuid::parse_str(&workspace_id).unwrap(),
@@ -528,7 +528,7 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  app_client
+  web_client
     .api_client
     .move_workspace_page_view_to_trash(
       Uuid::parse_str(&workspace_id).unwrap(),

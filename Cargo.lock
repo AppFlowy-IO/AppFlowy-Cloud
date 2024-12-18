@@ -1902,9 +1902,9 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
-version = "0.4.38"
+version = "0.4.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
+checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
@@ -2137,7 +2137,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=33cca67554c29b1a3821df6faf5423cff2cd5db3#33cca67554c29b1a3821df6faf5423cff2cd5db3"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2443178e4249354c094867875f300cc924cbe0e2#2443178e4249354c094867875f300cc924cbe0e2"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2162,7 +2162,7 @@ dependencies = [
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=33cca67554c29b1a3821df6faf5423cff2cd5db3#33cca67554c29b1a3821df6faf5423cff2cd5db3"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2443178e4249354c094867875f300cc924cbe0e2#2443178e4249354c094867875f300cc924cbe0e2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2176,6 +2176,7 @@ dependencies = [
  "fancy-regex 0.13.0",
  "futures",
  "getrandom 0.2.15",
+ "iana-time-zone",
  "js-sys",
  "lazy_static",
  "nanoid",
@@ -2201,7 +2202,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=33cca67554c29b1a3821df6faf5423cff2cd5db3#33cca67554c29b1a3821df6faf5423cff2cd5db3"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2443178e4249354c094867875f300cc924cbe0e2#2443178e4249354c094867875f300cc924cbe0e2"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2222,7 +2223,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=33cca67554c29b1a3821df6faf5423cff2cd5db3#33cca67554c29b1a3821df6faf5423cff2cd5db3"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2443178e4249354c094867875f300cc924cbe0e2#2443178e4249354c094867875f300cc924cbe0e2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2242,7 +2243,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=33cca67554c29b1a3821df6faf5423cff2cd5db3#33cca67554c29b1a3821df6faf5423cff2cd5db3"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2443178e4249354c094867875f300cc924cbe0e2#2443178e4249354c094867875f300cc924cbe0e2"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2264,7 +2265,7 @@ dependencies = [
 [[package]]
 name = "collab-importer"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=33cca67554c29b1a3821df6faf5423cff2cd5db3#33cca67554c29b1a3821df6faf5423cff2cd5db3"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2443178e4249354c094867875f300cc924cbe0e2#2443178e4249354c094867875f300cc924cbe0e2"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -2367,7 +2368,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=33cca67554c29b1a3821df6faf5423cff2cd5db3#33cca67554c29b1a3821df6faf5423cff2cd5db3"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2443178e4249354c094867875f300cc924cbe0e2#2443178e4249354c094867875f300cc924cbe0e2"
 dependencies = [
  "anyhow",
  "collab",
@@ -4034,9 +4035,9 @@ dependencies = [
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.60"
+version = "0.1.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7ffbb5a1b541ea2561f8c41c087286cc091e21e556a4f09a8f6cbf17b69b141"
+checksum = "235e081f3925a06703c2d0117ea8b91f042756fd6e7a6e5d901e8ca1a996b220"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",

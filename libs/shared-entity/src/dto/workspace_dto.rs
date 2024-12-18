@@ -342,6 +342,9 @@ pub struct ListDatabaseRowDetailParam {
   // Comma separated database row ids
   // e.g. "<uuid_1>,<uuid_2>,<uuid_3>"
   pub ids: String,
+  // if set to true, document data will be fetched (if exist)
+  // as markdown
+  pub with_doc: Option<bool>,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
@@ -356,8 +359,11 @@ pub struct DatabaseRowUpdatedItem {
 }
 
 impl ListDatabaseRowDetailParam {
-  pub fn from(ids: &[&str]) -> Self {
-    Self { ids: ids.join(",") }
+  pub fn new(ids: &[&str], with_doc: bool) -> Self {
+    Self {
+      ids: ids.join(","),
+      with_doc: Some(with_doc),
+    }
   }
   pub fn into_ids(&self) -> Vec<&str> {
     self.ids.split(',').collect()
@@ -396,7 +402,11 @@ pub struct AFDatabaseRow {
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AFDatabaseRowDetail {
   pub id: String,
-  pub cells: HashMap<String, HashMap<String, serde_json::Value>>,
+  // database field id -> cell data
+  pub cells: HashMap<String, serde_json::Value>,
+  pub has_doc: bool,
+  /// available if rows has doc and client request for it in [ListDatabaseRowDetailParam]
+  pub doc: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -413,4 +423,17 @@ pub struct AFInsertDatabaseField {
   pub name: String,
   pub field_type: i64,                             // FieldType ID
   pub type_option_data: Option<serde_json::Value>, // TypeOptionData
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AddDatatabaseRow {
+  pub cells: HashMap<String, serde_json::Value>,
+  pub document: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct UpsertDatatabaseRow {
+  pub pre_hash: String, // input which will be hashed into database row id
+  pub cells: HashMap<String, serde_json::Value>,
+  pub document: Option<String>,
 }

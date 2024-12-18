@@ -48,11 +48,11 @@ use database_entity::dto::PublishInfo;
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
-use std::collections::HashMap;
 use std::io::Cursor;
 use std::time::Instant;
 use tokio_stream::StreamExt;
@@ -284,7 +284,8 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row")
         .route(web::get().to(list_database_row_id_handler))
-        .route(web::post().to(post_database_row_handler)),
+        .route(web::post().to(post_database_row_handler))
+        .route(web::put().to(put_database_row_handler)),
     )
     .service(
       web::resource("/{workspace_id}/database/{database_id}/fields")
@@ -2017,7 +2018,7 @@ async fn post_database_row_handler(
   user_uuid: UserUuid,
   path_param: web::Path<(String, String)>,
   state: Data<AppState>,
-  cells_by_id: Json<HashMap<String, serde_json::Value>>,
+  add_database_row: Json<AddDatatabaseRow>,
 ) -> Result<Json<AppResponse<String>>> {
   let (workspace_id, db_id) = path_param.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
@@ -2026,16 +2027,67 @@ async fn post_database_row_handler(
     .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
 
+  let AddDatatabaseRow { cells, document } = add_database_row.into_inner();
+
   let new_db_row_id = biz::collab::ops::insert_database_row(
-    &state.collab_access_control_storage,
+    state.collab_access_control_storage.clone(),
     &state.pg_pool,
     &workspace_id,
     &db_id,
     uid,
-    cells_by_id.into_inner(),
+    None,
+    cells,
+    document,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
+}
+
+async fn put_database_row_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+  upsert_db_row: Json<UpsertDatatabaseRow>,
+) -> Result<Json<AppResponse<String>>> {
+  let (workspace_id, db_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  let UpsertDatatabaseRow {
+    pre_hash,
+    cells,
+    document,
+  } = upsert_db_row.into_inner();
+
+  let row_id = {
+    let mut hasher = Sha256::new();
+    hasher.update(&workspace_id);
+    hasher.update(&db_id);
+    hasher.update(pre_hash);
+    let hash = hasher.finalize();
+    Uuid::from_bytes([
+      // take 16 out of 32 bytes
+      hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9],
+      hash[10], hash[11], hash[12], hash[13], hash[14], hash[15],
+    ])
+  };
+  let row_id_str = row_id.to_string();
+
+  biz::collab::ops::upsert_database_row(
+    state.collab_access_control_storage.clone(),
+    &state.pg_pool,
+    &workspace_id,
+    &db_id,
+    uid,
+    &row_id_str,
+    cells,
+    document,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(row_id_str)))
 }
 
 async fn get_database_fields_handler(
@@ -2075,7 +2127,7 @@ async fn post_database_fields_handler(
 
   let field_id = biz::collab::ops::add_database_field(
     uid,
-    &state.collab_access_control_storage,
+    state.collab_access_control_storage.clone(),
     &state.pg_pool,
     &workspace_id,
     &db_id,
@@ -2125,6 +2177,7 @@ async fn list_database_row_details_handler(
   let (workspace_id, db_id) = path_param.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let list_db_row_query = param.into_inner();
+  let with_doc = list_db_row_query.with_doc.unwrap_or_default();
   let row_ids = list_db_row_query.into_ids();
 
   if let Err(e) = Uuid::parse_str(&workspace_id) {
@@ -2156,6 +2209,7 @@ async fn list_database_row_details_handler(
     db_id,
     &row_ids,
     UNSUPPORTED_FIELD_TYPES,
+    with_doc,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))

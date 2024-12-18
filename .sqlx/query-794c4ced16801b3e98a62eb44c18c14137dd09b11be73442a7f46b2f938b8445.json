@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT message_id, content, created_at, author, meta_data, reply_message_id\n        FROM af_chat_messages\n        WHERE chat_id = $1\n        AND reply_message_id = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "content",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "author",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "meta_data",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "reply_message_id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "794c4ced16801b3e98a62eb44c18c14137dd09b11be73442a7f46b2f938b8445"
+}

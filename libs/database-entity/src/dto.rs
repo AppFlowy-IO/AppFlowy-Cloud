@@ -746,72 +746,13 @@ pub struct AFCollabEmbeddedChunk {
   pub content_type: EmbeddingContentType,
   pub content: String,
   pub embedding: Option<Vec<f32>>,
-}
-
-impl AFCollabEmbeddedChunk {
-  pub fn from_proto(proto: &proto::collab::CollabEmbeddingsParams) -> Result<Self, EntityError> {
-    let collab_type_proto = proto::collab::CollabType::try_from(proto.collab_type).unwrap();
-    let collab_type = CollabType::from_proto(&collab_type_proto);
-    let content_type_proto =
-      proto::collab::EmbeddingContentType::try_from(proto.content_type).unwrap();
-    let content_type = EmbeddingContentType::from_proto(content_type_proto)?;
-    let embedding = if proto.embedding.is_empty() {
-      None
-    } else {
-      Some(proto.embedding.clone())
-    };
-    Ok(Self {
-      fragment_id: proto.fragment_id.clone(),
-      object_id: proto.object_id.clone(),
-      collab_type,
-      content_type,
-      content: proto.content.clone(),
-      embedding,
-    })
-  }
-
-  pub fn to_proto(&self) -> proto::collab::CollabEmbeddingsParams {
-    proto::collab::CollabEmbeddingsParams {
-      fragment_id: self.fragment_id.clone(),
-      object_id: self.object_id.clone(),
-      collab_type: self.collab_type.to_proto() as i32,
-      content_type: self.content_type.to_proto() as i32,
-      content: self.content.clone(),
-      embedding: self.embedding.clone().unwrap_or_default(),
-    }
-  }
-
-  pub fn to_protobuf_bytes(&self) -> Vec<u8> {
-    self.to_proto().encode_to_vec()
-  }
+  pub metadata: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AFCollabEmbeddings {
   pub tokens_consumed: u32,
   pub params: Vec<AFCollabEmbeddedChunk>,
-}
-
-impl AFCollabEmbeddings {
-  pub fn from_proto(proto: proto::collab::CollabEmbeddings) -> Result<Self, EntityError> {
-    let mut params = vec![];
-    for param in proto.embeddings {
-      params.push(AFCollabEmbeddedChunk::from_proto(&param)?);
-    }
-    Ok(Self {
-      tokens_consumed: proto.tokens_consumed,
-      params,
-    })
-  }
-
-  pub fn to_proto(&self) -> proto::collab::CollabEmbeddings {
-    let embeddings: Vec<proto::collab::CollabEmbeddingsParams> =
-      self.params.iter().map(|param| param.to_proto()).collect();
-    proto::collab::CollabEmbeddings {
-      tokens_consumed: self.tokens_consumed,
-      embeddings,
-    }
-  }
 }
 
 /// Type of content stored by the embedding.

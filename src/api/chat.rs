@@ -5,6 +5,7 @@ use crate::biz::chat::ops::{
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
+use serde::Deserialize;
 
 use crate::api::util::ai_model_from_header;
 use app_error::AppError;
@@ -356,16 +357,11 @@ async fn get_chat_message_handler(
 #[instrument(level = "debug", skip_all, err)]
 async fn get_chat_question_message_handler(
   path: web::Path<(String, String)>,
-  query: web::Query<HashMap<String, String>>,
+  query: web::Query<FindQuestionParams>,
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<Option<ChatMessage>>> {
-  let answer_message_id = query
-    .get("answer_message_id")
-    .and_then(|s| s.parse::<i64>().ok())
-    .ok_or_else(|| AppError::InvalidRequest(serde_json::to_string(&query.0).unwrap()))?;
-
   let (_workspace_id, chat_id) = path.into_inner();
-  let message = get_question_message(&state.pg_pool, &chat_id, answer_message_id).await?;
+  let message = get_question_message(&state.pg_pool, &chat_id, query.0.answer_message_id).await?;
   Ok(AppResponse::Ok().with_data(message).into())
 }
 
@@ -520,4 +516,9 @@ where
       },
     }
   }
+}
+
+#[derive(Debug, Deserialize)]
+struct FindQuestionParams {
+  answer_message_id: i64,
 }

@@ -262,6 +262,28 @@ impl Client {
       .into_data()
   }
 
+  pub async fn get_question_message_from_answer_id(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    answer_message_id: i64,
+  ) -> Result<Option<ChatMessage>, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/message/find_question",
+      self.base_url
+    );
+
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .query(&[("answer_message_id", answer_message_id)])
+      .send()
+      .await?;
+    AppResponse::<Option<ChatMessage>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn calculate_similarity(
     &self,
     params: CalculateSimilarityParams,

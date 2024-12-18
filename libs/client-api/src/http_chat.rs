@@ -262,6 +262,30 @@ impl Client {
       .into_data()
   }
 
+  pub async fn get_question_message_from_answer_id(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    answer_message_id: i64,
+  ) -> Result<Option<ChatMessage>, AppResponseError> {
+    let mut url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/message/find_question",
+      self.base_url
+    );
+    let query_params = vec![("answer_message_id", answer_message_id.to_string())];
+
+    let query = serde_urlencoded::to_string(&query_params).unwrap();
+    url = format!("{}?{}", url, query);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<Option<ChatMessage>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn calculate_similarity(
     &self,
     params: CalculateSimilarityParams,

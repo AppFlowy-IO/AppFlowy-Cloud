@@ -669,3 +669,40 @@ pub async fn select_chat_message_content<'a, E: Executor<'a, Database = Postgres
   .await?;
   Ok((row.content, row.meta_data))
 }
+
+pub async fn select_chat_message_matching_reply_message_id(
+  txn: &mut Transaction<'_, Postgres>,
+  chat_id: &str,
+  reply_message_id: i64,
+) -> Result<Option<ChatMessage>, AppError> {
+  let chat_id = Uuid::from_str(chat_id)?;
+  let row = sqlx::query!(
+    r#"
+        SELECT message_id, content, created_at, author, meta_data, reply_message_id
+        FROM af_chat_messages
+        WHERE chat_id = $1
+        AND reply_message_id = $2
+    "#,
+    &chat_id,
+    reply_message_id
+  )
+  .fetch_one(txn.deref_mut())
+  .await?;
+
+  let message = match serde_json::from_value::<ChatAuthor>(row.author) {
+    Ok(author) => Some(ChatMessage {
+      author,
+      message_id: row.message_id,
+      content: row.content,
+      created_at: row.created_at,
+      meta_data: row.meta_data,
+      reply_message_id: row.reply_message_id,
+    }),
+    Err(err) => {
+      warn!("Failed to deserialize author: {}", err);
+      None
+    },
+  };
+
+  Ok(message)
+}

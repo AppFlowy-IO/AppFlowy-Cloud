@@ -759,30 +759,30 @@ pub async fn broadcast_update(
   Ok(())
 }
 
-/// like [broadcast_update]
-/// but with timeout of 30 seconds
-/// error is logged and ignored
+/// like [broadcast_update] but in separate tokio task
+/// waits for a maximum of 30 seconds for the broadcast to complete
 pub async fn broadcast_update_with_timeout(
-  collab_storage: &CollabAccessControlStorage,
-  oid: &str,
+  collab_storage: Arc<CollabAccessControlStorage>,
+  oid: String,
   encoded_update: Vec<u8>,
-) {
-  tracing::info!("broadcasting update to group: {}", oid);
-  let res = match tokio::time::timeout(
-    Duration::from_secs(30),
-    broadcast_update(collab_storage, oid, encoded_update),
-  )
-  .await
-  {
-    Ok(result) => result.map_err(AppError::from),
-    Err(err) => {
-      tracing::error!("Timeout waiting for broadcasting the updates: {}", err);
-      Err(AppError::RequestTimeout(
-        "timeout while duplicating".to_string(),
-      ))
-    },
-  };
-  if let Err(err) = res {
-    tracing::error!("Error while broadcasting the updates: {}", err);
-  }
+) -> tokio::task::JoinHandle<()> {
+  tokio::spawn(async move {
+    tracing::info!("broadcasting update to group: {}", oid);
+    let res = match tokio::time::timeout(
+      Duration::from_secs(30),
+      broadcast_update(&collab_storage, &oid, encoded_update),
+    )
+    .await
+    {
+      Ok(res) => res,
+      Err(err) => {
+        tracing::error!("Error while broadcasting the updates: {:?}", err);
+        return;
+      },
+    };
+    match res {
+      Ok(()) => tracing::info!("broadcasted update to group: {}", oid),
+      Err(err) => tracing::error!("Error while broadcasting the updates: {:?}", err),
+    }
+  })
 }

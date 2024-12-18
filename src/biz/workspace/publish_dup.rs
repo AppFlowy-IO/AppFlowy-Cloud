@@ -358,7 +358,11 @@ impl PublishCollabDuplicator {
     }?;
 
     // broadcast folder changes
-    broadcast_update_with_timeout(&collab_storage, &dest_workspace_id, encoded_update).await;
+    tokio::spawn(broadcast_update_with_timeout(
+      collab_storage,
+      dest_workspace_id,
+      encoded_update,
+    ));
     Ok(())
   }
 

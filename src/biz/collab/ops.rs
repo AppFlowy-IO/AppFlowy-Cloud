@@ -460,7 +460,7 @@ pub async fn list_database_row_ids(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_database_row(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: Arc<CollabAccessControlStorage>,
   pg_pool: &PgPool,
   workspace_uuid_str: &str,
   database_uuid_str: &str,
@@ -507,7 +507,7 @@ pub async fn insert_database_row(
         workspace_uuid_str,
         uid,
         &new_doc_id,
-        collab_storage,
+        &collab_storage,
         row_doc_content,
       )
       .await?;
@@ -517,7 +517,7 @@ pub async fn insert_database_row(
   };
 
   let (mut db_collab, db_body) =
-    get_latest_collab_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+    get_latest_collab_database_body(&collab_storage, workspace_uuid_str, database_uuid_str).await?;
   write_to_database_row(
     &db_body,
     &mut new_db_row_collab.transact_mut(),
@@ -597,8 +597,8 @@ pub async fn insert_database_row(
       )
       .await?;
     broadcast_update_with_timeout(
-      collab_storage,
-      workspace_uuid_str,
+      collab_storage.clone(),
+      workspace_uuid_str.to_string(),
       created_doc.folder_updates,
     )
     .await;
@@ -635,13 +635,18 @@ pub async fn insert_database_row(
     .await?;
 
   db_txn.commit().await?;
-  broadcast_update_with_timeout(collab_storage, database_uuid_str, db_collab_update).await;
+  broadcast_update_with_timeout(
+    collab_storage,
+    database_uuid_str.to_string(),
+    db_collab_update,
+  )
+  .await;
   Ok(new_db_row_id.to_string())
 }
 
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_database_row(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: Arc<CollabAccessControlStorage>,
   pg_pool: &PgPool,
   workspace_uuid_str: &str,
   database_uuid_str: &str,
@@ -651,7 +656,7 @@ pub async fn upsert_database_row(
   row_doc_content: Option<String>,
 ) -> Result<(), AppError> {
   let (mut db_row_collab, db_row_body) =
-    match get_latest_collab_database_row_body(collab_storage, workspace_uuid_str, row_id).await {
+    match get_latest_collab_database_row_body(&collab_storage, workspace_uuid_str, row_id).await {
       Ok(res) => res,
       Err(err) => match err {
         AppError::RecordNotFound(_) => {
@@ -675,7 +680,7 @@ pub async fn upsert_database_row(
   // At this point, db row exists,
   // so we modify it, put into storage and broadcast change
   let (_db_collab, db_body) =
-    get_latest_collab_database_body(collab_storage, workspace_uuid_str, database_uuid_str).await?;
+    get_latest_collab_database_body(&collab_storage, workspace_uuid_str, database_uuid_str).await?;
   let mut db_row_txn = db_row_collab.transact_mut();
   write_to_database_row(
     &db_body,
@@ -688,7 +693,7 @@ pub async fn upsert_database_row(
 
   // determine if there are any document changes
   let doc_changes: Option<(String, DocChanges)> = get_database_row_doc_changes(
-    collab_storage,
+    &collab_storage,
     workspace_uuid_str,
     row_doc_content,
     &db_row_body,
@@ -718,7 +723,12 @@ pub async fn upsert_database_row(
       "inserting new database row from server",
     )
     .await?;
-  broadcast_update_with_timeout(collab_storage, row_id, db_row_collab_updates).await;
+  broadcast_update_with_timeout(
+    collab_storage.clone(),
+    row_id.to_string(),
+    db_row_collab_updates,
+  )
+  .await;
 
   // handle document changes
   if let Some((doc_id, doc_changes)) = doc_changes {
@@ -737,7 +747,7 @@ pub async fn upsert_database_row(
             "updating database row document from server",
           )
           .await?;
-        broadcast_update_with_timeout(collab_storage, &doc_id, doc_update).await;
+        broadcast_update_with_timeout(collab_storage, doc_id, doc_update).await;
       },
       DocChanges::Insert(created_doc) => {
         let CreatedRowDocument {
@@ -775,7 +785,12 @@ pub async fn upsert_database_row(
             "inserting updated folder from server",
           )
           .await?;
-        broadcast_update_with_timeout(collab_storage, workspace_uuid_str, folder_updates).await;
+        broadcast_update_with_timeout(
+          collab_storage,
+          workspace_uuid_str.to_string(),
+          folder_updates,
+        )
+        .await;
       },
     }
   }
@@ -811,14 +826,14 @@ pub async fn get_database_fields(
 // returns the id of the field created
 pub async fn add_database_field(
   uid: i64,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: Arc<CollabAccessControlStorage>,
   pg_pool: &PgPool,
   workspace_id: &str,
   database_id: &str,
   insert_field: AFInsertDatabaseField,
 ) -> Result<String, AppError> {
   let (mut db_collab, db_body) =
-    get_latest_collab_database_body(collab_storage, workspace_id, database_id).await?;
+    get_latest_collab_database_body(&collab_storage, workspace_id, database_id).await?;
 
   let new_id = gen_field_id();
   let mut type_options = TypeOptions::new();
@@ -872,7 +887,7 @@ pub async fn add_database_field(
     .await?;
 
   pg_txn.commit().await?;
-  broadcast_update_with_timeout(collab_storage, database_id, db_collab_update).await;
+  broadcast_update_with_timeout(collab_storage, database_id.to_string(), db_collab_update).await;
 
   Ok(new_id)
 }

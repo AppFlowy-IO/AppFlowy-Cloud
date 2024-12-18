@@ -2030,7 +2030,7 @@ async fn post_database_row_handler(
   let AddDatatabaseRow { cells, document } = add_database_row.into_inner();
 
   let new_db_row_id = biz::collab::ops::insert_database_row(
-    &state.collab_access_control_storage,
+    state.collab_access_control_storage.clone(),
     &state.pg_pool,
     &workspace_id,
     &db_id,
@@ -2077,7 +2077,7 @@ async fn put_database_row_handler(
   let row_id_str = row_id.to_string();
 
   biz::collab::ops::upsert_database_row(
-    &state.collab_access_control_storage,
+    state.collab_access_control_storage.clone(),
     &state.pg_pool,
     &workspace_id,
     &db_id,
@@ -2127,7 +2127,7 @@ async fn post_database_fields_handler(
 
   let field_id = biz::collab::ops::add_database_field(
     uid,
-    &state.collab_access_control_storage,
+    state.collab_access_control_storage.clone(),
     &state.pg_pool,
     &workspace_id,
     &db_id,

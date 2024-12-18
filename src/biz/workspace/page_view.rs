@@ -5,8 +5,10 @@ use crate::biz::collab::folder_view::{
   check_if_view_is_space, parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
   to_folder_view_icon, to_space_permission,
 };
-use crate::biz::collab::ops::{get_latest_collab_folder, get_latest_workspace_database};
-use crate::biz::collab::utils::{collab_from_doc_state, get_latest_collab_encoded};
+use crate::biz::collab::ops::get_latest_workspace_database;
+use crate::biz::collab::utils::{
+  collab_from_doc_state, get_latest_collab_encoded, get_latest_collab_folder,
+};
 use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;

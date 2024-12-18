@@ -11,7 +11,7 @@ use serde_json::json;
 use sqlx::{types::uuid, PgPool};
 use std::ops::DerefMut;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::instrument;
 use uuid::Uuid;
 use yrs::updates::encoder::Encode;
@@ -757,4 +757,32 @@ pub async fn broadcast_update(
     .await?;
 
   Ok(())
+}
+
+/// like [broadcast_update] but in separate tokio task
+/// waits for a maximum of 30 seconds for the broadcast to complete
+pub async fn broadcast_update_with_timeout(
+  collab_storage: Arc<CollabAccessControlStorage>,
+  oid: String,
+  encoded_update: Vec<u8>,
+) -> tokio::task::JoinHandle<()> {
+  tokio::spawn(async move {
+    tracing::info!("broadcasting update to group: {}", oid);
+    let res = match tokio::time::timeout(
+      Duration::from_secs(30),
+      broadcast_update(&collab_storage, &oid, encoded_update),
+    )
+    .await
+    {
+      Ok(res) => res,
+      Err(err) => {
+        tracing::error!("Error while broadcasting the updates: {:?}", err);
+        return;
+      },
+    };
+    match res {
+      Ok(()) => tracing::info!("broadcasted update to group: {}", oid),
+      Err(err) => tracing::error!("Error while broadcasting the updates: {:?}", err),
+    }
+  })
 }

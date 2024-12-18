@@ -49,7 +49,7 @@ use std::ops::DerefMut;
 use yrs::Map;
 
 use crate::biz::collab::utils::get_database_row_doc_changes;
-use crate::biz::workspace::ops::broadcast_update;
+use crate::biz::workspace::ops::broadcast_update_with_timeout;
 use access_control::collab::CollabAccessControl;
 use anyhow::Context;
 use database_entity::dto::{
@@ -596,12 +596,12 @@ pub async fn insert_database_row(
         "inserting updated folder from server",
       )
       .await?;
-    broadcast_update(
+    broadcast_update_with_timeout(
       collab_storage,
       workspace_uuid_str,
       created_doc.folder_updates,
     )
-    .await?;
+    .await;
   };
 
   // insert row
@@ -635,7 +635,7 @@ pub async fn insert_database_row(
     .await?;
 
   db_txn.commit().await?;
-  broadcast_update(collab_storage, database_uuid_str, db_collab_update).await?;
+  broadcast_update_with_timeout(collab_storage, database_uuid_str, db_collab_update).await;
   Ok(new_db_row_id.to_string())
 }
 
@@ -718,7 +718,7 @@ pub async fn upsert_database_row(
       "inserting new database row from server",
     )
     .await?;
-  broadcast_update(collab_storage, row_id, db_row_collab_updates).await?;
+  broadcast_update_with_timeout(collab_storage, row_id, db_row_collab_updates).await;
 
   // handle document changes
   if let Some((doc_id, doc_changes)) = doc_changes {
@@ -737,7 +737,7 @@ pub async fn upsert_database_row(
             "updating database row document from server",
           )
           .await?;
-        broadcast_update(collab_storage, &doc_id, doc_update).await?;
+        broadcast_update_with_timeout(collab_storage, &doc_id, doc_update).await;
       },
       DocChanges::Insert(created_doc) => {
         let CreatedRowDocument {
@@ -775,7 +775,7 @@ pub async fn upsert_database_row(
             "inserting updated folder from server",
           )
           .await?;
-        broadcast_update(collab_storage, workspace_uuid_str, folder_updates).await?;
+        broadcast_update_with_timeout(collab_storage, workspace_uuid_str, folder_updates).await;
       },
     }
   }
@@ -872,7 +872,7 @@ pub async fn add_database_field(
     .await?;
 
   pg_txn.commit().await?;
-  broadcast_update(collab_storage, database_id, db_collab_update).await?;
+  broadcast_update_with_timeout(collab_storage, database_id, db_collab_update).await;
 
   Ok(new_id)
 }

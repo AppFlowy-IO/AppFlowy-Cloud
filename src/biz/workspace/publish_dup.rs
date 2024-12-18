@@ -47,6 +47,7 @@ use crate::biz::collab::utils::collab_to_bin;
 use crate::biz::collab::utils::get_latest_collab_encoded;
 
 use super::ops::broadcast_update;
+use super::ops::broadcast_update_with_timeout;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
@@ -357,20 +358,8 @@ impl PublishCollabDuplicator {
     }?;
 
     // broadcast folder changes
-    match tokio::time::timeout(
-      Duration::from_secs(30),
-      broadcast_update(&collab_storage, &dest_workspace_id, encoded_update),
-    )
-    .await
-    {
-      Ok(result) => result.map_err(AppError::from),
-      Err(_) => {
-        error!("Timeout waiting for broadcasting the updates");
-        Err(AppError::RequestTimeout(
-          "timeout while duplicating".to_string(),
-        ))
-      },
-    }
+    broadcast_update_with_timeout(&collab_storage, &dest_workspace_id, encoded_update).await;
+    Ok(())
   }
 
   /// Deep copy a published collab to the destination workspace.

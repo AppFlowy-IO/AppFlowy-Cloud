@@ -11,7 +11,7 @@ use serde_json::json;
 use sqlx::{types::uuid, PgPool};
 use std::ops::DerefMut;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::instrument;
 use uuid::Uuid;
 use yrs::updates::encoder::Encode;
@@ -757,4 +757,32 @@ pub async fn broadcast_update(
     .await?;
 
   Ok(())
+}
+
+/// like [broadcast_update]
+/// but with timeout of 30 seconds
+/// error is logged and ignored
+pub async fn broadcast_update_with_timeout(
+  collab_storage: &CollabAccessControlStorage,
+  oid: &str,
+  encoded_update: Vec<u8>,
+) {
+  tracing::info!("broadcasting update to group: {}", oid);
+  let res = match tokio::time::timeout(
+    Duration::from_secs(30),
+    broadcast_update(collab_storage, oid, encoded_update),
+  )
+  .await
+  {
+    Ok(result) => result.map_err(AppError::from),
+    Err(err) => {
+      tracing::error!("Timeout waiting for broadcasting the updates: {}", err);
+      Err(AppError::RequestTimeout(
+        "timeout while duplicating".to_string(),
+      ))
+    },
+  };
+  if let Err(err) = res {
+    tracing::error!("Error while broadcasting the updates: {}", err);
+  }
 }

@@ -6,8 +6,8 @@ use client_api_test::{ai_test_enabled, TestClient};
 use futures_util::StreamExt;
 use serde_json::json;
 use shared_entity::dto::chat_dto::{
-  ChatMessageMetadata, ChatRAGData, CreateChatMessageParams, CreateChatParams, MessageCursor,
-  UpdateChatParams,
+  ChatMessageMetadata, ChatRAGData, CreateAnswerMessageParams, CreateChatMessageParams,
+  CreateChatParams, MessageCursor, UpdateChatParams,
 };
 
 #[tokio::test]
@@ -430,7 +430,19 @@ async fn get_question_message_test() {
     .await
     .unwrap();
 
-  assert_eq!(question.reply_message_id.unwrap(), answer.message_id);
+  test_client
+    .api_client
+    .save_answer(
+      &workspace_id,
+      &chat_id,
+      CreateAnswerMessageParams {
+        content: answer.content,
+        metadata: None,
+        question_message_id: question.message_id,
+      },
+    )
+    .await
+    .unwrap();
 
   let find_question = test_client
     .api_client

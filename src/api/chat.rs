@@ -1,10 +1,11 @@
 use crate::biz::chat::ops::{
   create_chat, create_chat_message, delete_chat, generate_chat_message_answer, get_chat_messages,
-  update_chat_message,
+  get_question_message, update_chat_message,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
+use serde::Deserialize;
 
 use crate::api::util::ai_model_from_header;
 use app_error::AppError;
@@ -68,6 +69,10 @@ pub fn chat_scope() -> Scope {
       .service(
         web::resource("/{chat_id}/message/answer")
             .route(web::post().to(save_answer_handler))
+      )
+      .service(
+        web::resource("/{chat_id}/message/find_question")
+            .route(web::get().to(get_chat_question_message_handler))
       )
 
       // AI response generation
@@ -350,6 +355,17 @@ async fn get_chat_message_handler(
 }
 
 #[instrument(level = "debug", skip_all, err)]
+async fn get_chat_question_message_handler(
+  path: web::Path<(String, String)>,
+  query: web::Query<FindQuestionParams>,
+  state: Data<AppState>,
+) -> actix_web::Result<JsonAppResponse<Option<ChatMessage>>> {
+  let (_workspace_id, chat_id) = path.into_inner();
+  let message = get_question_message(&state.pg_pool, &chat_id, query.0.answer_message_id).await?;
+  Ok(AppResponse::Ok().with_data(message).into())
+}
+
+#[instrument(level = "debug", skip_all, err)]
 async fn get_chat_settings_handler(
   path: web::Path<(String, String)>,
   state: Data<AppState>,
@@ -500,4 +516,9 @@ where
       },
     }
   }
+}
+
+#[derive(Debug, Deserialize)]
+struct FindQuestionParams {
+  answer_message_id: i64,
 }

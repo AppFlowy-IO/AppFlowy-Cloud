@@ -1,6 +1,7 @@
 use crate::http::log_request_id;
 use crate::Client;
 
+use app_error::AppError;
 use client_api_entity::chat_dto::{
   ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
   RepeatedChatMessage, UpdateChatMessageContentParams,
@@ -154,7 +155,17 @@ impl Client {
       .await?
       .timeout(Duration::from_secs(30))
       .send()
-      .await?;
+      .await
+      .map_err(|err| {
+        let app_err = AppError::from(err);
+        if matches!(app_err, AppError::ServiceTemporaryUnavailable(_)) {
+          AppError::AIServiceUnavailable(
+            "AI service temporarily unavailable, please try again later".to_string(),
+          )
+        } else {
+          app_err
+        }
+      })?;
     log_request_id(&resp);
     let stream = AppResponse::<serde_json::Value>::json_response_stream(resp).await?;
     Ok(QuestionStream::new(stream))

@@ -1,12 +1,10 @@
 use std::ops::DerefMut;
 use std::sync::Arc;
 
+use crate::biz::collab::utils::get_latest_collab_folder;
 use crate::mailer::AFCloudMailer;
 use crate::{
-  biz::collab::{
-    folder_view::{to_dto_view_icon, to_dto_view_layout},
-    ops::get_latest_collab_folder,
-  },
+  biz::collab::folder_view::{to_dto_view_icon, to_dto_view_layout},
   mailer::{WorkspaceAccessRequestApprovedMailerParam, WorkspaceAccessRequestMailerParam},
 };
 use access_control::workspace::WorkspaceAccessControl;

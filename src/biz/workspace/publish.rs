@@ -39,7 +39,7 @@ use database::{
 
 use crate::{
   api::metrics::PublishedCollabMetrics,
-  biz::collab::{folder_view::to_dto_folder_view_miminal, ops::get_latest_collab_folder},
+  biz::collab::{folder_view::to_dto_folder_view_miminal, utils::get_latest_collab_folder},
 };
 
 async fn check_workspace_owner_or_publisher(

@@ -12,6 +12,7 @@ use collab_document::document::DocumentBody;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
+use serde_json::json;
 use tracing::trace;
 use uuid::Uuid;
 
@@ -106,6 +107,8 @@ fn split_text_into_chunks(
   // We assume that every token is ~4 bytes. We're going to split document content into fragments
   // of ~2000 tokens each.
   let split_contents = split_text_by_max_content_len(content, 8000)?;
+  let metadata =
+    json!({"id": object_id, "source": "appflowy", "name": "document", "collab_type": collab_type });
   Ok(
     split_contents
       .into_iter()
@@ -116,6 +119,7 @@ fn split_text_into_chunks(
         content_type: EmbeddingContentType::PlainText,
         content,
         embedding: None,
+        metadata: metadata.clone(),
       })
       .collect(),
   )

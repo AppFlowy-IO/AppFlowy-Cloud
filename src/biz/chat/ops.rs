@@ -8,7 +8,7 @@ use database::chat;
 use database::chat::chat_ops::{
   delete_answer_message_by_question_message_id, insert_answer_message,
   insert_answer_message_with_transaction, insert_chat, insert_question_message,
-  select_chat_messages,
+  select_chat_message_matching_reply_message_id, select_chat_messages,
 };
 use futures::stream::Stream;
 use serde_json::json;
@@ -97,7 +97,8 @@ pub async fn generate_chat_message_answer(
       &ai_model,
       Some(metadata),
     )
-    .await?;
+    .await
+    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
 
   info!("new_answer: {:?}", new_answer);
   // Save the answer to the database
@@ -231,4 +232,16 @@ pub async fn get_chat_messages(
   let messages = select_chat_messages(&mut txn, chat_id, params).await?;
   txn.commit().await?;
   Ok(messages)
+}
+
+pub async fn get_question_message(
+  pg_pool: &PgPool,
+  chat_id: &str,
+  answer_message_id: i64,
+) -> Result<Option<ChatMessage>, AppError> {
+  let mut txn = pg_pool.begin().await?;
+  let message =
+    select_chat_message_matching_reply_message_id(&mut txn, chat_id, answer_message_id).await?;
+  txn.commit().await?;
+  Ok(message)
 }

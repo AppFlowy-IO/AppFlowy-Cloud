@@ -199,6 +199,10 @@ impl IndexerScheduler {
     Ok(())
   }
 
+  pub fn is_indexing_enabled(&self, collab_type: &CollabType) -> bool {
+    self.indexer_provider.is_indexing_enabled(collab_type)
+  }
+
   pub fn index_encoded_collabs(
     &self,
     workspace_id: &str,

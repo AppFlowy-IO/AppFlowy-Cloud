@@ -1167,6 +1167,37 @@ pub struct WorkspaceNamespace {
   pub is_original: bool,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct QuickNote {
+  pub id: Uuid,
+  pub data: serde_json::Value,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct QuickNotes {
+  pub quick_notes: Vec<QuickNote>,
+  pub has_more: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateQuickNoteParams {
+  pub data: Option<serde_json::Value>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateQuickNoteParams {
+  pub data: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ListQuickNotesQueryParams {
+  pub search_term: Option<String>,
+  pub offset: Option<i32>,
+  pub limit: Option<i32>,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CollabParams, CollabParamsV0};

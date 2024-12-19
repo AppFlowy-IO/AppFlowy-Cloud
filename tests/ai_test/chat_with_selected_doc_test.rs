@@ -106,10 +106,10 @@ async fn chat_with_multiple_selected_source_test() {
     &test_client,
     &workspace_id,
     &chat_id,
-    "When do we take off to Japan? Just tell me the date, and if you don't know, Just say you don’t know",
+    "When do we take off to Japan? Just tell me the date, and if you don't know, Just say you don’t know the date for the trip to Japan",
   )
   .await;
-  let expected_unknown_japan_answer = r#"I don’t know"#;
+  let expected_unknown_japan_answer = r#"I don’t know the date for your trip to Japan"#;
   test_client
     .assert_similarity(&workspace_id, &answer, expected_unknown_japan_answer, 0.7)
     .await;
@@ -168,7 +168,7 @@ async fn chat_with_multiple_selected_source_test() {
     &test_client,
     &workspace_id,
     &chat_id,
-    "When do we take off to Japan? Just tell me the date, and if you don't know, Just say you don’t know",
+    "When do we take off to Japan? Just tell me the date, and if you don't know, Just say you don’t know the date for the trip to Japan",
   )
   .await;
   test_client

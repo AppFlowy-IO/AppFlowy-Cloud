@@ -829,10 +829,17 @@ async fn batch_create_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
-    state.indexer_scheduler.index_encoded_collabs(
-      &workspace_id,
-      collab_params_list.iter().map(IndexedCollab::from).collect(),
-    )?;
+    let indexed_collabs: Vec<_> = collab_params_list
+      .iter()
+      .filter(|p| state.indexer_scheduler.is_indexing_enabled(&p.collab_type))
+      .map(IndexedCollab::from)
+      .collect();
+
+    if !indexed_collabs.is_empty() {
+      state
+        .indexer_scheduler
+        .index_encoded_collabs(&workspace_id, indexed_collabs)?;
+    }
   }
 
   let start = Instant::now();

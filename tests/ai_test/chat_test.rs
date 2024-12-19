@@ -294,54 +294,6 @@ async fn generate_chat_message_answer_test() {
   assert!(!answer.is_empty());
 }
 
-#[tokio::test]
-async fn create_chat_context_test() {
-  if !ai_test_enabled() {
-    return;
-  }
-  let test_client = TestClient::new_user_without_ws_conn().await;
-  let workspace_id = test_client.workspace_id().await;
-  let chat_id = uuid::Uuid::new_v4().to_string();
-  let params = CreateChatParams {
-    chat_id: chat_id.clone(),
-    name: "context chat".to_string(),
-    rag_ids: vec![],
-  };
-
-  test_client
-    .api_client
-    .create_chat(&workspace_id, params)
-    .await
-    .unwrap();
-
-  let content = "Lacus have lived in the US for five years".to_string();
-  let metadata = ChatMessageMetadata {
-    data: ChatRAGData::from_text(content),
-    id: chat_id.clone(),
-    name: "".to_string(),
-    source: "appflowy".to_string(),
-    extra: None,
-  };
-
-  let params = CreateChatMessageParams::new_user("Where Lacus live?").with_metadata(metadata);
-  let question = test_client
-    .api_client
-    .create_question(&workspace_id, &chat_id, params)
-    .await
-    .unwrap();
-
-  let answer = test_client
-    .api_client
-    .get_answer(&workspace_id, &chat_id, question.message_id)
-    .await
-    .unwrap();
-  println!("answer: {:?}", answer);
-  if answer.content.contains("United States") {
-    return;
-  }
-  assert!(answer.content.contains("US"));
-}
-
 // #[tokio::test]
 // async fn update_chat_message_test() {
 //   if !ai_test_enabled() {

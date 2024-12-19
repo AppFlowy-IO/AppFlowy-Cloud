@@ -7,6 +7,7 @@ pub mod index;
 pub mod listener;
 pub mod pg_row;
 pub mod publish;
+pub mod quick_note;
 pub mod resource_usage;
 pub mod template;
 pub mod user;

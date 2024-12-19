@@ -316,7 +316,7 @@ async fn answer_stream_v2_handler(
       )
     },
     Err(err) => Ok(
-      HttpResponse::Ok()
+      HttpResponse::ServiceUnavailable()
         .content_type("text/event-stream")
         .streaming(stream::once(async move {
           Err(AppError::AIServiceUnavailable(err.to_string()))

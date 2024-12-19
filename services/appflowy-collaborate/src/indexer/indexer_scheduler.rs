@@ -13,7 +13,6 @@ use bytes::Bytes;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
@@ -206,6 +205,10 @@ impl IndexerScheduler {
     Ok(())
   }
 
+  pub fn is_indexing_enabled(&self, collab_type: &CollabType) -> bool {
+    self.indexer_provider.is_indexing_enabled(collab_type)
+  }
+
   pub fn index_encoded_collabs(
     &self,
     workspace_id: &str,
@@ -265,7 +268,7 @@ impl IndexerScheduler {
     &self,
     workspace_id: &str,
     object_id: &str,
-    collab: &Arc<RwLock<Collab>>,
+    collab: &Collab,
     collab_type: &CollabType,
   ) -> Result<(), AppError> {
     if !self.index_enabled() {
@@ -284,9 +287,7 @@ impl IndexerScheduler {
     let workspace_id = Uuid::parse_str(workspace_id)?;
     let embedder = self.create_embedder()?;
 
-    let lock = collab.read().await;
-    let chunks = indexer.create_embedded_chunks(&lock, embedder.model())?;
-    drop(lock); // release the read lock ASAP
+    let chunks = indexer.create_embedded_chunks(collab, embedder.model())?;
 
     let threads = self.threads.clone();
     let tx = self.schedule_tx.clone();

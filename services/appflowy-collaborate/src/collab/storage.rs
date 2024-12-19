@@ -545,6 +545,18 @@ where
       .await
   }
 
+  async fn get_latest_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> AppResult<Option<SnapshotData>> {
+    self
+      .snapshot_control
+      .get_latest_snapshot(workspace_id, object_id, collab_type)
+      .await
+  }
+
   async fn get_collab_snapshot_list(
     &self,
     workspace_id: &str,

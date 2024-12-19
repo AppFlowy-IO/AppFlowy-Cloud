@@ -741,7 +741,7 @@ pub async fn broadcast_update(
   oid: &str,
   encoded_update: Vec<u8>,
 ) -> Result<(), AppError> {
-  tracing::info!("broadcasting update to group: {}", oid);
+  tracing::trace!("broadcasting update to group: {}", oid);
   let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
   let msg = ClientCollabMessage::ClientUpdateSync {
     data: UpdateSync {

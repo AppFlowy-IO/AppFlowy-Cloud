@@ -199,7 +199,11 @@ where
         return Ok(false);
       }
 
-      trace!("🔥{} start sync, reason:{}", &sync_object.object_id, reason);
+      tracing::debug!(
+        "🔥{} restart sync due to missing update, reason:{}",
+        &sync_object.object_id,
+        reason
+      );
       let awareness = collab.get_awareness();
       let payload = gen_sync_state(awareness, &ClientSyncProtocol)?;
       sink.queue_init_sync(|msg_id| {
@@ -236,8 +240,8 @@ where
     SyncReason::CollabInitialize
     | SyncReason::ServerCannotApplyUpdate
     | SyncReason::NetworkResume => {
-      trace!(
-        "🔥{} start sync, reason: {}",
+      tracing::debug!(
+        "🔥{} resume network, reason: {}",
         &sync_object.object_id,
         reason
       );

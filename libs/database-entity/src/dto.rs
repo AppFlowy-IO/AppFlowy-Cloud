@@ -254,13 +254,13 @@ impl Display for QueryCollabParams {
 }
 
 impl QueryCollabParams {
-  pub fn new<T1: ToString, T2: ToString>(
+  pub fn new<T1: Into<String>, T2: Into<String>>(
     object_id: T1,
     collab_type: CollabType,
     workspace_id: T2,
   ) -> Self {
-    let workspace_id = workspace_id.to_string();
-    let object_id = object_id.to_string();
+    let workspace_id = workspace_id.into();
+    let object_id = object_id.into();
     let inner = QueryCollab {
       object_id,
       collab_type,
@@ -1165,6 +1165,35 @@ pub struct WorkspaceNamespace {
   pub workspace_id: Uuid,
   pub namespace: String,
   pub is_original: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct QuickNote {
+  pub id: Uuid,
+  pub data: serde_json::Value,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct QuickNotes {
+  pub quick_notes: Vec<QuickNote>,
+  pub has_more: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateQuickNoteParams {}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateQuickNoteParams {
+  pub data: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ListQuickNotesQueryParams {
+  pub search_term: Option<String>,
+  pub offset: Option<i32>,
+  pub limit: Option<i32>,
 }
 
 #[cfg(test)]

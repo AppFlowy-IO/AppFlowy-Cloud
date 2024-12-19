@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE af_quick_note SET data = $1, updated_at = NOW() WHERE quick_note_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "770a4979e137ca08c5ea625259221f9d397a56defb8e498eb92da7b3a8af612b"
+}

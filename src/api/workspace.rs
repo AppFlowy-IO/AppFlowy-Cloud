@@ -17,6 +17,9 @@ use crate::biz::workspace::page_view::{
   update_page, update_page_collab_data, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
+use crate::biz::workspace::quick_note::{
+  create_quick_note, delete_quick_note, list_quick_notes, update_quick_note,
+};
 use crate::domain::compression::{
   blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
 };
@@ -299,6 +302,16 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/database/{database_id}/row/detail")
         .route(web::get().to(list_database_row_details_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/quick-note")
+        .route(web::get().to(list_quick_notes_handler))
+        .route(web::post().to(post_quick_note_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/quick-note/{quick_note_id}")
+        .route(web::put().to(update_quick_note_handler))
+        .route(web::delete().to(delete_quick_note_handler)),
     )
 }
 
@@ -817,8 +830,7 @@ async fn batch_create_collab_handler(
   let total_size = collab_params_list
     .iter()
     .fold(0, |acc, x| acc + x.encoded_collab_v1.len());
-  event!(
-    tracing::Level::INFO,
+  tracing::info!(
     "decompressed {} collab objects in {:?}",
     collab_params_list.len(),
     start.elapsed()
@@ -829,10 +841,18 @@ async fn batch_create_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
-    state.indexer_scheduler.index_encoded_collabs(
-      &workspace_id,
-      collab_params_list.iter().map(IndexedCollab::from).collect(),
-    )?;
+    let indexed_collabs: Vec<_> = collab_params_list
+      .iter()
+      .filter(|p| state.indexer_scheduler.is_indexing_enabled(&p.collab_type))
+      .map(IndexedCollab::from)
+      .collect();
+
+    let len = indexed_collabs.len();
+    state
+      .indexer_scheduler
+      .index_encoded_collabs(&workspace_id, indexed_collabs)?;
+
+    tracing::info!("scheduled indexing for {} collabs", len);
   }
 
   let start = Instant::now();
@@ -841,8 +861,7 @@ async fn batch_create_collab_handler(
     .batch_insert_new_collab(&workspace_id, &uid, collab_params_list)
     .await?;
 
-  event!(
-    tracing::Level::INFO,
+  tracing::info!(
     "inserted collab objects to disk in {:?}, total size:{}",
     start.elapsed(),
     total_size
@@ -1860,7 +1879,6 @@ async fn post_realtime_message_stream_handler(
     bytes.extend_from_slice(&item?);
   }
 
-  event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
@@ -2429,4 +2447,79 @@ async fn collab_full_sync_handler(
     Ok(None) => Ok(HttpResponse::InternalServerError().finish()),
     Err(err) => Ok(err.error_response()),
   }
+}
+
+async fn post_quick_note_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  let workspace_id = workspace_id.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .await?;
+  create_quick_note(&state.pg_pool, uid, workspace_id).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn list_quick_notes_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+  query: web::Query<ListQuickNotesQueryParams>,
+) -> Result<JsonAppResponse<QuickNotes>> {
+  let workspace_id = workspace_id.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .await?;
+  let ListQuickNotesQueryParams {
+    search_term,
+    offset,
+    limit,
+  } = query.into_inner();
+  let quick_notes = list_quick_notes(
+    &state.pg_pool,
+    uid,
+    workspace_id,
+    search_term,
+    offset,
+    limit,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(quick_notes)))
+}
+
+async fn update_quick_note_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(Uuid, Uuid)>,
+  state: Data<AppState>,
+  data: Json<UpdateQuickNoteParams>,
+) -> Result<JsonAppResponse<()>> {
+  let (workspace_id, quick_note_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .await?;
+  update_quick_note(&state.pg_pool, quick_note_id, &data.data).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_quick_note_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(Uuid, Uuid)>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  let (workspace_id, quick_note_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .await?;
+  delete_quick_note(&state.pg_pool, quick_note_id).await?;
+  Ok(Json(AppResponse::Ok()))
 }

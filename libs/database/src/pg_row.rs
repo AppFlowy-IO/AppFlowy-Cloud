@@ -5,8 +5,9 @@ use chrono::{DateTime, Utc};
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWorkspace, AFWorkspaceInvitationStatus,
   AccessRequestMinimal, AccessRequestStatus, AccessRequestWithViewId, AccessRequesterInfo,
-  AccountLink, GlobalComment, Reaction, Template, TemplateCategory, TemplateCategoryMinimal,
-  TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
+  AccountLink, GlobalComment, QuickNote, Reaction, Template, TemplateCategory,
+  TemplateCategoryMinimal, TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal,
+  TemplateGroup, TemplateMinimal,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -645,5 +646,24 @@ impl TryFrom<AFAccessRequestWithViewIdColumn> for AccessRequestWithViewId {
       status: value.status.into(),
       created_at: value.created_at,
     })
+  }
+}
+
+#[derive(FromRow, Serialize, Debug)]
+pub struct AFQuickNoteRow {
+  pub quick_note_id: Uuid,
+  pub data: serde_json::Value,
+  pub created_at: DateTime<Utc>,
+  pub updated_at: DateTime<Utc>,
+}
+
+impl From<AFQuickNoteRow> for QuickNote {
+  fn from(value: AFQuickNoteRow) -> Self {
+    Self {
+      id: value.quick_note_id,
+      data: value.data,
+      created_at: value.created_at,
+      last_updated_at: value.updated_at,
+    }
   }
 }

@@ -25,8 +25,9 @@ use rayon::prelude::*;
 use sqlx::PgPool;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::time::timeout;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
@@ -100,8 +101,13 @@ impl IndexerScheduler {
       this.index_enabled(),
       num_thread
     );
+
     if this.index_enabled() {
-      tokio::spawn(spawn_write_indexing(rx, this.pg_pool.clone()));
+      tokio::spawn(spawn_write_indexing(
+        rx,
+        this.pg_pool.clone(),
+        this.metrics.clone(),
+      ));
       tokio::spawn(handle_unindexed_collabs(this.clone()));
     }
 
@@ -302,7 +308,7 @@ impl IndexerScheduler {
         indexer.embed(&embedder, chunks)
       });
       let duration = start.elapsed();
-      metrics.record_processing_time(duration.as_millis());
+      metrics.record_generate_embedding_time(duration.as_millis());
 
       match result {
         Ok(embed_result) => match embed_result {
@@ -495,7 +501,11 @@ async fn index_unindexd_collab(
 }
 
 const EMBEDDING_RECORD_BUFFER_SIZE: usize = 5;
-async fn spawn_write_indexing(mut rx: UnboundedReceiver<EmbeddingRecord>, pg_pool: PgPool) {
+async fn spawn_write_indexing(
+  mut rx: UnboundedReceiver<EmbeddingRecord>,
+  pg_pool: PgPool,
+  metrics: Arc<EmbeddingMetrics>,
+) {
   let mut buf = Vec::with_capacity(EMBEDDING_RECORD_BUFFER_SIZE);
   loop {
     let n = rx.recv_many(&mut buf, EMBEDDING_RECORD_BUFFER_SIZE).await;
@@ -504,6 +514,7 @@ async fn spawn_write_indexing(mut rx: UnboundedReceiver<EmbeddingRecord>, pg_poo
       break;
     }
 
+    let start = Instant::now();
     let records = buf.drain(..n).collect::<Vec<_>>();
     for record in records.iter() {
       info!(
@@ -511,7 +522,20 @@ async fn spawn_write_indexing(mut rx: UnboundedReceiver<EmbeddingRecord>, pg_poo
         record.object_id, record.tokens_used
       );
     }
-    match batch_insert_records(&pg_pool, records).await {
+
+    let result = timeout(
+      Duration::from_secs(20),
+      batch_insert_records(&pg_pool, records),
+    )
+    .await
+    .unwrap_or_else(|_| {
+      Err(AppError::Internal(anyhow!(
+        "timeout when writing embeddings"
+      )))
+    });
+
+    metrics.record_write_embedding_time(start.elapsed().as_millis());
+    match result {
       Ok(_) => trace!("[Embedding] save {} embeddings to disk", n),
       Err(err) => error!("Failed to write collab embedding to disk:{}", err),
     }
@@ -568,7 +592,7 @@ fn process_collab(
     let chunks = indexer.create_embedded_chunks(&collab, embdder.model())?;
     let result = indexer.embed(embdder, chunks);
     let duration = start_time.elapsed();
-    metrics.record_processing_time(duration.as_millis());
+    metrics.record_generate_embedding_time(duration.as_millis());
 
     match result {
       Ok(Some(embeddings)) => Ok(Some((embeddings.tokens_consumed, embeddings.params))),

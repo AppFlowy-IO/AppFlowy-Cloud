@@ -271,8 +271,8 @@ where
     });
 
     // Create message router for user if it's not exist
-    let should_sub = self.msg_router_by_user.get(user).is_none();
-    if should_sub {
+    let is_router_exists = self.msg_router_by_user.get(user).is_some();
+    if !is_router_exists {
       trace!("create a new client message router for user:{}", user);
       let new_client_router = ClientMessageRouter::new(NullSender::<()>::default());
       self
@@ -290,7 +290,7 @@ where
     }
 
     // Only subscribe when the user is not subscribed to the group
-    if should_sub {
+    if !self.group_manager.contains_user(object_id, user) {
       self.subscribe_group(user, object_id, &origin).await?;
     }
     if let Some(client_stream) = self.msg_router_by_user.get(user) {

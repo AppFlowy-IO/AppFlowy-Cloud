@@ -14,4 +14,7 @@ pub enum AIError {
 
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),
+
+  #[error("Service unavailable:{0}")]
+  ServiceUnavailable(String),
 }

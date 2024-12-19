@@ -373,6 +373,11 @@ where
     resp: reqwest::Response,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let status_code = resp.status();
+    if status_code.is_server_error() {
+      let body = resp.text().await?;
+      return Err(AIError::ServiceUnavailable(body));
+    }
+
     if !status_code.is_success() {
       let body = resp.text().await?;
       return Err(AIError::InvalidRequest(body));
@@ -385,16 +390,29 @@ where
 }
 impl From<reqwest::Error> for AIError {
   fn from(error: reqwest::Error) -> Self {
+    if error.is_connect() {
+      return AIError::ServiceUnavailable(error.to_string());
+    }
+
     if error.is_timeout() {
       return AIError::RequestTimeout(error.to_string());
     }
 
-    if error.is_request() {
-      return if error.status() == Some(StatusCode::PAYLOAD_TOO_LARGE) {
-        AIError::PayloadTooLarge(error.to_string())
-      } else {
-        AIError::InvalidRequest(format!("{:?}", error))
-      };
+    // Handle request-related errors
+    if let Some(status_code) = error.status() {
+      if error.is_request() {
+        match status_code {
+          StatusCode::PAYLOAD_TOO_LARGE => {
+            return AIError::PayloadTooLarge(error.to_string());
+          },
+          status_code if status_code.is_server_error() => {
+            return AIError::ServiceUnavailable(error.to_string());
+          },
+          _ => {
+            return AIError::InvalidRequest(format!("{:?}", error));
+          },
+        }
+      }
     }
     AIError::Internal(error.into())
   }

@@ -120,7 +120,7 @@ impl SnapshotControl {
     let timestamp = Utc::now();
     let snapshot_id = timestamp.timestamp_millis();
     let key = collab_snapshot_key(&params.workspace_id, &params.object_id, snapshot_id);
-    let compressed = zstd::encode_all(params.data.as_ref(), ZSTD_COMPRESSION_LEVEL)?;
+    let compressed = zstd::encode_all(params.doc_state.as_ref(), ZSTD_COMPRESSION_LEVEL)?;
     if let Err(err) = self.s3.put_blob(&key, compressed.into(), None).await {
       self.collab_metrics.write_snapshot_failures.inc();
       return Err(err);

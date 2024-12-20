@@ -217,7 +217,7 @@ pub struct InsertSnapshotParams {
   #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
   #[validate(custom(function = "validate_not_empty_payload"))]
-  pub data: Bytes,
+  pub doc_state: Bytes,
   #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
   pub collab_type: CollabType,

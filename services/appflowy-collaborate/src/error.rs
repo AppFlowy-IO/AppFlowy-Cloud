@@ -79,6 +79,9 @@ pub enum RealtimeError {
 
   #[error("failed to obtain lease: {0}")]
   Lease(Box<dyn std::error::Error + Send + Sync>),
+
+  #[error("failed to send ws message: {0}")]
+  SendWSMessageFailed(String),
 }
 
 #[derive(Debug)]

@@ -60,6 +60,27 @@ pub enum RealtimeError {
 
   #[error("Collab redis stream error: {0}")]
   StreamError(#[from] StreamError),
+
+  #[error("Cannot create group: {0}")]
+  CannotCreateGroup(String),
+
+  #[error("BinCodeCollab error: {0}")]
+  BincodeEncode(String),
+
+  #[error("Failed to create snapshot: {0}")]
+  CreateSnapshotFailed(String),
+
+  #[error("Failed to get latest snapshot: {0}")]
+  GetLatestSnapshotFailed(String),
+
+  #[error("Collab Schema Error: {0}")]
+  CollabSchemaError(String),
+
+  #[error("failed to obtain lease: {0}")]
+  Lease(Box<dyn std::error::Error + Send + Sync>),
+
+  #[error("failed to send ws message: {0}")]
+  SendWSMessageFailed(String),
 }
 
 #[derive(Debug)]

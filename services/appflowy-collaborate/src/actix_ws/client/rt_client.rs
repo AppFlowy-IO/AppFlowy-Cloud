@@ -107,7 +107,7 @@ where
         user: self.user.clone(),
         message,
       })
-      .map_err(|err| RealtimeError::Internal(err.into()))
+      .map_err(|err| RealtimeError::SendWSMessageFailed(err.to_string()))
   }
 }
 

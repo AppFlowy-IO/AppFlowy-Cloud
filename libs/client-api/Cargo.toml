@@ -40,7 +40,7 @@ serde_json.workspace = true
 serde.workspace = true
 app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 scraper = { version = "0.17.1", optional = true }
-arc-swap = "1.7"
+arc-swap.workspace = true
 
 shared-entity = { workspace = true }
 collab-rt-entity = { workspace = true }

@@ -830,8 +830,7 @@ async fn batch_create_collab_handler(
   let total_size = collab_params_list
     .iter()
     .fold(0, |acc, x| acc + x.encoded_collab_v1.len());
-  event!(
-    tracing::Level::INFO,
+  tracing::info!(
     "decompressed {} collab objects in {:?}",
     collab_params_list.len(),
     start.elapsed()
@@ -849,9 +848,11 @@ async fn batch_create_collab_handler(
       .collect();
 
     if !indexed_collabs.is_empty() {
+      let len = indexed_collabs.len();
       state
         .indexer_scheduler
         .index_encoded_collabs(&workspace_id, indexed_collabs)?;
+      tracing::info!("scheduled indexing for {} collabs", len);
     }
   }
 
@@ -861,8 +862,7 @@ async fn batch_create_collab_handler(
     .batch_insert_new_collab(&workspace_id, &uid, collab_params_list)
     .await?;
 
-  event!(
-    tracing::Level::INFO,
+  tracing::info!(
     "inserted collab objects to disk in {:?}, total size:{}",
     start.elapsed(),
     total_size
@@ -1305,7 +1305,7 @@ async fn create_collab_snapshot_handler(
     .create_snapshot(InsertSnapshotParams {
       object_id,
       workspace_id,
-      data,
+      doc_state: data,
       collab_type,
     })
     .await?;
@@ -1880,7 +1880,6 @@ async fn post_realtime_message_stream_handler(
     bytes.extend_from_slice(&item?);
   }
 
-  event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;

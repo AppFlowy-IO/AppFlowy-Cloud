@@ -64,7 +64,7 @@ where
       let data = encode_collab.doc_state;
       let params = InsertSnapshotParams {
         object_id,
-        data,
+        doc_state: data,
         workspace_id,
         collab_type,
       };

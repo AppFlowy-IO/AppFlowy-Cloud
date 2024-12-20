@@ -28,9 +28,11 @@ async fn quick_note_crud_test() {
     .expect("list quick notes");
   assert_eq!(quick_notes.quick_notes.len(), 2);
   assert!(!quick_notes.has_more);
+  let mut notes_sorted_by_created_at_asc = quick_notes.quick_notes.clone();
+  notes_sorted_by_created_at_asc.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
-  let quick_note_id_1 = quick_note_ids[0];
-  let quick_note_id_2 = quick_note_ids[1];
+  let quick_note_id_1 = notes_sorted_by_created_at_asc[0].id;
+  let quick_note_id_2 = notes_sorted_by_created_at_asc[1].id;
   let data_1 = json!([
     {
       "type": "paragraph",

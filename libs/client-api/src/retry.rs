@@ -7,13 +7,13 @@ use app_error::gotrue::GoTrueError;
 use client_websocket::{connect_async, WebSocketStream};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use parking_lot::RwLock;
-use reqwest::header::HeaderMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, RetryIf};
+use tokio_tungstenite::tungstenite::http::HeaderMap;
 use tracing::{debug, info, trace};
 
 pub(crate) struct RefreshTokenAction {

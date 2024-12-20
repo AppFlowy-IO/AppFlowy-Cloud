@@ -1,4 +1,5 @@
 use actix_multipart::form::{bytes::Bytes as MPBytes, MultipartForm};
+use actix_web::http::StatusCode;
 use actix_web::{
   web::{self, Data, Json},
   HttpResponse, Result, Scope,
@@ -11,7 +12,6 @@ use database_entity::dto::{
   TemplateCreators, TemplateHomePage, TemplateHomePageQueryParams, TemplateWithPublishInfo,
   Templates, UpdateTemplateCategoryParams, UpdateTemplateCreatorParams, UpdateTemplateParams,
 };
-use reqwest::StatusCode;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use uuid::Uuid;
 

@@ -19,7 +19,6 @@ __rustls-tls = []
 
 [dependencies]
 thiserror = "1"
-http = "0.2"
 httparse = "1.8"
 futures-util = { version = "0.3", default-features = false, features = [
   "sink",
@@ -27,7 +26,7 @@ futures-util = { version = "0.3", default-features = false, features = [
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio-tungstenite = "0.20"
+tokio-tungstenite.workspace = true
 tokio = { workspace = true, features = ["net"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

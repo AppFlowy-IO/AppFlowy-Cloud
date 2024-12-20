@@ -30,7 +30,7 @@ chrono = "0.4"
 client-websocket = { workspace = true, features = ["native-tls"] }
 semver = "1.0.22"
 zstd = { version = "0.13.2" }
-
+tokio-tungstenite.workspace = true
 
 collab = { workspace = true, optional = true }
 yrs = { workspace = true, optional = true }

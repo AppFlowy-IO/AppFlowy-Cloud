@@ -107,16 +107,16 @@ impl Display for CollabParams {
 }
 
 impl CollabParams {
-  pub fn new<T: ToString>(
+  pub fn new<T: ToString, B: Into<Bytes>>(
     object_id: T,
     collab_type: CollabType,
-    encoded_collab_v1: Vec<u8>,
+    encoded_collab_v1: B,
   ) -> Self {
     let object_id = object_id.to_string();
     Self {
       object_id,
       collab_type,
-      encoded_collab_v1: Bytes::from(encoded_collab_v1),
+      encoded_collab_v1: encoded_collab_v1.into(),
     }
   }
 

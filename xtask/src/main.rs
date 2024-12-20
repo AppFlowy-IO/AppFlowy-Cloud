@@ -102,11 +102,9 @@ fn spawn_server(
     cmd.stdout(Stdio::null()).stderr(Stdio::null());
   }
 
-  Ok(
-    cmd
-      .spawn()
-      .context(format!("Failed to start {} process", name))?,
-  )
+  cmd
+    .spawn()
+    .context(format!("Failed to start {} process", name))
 }
 
 async fn kill_existing_process(process_identifier: &str) -> Result<()> {

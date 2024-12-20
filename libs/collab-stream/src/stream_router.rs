@@ -286,7 +286,7 @@ mod test {
     const ROUTES_COUNT: usize = 200;
     const MSG_PER_ROUTE: usize = 10;
     let mut client = Client::open("redis://127.0.0.1/").unwrap();
-    let mut keys = init_streams(&mut client, ROUTES_COUNT, MSG_PER_ROUTE);
+    let keys = init_streams(&mut client, ROUTES_COUNT, MSG_PER_ROUTE);
 
     let router = StreamRouter::new(&client).unwrap();
 
@@ -312,13 +312,14 @@ mod test {
     const ROUTES_COUNT: usize = 200;
     const MSG_PER_ROUTE: usize = 10;
     let mut client = Client::open("redis://127.0.0.1/").unwrap();
-    let mut keys = init_streams(&mut client, ROUTES_COUNT, 0);
+    let keys = init_streams(&mut client, ROUTES_COUNT, 0);
 
     let router = StreamRouter::new(&client).unwrap();
 
     let mut join_set = JoinSet::new();
-    for key in keys.iter().cloned() {
+    for key in keys.iter() {
       let mut observer = router.observe(key.clone(), None);
+      let key = key.clone();
       join_set.spawn(async move {
         for i in 0..MSG_PER_ROUTE {
           let (_msg_id, map) = observer.recv().await.unwrap();
@@ -331,7 +332,7 @@ mod test {
     for msg_idx in 0..MSG_PER_ROUTE {
       for key in keys.iter() {
         let data = format!("{}-{}", key, msg_idx);
-        let _: String = client.xadd(&key, "*", &[("data", data)]).unwrap();
+        let _: String = client.xadd(key, "*", &[("data", data)]).unwrap();
       }
     }
 

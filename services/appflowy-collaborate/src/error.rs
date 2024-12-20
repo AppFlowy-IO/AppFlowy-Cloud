@@ -1,4 +1,3 @@
-use app_error::AppError;
 use collab::error::CollabError;
 use collab_stream::error::StreamError;
 use std::fmt::Display;

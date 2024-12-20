@@ -20,6 +20,7 @@ use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
 
 use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabRealtimeMetrics;
+use bytes::Bytes;
 use collab_stream::error::StreamError;
 use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
@@ -1145,45 +1146,16 @@ impl CollabPersister {
       let sv = tx.state_vector().encode_v1();
       let doc_state_full = tx.encode_state_as_update_v1(&StateVector::default());
       let full_len = doc_state_full.len();
-      self
-        .metrics
-        .full_collab_size
-        .observe(doc_state_full.len() as f64);
-      let params = InsertSnapshotParams {
-        object_id: self.object_id.clone(),
-        doc_state: doc_state_full.into(),
-        workspace_id: self.workspace_id.clone(),
-        collab_type: self.collab_type.clone(),
-      };
-      self
-        .storage
-        .create_snapshot(params)
-        .await
-        .map_err(|err| RealtimeError::CreateSnapshotFailed(err.to_string()))?;
+      self.write_doc_state_full(doc_state_full).await?;
 
       // 2. Generate document state with GC turned on and save it.
       tx.force_gc();
       drop(tx);
-
       let doc_state_light = collab
         .transact()
         .encode_state_as_update_v1(&StateVector::default());
       let light_len = doc_state_light.len();
-      let encoded_collab = EncodedCollab::new_v1(sv, doc_state_light)
-        .encode_to_bytes()
-        .map_err(|err| RealtimeError::Internal(err.into()))?;
-      self
-        .metrics
-        .collab_size
-        .observe(encoded_collab.len() as f64);
-      let params = CollabParams::new(&self.object_id, self.collab_type.clone(), encoded_collab);
-      let encoded_collab = params.encoded_collab_v1.clone();
-
-      self
-        .storage
-        .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, true)
-        .await
-        .map_err(|err| RealtimeError::Internal(err.into()))?;
+      self.write_doc_state_light(sv, doc_state_light).await?;
 
       tracing::debug!(
         "persisted collab {} snapshot at {}: {} and {} bytes",
@@ -1192,23 +1164,6 @@ impl CollabPersister {
         full_len,
         light_len
       );
-
-      let indexed_collab = IndexedCollab {
-        object_id: self.object_id.clone(),
-        collab_type: self.collab_type.clone(),
-        encoded_collab,
-      };
-      if let Err(err) = self
-        .indexer_scheduler
-        .index_encoded_collab_one(&self.workspace_id, indexed_collab)
-      {
-        tracing::warn!(
-          "failed to index collab `{}/{}`: {}",
-          self.workspace_id,
-          self.object_id,
-          err
-        );
-      }
 
       // 3. finally we can drop Redis messages
       let now = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis();
@@ -1226,6 +1181,71 @@ impl CollabPersister {
     }
 
     Ok(())
+  }
+
+  async fn write_doc_state_light(
+    &self,
+    sv: Vec<u8>,
+    doc_state_light: Vec<u8>,
+  ) -> Result<(), RealtimeError> {
+    let encoded_collab = EncodedCollab::new_v1(sv, doc_state_light)
+      .encode_to_bytes()
+      .map(Bytes::from)
+      .map_err(|err| RealtimeError::BincodeEncode(err.to_string()))?;
+    self
+      .metrics
+      .collab_size
+      .observe(encoded_collab.len() as f64);
+    let params = CollabParams::new(
+      &self.object_id,
+      self.collab_type.clone(),
+      encoded_collab.clone(),
+    );
+    self
+      .storage
+      .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, true)
+      .await
+      .map_err(|err| RealtimeError::Internal(err.into()))?;
+    self.index_encoded_collab(encoded_collab);
+    Ok(())
+  }
+
+  async fn write_doc_state_full(&self, doc_state_full: Vec<u8>) -> Result<(), RealtimeError> {
+    self
+      .metrics
+      .full_collab_size
+      .observe(doc_state_full.len() as f64);
+    let params = InsertSnapshotParams {
+      object_id: self.object_id.clone(),
+      doc_state: doc_state_full.into(),
+      workspace_id: self.workspace_id.clone(),
+      collab_type: self.collab_type.clone(),
+    };
+    self
+      .storage
+      .create_snapshot(params)
+      .await
+      .map_err(|err| RealtimeError::CreateSnapshotFailed(err.to_string()))?;
+    Ok(())
+  }
+
+  fn index_encoded_collab(&self, encoded_collab: Bytes) {
+    let indexed_collab = IndexedCollab {
+      object_id: self.object_id.clone(),
+      collab_type: self.collab_type.clone(),
+      encoded_collab,
+    };
+    if let Err(err) = self
+      .indexer_scheduler
+      .index_encoded_collab_one(&self.workspace_id, indexed_collab)
+    {
+      tracing::warn!(
+        "failed to index collab `{}/{}`: {}",
+        self.workspace_id,
+        self.object_id,
+        err
+      );
+    }
   }
 
   async fn load_collab_full(&self, keep_history: bool) -> Result<Option<Collab>, RealtimeError> {

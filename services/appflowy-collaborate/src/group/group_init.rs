@@ -1151,7 +1151,7 @@ impl CollabPersister {
         .observe(doc_state_full.len() as f64);
       let params = InsertSnapshotParams {
         object_id: self.object_id.clone(),
-        data: doc_state_full.into(),
+        doc_state: doc_state_full.into(),
         workspace_id: self.workspace_id.clone(),
         collab_type: self.collab_type.clone(),
       };

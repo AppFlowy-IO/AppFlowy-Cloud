@@ -1304,7 +1304,7 @@ async fn create_collab_snapshot_handler(
     .create_snapshot(InsertSnapshotParams {
       object_id,
       workspace_id,
-      data,
+      doc_state: data,
       collab_type,
     })
     .await?;

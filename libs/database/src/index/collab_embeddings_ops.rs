@@ -1,7 +1,9 @@
 use collab_entity::CollabType;
+use futures_util::stream::BoxStream;
+use futures_util::StreamExt;
 use pgvector::Vector;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
-use sqlx::{Error, Executor, Postgres, Transaction};
+use sqlx::{Error, Executor, PgPool, Postgres, Transaction};
 use std::ops::DerefMut;
 use uuid::Uuid;
 
@@ -109,35 +111,29 @@ pub async fn upsert_collab_embeddings(
   Ok(())
 }
 
-pub async fn get_collabs_without_embeddings<'a, E>(
-  executor: E,
-) -> Result<Vec<CollabId>, sqlx::Error>
-where
-  E: Executor<'a, Database = Postgres>,
-{
-  let oids = sqlx::query!(
+pub fn get_collabs_without_embeddings(pg_pool: &PgPool) -> BoxStream<sqlx::Result<CollabId>> {
+  // atm. get only documents
+  sqlx::query!(
     r#"
-  select c.workspace_id, c.oid, c.partition_key
-  from af_collab c
-  join af_workspace w on c.workspace_id = w.workspace_id
-  where not coalesce(w.settings['disable_search_indexding']::boolean, false)
-    and not exists (
-    select 1
-    from af_collab_embeddings em
-    where em.oid = c.oid and em.partition_key = 0)"# // atm. get only documents
+      select c.workspace_id, c.oid, c.partition_key
+      from af_collab c
+      join af_workspace w on c.workspace_id = w.workspace_id
+      where not coalesce(w.settings['disable_search_indexding']::boolean, false)
+        and not exists (
+          select 1 from af_collab_embeddings em
+          where em.oid = c.oid and em.partition_key = 0
+        )
+    "#
   )
-  .fetch_all(executor)
-  .await?;
-  Ok(
-    oids
-      .into_iter()
-      .map(|r| CollabId {
-        collab_type: CollabType::from(r.partition_key),
-        workspace_id: r.workspace_id,
-        object_id: r.oid,
-      })
-      .collect(),
-  )
+  .fetch(pg_pool)
+  .map(|row| {
+    row.map(|r| CollabId {
+      collab_type: CollabType::from(r.partition_key),
+      workspace_id: r.workspace_id,
+      object_id: r.oid,
+    })
+  })
+  .boxed()
 }
 
 #[derive(Debug, Clone)]

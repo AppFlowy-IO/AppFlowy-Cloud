@@ -6,12 +6,12 @@ mod native;
 mod web;
 
 pub use error::{Error, ProtocolError, Result};
-use http::HeaderMap;
 pub use message::coding::*;
 pub use message::CloseFrame;
 pub use message::Message;
 #[cfg(not(target_arch = "wasm32"))]
 use native as ws;
+use tokio_tungstenite::tungstenite::http::HeaderMap;
 #[cfg(target_arch = "wasm32")]
 use web as ws;
 pub use ws::WebSocketStream;

@@ -1,8 +1,8 @@
 use futures_util::{Sink, Stream, StreamExt};
-use http::HeaderMap;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::HeaderMap;
 use tokio_tungstenite::{
   tungstenite::{
     error::*,

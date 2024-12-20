@@ -7,11 +7,13 @@ use std::time::Duration;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+// use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use semver::Version;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
+use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
+use tokio_tungstenite::tungstenite::http::{HeaderMap, HeaderValue};
 use tracing::{error, info, trace, warn};
 
 use crate::ping::ServerFixIntervalPing;
@@ -493,7 +495,7 @@ impl Display for ConnectInfo {
 }
 
 impl From<ConnectInfo> for HeaderMap {
-  fn from(info: ConnectInfo) -> Self {
+  fn from(info: ConnectInfo) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(
       "device-id",

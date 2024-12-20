@@ -36,7 +36,7 @@ impl From<Error> for WSError {
       Error::Protocol(ProtocolError::SendAfterClosing) => WSError::Close(value.to_string()),
       Error::Http(resp) => {
         let status = resp.status();
-        if status == StatusCode::UNAUTHORIZED || status == StatusCode::NOT_FOUND {
+        if status == StatusCode::UNAUTHORIZED.as_u16() || status == StatusCode::NOT_FOUND.as_u16() {
           WSError::AuthError("Unauthorized websocket connection".to_string())
         } else {
           WSError::TungsteniteError(value)

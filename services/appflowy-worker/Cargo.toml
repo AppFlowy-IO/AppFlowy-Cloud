@@ -61,5 +61,5 @@ mailer.workspace = true
 md5.workspace = true
 base64.workspace = true
 prometheus-client = "0.22.3"
-reqwest = "0.12.5"
+reqwest.workspace = true
 zstd.workspace = true

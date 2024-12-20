@@ -1,5 +1,5 @@
 use client_api_entity::{
-  CreateQuickNoteParams, ListQuickNotesQueryParams, QuickNotes, UpdateQuickNoteParams,
+  CreateQuickNoteParams, ListQuickNotesQueryParams, QuickNote, QuickNotes, UpdateQuickNoteParams,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -18,15 +18,21 @@ fn quick_note_resource_url(base_url: &str, workspace_id: Uuid, quick_note_id: Uu
 
 // Quick Note API
 impl Client {
-  pub async fn create_quick_note(&self, workspace_id: Uuid) -> Result<(), AppResponseError> {
+  pub async fn create_quick_note(
+    &self,
+    workspace_id: Uuid,
+    data: Option<serde_json::Value>,
+  ) -> Result<QuickNote, AppResponseError> {
     let url = quick_note_resources_url(&self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&CreateQuickNoteParams {})
+      .json(&CreateQuickNoteParams { data })
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    AppResponse::<QuickNote>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   pub async fn list_quick_notes(

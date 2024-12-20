@@ -7,15 +7,25 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use database_entity::dto::QuickNotes;
+use database_entity::dto::{QuickNote, QuickNotes};
 
 pub async fn create_quick_note(
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
-) -> Result<(), AppError> {
-  let default_data = json!([]);
-  insert_new_quick_note(pg_pool, workspace_id, uid, &default_data).await
+  data: Option<&serde_json::Value>,
+) -> Result<QuickNote, AppError> {
+  let default_data = json!([
+    {
+      "type": "paragraph",
+      "delta": {
+        "insert": "",
+      },
+    }
+  ]);
+  let new_data = data.unwrap_or(&default_data);
+  let quick_note = insert_new_quick_note(pg_pool, workspace_id, uid, new_data).await?;
+  Ok(quick_note)
 }
 
 pub async fn update_quick_note(

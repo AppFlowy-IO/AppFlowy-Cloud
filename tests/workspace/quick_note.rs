@@ -10,12 +10,14 @@ async fn quick_note_crud_test() {
   let client = TestClient::new_user_without_ws_conn().await;
   let workspace_id = client.workspace_id().await;
   let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let mut quick_note_ids: Vec<Uuid> = vec![];
   for _ in 0..2 {
-    client
+    let quick_note = client
       .api_client
-      .create_quick_note(workspace_uuid)
+      .create_quick_note(workspace_uuid, None)
       .await
       .expect("create quick note");
+    quick_note_ids.push(quick_note.id);
     // To ensure that the creation time is different
     time::sleep(Duration::from_millis(1)).await;
   }
@@ -92,6 +94,12 @@ async fn quick_note_crud_test() {
     .list_quick_notes(workspace_uuid, None, None, None)
     .await
     .expect("list quick notes");
+  assert_eq!(quick_notes.quick_notes.len(), 2);
+  let quick_notes = client
+    .api_client
+    .list_quick_notes(workspace_uuid, Some("".to_string()), None, None)
+    .await
+    .expect("list quick notes with empty search term");
   assert_eq!(quick_notes.quick_notes.len(), 2);
   let quick_notes_with_offset_and_limit = client
     .api_client

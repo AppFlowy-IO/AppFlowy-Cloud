@@ -10,16 +10,20 @@ pub async fn insert_new_quick_note<'a, E: Executor<'a, Database = Postgres>>(
   workspace_id: Uuid,
   uid: i64,
   data: &serde_json::Value,
-) -> Result<(), AppError> {
-  sqlx::query!(
-    "INSERT INTO af_quick_note (workspace_id, uid, data) VALUES ($1, $2, $3)",
+) -> Result<QuickNote, AppError> {
+  let quick_note = sqlx::query_as!(
+    QuickNote,
+    r#"
+      INSERT INTO af_quick_note (workspace_id, uid, data) VALUES ($1, $2, $3)
+      RETURNING quick_note_id AS id, data, created_at AS "created_at!", updated_at AS "last_updated_at!"
+    "#,
     workspace_id,
     uid,
     data
   )
-  .execute(executor)
+  .fetch_one(executor)
   .await?;
-  Ok(())
+  Ok(quick_note)
 }
 
 pub async fn select_quick_notes_with_one_more_than_limit<
@@ -46,7 +50,7 @@ pub async fn select_quick_notes_with_one_more_than_limit<
   query_builder.push_bind(workspace_id);
   query_builder.push(" AND uid = ");
   query_builder.push_bind(uid);
-  if let Some(search_term) = search_term {
+  if let Some(search_term) = search_term.filter(|term| !term.is_empty()) {
     query_builder.push(" AND data @? ");
     let json_path_query = format!("'$.**.insert ? (@ like_regex \".*{}.*\")'", search_term);
     query_builder.push(json_path_query);

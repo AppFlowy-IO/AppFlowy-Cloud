@@ -847,12 +847,13 @@ async fn batch_create_collab_handler(
       .map(IndexedCollab::from)
       .collect();
 
-    let len = indexed_collabs.len();
-    state
-      .indexer_scheduler
-      .index_encoded_collabs(&workspace_id, indexed_collabs)?;
-
-    tracing::info!("scheduled indexing for {} collabs", len);
+    if !indexed_collabs.is_empty() {
+      let len = indexed_collabs.len();
+      state
+        .indexer_scheduler
+        .index_encoded_collabs(&workspace_id, indexed_collabs)?;
+      tracing::info!("scheduled indexing for {} collabs", len);
+    }
   }
 
   let start = Instant::now();
@@ -2453,15 +2454,17 @@ async fn post_quick_note_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<()>> {
+  data: Json<CreateQuickNoteParams>,
+) -> Result<JsonAppResponse<QuickNote>> {
   let workspace_id = workspace_id.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
     .await?;
-  create_quick_note(&state.pg_pool, uid, workspace_id).await?;
-  Ok(Json(AppResponse::Ok()))
+  let data = data.into_inner();
+  let quick_note = create_quick_note(&state.pg_pool, uid, workspace_id, data.data.as_ref()).await?;
+  Ok(Json(AppResponse::Ok().with_data(quick_note)))
 }
 
 async fn list_quick_notes_handler(

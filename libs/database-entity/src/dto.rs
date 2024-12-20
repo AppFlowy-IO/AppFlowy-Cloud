@@ -1182,7 +1182,9 @@ pub struct QuickNotes {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct CreateQuickNoteParams {}
+pub struct CreateQuickNoteParams {
+  pub data: Option<serde_json::Value>,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateQuickNoteParams {

@@ -400,7 +400,7 @@ impl CollabGroup {
         .state
         .collab_type
         .validate_require_data(collab)
-        .map_err(|err| RealtimeError::Internal(err.into()))
+        .map_err(|err| RealtimeError::CollabSchemaError(err.to_string()))
     })?;
     Ok(encode_collab)
   }
@@ -1159,7 +1159,7 @@ impl CollabPersister {
         .storage
         .create_snapshot(params)
         .await
-        .map_err(|err| RealtimeError::Internal(err.into()))?;
+        .map_err(|err| RealtimeError::CreateSnapshotFailed(err.to_string()))?;
 
       // 2. Generate document state with GC turned on and save it.
       tx.force_gc();
@@ -1239,12 +1239,12 @@ impl CollabPersister {
           self.collab_type.clone(),
         )
         .await
-        .map_err(|err| RealtimeError::Internal(err.into()))?;
+        .map_err(|err| RealtimeError::GetLatestSnapshotFailed(err.to_string()))?;
       match snapshot {
         None => None,
         Some(snapshot) => {
           let encoded_collab = EncodedCollab::decode_from_bytes(&snapshot.encoded_collab_v1)
-            .map_err(|err| RealtimeError::Internal(err.into()))?;
+            .map_err(|err| RealtimeError::BincodeEncode(err.to_string()))?;
           Some(encoded_collab.doc_state)
         },
       }

@@ -12,8 +12,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::error;
 
-pub const CONTROL_STREAM_KEY: &str = "af_collab_control";
-
 #[derive(Clone)]
 pub struct CollabRedisStream {
   connection_manager: ConnectionManager,

@@ -134,7 +134,7 @@ where
       .transact()
       .state_vector(),
       Err(err) if err.is_record_not_found() => StateVector::default(),
-      Err(err) => return Err(RealtimeError::Internal(err.into())),
+      Err(err) => return Err(RealtimeError::CannotCreateGroup(err.to_string())),
     };
 
     trace!(

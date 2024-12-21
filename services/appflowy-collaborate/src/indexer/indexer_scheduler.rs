@@ -22,7 +22,8 @@ use database_entity::dto::{AFCollabEmbeddedChunk, CollabParams};
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use rayon::prelude::*;
-use sqlx::PgPool;
+use sqlx::pool::PoolConnection;
+use sqlx::{PgPool, Postgres};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -107,7 +108,7 @@ impl IndexerScheduler {
         this.pg_pool.clone(),
         this.metrics.clone(),
       ));
-      tokio::spawn(handle_unindexed_collabs(this.clone()));
+      tokio::spawn(handle_unindexed_collabs_periodically(this.clone()));
     }
 
     this
@@ -396,56 +397,87 @@ fn should_embed(
   should_embed
 }
 
-async fn handle_unindexed_collabs(scheduler: Arc<IndexerScheduler>) {
-  // wait for 30 seconds before starting indexing
-  tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+/// Periodically checks for unindexed collabs and indexes them
+async fn handle_unindexed_collabs_periodically(scheduler: Arc<IndexerScheduler>) {
+  // Wait for 30 seconds before starting indexing
+  tokio::time::sleep(Duration::from_secs(30)).await;
 
-  let mut i = 0;
-  let mut stream = get_unindexed_collabs(&scheduler.pg_pool, scheduler.storage.clone()).await;
+  let limit = get_env_var("APPFLOWY_INDEXER_SCHEDULER_GET_UNINDEXED_LIMIT", "100")
+    .parse::<i64>()
+    .unwrap_or(100);
+
   let record_tx = scheduler.schedule_tx.clone();
-  let start = Instant::now();
-  while let Some(result) = stream.next().await {
-    if let Ok(embedder) = scheduler.create_embedder() {
-      match result {
-        Ok(collab) => {
-          let workspace = collab.workspace_id;
-          let oid = collab.object_id.clone();
-          if let Err(err) = index_unindexd_collab(
-            embedder,
-            &scheduler.indexer_provider,
-            scheduler.threads.clone(),
-            collab,
-            record_tx.clone(),
-          )
-          .await
-          {
-            // only logging error in debug mode. Will be enabled in production if needed.
-            if cfg!(debug_assertions) {
-              warn!("failed to index collab {}/{}: {}", workspace, oid, err);
+  loop {
+    let start = Instant::now();
+    let conn = scheduler.pg_pool.try_acquire();
+    if conn.is_none() {
+      // when no connection is available, wait for a while before checking again
+      tokio::time::sleep(Duration::from_secs(5)).await;
+      continue;
+    }
+
+    let mut conn = conn.unwrap();
+    let mut stream = get_unindexed_collabs(&mut conn, limit, scheduler.storage.clone()).await;
+
+    let mut processed_in_batch = 0;
+    while let Some(result) = stream.next().await {
+      if let Ok(embedder) = scheduler.create_embedder() {
+        match result {
+          Ok(collab) => {
+            let workspace = collab.workspace_id;
+            let oid = collab.object_id.clone();
+
+            // Attempt to index the unindexed collab
+            if let Err(err) = index_unindexd_collab(
+              embedder,
+              &scheduler.indexer_provider,
+              scheduler.threads.clone(),
+              collab,
+              record_tx.clone(),
+            )
+            .await
+            {
+              // Only log errors in debug mode
+              if cfg!(debug_assertions) {
+                warn!("Failed to index collab {}/{}: {}", workspace, oid, err);
+              }
+            } else {
+              processed_in_batch += 1;
             }
-          } else {
-            i += 1;
-          }
-        },
-        Err(err) => {
-          error!("failed to get unindexed document: {}", err);
-        },
+          },
+          Err(err) => {
+            error!("Failed to get unindexed document: {}", err);
+          },
+        }
       }
     }
+
+    if processed_in_batch == 0 {
+      trace!("[Embedding] no embeddings to process in this batch");
+      // When no more unindexed collabs are found, wait for a while before checking again
+      tokio::time::sleep(Duration::from_secs(120)).await;
+    } else {
+      scheduler
+        .metrics
+        .record_handle_batch_unindexed_collab_time(start.elapsed().as_millis());
+    }
+
+    info!(
+      "Indexed {} unindexed collabs in {:?} ",
+      processed_in_batch,
+      start.elapsed()
+    );
   }
-  info!(
-    "indexed {} unindexed collabs in {:?} after restart",
-    i,
-    start.elapsed()
-  )
 }
 
 pub async fn get_unindexed_collabs(
-  pg_pool: &PgPool,
+  conn: &mut PoolConnection<Postgres>,
+  limit: i64,
   storage: Arc<dyn CollabStorage>,
 ) -> BoxStream<Result<UnindexedCollab, anyhow::Error>> {
   let cloned_storage = storage.clone();
-  get_collabs_without_embeddings(pg_pool)
+  get_collabs_without_embeddings(conn, limit)
+    .await
     .map(move |result| {
       let storage = cloned_storage.clone();
       async move {

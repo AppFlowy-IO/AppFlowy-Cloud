@@ -1,13 +1,13 @@
 use collab_entity::CollabType;
+use database_entity::dto::{AFCollabEmbeddedChunk, IndexingStatus, QueryCollab, QueryCollabParams};
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use pgvector::Vector;
+use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
-use sqlx::{Error, Executor, PgPool, Postgres, Transaction};
+use sqlx::{Error, Executor, Postgres, Transaction};
 use std::ops::DerefMut;
 use uuid::Uuid;
-
-use database_entity::dto::{AFCollabEmbeddedChunk, IndexingStatus, QueryCollab, QueryCollabParams};
 
 pub async fn get_index_status<'a, E>(
   tx: E,
@@ -111,8 +111,12 @@ pub async fn upsert_collab_embeddings(
   Ok(())
 }
 
-pub fn get_collabs_without_embeddings(pg_pool: &PgPool) -> BoxStream<sqlx::Result<CollabId>> {
+pub async fn get_collabs_without_embeddings(
+  conn: &mut PoolConnection<Postgres>,
+  limit: i64,
+) -> BoxStream<sqlx::Result<CollabId>> {
   // atm. get only documents
+
   sqlx::query!(
     r#"
       select c.workspace_id, c.oid, c.partition_key
@@ -123,9 +127,12 @@ pub fn get_collabs_without_embeddings(pg_pool: &PgPool) -> BoxStream<sqlx::Resul
           select 1 from af_collab_embeddings em
           where em.oid = c.oid and em.partition_key = 0
         )
-    "#
+      order by c.updated_at desc
+      limit $1
+    "#,
+    limit
   )
-  .fetch(pg_pool)
+  .fetch(conn.deref_mut())
   .map(|row| {
     row.map(|r| CollabId {
       collab_type: CollabType::from(r.partition_key),

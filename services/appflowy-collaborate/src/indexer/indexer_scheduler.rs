@@ -33,6 +33,7 @@ use uuid::Uuid;
 pub struct IndexerScheduler {
   indexer_provider: Arc<IndexerProvider>,
   pg_pool: PgPool,
+  #[allow(dead_code)]
   storage: Arc<dyn CollabStorage>,
   threads: Arc<ThreadPoolNoAbort>,
   #[allow(dead_code)]
@@ -107,7 +108,7 @@ impl IndexerScheduler {
         this.pg_pool.clone(),
         this.metrics.clone(),
       ));
-      tokio::spawn(handle_unindexed_collabs(this.clone()));
+      // tokio::spawn(handle_unindexed_collabs(this.clone()));
     }
 
     this
@@ -396,6 +397,7 @@ fn should_embed(
   should_embed
 }
 
+#[allow(dead_code)]
 async fn handle_unindexed_collabs(scheduler: Arc<IndexerScheduler>) {
   // wait for 30 seconds before starting indexing
   tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
@@ -479,6 +481,7 @@ pub async fn get_unindexed_collabs(
     .boxed()
 }
 
+#[allow(dead_code)]
 async fn index_unindexd_collab(
   embedder: Embedder,
   indexer_provider: &Arc<IndexerProvider>,

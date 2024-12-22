@@ -4,7 +4,7 @@ pub mod metrics;
 mod open_ai;
 mod provider;
 mod queue;
-mod unindex;
+mod unindexed_workspace;
 mod vector;
 
 pub use document_indexer::DocumentIndexer;

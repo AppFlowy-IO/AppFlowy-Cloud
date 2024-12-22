@@ -1,6 +1,6 @@
 use crate::config::get_env_var;
 use crate::indexer::metrics::EmbeddingMetrics;
-use crate::indexer::unindex::handle_unindexed_collabs_periodically;
+use crate::indexer::unindexed_workspace::handle_unindexed_collabs_periodically;
 use crate::indexer::vector::embedder::Embedder;
 use crate::indexer::vector::open_ai;
 use crate::indexer::{Indexer, IndexerProvider};
@@ -475,8 +475,8 @@ pub(crate) async fn batch_insert_records(
     .collect::<Vec<_>>();
 
   let n = records.len();
+  let mut txn = pg_pool.begin().await?;
   for record in records {
-    let mut txn = pg_pool.begin().await?;
     upsert_collab_embeddings(
       &mut txn,
       &record.workspace_id,
@@ -486,12 +486,11 @@ pub(crate) async fn batch_insert_records(
       record.contents,
     )
     .await?;
-    txn.commit().await.map_err(|e| {
-      error!("[Embedding] Failed to commit transaction: {:?}", e);
-      e
-    })?;
   }
-  trace!("[Embedding]  upsert {} collabs", n);
+  txn.commit().await.map_err(|e| {
+    error!("[Embedding] Failed to commit transaction: {:?}", e);
+    e
+  })?;
   Ok(())
 }
 

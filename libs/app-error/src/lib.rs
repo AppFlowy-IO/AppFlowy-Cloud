@@ -182,6 +182,9 @@ pub enum AppError {
   #[error("Decode update error: {0}")]
   DecodeUpdateError(String),
 
+  #[error("{0}")]
+  ActionTimeout(String),
+
   #[error("Apply update error:{0}")]
   ApplyUpdateError(String),
 }
@@ -263,6 +266,7 @@ impl AppError {
       AppError::ServiceTemporaryUnavailable(_) => ErrorCode::ServiceTemporaryUnavailable,
       AppError::DecodeUpdateError(_) => ErrorCode::DecodeUpdateError,
       AppError::ApplyUpdateError(_) => ErrorCode::ApplyUpdateError,
+      AppError::ActionTimeout(_) => ErrorCode::ActionTimeout,
     }
   }
 }
@@ -424,6 +428,7 @@ pub enum ErrorCode {
   ServiceTemporaryUnavailable = 1054,
   DecodeUpdateError = 1055,
   ApplyUpdateError = 1056,
+  ActionTimeout = 1057,
 }
 
 impl ErrorCode {

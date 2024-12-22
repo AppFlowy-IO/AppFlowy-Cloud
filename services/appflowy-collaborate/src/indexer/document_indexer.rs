@@ -104,6 +104,10 @@ fn split_text_into_chunks(
     embedding_model,
     EmbeddingModel::TextEmbedding3Small
   ));
+
+  if content.is_empty() {
+    return Ok(vec![]);
+  }
   // We assume that every token is ~4 bytes. We're going to split document content into fragments
   // of ~2000 tokens each.
   let split_contents = split_text_by_max_content_len(content, 8000)?;
@@ -115,7 +119,6 @@ fn split_text_into_chunks(
       .map(|content| AFCollabEmbeddedChunk {
         fragment_id: Uuid::new_v4().to_string(),
         object_id: object_id.clone(),
-        collab_type: collab_type.clone(),
         content_type: EmbeddingContentType::PlainText,
         content,
         embedding: None,

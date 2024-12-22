@@ -71,15 +71,11 @@ impl EmbeddingMetrics {
   }
 
   pub fn record_write_embedding_time(&self, millis: u128) {
-    tracing::trace!("[Embedding]: write embedding time cost: {}ms", millis);
     self.write_embedding_time_histogram.observe(millis as f64);
   }
 
-  pub fn record_handle_batch_unindexed_collab_time(&self, millis: u128) {
-    tracing::trace!(
-      "[Embedding]: handle batch unindexed collab cost: {}ms",
-      millis
-    );
+  pub fn record_handle_batch_unindexed_collab_time(&self, num: u32, millis: u128) {
+    tracing::info!("[Embedding]: index {} collabs cost: {}ms", num, millis);
     self
       .handle_batch_unindexed_collab_time_histogram
       .observe(millis as f64);

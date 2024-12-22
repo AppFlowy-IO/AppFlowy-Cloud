@@ -89,17 +89,17 @@ impl PgHasArrayType for Fragment {
 pub async fn upsert_collab_embeddings(
   transaction: &mut Transaction<'_, Postgres>,
   workspace_id: &Uuid,
+  object_id: &str,
+  collab_type: CollabType,
   tokens_used: u32,
   records: Vec<AFCollabEmbeddedChunk>,
 ) -> Result<(), sqlx::Error> {
-  if records.is_empty() {
-    return Ok(());
-  }
-
-  let object_id = records[0].object_id.clone();
-  let collab_type = records[0].collab_type.clone();
   let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
-
+  tracing::trace!(
+    "[Embedding] upsert {} {} fragments",
+    object_id,
+    fragments.len()
+  );
   sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4, $5::af_fragment_v2[])"#)
     .bind(*workspace_id)
     .bind(object_id)
@@ -111,7 +111,8 @@ pub async fn upsert_collab_embeddings(
   Ok(())
 }
 
-pub async fn get_collabs_without_embeddings(
+#[allow(dead_code)]
+pub async fn get_collabs_without_embeddings_stream(
   conn: &mut PoolConnection<Postgres>,
   limit: i64,
 ) -> BoxStream<sqlx::Result<CollabId>> {
@@ -141,6 +142,41 @@ pub async fn get_collabs_without_embeddings(
     })
   })
   .boxed()
+}
+
+pub async fn get_collabs_without_embeddings(
+  conn: &mut PoolConnection<Postgres>,
+  limit: i64,
+) -> sqlx::Result<Vec<CollabId>> {
+  // atm. get only documents
+  let records = sqlx::query!(
+    r#"
+      select c.workspace_id, c.oid, c.partition_key
+      from af_collab c
+      join af_workspace w on c.workspace_id = w.workspace_id
+      where not coalesce(w.settings['disable_search_indexding']::boolean, false)
+        and not exists (
+          select 1 from af_collab_embeddings em
+          where em.oid = c.oid and em.partition_key = 0
+        )
+      order by c.updated_at desc
+      limit $1
+    "#,
+    limit
+  )
+  .fetch_all(conn.deref_mut())
+  .await?;
+
+  Ok(
+    records
+      .into_iter()
+      .map(|r| CollabId {
+        collab_type: CollabType::from(r.partition_key),
+        workspace_id: r.workspace_id,
+        object_id: r.oid,
+      })
+      .collect(),
+  )
 }
 
 #[derive(Debug, Clone)]

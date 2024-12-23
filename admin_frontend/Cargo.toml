@@ -26,7 +26,7 @@ redis = { version = "0.25.2", features = [
 ] }
 uuid = { workspace = true, features = ["v4"] }
 dotenvy = "0.15"
-reqwest = "0.11.27"
+reqwest.workspace = true
 tower-service = "0.3"
 tower-http = { version = "0.5", features = ["fs"] }
 tower = "0.4"

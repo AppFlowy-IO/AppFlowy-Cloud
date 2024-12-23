@@ -32,7 +32,6 @@ use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
-use appflowy_collaborate::indexer::IndexedCollab;
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
@@ -49,6 +48,7 @@ use database::user::select_uid_from_email;
 use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
 use database_entity::dto::*;
+use indexer::scheduler::PendingUnindexedCollab;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -63,6 +63,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, event, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
+
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
@@ -721,9 +722,11 @@ async fn create_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
+    let workspace_id_uuid =
+      Uuid::parse_str(&workspace_id).map_err(|err| AppError::Internal(err.into()))?;
     state
       .indexer_scheduler
-      .index_encoded_collab_one(&workspace_id, IndexedCollab::from(&params))?;
+      .index_pending_collab_one(PendingUnindexedCollab::from((workspace_id_uuid, &params)))?;
   }
 
   let mut transaction = state
@@ -759,7 +762,8 @@ async fn batch_create_collab_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let workspace_id = workspace_id.into_inner().to_string();
+  let workspace_id_uuid = workspace_id.into_inner();
+  let workspace_id = workspace_id_uuid.to_string();
   let compress_type = compress_type_from_header_value(req.headers())?;
   event!(tracing::Level::DEBUG, "start decompressing collab list");
 
@@ -845,13 +849,13 @@ async fn batch_create_collab_handler(
     let indexed_collabs: Vec<_> = collab_params_list
       .iter()
       .filter(|p| state.indexer_scheduler.is_indexing_enabled(&p.collab_type))
-      .map(IndexedCollab::from)
+      .map(|value| PendingUnindexedCollab::from((workspace_id_uuid, value)))
       .collect();
 
     if !indexed_collabs.is_empty() {
       state
         .indexer_scheduler
-        .index_encoded_collabs(&workspace_id, indexed_collabs)?;
+        .index_pending_collabs(indexed_collabs)?;
     }
   }
 
@@ -1366,9 +1370,11 @@ async fn update_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
+    let workspace_id_uuid =
+      Uuid::parse_str(&workspace_id).map_err(|err| AppError::Internal(err.into()))?;
     state
       .indexer_scheduler
-      .index_encoded_collab_one(&workspace_id, IndexedCollab::from(&params))?;
+      .index_pending_collab_one(PendingUnindexedCollab::from((workspace_id_uuid, &params)))?;
   }
 
   state

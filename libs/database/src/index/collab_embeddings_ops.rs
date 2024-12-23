@@ -110,27 +110,23 @@ pub async fn upsert_collab_embeddings(
     .await?;
   Ok(())
 }
-
-#[allow(dead_code)]
-pub async fn get_collabs_without_embeddings_stream(
+pub async fn stream_collabs_without_embeddings(
   conn: &mut PoolConnection<Postgres>,
+  workspace_id: Uuid,
   limit: i64,
 ) -> BoxStream<sqlx::Result<CollabId>> {
-  // atm. get only documents
-
   sqlx::query!(
     r#"
-      select c.workspace_id, c.oid, c.partition_key
-      from af_collab c
-      join af_workspace w on c.workspace_id = w.workspace_id
-      where not coalesce(w.settings['disable_search_indexding']::boolean, false)
-        and not exists (
-          select 1 from af_collab_embeddings em
-          where em.oid = c.oid and em.partition_key = 0
-        )
-      order by c.updated_at desc
-      limit $1
+        SELECT c.workspace_id, c.oid, c.partition_key
+        FROM af_collab c
+        JOIN af_workspace w ON c.workspace_id = w.workspace_id
+        WHERE c.workspace_id = $1
+        AND NOT COALESCE(w.settings['disable_search_indexing']::boolean, false)
+        AND c.indexed_at IS NULL
+        ORDER BY c.updated_at DESC
+        LIMIT $2
     "#,
+    workspace_id,
     limit
   )
   .fetch(conn.deref_mut())
@@ -143,42 +139,6 @@ pub async fn get_collabs_without_embeddings_stream(
   })
   .boxed()
 }
-
-pub async fn get_collabs_without_embeddings(
-  conn: &mut PoolConnection<Postgres>,
-  limit: i64,
-) -> sqlx::Result<Vec<CollabId>> {
-  // atm. get only documents
-  let records = sqlx::query!(
-    r#"
-      select c.workspace_id, c.oid, c.partition_key
-      from af_collab c
-      join af_workspace w on c.workspace_id = w.workspace_id
-      where not coalesce(w.settings['disable_search_indexding']::boolean, false)
-        and not exists (
-          select 1 from af_collab_embeddings em
-          where em.oid = c.oid and em.partition_key = 0
-        )
-      order by c.updated_at desc
-      limit $1
-    "#,
-    limit
-  )
-  .fetch_all(conn.deref_mut())
-  .await?;
-
-  Ok(
-    records
-      .into_iter()
-      .map(|r| CollabId {
-        collab_type: CollabType::from(r.partition_key),
-        workspace_id: r.workspace_id,
-        object_id: r.oid,
-      })
-      .collect(),
-  )
-}
-
 #[derive(Debug, Clone)]
 pub struct CollabId {
   pub collab_type: CollabType,

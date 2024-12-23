@@ -59,7 +59,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
 use tokio::task::spawn_local;
-use tokio::time::interval;
+use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
@@ -177,6 +177,7 @@ async fn process_upcoming_tasks(
     .group(group_name, consumer_name)
     .count(10);
   let mut interval = interval(Duration::from_secs(interval_secs));
+  interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
   interval.tick().await;
 
   loop {

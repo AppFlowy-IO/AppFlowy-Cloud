@@ -15,8 +15,6 @@ use tracing::{error, info, trace, warn};
 use yrs::updates::decoder::Decode;
 use yrs::StateVector;
 
-use database::collab::CollabStorage;
-
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::config::get_env_var;
@@ -24,8 +22,9 @@ use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
-use crate::indexer::IndexerScheduler;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
+use database::collab::CollabStorage;
+use indexer::scheduler::IndexerScheduler;
 
 use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};

@@ -13,15 +13,14 @@ use app_error::AppError;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
 
-use database::collab::{CollabStorage, GetCollabOrigin};
-use database_entity::dto::QueryCollabParams;
-
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
-use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabRealtimeMetrics;
+use database::collab::{CollabStorage, GetCollabOrigin};
+use database_entity::dto::QueryCollabParams;
+use indexer::scheduler::IndexerScheduler;
 
 pub struct GroupManager<S> {
   state: GroupManagementState,

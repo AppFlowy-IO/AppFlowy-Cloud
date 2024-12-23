@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT c.workspace_id, c.oid, c.partition_key\n        FROM af_collab c\n        JOIN af_workspace w ON c.workspace_id = w.workspace_id\n        WHERE c.workspace_id = $1\n        AND NOT COALESCE(w.settings['disable_search_indexing']::boolean, false)\n        AND c.indexed_at IS NULL\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "oid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "partition_key",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "291823c27aa06a0fc414c62eec0cdf87f667560d1448d371d0bfc2a8fce531d9"
+}

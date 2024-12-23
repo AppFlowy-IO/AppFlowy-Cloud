@@ -1,15 +1,14 @@
-use crate::config::get_env_var;
-use crate::indexer::vector::embedder::Embedder;
-use crate::indexer::{batch_insert_records, EmbeddingRecord, IndexerProvider, IndexerScheduler};
-use crate::thread_pool_no_abort::ThreadPoolNoAbort;
-use app_error::AppError;
+use crate::collab_indexer::IndexerProvider;
+use crate::entity::{EmbeddingRecord, UnindexedCollab};
+use crate::scheduler::{batch_insert_records, IndexerScheduler};
+use crate::thread_pool::ThreadPoolNoAbort;
+use crate::vector::embedder::Embedder;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
-use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database::collab::{CollabStorage, GetCollabOrigin};
-use database::index::{get_collabs_without_embeddings, get_collabs_without_embeddings_stream};
+use database::index::stream_collabs_without_embeddings;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use rayon::iter::ParallelIterator;
@@ -18,24 +17,14 @@ use sqlx::pool::PoolConnection;
 use sqlx::Postgres;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::time::timeout;
 use tracing::{error, info, trace};
 use uuid::Uuid;
 
-/// Periodically checks for unindexed collabs and indexes them
-pub(crate) async fn handle_unindexed_collabs_periodically(scheduler: Arc<IndexerScheduler>) {
-  // Wait for 30 seconds before starting indexing
-  tokio::time::sleep(Duration::from_secs(30)).await;
-
-  let limit = get_env_var("APPFLOWY_INDEXER_SCHEDULER_GET_UNINDEXED_LIMIT", "50")
-    .parse::<i64>()
-    .unwrap_or(50);
-
+#[allow(dead_code)]
+pub(crate) async fn index_workspace(scheduler: Arc<IndexerScheduler>, workspace_id: Uuid) {
   let weak_threads = Arc::downgrade(&scheduler.threads);
-  let mut retry_delay = Duration::from_secs(5);
-
+  let mut retry_delay = Duration::from_secs(2);
   loop {
-    let handle_batch_start = Instant::now();
     let threads = match weak_threads.upgrade() {
       Some(threads) => threads,
       None => {
@@ -45,73 +34,98 @@ pub(crate) async fn handle_unindexed_collabs_periodically(scheduler: Arc<Indexer
     };
 
     let conn = scheduler.pg_pool.try_acquire();
-    let unindexed_collabs = match conn {
-      None => {
-        tokio::time::sleep(retry_delay).await;
-        retry_delay = retry_delay.saturating_mul(2);
+    if conn.is_none() {
+      tokio::time::sleep(retry_delay).await;
+      // 4s, 8s, 16s, 32s, 60s
+      retry_delay = retry_delay.saturating_mul(2);
+      if retry_delay > Duration::from_secs(60) {
+        error!("[Embedding] failed to acquire db connection for 1 minute, stop indexing");
+        break;
+      }
+      continue;
+    }
+
+    retry_delay = Duration::from_secs(2);
+    let mut conn = conn.unwrap();
+    let mut stream =
+      stream_unindexed_collabs(&mut conn, workspace_id, scheduler.storage.clone(), 50).await;
+
+    let batch_size = 5;
+    let mut unindexed_collabs = Vec::with_capacity(batch_size);
+    while let Some(Ok(collab)) = stream.next().await {
+      if unindexed_collabs.len() < batch_size {
+        unindexed_collabs.push(collab);
         continue;
-      },
-      Some(mut conn) => {
-        retry_delay = Duration::from_secs(5);
-        get_unindexed_collabs(&mut conn, limit, scheduler.storage.clone())
-          .await
-          .unwrap_or_default()
-      },
-    };
-
-    info!(
-      "[Embedding] process batch {:?} embeddings",
-      unindexed_collabs
-        .iter()
-        .map(|v| v.object_id.clone())
-        .collect::<Vec<_>>()
-    );
-
-    if unindexed_collabs.is_empty() {
-      trace!("[Embedding] no embeddings to process in this batch");
-      tokio::time::sleep(Duration::from_secs(10)).await;
-    } else if let Ok(embedder) = scheduler.create_embedder() {
-      let indexed_collabs = index_unindexd_collab(
-        embedder,
-        &scheduler.indexer_provider,
-        threads,
-        unindexed_collabs,
-      )
-      .await;
-
-      let write_start = Instant::now();
-      let n = indexed_collabs.len();
-      match batch_insert_records(&scheduler.pg_pool, indexed_collabs).await {
-        Ok(_) => trace!(
-          "[Embedding] upsert {} embeddings success, cost:{}ms",
-          n,
-          write_start.elapsed().as_millis()
-        ),
-        Err(err) => error!("{}", err),
       }
 
-      scheduler
-        .metrics
-        .record_write_embedding_time(write_start.elapsed().as_millis());
-      scheduler.metrics.record_handle_batch_unindexed_collab_time(
-        n as u32,
-        handle_batch_start.elapsed().as_millis(),
-      );
-      tokio::time::sleep(Duration::from_secs(5)).await;
-    } else {
-      trace!("[Embedding] no embeddings to process in this batch");
+      index_then_write_embedding_to_disk(
+        &scheduler,
+        threads.clone(),
+        std::mem::take(&mut unindexed_collabs),
+      )
+      .await;
+    }
+
+    if !unindexed_collabs.is_empty() {
+      index_then_write_embedding_to_disk(&scheduler, threads.clone(), unindexed_collabs).await;
     }
   }
 }
 
-#[allow(dead_code)]
-async fn get_unindexed_collabs_stream(
+async fn index_then_write_embedding_to_disk(
+  scheduler: &Arc<IndexerScheduler>,
+  threads: Arc<ThreadPoolNoAbort>,
+  unindexed_collabs: Vec<UnindexedCollab>,
+) {
+  info!(
+    "[Embedding] process batch {:?} embeddings",
+    unindexed_collabs
+      .iter()
+      .map(|v| v.object_id.clone())
+      .collect::<Vec<_>>()
+  );
+
+  if let Ok(embedder) = scheduler.create_embedder() {
+    let start = Instant::now();
+    let embeddings = create_embeddings(
+      embedder,
+      &scheduler.indexer_provider,
+      threads.clone(),
+      unindexed_collabs,
+    )
+    .await;
+    scheduler
+      .metrics
+      .record_gen_embedding_time(embeddings.len() as u32, start.elapsed().as_millis());
+
+    let write_start = Instant::now();
+    let n = embeddings.len();
+    match batch_insert_records(&scheduler.pg_pool, embeddings).await {
+      Ok(_) => trace!(
+        "[Embedding] upsert {} embeddings success, cost:{}ms",
+        n,
+        write_start.elapsed().as_millis()
+      ),
+      Err(err) => error!("{}", err),
+    }
+
+    scheduler
+      .metrics
+      .record_write_embedding_time(write_start.elapsed().as_millis());
+    tokio::time::sleep(Duration::from_secs(5)).await;
+  } else {
+    trace!("[Embedding] no embeddings to process in this batch");
+  }
+}
+
+async fn stream_unindexed_collabs(
   conn: &mut PoolConnection<Postgres>,
-  limit: i64,
+  workspace_id: Uuid,
   storage: Arc<dyn CollabStorage>,
+  limit: i64,
 ) -> BoxStream<Result<UnindexedCollab, anyhow::Error>> {
   let cloned_storage = storage.clone();
-  get_collabs_without_embeddings_stream(conn, limit)
+  stream_collabs_without_embeddings(conn, workspace_id, limit)
     .await
     .map(move |result| {
       let storage = cloned_storage.clone();
@@ -130,6 +144,7 @@ async fn get_unindexed_collabs_stream(
                 collab,
               }))
             },
+            // TODO(nathan): support other collab types
             _ => Ok::<_, anyhow::Error>(None),
           },
           Err(e) => Err(e.into()),
@@ -145,32 +160,8 @@ async fn get_unindexed_collabs_stream(
     })
     .boxed()
 }
-async fn get_unindexed_collabs(
-  conn: &mut PoolConnection<Postgres>,
-  limit: i64,
-  storage: Arc<dyn CollabStorage>,
-) -> Result<Vec<UnindexedCollab>, anyhow::Error> {
-  let collab_ids = get_collabs_without_embeddings(conn, limit).await?;
-  let mut result = Vec::new();
-  for cid in collab_ids {
-    if cid.collab_type == CollabType::Document {
-      // Get the collaboration details
-      let collab = storage
-        .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
-        .await?;
 
-      // Add the result to the vector
-      result.push(UnindexedCollab {
-        workspace_id: cid.workspace_id,
-        object_id: cid.object_id,
-        collab_type: cid.collab_type,
-        collab,
-      });
-    }
-  }
-  Ok(result)
-}
-async fn index_unindexd_collab(
+async fn create_embeddings(
   embedder: Embedder,
   indexer_provider: &Arc<IndexerProvider>,
   threads: Arc<ThreadPoolNoAbort>,
@@ -229,11 +220,4 @@ async fn index_unindexd_collab(
       })
     })
     .collect::<Vec<_>>()
-}
-
-pub struct UnindexedCollab {
-  pub workspace_id: Uuid,
-  pub object_id: String,
-  pub collab_type: CollabType,
-  pub collab: EncodedCollab,
 }

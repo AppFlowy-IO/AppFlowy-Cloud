@@ -63,3 +63,4 @@ base64.workspace = true
 prometheus-client = "0.22.3"
 reqwest.workspace = true
 zstd.workspace = true
+indexer.workspace = true

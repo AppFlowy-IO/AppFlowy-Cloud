@@ -1,11 +1,11 @@
-use crate::config::get_env_var;
-use crate::indexer::vector::embedder::Embedder;
-use crate::indexer::DocumentIndexer;
+use crate::collab_indexer::DocumentIndexer;
+use crate::vector::embedder::Embedder;
 use app_error::AppError;
 use appflowy_ai_client::dto::EmbeddingModel;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings};
+use infra::env_util::get_env_var;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;

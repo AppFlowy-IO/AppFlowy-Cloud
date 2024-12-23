@@ -1,20 +1,19 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::group::group_init::EditState;
 use anyhow::anyhow;
+use app_error::AppError;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::{validate_data_for_folder, CollabType};
+use database::collab::CollabStorage;
+use database_entity::dto::CollabParams;
+use indexer::scheduler::{IndexerScheduler, PendingUnindexedCollab, UnindexedData};
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 use tracing::{trace, warn};
-
-use app_error::AppError;
-use database::collab::CollabStorage;
-use database_entity::dto::CollabParams;
-
-use crate::group::group_init::EditState;
-use crate::indexer::IndexerScheduler;
+use uuid::Uuid;
 
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
@@ -131,9 +130,13 @@ where
     })
     .await??;
 
-    self
-      .indexer_scheduler
-      .index_encoded_collab_one(&self.workspace_id, &params)?;
+    let pending = PendingUnindexedCollab {
+      workspace_id: Uuid::parse_str(&self.workspace_id)?,
+      object_id: self.object_id.clone(),
+      collab_type: self.collab_type.clone(),
+      data: UnindexedData::UnindexedEncodeCollab(params.encoded_collab_v1.clone()),
+    };
+    self.indexer_scheduler.index_pending_collab_one(pending)?;
 
     self
       .storage

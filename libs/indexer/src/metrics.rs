@@ -6,7 +6,7 @@ pub struct EmbeddingMetrics {
   failed_embed_count: Counter,
   processing_time_histogram: Histogram,
   write_embedding_time_histogram: Histogram,
-  handle_batch_unindexed_collab_time_histogram: Histogram,
+  gen_embeddings_time_histogram: Histogram,
 }
 
 impl EmbeddingMetrics {
@@ -16,9 +16,7 @@ impl EmbeddingMetrics {
       failed_embed_count: Counter::default(),
       processing_time_histogram: Histogram::new([500.0, 1000.0, 5000.0, 8000.0].into_iter()),
       write_embedding_time_histogram: Histogram::new([500.0, 1000.0, 5000.0, 8000.0].into_iter()),
-      handle_batch_unindexed_collab_time_histogram: Histogram::new(
-        [1000.0, 3000.0, 5000.0, 8000.0].into_iter(),
-      ),
+      gen_embeddings_time_histogram: Histogram::new([1000.0, 3000.0, 5000.0, 8000.0].into_iter()),
     }
   }
 
@@ -49,9 +47,9 @@ impl EmbeddingMetrics {
     );
 
     realtime_registry.register(
-      "handle_batch_unindexed_collab_time_histogram",
-      "Histogram of unindexed collab pg query times",
-      metrics.handle_batch_unindexed_collab_time_histogram.clone(),
+      "gen_embeddings_time_histogram",
+      "Histogram of embedding generation times",
+      metrics.gen_embeddings_time_histogram.clone(),
     );
 
     metrics
@@ -74,10 +72,8 @@ impl EmbeddingMetrics {
     self.write_embedding_time_histogram.observe(millis as f64);
   }
 
-  pub fn record_handle_batch_unindexed_collab_time(&self, num: u32, millis: u128) {
+  pub fn record_gen_embedding_time(&self, num: u32, millis: u128) {
     tracing::info!("[Embedding]: index {} collabs cost: {}ms", num, millis);
-    self
-      .handle_batch_unindexed_collab_time_histogram
-      .observe(millis as f64);
+    self.gen_embeddings_time_histogram.observe(millis as f64);
   }
 }

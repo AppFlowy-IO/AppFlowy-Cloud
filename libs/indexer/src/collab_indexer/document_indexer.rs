@@ -1,6 +1,6 @@
-use crate::indexer::open_ai::split_text_by_max_content_len;
-use crate::indexer::vector::embedder::Embedder;
-use crate::indexer::Indexer;
+use crate::collab_indexer::Indexer;
+use crate::vector::embedder::Embedder;
+use crate::vector::open_ai::split_text_by_max_content_len;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::{

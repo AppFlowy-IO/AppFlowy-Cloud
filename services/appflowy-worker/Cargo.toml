@@ -64,3 +64,8 @@ prometheus-client = "0.22.3"
 reqwest.workspace = true
 zstd.workspace = true
 indexer.workspace = true
+appflowy-collaborate = { path = "../appflowy-collaborate" }
+rayon = "1.10.0"
+app-error = { workspace = true, features = [
+  "sqlx_error",
+] }

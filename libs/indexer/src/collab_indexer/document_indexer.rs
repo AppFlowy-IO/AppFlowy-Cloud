@@ -20,7 +20,7 @@ pub struct DocumentIndexer;
 
 #[async_trait]
 impl Indexer for DocumentIndexer {
-  fn create_embedded_chunks(
+  fn create_embedded_chunks_from_collab(
     &self,
     collab: &Collab,
     embedding_model: EmbeddingModel,
@@ -35,9 +35,7 @@ impl Indexer for DocumentIndexer {
 
     let result = document.to_plain_text(collab.transact(), false, true);
     match result {
-      Ok(content) => {
-        split_text_into_chunks(object_id, content, CollabType::Document, &embedding_model)
-      },
+      Ok(content) => self.create_embedded_chunks_from_text(object_id, content, embedding_model),
       Err(err) => {
         if matches!(err, DocumentError::NoRequiredData) {
           Ok(vec![])
@@ -46,6 +44,15 @@ impl Indexer for DocumentIndexer {
         }
       },
     }
+  }
+
+  fn create_embedded_chunks_from_text(
+    &self,
+    object_id: String,
+    text: String,
+    model: EmbeddingModel,
+  ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
+    split_text_into_chunks(object_id, text, CollabType::Document, &model)
   }
 
   fn embed(

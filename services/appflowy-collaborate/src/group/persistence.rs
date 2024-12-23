@@ -6,10 +6,11 @@ use anyhow::anyhow;
 use app_error::AppError;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
+use collab_document::document::DocumentBody;
 use collab_entity::{validate_data_for_folder, CollabType};
 use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
-use indexer::scheduler::{IndexerScheduler, PendingUnindexedCollab, UnindexedData};
+use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 use tracing::{trace, warn};
@@ -123,22 +124,37 @@ where
     let collab_type = self.collab_type.clone();
 
     let cloned_collab = self.collab.clone();
+    let indexer_scheduler = self.indexer_scheduler.clone();
+
     let params = tokio::task::spawn_blocking(move || {
       let collab = cloned_collab.blocking_read();
       let params = get_encode_collab(&workspace_id, &object_id, &collab, &collab_type)?;
+      match collab_type {
+        CollabType::Document => {
+          let txn = collab.transact();
+          let text = DocumentBody::from_collab(&collab)
+            .and_then(|doc| doc.to_plain_text(txn, false, true).ok());
+
+          if let Some(text) = text {
+            let pending = UnindexedCollabTask::new(
+              Uuid::parse_str(&workspace_id)?,
+              object_id.clone(),
+              collab_type,
+              UnindexedData::UnindexedText(text),
+            );
+            if let Err(err) = indexer_scheduler.index_pending_collab_one(pending, true) {
+              warn!("fail to index collab: {}:{}", object_id, err);
+            }
+          }
+        },
+        _ => {
+          // TODO(nathan): support other collab types
+        },
+      }
+
       Ok::<_, AppError>(params)
     })
     .await??;
-
-    let pending = PendingUnindexedCollab {
-      workspace_id: Uuid::parse_str(&self.workspace_id)?,
-      object_id: self.object_id.clone(),
-      collab_type: self.collab_type.clone(),
-      data: UnindexedData::UnindexedEncodeCollab(params.encoded_collab_v1.clone()),
-    };
-    self
-      .indexer_scheduler
-      .index_pending_collab_one(pending, true)?;
 
     self
       .storage

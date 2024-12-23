@@ -320,6 +320,7 @@ impl From<sqlx::Error> for AppError {
       sqlx::Error::RowNotFound => {
         AppError::RecordNotFound(format!("Record not exist in db. {})", msg))
       },
+      sqlx::Error::PoolTimedOut => AppError::ActionTimeout(value.to_string()),
       _ => AppError::SqlxError(msg),
     }
   }

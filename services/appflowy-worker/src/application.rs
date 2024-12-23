@@ -15,10 +15,13 @@ use secrecy::ExposeSecret;
 
 use crate::mailer::AFWorkerMailer;
 use crate::metric::ImportMetrics;
+use appflowy_worker::indexer_worker::{run_background_indexer, BackgroundIndexerConfig};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
+use indexer::metrics::EmbeddingMetrics;
+use indexer::thread_pool::ThreadPoolNoAbortBuilder;
 use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
 use std::sync::{Arc, Once};
@@ -124,6 +127,25 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     maximum_import_file_size,
   ));
 
+  let threads = Arc::new(
+    ThreadPoolNoAbortBuilder::new()
+      .num_threads(20)
+      .thread_name(|index| format!("background-embedding-thread-{index}"))
+      .build()
+      .unwrap(),
+  );
+
+  tokio::spawn(run_background_indexer(
+    state.pg_pool.clone(),
+    state.redis_client.clone(),
+    state.metrics.embedder_metrics.clone(),
+    threads.clone(),
+    BackgroundIndexerConfig {
+      open_api_key: appflowy_collaborate::config::get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+      tick_interval_secs: 10,
+    },
+  ));
+
   let app = Router::new()
     .route("/metrics", get(metrics_handler))
     .with_state(Arc::new(state));
@@ -212,15 +234,18 @@ pub struct AppMetrics {
   #[allow(dead_code)]
   registry: Arc<prometheus_client::registry::Registry>,
   import_metrics: Arc<ImportMetrics>,
+  embedder_metrics: Arc<EmbeddingMetrics>,
 }
 
 impl AppMetrics {
   pub fn new() -> Self {
     let mut registry = prometheus_client::registry::Registry::default();
     let import_metrics = Arc::new(ImportMetrics::register(&mut registry));
+    let embedder_metrics = Arc::new(EmbeddingMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       import_metrics,
+      embedder_metrics,
     }
   }
 }

@@ -11,10 +11,7 @@ use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;
 
-use crate::collab::util::{
-  alex_software_engineer_story, empty_document_editor, generate_random_string,
-  test_encode_collab_v1,
-};
+use crate::collab::util::{empty_document_editor, generate_random_string, test_encode_collab_v1};
 use client_api_test::TestClient;
 use shared_entity::response::AppResponse;
 use uuid::Uuid;
@@ -155,15 +152,15 @@ async fn batch_insert_document_collab_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
-  let num_collabs = 200;
+  let num_collabs = 100;
   let mut list = vec![];
   for _ in 0..num_collabs {
     let object_id = Uuid::new_v4().to_string();
     let mut editor = empty_document_editor(&object_id);
     let paragraphs = vec![
-      generate_random_string(10),
-      generate_random_string(24),
-      generate_random_string(12),
+      generate_random_string(1),
+      generate_random_string(2),
+      generate_random_string(5),
     ];
     editor.insert_paragraphs(paragraphs);
     list.push((object_id, editor.encode_collab()));

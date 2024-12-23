@@ -181,7 +181,7 @@ async fn create_embeddings(
       .ok()?;
 
       let chunks = indexer
-        .create_embedded_chunks(&collab, embedder.model())
+        .create_embedded_chunks_from_collab(&collab, embedder.model())
         .ok()?;
       if chunks.is_empty() {
         trace!("[Embedding] {} has no embeddings", unindexed.object_id,);

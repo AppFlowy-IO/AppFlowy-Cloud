@@ -777,6 +777,8 @@ name = "appflowy-worker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "app-error",
+ "appflowy-collaborate",
  "async_zip",
  "aws-config",
  "aws-sdk-s3",
@@ -798,6 +800,7 @@ dependencies = [
  "md5",
  "mime_guess",
  "prometheus-client",
+ "rayon",
  "redis 0.25.4",
  "reqwest",
  "secrecy",

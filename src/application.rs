@@ -325,18 +325,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
       .parse::<bool>()
       .unwrap_or(true),
     openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
-    enable_background_indexing: get_env_var(
-      "APPFLOWY_INDEXER_BACKGROUND_INDEXING_ENABLED",
-      "false",
-    )
-    .parse::<bool>()
-    .unwrap_or(false),
     embedding_buffer_size: appflowy_collaborate::config::get_env_var(
       "APPFLOWY_INDEXER_EMBEDDING_BUFFER_SIZE",
-      "2000",
+      "5000",
     )
     .parse::<usize>()
-    .unwrap_or(2000),
+    .unwrap_or(5000),
   };
   let indexer_scheduler = IndexerScheduler::new(
     IndexerProvider::new(),

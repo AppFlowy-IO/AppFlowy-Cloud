@@ -1,12 +1,10 @@
 use crate::error::IndexerError;
-use crate::scheduler::PendingUnindexedCollab;
+use crate::scheduler::UnindexedCollabTask;
 use anyhow::anyhow;
 use app_error::AppError;
-use collab_entity::CollabType;
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamId, StreamReadOptions, StreamReadReply};
 use redis::{AsyncCommands, RedisResult, Value};
-use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use tracing::error;
 
@@ -14,27 +12,7 @@ pub const INDEX_TASK_STREAM_NAME: &str = "index_collab_task_stream";
 const INDEXER_WORKER_GROUP_NAME: &str = "indexer_worker_group";
 const INDEXER_CONSUMER_NAME: &str = "appflowy_worker";
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum EmbedderTask {
-  CollabId {
-    object_id: String,
-    collab_type: CollabType,
-    /// Timestamp that indicates when the task was created.
-    created_at: i64,
-  },
-}
-
-impl From<PendingUnindexedCollab> for EmbedderTask {
-  fn from(pending_collab: PendingUnindexedCollab) -> Self {
-    EmbedderTask::CollabId {
-      object_id: pending_collab.object_id,
-      collab_type: pending_collab.collab_type,
-      created_at: chrono::Utc::now().timestamp(),
-    }
-  }
-}
-
-impl TryFrom<&StreamId> for EmbedderTask {
+impl TryFrom<&StreamId> for UnindexedCollabTask {
   type Error = IndexerError;
 
   fn try_from(stream_id: &StreamId) -> Result<Self, Self::Error> {
@@ -57,7 +35,7 @@ impl TryFrom<&StreamId> for EmbedderTask {
       },
     };
 
-    from_str::<EmbedderTask>(&task_str).map_err(|err| IndexerError::Internal(err.into()))
+    from_str::<UnindexedCollabTask>(&task_str).map_err(|err| IndexerError::Internal(err.into()))
   }
 }
 
@@ -68,7 +46,7 @@ impl TryFrom<&StreamId> for EmbedderTask {
 ///
 pub async fn add_background_embed_task(
   redis_client: ConnectionManager,
-  tasks: Vec<EmbedderTask>,
+  tasks: Vec<UnindexedCollabTask>,
 ) -> Result<(), AppError> {
   let items = tasks
     .into_iter()
@@ -132,14 +110,14 @@ pub async fn read_background_embed_tasks(
 ///   If `false`, the task remains in the stream after acknowledgment.
 pub async fn ack_task(
   redis_client: &mut ConnectionManager,
-  stream_entity_id: &str,
+  stream_entity_ids: Vec<String>,
   delete_task: bool,
 ) -> Result<(), IndexerError> {
   let _: () = redis_client
     .xack(
       INDEX_TASK_STREAM_NAME,
       INDEXER_WORKER_GROUP_NAME,
-      &[stream_entity_id],
+      &stream_entity_ids,
     )
     .await
     .map_err(|err| {
@@ -149,7 +127,7 @@ pub async fn ack_task(
 
   if delete_task {
     let _: () = redis_client
-      .xdel(INDEX_TASK_STREAM_NAME, &[stream_entity_id])
+      .xdel(INDEX_TASK_STREAM_NAME, &stream_entity_ids)
       .await
       .map_err(|err| {
         error!("Failed to delete task: {:?}", err);

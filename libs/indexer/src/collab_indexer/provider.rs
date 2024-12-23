@@ -11,9 +11,16 @@ use std::sync::Arc;
 use tracing::info;
 
 pub trait Indexer: Send + Sync {
-  fn create_embedded_chunks(
+  fn create_embedded_chunks_from_collab(
     &self,
     collab: &Collab,
+    model: EmbeddingModel,
+  ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError>;
+
+  fn create_embedded_chunks_from_text(
+    &self,
+    object_id: String,
+    text: String,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError>;
 

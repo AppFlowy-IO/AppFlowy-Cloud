@@ -6,23 +6,20 @@ use crate::queue::add_background_embed_task;
 use crate::thread_pool::{ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 use crate::vector::embedder::Embedder;
 use crate::vector::open_ai;
-use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
-use bytes::Bytes;
-use collab::core::collab::DataSource;
-use collab::core::origin::CollabOrigin;
-use collab::entity::EncodedCollab;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
+use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database::index::upsert_collab_embeddings;
 use database::workspace::select_workspace_settings;
-use database_entity::dto::{AFCollabEmbeddedChunk, CollabParams};
+use database_entity::dto::AFCollabEmbeddedChunk;
 use infra::env_util::get_env_var;
 use rayon::prelude::*;
 use redis::aio::ConnectionManager;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::cmp::max;
 use std::collections::HashSet;
@@ -31,6 +28,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::RwLock as TokioRwLock;
 use tokio::time::timeout;
 use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
@@ -43,7 +41,7 @@ pub struct IndexerScheduler {
   #[allow(dead_code)]
   pub(crate) metrics: Arc<EmbeddingMetrics>,
   write_embedding_tx: UnboundedSender<EmbeddingRecord>,
-  gen_embedding_tx: mpsc::Sender<PendingUnindexedCollab>,
+  gen_embedding_tx: mpsc::Sender<UnindexedCollabTask>,
   config: IndexerConfiguration,
   redis_client: ConnectionManager,
 }
@@ -52,7 +50,6 @@ pub struct IndexerScheduler {
 pub struct IndexerConfiguration {
   pub enable: bool,
   pub openai_api_key: String,
-  pub enable_background_indexing: bool,
   /// High watermark for the number of embeddings that can be buffered before being written to the database.
   pub embedding_buffer_size: usize,
 }
@@ -63,7 +60,7 @@ impl IndexerScheduler {
     pg_pool: PgPool,
     storage: Arc<dyn CollabStorage>,
     metrics: Arc<EmbeddingMetrics>,
-    mut config: IndexerConfiguration,
+    config: IndexerConfiguration,
     redis_client: ConnectionManager,
   ) -> Arc<Self> {
     // Since threads often block while waiting for I/O, you can use more threads than CPU cores to improve concurrency.
@@ -75,22 +72,14 @@ impl IndexerScheduler {
       5,
     );
 
-    if num_thread > config.embedding_buffer_size {
-      warn!(
-        "Number of threads {} is greater than embedding_buffer_size {}, set to {}",
-        num_thread, config.embedding_buffer_size, num_thread
-      );
-      config.embedding_buffer_size = num_thread;
-    }
-
     info!("Indexer scheduler config: {:?}", config);
     let (write_embedding_tx, write_embedding_rx) = unbounded_channel::<EmbeddingRecord>();
     let (gen_embedding_tx, gen_embedding_rx) =
-      mpsc::channel::<PendingUnindexedCollab>(config.embedding_buffer_size);
+      mpsc::channel::<UnindexedCollabTask>(config.embedding_buffer_size);
     let threads = Arc::new(
       ThreadPoolNoAbortBuilder::new()
         .num_threads(num_thread)
-        .thread_name(|index| format!("embedding-request-{index}"))
+        .thread_name(|index| format!("create-embedding-thread-{index}"))
         .build()
         .unwrap(),
     );
@@ -113,17 +102,20 @@ impl IndexerScheduler {
       num_thread
     );
 
+    let latest_write_embedding_err = Arc::new(TokioRwLock::new(None));
     if this.index_enabled() {
       tokio::spawn(spawn_rayon_generate_embeddings(
         gen_embedding_rx,
         Arc::downgrade(&this),
         num_thread,
+        latest_write_embedding_err.clone(),
       ));
 
       tokio::spawn(spawn_pg_write_embeddings(
         write_embedding_rx,
         this.pg_pool.clone(),
         this.metrics.clone(),
+        latest_write_embedding_err,
       ));
     }
 
@@ -169,27 +161,20 @@ impl IndexerScheduler {
     Ok(embeddings)
   }
 
-  pub fn embed_in_background(
-    &self,
-    pending_collab: PendingUnindexedCollab,
-  ) -> Result<(), AppError> {
+  pub fn embed_in_background(&self, pending_collab: UnindexedCollabTask) -> Result<(), AppError> {
     if !self.index_enabled() {
-      return Ok(());
-    }
-
-    if !self.config.enable_background_indexing {
       return Ok(());
     }
 
     let redis_client = self.redis_client.clone();
     tokio::spawn(add_background_embed_task(
       redis_client,
-      vec![pending_collab.into()],
+      vec![pending_collab],
     ));
     Ok(())
   }
 
-  pub fn embed_immediately(&self, pending_collab: PendingUnindexedCollab) -> Result<(), AppError> {
+  pub fn embed_immediately(&self, pending_collab: UnindexedCollabTask) -> Result<(), AppError> {
     if !self.index_enabled() {
       return Ok(());
     }
@@ -210,8 +195,8 @@ impl IndexerScheduler {
 
   pub fn index_pending_collab_one(
     &self,
-    pending_collab: PendingUnindexedCollab,
-    _background: bool,
+    pending_collab: UnindexedCollabTask,
+    background: bool,
   ) -> Result<(), AppError> {
     if !self.index_enabled() {
       return Ok(());
@@ -224,14 +209,17 @@ impl IndexerScheduler {
       return Ok(());
     }
 
-    let _ = self.embed_immediately(pending_collab);
+    if background {
+      let _ = self.embed_in_background(pending_collab);
+    } else {
+      let _ = self.embed_immediately(pending_collab);
+    }
     Ok(())
   }
 
   pub fn index_pending_collabs(
     &self,
-    mut pending_collabs: Vec<PendingUnindexedCollab>,
-    _background: bool,
+    mut pending_collabs: Vec<UnindexedCollabTask>,
   ) -> Result<(), AppError> {
     if !self.index_enabled() {
       return Ok(());
@@ -265,31 +253,30 @@ impl IndexerScheduler {
       return Ok(());
     }
 
-    let indexer = self
-      .indexer_provider
-      .indexer_for(collab_type)
-      .ok_or_else(|| {
-        AppError::Internal(anyhow!(
-          "No indexer found for collab type {:?}",
-          collab_type
-        ))
-      })?;
-    let embedder = self.create_embedder()?;
+    match collab_type {
+      CollabType::Document => {
+        let lock = collab.read().await;
+        let txn = lock.transact();
+        let text = DocumentBody::from_collab(&lock)
+          .and_then(|body| body.to_plain_text(txn, false, true).ok());
+        drop(lock); // release the read lock ASAP
 
-    let lock = collab.read().await;
-    let chunks = indexer.create_embedded_chunks(&lock, embedder.model())?;
-    drop(lock); // release the read lock ASAP
-
-    if chunks.is_empty() {
-      return Ok(());
+        if let Some(text) = text {
+          if !text.is_empty() {
+            let pending = UnindexedCollabTask::new(
+              Uuid::parse_str(workspace_id)?,
+              object_id.to_string(),
+              collab_type.clone(),
+              UnindexedData::UnindexedText(text),
+            );
+            self.embed_immediately(pending)?;
+          }
+        }
+      },
+      _ => {
+        // TODO(nathan): support other collab types
+      },
     }
-
-    self.embed_immediately(PendingUnindexedCollab {
-      workspace_id: Uuid::parse_str(workspace_id)?,
-      object_id: object_id.to_string(),
-      collab_type: collab_type.clone(),
-      data: UnindexedData::UnindexedChunks(chunks),
-    })?;
 
     Ok(())
   }
@@ -309,12 +296,23 @@ impl IndexerScheduler {
 }
 
 async fn spawn_rayon_generate_embeddings(
-  mut rx: mpsc::Receiver<PendingUnindexedCollab>,
+  mut rx: mpsc::Receiver<UnindexedCollabTask>,
   scheduler: Weak<IndexerScheduler>,
   buffer_size: usize,
+  latest_write_embedding_err: Arc<TokioRwLock<Option<AppError>>>,
 ) {
   let mut buf = Vec::with_capacity(buffer_size);
   loop {
+    let latest_error = latest_write_embedding_err.write().await.take();
+    if let Some(err) = latest_error {
+      if matches!(err, AppError::ActionTimeout(_)) {
+        info!(
+          "[Embedding] last write embedding task failed with timeout, waiting for 30s before retrying..."
+        );
+        tokio::time::sleep(Duration::from_secs(30)).await;
+      }
+    }
+
     let n = rx.recv_many(&mut buf, buffer_size).await;
     let scheduler = match scheduler.upgrade() {
       Some(scheduler) => scheduler,
@@ -395,10 +393,11 @@ async fn spawn_rayon_generate_embeddings(
 }
 
 const EMBEDDING_RECORD_BUFFER_SIZE: usize = 10;
-async fn spawn_pg_write_embeddings(
+pub async fn spawn_pg_write_embeddings(
   mut rx: UnboundedReceiver<EmbeddingRecord>,
   pg_pool: PgPool,
   metrics: Arc<EmbeddingMetrics>,
+  latest_write_embedding_error: Arc<TokioRwLock<Option<AppError>>>,
 ) {
   let mut buf = Vec::with_capacity(EMBEDDING_RECORD_BUFFER_SIZE);
   loop {
@@ -424,15 +423,18 @@ async fn spawn_pg_write_embeddings(
     )
     .await
     .unwrap_or_else(|_| {
-      Err(AppError::Internal(anyhow!(
-        "timeout when writing embeddings"
-      )))
+      Err(AppError::ActionTimeout(
+        "timeout when writing embeddings".to_string(),
+      ))
     });
 
     metrics.record_write_embedding_time(start.elapsed().as_millis());
     match result {
       Ok(_) => trace!("[Embedding] save {} embeddings to disk", n),
-      Err(err) => error!("Failed to write collab embedding to disk:{}", err),
+      Err(err) => {
+        error!("Failed to write collab embedding to disk:{}", err);
+        latest_write_embedding_error.write().await.replace(err);
+      },
     }
   }
 }
@@ -469,7 +471,7 @@ pub(crate) async fn batch_insert_records(
 
 /// This function must be called within the rayon thread pool.
 fn process_collab(
-  embdder: &Embedder,
+  embedder: &Embedder,
   indexer: Option<Arc<dyn Indexer>>,
   object_id: &str,
   data: UnindexedData,
@@ -480,26 +482,14 @@ fn process_collab(
 
     let start_time = Instant::now();
     let chunks = match data {
-      UnindexedData::UnindexedEncodeCollab(encoded_collab) => {
-        let encode_collab = EncodedCollab::decode_from_bytes(&encoded_collab)
-          .map_err(|err| AppError::Internal(anyhow!("Failed to decode encoded collab: {}", err)))?;
-        let collab = Collab::new_with_source(
-          CollabOrigin::Empty,
-          object_id,
-          DataSource::DocStateV1(encode_collab.doc_state.into()),
-          vec![],
-          false,
-        )
-        .map_err(|err| AppError::Internal(err.into()))?;
-        indexer.create_embedded_chunks(&collab, embdder.model())?
+      UnindexedData::UnindexedText(text) => {
+        indexer.create_embedded_chunks_from_text(object_id.to_string(), text, embedder.model())?
       },
-      UnindexedData::UnindexedChunks(chunks) => chunks,
     };
 
-    let result = indexer.embed(embdder, chunks);
+    let result = indexer.embed(embedder, chunks);
     let duration = start_time.elapsed();
     metrics.record_generate_embedding_time(duration.as_millis());
-
     match result {
       Ok(Some(embeddings)) => Ok(Some((embeddings.tokens_consumed, embeddings.params))),
       Ok(None) => Ok(None),
@@ -513,25 +503,33 @@ fn process_collab(
   }
 }
 
-pub struct PendingUnindexedCollab {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UnindexedCollabTask {
   pub workspace_id: Uuid,
   pub object_id: String,
   pub collab_type: CollabType,
   pub data: UnindexedData,
+  pub created_at: i64,
 }
 
-pub enum UnindexedData {
-  UnindexedEncodeCollab(Bytes),
-  UnindexedChunks(Vec<AFCollabEmbeddedChunk>),
-}
-
-impl From<(Uuid, &CollabParams)> for PendingUnindexedCollab {
-  fn from((workspace_id, params): (Uuid, &CollabParams)) -> Self {
+impl UnindexedCollabTask {
+  pub fn new(
+    workspace_id: Uuid,
+    object_id: String,
+    collab_type: CollabType,
+    data: UnindexedData,
+  ) -> Self {
     Self {
       workspace_id,
-      object_id: params.object_id.clone(),
-      collab_type: params.collab_type.clone(),
-      data: UnindexedData::UnindexedEncodeCollab(params.encoded_collab_v1.clone()),
+      object_id,
+      collab_type,
+      data,
+      created_at: chrono::Utc::now().timestamp(),
     }
   }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum UnindexedData {
+  UnindexedText(String),
 }

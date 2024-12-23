@@ -1129,11 +1129,6 @@ impl CollabPersister {
     collab: &mut Collab,
     message_id: MessageId,
   ) -> Result<(), RealtimeError> {
-    if !collab.get_awareness().doc().skip_gc() {
-      return Err(RealtimeError::UnexpectedData(
-        "tried to save history for snapshot with GC turned on",
-      ));
-    }
     // try to acquire snapshot lease - it's possible that multiple web services will try to
     // perform snapshot at the same time, so we'll use lease to let only one of them atm.
     if let Some(mut lease) = self

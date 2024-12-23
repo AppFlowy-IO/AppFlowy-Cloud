@@ -321,11 +321,11 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!("Setting up Indexer scheduler...");
   let embedder_config = IndexerConfiguration {
-    enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+    enable: get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()
       .unwrap_or(true),
     openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
-    enable_background_indexing: appflowy_collaborate::config::get_env_var(
+    enable_background_indexing: get_env_var(
       "APPFLOWY_INDEXER_BACKGROUND_INDEXING_ENABLED",
       "false",
     )

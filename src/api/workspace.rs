@@ -724,9 +724,10 @@ async fn create_collab_handler(
   {
     let workspace_id_uuid =
       Uuid::parse_str(&workspace_id).map_err(|err| AppError::Internal(err.into()))?;
-    state
-      .indexer_scheduler
-      .index_pending_collab_one(PendingUnindexedCollab::from((workspace_id_uuid, &params)))?;
+    state.indexer_scheduler.index_pending_collab_one(
+      PendingUnindexedCollab::from((workspace_id_uuid, &params)),
+      true,
+    )?;
   }
 
   let mut transaction = state
@@ -841,22 +842,17 @@ async fn batch_create_collab_handler(
     start.elapsed()
   );
 
+  let mut indexed_collabs = vec![];
   if state
     .indexer_scheduler
     .can_index_workspace(&workspace_id)
     .await?
   {
-    let indexed_collabs: Vec<_> = collab_params_list
+    indexed_collabs = collab_params_list
       .iter()
       .filter(|p| state.indexer_scheduler.is_indexing_enabled(&p.collab_type))
       .map(|value| PendingUnindexedCollab::from((workspace_id_uuid, value)))
-      .collect();
-
-    if !indexed_collabs.is_empty() {
-      state
-        .indexer_scheduler
-        .index_pending_collabs(indexed_collabs)?;
-    }
+      .collect::<Vec<_>>();
   }
 
   let start = Instant::now();
@@ -871,6 +867,13 @@ async fn batch_create_collab_handler(
     start.elapsed(),
     total_size
   );
+
+  // Must after batch_insert_new_collab
+  if !indexed_collabs.is_empty() {
+    state
+      .indexer_scheduler
+      .index_pending_collabs(indexed_collabs, true)?;
+  }
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -1372,9 +1375,10 @@ async fn update_collab_handler(
   {
     let workspace_id_uuid =
       Uuid::parse_str(&workspace_id).map_err(|err| AppError::Internal(err.into()))?;
-    state
-      .indexer_scheduler
-      .index_pending_collab_one(PendingUnindexedCollab::from((workspace_id_uuid, &params)))?;
+    state.indexer_scheduler.index_pending_collab_one(
+      PendingUnindexedCollab::from((workspace_id_uuid, &params)),
+      false,
+    )?;
   }
 
   state

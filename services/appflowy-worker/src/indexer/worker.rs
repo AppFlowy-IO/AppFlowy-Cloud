@@ -13,7 +13,7 @@ use tracing::{error, info};
 pub async fn run_background_indexer(
   pg_pool: PgPool,
   mut redis_client: ConnectionManager,
-  metrics: Arc<EmbeddingMetrics>,
+  embed_metrics: Arc<EmbeddingMetrics>,
   tick_interval_secs: u64,
 ) {
   info!("Starting background indexer...");

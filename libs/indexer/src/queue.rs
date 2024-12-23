@@ -19,6 +19,8 @@ pub enum EmbedderTask {
   CollabId {
     object_id: String,
     collab_type: CollabType,
+    /// Timestamp that indicates when the task was created.
+    created_at: i64,
   },
 }
 
@@ -27,6 +29,7 @@ impl From<PendingUnindexedCollab> for EmbedderTask {
     EmbedderTask::CollabId {
       object_id: pending_collab.object_id,
       collab_type: pending_collab.collab_type,
+      created_at: chrono::Utc::now().timestamp(),
     }
   }
 }

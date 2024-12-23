@@ -136,7 +136,9 @@ where
       collab_type: self.collab_type.clone(),
       data: UnindexedData::UnindexedEncodeCollab(params.encoded_collab_v1.clone()),
     };
-    self.indexer_scheduler.index_pending_collab_one(pending)?;
+    self
+      .indexer_scheduler
+      .index_pending_collab_one(pending, true)?;
 
     self
       .storage

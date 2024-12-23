@@ -104,7 +104,7 @@ impl CollabGroup {
   pub async fn generate_embeddings(&self) {
     let result = self
       .indexer_scheduler
-      .index_collab(
+      .index_collab_immediately(
         &self.workspace_id,
         &self.object_id,
         &self.collab,

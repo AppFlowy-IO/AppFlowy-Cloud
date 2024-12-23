@@ -25,7 +25,7 @@ use collab_stream::error::StreamError;
 use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
 use database::collab::{CollabStorage, GetCollabOrigin};
-use database_entity::dto::{CollabParams, InsertSnapshotParams, QueryCollabParams};
+use database_entity::dto::{CollabParams, QueryCollabParams};
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -993,7 +993,7 @@ impl CollabPersister {
     tracing::trace!("requested to load compact collab {}", self.object_id);
     // 1. Try to load the latest snapshot from storage
     let start = Instant::now();
-    let mut collab = match self.load_collab_full(false).await? {
+    let mut collab = match self.load_collab_full().await? {
       Some(collab) => collab,
       None => Collab::new_with_origin(CollabOrigin::Server, self.object_id.clone(), vec![], false),
     };
@@ -1055,10 +1055,10 @@ impl CollabPersister {
       i += 1;
       let update: Update = update.into_update()?;
       if collab.is_none() {
-        collab = Some(match self.load_collab_full(true).await? {
+        collab = Some(match self.load_collab_full().await? {
           Some(collab) => collab,
           None => {
-            Collab::new_with_origin(CollabOrigin::Server, self.object_id.clone(), vec![], true)
+            Collab::new_with_origin(CollabOrigin::Server, self.object_id.clone(), vec![], false)
           },
         })
       };
@@ -1141,27 +1141,16 @@ impl CollabPersister {
       .lease(&self.workspace_id, &self.object_id)
       .await?
     {
-      // 1. Save full historic document state
-      let mut tx = collab.transact_mut();
-      let sv = tx.state_vector().encode_v1();
-      let doc_state_full = tx.encode_state_as_update_v1(&StateVector::default());
-      let full_len = doc_state_full.len();
-      self.write_doc_state_full(doc_state_full).await?;
-
-      // 2. Generate document state with GC turned on and save it.
-      tx.force_gc();
-      drop(tx);
       let doc_state_light = collab
         .transact()
         .encode_state_as_update_v1(&StateVector::default());
       let light_len = doc_state_light.len();
-      self.write_doc_state_light(sv, doc_state_light).await?;
+      self.write_collab(doc_state_light).await?;
 
       tracing::debug!(
-        "persisted collab {} snapshot at {}: {} and {} bytes",
+        "persisted collab {} snapshot at {}: {} bytes",
         self.object_id,
         message_id,
-        full_len,
         light_len
       );
 
@@ -1183,12 +1172,8 @@ impl CollabPersister {
     Ok(())
   }
 
-  async fn write_doc_state_light(
-    &self,
-    sv: Vec<u8>,
-    doc_state_light: Vec<u8>,
-  ) -> Result<(), RealtimeError> {
-    let encoded_collab = EncodedCollab::new_v1(sv, doc_state_light)
+  async fn write_collab(&self, doc_state_v1: Vec<u8>) -> Result<(), RealtimeError> {
+    let encoded_collab = EncodedCollab::new_v1(Default::default(), doc_state_v1)
       .encode_to_bytes()
       .map(Bytes::from)
       .map_err(|err| RealtimeError::BincodeEncode(err.to_string()))?;
@@ -1207,25 +1192,6 @@ impl CollabPersister {
       .await
       .map_err(|err| RealtimeError::Internal(err.into()))?;
     self.index_encoded_collab(encoded_collab);
-    Ok(())
-  }
-
-  async fn write_doc_state_full(&self, doc_state_full: Vec<u8>) -> Result<(), RealtimeError> {
-    self
-      .metrics
-      .full_collab_size
-      .observe(doc_state_full.len() as f64);
-    let params = InsertSnapshotParams {
-      object_id: self.object_id.clone(),
-      doc_state: doc_state_full.into(),
-      workspace_id: self.workspace_id.clone(),
-      collab_type: self.collab_type.clone(),
-    };
-    self
-      .storage
-      .create_snapshot(params)
-      .await
-      .map_err(|err| RealtimeError::CreateSnapshotFailed(err.to_string()))?;
     Ok(())
   }
 
@@ -1248,48 +1214,21 @@ impl CollabPersister {
     }
   }
 
-  async fn load_collab_full(&self, keep_history: bool) -> Result<Option<Collab>, RealtimeError> {
-    let doc_state = if keep_history {
-      // if we want history-keeping variant, we need to get a snapshot
-      let snapshot = self
-        .storage
-        .get_latest_snapshot(
-          &self.workspace_id,
-          &self.object_id,
-          self.collab_type.clone(),
-        )
-        .await
-        .map_err(|err| RealtimeError::GetLatestSnapshotFailed(err.to_string()))?;
-      match snapshot {
-        None => None,
-        Some(snapshot) => {
-          let encoded_collab = EncodedCollab::decode_from_bytes(&snapshot.encoded_collab_v1)
-            .map_err(|err| RealtimeError::BincodeEncode(err.to_string()))?;
-          Some(encoded_collab.doc_state)
-        },
-      }
-    } else {
-      None // if we want a lightweight variant, we'll fallback to default
-    };
-    let doc_state = match doc_state {
-      Some(doc_state) => doc_state,
-      None => {
-        // we didn't find a snapshot, or we want a lightweight collab version
-        let params = QueryCollabParams::new(
-          self.object_id.clone(),
-          self.collab_type.clone(),
-          self.workspace_id.clone(),
-        );
-        let result = self
-          .storage
-          .get_encode_collab(GetCollabOrigin::Server, params, false)
-          .await;
-        match result {
-          Ok(encoded_collab) => encoded_collab.doc_state,
-          Err(AppError::RecordNotFound(_)) => return Ok(None),
-          Err(err) => return Err(RealtimeError::Internal(err.into())),
-        }
-      },
+  async fn load_collab_full(&self) -> Result<Option<Collab>, RealtimeError> {
+    // we didn't find a snapshot, or we want a lightweight collab version
+    let params = QueryCollabParams::new(
+      self.object_id.clone(),
+      self.collab_type.clone(),
+      self.workspace_id.clone(),
+    );
+    let result = self
+      .storage
+      .get_encode_collab(GetCollabOrigin::Server, params, false)
+      .await;
+    let doc_state = match result {
+      Ok(encoded_collab) => encoded_collab.doc_state,
+      Err(AppError::RecordNotFound(_)) => return Ok(None),
+      Err(err) => return Err(RealtimeError::Internal(err.into())),
     };
 
     let collab: Collab = Collab::new_with_source(
@@ -1297,7 +1236,7 @@ impl CollabPersister {
       &self.object_id,
       DataSource::DocStateV1(doc_state.into()),
       vec![],
-      keep_history, // should we use history-remembering version (true) or lightweight one (false)?
+      false,
     )?;
     Ok(Some(collab))
   }

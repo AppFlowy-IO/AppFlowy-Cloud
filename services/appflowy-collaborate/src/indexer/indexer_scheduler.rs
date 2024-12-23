@@ -4,11 +4,9 @@ use crate::indexer::vector::embedder::Embedder;
 use crate::indexer::vector::open_ai;
 use crate::indexer::{Indexer, IndexerProvider};
 use crate::thread_pool_no_abort::{ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
-use actix::dev::Stream;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
-use async_stream::try_stream;
 use bytes::Bytes;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
@@ -20,10 +18,10 @@ use database::collab::{CollabStorage, GetCollabOrigin};
 use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
 use database_entity::dto::{AFCollabEmbeddedChunk, CollabParams};
+use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use rayon::prelude::*;
 use sqlx::PgPool;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -34,6 +32,7 @@ use uuid::Uuid;
 pub struct IndexerScheduler {
   indexer_provider: Arc<IndexerProvider>,
   pg_pool: PgPool,
+  #[allow(dead_code)]
   storage: Arc<dyn CollabStorage>,
   threads: Arc<ThreadPoolNoAbort>,
   #[allow(dead_code)]
@@ -108,7 +107,7 @@ impl IndexerScheduler {
         this.pg_pool.clone(),
         this.metrics.clone(),
       ));
-      tokio::spawn(handle_unindexed_collabs(this.clone()));
+      // tokio::spawn(handle_unindexed_collabs(this.clone()));
     }
 
     this
@@ -395,12 +394,13 @@ fn should_embed(
   should_embed
 }
 
+#[allow(dead_code)]
 async fn handle_unindexed_collabs(scheduler: Arc<IndexerScheduler>) {
   // wait for 30 seconds before starting indexing
   tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
 
   let mut i = 0;
-  let mut stream = get_unindexed_collabs(&scheduler.pg_pool, scheduler.storage.clone());
+  let mut stream = get_unindexed_collabs(&scheduler.pg_pool, scheduler.storage.clone()).await;
   let record_tx = scheduler.schedule_tx.clone();
   let start = Instant::now();
   while let Some(result) = stream.next().await {
@@ -439,41 +439,46 @@ async fn handle_unindexed_collabs(scheduler: Arc<IndexerScheduler>) {
   )
 }
 
-fn get_unindexed_collabs(
+pub async fn get_unindexed_collabs(
   pg_pool: &PgPool,
   storage: Arc<dyn CollabStorage>,
-) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab, anyhow::Error>> + Send>> {
-  let db = pg_pool.clone();
-  Box::pin(try_stream! {
-    let collabs = get_collabs_without_embeddings(&db).await?;
-    if !collabs.is_empty() {
-      info!("found {} unindexed collabs", collabs.len());
-    }
-    for cid in collabs {
-      match &cid.collab_type {
-        CollabType::Document => {
-          let collab = storage
-            .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
-            .await?;
+) -> BoxStream<Result<UnindexedCollab, anyhow::Error>> {
+  let cloned_storage = storage.clone();
+  get_collabs_without_embeddings(pg_pool)
+    .map(move |result| {
+      let storage = cloned_storage.clone();
+      async move {
+        match result {
+          Ok(cid) => match cid.collab_type {
+            CollabType::Document => {
+              let collab = storage
+                .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
+                .await?;
 
-          yield UnindexedCollab {
-            workspace_id: cid.workspace_id,
-            object_id: cid.object_id,
-            collab_type: cid.collab_type,
-            collab,
-          };
-        },
-        CollabType::Database
-        | CollabType::WorkspaceDatabase
-        | CollabType::Folder
-        | CollabType::DatabaseRow
-        | CollabType::UserAwareness
-        | CollabType::Unknown => { /* atm. only document types are supported */ },
+              Ok(Some(UnindexedCollab {
+                workspace_id: cid.workspace_id,
+                object_id: cid.object_id,
+                collab_type: cid.collab_type,
+                collab,
+              }))
+            },
+            _ => Ok::<_, anyhow::Error>(None),
+          },
+          Err(e) => Err(e.into()),
+        }
       }
-    }
-  })
+    })
+    .filter_map(|future| async {
+      match future.await {
+        Ok(Some(unindexed_collab)) => Some(Ok(unindexed_collab)),
+        Ok(None) => None,
+        Err(e) => Some(Err(e)),
+      }
+    })
+    .boxed()
 }
 
+#[allow(dead_code)]
 async fn index_unindexd_collab(
   embedder: Embedder,
   indexer_provider: &Arc<IndexerProvider>,

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n  select c.workspace_id, c.oid, c.partition_key\n  from af_collab c\n  join af_workspace w on c.workspace_id = w.workspace_id\n  where not coalesce(w.settings['disable_search_indexding']::boolean, false)\n    and not exists (\n    select 1\n    from af_collab_embeddings em\n    where em.oid = c.oid and em.partition_key = 0)",
+  "query": "\n      select c.workspace_id, c.oid, c.partition_key\n      from af_collab c\n      join af_workspace w on c.workspace_id = w.workspace_id\n      where not coalesce(w.settings['disable_search_indexding']::boolean, false)\n        and not exists (\n          select 1 from af_collab_embeddings em\n          where em.oid = c.oid and em.partition_key = 0\n        )\n    ",
   "describe": {
     "columns": [
       {
@@ -28,5 +28,5 @@
       false
     ]
   },
-  "hash": "26f293af01281f6f4a99fd69d3a4acc1a556dd3628873fa3ce3e8eaa18ccda1b"
+  "hash": "ad216288cbbe83aba35b5d04705ee5964f1da4f3839c4725a6784c13f2245379"
 }

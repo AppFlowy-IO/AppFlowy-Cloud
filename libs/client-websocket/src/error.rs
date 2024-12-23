@@ -1,6 +1,7 @@
 use http::{header::HeaderName, Response};
 use std::{io, result, str, string};
 use thiserror::Error;
+use tokio_tungstenite::tungstenite::http;
 
 /// These error types are copy-pasted from the tokio_tungstenite crate.
 pub type Result<T, E = Error> = result::Result<T, E>;

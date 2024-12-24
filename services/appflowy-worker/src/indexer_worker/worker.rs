@@ -3,6 +3,7 @@ use collab_entity::CollabType;
 use database::index::get_collabs_indexed_at;
 use indexer::collab_indexer::{Indexer, IndexerProvider};
 use indexer::entity::EmbeddingRecord;
+use indexer::error::IndexerError;
 use indexer::metrics::EmbeddingMetrics;
 use indexer::queue::{
   ack_task, default_indexer_group_option, ensure_indexer_consumer_group,
@@ -76,6 +77,7 @@ pub async fn run_background_indexer(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_upcoming_tasks(
   pg_pool: PgPool,
   redis_client: &mut ConnectionManager,
@@ -104,90 +106,100 @@ async fn process_upcoming_tasks(
       }
     }
 
-    if let Ok(replay) = read_background_embed_tasks(redis_client, &options).await {
-      let all_keys: Vec<String> = replay
-        .keys
-        .iter()
-        .flat_map(|key| key.ids.iter().map(|stream_id| stream_id.id.clone()))
-        .collect();
-
-      for key in replay.keys {
-        info!(
-          "[Background Embedding] processing {} embedding tasks",
-          key.ids.len()
-        );
-
-        let mut tasks: Vec<UnindexedCollabTask> = key
-          .ids
-          .into_iter()
-          .filter_map(|stream_id| UnindexedCollabTask::try_from(&stream_id).ok())
-          .collect();
-
-        let collab_ids: Vec<(String, CollabType)> = tasks
+    match read_background_embed_tasks(redis_client, &options).await {
+      Ok(replay) => {
+        let all_keys: Vec<String> = replay
+          .keys
           .iter()
-          .map(|task| (task.object_id.clone(), task.collab_type.clone()))
+          .flat_map(|key| key.ids.iter().map(|stream_id| stream_id.id.clone()))
           .collect();
 
-        let indexed_collabs = get_collabs_indexed_at(&pg_pool, collab_ids)
-          .await
-          .unwrap_or_default();
+        for key in replay.keys {
+          info!(
+            "[Background Embedding] processing {} embedding tasks",
+            key.ids.len()
+          );
 
-        let all_tasks_len = tasks.len();
-        if !indexed_collabs.is_empty() {
-          // Filter out tasks where `created_at` is less than `indexed_at`
-          tasks = tasks
+          let mut tasks: Vec<UnindexedCollabTask> = key
+            .ids
             .into_iter()
-            .filter(|task| {
+            .filter_map(|stream_id| UnindexedCollabTask::try_from(&stream_id).ok())
+            .collect();
+
+          let collab_ids: Vec<(String, CollabType)> = tasks
+            .iter()
+            .map(|task| (task.object_id.clone(), task.collab_type.clone()))
+            .collect();
+
+          let indexed_collabs = get_collabs_indexed_at(&pg_pool, collab_ids)
+            .await
+            .unwrap_or_default();
+
+          let all_tasks_len = tasks.len();
+          if !indexed_collabs.is_empty() {
+            // Filter out tasks where `created_at` is less than `indexed_at`
+            tasks.retain(|task| {
               indexed_collabs
                 .get(&task.object_id)
                 .map_or(true, |indexed_at| task.created_at > indexed_at.timestamp())
-            })
-            .collect();
-        }
+            });
+          }
 
-        if all_tasks_len != tasks.len() {
-          info!("[Background Embedding] filter out {} tasks where `created_at` is less than `indexed_at`", all_tasks_len - tasks.len());
-        }
+          if all_tasks_len != tasks.len() {
+            info!("[Background Embedding] filter out {} tasks where `created_at` is less than `indexed_at`", all_tasks_len - tasks.len());
+          }
 
-        tasks.into_par_iter().for_each(|task| {
-          let result = threads.install(|| {
-            if let Some(indexer) = indexer_provider.indexer_for(&task.collab_type) {
-              let start = Instant::now();
-              let embedder = create_embedder(&config);
-              let result = handle_task(embedder, indexer, task);
-              let cost = start.elapsed().as_millis();
-              metrics.record_write_embedding_time(cost);
-              if let Some(record) = result {
-                trace!(
-                  "[Background Embedding] send {} embedding record to write task",
-                  record.object_id
-                );
-                if let Err(err) = sender.send(record) {
+          tasks.into_par_iter().for_each(|task| {
+            let result = threads.install(|| {
+              if let Some(indexer) = indexer_provider.indexer_for(&task.collab_type) {
+                let start = Instant::now();
+                let embedder = create_embedder(&config);
+                let result = handle_task(embedder, indexer, task);
+                let cost = start.elapsed().as_millis();
+                metrics.record_write_embedding_time(cost);
+                if let Some(record) = result {
                   trace!(
-                    "[Background Embedding] failed to send embedding record to write task: {:?}",
-                    err
+                    "[Background Embedding] send {} embedding record to write task",
+                    record.object_id
                   );
+                  if let Err(err) = sender.send(record) {
+                    trace!(
+                      "[Background Embedding] failed to send embedding record to write task: {:?}",
+                      err
+                    );
+                  }
                 }
               }
+            });
+            if let Err(err) = result {
+              error!(
+                "[Background Embedding] Failed to process embedder task: {:?}",
+                err
+              );
             }
           });
-          if let Err(err) = result {
+        }
+
+        if !all_keys.is_empty() {
+          match ack_task(redis_client, all_keys, true).await {
+            Ok(_) => trace!("[Background embedding]: delete tasks from stream"),
+            Err(err) => {
+              error!("[Background Embedding] Failed to ack tasks: {:?}", err);
+            },
+          }
+        }
+      },
+      Err(err) => {
+        error!("[Background Embedding] Failed to read tasks: {:?}", err);
+        if matches!(err, IndexerError::StreamGroupNotExist(_)) {
+          if let Err(err) = ensure_indexer_consumer_group(redis_client).await {
             error!(
-              "[Background Embedding] Failed to process embedder task: {:?}",
+              "[Background Embedding] Failed to ensure indexer consumer group: {:?}",
               err
             );
           }
-        });
-      }
-
-      if !all_keys.is_empty() {
-        match ack_task(redis_client, all_keys, true).await {
-          Ok(_) => trace!("[Background embedding]: delete tasks from stream"),
-          Err(err) => {
-            error!("[Background Embedding] Failed to ack tasks: {:?}", err);
-          },
         }
-      }
+      },
     }
   }
 }

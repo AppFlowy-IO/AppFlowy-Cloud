@@ -131,7 +131,7 @@ async fn different_group_read_message_test() {
   let group_2_messages = result2.unwrap();
 
   // consumer1 already acked the message before. so it should not be available
-  assert!(group_1_messages[0].data.is_empty());
+  assert!(group_1_messages.is_empty());
   assert_eq!(group_2_messages[0].data, vec![1, 2, 3, 4, 5]);
 }
 

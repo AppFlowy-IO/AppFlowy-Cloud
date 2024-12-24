@@ -428,9 +428,11 @@ pub async fn spawn_pg_write_embeddings(
       ))
     });
 
-    metrics.record_write_embedding_time(start.elapsed().as_millis());
     match result {
-      Ok(_) => trace!("[Embedding] save {} embeddings to disk", n),
+      Ok(_) => {
+        trace!("[Embedding] save {} embeddings to disk", n);
+        metrics.record_write_embedding_time(start.elapsed().as_millis());
+      },
       Err(err) => {
         error!("Failed to write collab embedding to disk:{}", err);
         latest_write_embedding_error.write().await.replace(err);

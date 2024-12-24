@@ -1,5 +1,4 @@
 use app_error::AppError;
-use appflowy_collaborate::config::get_env_var;
 use collab_entity::CollabType;
 use database::index::get_collabs_indexed_at;
 use indexer::collab_indexer::{Indexer, IndexerProvider};
@@ -109,7 +108,7 @@ async fn process_upcoming_tasks(
         info!(
           "[Background Embedding] last write embedding task failed with timeout, waiting for 30s before retrying..."
         );
-        tokio::time::sleep(Duration::from_secs(30)).await;
+        tokio::time::sleep(Duration::from_secs(15)).await;
       }
     }
 
@@ -132,6 +131,7 @@ async fn process_upcoming_tasks(
             .into_iter()
             .filter_map(|stream_id| UnindexedCollabTask::try_from(&stream_id).ok())
             .collect();
+          tasks.retain(|task| !task.data.is_empty());
 
           let collab_ids: Vec<(String, CollabType)> = tasks
             .iter()
@@ -156,25 +156,28 @@ async fn process_upcoming_tasks(
             info!("[Background Embedding] filter out {} tasks where `created_at` is less than `indexed_at`", all_tasks_len - tasks.len());
           }
 
+          let start = Instant::now();
+          let num_tasks = tasks.len();
           tasks.into_par_iter().for_each(|task| {
             let result = threads.install(|| {
               if let Some(indexer) = indexer_provider.indexer_for(&task.collab_type) {
-                let start = Instant::now();
                 let embedder = create_embedder(&config);
                 let result = handle_task(embedder, indexer, task);
-                let cost = start.elapsed().as_millis();
-                metrics.record_write_embedding_time(cost);
-                if let Some(record) = result {
-                  trace!(
-                    "[Background Embedding] send {} embedding record to write task",
-                    record.object_id
-                  );
-                  if let Err(err) = sender.send(record) {
+                match result {
+                  None => metrics.record_failed_embed_count(1),
+                  Some(record) => {
+                    metrics.record_embed_count(1);
                     trace!(
+                      "[Background Embedding] send {} embedding record to write task",
+                      record.object_id
+                    );
+                    if let Err(err) = sender.send(record) {
+                      trace!(
                       "[Background Embedding] failed to send embedding record to write task: {:?}",
                       err
                     );
-                  }
+                    }
+                  },
                 }
               }
             });
@@ -185,6 +188,8 @@ async fn process_upcoming_tasks(
               );
             }
           });
+          let cost = start.elapsed().as_millis();
+          metrics.record_gen_embedding_time(num_tasks as u32, cost);
         }
 
         if !all_keys.is_empty() {

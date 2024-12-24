@@ -162,16 +162,16 @@ impl IndexerScheduler {
     Ok(embeddings)
   }
 
-  pub fn embed_in_background(&self, pending_collab: UnindexedCollabTask) -> Result<(), AppError> {
+  pub fn embed_in_background(
+    &self,
+    pending_collabs: Vec<UnindexedCollabTask>,
+  ) -> Result<(), AppError> {
     if !self.index_enabled() {
       return Ok(());
     }
 
     let redis_client = self.redis_client.clone();
-    tokio::spawn(add_background_embed_task(
-      redis_client,
-      vec![pending_collab],
-    ));
+    tokio::spawn(add_background_embed_task(redis_client, pending_collabs));
     Ok(())
   }
 
@@ -183,7 +183,8 @@ impl IndexerScheduler {
       match err {
         TrySendError::Full(pending) => {
           warn!("[Embedding] Embedding queue is full, embedding in background");
-          self.embed_in_background(pending)?;
+          self.embed_in_background(vec![pending])?;
+          self.metrics.record_failed_embed_count(1);
         },
         TrySendError::Closed(_) => {
           error!("Failed to send embedding record: channel closed");
@@ -211,13 +212,14 @@ impl IndexerScheduler {
     }
 
     if background {
-      let _ = self.embed_in_background(pending_collab);
+      let _ = self.embed_in_background(vec![pending_collab]);
     } else {
       let _ = self.embed_immediately(pending_collab);
     }
     Ok(())
   }
 
+  /// Index all pending collabs in the background
   pub fn index_pending_collabs(
     &self,
     mut pending_collabs: Vec<UnindexedCollabTask>,
@@ -231,10 +233,8 @@ impl IndexerScheduler {
       return Ok(());
     }
 
-    info!("indexing {} collabs", pending_collabs.len());
-    for pending_collab in pending_collabs {
-      let _ = self.embed_immediately(pending_collab);
-    }
+    info!("indexing {} collabs in background", pending_collabs.len());
+    let _ = self.embed_in_background(pending_collabs);
 
     Ok(())
   }
@@ -492,7 +492,6 @@ fn process_collab(
   if let Some(indexer) = indexer {
     metrics.record_embed_count(1);
 
-    let start_time = Instant::now();
     let chunks = match data {
       UnindexedData::UnindexedText(text) => {
         indexer.create_embedded_chunks_from_text(object_id.to_string(), text, embedder.model())?
@@ -500,8 +499,6 @@ fn process_collab(
     };
 
     let result = indexer.embed(embedder, chunks);
-    let duration = start_time.elapsed();
-    metrics.record_generate_embedding_time(duration.as_millis());
     match result {
       Ok(Some(embeddings)) => Ok(Some((embeddings.tokens_consumed, embeddings.params))),
       Ok(None) => Ok(None),
@@ -544,4 +541,12 @@ impl UnindexedCollabTask {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum UnindexedData {
   UnindexedText(String),
+}
+
+impl UnindexedData {
+  pub fn is_empty(&self) -> bool {
+    match self {
+      UnindexedData::UnindexedText(text) => text.is_empty(),
+    }
+  }
 }

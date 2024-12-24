@@ -648,6 +648,7 @@ dependencies = [
  "hex",
  "http 0.2.12",
  "image",
+ "indexer",
  "infra",
  "itertools 0.11.0",
  "lazy_static",
@@ -736,6 +737,7 @@ dependencies = [
  "futures",
  "futures-util",
  "governor",
+ "indexer",
  "indexmap 2.3.0",
  "itertools 0.12.1",
  "lazy_static",
@@ -775,6 +777,8 @@ name = "appflowy-worker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "app-error",
+ "appflowy-collaborate",
  "async_zip",
  "aws-config",
  "aws-sdk-s3",
@@ -790,11 +794,13 @@ dependencies = [
  "database-entity",
  "dotenvy",
  "futures",
+ "indexer",
  "infra",
  "mailer",
  "md5",
  "mime_guess",
  "prometheus-client",
+ "rayon",
  "redis 0.25.4",
  "reqwest",
  "secrecy",
@@ -2849,9 +2855,9 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "6.0.1"
+version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
 dependencies = [
  "cfg-if",
  "crossbeam-utils",
@@ -4194,6 +4200,42 @@ name = "impl-more"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "206ca75c9c03ba3d4ace2460e57b189f39f43de612c2f85836e65c929701bb2d"
+
+[[package]]
+name = "indexer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "app-error",
+ "appflowy-ai-client",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "collab",
+ "collab-document",
+ "collab-entity",
+ "collab-folder",
+ "collab-stream",
+ "dashmap 6.1.0",
+ "database",
+ "database-entity",
+ "futures-util",
+ "infra",
+ "prometheus-client",
+ "rayon",
+ "redis 0.25.4",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.63",
+ "tiktoken-rs",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "unicode-segmentation",
+ "ureq",
+ "uuid",
+]
 
 [[package]]
 name = "indexmap"
@@ -7293,11 +7335,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.8"
+version = "2.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08f5383f3e0071702bf93ab5ee99b52d26936be9dedd9413067cbdcddcb6141a"
+checksum = "f072643fd0190df67a8bab670c20ef5d8737177d6ac6b2e9a236cb096206b2cc"
 dependencies = [
- "thiserror-impl 2.0.8",
+ "thiserror-impl 2.0.9",
 ]
 
 [[package]]
@@ -7313,9 +7355,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.8"
+version = "2.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2f357fcec90b3caef6623a099691be676d033b40a058ac95d2a6ade6fa0c943"
+checksum = "7b50fa271071aae2e6ee85f842e2e28ba8cd2c5fb67f11fcb1fd70b276f9e7d4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7882,7 +7924,7 @@ dependencies = [
  "native-tls",
  "rand 0.8.5",
  "sha1",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "utf-8",
 ]
 
@@ -7942,9 +7984,9 @@ checksum = "e4259d9d4425d9f0661581b804cb85fe66a4c631cadd8f490d1c13a35d5d9291"
 
 [[package]]
 name = "unicode-segmentation"
-version = "1.11.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4c87d22b6e3f4a18d4d40ef354e97c90fcb14dd91d7dc0aa9d8a1172ebf7202"
+checksum = "f6ccf251212114b54433ec949fd6a7841275f9ada20dddd2f29e9ceea4501493"
 
 [[package]]
 name = "unicode-width"
@@ -8678,7 +8720,7 @@ dependencies = [
  "arc-swap",
  "async-lock",
  "async-trait",
- "dashmap 6.0.1",
+ "dashmap 6.1.0",
  "fastrand",
  "serde",
  "serde_json",

@@ -40,10 +40,11 @@ use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
-use appflowy_collaborate::indexer::{IndexerConfiguration, IndexerProvider, IndexerScheduler};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
+use indexer::collab_indexer::IndexerProvider;
+use indexer::scheduler::{IndexerConfiguration, IndexerScheduler};
 use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
 use snowflake::Snowflake;
@@ -320,10 +321,16 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!("Setting up Indexer scheduler...");
   let embedder_config = IndexerConfiguration {
-    enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+    enable: get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()
       .unwrap_or(true),
     openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+    embedding_buffer_size: appflowy_collaborate::config::get_env_var(
+      "APPFLOWY_INDEXER_EMBEDDING_BUFFER_SIZE",
+      "5000",
+    )
+    .parse::<usize>()
+    .unwrap_or(5000),
   };
   let indexer_scheduler = IndexerScheduler::new(
     IndexerProvider::new(),
@@ -331,6 +338,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_access_control_storage.clone(),
     metrics.embedding_metrics.clone(),
     embedder_config,
+    redis_conn_manager.clone(),
   );
 
   info!("Application state initialized");

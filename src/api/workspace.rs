@@ -1,5 +1,5 @@
 use crate::api::util::{client_version_from_headers, realtime_user_for_web_request, PayloadReader};
-use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
+use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
 use crate::biz::collab::ops::{
@@ -32,23 +32,28 @@ use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
-use appflowy_collaborate::indexer::IndexedCollab;
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
+use collab::core::collab::DataSource;
+use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
+use collab::preclude::Collab;
 use collab_database::entity::FieldType;
+use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::timestamp;
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::RealtimeMessage;
-use collab_rt_protocol::validate_encode_collab;
+use collab_rt_protocol::collab_from_encode_collab;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::user::select_uid_from_email;
 use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
 use database_entity::dto::*;
+use indexer::scheduler::{UnindexedCollabTask, UnindexedData};
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -63,6 +68,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, event, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
+
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
@@ -706,7 +712,16 @@ async fn create_collab_handler(
     );
   }
 
-  if let Err(err) = params.check_encode_collab().await {
+  let collab = collab_from_encode_collab(&params.object_id, &params.encoded_collab_v1)
+    .await
+    .map_err(|err| {
+      AppError::NoRequiredData(format!(
+        "Failed to create collab from encoded collab: {}",
+        err
+      ))
+    })?;
+
+  if let Err(err) = params.collab_type.validate_require_data(&collab) {
     return Err(
       AppError::NoRequiredData(format!(
         "collab doc state is not correct:{},{}",
@@ -721,9 +736,19 @@ async fn create_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
-    state
-      .indexer_scheduler
-      .index_encoded_collab_one(&workspace_id, IndexedCollab::from(&params))?;
+    if let Ok(text) = Document::open(collab).and_then(|doc| doc.to_plain_text(false, true)) {
+      let workspace_id_uuid =
+        Uuid::parse_str(&workspace_id).map_err(|err| AppError::Internal(err.into()))?;
+      let pending = UnindexedCollabTask::new(
+        workspace_id_uuid,
+        params.object_id.clone(),
+        params.collab_type.clone(),
+        UnindexedData::UnindexedText(text),
+      );
+      state
+        .indexer_scheduler
+        .index_pending_collab_one(pending, false)?;
+    }
   }
 
   let mut transaction = state
@@ -759,7 +784,8 @@ async fn batch_create_collab_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let workspace_id = workspace_id.into_inner().to_string();
+  let workspace_id_uuid = workspace_id.into_inner();
+  let workspace_id = workspace_id_uuid.to_string();
   let compress_type = compress_type_from_header_value(req.headers())?;
   event!(tracing::Level::DEBUG, "start decompressing collab list");
 
@@ -791,7 +817,7 @@ async fn batch_create_collab_handler(
     }
   }
   // Perform decompression and processing in a Rayon thread pool
-  let collab_params_list = tokio::task::spawn_blocking(move || match compress_type {
+  let mut collab_params_list = tokio::task::spawn_blocking(move || match compress_type {
     CompressionType::Brotli { buffer_size } => offset_len_list
       .into_par_iter()
       .filter_map(|(offset, len)| {
@@ -800,12 +826,31 @@ async fn batch_create_collab_handler(
           Ok(decompressed_data) => {
             let params = CollabParams::from_bytes(&decompressed_data).ok()?;
             if params.validate().is_ok() {
-              match validate_encode_collab(
+              let encoded_collab =
+                EncodedCollab::decode_from_bytes(&params.encoded_collab_v1).ok()?;
+              let collab = Collab::new_with_source(
+                CollabOrigin::Empty,
                 &params.object_id,
-                &params.encoded_collab_v1,
-                &params.collab_type,
-              ) {
-                Ok(_) => Some(params),
+                DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
+                vec![],
+                false,
+              )
+              .ok()?;
+
+              match params.collab_type.validate_require_data(&collab) {
+                Ok(_) => {
+                  match params.collab_type {
+                    CollabType::Document => {
+                      let index_text =
+                        Document::open(collab).and_then(|doc| doc.to_plain_text(false, true));
+                      Some((Some(index_text), params))
+                    },
+                    _ => {
+                      // TODO(nathan): support other types
+                      Some((None, params))
+                    },
+                  }
+                },
                 Err(_) => None,
               }
             } else {
@@ -829,7 +874,7 @@ async fn batch_create_collab_handler(
 
   let total_size = collab_params_list
     .iter()
-    .fold(0, |acc, x| acc + x.encoded_collab_v1.len());
+    .fold(0, |acc, x| acc + x.1.encoded_collab_v1.len());
   event!(
     tracing::Level::INFO,
     "decompressed {} collab objects in {:?}",
@@ -837,23 +882,39 @@ async fn batch_create_collab_handler(
     start.elapsed()
   );
 
-  // if state
-  //   .indexer_scheduler
-  //   .can_index_workspace(&workspace_id)
-  //   .await?
-  // {
-  //   let indexed_collabs: Vec<_> = collab_params_list
-  //     .iter()
-  //     .filter(|p| state.indexer_scheduler.is_indexing_enabled(&p.collab_type))
-  //     .map(IndexedCollab::from)
-  //     .collect();
-  //
-  //   if !indexed_collabs.is_empty() {
-  //     state
-  //       .indexer_scheduler
-  //       .index_encoded_collabs(&workspace_id, indexed_collabs)?;
-  //   }
-  // }
+  let mut pending_undexed_collabs = vec![];
+  if state
+    .indexer_scheduler
+    .can_index_workspace(&workspace_id)
+    .await?
+  {
+    pending_undexed_collabs = collab_params_list
+      .iter_mut()
+      .filter(|p| {
+        state
+          .indexer_scheduler
+          .is_indexing_enabled(&p.1.collab_type)
+      })
+      .flat_map(|value| match std::mem::take(&mut value.0) {
+        None => None,
+        Some(text) => text
+          .map(|text| {
+            UnindexedCollabTask::new(
+              workspace_id_uuid,
+              value.1.object_id.clone(),
+              value.1.collab_type.clone(),
+              UnindexedData::UnindexedText(text),
+            )
+          })
+          .ok(),
+      })
+      .collect::<Vec<_>>();
+  }
+
+  let collab_params_list = collab_params_list
+    .into_iter()
+    .map(|(_, params)| params)
+    .collect::<Vec<_>>();
 
   let start = Instant::now();
   state
@@ -867,6 +928,13 @@ async fn batch_create_collab_handler(
     start.elapsed(),
     total_size
   );
+
+  // Must after batch_insert_new_collab
+  if !pending_undexed_collabs.is_empty() {
+    state
+      .indexer_scheduler
+      .index_pending_collabs(pending_undexed_collabs)?;
+  }
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -1366,9 +1434,45 @@ async fn update_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
-    state
-      .indexer_scheduler
-      .index_encoded_collab_one(&workspace_id, IndexedCollab::from(&params))?;
+    let workspace_id_uuid =
+      Uuid::parse_str(&workspace_id).map_err(|err| AppError::Internal(err.into()))?;
+
+    match params.collab_type {
+      CollabType::Document => {
+        let collab = collab_from_encode_collab(&params.object_id, &params.encoded_collab_v1)
+          .await
+          .map_err(|err| {
+            AppError::InvalidRequest(format!(
+              "Failed to create collab from encoded collab: {}",
+              err
+            ))
+          })?;
+        params
+          .collab_type
+          .validate_require_data(&collab)
+          .map_err(|err| {
+            AppError::NoRequiredData(format!(
+              "collab doc state is not correct:{},{}",
+              params.object_id, err
+            ))
+          })?;
+
+        if let Ok(text) = Document::open(collab).and_then(|doc| doc.to_plain_text(false, true)) {
+          let pending = UnindexedCollabTask::new(
+            workspace_id_uuid,
+            params.object_id.clone(),
+            params.collab_type.clone(),
+            UnindexedData::UnindexedText(text),
+          );
+          state
+            .indexer_scheduler
+            .index_pending_collab_one(pending, false)?;
+        }
+      },
+      _ => {
+        // TODO(nathan): support other collab type
+      },
+    }
   }
 
   state

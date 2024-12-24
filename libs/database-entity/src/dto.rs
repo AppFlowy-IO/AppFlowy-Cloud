@@ -742,7 +742,6 @@ impl From<i16> for AFWorkspaceInvitationStatus {
 pub struct AFCollabEmbeddedChunk {
   pub fragment_id: String,
   pub object_id: String,
-  pub collab_type: CollabType,
   pub content_type: EmbeddingContentType,
   pub content: String,
   pub embedding: Option<Vec<f32>>,

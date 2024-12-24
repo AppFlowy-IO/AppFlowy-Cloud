@@ -1,4 +1,5 @@
 use app_error::AppError;
+use appflowy_collaborate::config::get_env_var;
 use collab_entity::CollabType;
 use database::index::get_collabs_indexed_at;
 use indexer::collab_indexer::{Indexer, IndexerProvider};
@@ -25,6 +26,7 @@ use tracing::{error, info, trace};
 
 #[derive(Debug)]
 pub struct BackgroundIndexerConfig {
+  pub enable: bool,
   pub open_api_key: String,
   pub tick_interval_secs: u64,
 }
@@ -36,6 +38,11 @@ pub async fn run_background_indexer(
   threads: Arc<ThreadPoolNoAbort>,
   config: BackgroundIndexerConfig,
 ) {
+  if !config.enable {
+    info!("Background indexer is disabled. Stop background indexer");
+    return;
+  }
+
   if config.open_api_key.is_empty() {
     error!("OpenAI API key is not set. Stop background indexer");
     return;

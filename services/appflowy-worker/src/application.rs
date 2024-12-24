@@ -141,6 +141,9 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     state.metrics.embedder_metrics.clone(),
     threads.clone(),
     BackgroundIndexerConfig {
+      enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+        .parse::<bool>()
+        .unwrap_or(true),
       open_api_key: appflowy_collaborate::config::get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
       tick_interval_secs: 10,
     },

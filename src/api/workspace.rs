@@ -715,7 +715,7 @@ async fn create_collab_handler(
   let collab = collab_from_encode_collab(&params.object_id, &params.encoded_collab_v1)
     .await
     .map_err(|err| {
-      AppError::InvalidRequest(format!(
+      AppError::NoRequiredData(format!(
         "Failed to create collab from encoded collab: {}",
         err
       ))

@@ -1,4 +1,6 @@
 use app_error::AppError;
+use collab_entity::CollabType;
+use database::index::get_collabs_indexed_at;
 use indexer::collab_indexer::{Indexer, IndexerProvider};
 use indexer::entity::EmbeddingRecord;
 use indexer::metrics::EmbeddingMetrics;
@@ -15,6 +17,7 @@ use redis::aio::ConnectionManager;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::sync::RwLock;
 use tokio::time::{interval, MissedTickBehavior};
@@ -48,12 +51,13 @@ pub async fn run_background_indexer(
   let (write_embedding_tx, write_embedding_rx) = unbounded_channel::<EmbeddingRecord>();
   let write_embedding_task_fut = spawn_pg_write_embeddings(
     write_embedding_rx,
-    pg_pool,
+    pg_pool.clone(),
     embed_metrics.clone(),
     latest_write_embedding_err.clone(),
   );
 
   let process_tasks_task_fut = process_upcoming_tasks(
+    pg_pool,
     &mut redis_client,
     embed_metrics,
     indexer_provider,
@@ -74,6 +78,7 @@ pub async fn run_background_indexer(
 }
 
 async fn process_upcoming_tasks(
+  pg_pool: PgPool,
   redis_client: &mut ConnectionManager,
   metrics: Arc<EmbeddingMetrics>,
   indexer_provider: Arc<IndexerProvider>,
@@ -108,27 +113,64 @@ async fn process_upcoming_tasks(
         .collect();
 
       for key in replay.keys {
-        info!("[Background Embedding] processing {} tasks", key.ids.len());
-        key.ids.into_par_iter().for_each(|stream_id| {
-          let result = threads.install(|| match UnindexedCollabTask::try_from(&stream_id) {
-            Ok(task) => {
-              if let Some(indexer) = indexer_provider.indexer_for(&task.collab_type) {
-                let start = Instant::now();
-                let embedder = create_embedder(&config);
-                let result = handle_task(embedder, indexer, task);
-                let cost = start.elapsed().as_millis();
-                metrics.record_write_embedding_time(cost);
-                if let Some(record) = result {
-                  let _ = sender.send(record);
+        info!(
+          "[Background Embedding] processing {} embedding tasks",
+          key.ids.len()
+        );
+
+        let mut tasks: Vec<UnindexedCollabTask> = key
+          .ids
+          .into_iter()
+          .filter_map(|stream_id| UnindexedCollabTask::try_from(&stream_id).ok())
+          .collect();
+
+        let collab_ids: Vec<(String, CollabType)> = tasks
+          .iter()
+          .map(|task| (task.object_id.clone(), task.collab_type.clone()))
+          .collect();
+
+        let indexed_collabs = get_collabs_indexed_at(&pg_pool, collab_ids)
+          .await
+          .unwrap_or_default();
+
+        let all_tasks_len = tasks.len();
+        if !indexed_collabs.is_empty() {
+          // Filter out tasks where `created_at` is less than `indexed_at`
+          tasks = tasks
+            .into_iter()
+            .filter(|task| {
+              indexed_collabs
+                .get(&task.object_id)
+                .map_or(true, |indexed_at| task.created_at > *indexed_at.timestamp())
+            })
+            .collect();
+        }
+
+        if all_tasks_len != tasks.len() {
+          info!("[Background Embedding] filter out {} tasks where `created_at` is less than `indexed_at`", all_tasks_len - tasks.len());
+        }
+
+        tasks.into_par_iter().for_each(|task| {
+          let result = threads.install(|| {
+            if let Some(indexer) = indexer_provider.indexer_for(&task.collab_type) {
+              let start = Instant::now();
+              let embedder = create_embedder(&config);
+              let result = handle_task(embedder, indexer, task);
+              let cost = start.elapsed().as_millis();
+              metrics.record_write_embedding_time(cost);
+              if let Some(record) = result {
+                trace!(
+                  "[Background Embedding] send {} embedding record to write task",
+                  record.object_id
+                );
+                if let Err(err) = sender.send(record) {
+                  trace!(
+                    "[Background Embedding] failed to send embedding record to write task: {:?}",
+                    err
+                  );
                 }
               }
-            },
-            Err(err) => {
-              error!(
-                "[Background Embedding] failed to parse embedder task: {:?}",
-                err
-              );
-            },
+            }
           });
           if let Err(err) = result {
             error!(

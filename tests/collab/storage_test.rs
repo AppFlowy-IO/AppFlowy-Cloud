@@ -199,7 +199,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
     .create_collab(CreateCollabParams {
       object_id: Uuid::new_v4().to_string(),
       encoded_collab_v1: vec![],
-      collab_type: CollabType::Unknown,
+      collab_type: CollabType::Document,
       workspace_id: workspace_id.clone(),
     })
     .await
@@ -220,7 +220,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .create_collab(CreateCollabParams {
       object_id,
       encoded_collab_v1: encode_collab,
-      collab_type: CollabType::Unknown,
+      collab_type: CollabType::Document,
       workspace_id: workspace_id.clone(),
     })
     .await

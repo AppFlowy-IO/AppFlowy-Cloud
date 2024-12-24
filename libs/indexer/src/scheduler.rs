@@ -8,12 +8,13 @@ use crate::vector::embedder::Embedder;
 use crate::vector::open_ai;
 use app_error::AppError;
 use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
+use chrono::DateTime;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
-use database::index::upsert_collab_embeddings;
+use database::index::{update_collab_indexed_at, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
 use database_entity::dto::AFCollabEmbeddedChunk;
 use infra::env_util::get_env_var;
@@ -23,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::cmp::max;
 use std::collections::HashSet;
+use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
@@ -454,6 +456,14 @@ pub(crate) async fn batch_insert_records(
 
   let mut txn = pg_pool.begin().await?;
   for record in records {
+    update_collab_indexed_at(
+      txn.deref_mut(),
+      &record.object_id,
+      &record.collab_type,
+      DateTime::from(chrono::Utc::now()),
+    )
+    .await?;
+
     upsert_collab_embeddings(
       &mut txn,
       &record.workspace_id,
@@ -468,6 +478,7 @@ pub(crate) async fn batch_insert_records(
     error!("[Embedding] Failed to commit transaction: {:?}", e);
     e
   })?;
+
   Ok(())
 }
 

@@ -1,3 +1,5 @@
+use crate::collab::partition_key_from_collab_type;
+use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddedChunk, IndexingStatus, QueryCollab, QueryCollabParams};
 use futures_util::stream::BoxStream;
@@ -6,6 +8,7 @@ use pgvector::Vector;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
 use sqlx::{Error, Executor, Postgres, Transaction};
+use std::collections::HashMap;
 use std::ops::DerefMut;
 use uuid::Uuid;
 
@@ -110,6 +113,7 @@ pub async fn upsert_collab_embeddings(
     .await?;
   Ok(())
 }
+
 pub async fn stream_collabs_without_embeddings(
   conn: &mut PoolConnection<Postgres>,
   workspace_id: Uuid,
@@ -139,6 +143,72 @@ pub async fn stream_collabs_without_embeddings(
   })
   .boxed()
 }
+
+pub async fn update_collab_indexed_at<'a, E>(
+  tx: E,
+  object_id: &str,
+  collab_type: &CollabType,
+  indexed_at: DateTime<Utc>,
+) -> Result<(), Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let partition_key = partition_key_from_collab_type(collab_type);
+  sqlx::query!(
+    r#"
+      UPDATE af_collab
+      SET indexed_at = $1
+      WHERE oid = $2 AND partition_key = $3
+    "#,
+    indexed_at,
+    object_id,
+    partition_key
+  )
+  .execute(tx)
+  .await?;
+
+  Ok(())
+}
+
+pub async fn get_collabs_indexed_at<'a, E>(
+  executor: E,
+  collab_ids: Vec<(String, CollabType)>,
+) -> Result<HashMap<String, DateTime<Utc>>, Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let (oids, partition_keys): (Vec<String>, Vec<i32>) = collab_ids
+    .into_iter()
+    .map(|(object_id, collab_type)| (object_id, partition_key_from_collab_type(&collab_type)))
+    .unzip();
+
+  let result = sqlx::query!(
+    r#"
+        SELECT oid, indexed_at
+        FROM af_collab
+        WHERE (oid, partition_key) = ANY (
+            SELECT UNNEST($1::text[]), UNNEST($2::int[])
+        )
+        "#,
+    &oids,
+    &partition_keys
+  )
+  .fetch_all(executor)
+  .await?;
+
+  let map = result
+    .into_iter()
+    .filter_map(|r| {
+      if let Some(indexed_at) = r.indexed_at {
+        Some((r.oid, indexed_at))
+      } else {
+        None
+      }
+    })
+    .collect::<HashMap<String, DateTime<Utc>>>();
+  Ok(map)
+}
+
 #[derive(Debug, Clone)]
 pub struct CollabId {
   pub collab_type: CollabType,

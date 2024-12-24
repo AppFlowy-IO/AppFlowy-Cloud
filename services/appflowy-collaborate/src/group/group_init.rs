@@ -19,13 +19,12 @@ use yrs::{ReadTxn, StateVector};
 
 use collab_stream::error::StreamError;
 
-use database::collab::CollabStorage;
-
 use crate::error::RealtimeError;
 use crate::group::broadcast::{CollabBroadcast, Subscription};
 use crate::group::persistence::GroupPersistence;
-use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabRealtimeMetrics;
+use database::collab::CollabStorage;
+use indexer::scheduler::IndexerScheduler;
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
@@ -105,7 +104,7 @@ impl CollabGroup {
   pub async fn generate_embeddings(&self) {
     let result = self
       .indexer_scheduler
-      .index_collab(
+      .index_collab_immediately(
         &self.workspace_id,
         &self.object_id,
         &self.collab,

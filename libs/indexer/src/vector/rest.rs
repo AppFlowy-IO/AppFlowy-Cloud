@@ -1,4 +1,4 @@
-use crate::thread_pool_no_abort::CatchedPanic;
+use crate::thread_pool::CatchedPanic;
 
 #[derive(Debug, thiserror::Error)]
 #[error("{fault}: {kind}")]

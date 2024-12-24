@@ -1,6 +1,6 @@
-use crate::indexer::open_ai::split_text_by_max_content_len;
-use crate::indexer::vector::embedder::Embedder;
-use crate::indexer::Indexer;
+use crate::collab_indexer::Indexer;
+use crate::vector::embedder::Embedder;
+use crate::vector::open_ai::split_text_by_max_content_len;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::{
@@ -20,7 +20,7 @@ pub struct DocumentIndexer;
 
 #[async_trait]
 impl Indexer for DocumentIndexer {
-  fn create_embedded_chunks(
+  fn create_embedded_chunks_from_collab(
     &self,
     collab: &Collab,
     embedding_model: EmbeddingModel,
@@ -35,9 +35,7 @@ impl Indexer for DocumentIndexer {
 
     let result = document.to_plain_text(collab.transact(), false, true);
     match result {
-      Ok(content) => {
-        split_text_into_chunks(object_id, content, CollabType::Document, &embedding_model)
-      },
+      Ok(content) => self.create_embedded_chunks_from_text(object_id, content, embedding_model),
       Err(err) => {
         if matches!(err, DocumentError::NoRequiredData) {
           Ok(vec![])
@@ -46,6 +44,15 @@ impl Indexer for DocumentIndexer {
         }
       },
     }
+  }
+
+  fn create_embedded_chunks_from_text(
+    &self,
+    object_id: String,
+    text: String,
+    model: EmbeddingModel,
+  ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
+    split_text_into_chunks(object_id, text, CollabType::Document, &model)
   }
 
   fn embed(
@@ -104,6 +111,10 @@ fn split_text_into_chunks(
     embedding_model,
     EmbeddingModel::TextEmbedding3Small
   ));
+
+  if content.is_empty() {
+    return Ok(vec![]);
+  }
   // We assume that every token is ~4 bytes. We're going to split document content into fragments
   // of ~2000 tokens each.
   let split_contents = split_text_by_max_content_len(content, 8000)?;
@@ -115,7 +126,6 @@ fn split_text_into_chunks(
       .map(|content| AFCollabEmbeddedChunk {
         fragment_id: Uuid::new_v4().to_string(),
         object_id: object_id.clone(),
-        collab_type: collab_type.clone(),
         content_type: EmbeddingContentType::PlainText,
         content,
         embedding: None,

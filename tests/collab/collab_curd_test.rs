@@ -11,7 +11,7 @@ use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;
 
-use crate::collab::util::{generate_random_string, test_encode_collab_v1};
+use crate::collab::util::{empty_document_editor, generate_random_string, test_encode_collab_v1};
 use client_api_test::TestClient;
 use shared_entity::response::AppResponse;
 use uuid::Uuid;
@@ -48,77 +48,6 @@ async fn batch_insert_collab_with_empty_payload_test() {
     .unwrap_err();
 
   assert_eq!(error.code, ErrorCode::InvalidRequest);
-}
-
-#[tokio::test]
-async fn batch_insert_collab_success_test() {
-  let mut test_client = TestClient::new_user().await;
-  let workspace_id = test_client.workspace_id().await;
-
-  let mut mock_encoded_collab = vec![];
-  for _ in 0..200 {
-    let object_id = Uuid::new_v4().to_string();
-    let encoded_collab_v1 =
-      test_encode_collab_v1(&object_id, "title", &generate_random_string(2 * 1024));
-    mock_encoded_collab.push(encoded_collab_v1);
-  }
-
-  for _ in 0..30 {
-    let object_id = Uuid::new_v4().to_string();
-    let encoded_collab_v1 =
-      test_encode_collab_v1(&object_id, "title", &generate_random_string(10 * 1024));
-    mock_encoded_collab.push(encoded_collab_v1);
-  }
-
-  for _ in 0..10 {
-    let object_id = Uuid::new_v4().to_string();
-    let encoded_collab_v1 =
-      test_encode_collab_v1(&object_id, "title", &generate_random_string(800 * 1024));
-    mock_encoded_collab.push(encoded_collab_v1);
-  }
-
-  let params_list = mock_encoded_collab
-    .iter()
-    .map(|encoded_collab_v1| CollabParams {
-      object_id: Uuid::new_v4().to_string(),
-      encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap().into(),
-      collab_type: CollabType::Unknown,
-    })
-    .collect::<Vec<_>>();
-
-  test_client
-    .create_collab_list(&workspace_id, params_list.clone())
-    .await
-    .unwrap();
-
-  let params = params_list
-    .iter()
-    .map(|params| QueryCollab {
-      object_id: params.object_id.clone(),
-      collab_type: params.collab_type.clone(),
-    })
-    .collect::<Vec<_>>();
-
-  let result = test_client
-    .batch_get_collab(&workspace_id, params)
-    .await
-    .unwrap();
-
-  for params in params_list {
-    let encoded_collab = result.0.get(&params.object_id).unwrap();
-    match encoded_collab {
-      QueryCollabResult::Success { encode_collab_v1 } => {
-        let actual = EncodedCollab::decode_from_bytes(encode_collab_v1.as_ref()).unwrap();
-        let expected = EncodedCollab::decode_from_bytes(params.encoded_collab_v1.as_ref()).unwrap();
-        assert_eq!(actual.doc_state, expected.doc_state);
-      },
-      QueryCollabResult::Failed { error } => {
-        panic!("Failed to get collab: {:?}", error);
-      },
-    }
-  }
-
-  assert_eq!(result.0.values().len(), 240);
 }
 
 #[tokio::test]
@@ -216,6 +145,69 @@ async fn create_collab_compatibility_with_json_params_test() {
     .into_data()
     .unwrap();
   assert_eq!(encoded_collab, encoded_collab_from_server);
+}
+
+#[tokio::test]
+async fn batch_insert_document_collab_test() {
+  let mut test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+
+  let num_collabs = 100;
+  let mut list = vec![];
+  for _ in 0..num_collabs {
+    let object_id = Uuid::new_v4().to_string();
+    let mut editor = empty_document_editor(&object_id);
+    let paragraphs = vec![
+      generate_random_string(1),
+      generate_random_string(2),
+      generate_random_string(5),
+    ];
+    editor.insert_paragraphs(paragraphs);
+    list.push((object_id, editor.encode_collab()));
+  }
+
+  let params_list = list
+    .iter()
+    .map(|(object_id, encoded_collab_v1)| CollabParams {
+      object_id: object_id.clone(),
+      encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap().into(),
+      collab_type: CollabType::Document,
+    })
+    .collect::<Vec<_>>();
+
+  test_client
+    .create_collab_list(&workspace_id, params_list.clone())
+    .await
+    .unwrap();
+
+  let params = params_list
+    .iter()
+    .map(|params| QueryCollab {
+      object_id: params.object_id.clone(),
+      collab_type: params.collab_type.clone(),
+    })
+    .collect::<Vec<_>>();
+
+  let result = test_client
+    .batch_get_collab(&workspace_id, params)
+    .await
+    .unwrap();
+
+  for params in params_list {
+    let encoded_collab = result.0.get(&params.object_id).unwrap();
+    match encoded_collab {
+      QueryCollabResult::Success { encode_collab_v1 } => {
+        let actual = EncodedCollab::decode_from_bytes(encode_collab_v1.as_ref()).unwrap();
+        let expected = EncodedCollab::decode_from_bytes(params.encoded_collab_v1.as_ref()).unwrap();
+        assert_eq!(actual.doc_state, expected.doc_state);
+      },
+      QueryCollabResult::Failed { error } => {
+        panic!("Failed to get collab: {:?}", error);
+      },
+    }
+  }
+
+  assert_eq!(result.0.values().len(), num_collabs);
 }
 
 #[derive(Debug, Clone, Serialize)]

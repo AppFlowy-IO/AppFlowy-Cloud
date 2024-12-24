@@ -4,8 +4,9 @@ use prometheus_client::registry::Registry;
 pub struct EmbeddingMetrics {
   total_embed_count: Counter,
   failed_embed_count: Counter,
-  processing_time_histogram: Histogram,
   write_embedding_time_histogram: Histogram,
+  gen_embeddings_time_histogram: Histogram,
+  fallback_background_tasks: Counter,
 }
 
 impl EmbeddingMetrics {
@@ -13,8 +14,9 @@ impl EmbeddingMetrics {
     Self {
       total_embed_count: Counter::default(),
       failed_embed_count: Counter::default(),
-      processing_time_histogram: Histogram::new([500.0, 1000.0, 5000.0, 8000.0].into_iter()),
       write_embedding_time_histogram: Histogram::new([500.0, 1000.0, 5000.0, 8000.0].into_iter()),
+      gen_embeddings_time_histogram: Histogram::new([1000.0, 3000.0, 5000.0, 8000.0].into_iter()),
+      fallback_background_tasks: Counter::default(),
     }
   }
 
@@ -34,14 +36,21 @@ impl EmbeddingMetrics {
       metrics.failed_embed_count.clone(),
     );
     realtime_registry.register(
-      "processing_time_seconds",
-      "Histogram of embedding processing times",
-      metrics.processing_time_histogram.clone(),
-    );
-    realtime_registry.register(
       "write_embedding_time_seconds",
       "Histogram of embedding write times",
       metrics.write_embedding_time_histogram.clone(),
+    );
+
+    realtime_registry.register(
+      "gen_embeddings_time_histogram",
+      "Histogram of embedding generation times",
+      metrics.gen_embeddings_time_histogram.clone(),
+    );
+
+    realtime_registry.register(
+      "fallback_background_tasks",
+      "Total count of fallback background tasks",
+      metrics.fallback_background_tasks.clone(),
     );
 
     metrics
@@ -55,13 +64,16 @@ impl EmbeddingMetrics {
     self.failed_embed_count.inc_by(count);
   }
 
-  pub fn record_generate_embedding_time(&self, millis: u128) {
-    tracing::trace!("[Embedding]: generate embeddings cost: {}ms", millis);
-    self.processing_time_histogram.observe(millis as f64);
+  pub fn record_fallback_background_tasks(&self, count: u64) {
+    self.fallback_background_tasks.inc_by(count);
   }
 
   pub fn record_write_embedding_time(&self, millis: u128) {
-    tracing::trace!("[Embedding]: write embedding time cost: {}ms", millis);
     self.write_embedding_time_histogram.observe(millis as f64);
+  }
+
+  pub fn record_gen_embedding_time(&self, num: u32, millis: u128) {
+    tracing::info!("[Embedding]: index {} collabs cost: {}ms", num, millis);
+    self.gen_embeddings_time_histogram.observe(millis as f64);
   }
 }

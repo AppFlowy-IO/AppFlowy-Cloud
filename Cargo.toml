@@ -156,6 +156,7 @@ base64.workspace = true
 md5.workspace = true
 nanoid = "0.4.0"
 http.workspace = true
+indexer.workspace = true
 
 [dev-dependencies]
 flate2 = "1.0"
@@ -176,7 +177,6 @@ image = "0.23.14"
 collab-rt-entity = { path = "libs/collab-rt-entity" }
 hex = "0.4.3"
 unicode-normalization = "0.1.24"
-
 
 [[bin]]
 name = "appflowy_cloud"
@@ -221,9 +221,11 @@ members = [
   "xtask",
   "libs/tonic-proto",
   "libs/mailer",
+  "libs/indexer",
 ]
 
 [workspace.dependencies]
+indexer = { path = "libs/indexer" }
 collab-rt-entity = { path = "libs/collab-rt-entity" }
 collab-rt-protocol = { path = "libs/collab-rt-protocol" }
 database = { path = "libs/database" }

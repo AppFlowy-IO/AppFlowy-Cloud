@@ -1,13 +1,16 @@
+use crate::collab::partition_key_from_collab_type;
+use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
+use database_entity::dto::{AFCollabEmbeddedChunk, IndexingStatus, QueryCollab, QueryCollabParams};
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use pgvector::Vector;
+use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
-use sqlx::{Error, Executor, PgPool, Postgres, Transaction};
+use sqlx::{Error, Executor, Postgres, Transaction};
+use std::collections::HashMap;
 use std::ops::DerefMut;
 use uuid::Uuid;
-
-use database_entity::dto::{AFCollabEmbeddedChunk, IndexingStatus, QueryCollab, QueryCollabParams};
 
 pub async fn get_index_status<'a, E>(
   tx: E,
@@ -89,17 +92,17 @@ impl PgHasArrayType for Fragment {
 pub async fn upsert_collab_embeddings(
   transaction: &mut Transaction<'_, Postgres>,
   workspace_id: &Uuid,
+  object_id: &str,
+  collab_type: CollabType,
   tokens_used: u32,
   records: Vec<AFCollabEmbeddedChunk>,
 ) -> Result<(), sqlx::Error> {
-  if records.is_empty() {
-    return Ok(());
-  }
-
-  let object_id = records[0].object_id.clone();
-  let collab_type = records[0].collab_type.clone();
   let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
-
+  tracing::trace!(
+    "[Embedding] upsert {} {} fragments",
+    object_id,
+    fragments.len()
+  );
   sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4, $5::af_fragment_v2[])"#)
     .bind(*workspace_id)
     .bind(object_id)
@@ -111,21 +114,26 @@ pub async fn upsert_collab_embeddings(
   Ok(())
 }
 
-pub fn get_collabs_without_embeddings(pg_pool: &PgPool) -> BoxStream<sqlx::Result<CollabId>> {
-  // atm. get only documents
+pub async fn stream_collabs_without_embeddings(
+  conn: &mut PoolConnection<Postgres>,
+  workspace_id: Uuid,
+  limit: i64,
+) -> BoxStream<sqlx::Result<CollabId>> {
   sqlx::query!(
     r#"
-      select c.workspace_id, c.oid, c.partition_key
-      from af_collab c
-      join af_workspace w on c.workspace_id = w.workspace_id
-      where not coalesce(w.settings['disable_search_indexding']::boolean, false)
-        and not exists (
-          select 1 from af_collab_embeddings em
-          where em.oid = c.oid and em.partition_key = 0
-        )
-    "#
+        SELECT c.workspace_id, c.oid, c.partition_key
+        FROM af_collab c
+        JOIN af_workspace w ON c.workspace_id = w.workspace_id
+        WHERE c.workspace_id = $1
+        AND NOT COALESCE(w.settings['disable_search_indexing']::boolean, false)
+        AND c.indexed_at IS NULL
+        ORDER BY c.updated_at DESC
+        LIMIT $2
+    "#,
+    workspace_id,
+    limit
   )
-  .fetch(pg_pool)
+  .fetch(conn.deref_mut())
   .map(|row| {
     row.map(|r| CollabId {
       collab_type: CollabType::from(r.partition_key),
@@ -134,6 +142,71 @@ pub fn get_collabs_without_embeddings(pg_pool: &PgPool) -> BoxStream<sqlx::Resul
     })
   })
   .boxed()
+}
+
+pub async fn update_collab_indexed_at<'a, E>(
+  tx: E,
+  object_id: &str,
+  collab_type: &CollabType,
+  indexed_at: DateTime<Utc>,
+) -> Result<(), Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let partition_key = partition_key_from_collab_type(collab_type);
+  sqlx::query!(
+    r#"
+      UPDATE af_collab
+      SET indexed_at = $1
+      WHERE oid = $2 AND partition_key = $3
+    "#,
+    indexed_at,
+    object_id,
+    partition_key
+  )
+  .execute(tx)
+  .await?;
+
+  Ok(())
+}
+
+pub async fn get_collabs_indexed_at<'a, E>(
+  executor: E,
+  collab_ids: Vec<(String, CollabType)>,
+) -> Result<HashMap<String, DateTime<Utc>>, Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let (oids, partition_keys): (Vec<String>, Vec<i32>) = collab_ids
+    .into_iter()
+    .map(|(object_id, collab_type)| (object_id, partition_key_from_collab_type(&collab_type)))
+    .unzip();
+
+  let result = sqlx::query!(
+    r#"
+        SELECT oid, indexed_at
+        FROM af_collab
+        WHERE (oid, partition_key) = ANY (
+            SELECT UNNEST($1::text[]), UNNEST($2::int[])
+        )
+        "#,
+    &oids,
+    &partition_keys
+  )
+  .fetch_all(executor)
+  .await?;
+
+  let map = result
+    .into_iter()
+    .filter_map(|r| {
+      if let Some(indexed_at) = r.indexed_at {
+        Some((r.oid, indexed_at))
+      } else {
+        None
+      }
+    })
+    .collect::<HashMap<String, DateTime<Utc>>>();
+  Ok(map)
 }
 
 #[derive(Debug, Clone)]

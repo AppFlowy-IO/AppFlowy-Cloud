@@ -1,5 +1,4 @@
 use crate::error::RealtimeError;
-use crate::indexer::IndexedCollab;
 use anyhow::anyhow;
 use app_error::AppError;
 use arc_swap::ArcSwap;
@@ -18,9 +17,9 @@ use collab_rt_protocol::{Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
 use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
 
-use crate::indexer::IndexerScheduler;
 use crate::metrics::CollabRealtimeMetrics;
 use bytes::Bytes;
+use collab_document::document::DocumentBody;
 use collab_stream::error::StreamError;
 use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
@@ -28,12 +27,14 @@ use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
+use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace};
+use uuid::Uuid;
 use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Update};
@@ -366,7 +367,7 @@ impl CollabGroup {
       .state
       .persister
       .indexer_scheduler
-      .index_collab(workspace_id, object_id, &collab, collab_type)
+      .index_collab_immediately(&workspace_id, &object_id, &collab, &collab_type)
       .await
   }
 
@@ -1142,6 +1143,20 @@ impl CollabPersister {
       let light_len = doc_state_light.len();
       self.write_collab(doc_state_light).await?;
 
+      match self.collab_type {
+        CollabType::Document => {
+          let txn = collab.transact();
+          if let Some(text) = DocumentBody::from_collab(collab)
+            .and_then(|body| body.to_plain_text(txn, false, true).ok())
+          {
+            self.index_collab_content(text);
+          }
+        },
+        _ => {
+          // TODO(nathan): support other collab type
+        },
+      }
+
       tracing::debug!(
         "persisted collab {} snapshot at {}: {} bytes",
         self.object_id,
@@ -1176,36 +1191,34 @@ impl CollabPersister {
       .metrics
       .collab_size
       .observe(encoded_collab.len() as f64);
-    let params = CollabParams::new(
-      &self.object_id,
-      self.collab_type.clone(),
-      encoded_collab.clone(),
-    );
+    let params = CollabParams::new(&self.object_id, self.collab_type.clone(), encoded_collab);
     self
       .storage
       .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, true)
       .await
       .map_err(|err| RealtimeError::Internal(err.into()))?;
-    self.index_encoded_collab(encoded_collab);
     Ok(())
   }
 
-  fn index_encoded_collab(&self, encoded_collab: Bytes) {
-    let indexed_collab = IndexedCollab {
-      object_id: self.object_id.clone(),
-      collab_type: self.collab_type.clone(),
-      encoded_collab,
-    };
-    if let Err(err) = self
-      .indexer_scheduler
-      .index_encoded_collab_one(&self.workspace_id, indexed_collab)
-    {
-      tracing::warn!(
-        "failed to index collab `{}/{}`: {}",
-        self.workspace_id,
-        self.object_id,
-        err
+  fn index_collab_content(&self, text: String) {
+    if let Ok(workspace_id) = Uuid::parse_str(&self.workspace_id) {
+      let indexed_collab = UnindexedCollabTask::new(
+        workspace_id,
+        self.object_id.clone(),
+        self.collab_type.clone(),
+        UnindexedData::Text(text),
       );
+      if let Err(err) = self
+        .indexer_scheduler
+        .index_pending_collab_one(indexed_collab, false)
+      {
+        tracing::warn!(
+          "failed to index collab `{}/{}`: {}",
+          self.workspace_id,
+          self.object_id,
+          err
+        );
+      }
     }
   }
 

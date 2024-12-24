@@ -1,4 +1,4 @@
-use crate::indexer::vector::open_ai;
+use crate::vector::open_ai;
 use app_error::AppError;
 use appflowy_ai_client::dto::{EmbeddingModel, EmbeddingRequest, OpenAIEmbeddingResponse};
 

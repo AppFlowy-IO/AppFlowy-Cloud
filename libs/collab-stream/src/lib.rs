@@ -1,6 +1,8 @@
 pub mod client;
+pub mod collab_update_sink;
 pub mod error;
+pub mod lease;
 pub mod model;
 pub mod pubsub;
-pub mod stream;
 pub mod stream_group;
+pub mod stream_router;

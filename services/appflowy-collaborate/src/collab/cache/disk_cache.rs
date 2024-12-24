@@ -357,7 +357,7 @@ impl CollabDiskCache {
     while let Err(err) = s3.put_blob(&key, doc_state.clone().into(), None).await {
       match err {
         AppError::ServiceTemporaryUnavailable(err) if retries > 0 => {
-          tracing::info!(
+          tracing::debug!(
             "S3 service is temporarily unavailable: {}. Remaining retries: {}",
             err,
             retries
@@ -371,6 +371,7 @@ impl CollabDiskCache {
         },
       }
     }
+    tracing::trace!("saved collab to S3: {}", key);
     Ok(())
   }
 

@@ -154,6 +154,7 @@ impl CollabMemCache {
     timestamp: i64,
     expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
+    tracing::trace!("insert collab {} to memory cache", object_id);
     self
       .insert_data_with_timestamp(object_id, data, timestamp, expiration_seconds)
       .await

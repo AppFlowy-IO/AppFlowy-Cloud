@@ -418,12 +418,12 @@ impl StreamGroup {
               _ = interval.tick() => {
                 if let Ok(len) = get_stream_length(&mut connection_manager, &stream_key).await {
                   if len + 100 > max_len {
-                    warn!("stream len is going to exceed the max len: {}, current: {}", max_len, len);
+                    warn!("stream `{}` len is going to exceed the max len: {}, current: {}", stream_key, max_len, len);
                   }
                 }
               }
               _ = cancel_token.cancelled() => {
-                trace!("Stream length check task cancelled.");
+                trace!("Stream `{}` length check task cancelled.", stream_key);
                 break;
               }
           }

@@ -239,7 +239,7 @@ async fn init_collab_handle(
 ) -> Result<OpenCollabHandle, HistoryError> {
   let group_name = format!("history_{}:{}", workspace_id, object_id);
   let update_stream = redis_stream
-    .collab_update_stream(workspace_id, object_id, &group_name)
+    .collab_update_stream_group(workspace_id, object_id, &group_name)
     .await
     .unwrap();
 

@@ -113,7 +113,6 @@ async fn post_realtime_message_stream_handler(
     bytes.extend_from_slice(&item?);
   }
 
-  event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;

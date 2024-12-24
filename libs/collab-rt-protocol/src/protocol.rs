@@ -93,6 +93,7 @@ pub trait CollabSyncProtocol {
       Message::Auth(reason) => self.handle_auth(collab, reason).await,
       //FIXME: where is the QueryAwareness protocol?
       Message::Awareness(update) => {
+        let update = AwarenessUpdate::decode_v1(&update)?;
         self
           .handle_awareness_update(message_origin, collab, update)
           .await
@@ -117,7 +118,7 @@ pub trait CollabSyncProtocol {
         .map_err(|e| RTProtocolError::YrsTransaction(e.to_string()))?
         .state_vector();
       let awareness_update = awareness.update()?;
-      (state_vector, awareness_update)
+      (state_vector, awareness_update.encode_v1())
     };
 
     // 1. encode doc state vector
@@ -220,14 +221,14 @@ pub trait CollabSyncProtocol {
   }
 }
 
-const LARGE_UPDATE_THRESHOLD: usize = 1024 * 1024; // 1MB
+pub const LARGE_UPDATE_THRESHOLD: usize = 1024 * 1024; // 1MB
 
 #[inline]
-pub async fn decode_update(update: Vec<u8>) -> Result<Update, RTProtocolError> {
+pub async fn decode_update(update: Vec<u8>) -> Result<Update, yrs::encoding::read::Error> {
   let update = if update.len() > LARGE_UPDATE_THRESHOLD {
     spawn_blocking(move || Update::decode_v1(&update))
       .await
-      .map_err(|err| RTProtocolError::Internal(err.into()))?
+      .map_err(|err| yrs::encoding::read::Error::Custom(err.to_string()))?
   } else {
     Update::decode_v1(&update)
   }?;

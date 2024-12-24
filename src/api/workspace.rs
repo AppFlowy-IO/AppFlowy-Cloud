@@ -743,7 +743,7 @@ async fn create_collab_handler(
         workspace_id_uuid,
         params.object_id.clone(),
         params.collab_type.clone(),
-        UnindexedData::UnindexedText(text),
+        UnindexedData::Text(text),
       );
       state
         .indexer_scheduler
@@ -875,8 +875,7 @@ async fn batch_create_collab_handler(
   let total_size = collab_params_list
     .iter()
     .fold(0, |acc, x| acc + x.1.encoded_collab_v1.len());
-  event!(
-    tracing::Level::INFO,
+  tracing::info!(
     "decompressed {} collab objects in {:?}",
     collab_params_list.len(),
     start.elapsed()
@@ -903,7 +902,7 @@ async fn batch_create_collab_handler(
               workspace_id_uuid,
               value.1.object_id.clone(),
               value.1.collab_type.clone(),
-              UnindexedData::UnindexedText(text),
+              UnindexedData::Text(text),
             )
           })
           .ok(),
@@ -922,8 +921,7 @@ async fn batch_create_collab_handler(
     .batch_insert_new_collab(&workspace_id, &uid, collab_params_list)
     .await?;
 
-  event!(
-    tracing::Level::INFO,
+  tracing::info!(
     "inserted collab objects to disk in {:?}, total size:{}",
     start.elapsed(),
     total_size
@@ -1373,7 +1371,7 @@ async fn create_collab_snapshot_handler(
     .create_snapshot(InsertSnapshotParams {
       object_id,
       workspace_id,
-      data,
+      doc_state: data,
       collab_type,
     })
     .await?;
@@ -1462,7 +1460,7 @@ async fn update_collab_handler(
             workspace_id_uuid,
             params.object_id.clone(),
             params.collab_type.clone(),
-            UnindexedData::UnindexedText(text),
+            UnindexedData::Text(text),
           );
           state
             .indexer_scheduler
@@ -1984,7 +1982,6 @@ async fn post_realtime_message_stream_handler(
     bytes.extend_from_slice(&item?);
   }
 
-  event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;

@@ -10,7 +10,7 @@ async fn single_reader_single_sender_update_stream_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
 
   let mut send_group = redis_stream
-    .collab_update_stream(&workspace, &object_id, "write")
+    .collab_update_stream_group(&workspace, &object_id, "write")
     .await
     .unwrap();
   for i in 0..5 {
@@ -18,7 +18,7 @@ async fn single_reader_single_sender_update_stream_test() {
   }
 
   let mut recv_group = redis_stream
-    .collab_update_stream(&workspace, &object_id, "read1")
+    .collab_update_stream_group(&workspace, &object_id, "read1")
     .await
     .unwrap();
 
@@ -55,19 +55,19 @@ async fn multiple_reader_single_sender_update_stream_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
 
   let mut send_group = redis_stream
-    .collab_update_stream(&workspace, &object_id, "write")
+    .collab_update_stream_group(&workspace, &object_id, "write")
     .await
     .unwrap();
   send_group.insert_message(vec![1, 2, 3]).await.unwrap();
   send_group.insert_message(vec![4, 5, 6]).await.unwrap();
 
   let recv_group_1 = redis_stream
-    .collab_update_stream(&workspace, &object_id, "read1")
+    .collab_update_stream_group(&workspace, &object_id, "read1")
     .await
     .unwrap();
 
   let recv_group_2 = redis_stream
-    .collab_update_stream(&workspace, &object_id, "read2")
+    .collab_update_stream_group(&workspace, &object_id, "read2")
     .await
     .unwrap();
   // Both groups should have the same messages

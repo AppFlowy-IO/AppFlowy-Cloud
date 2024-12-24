@@ -27,7 +27,7 @@ async fn apply_update_stream_updates_test() {
     .unwrap();
 
   let mut update_group = redis_stream
-    .collab_update_stream(&workspace_id, &object_id, "appflowy_cloud")
+    .collab_update_stream_group(&workspace_id, &object_id, "appflowy_cloud")
     .await
     .unwrap();
 
@@ -81,7 +81,7 @@ async fn apply_update_stream_updates_test() {
 //     .unwrap();
 //
 //   let mut update_group = redis_stream
-//     .collab_update_stream(&workspace_id, &object_id, "appflowy_cloud")
+//     .collab_update_stream_group(&workspace_id, &object_id, "appflowy_cloud")
 //     .await
 //     .unwrap();
 //

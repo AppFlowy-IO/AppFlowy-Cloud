@@ -8,7 +8,6 @@ use crate::vector::embedder::Embedder;
 use crate::vector::open_ai;
 use app_error::AppError;
 use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
-use chrono::DateTime;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
@@ -460,7 +459,7 @@ pub(crate) async fn batch_insert_records(
       txn.deref_mut(),
       &record.object_id,
       &record.collab_type,
-      DateTime::from(chrono::Utc::now()),
+      chrono::Utc::now(),
     )
     .await?;
 

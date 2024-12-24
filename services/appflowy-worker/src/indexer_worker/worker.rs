@@ -17,7 +17,6 @@ use redis::aio::ConnectionManager;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::sync::RwLock;
 use tokio::time::{interval, MissedTickBehavior};
@@ -141,7 +140,7 @@ async fn process_upcoming_tasks(
             .filter(|task| {
               indexed_collabs
                 .get(&task.object_id)
-                .map_or(true, |indexed_at| task.created_at > *indexed_at.timestamp())
+                .map_or(true, |indexed_at| task.created_at > indexed_at.timestamp())
             })
             .collect();
         }

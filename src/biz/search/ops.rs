@@ -12,7 +12,7 @@ use shared_entity::dto::search_dto::{
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
 
-use appflowy_collaborate::indexer::IndexerScheduler;
+use indexer::scheduler::IndexerScheduler;
 use uuid::Uuid;
 
 pub async fn search_document(
@@ -23,7 +23,7 @@ pub async fn search_document(
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
-  let embeddings = indexer_scheduler.embeddings(EmbeddingRequest {
+  let embeddings = indexer_scheduler.create_search_embeddings(EmbeddingRequest {
     input: EmbeddingInput::String(request.query.clone()),
     model: EmbeddingModel::TextEmbedding3Small.to_string(),
     encoding_format: EmbeddingEncodingFormat::Float,

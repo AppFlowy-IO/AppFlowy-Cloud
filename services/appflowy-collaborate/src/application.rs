@@ -31,11 +31,12 @@ use crate::collab::cache::CollabCache;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
 use crate::config::{get_env_var, Config, DatabaseSetting, S3Setting};
-use crate::indexer::{IndexerConfiguration, IndexerProvider, IndexerScheduler};
 use crate::pg_listener::PgListeners;
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
 use crate::CollaborationServer;
+use indexer::collab_indexer::IndexerProvider;
+use indexer::scheduler::{IndexerConfiguration, IndexerScheduler};
 
 pub struct Application {
   actix_server: Server,
@@ -154,10 +155,13 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!("Setting up Indexer provider...");
   let embedder_config = IndexerConfiguration {
-    enable: crate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+    enable: get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()
       .unwrap_or(true),
     openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+    embedding_buffer_size: get_env_var("APPFLOWY_INDEXER_EMBEDDING_BUFFER_SIZE", "2000")
+      .parse::<usize>()
+      .unwrap_or(2000),
   };
   let indexer_scheduler = IndexerScheduler::new(
     IndexerProvider::new(),
@@ -165,6 +169,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_storage.clone(),
     metrics.embedding_metrics.clone(),
     embedder_config,
+    redis_conn_manager.clone(),
   );
 
   let app_state = AppState {

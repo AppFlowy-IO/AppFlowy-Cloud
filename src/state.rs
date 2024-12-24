@@ -15,15 +15,14 @@ use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::indexer::metrics::EmbeddingMetrics;
-use appflowy_collaborate::indexer::IndexerScheduler;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use collab_stream::stream_router::StreamRouter;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
-
+use indexer::metrics::EmbeddingMetrics;
+use indexer::scheduler::IndexerScheduler;
 use snowflake::Snowflake;
 use tonic_proto::history::history_client::HistoryClient;
 

@@ -6,18 +6,17 @@ use futures_util::StreamExt;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::collab::storage::CollabAccessControlStorage;
+use crate::config::Config;
+use crate::metrics::CollabMetrics;
+use crate::pg_listener::PgListeners;
+use crate::CollabRealtimeMetrics;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use collab_stream::stream_router::StreamRouter;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
-
-use crate::collab::storage::CollabAccessControlStorage;
-use crate::config::Config;
-use crate::indexer::metrics::EmbeddingMetrics;
-use crate::indexer::IndexerScheduler;
-use crate::metrics::CollabMetrics;
-use crate::pg_listener::PgListeners;
-use crate::CollabRealtimeMetrics;
+use indexer::metrics::EmbeddingMetrics;
+use indexer::scheduler::IndexerScheduler;
 
 pub type RedisConnectionManager = redis::aio::ConnectionManager;
 

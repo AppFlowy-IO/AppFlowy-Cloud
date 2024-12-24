@@ -18,6 +18,7 @@ async fn main() -> anyhow::Result<()> {
   filters.push(format!("gotrue={}", level));
   filters.push(format!("appflowy_collaborate={}", level));
   filters.push(format!("appflowy_ai_client={}", level));
+  filters.push(format!("indexer={}", level));
 
   // Load environment variables from .env file
   dotenvy::dotenv().ok();

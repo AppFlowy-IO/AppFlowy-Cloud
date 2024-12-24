@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE af_collab\n      SET indexed_at = $1\n      WHERE oid = $2 AND partition_key = $3\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d0e5f5097b35a15f19e9e7faf2c62336d5f130e939331e84c7d834f6028ea673"
+}

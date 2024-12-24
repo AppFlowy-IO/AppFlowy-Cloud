@@ -220,7 +220,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .create_collab(CreateCollabParams {
       object_id,
       encoded_collab_v1: encode_collab,
-      collab_type: CollabType::Document,
+      collab_type: CollabType::Unknown,
       workspace_id: workspace_id.clone(),
     })
     .await

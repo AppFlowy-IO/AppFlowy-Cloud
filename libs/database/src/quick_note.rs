@@ -55,7 +55,7 @@ pub async fn select_quick_notes_with_one_more_than_limit<
     let json_path_query = format!("'$.**.insert ? (@ like_regex \".*{}.*\")'", search_term);
     query_builder.push(json_path_query);
   }
-  query_builder.push(" ORDER BY created_at DESC");
+  query_builder.push(" ORDER BY updated_at DESC");
   if let Some(limit) = limit {
     query_builder.push(" LIMIT ");
     query_builder.push_bind(limit);

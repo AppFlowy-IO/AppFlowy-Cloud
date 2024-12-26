@@ -1464,7 +1464,7 @@ async fn update_collab_handler(
           );
           state
             .indexer_scheduler
-            .index_pending_collab_one(pending, false)?;
+            .index_pending_collab_one(pending, true)?;
         }
       },
       _ => {

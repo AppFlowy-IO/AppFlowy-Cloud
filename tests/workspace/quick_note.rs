@@ -21,6 +21,8 @@ async fn quick_note_crud_test() {
     // To ensure that the creation time is different
     time::sleep(Duration::from_millis(1)).await;
   }
+  let quick_note_id_1 = quick_note_ids[0];
+  let quick_note_id_2 = quick_note_ids[1];
   let quick_notes = client
     .api_client
     .list_quick_notes(workspace_uuid, None, None, None)
@@ -81,12 +83,14 @@ async fn quick_note_crud_test() {
   ]);
   client
     .api_client
-    .update_quick_note(workspace_uuid, quick_note_id_1, data_1)
+    .update_quick_note(workspace_uuid, quick_note_id_2, data_2)
     .await
     .expect("update quick note");
+  // To ensure that the update time is different
+  time::sleep(Duration::from_millis(1)).await;
   client
     .api_client
-    .update_quick_note(workspace_uuid, quick_note_id_2, data_2)
+    .update_quick_note(workspace_uuid, quick_note_id_1, data_1)
     .await
     .expect("update quick note");
   let quick_notes = client
@@ -110,7 +114,7 @@ async fn quick_note_crud_test() {
   assert!(!quick_notes_with_offset_and_limit.has_more);
   assert_eq!(
     quick_notes_with_offset_and_limit.quick_notes[0].id,
-    quick_note_id_1
+    quick_note_id_2
   );
   let quick_notes_with_offset_and_limit = client
     .api_client
@@ -121,7 +125,7 @@ async fn quick_note_crud_test() {
   assert!(quick_notes_with_offset_and_limit.has_more);
   assert_eq!(
     quick_notes_with_offset_and_limit.quick_notes[0].id,
-    quick_note_id_2
+    quick_note_id_1
   );
   let filtered_quick_notes = client
     .api_client

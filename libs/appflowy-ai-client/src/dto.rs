@@ -26,6 +26,8 @@ pub struct MessageData {
   #[serde(default)]
   pub rag_ids: Vec<String>,
   #[serde(default)]
+  pub rag_only: bool,
+  #[serde(default)]
   pub message_id: Option<String>,
 }
 

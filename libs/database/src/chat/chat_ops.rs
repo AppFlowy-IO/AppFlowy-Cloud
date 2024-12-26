@@ -45,8 +45,9 @@ pub async fn insert_chat<'a, E: Executor<'a, Database = Postgres>>(
 
 pub async fn select_chat_settings<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  chat_id: &Uuid,
+  chat_id: &str,
 ) -> Result<ChatSettings, AppError> {
+  let chat_id = Uuid::parse_str(chat_id)?;
   let row = sqlx::query!(
     r#"
         SELECT name, meta_data, rag_ids

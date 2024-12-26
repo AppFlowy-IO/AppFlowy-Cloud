@@ -235,6 +235,7 @@ impl AppFlowyAIClient {
     content: &str,
     metadata: Option<Value>,
     rag_ids: Vec<String>,
+    rag_only: bool,
     model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
@@ -243,6 +244,7 @@ impl AppFlowyAIClient {
         content: content.to_string(),
         metadata,
         rag_ids,
+        rag_only,
         message_id: Some(question_id.to_string()),
       },
     };

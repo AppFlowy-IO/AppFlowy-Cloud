@@ -58,6 +58,7 @@ async fn stream_test() {
       "I feel hungry",
       None,
       vec![],
+      false,
       &AIModel::GPT4oMini,
     )
     .await

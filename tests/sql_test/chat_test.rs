@@ -206,7 +206,7 @@ async fn chat_setting_test(pool: PgPool) {
     .expect("Failed to insert chat");
 
   // Validate inserted rag_ids
-  let settings = select_chat_settings(&pool, &chat_id)
+  let settings = select_chat_settings(&pool, &chat_id.to_string())
     .await
     .expect("Failed to get chat settings");
   assert_eq!(settings.rag_ids, vec!["rag1", "rag2"]);
@@ -223,7 +223,7 @@ async fn chat_setting_test(pool: PgPool) {
     .expect("Failed to update chat settings");
 
   // Validate metadata update
-  let settings = select_chat_settings(&pool, &chat_id)
+  let settings = select_chat_settings(&pool, &chat_id.to_string())
     .await
     .expect("Failed to get chat settings");
   assert_eq!(settings.metadata, json!({"key": "value"}));
@@ -240,7 +240,7 @@ async fn chat_setting_test(pool: PgPool) {
     .expect("Failed to update chat settings");
 
   // Validate both rag_ids and metadata
-  let settings = select_chat_settings(&pool, &chat_id)
+  let settings = select_chat_settings(&pool, &chat_id.to_string())
     .await
     .expect("Failed to get chat settings");
   assert_eq!(

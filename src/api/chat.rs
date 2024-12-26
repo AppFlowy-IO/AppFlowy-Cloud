@@ -286,14 +286,14 @@ async fn answer_stream_v2_handler(
   let (_workspace_id, chat_id, question_id) = path.into_inner();
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
-  let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &chat_id).await?;
+  let settings = chat::chat_ops::select_chat_settings(&state.pg_pool, &chat_id).await?;
   let ai_model = ai_model_from_header(&req);
 
   trace!(
-    "[Chat] stream answer for chat: {}, question: {}, rag_ids: {:?}",
+    "[Chat] stream answer for chat: {}, question: {}, setting: {:?}",
     chat_id,
     content,
-    rag_ids
+    settings,
   );
   match state
     .ai_client
@@ -302,7 +302,12 @@ async fn answer_stream_v2_handler(
       question_id,
       &content,
       Some(metadata),
-      rag_ids,
+      settings.rag_ids,
+      settings
+        .metadata
+        .get("rag_only")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false),
       &ai_model,
     )
     .await
@@ -371,8 +376,7 @@ async fn get_chat_settings_handler(
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<ChatSettings>> {
   let (_, chat_id) = path.into_inner();
-  let chat_id_uuid = Uuid::parse_str(&chat_id).map_err(AppError::from)?;
-  let settings = chat::chat_ops::select_chat_settings(&state.pg_pool, &chat_id_uuid).await?;
+  let settings = chat::chat_ops::select_chat_settings(&state.pg_pool, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(settings).into())
 }
 

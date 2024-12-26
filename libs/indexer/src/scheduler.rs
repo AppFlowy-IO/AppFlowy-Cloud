@@ -490,14 +490,17 @@ fn process_collab(
   metrics: &EmbeddingMetrics,
 ) -> Result<Option<(u32, Vec<AFCollabEmbeddedChunk>)>, AppError> {
   if let Some(indexer) = indexer {
-    metrics.record_embed_count(1);
-
     let chunks = match data {
       UnindexedData::UnindexedText(text) => {
         indexer.create_embedded_chunks_from_text(object_id.to_string(), text, embedder.model())?
       },
     };
 
+    if chunks.is_empty() {
+      return Ok(None);
+    }
+
+    metrics.record_embed_count(1);
     let result = indexer.embed(embedder, chunks);
     match result {
       Ok(Some(embeddings)) => Ok(Some((embeddings.tokens_consumed, embeddings.params))),

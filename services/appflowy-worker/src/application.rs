@@ -129,7 +129,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
 
   let threads = Arc::new(
     ThreadPoolNoAbortBuilder::new()
-      .num_threads(20)
+      .num_threads(30)
       .thread_name(|index| format!("background-embedding-thread-{index}"))
       .build()
       .unwrap(),

@@ -24,6 +24,71 @@ impl TestDoc {
 
     Self { object_id, editor }
   }
+
+  #[allow(dead_code)]
+  fn insert_text(&mut self, text: &str) {
+    self.editor.insert_paragraphs(vec![text.to_string()]);
+  }
+}
+
+#[tokio::test]
+async fn chat_with_rag_only_enable_test() {
+  if !ai_test_enabled() {
+    return;
+  }
+
+  let doc = TestDoc::new(vec![""]);
+  let test_client = Arc::new(TestClient::new_user().await);
+  let workspace_id = test_client.workspace_id().await;
+  let params = CreateCollabParams {
+    workspace_id: workspace_id.clone(),
+    object_id: doc.object_id.clone(),
+    encoded_collab_v1: doc.editor.encode_collab().encode_to_bytes().unwrap(),
+    collab_type: CollabType::Document,
+  };
+  let cloned_test_client = Arc::clone(&test_client);
+  cloned_test_client
+    .api_client
+    .create_collab(params)
+    .await
+    .unwrap();
+
+  // create chat
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: "Chat with SG".to_string(),
+    rag_ids: vec![doc.object_id.clone()],
+  };
+  test_client
+    .api_client
+    .create_chat(&workspace_id, params)
+    .await
+    .unwrap();
+
+  // set rag_only
+  let params = UpdateChatParams {
+    name: None,
+    metadata: Some(serde_json::json!({"rag_only": true})),
+    rag_ids: None,
+  };
+  test_client
+    .api_client
+    .update_chat_settings(&workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+
+  let answer = ask_question(
+    &test_client,
+    &workspace_id,
+    &chat_id,
+    "How is the weather in Singapore?",
+  )
+  .await;
+  let expected_unknown_japan_answer = r#"I don’t know"#;
+  test_client
+    .assert_similarity(&workspace_id, &answer, expected_unknown_japan_answer, 0.7)
+    .await;
 }
 
 #[tokio::test]

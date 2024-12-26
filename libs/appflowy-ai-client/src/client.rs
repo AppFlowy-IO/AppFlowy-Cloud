@@ -185,6 +185,7 @@ impl AppFlowyAIClient {
         content: content.to_string(),
         metadata,
         rag_ids: vec![],
+        rag_only: false,
         message_id: Some(question_id.to_string()),
       },
     };
@@ -214,6 +215,7 @@ impl AppFlowyAIClient {
         content: content.to_string(),
         metadata,
         rag_ids,
+        rag_only: false,
         message_id: None,
       },
     };
@@ -228,6 +230,7 @@ impl AppFlowyAIClient {
     AIResponse::<()>::stream_response(resp).await
   }
 
+  #[allow(clippy::too_many_arguments)]
   pub async fn stream_question_v2(
     &self,
     chat_id: &str,

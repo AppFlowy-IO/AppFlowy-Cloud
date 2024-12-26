@@ -143,7 +143,7 @@ impl IndexerScheduler {
 
   pub(crate) fn create_embedder(&self) -> Result<Embedder, AppError> {
     if self.config.openai_api_key.is_empty() {
-      return Err(AppError::AIServiceUnavailable(
+      return Err(AppError::ServiceUnavailable(
         "OpenAI API key is empty".to_string(),
       ));
     }
@@ -164,12 +164,19 @@ impl IndexerScheduler {
 
   pub fn embed_in_background(
     &self,
-    pending_collabs: Vec<UnindexedCollabTask>,
+    mut pending_collabs: Vec<UnindexedCollabTask>,
   ) -> Result<(), AppError> {
     if !self.index_enabled() {
       return Ok(());
     }
 
+    // Filter out empty data
+    pending_collabs.retain(|collab| !collab.data.is_empty());
+    if pending_collabs.is_empty() {
+      return Ok(());
+    }
+
+    info!("indexing {} collabs in background", pending_collabs.len());
     let redis_client = self.redis_client.clone();
     tokio::spawn(add_background_embed_task(redis_client, pending_collabs));
     Ok(())
@@ -177,8 +184,19 @@ impl IndexerScheduler {
 
   pub fn embed_immediately(&self, pending_collab: UnindexedCollabTask) -> Result<(), AppError> {
     if !self.index_enabled() {
+      return Err(AppError::ServiceUnavailable(
+        "Indexing service is disabled".to_string(),
+      ));
+    }
+
+    if pending_collab.data.is_empty() {
+      trace!(
+        "[Embedding] Empty data, skipping embedding {}",
+        pending_collab.object_id
+      );
       return Ok(());
     }
+
     if let Err(err) = self.gen_embedding_tx.try_send(pending_collab) {
       match err {
         TrySendError::Full(pending) => {
@@ -229,11 +247,6 @@ impl IndexerScheduler {
     }
 
     pending_collabs.retain(|collab| self.is_indexing_enabled(&collab.collab_type));
-    if pending_collabs.is_empty() {
-      return Ok(());
-    }
-
-    info!("indexing {} collabs in background", pending_collabs.len());
     let _ = self.embed_in_background(pending_collabs);
 
     Ok(())
@@ -263,15 +276,13 @@ impl IndexerScheduler {
         drop(lock); // release the read lock ASAP
 
         if let Some(text) = text {
-          if !text.is_empty() {
-            let pending = UnindexedCollabTask::new(
-              Uuid::parse_str(workspace_id)?,
-              object_id.to_string(),
-              collab_type.clone(),
-              UnindexedData::UnindexedText(text),
-            );
-            self.embed_immediately(pending)?;
-          }
+          let pending = UnindexedCollabTask::new(
+            Uuid::parse_str(workspace_id)?,
+            object_id.to_string(),
+            collab_type.clone(),
+            UnindexedData::UnindexedText(text),
+          );
+          self.embed_immediately(pending)?;
         }
       },
       _ => {

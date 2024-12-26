@@ -24,7 +24,7 @@ where
     let status_code = resp.status();
     if status_code.is_server_error() {
       let body = resp.text().await?;
-      return Err(AppError::AIServiceUnavailable(body).into());
+      return Err(AppError::ServiceUnavailable(body).into());
     }
 
     if !status_code.is_success() {

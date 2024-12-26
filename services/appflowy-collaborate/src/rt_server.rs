@@ -244,22 +244,23 @@ where
             {
               // yield
               yield_now().await;
+              let _ = group_cmd_sender
+                .send(GroupCommand::GenerateCollabEmbedding {
+                  object_id: object_id.clone(),
+                })
+                .await;
 
               // Calculate missing update
               let (tx, rx) = tokio::sync::oneshot::channel();
               let _ = group_cmd_sender
                 .send(GroupCommand::CalculateMissingUpdate {
-                  object_id: object_id.clone(),
+                  object_id,
                   state_vector,
                   ret: tx,
                 })
                 .await;
               match rx.await {
                 Ok(missing_update_result) => {
-                  let _ = group_cmd_sender
-                    .send(GroupCommand::GenerateCollabEmbedding { object_id })
-                    .await;
-
                   let result = missing_update_result
                     .map_err(|err| {
                       AppError::Internal(anyhow!("fail to calculate missing update: {}", err))
@@ -275,11 +276,15 @@ where
                 },
               }
             } else {
+              let _ = group_cmd_sender
+                .send(GroupCommand::GenerateCollabEmbedding { object_id })
+                .await;
               let _ = return_rx.send(Ok(None));
             }
           }
         },
         Ok(Err(err)) => {
+          trace!("apply http update to group fail: {}", err);
           if let Some(return_rx) = return_tx {
             let _ = return_rx.send(Err(AppError::Internal(anyhow!(
               "apply http update to group fail: {}",

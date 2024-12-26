@@ -271,7 +271,7 @@ async fn answer_stream_handler(
       HttpResponse::Ok()
         .content_type("text/event-stream")
         .streaming(stream::once(async move {
-          Err(AppError::AIServiceUnavailable(err.to_string()))
+          Err(AppError::ServiceUnavailable(err.to_string()))
         })),
     ),
   }
@@ -324,7 +324,7 @@ async fn answer_stream_v2_handler(
       HttpResponse::ServiceUnavailable()
         .content_type("text/event-stream")
         .streaming(stream::once(async move {
-          Err(AppError::AIServiceUnavailable(err.to_string()))
+          Err(AppError::ServiceUnavailable(err.to_string()))
         })),
     ),
   }

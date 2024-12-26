@@ -47,6 +47,7 @@ pub fn make_big_collab_doc_state(object_id: &str, key: &str, value: String) -> V
 
 pub struct TestDocumentEditor {
   pub document: Document,
+  pub prev_id: String,
 }
 
 impl TestDocumentEditor {
@@ -60,7 +61,6 @@ impl TestDocumentEditor {
 
   pub(crate) fn insert_paragraphs(&mut self, paragraphs: Vec<String>) {
     let page_id = self.document.get_page_id().unwrap();
-    let mut prev_id = "".to_string();
     for paragraph in paragraphs {
       let block_id = nanoid!(6);
       let text_id = nanoid!(6);
@@ -76,9 +76,9 @@ impl TestDocumentEditor {
 
       self
         .document
-        .insert_block(block, Some(prev_id.clone()))
+        .insert_block(block, Some(self.prev_id.clone()))
         .unwrap();
-      prev_id.clone_from(&block_id);
+      self.prev_id.clone_from(&block_id);
       self
         .document
         .apply_text_delta(&text_id, format!(r#"[{{"insert": "{}"}}]"#, paragraph));
@@ -105,6 +105,7 @@ pub fn empty_document_editor(object_id: &str) -> TestDocumentEditor {
   .unwrap();
   TestDocumentEditor {
     document: Document::open(collab).unwrap(),
+    prev_id: "".to_string(),
   }
 }
 

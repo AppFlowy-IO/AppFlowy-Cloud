@@ -72,7 +72,7 @@ async fn stream_complete_text_handler(
       HttpResponse::Ok()
         .content_type("text/event-stream")
         .streaming(stream::once(async move {
-          Err(AppError::AIServiceUnavailable(err.to_string()))
+          Err(AppError::ServiceUnavailable(err.to_string()))
         })),
     ),
   }
@@ -164,7 +164,7 @@ async fn local_ai_config_handler(
     .ai_client
     .get_local_ai_config(platform, query.app_version)
     .await
-    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
+    .map_err(|err| AppError::ServiceUnavailable(err.to_string()))?;
   Ok(AppResponse::Ok().with_data(config).into())
 }
 
@@ -179,6 +179,6 @@ async fn calculate_similarity_handler(
     .ai_client
     .calculate_similarity(params)
     .await
-    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
+    .map_err(|err| AppError::ServiceUnavailable(err.to_string()))?;
   Ok(AppResponse::Ok().with_data(response).into())
 }

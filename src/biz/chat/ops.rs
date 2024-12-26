@@ -98,7 +98,7 @@ pub async fn generate_chat_message_answer(
       Some(metadata),
     )
     .await
-    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
+    .map_err(|err| AppError::ServiceUnavailable(err.to_string()))?;
 
   info!("new_answer: {:?}", new_answer);
   // Save the answer to the database

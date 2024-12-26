@@ -159,7 +159,7 @@ impl Client {
       .map_err(|err| {
         let app_err = AppError::from(err);
         if matches!(app_err, AppError::ServiceTemporaryUnavailable(_)) {
-          AppError::AIServiceUnavailable(
+          AppError::ServiceUnavailable(
             "AI service temporarily unavailable, please try again later".to_string(),
           )
         } else {

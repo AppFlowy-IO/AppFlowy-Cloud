@@ -132,7 +132,7 @@ pub enum AppError {
   PublishNamespaceAlreadyTaken(String),
 
   #[error("{0}")]
-  AIServiceUnavailable(String),
+  ServiceUnavailable(String),
 
   #[error("{0}")]
   StringLengthLimitReached(String),
@@ -248,7 +248,7 @@ impl AppError {
       AppError::OverrideWithIncorrectData(_) => ErrorCode::OverrideWithIncorrectData,
       AppError::Utf8Error(_) => ErrorCode::Internal,
       AppError::PublishNamespaceAlreadyTaken(_) => ErrorCode::PublishNamespaceAlreadyTaken,
-      AppError::AIServiceUnavailable(_) => ErrorCode::AIServiceUnavailable,
+      AppError::ServiceUnavailable(_) => ErrorCode::ServiceUnavailable,
       AppError::StringLengthLimitReached(_) => ErrorCode::StringLengthLimitReached,
       AppError::InvalidContentType(_) => ErrorCode::InvalidContentType,
       AppError::InvalidPublishedOutline(_) => ErrorCode::InvalidPublishedOutline,
@@ -403,7 +403,7 @@ pub enum ErrorCode {
   OverrideWithIncorrectData = 1029,
   PublishNamespaceNotSet = 1030,
   PublishNamespaceAlreadyTaken = 1031,
-  AIServiceUnavailable = 1032,
+  ServiceUnavailable = 1032,
   AIResponseLimitExceeded = 1033,
   StringLengthLimitReached = 1034,
   #[cfg(feature = "sqlx_error")]
@@ -473,7 +473,7 @@ impl From<AIError> for AppError {
       AIError::PayloadTooLarge(err) => AppError::PayloadTooLarge(err),
       AIError::InvalidRequest(err) => AppError::InvalidRequest(err),
       AIError::SerdeError(err) => AppError::SerdeError(err),
-      AIError::ServiceUnavailable(err) => AppError::AIServiceUnavailable(err),
+      AIError::ServiceUnavailable(err) => AppError::ServiceUnavailable(err),
     }
   }
 }

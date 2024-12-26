@@ -580,7 +580,10 @@ impl TestClient {
     match timeout(timeout_duration, poll_fut).await {
       Ok(Ok(items)) => items,
       Ok(Err(e)) => panic!("Test failed: {}", e),
-      Err(_) => panic!("Test failed: Timeout after 30 seconds."),
+      Err(_) => panic!(
+        "Test failed: Timeout after 30 seconds to get all embedding info. {:?}",
+        query
+      ),
     }
   }
 

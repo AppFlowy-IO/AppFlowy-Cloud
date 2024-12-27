@@ -8,7 +8,6 @@ use crate::vector::embedder::Embedder;
 use crate::vector::open_ai;
 use app_error::AppError;
 use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
-use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
@@ -243,7 +242,7 @@ impl IndexerScheduler {
     &self,
     workspace_id: &str,
     object_id: &str,
-    collab: &Arc<RwLock<Collab>>,
+    collab: &Collab,
     collab_type: &CollabType,
   ) -> Result<(), AppError> {
     if !self.index_enabled() {
@@ -256,11 +255,9 @@ impl IndexerScheduler {
 
     match collab_type {
       CollabType::Document => {
-        let lock = collab.read().await;
-        let txn = lock.transact();
-        let text = DocumentBody::from_collab(&lock)
+        let txn = collab.transact();
+        let text = DocumentBody::from_collab(collab)
           .and_then(|body| body.to_plain_text(txn, false, true).ok());
-        drop(lock); // release the read lock ASAP
 
         if let Some(text) = text {
           if !text.is_empty() {
@@ -268,7 +265,7 @@ impl IndexerScheduler {
               Uuid::parse_str(workspace_id)?,
               object_id.to_string(),
               collab_type.clone(),
-              UnindexedData::UnindexedText(text),
+              UnindexedData::Text(text),
             );
             self.embed_immediately(pending)?;
           }
@@ -491,7 +488,7 @@ fn process_collab(
 ) -> Result<Option<(u32, Vec<AFCollabEmbeddedChunk>)>, AppError> {
   if let Some(indexer) = indexer {
     let chunks = match data {
-      UnindexedData::UnindexedText(text) => {
+      UnindexedData::Text(text) => {
         indexer.create_embedded_chunks_from_text(object_id.to_string(), text, embedder.model())?
       },
     };
@@ -543,13 +540,13 @@ impl UnindexedCollabTask {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum UnindexedData {
-  UnindexedText(String),
+  Text(String),
 }
 
 impl UnindexedData {
   pub fn is_empty(&self) -> bool {
     match self {
-      UnindexedData::UnindexedText(text) => text.is_empty(),
+      UnindexedData::Text(text) => text.is_empty(),
     }
   }
 }

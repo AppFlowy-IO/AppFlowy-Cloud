@@ -107,16 +107,16 @@ impl Display for CollabParams {
 }
 
 impl CollabParams {
-  pub fn new<T: ToString>(
+  pub fn new<T: ToString, B: Into<Bytes>>(
     object_id: T,
     collab_type: CollabType,
-    encoded_collab_v1: Vec<u8>,
+    encoded_collab_v1: B,
   ) -> Self {
     let object_id = object_id.to_string();
     Self {
       object_id,
       collab_type,
-      encoded_collab_v1: Bytes::from(encoded_collab_v1),
+      encoded_collab_v1: encoded_collab_v1.into(),
     }
   }
 
@@ -217,7 +217,7 @@ pub struct InsertSnapshotParams {
   #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
   #[validate(custom(function = "validate_not_empty_payload"))]
-  pub data: Bytes,
+  pub doc_state: Bytes,
   #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
   pub collab_type: CollabType,
@@ -254,13 +254,13 @@ impl Display for QueryCollabParams {
 }
 
 impl QueryCollabParams {
-  pub fn new<T1: ToString, T2: ToString>(
+  pub fn new<T1: Into<String>, T2: Into<String>>(
     object_id: T1,
     collab_type: CollabType,
     workspace_id: T2,
   ) -> Self {
-    let workspace_id = workspace_id.to_string();
-    let object_id = object_id.to_string();
+    let workspace_id = workspace_id.into();
+    let object_id = object_id.into();
     let inner = QueryCollab {
       object_id,
       collab_type,

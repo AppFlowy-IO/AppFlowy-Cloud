@@ -1,6 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
 
-use collab::core::awareness::AwarenessUpdate;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use yrs::updates::decoder::{Decode, Decoder};
@@ -22,7 +21,7 @@ pub const PERMISSION_GRANTED: u8 = 1;
 pub enum Message {
   Sync(SyncMessage),
   Auth(Option<String>),
-  Awareness(AwarenessUpdate),
+  Awareness(Vec<u8>),
   Custom(CustomMessage),
 }
 
@@ -44,7 +43,7 @@ impl Encode for Message {
       },
       Message::Awareness(update) => {
         encoder.write_var(MSG_AWARENESS);
-        encoder.write_buf(update.encode_v1())
+        encoder.write_buf(update)
       },
       Message::Custom(msg) => {
         encoder.write_var(MSG_CUSTOM);
@@ -64,8 +63,7 @@ impl Decode for Message {
       },
       MSG_AWARENESS => {
         let data = decoder.read_buf()?;
-        let update = AwarenessUpdate::decode_v1(data)?;
-        Ok(Message::Awareness(update))
+        Ok(Message::Awareness(data.into()))
       },
       MSG_AUTH => {
         let reason = if decoder.read_var::<u8>()? == PERMISSION_DENIED {

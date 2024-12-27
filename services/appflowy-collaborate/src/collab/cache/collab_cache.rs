@@ -1,4 +1,6 @@
+use bytes::Bytes;
 use collab::entity::EncodedCollab;
+use collab_entity::CollabType;
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
@@ -186,6 +188,11 @@ impl CollabCache {
 
     // when the data is written to the disk cache but fails to be written to the memory cache
     // we log the error and continue.
+    self.cache_collab(object_id, collab_type, encode_collab_data);
+    Ok(())
+  }
+
+  fn cache_collab(&self, object_id: String, collab_type: CollabType, encode_collab_data: Bytes) {
     let mem_cache = self.mem_cache.clone();
     tokio::spawn(async move {
       if let Err(err) = mem_cache
@@ -203,20 +210,6 @@ impl CollabCache {
         );
       }
     });
-
-    Ok(())
-  }
-
-  pub async fn get_encode_collab_from_disk(
-    &self,
-    workspace_id: &str,
-    query: QueryCollab,
-  ) -> Result<EncodedCollab, AppError> {
-    let encode_collab = self
-      .disk_cache
-      .get_collab_encoded_from_disk(workspace_id, query)
-      .await?;
-    Ok(encode_collab)
   }
 
   pub async fn insert_encode_collab_to_disk(
@@ -225,10 +218,12 @@ impl CollabCache {
     uid: &i64,
     params: CollabParams,
   ) -> Result<(), AppError> {
+    let p = params.clone();
     self
       .disk_cache
       .upsert_collab(workspace_id, uid, params)
       .await?;
+    self.cache_collab(p.object_id, p.collab_type, p.encoded_collab_v1);
     Ok(())
   }
 

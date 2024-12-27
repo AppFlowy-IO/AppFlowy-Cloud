@@ -239,7 +239,6 @@ jobs:
         if: always()
         run: docker logout
 
-
   appflowy_worker_image:
     runs-on: ubuntu-22.04
     env:

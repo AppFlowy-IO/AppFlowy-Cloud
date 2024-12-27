@@ -6,8 +6,11 @@ use anyhow::{anyhow, Result};
 use app_error::AppError;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::MessageByObjectId;
+use collab_stream::client::CollabRedisStream;
+use collab_stream::stream_router::StreamRouter;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use redis::aio::ConnectionManager;
 use tokio::sync::mpsc::Sender;
 use tokio::task::yield_now;
 use tokio::time::interval;
@@ -50,9 +53,10 @@ where
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
+    redis_stream_router: Arc<StreamRouter>,
+    redis_connection_manager: ConnectionManager,
     group_persistence_interval: Duration,
-    edit_state_max_count: u32,
-    edit_state_max_secs: i64,
+    prune_grace_period: Duration,
     indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
     let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
@@ -66,14 +70,16 @@ where
     }
 
     let connect_state = ConnectState::new();
+    let collab_stream =
+      CollabRedisStream::new_with_connection_manager(redis_connection_manager, redis_stream_router);
     let group_manager = Arc::new(
       GroupManager::new(
         storage.clone(),
         access_control.clone(),
         metrics.clone(),
+        collab_stream,
         group_persistence_interval,
-        edit_state_max_count,
-        edit_state_max_secs,
+        prune_grace_period,
         indexer_scheduler.clone(),
       )
       .await?,

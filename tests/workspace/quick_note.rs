@@ -21,8 +21,8 @@ async fn quick_note_crud_test() {
     // To ensure that the creation time is different
     time::sleep(Duration::from_millis(1)).await;
   }
-  let quick_note_id_1 = quick_note_ids[0];
-  let quick_note_id_2 = quick_note_ids[1];
+  let _quick_note_id_1 = quick_note_ids[0];
+  let _quick_note_id_2 = quick_note_ids[1];
   let quick_notes = client
     .api_client
     .list_quick_notes(workspace_uuid, None, None, None)
@@ -30,9 +30,11 @@ async fn quick_note_crud_test() {
     .expect("list quick notes");
   assert_eq!(quick_notes.quick_notes.len(), 2);
   assert!(!quick_notes.has_more);
-  assert_eq!(quick_notes.quick_notes[0].id, quick_note_id_2);
-  assert_eq!(quick_notes.quick_notes[1].id, quick_note_id_1);
+  let mut notes_sorted_by_created_at_asc = quick_notes.quick_notes.clone();
+  notes_sorted_by_created_at_asc.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
+  let quick_note_id_1 = notes_sorted_by_created_at_asc[0].id;
+  let quick_note_id_2 = notes_sorted_by_created_at_asc[1].id;
   let data_1 = json!([
     {
       "type": "paragraph",

@@ -615,7 +615,7 @@ impl CollabGroup {
               if ack_response.is_none() {
                 ack_response = Some(
                   CollabAck::new(
-                    message_origin.clone(),
+                    CollabOrigin::Server,
                     state.object_id.to_string(),
                     msg_id,
                     state.seq_no.load(Ordering::SeqCst),
@@ -639,7 +639,7 @@ impl CollabGroup {
 
               ack_response = Some(
                 CollabAck::new(
-                  message_origin.clone(),
+                  CollabOrigin::Server,
                   state.object_id.to_string(),
                   msg_id,
                   state.seq_no.load(Ordering::SeqCst),

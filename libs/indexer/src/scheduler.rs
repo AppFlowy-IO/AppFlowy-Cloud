@@ -256,7 +256,7 @@ impl IndexerScheduler {
     match collab_type {
       CollabType::Document => {
         let txn = collab.transact();
-        let text = DocumentBody::from_collab(&collab)
+        let text = DocumentBody::from_collab(collab)
           .and_then(|body| body.to_plain_text(txn, false, true).ok());
 
         if let Some(text) = text {

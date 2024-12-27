@@ -21,8 +21,8 @@ async fn quick_note_crud_test() {
     // To ensure that the creation time is different
     time::sleep(Duration::from_millis(1)).await;
   }
-  let quick_note_id_1 = quick_note_ids[0];
-  let quick_note_id_2 = quick_note_ids[1];
+  let _quick_note_id_1 = quick_note_ids[0];
+  let _quick_note_id_2 = quick_note_ids[1];
   let quick_notes = client
     .api_client
     .list_quick_notes(workspace_uuid, None, None, None)

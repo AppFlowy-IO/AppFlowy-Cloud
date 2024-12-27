@@ -638,6 +638,7 @@ dependencies = [
  "derive_more",
  "dotenvy",
  "fancy-regex 0.11.0",
+ "flate2",
  "futures",
  "futures-lite",
  "futures-util",
@@ -716,6 +717,7 @@ dependencies = [
  "anyhow",
  "app-error",
  "appflowy-ai-client",
+ "arc-swap",
  "async-stream",
  "async-trait",
  "authentication",
@@ -2354,11 +2356,15 @@ name = "collab-stream"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
+ "async-trait",
  "bincode",
  "bytes",
  "chrono",
+ "collab",
  "collab-entity",
  "futures",
+ "loole",
  "prost 0.13.3",
  "rand 0.8.5",
  "redis 0.25.4",
@@ -2369,6 +2375,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tracing",
+ "zstd 0.13.2",
 ]
 
 [[package]]
@@ -3323,9 +3330,9 @@ dependencies = [
 
 [[package]]
 name = "futures"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "645c6916888f6cb6350d2550b80fb63e734897a8498abe35cfb732b6487804b0"
+checksum = "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -3354,9 +3361,9 @@ checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
 
 [[package]]
 name = "futures-executor"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a576fc72ae164fca6b9db127eaa9a9dda0d61316034f33a0a0d4eda41f02b01d"
+checksum = "1e28d1d997f585e54aebc3f97d39e72338912123a67330d723fdbb564d646c9f"
 dependencies = [
  "futures-core",
  "futures-task",
@@ -4513,6 +4520,16 @@ name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+
+[[package]]
+name = "loole"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2998397c725c822c6b2ba605fd9eb4c6a7a0810f1629ba3cc232ef4f0308d96"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+]
 
 [[package]]
 name = "lru"
@@ -8666,6 +8683,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
  "tokio",
 ]
 

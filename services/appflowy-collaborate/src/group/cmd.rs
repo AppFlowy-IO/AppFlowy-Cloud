@@ -6,6 +6,11 @@ use async_stream::stream;
 use bytes::Bytes;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
+use dashmap::DashMap;
+use futures_util::StreamExt;
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabAck;
@@ -13,10 +18,7 @@ use collab_rt_entity::{
   AckCode, ClientCollabMessage, MessageByObjectId, ServerCollabMessage, SinkMessage, UpdateSync,
 };
 use collab_rt_protocol::{Message, SyncMessage};
-use dashmap::DashMap;
 use database::collab::CollabStorage;
-use futures_util::StreamExt;
-use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};
 use yrs::updates::encoder::Encode;
 use yrs::StateVector;
@@ -147,7 +149,10 @@ where
           },
           GroupCommand::GenerateCollabEmbedding { object_id } => {
             if let Some(group) = self.group_manager.get_group(&object_id).await {
-              group.generate_embeddings().await;
+              match group.generate_embeddings().await {
+                Ok(_) => trace!("successfully created embeddings for {}", object_id),
+                Err(err) => trace!("failed to create embeddings for {}: {}", object_id, err),
+              }
             }
           },
           GroupCommand::CalculateMissingUpdate {
@@ -334,16 +339,15 @@ where
     };
 
     if let Some(group) = self.group_manager.get_group(&object_id).await {
-      let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
       let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
       group.subscribe(
         &server_rt_user,
         CollabOrigin::Server,
-        collab_message_sender,
+        NullSender::default(),
         message_by_oid_receiver,
       );
-      let message = MessageByObjectId::new_with_message(object_id.clone(), messages);
-      if let Err(err) = message_by_oid_sender.try_send(message) {
+      let message = HashMap::from([(object_id.clone(), messages)]);
+      if let Err(err) = message_by_oid_sender.try_send(MessageByObjectId(message)) {
         error!(
           "failed to send message to group: {}, object_id: {}",
           err, object_id

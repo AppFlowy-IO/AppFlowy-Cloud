@@ -228,7 +228,7 @@ fn handle_task(
     task.collab_type
   );
   let chunks = match task.data {
-    UnindexedData::UnindexedText(text) => indexer
+    UnindexedData::Text(text) => indexer
       .create_embedded_chunks_from_text(task.object_id.clone(), text, embedder.model())
       .ok()?,
   };

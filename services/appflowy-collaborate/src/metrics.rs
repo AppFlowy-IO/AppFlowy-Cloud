@@ -8,16 +8,20 @@ pub struct CollabRealtimeMetrics {
   pub(crate) connected_users: Gauge,
   pub(crate) opening_collab_count: Gauge,
   pub(crate) num_of_editing_users: Gauge,
+  /// Number of times a compact state collab load has been done.
+  pub(crate) load_collab_count: Gauge,
+  /// Number of times a full state collab (with history) load has been done.
+  pub(crate) load_full_collab_count: Gauge,
   /// The number of apply update
   pub(crate) apply_update_count: Gauge,
   /// The number of apply update failed
   pub(crate) apply_update_failed_count: Gauge,
-  pub(crate) acquire_collab_lock_count: Gauge,
-  pub(crate) acquire_collab_lock_fail_count: Gauge,
-  /// How long it takes to apply update in milliseconds.
-  pub(crate) apply_update_time: Histogram,
-  /// How big the update is in bytes.
-  pub(crate) apply_update_size: Histogram,
+  /// How long it takes to load a collab (from snapshot and updates combined).
+  pub(crate) load_collab_time: Histogram,
+  /// How big is the collab (no history, after applying all updates).
+  pub(crate) collab_size: Histogram,
+  /// How big is the collab (with history, after applying all updates).
+  pub(crate) full_collab_size: Histogram,
 }
 
 impl CollabRealtimeMetrics {
@@ -28,23 +32,30 @@ impl CollabRealtimeMetrics {
       num_of_editing_users: Gauge::default(),
       apply_update_count: Default::default(),
       apply_update_failed_count: Default::default(),
-      acquire_collab_lock_count: Default::default(),
-      acquire_collab_lock_fail_count: Default::default(),
 
       // when it comes to histograms we organize them by buckets or specific sizes - since our
       // prometheus client doesn't support Summary type, we use Histogram type instead
 
-      // time spent on apply_update in milliseconds: 1ms, 5ms, 15ms, 30ms, 100ms, 200ms, 500ms, 1s
-      apply_update_time: Histogram::new(
+      // time spent on loading collab in milliseconds: 1ms, 5ms, 15ms, 30ms, 100ms, 200ms, 500ms, 1s
+      load_collab_time: Histogram::new(
         [1.0, 5.0, 15.0, 30.0, 100.0, 200.0, 500.0, 1000.0].into_iter(),
       ),
-      // update size in bytes: 128B, 512B, 1KB, 64KB, 512KB, 1MB, 5MB, 10MB
-      apply_update_size: Histogram::new(
+      // collab size in bytes: 128B, 512B, 1KB, 64KB, 512KB, 1MB, 5MB, 10MB
+      collab_size: Histogram::new(
         [
           128.0, 512.0, 1024.0, 65536.0, 524288.0, 1048576.0, 5242880.0, 10485760.0,
         ]
         .into_iter(),
       ),
+      // collab size in bytes: 128B, 512B, 1KB, 64KB, 512KB, 1MB, 5MB, 10MB
+      full_collab_size: Histogram::new(
+        [
+          128.0, 512.0, 1024.0, 65536.0, 524288.0, 1048576.0, 5242880.0, 10485760.0,
+        ]
+        .into_iter(),
+      ),
+      load_collab_count: Default::default(),
+      load_full_collab_count: Default::default(),
     }
   }
 
@@ -76,28 +87,31 @@ impl CollabRealtimeMetrics {
       "number of apply update failed",
       metrics.apply_update_failed_count.clone(),
     );
-
     realtime_registry.register(
-      "acquire_collab_lock_count",
-      "number of acquire collab lock",
-      metrics.acquire_collab_lock_count.clone(),
+      "load_collab_time",
+      "time spent on loading collab in milliseconds",
+      metrics.load_collab_time.clone(),
     );
     realtime_registry.register(
-      "acquire_collab_lock_fail_count",
-      "number of acquire collab lock failed",
-      metrics.acquire_collab_lock_fail_count.clone(),
+      "collab_size",
+      "size of compact collab in bytes",
+      metrics.collab_size.clone(),
     );
     realtime_registry.register(
-      "apply_update_time",
-      "time spent on applying collab updates in milliseconds",
-      metrics.apply_update_time.clone(),
+      "full_collab_size",
+      "size of full collab in bytes",
+      metrics.full_collab_size.clone(),
     );
     realtime_registry.register(
-      "apply_update_size",
-      "size of updates applied to collab in bytes",
-      metrics.apply_update_size.clone(),
+      "load_collab_count",
+      "number of collab loads (no history)",
+      metrics.load_collab_count.clone(),
     );
-
+    realtime_registry.register(
+      "load_full_collab_count",
+      "number of collab loads (with history)",
+      metrics.load_full_collab_count.clone(),
+    );
     metrics
   }
 }

@@ -367,7 +367,7 @@ impl CollabGroup {
       .state
       .persister
       .indexer_scheduler
-      .index_collab_immediately(&workspace_id, &object_id, &collab, &collab_type)
+      .index_collab_immediately(workspace_id, object_id, &collab, collab_type)
       .await
   }
 

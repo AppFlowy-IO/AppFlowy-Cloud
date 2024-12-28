@@ -513,7 +513,7 @@ async fn xack_task(
   group_name: &str,
   entry_id: &str,
 ) -> Result<(), ImportError> {
-  redis_client
+  let _: () = redis_client
     .xack(stream_name, group_name, &[entry_id])
     .await
     .map_err(|e| {

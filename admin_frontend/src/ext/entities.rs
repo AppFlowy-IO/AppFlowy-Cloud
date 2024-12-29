@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct JsonResponse<T> {
   pub code: u16,
   pub data: T,
@@ -21,6 +22,7 @@ pub struct WorkspaceUsageLimits {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct WorkspaceMember {
   pub name: String,
   pub email: String,
@@ -38,6 +40,7 @@ pub struct WorkspaceDocUsage {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct UserProfile {
   pub uid: i64,
   pub uuid: Uuid,

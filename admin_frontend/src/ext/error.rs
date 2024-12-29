@@ -2,6 +2,7 @@ use axum::response::{IntoResponse, Response};
 use shared_entity::response::AppResponseError;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Error {
   NotOk(u16, String), // HTTP status code, payload
   Reqwest(reqwest::Error),

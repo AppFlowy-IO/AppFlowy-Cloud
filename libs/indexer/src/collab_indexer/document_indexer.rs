@@ -123,13 +123,16 @@ fn split_text_into_chunks(
   Ok(
     split_contents
       .into_iter()
-      .map(|content| AFCollabEmbeddedChunk {
+      .enumerate()
+      .map(|(index, content)| AFCollabEmbeddedChunk {
         fragment_id: Uuid::new_v4().to_string(),
         object_id: object_id.clone(),
         content_type: EmbeddingContentType::PlainText,
         content,
         embedding: None,
         metadata: metadata.clone(),
+        fragment_index: index as i32,
+        embedded_type: 0,
       })
       .collect(),
   )

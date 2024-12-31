@@ -1,3 +1,4 @@
+use chrono::Utc;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::metrics::histogram::Histogram;
@@ -22,6 +23,8 @@ pub struct CollabRealtimeMetrics {
   pub(crate) collab_size: Histogram,
   /// How big is the collab (with history, after applying all updates).
   pub(crate) full_collab_size: Histogram,
+  /// How long does it take since collab update is send to a stream to be read from it.
+  pub(crate) collab_stream_latency: Histogram,
 }
 
 impl CollabRealtimeMetrics {
@@ -51,6 +54,13 @@ impl CollabRealtimeMetrics {
       full_collab_size: Histogram::new(
         [
           128.0, 512.0, 1024.0, 65536.0, 524288.0, 1048576.0, 5242880.0, 10485760.0,
+        ]
+        .into_iter(),
+      ),
+      // collab update xadd-to-xread latency: 5ms, 50ms, 100ms, 500ms, 1s, 5s, 10s, 30s, 60s
+      collab_stream_latency: Histogram::new(
+        [
+          5.0, 50.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0, 30000.0, 60000.0,
         ]
         .into_iter(),
       ),
@@ -112,7 +122,21 @@ impl CollabRealtimeMetrics {
       "number of collab loads (with history)",
       metrics.load_full_collab_count.clone(),
     );
+    realtime_registry.register(
+      "collab_stream_latency",
+      "latency since collab update is send to a stream to be read from it",
+      metrics.collab_stream_latency.clone(),
+    );
     metrics
+  }
+
+  pub fn observe_collab_stream_latency(&self, message_id_timestamp: u64) {
+    let now = Utc::now().timestamp_millis() as u64;
+    if now > message_id_timestamp {
+      self
+        .collab_stream_latency
+        .observe((now - message_id_timestamp) as f64);
+    }
   }
 }
 

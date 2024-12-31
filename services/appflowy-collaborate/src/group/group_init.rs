@@ -186,7 +186,8 @@ impl CollabGroup {
         }
         res = updates.next() => {
           match res {
-            Some(Ok((_message_id, update))) => {
+            Some(Ok((message_id, update))) => {
+              state.metrics.observe_collab_stream_latency(message_id.timestamp_ms);
               Self::handle_inbound_update(&state, update).await;
             },
             Some(Err(err)) => {

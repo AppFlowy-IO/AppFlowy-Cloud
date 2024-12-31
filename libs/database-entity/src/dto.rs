@@ -746,6 +746,8 @@ pub struct AFCollabEmbeddedChunk {
   pub content: String,
   pub embedding: Option<Vec<f32>>,
   pub metadata: serde_json::Value,
+  pub fragment_index: i32,
+  pub embedded_type: i16,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

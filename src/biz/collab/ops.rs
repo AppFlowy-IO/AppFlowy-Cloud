@@ -67,14 +67,12 @@ use super::folder_view::section_items_to_recent_folder_view;
 use super::folder_view::section_items_to_trash_folder_view;
 use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
-use super::utils::collab_from_doc_state;
 use super::utils::collab_to_bin;
 use super::utils::create_row_document;
 use super::utils::field_by_id_name_uniq;
 use super::utils::get_latest_collab;
 use super::utils::get_latest_collab_database_body;
 use super::utils::get_latest_collab_database_row_body;
-use super::utils::get_latest_collab_encoded;
 use super::utils::get_latest_collab_folder;
 use super::utils::get_row_details_serde;
 use super::utils::type_option_reader_by_id;
@@ -335,17 +333,14 @@ pub async fn get_latest_workspace_database(
   workspace_id: Uuid,
 ) -> Result<(String, WorkspaceDatabase), AppError> {
   let workspace_database_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
-  let workspace_database_collab = {
-    let encoded_collab = get_latest_collab_encoded(
-      collab_storage,
-      collab_origin,
-      &workspace_id.to_string(),
-      &workspace_database_oid,
-      CollabType::WorkspaceDatabase,
-    )
-    .await?;
-    collab_from_doc_state(encoded_collab.doc_state.to_vec(), &workspace_database_oid)?
-  };
+  let workspace_database_collab = get_latest_collab(
+    collab_storage,
+    collab_origin,
+    &workspace_id.to_string(),
+    &workspace_database_oid,
+    CollabType::WorkspaceDatabase,
+  )
+  .await?;
 
   let workspace_database = WorkspaceDatabase::open(workspace_database_collab)
     .map_err(|err| AppError::Unhandled(format!("failed to open workspace database: {}", err)))?;

@@ -13,8 +13,8 @@ use crate::biz::workspace::ops::{
 };
 use crate::biz::workspace::page_view::{
   create_page, create_space, delete_all_pages_from_trash, delete_trash, get_page_view_collab,
-  move_page, move_page_to_trash, restore_all_pages_from_trash, restore_page_from_trash,
-  update_page, update_page_collab_data, update_space,
+  move_page, move_page_to_trash, publish_page, restore_all_pages_from_trash,
+  restore_page_from_trash, update_page, update_page_collab_data, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::biz::workspace::quick_note::{
@@ -188,6 +188,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/delete-all-pages-from-trash")
         .route(web::post().to(delete_all_pages_from_trash_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/publish")
+        .route(web::post().to(publish_page_handler)),
     )
     .service(
       web::resource("/{workspace_id}/batch/collab")
@@ -1267,6 +1271,37 @@ async fn delete_all_pages_from_trash_handler(
     user,
     &state.collab_access_control_storage,
     workspace_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn publish_page_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<PublishPageParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, view_id) = path.into_inner();
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  let PublishPageParams {
+    publish_name,
+    visible_database_view_ids,
+  } = payload.into_inner();
+  publish_page(
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    state.published_collab_store.as_ref(),
+    uid,
+    *user_uuid,
+    workspace_id,
+    &view_id,
+    visible_database_view_ids,
+    publish_name,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

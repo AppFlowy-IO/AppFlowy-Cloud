@@ -15,10 +15,10 @@ use indexer::vector::embedder::Embedder;
 use indexer::vector::open_ai;
 use rayon::prelude::*;
 use redis::aio::ConnectionManager;
+use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use secrecy::{ExposeSecret, Secret};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::sync::RwLock;
 use tokio::time::{interval, MissedTickBehavior};
@@ -243,5 +243,7 @@ fn handle_task(
 }
 
 fn create_embedder(config: &BackgroundIndexerConfig) -> Embedder {
-  Embedder::OpenAI(open_ai::Embedder::new(config.open_api_key.expose_secret().clone()))
+  Embedder::OpenAI(open_ai::Embedder::new(
+    config.open_api_key.expose_secret().clone(),
+  ))
 }

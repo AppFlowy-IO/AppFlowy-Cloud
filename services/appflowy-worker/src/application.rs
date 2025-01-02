@@ -23,9 +23,9 @@ use indexer::metrics::EmbeddingMetrics;
 use indexer::thread_pool::ThreadPoolNoAbortBuilder;
 use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
+use secrecy::{ExposeSecret, Secret};
 use std::sync::{Arc, Once};
 use std::time::Duration;
-use secrecy::{ExposeSecret, Secret};
 use tokio::net::TcpListener;
 use tokio::task::LocalSet;
 use tracing::info;
@@ -144,7 +144,10 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
       enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
         .parse::<bool>()
         .unwrap_or(true),
-      open_api_key: Secret::new(appflowy_collaborate::config::get_env_var("APPFLOWY_AI_OPENAI_API_KEY", "")),
+      open_api_key: Secret::new(appflowy_collaborate::config::get_env_var(
+        "APPFLOWY_AI_OPENAI_API_KEY",
+        "",
+      )),
       tick_interval_secs: 10,
     },
   ));

@@ -15,6 +15,7 @@ use indexer::vector::embedder::Embedder;
 use indexer::vector::open_ai;
 use rayon::prelude::*;
 use redis::aio::ConnectionManager;
+use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -23,10 +24,9 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, MissedTickBehavior};
 use tracing::{error, info, trace};
 
-#[derive(Debug)]
 pub struct BackgroundIndexerConfig {
   pub enable: bool,
-  pub open_api_key: String,
+  pub open_api_key: Secret<String>,
   pub tick_interval_secs: u64,
 }
 
@@ -42,7 +42,7 @@ pub async fn run_background_indexer(
     return;
   }
 
-  if config.open_api_key.is_empty() {
+  if config.open_api_key.expose_secret().is_empty() {
     error!("OpenAI API key is not set. Stop background indexer");
     return;
   }
@@ -243,5 +243,7 @@ fn handle_task(
 }
 
 fn create_embedder(config: &BackgroundIndexerConfig) -> Embedder {
-  Embedder::OpenAI(open_ai::Embedder::new(config.open_api_key.clone()))
+  Embedder::OpenAI(open_ai::Embedder::new(
+    config.open_api_key.expose_secret().clone(),
+  ))
 }

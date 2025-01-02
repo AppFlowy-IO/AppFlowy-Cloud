@@ -38,3 +38,4 @@ redis = { workspace = true, features = [
   "connection-manager",
 ] }
 tokio-util = "0.7.12"
+secrecy = { workspace = true, features = ["serde"] }

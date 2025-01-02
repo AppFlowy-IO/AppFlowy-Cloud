@@ -15,7 +15,7 @@ use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, Secret};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::info;
@@ -158,7 +158,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     enable: get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()
       .unwrap_or(true),
-    openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+    openai_api_key: Secret::new(get_env_var("APPFLOWY_AI_OPENAI_API_KEY", "")),
     embedding_buffer_size: get_env_var("APPFLOWY_INDEXER_EMBEDDING_BUFFER_SIZE", "2000")
       .parse::<usize>()
       .unwrap_or(2000),

@@ -25,6 +25,7 @@ use std::collections::HashSet;
 use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
+use secrecy::{ExposeSecret, Secret};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -49,7 +50,7 @@ pub struct IndexerScheduler {
 #[derive(Debug)]
 pub struct IndexerConfiguration {
   pub enable: bool,
-  pub openai_api_key: String,
+  pub openai_api_key: Secret<String>,
   /// High watermark for the number of embeddings that can be buffered before being written to the database.
   pub embedding_buffer_size: usize,
 }
@@ -129,7 +130,7 @@ impl IndexerScheduler {
     }
 
     // if openai api key is empty, return false
-    if self.config.openai_api_key.is_empty() {
+    if self.config.openai_api_key.expose_secret().is_empty() {
       return false;
     }
 
@@ -141,14 +142,14 @@ impl IndexerScheduler {
   }
 
   pub(crate) fn create_embedder(&self) -> Result<Embedder, AppError> {
-    if self.config.openai_api_key.is_empty() {
+    if self.config.openai_api_key.expose_secret().is_empty() {
       return Err(AppError::AIServiceUnavailable(
         "OpenAI API key is empty".to_string(),
       ));
     }
 
     Ok(Embedder::OpenAI(open_ai::Embedder::new(
-      self.config.openai_api_key.clone(),
+      self.config.openai_api_key.expose_secret().clone(),
     )))
   }
 

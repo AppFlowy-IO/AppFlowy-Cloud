@@ -20,7 +20,7 @@ pub trait Indexer: Send + Sync {
   fn create_embedded_chunks_from_text(
     &self,
     object_id: String,
-    text: String,
+    paragraphs: Vec<String>,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError>;
 

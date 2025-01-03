@@ -419,9 +419,7 @@ async fn add_new_space_to_folder(
       .with_view_id(view_id)
       .with_name(name)
       .with_extra(|builder| {
-        let mut extra = builder
-          .is_space(true, to_space_permission(space_permission))
-          .build();
+        let mut extra = builder.is_space(true).build();
         extra["space_icon_color"] = json!(space_icon_color);
         extra["space_icon"] = json!(space_icon);
         extra

@@ -9,8 +9,8 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  CreatePageParams, CreateSpaceParams, IconType, MovePageParams, SpacePermission, UpdatePageParams,
-  UpdateSpaceParams, ViewIcon, ViewLayout,
+  CreatePageParams, CreateSpaceParams, IconType, MovePageParams, PublishPageParams,
+  SpacePermission, UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -726,4 +726,72 @@ async fn create_space() {
   );
   assert_eq!(space_info["space_icon"].as_str().unwrap(), "space_icon_3");
   assert_eq!(space_info["space_icon_color"].as_str().unwrap(), "#000000");
+}
+
+#[tokio::test]
+async fn publish_page() {
+  let registered_user = generate_unique_registered_user().await;
+  let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let workspace_id = web_client.workspace_id().await;
+  let folder_view = web_client
+    .api_client
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let database_page_id = general_space
+    .children
+    .iter()
+    .find(|v| v.name == "To-dos")
+    .unwrap()
+    .view_id
+    .clone();
+  let document_page_id = general_space
+    .children
+    .iter()
+    .find(|v| v.name == "Getting started")
+    .unwrap()
+    .view_id
+    .clone();
+  let page_to_be_published = vec![database_page_id, document_page_id];
+  for view_id in &page_to_be_published {
+    web_client
+      .api_client
+      .publish_page(
+        Uuid::parse_str(&workspace_id).unwrap(),
+        view_id,
+        &PublishPageParams {
+          publish_name: None,
+          visible_database_view_ids: None,
+        },
+      )
+      .await
+      .unwrap();
+  }
+  let publish_namespace = web_client
+    .api_client
+    .get_workspace_publish_namespace(&workspace_id)
+    .await
+    .unwrap();
+  let published_view = web_client
+    .api_client
+    .get_published_outline(&publish_namespace)
+    .await
+    .unwrap();
+  let published_view_ids: HashSet<String> = published_view
+    .children
+    .iter()
+    .find(|v| v.name == "General")
+    .unwrap()
+    .children
+    .iter()
+    .map(|v| v.view_id.clone())
+    .collect();
+  for view_id in &page_to_be_published {
+    assert!(published_view_ids.contains(view_id));
+  }
 }

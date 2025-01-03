@@ -281,6 +281,12 @@ pub struct PublishInfoView {
   pub info: PublishInfo,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublishPageParams {
+  pub publish_name: Option<String>,
+  pub visible_database_view_ids: Option<Vec<String>>,
+}
+
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum IconType {

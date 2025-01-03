@@ -13,6 +13,7 @@ use crate::pg_listener::PgListeners;
 use crate::CollabRealtimeMetrics;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
+use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::StreamRouter;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use indexer::metrics::EmbeddingMetrics;
@@ -40,6 +41,7 @@ pub struct AppMetrics {
   pub access_control_metrics: Arc<AccessControlMetrics>,
   pub realtime_metrics: Arc<CollabRealtimeMetrics>,
   pub collab_metrics: Arc<CollabMetrics>,
+  pub collab_stream_metrics: Arc<CollabStreamMetrics>,
   pub embedding_metrics: Arc<EmbeddingMetrics>,
 }
 
@@ -55,12 +57,14 @@ impl AppMetrics {
     let access_control_metrics = Arc::new(AccessControlMetrics::register(&mut registry));
     let realtime_metrics = Arc::new(CollabRealtimeMetrics::register(&mut registry));
     let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
+    let collab_stream_metrics = Arc::new(CollabStreamMetrics::register(&mut registry));
     let embedding_metrics = Arc::new(EmbeddingMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       access_control_metrics,
       realtime_metrics,
       collab_metrics,
+      collab_stream_metrics,
       embedding_metrics,
     }
   }

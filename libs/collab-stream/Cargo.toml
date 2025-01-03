@@ -24,6 +24,7 @@ tokio-util = { version = "0.7" }
 prost.workspace = true
 async-stream.workspace = true
 async-trait.workspace = true
+prometheus-client.workspace = true
 zstd = "0.13"
 loole = "0.4.0"
 

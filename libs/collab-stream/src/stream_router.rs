@@ -1,3 +1,4 @@
+use crate::metrics::CollabStreamMetrics;
 use loole::{Receiver, Sender};
 use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::Client;
@@ -27,14 +28,19 @@ pub struct StreamRouter {
   alive: Arc<AtomicBool>,
   #[allow(dead_code)]
   workers: Vec<Worker>,
+  metrics: Arc<CollabStreamMetrics>,
 }
 
 impl StreamRouter {
-  pub fn new(client: &Client) -> Result<Self, RedisError> {
-    Self::with_options(client, Default::default())
+  pub fn new(client: &Client, metrics: Arc<CollabStreamMetrics>) -> Result<Self, RedisError> {
+    Self::with_options(client, metrics, Default::default())
   }
 
-  pub fn with_options(client: &Client, options: StreamRouterOptions) -> Result<Self, RedisError> {
+  pub fn with_options(
+    client: &Client,
+    metrics: Arc<CollabStreamMetrics>,
+    options: StreamRouterOptions,
+  ) -> Result<Self, RedisError> {
     let alive = Arc::new(AtomicBool::new(true));
     let (tx, rx) = loole::unbounded();
     let mut workers = Vec::with_capacity(options.worker_count);
@@ -47,6 +53,7 @@ impl StreamRouter {
         rx.clone(),
         alive.clone(),
         &options,
+        metrics.clone(),
       );
       workers.push(worker);
     }
@@ -55,6 +62,7 @@ impl StreamRouter {
       buf: tx,
       workers,
       alive,
+      metrics,
     })
   }
 
@@ -63,6 +71,7 @@ impl StreamRouter {
     let last_id = last_id.unwrap_or_else(|| "0".to_string());
     let h = StreamHandle::new(stream_key, last_id, tx);
     self.buf.send(h).unwrap();
+    self.metrics.reads_enqueued.inc();
     rx
   }
 }
@@ -118,6 +127,7 @@ impl Worker {
     rx: Receiver<StreamHandle>,
     alive: Arc<AtomicBool>,
     options: &StreamRouterOptions,
+    metrics: Arc<CollabStreamMetrics>,
   ) -> Self {
     let mut xread_options = StreamReadOptions::default();
     if let Some(block_millis) = options.xread_block_millis {
@@ -128,7 +138,7 @@ impl Worker {
     }
     let count = options.xread_streams;
     let handle = std::thread::spawn(move || {
-      if let Err(err) = Self::process_streams(conn, tx, rx, alive, xread_options, count) {
+      if let Err(err) = Self::process_streams(conn, tx, rx, alive, xread_options, count, metrics) {
         tracing::error!("worker {} failed: {}", worker_id, err);
       }
     });
@@ -142,11 +152,13 @@ impl Worker {
     alive: Arc<AtomicBool>,
     options: StreamReadOptions,
     count: usize,
+    metrics: Arc<CollabStreamMetrics>,
   ) -> RedisResult<()> {
     let mut stream_keys = Vec::with_capacity(count);
     let mut message_ids = Vec::with_capacity(count);
     let mut senders = HashMap::with_capacity(count);
     while alive.load(SeqCst) {
+      // receive next `count` of stream read requests
       if !Self::read_buf(&rx, &mut stream_keys, &mut message_ids, &mut senders) {
         break; // rx channel has closed
       }
@@ -158,10 +170,12 @@ impl Worker {
         continue;
       }
 
+      metrics.reads_dequeued.inc_by(key_count as u64);
       let result: StreamReadReply = conn.xread_options(&stream_keys, &message_ids, &options)?;
 
       let mut msgs = 0;
       for stream in result.keys {
+        // for each stream returned from Redis, resolve corresponding subscriber and send messages
         let mut remove_sender = false;
         if let Some((sender, idx)) = senders.get(stream.key.as_str()) {
           for id in stream.ids {
@@ -170,7 +184,7 @@ impl Worker {
             message_ids[*idx].clone_from(&message_id); //TODO: optimize
             msgs += 1;
             if let Err(err) = sender.send((message_id, value)) {
-              tracing::warn!("failed to send: {}", err);
+              tracing::debug!("failed to send: {}", err);
               remove_sender = true;
             }
           }
@@ -188,7 +202,8 @@ impl Worker {
           key_count
         );
       }
-      Self::schedule_back(&tx, &mut stream_keys, &mut message_ids, &mut senders);
+      let scheduled = Self::schedule_back(&tx, &mut stream_keys, &mut message_ids, &mut senders);
+      metrics.reads_enqueued.inc_by(scheduled as u64);
     }
     Ok(())
   }
@@ -198,21 +213,27 @@ impl Worker {
     keys: &mut Vec<StreamKey>,
     ids: &mut Vec<String>,
     senders: &mut HashMap<&str, (StreamSender, usize)>,
-  ) {
+  ) -> usize {
     let keys = keys.drain(..);
     let mut ids = ids.drain(..);
+    let mut scheduled = 0;
     for key in keys {
       if let Some(last_id) = ids.next() {
         if let Some((sender, _)) = senders.remove(key.as_str()) {
+          if sender.is_closed() {
+            continue; // sender is already closed
+          }
           let h = StreamHandle::new(key, last_id, sender);
           if let Err(err) = tx.send(h) {
-            tracing::warn!("failed to reschedule: {}", err);
+            tracing::error!("failed to reschedule: {}", err);
             break;
           }
+          scheduled += 1;
         }
       }
     }
     senders.clear();
+    scheduled
   }
 
   fn read_buf(
@@ -276,19 +297,23 @@ impl StreamHandle {
 
 #[cfg(test)]
 mod test {
-  use crate::stream_router::StreamRouter;
+  use crate::metrics::CollabStreamMetrics;
+  use crate::stream_router::{StreamRouter, StreamRouterOptions};
   use rand::random;
   use redis::{Client, Commands, FromRedisValue};
+  use std::sync::Arc;
   use tokio::task::JoinSet;
 
   #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
   async fn multi_worker_preexisting_messages() {
     const ROUTES_COUNT: usize = 200;
     const MSG_PER_ROUTE: usize = 10;
+
     let mut client = Client::open("redis://127.0.0.1/").unwrap();
     let keys = init_streams(&mut client, ROUTES_COUNT, MSG_PER_ROUTE);
+    let metrics = Arc::new(CollabStreamMetrics::default());
 
-    let router = StreamRouter::new(&client).unwrap();
+    let router = StreamRouter::new(&client, metrics).unwrap();
 
     let mut join_set = JoinSet::new();
     for key in keys {
@@ -313,8 +338,9 @@ mod test {
     const MSG_PER_ROUTE: usize = 10;
     let mut client = Client::open("redis://127.0.0.1/").unwrap();
     let keys = init_streams(&mut client, ROUTES_COUNT, 0);
+    let metrics = Arc::new(CollabStreamMetrics::default());
 
-    let router = StreamRouter::new(&client).unwrap();
+    let router = StreamRouter::new(&client, metrics).unwrap();
 
     let mut join_set = JoinSet::new();
     for key in keys.iter() {
@@ -348,13 +374,59 @@ mod test {
     let _: String = client.xadd(&key, "*", &[("data", 1)]).unwrap();
     let m2: String = client.xadd(&key, "*", &[("data", 2)]).unwrap();
     let m3: String = client.xadd(&key, "*", &[("data", 3)]).unwrap();
+    let metrics = Arc::new(CollabStreamMetrics::default());
 
-    let router = StreamRouter::new(&client).unwrap();
+    let router = StreamRouter::new(&client, metrics).unwrap();
     let mut observer = router.observe(key, Some(m2));
 
     let (msg_id, m) = observer.recv().await.unwrap();
     assert_eq!(msg_id, m3);
     assert_eq!(u32::from_redis_value(&m["data"]).unwrap(), 3);
+  }
+
+  #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+  async fn drop_subscription() {
+    const ROUTES_COUNT: usize = 1;
+    const MSG_PER_ROUTE: usize = 10;
+
+    let mut client = Client::open("redis://127.0.0.1/").unwrap();
+    let mut keys = init_streams(&mut client, ROUTES_COUNT, MSG_PER_ROUTE);
+    let metrics = Arc::new(CollabStreamMetrics::default());
+
+    let router = StreamRouter::with_options(
+      &client,
+      metrics.clone(),
+      StreamRouterOptions {
+        worker_count: 2,
+        xread_streams: 100,
+        xread_block_millis: Some(50),
+        xread_count: None,
+      },
+    )
+    .unwrap();
+
+    let key = keys.pop().unwrap();
+    let mut observer = router.observe(key.clone(), None);
+    for i in 0..MSG_PER_ROUTE {
+      let (_msg_id, map) = observer.recv().await.unwrap();
+      let value = String::from_redis_value(&map["data"]).unwrap();
+      assert_eq!(value, format!("{}-{}", key, i));
+    }
+    // drop observer and wait for worker to release
+    drop(observer);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let enqueued = metrics.reads_enqueued.get();
+    let dequeued = metrics.reads_dequeued.get();
+    assert_eq!(enqueued, dequeued, "dropped observer state");
+
+    // after dropping observer, no new polling task should be rescheduled
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    assert_eq!(metrics.reads_enqueued.get(), enqueued, "unchanged enqueues");
+    assert_eq!(metrics.reads_dequeued.get(), dequeued, "unchanged dequeues");
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    assert_eq!(metrics.reads_enqueued.get(), enqueued, "unchanged enqueues");
+    assert_eq!(metrics.reads_dequeued.get(), dequeued, "unchanged dequeues");
   }
 
   fn init_streams(client: &mut Client, stream_count: usize, msgs_per_stream: usize) -> Vec<String> {

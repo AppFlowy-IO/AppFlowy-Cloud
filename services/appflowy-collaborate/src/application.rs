@@ -24,6 +24,7 @@ use crate::actix_ws::server::RealtimeServerActor;
 use crate::api::{collab_scope, ws_scope};
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use access_control::casbin::access::AccessControl;
+use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 
@@ -110,8 +111,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let user_cache = UserCache::new(pg_pool.clone()).await;
 
   info!("Connecting to Redis...");
-  let (redis_conn_manager, redis_stream_router) =
-    get_redis_client(config.redis_uri.expose_secret(), config.redis_worker_count).await?;
+  let (redis_conn_manager, redis_stream_router) = get_redis_client(
+    config.redis_uri.expose_secret(),
+    config.redis_worker_count,
+    metrics.collab_stream_metrics.clone(),
+  )
+  .await?;
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -189,12 +194,14 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 async fn get_redis_client(
   redis_uri: &str,
   worker_count: usize,
+  metrics: Arc<CollabStreamMetrics>,
 ) -> Result<(redis::aio::ConnectionManager, Arc<StreamRouter>), Error> {
   info!("Connecting to redis with uri: {}", redis_uri);
   let client = redis::Client::open(redis_uri).context("failed to connect to redis")?;
 
   let router = StreamRouter::with_options(
     &client,
+    metrics,
     StreamRouterOptions {
       worker_count,
       xread_streams: 100,

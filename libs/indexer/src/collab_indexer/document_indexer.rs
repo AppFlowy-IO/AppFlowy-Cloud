@@ -1,6 +1,6 @@
 use crate::collab_indexer::Indexer;
 use crate::vector::embedder::Embedder;
-use crate::vector::open_ai::split_text_by_max_content_len;
+use crate::vector::open_ai::group_paragraphs_by_max_content_len;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::{
@@ -33,26 +33,17 @@ impl Indexer for DocumentIndexer {
       )
     })?;
 
-    let result = document.to_plain_text(collab.transact(), false, true);
-    match result {
-      Ok(content) => self.create_embedded_chunks_from_text(object_id, content, embedding_model),
-      Err(err) => {
-        if matches!(err, DocumentError::NoRequiredData) {
-          Ok(vec![])
-        } else {
-          Err(AppError::Internal(err.into()))
-        }
-      },
-    }
+    let paragraphs = document.paragraphs(collab.transact());
+    self.create_embedded_chunks_from_text(object_id, paragraphs, embedding_model)
   }
 
   fn create_embedded_chunks_from_text(
     &self,
     object_id: String,
-    text: String,
+    paragraphs: Vec<String>,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
-    split_text_into_chunks(object_id, text, CollabType::Document, &model)
+    split_text_into_chunks(object_id, paragraphs, CollabType::Document, &model)
   }
 
   fn embed(
@@ -103,7 +94,7 @@ impl Indexer for DocumentIndexer {
 
 fn split_text_into_chunks(
   object_id: String,
-  content: String,
+  paragraphs: Vec<String>,
   collab_type: CollabType,
   embedding_model: &EmbeddingModel,
 ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
@@ -112,12 +103,12 @@ fn split_text_into_chunks(
     EmbeddingModel::TextEmbedding3Small
   ));
 
-  if content.is_empty() {
+  if paragraphs.is_empty() {
     return Ok(vec![]);
   }
   // We assume that every token is ~4 bytes. We're going to split document content into fragments
   // of ~2000 tokens each.
-  let split_contents = split_text_by_max_content_len(content, 8000)?;
+  let split_contents = group_paragraphs_by_max_content_len(paragraphs, 8000)?;
   let metadata =
     json!({"id": object_id, "source": "appflowy", "name": "document", "collab_type": collab_type });
   Ok(

@@ -542,6 +542,7 @@ impl UnindexedCollabTask {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum UnindexedData {
   Text(String),
+  Paragraphs(Vec<String>),
 }
 
 impl UnindexedData {

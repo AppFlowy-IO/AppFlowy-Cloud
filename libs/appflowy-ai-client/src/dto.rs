@@ -13,9 +13,36 @@ pub struct SummarizeRowResponse {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChatQuestionQuery {
+  pub chat_id: String,
+  pub question_id: i64,
+  pub format: ResponseFormat,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatQuestion {
   pub chat_id: String,
   pub data: MessageData,
+  #[serde(default)]
+  pub format: ResponseFormat,
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct ResponseFormat {
+  #[serde(rename = "type")]
+  pub format_type: FormatType,
+  pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum FormatType {
+  #[default]
+  Paragraph = 0,
+  BulletList = 1,
+  NumberedList = 2,
+  SimpleTable = 3,
+  // Image = 4,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

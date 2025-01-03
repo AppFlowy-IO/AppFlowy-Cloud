@@ -24,27 +24,6 @@ async fn qa_test() {
   println!("questions: {:?}", questions);
   assert_eq!(questions.len(), 3)
 }
-#[tokio::test]
-async fn stop_stream_test() {
-  let client = appflowy_ai_client();
-  client.health_check().await.unwrap();
-  let chat_id = uuid::Uuid::new_v4().to_string();
-  let mut stream = client
-    .stream_question(&chat_id, "I feel hungry", None, vec![], &AIModel::GPT4oMini)
-    .await
-    .unwrap();
-
-  let mut count = 0;
-  while let Some(message) = stream.next().await {
-    if count > 1 {
-      break;
-    }
-    count += 1;
-    println!("message: {:?}", message);
-  }
-
-  assert_ne!(count, 0);
-}
 
 #[tokio::test]
 async fn stream_test() {

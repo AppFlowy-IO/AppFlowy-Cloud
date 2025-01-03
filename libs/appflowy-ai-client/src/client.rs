@@ -1,8 +1,8 @@
 use crate::dto::{
   AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextResponse,
   CompletionType, CreateChatContext, CustomPrompt, Document, LocalAIConfig, MessageData,
-  RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SimilarityResponse,
-  SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
+  RepeatedLocalAIPackage, RepeatedRelatedQuestion, ResponseFormat, SearchDocumentsRequest,
+  SimilarityResponse, SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -187,6 +187,7 @@ impl AppFlowyAIClient {
         rag_ids: vec![],
         message_id: Some(question_id.to_string()),
       },
+      format: Default::default(),
     };
     let url = format!("{}/chat/message", self.url);
     let resp = self
@@ -216,6 +217,7 @@ impl AppFlowyAIClient {
         rag_ids,
         message_id: None,
       },
+      format: Default::default(),
     };
     let url = format!("{}/chat/message/stream", self.url);
     let resp = self
@@ -245,12 +247,21 @@ impl AppFlowyAIClient {
         rag_ids,
         message_id: Some(question_id.to_string()),
       },
+      format: ResponseFormat::default(),
     };
+    self.stream_question_v3(model, json).await
+  }
+
+  pub async fn stream_question_v3(
+    &self,
+    model: &AIModel,
+    question: ChatQuestion,
+  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let url = format!("{}/v2/chat/message/stream", self.url);
     let resp = self
       .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
-      .json(&json)
+      .json(&question)
       .timeout(Duration::from_secs(30))
       .send()
       .await?;

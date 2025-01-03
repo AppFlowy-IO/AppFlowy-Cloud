@@ -1,5 +1,6 @@
 use crate::ai_test::util::read_text_from_asset;
 
+use appflowy_ai_client::dto::{ChatQuestionQuery, FormatType, ResponseFormat};
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{ai_test_enabled, TestClient};
@@ -347,6 +348,55 @@ async fn generate_chat_message_answer_test() {
 //   // when the question was updated, the answer should be different
 //   assert_ne!(remote_messages[1].content, messages[1].content);
 // }
+
+#[tokio::test]
+async fn get_format_question_message_test() {
+  if !ai_test_enabled() {
+    return;
+  }
+
+  let test_client = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = test_client.workspace_id().await;
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: "my ai chat".to_string(),
+    rag_ids: vec![],
+  };
+
+  test_client
+    .api_client
+    .create_chat(&workspace_id, params)
+    .await
+    .unwrap();
+
+  let params = CreateChatMessageParams::new_user(
+    "what is the different between Rust and c++? Give me three points",
+  );
+  let question = test_client
+    .api_client
+    .create_question(&workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+
+  let query = ChatQuestionQuery {
+    chat_id,
+    question_id: question.message_id,
+    format: ResponseFormat {
+      format_type: FormatType::SimpleTable,
+      metadata: None,
+    },
+  };
+
+  let answer_stream = test_client
+    .api_client
+    .stream_answer_v3(&workspace_id, query)
+    .await
+    .unwrap();
+  let answer = collect_answer(answer_stream).await;
+  println!("answer:\n{}", answer);
+  assert!(!answer.is_empty());
+}
 
 #[tokio::test]
 async fn get_question_message_test() {

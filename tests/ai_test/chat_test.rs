@@ -1,6 +1,6 @@
 use crate::ai_test::util::read_text_from_asset;
 
-use appflowy_ai_client::dto::{ChatQuestionQuery, FormatType, ResponseFormat};
+use appflowy_ai_client::dto::{ChatQuestionQuery, OutputContent, OutputLayout, ResponseFormat};
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{ai_test_enabled, TestClient};
@@ -383,8 +383,9 @@ async fn get_format_question_message_test() {
     chat_id,
     question_id: question.message_id,
     format: ResponseFormat {
-      format_type: FormatType::SimpleTable,
-      metadata: None,
+      output_layout: OutputLayout::SimpleTable,
+      output_content: OutputContent::TEXT,
+      output_content_metadata: None,
     },
   };
 

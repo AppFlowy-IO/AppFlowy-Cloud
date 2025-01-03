@@ -29,20 +29,28 @@ pub struct ChatQuestion {
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct ResponseFormat {
-  #[serde(rename = "type")]
-  pub format_type: FormatType,
-  pub metadata: Option<serde_json::Value>,
+  pub output_layout: OutputLayout,
+  pub output_content: OutputContent,
+  pub output_content_metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
-pub enum FormatType {
+pub enum OutputLayout {
   #[default]
   Paragraph = 0,
   BulletList = 1,
   NumberedList = 2,
   SimpleTable = 3,
-  // Image = 4,
+}
+
+#[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum OutputContent {
+  #[default]
+  TEXT = 0,
+  IMAGE = 1,
+  RichTextImage = 2,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

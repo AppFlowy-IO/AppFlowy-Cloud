@@ -2,9 +2,7 @@ use std::collections::HashSet;
 
 use app_error::AppError;
 use chrono::DateTime;
-use collab_folder::{
-  hierarchy_builder::SpacePermission, Folder, SectionItem, ViewLayout as CollabFolderViewLayout,
-};
+use collab_folder::{Folder, SectionItem, SpacePermission, ViewLayout as CollabFolderViewLayout};
 use shared_entity::dto::workspace_dto::{
   self, FavoriteFolderView, FolderView, FolderViewMinimal, RecentFolderView, TrashFolderView,
   ViewLayout,

@@ -36,7 +36,7 @@ use collab_document::document::Document;
 use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
-use collab_folder::{timestamp, CollabOrigin, Folder};
+use collab_folder::{timestamp, CollabOrigin, Folder, SpaceInfo};
 use collab_rt_entity::user::RealtimeUser;
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
@@ -419,12 +419,14 @@ async fn add_new_space_to_folder(
       .with_view_id(view_id)
       .with_name(name)
       .with_extra(|builder| {
-        let mut extra = builder
-          .is_space(true, to_space_permission(space_permission))
-          .build();
-        extra["space_icon_color"] = json!(space_icon_color);
-        extra["space_icon"] = json!(space_icon);
-        extra
+        builder
+          .with_space_info(SpaceInfo {
+            space_icon: Some(space_icon.to_string()),
+            space_icon_color: Some(space_icon_color.to_string()),
+            space_permission: to_space_permission(space_permission),
+            ..Default::default()
+          })
+          .build()
       })
       .build()
       .view;

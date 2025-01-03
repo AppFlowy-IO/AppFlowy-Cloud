@@ -9,12 +9,11 @@ use appflowy_ai_client::dto::{
 use async_trait::async_trait;
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
-use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
 use serde_json::json;
 use tracing::trace;
-use uuid::Uuid;
+use twox_hash::xxhash64::Hasher;
 
 pub struct DocumentIndexer;
 
@@ -115,15 +114,18 @@ fn split_text_into_chunks(
     split_contents
       .into_iter()
       .enumerate()
-      .map(|(index, content)| AFCollabEmbeddedChunk {
-        fragment_id: Uuid::new_v4().to_string(),
-        object_id: object_id.clone(),
-        content_type: EmbeddingContentType::PlainText,
-        content,
-        embedding: None,
-        metadata: metadata.clone(),
-        fragment_index: index as i32,
-        embedded_type: 0,
+      .map(|(index, content)| {
+        let consistent_hash = Hasher::oneshot(0, content.as_bytes());
+        AFCollabEmbeddedChunk {
+          fragment_id: format!("{:x}", consistent_hash),
+          object_id: object_id.clone(),
+          content_type: EmbeddingContentType::PlainText,
+          content,
+          embedding: None,
+          metadata: metadata.clone(),
+          fragment_index: index as i32,
+          embedded_type: 0,
+        }
       })
       .collect(),
   )

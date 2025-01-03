@@ -227,11 +227,13 @@ fn handle_task(
     task.data,
     task.collab_type
   );
-  let chunks = match task.data {
-    UnindexedData::Text(text) => indexer
-      .create_embedded_chunks_from_text(task.object_id.clone(), text, embedder.model())
-      .ok()?,
+  let paragraphs = match task.data {
+    UnindexedData::Paragraphs(paragraphs) => paragraphs,
+    UnindexedData::Text(text) => text.split('\n').map(|s| s.to_string()).collect(),
   };
+  let chunks = indexer
+    .create_embedded_chunks_from_text(task.object_id.clone(), paragraphs, embedder.model())
+    .ok()?;
   let embeddings = indexer.embed(&embedder, chunks).ok()?;
   embeddings.map(|embeddings| EmbeddingRecord {
     workspace_id: task.workspace_id,

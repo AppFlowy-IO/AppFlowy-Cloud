@@ -5,7 +5,6 @@ use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use tiktoken_rs::CoreBPE;
-use unicode_segmentation::UnicodeSegmentation;
 
 pub const OPENAI_EMBEDDINGS_URL: &str = "https://api.openai.com/v1/embeddings";
 

@@ -2365,6 +2365,7 @@ dependencies = [
  "collab-entity",
  "futures",
  "loole",
+ "prometheus-client",
  "prost 0.13.3",
  "rand 0.8.5",
  "redis 0.25.4",

@@ -258,18 +258,17 @@ impl IndexerScheduler {
       CollabType::Document => {
         let txn = collab.transact();
         let text = DocumentBody::from_collab(collab)
-          .and_then(|body| body.to_plain_text(txn, false, true).ok());
+          .map(|body| body.paragraphs(txn))
+          .unwrap_or_default();
 
-        if let Some(text) = text {
-          if !text.is_empty() {
-            let pending = UnindexedCollabTask::new(
-              Uuid::parse_str(workspace_id)?,
-              object_id.to_string(),
-              collab_type.clone(),
-              UnindexedData::Text(text),
-            );
-            self.embed_immediately(pending)?;
-          }
+        if !text.is_empty() {
+          let pending = UnindexedCollabTask::new(
+            Uuid::parse_str(workspace_id)?,
+            object_id.to_string(),
+            collab_type.clone(),
+            UnindexedData::Paragraphs(text),
+          );
+          self.embed_immediately(pending)?;
         }
       },
       _ => {
@@ -488,11 +487,15 @@ fn process_collab(
   metrics: &EmbeddingMetrics,
 ) -> Result<Option<(u32, Vec<AFCollabEmbeddedChunk>)>, AppError> {
   if let Some(indexer) = indexer {
-    let chunks = match data {
-      UnindexedData::Text(text) => {
-        indexer.create_embedded_chunks_from_text(object_id.to_string(), text, embedder.model())?
-      },
+    let paragraphs = match data {
+      UnindexedData::Paragraphs(paragraphs) => paragraphs,
+      UnindexedData::Text(text) => text.split('\n').map(|s| s.to_string()).collect(),
     };
+    let chunks = indexer.create_embedded_chunks_from_text(
+      object_id.to_string(),
+      paragraphs,
+      embedder.model(),
+    )?;
 
     if chunks.is_empty() {
       return Ok(None);
@@ -549,6 +552,7 @@ impl UnindexedData {
   pub fn is_empty(&self) -> bool {
     match self {
       UnindexedData::Text(text) => text.is_empty(),
+      UnindexedData::Paragraphs(text) => text.is_empty(),
     }
   }
 }

@@ -108,7 +108,7 @@ fn split_text_into_chunks(
   }
   // We assume that every token is ~4 bytes. We're going to split document content into fragments
   // of ~2000 tokens each.
-  let split_contents = group_paragraphs_by_max_content_len(paragraphs, 8000)?;
+  let split_contents = group_paragraphs_by_max_content_len(paragraphs, 8000);
   let metadata =
     json!({"id": object_id, "source": "appflowy", "name": "document", "collab_type": collab_type });
   Ok(

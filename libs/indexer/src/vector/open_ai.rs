@@ -184,47 +184,35 @@ pub fn split_text_by_max_tokens(
   Ok(chunks)
 }
 
-#[inline]
 pub fn group_paragraphs_by_max_content_len(
   paragraphs: Vec<String>,
   max_content_len: usize,
-) -> Result<Vec<String>, AppError> {
+) -> Vec<String> {
   if paragraphs.is_empty() {
-    return Ok(vec![]);
+    return vec![];
   }
 
-  if paragraphs.len() <= max_content_len {
-    return Ok(vec![paragraphs]);
-  }
-
-  // Content is longer than max_content_len; need to split
-  let mut result = Vec::with_capacity(1 + paragraphs.len() / max_content_len);
-  let mut fragment = String::with_capacity(max_content_len);
-  let mut current_len = 0;
-
-  for grapheme in paragraphs.graphemes(true) {
-    let grapheme_len = grapheme.len();
-    if current_len + grapheme_len > max_content_len {
-      if !fragment.is_empty() {
-        result.push(std::mem::take(&mut fragment));
+  let mut result = Vec::new();
+  let mut current = String::new();
+  for paragraph in paragraphs {
+    if paragraph.len() + current.len() > max_content_len {
+      // if we add the paragraph to the current content, it will exceed the limit
+      // so we push the current content to the result set and start a new chunk
+      let accumulated = std::mem::replace(&mut current, paragraph);
+      if !accumulated.is_empty() {
+        result.push(accumulated);
       }
-      current_len = 0;
-
-      if grapheme_len > max_content_len {
-        // Push the grapheme as a fragment on its own
-        result.push(grapheme.to_string());
-        continue;
-      }
+    } else {
+      // add the paragraph to the current chunk
+      current.push_str(&paragraph);
     }
-    fragment.push_str(grapheme);
-    current_len += grapheme_len;
   }
 
-  // Add the last fragment if it's not empty
-  if !fragment.is_empty() {
-    result.push(fragment);
+  if !current.is_empty() {
+    result.push(current);
   }
-  Ok(result)
+
+  result
 }
 
 #[cfg(test)]

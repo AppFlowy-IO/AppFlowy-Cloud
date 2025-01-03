@@ -2024,10 +2024,13 @@ async fn get_workspace_folder_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
   query: web::Query<QueryWorkspaceFolder>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<FolderView>>> {
   let depth = query.depth.unwrap_or(1);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
   let workspace_id = workspace_id.into_inner();
   state
     .workspace_access_control
@@ -2039,9 +2042,11 @@ async fn get_workspace_folder_handler(
     workspace_id.to_string()
   };
   let folder_view = biz::collab::ops::get_user_workspace_structure(
+    &state.metrics.appflowy_web_metrics,
+    server,
     &state.collab_access_control_storage,
     &state.pg_pool,
-    uid,
+    user,
     workspace_id,
     depth,
     &root_view_id,

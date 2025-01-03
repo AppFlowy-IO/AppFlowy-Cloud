@@ -34,6 +34,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use yrs::Map;
 
+pub const DEFAULT_SPACE_ICON: &str = "interface_essential/home-3";
+pub const DEFAULT_SPACE_ICON_COLOR: &str = "0xFFA34AFD";
+
 pub fn get_row_details_serde(
   row_detail: RowDetail,
   field_by_id_name_uniq: &HashMap<String, Field>,

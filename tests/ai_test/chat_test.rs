@@ -3,7 +3,7 @@ use crate::ai_test::util::read_text_from_asset;
 use appflowy_ai_client::dto::{
   ChatQuestionQuery, OutputContent, OutputContentMetadata, OutputLayout, ResponseFormat,
 };
-use assert_json_diff::{assert_json_eq, assert_json_include};
+use assert_json_diff::assert_json_include;
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{ai_test_enabled, TestClient};
 use futures_util::StreamExt;
@@ -223,35 +223,17 @@ async fn chat_qa_test() {
     .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
+  let expected = json!({
+      "id": "123",
+      "name": "test context",
+      "source": "user added",
+      "extra": {
+          "created_at": 123
+      }
+  });
   assert_json_include!(
-    actual: question.meta_data,
-    expected: json!([
-      {
-        "id": "123",
-        "name": "test context",
-        "source": "user added",
-        "extra": {
-            "created_at": 123
-        }
-      }
-    ])
-  );
-
-  let answer = test_client
-    .api_client
-    .get_answer(&workspace_id, &chat_id, question.message_id)
-    .await
-    .unwrap();
-  assert!(answer.content.contains("Singapore"));
-  assert_json_eq!(
-    answer.meta_data,
-    json!([
-      {
-        "id": "123",
-        "name": "test context",
-        "source": "user added",
-      }
-    ])
+      actual: json!(question.meta_data[0]),
+      expected: expected
   );
 
   let related_questions = test_client

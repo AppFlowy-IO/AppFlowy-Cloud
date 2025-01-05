@@ -51,8 +51,10 @@ jobs:
 
       - name: Start Docker Compose Services
         run: |
-          SKIP_SQLX_PREPARE=true ./script/run_local_server.sh
+          docker compose -f docker-compose-dev.yml up -d 
+          ./script/code_gen.sh
+          cargo sqlx database create && cargo sqlx migrate run
 
       - name: Run Server and Test
         run: |
-          cargo test stress_test
+          cargo run --package xtask -- --stress-test

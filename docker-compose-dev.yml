@@ -28,6 +28,11 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
       - SUPABASE_PASSWORD=${SUPABASE_PASSWORD:-root}
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 6
     ports:
       - 5432:5432
     volumes:
@@ -45,7 +50,8 @@ services:
     restart: on-failure
     image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       # Gotrue config: https://github.com/supabase/gotrue/blob/master/example.env
       - GOTRUE_ADMIN_EMAIL=${GOTRUE_ADMIN_EMAIL}

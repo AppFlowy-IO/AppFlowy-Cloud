@@ -7,14 +7,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  POSTGRES_HOST: localhost
-  REDIS_HOST: localhost
-  MINIO_HOST: localhost
   SQLX_OFFLINE: true
   RUST_TOOLCHAIN: "1.80"
-  LOCALHOST_URL: http://localhost
-  LOCALHOST_WS: ws://localhost/ws/v1
-  LOCALHOST_GOTRUE: http://localhost/gotrue
+  POSTGRES_HOST: localhost
+  REDIS_HOST: localhost
 
 jobs:
   test:
@@ -31,27 +27,33 @@ jobs:
       - name: Copy and Rename deploy.env to .env
         run: cp deploy.env .env
 
+      - name: Install PostgreSQL Client
+        run: |
+          brew update
+          brew install libpq
+          brew install sqlx-cli
+
       - name: Replace Values in .env
         run: |
           sed -i '' 's|RUST_LOG=.*|RUST_LOG=debug|' .env
           sed -i '' 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=http://localhost:9999|' .env
+          sed -i '' 's|APPFLOWY_INDEXER_ENABLED=.*|APPFLOWY_INDEXER_ENABLED=false|' .env
+          
           sed -i '' 's|APPFLOWY_GOTRUE_BASE_URL=.*|APPFLOWY_GOTRUE_BASE_URL=http://localhost:9999|' .env
-          sed -i '' 's|GOTRUE_DATABASE_URL=.*|GOTRUE_DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres|' .env
+          sed -i '' 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
+          sed -i '' 's|APPFLOWY_DATABASE_URL=.*|APPFLOWY_DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
+          
+          sed -i '' 's|DATABASE_URL=.*|DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
+          cat .env
         shell: bash
-
-      - name: Remove All Docker Data Used in docker-compose-dev.yml
-        run: |
-        #          docker compose -f docker-compose-dev.yml down --volumes --remove-orphans
 
       - name: Start Docker Compose Services
         run: |
-          #          docker compose -f docker-compose-dev.yml up -d
-               docker ps -a
+          ./script/run_local_server.sh
 
       - name: Install Prerequisites
         run: |
           brew install protobuf
-      
 
       - name: Run Server and Test
         run: |

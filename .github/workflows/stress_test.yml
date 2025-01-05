@@ -11,6 +11,8 @@ env:
   RUST_TOOLCHAIN: "1.80"
   POSTGRES_HOST: localhost
   REDIS_HOST: localhost
+  LOCALHOST_GOTRUE: http://localhost/gotrue
+  DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
 
 jobs:
   test:
@@ -27,11 +29,12 @@ jobs:
       - name: Copy and Rename deploy.env to .env
         run: cp deploy.env .env
 
-      - name: Install PostgreSQL Client
+      - name: Install Prerequisites
         run: |
           brew update
           brew install libpq
           brew install sqlx-cli
+          brew install protobuf
 
       - name: Replace Values in .env
         run: |
@@ -43,17 +46,12 @@ jobs:
           sed -i '' 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
           sed -i '' 's|APPFLOWY_DATABASE_URL=.*|APPFLOWY_DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
           
-          sed -i '' 's|DATABASE_URL=.*|DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
           cat .env
         shell: bash
 
       - name: Start Docker Compose Services
         run: |
           ./script/run_local_server.sh
-
-      - name: Install Prerequisites
-        run: |
-          brew install protobuf
 
       - name: Run Server and Test
         run: |

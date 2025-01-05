@@ -18,7 +18,7 @@ async fn stress_test_run_multiple_text_edits() {
   ));
   // create writer
   let mut writer = TestClient::new_user().await;
-  sleep(Duration::from_secs(2)).await; // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
+  sleep(Duration::from_secs(5)).await; // sleep 5 secs to make sure it do not trigger register user too fast in gotrue
 
   let object_id = Uuid::new_v4().to_string();
   let workspace_id = writer.workspace_id().await;

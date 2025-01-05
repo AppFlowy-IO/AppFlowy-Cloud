@@ -41,12 +41,12 @@ jobs:
 
       - name: Remove All Docker Data Used in docker-compose-dev.yml
         run: |
-          docker compose -f docker-compose-dev.yml down --volumes --remove-orphans
+        #          docker compose -f docker-compose-dev.yml down --volumes --remove-orphans
 
       - name: Start Docker Compose Services
         run: |
-          docker compose -f docker-compose-dev.yml up -d
-          docker ps -a
+          #          docker compose -f docker-compose-dev.yml up -d
+               docker ps -a
 
       - name: Install Prerequisites
         run: |

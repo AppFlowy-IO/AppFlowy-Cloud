@@ -17,6 +17,7 @@ use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::CollabRealtimeMetrics;
+use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::StreamRouter;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
@@ -128,6 +129,7 @@ pub struct AppMetrics {
   pub published_collab_metrics: Arc<PublishedCollabMetrics>,
   pub appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
   pub embedding_metrics: Arc<EmbeddingMetrics>,
+  pub collab_stream_metrics: Arc<CollabStreamMetrics>,
 }
 
 impl Default for AppMetrics {
@@ -146,6 +148,7 @@ impl AppMetrics {
     let published_collab_metrics = Arc::new(PublishedCollabMetrics::register(&mut registry));
     let appflowy_web_metrics = Arc::new(AppFlowyWebMetrics::register(&mut registry));
     let embedding_metrics = Arc::new(EmbeddingMetrics::register(&mut registry));
+    let collab_stream_metrics = Arc::new(CollabStreamMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       request_metrics,
@@ -155,6 +158,7 @@ impl AppMetrics {
       published_collab_metrics,
       appflowy_web_metrics,
       embedding_metrics,
+      collab_stream_metrics,
     }
   }
 }

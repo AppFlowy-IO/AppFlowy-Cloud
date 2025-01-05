@@ -9,15 +9,13 @@ use shared_entity::dto::workspace_dto::{
 };
 use uuid::Uuid;
 
-/// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
-pub fn collab_folder_to_folder_view(
-  workspace_id: Uuid,
-  root_view_id: &str,
-  folder: &Folder,
-  max_depth: u32,
-  pubished_view_ids: &HashSet<String>,
-) -> Result<FolderView, AppError> {
-  let mut unviewable = HashSet::new();
+pub struct PrivateAndNonviewableViews {
+  pub my_private_view_ids: HashSet<String>,
+  pub nonviewable_view_ids: HashSet<String>,
+}
+
+pub fn private_and_nonviewable_view_ids(folder: &Folder) -> PrivateAndNonviewableViews {
+  let mut nonviewable_view_ids = HashSet::new();
   let mut my_private_view_ids = HashSet::new();
   for private_section in folder.get_my_private_sections() {
     my_private_view_ids.insert(private_section.id);
@@ -26,21 +24,36 @@ pub fn collab_folder_to_folder_view(
     if let Some(private_view) = folder.get_view(&private_section.id) {
       if check_if_view_is_space(&private_view) && !my_private_view_ids.contains(&private_section.id)
       {
-        unviewable.insert(private_section.id);
+        nonviewable_view_ids.insert(private_section.id);
       }
     }
   }
   for trash_view in folder.get_all_trash_sections() {
-    unviewable.insert(trash_view.id);
+    nonviewable_view_ids.insert(trash_view.id);
   }
+  PrivateAndNonviewableViews {
+    my_private_view_ids,
+    nonviewable_view_ids,
+  }
+}
+
+/// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
+pub fn collab_folder_to_folder_view(
+  workspace_id: Uuid,
+  root_view_id: &str,
+  folder: &Folder,
+  max_depth: u32,
+  pubished_view_ids: &HashSet<String>,
+) -> Result<FolderView, AppError> {
+  let private_and_nonviewable_views = private_and_nonviewable_view_ids(folder);
 
   to_folder_view(
     workspace_id,
     "",
     root_view_id,
     folder,
-    &unviewable,
-    &my_private_view_ids,
+    &private_and_nonviewable_views.nonviewable_view_ids,
+    &private_and_nonviewable_views.my_private_view_ids,
     pubished_view_ids,
     false,
     0,
@@ -225,6 +238,27 @@ pub fn section_items_to_trash_folder_view(
       })
     })
     .collect()
+}
+
+pub fn check_if_view_ancestors_fulfil_condition(
+  view_id: &str,
+  collab_folder: &Folder,
+  condition: impl Fn(&collab_folder::View) -> bool,
+) -> bool {
+  let mut current_view_id = view_id.to_string();
+  loop {
+    let view = match collab_folder.get_view(&current_view_id) {
+      Some(view) => view,
+      None => return false,
+    };
+    if condition(&view) {
+      return true;
+    }
+    current_view_id = view.parent_view_id.clone();
+    if current_view_id.is_empty() {
+      return false;
+    }
+  }
 }
 
 pub fn check_if_view_is_space(view: &collab_folder::View) -> bool {

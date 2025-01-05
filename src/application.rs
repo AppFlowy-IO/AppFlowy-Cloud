@@ -42,6 +42,7 @@ use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
+use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use indexer::collab_indexer::IndexerProvider;
@@ -248,8 +249,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   // Redis
   info!("Connecting to Redis...");
-  let (redis_conn_manager, redis_stream_router) =
-    get_redis_client(config.redis_uri.expose_secret(), config.redis_worker_count).await?;
+  let (redis_conn_manager, redis_stream_router) = get_redis_client(
+    config.redis_uri.expose_secret(),
+    config.redis_worker_count,
+    metrics.collab_stream_metrics.clone(),
+  )
+  .await?;
 
   info!("Setup AppFlowy AI: {}", config.appflowy_ai.url());
   let appflowy_ai_client = AppFlowyAIClient::new(&config.appflowy_ai.url());
@@ -327,7 +332,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     enable: get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()
       .unwrap_or(true),
-    openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+    openai_api_key: Secret::new(get_env_var("APPFLOWY_AI_OPENAI_API_KEY", "")),
     embedding_buffer_size: appflowy_collaborate::config::get_env_var(
       "APPFLOWY_INDEXER_EMBEDDING_BUFFER_SIZE",
       "5000",
@@ -387,12 +392,14 @@ fn get_admin_client(
 async fn get_redis_client(
   redis_uri: &str,
   worker_count: usize,
+  metrics: Arc<CollabStreamMetrics>,
 ) -> Result<(redis::aio::ConnectionManager, Arc<StreamRouter>), Error> {
   info!("Connecting to redis with uri: {}", redis_uri);
   let client = redis::Client::open(redis_uri).context("failed to connect to redis")?;
 
   let router = StreamRouter::with_options(
     &client,
+    metrics,
     StreamRouterOptions {
       worker_count,
       xread_streams: 100,

@@ -19,20 +19,30 @@ use collab_database::rows::RowId;
 use collab_database::rows::RowMetaKey;
 use collab_database::template::timestamp_parse::TimestampCellData;
 use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
+use collab_database::workspace_database::WorkspaceDatabaseBody;
 use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::CollabOrigin;
 use collab_folder::Folder;
+use database::collab::select_workspace_database_oid;
 use database::collab::CollabStorage;
 use database::collab::GetCollabOrigin;
 use database_entity::dto::QueryCollab;
 use database_entity::dto::QueryCollabParams;
+use database_entity::dto::QueryCollabResult;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
+use sqlx::PgPool;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
+use uuid::Uuid;
 use yrs::Map;
+
+pub const DEFAULT_SPACE_ICON: &str = "interface_essential/home-3";
+pub const DEFAULT_SPACE_ICON_COLOR: &str = "0xFFA34AFD";
 
 pub fn get_row_details_serde(
   row_detail: RowDetail,
@@ -259,6 +269,53 @@ pub async fn get_latest_collab_encoded(
     .await
 }
 
+pub async fn batch_get_latest_collab_encoded(
+  collab_storage: &CollabAccessControlStorage,
+  collab_origin: GetCollabOrigin,
+  workspace_id: &str,
+  oid_list: &[String],
+  collab_type: CollabType,
+) -> Result<HashMap<String, EncodedCollab>, AppError> {
+  let uid = match collab_origin {
+    GetCollabOrigin::User { uid } => uid,
+    _ => 0,
+  };
+  let queries: Vec<QueryCollab> = oid_list
+    .iter()
+    .map(|row_id| QueryCollab {
+      object_id: row_id.to_string(),
+      collab_type: collab_type.clone(),
+    })
+    .collect();
+  let query_collab_results = collab_storage
+    .batch_get_collab(&uid, workspace_id, queries, true)
+    .await;
+  let encoded_collabs = tokio::task::spawn_blocking(move || {
+    let collabs: HashMap<String, EncodedCollab> = query_collab_results
+      .into_par_iter()
+      .filter_map(|(oid, query_collab_result)| match query_collab_result {
+        QueryCollabResult::Success { encode_collab_v1 } => {
+          let decoded_result = EncodedCollab::decode_from_bytes(&encode_collab_v1);
+          match decoded_result {
+            Ok(decoded) => Some((oid, decoded)),
+            Err(err) => {
+              tracing::error!("Failed to decode collab for row {}: {}", oid, err);
+              None
+            },
+          }
+        },
+        QueryCollabResult::Failed { error } => {
+          tracing::error!("Failed to get collab: {:?}", error);
+          None
+        },
+      })
+      .collect();
+    collabs
+  })
+  .await?;
+  Ok(encoded_collabs)
+}
+
 pub async fn get_latest_collab(
   storage: &CollabAccessControlStorage,
   origin: GetCollabOrigin,
@@ -275,6 +332,31 @@ pub async fn get_latest_collab(
       ))
     })?;
   Ok(collab)
+}
+
+pub async fn get_latest_collab_workspace_database_body(
+  pg_pool: &PgPool,
+  storage: &CollabAccessControlStorage,
+  origin: GetCollabOrigin,
+  workspace_id: &str,
+) -> Result<WorkspaceDatabaseBody, AppError> {
+  let workspace_uuid = Uuid::parse_str(workspace_id)?;
+  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_uuid).await?;
+  let mut collab = get_latest_collab(
+    storage,
+    origin,
+    workspace_id,
+    &ws_db_oid,
+    CollabType::WorkspaceDatabase,
+  )
+  .await?;
+  let ws_db = WorkspaceDatabaseBody::open(&mut collab).map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to open workspace database body: {}",
+      err
+    ))
+  })?;
+  Ok(ws_db)
 }
 
 pub async fn get_latest_collab_folder(
@@ -336,6 +418,21 @@ pub async fn collab_to_bin(collab: Collab, collab_type: CollabType) -> Result<Ve
       .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
       .map_err(|e| AppError::Unhandled(e.to_string()))?
       .encode_to_bytes()?;
+    Ok(bin)
+  })
+  .await?
+}
+
+pub async fn collab_to_doc_state(
+  collab: Collab,
+  collab_type: CollabType,
+) -> Result<Vec<u8>, AppError> {
+  tokio::task::spawn_blocking(move || {
+    let bin = collab
+      .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+      .map_err(|e| AppError::Unhandled(e.to_string()))?
+      .doc_state
+      .to_vec();
     Ok(bin)
   })
   .await?

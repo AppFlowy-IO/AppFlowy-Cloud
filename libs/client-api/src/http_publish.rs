@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use client_api_entity::workspace_dto::PublishInfoView;
+use client_api_entity::workspace_dto::{PublishInfoView, PublishedView};
 use client_api_entity::{workspace_dto::PublishedDuplicate, PublishInfo, UpdatePublishNamespace};
 use client_api_entity::{
   CreateGlobalCommentParams, CreateReactionParams, DeleteGlobalCommentParams, DeleteReactionParams,
@@ -297,6 +297,29 @@ impl Client {
 
     let resp = self.cloud_client.get(&url).send().await?;
     AppResponse::<PublishInfo>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all)]
+  pub async fn get_published_outline(
+    &self,
+    publish_namespace: &str,
+  ) -> Result<PublishedView, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-outline/{}",
+      self.base_url, publish_namespace,
+    );
+
+    let resp = self
+      .cloud_client
+      .get(&url)
+      .send()
+      .await?
+      .error_for_status()?;
+
+    log_request_id(&resp);
+    AppResponse::<PublishedView>::from_response(resp)
       .await?
       .into_data()
   }

@@ -15,7 +15,7 @@ use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, Secret};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tracing::info;
@@ -24,6 +24,7 @@ use crate::actix_ws::server::RealtimeServerActor;
 use crate::api::{collab_scope, ws_scope};
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use access_control::casbin::access::AccessControl;
+use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 
@@ -110,8 +111,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let user_cache = UserCache::new(pg_pool.clone()).await;
 
   info!("Connecting to Redis...");
-  let (redis_conn_manager, redis_stream_router) =
-    get_redis_client(config.redis_uri.expose_secret(), config.redis_worker_count).await?;
+  let (redis_conn_manager, redis_stream_router) = get_redis_client(
+    config.redis_uri.expose_secret(),
+    config.redis_worker_count,
+    metrics.collab_stream_metrics.clone(),
+  )
+  .await?;
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -158,7 +163,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     enable: get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()
       .unwrap_or(true),
-    openai_api_key: get_env_var("APPFLOWY_AI_OPENAI_API_KEY", ""),
+    openai_api_key: Secret::new(get_env_var("APPFLOWY_AI_OPENAI_API_KEY", "")),
     embedding_buffer_size: get_env_var("APPFLOWY_INDEXER_EMBEDDING_BUFFER_SIZE", "2000")
       .parse::<usize>()
       .unwrap_or(2000),
@@ -189,12 +194,14 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 async fn get_redis_client(
   redis_uri: &str,
   worker_count: usize,
+  metrics: Arc<CollabStreamMetrics>,
 ) -> Result<(redis::aio::ConnectionManager, Arc<StreamRouter>), Error> {
   info!("Connecting to redis with uri: {}", redis_uri);
   let client = redis::Client::open(redis_uri).context("failed to connect to redis")?;
 
   let router = StreamRouter::with_options(
     &client,
+    metrics,
     StreamRouterOptions {
       worker_count,
       xread_streams: 100,

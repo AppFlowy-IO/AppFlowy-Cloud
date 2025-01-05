@@ -26,10 +26,9 @@ use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
-use collab_folder::hierarchy_builder::SpacePermission;
-use collab_folder::CollabOrigin;
 use collab_folder::Folder;
 use collab_folder::SectionItem;
+use collab_folder::{CollabOrigin, SpaceInfo};
 use collab_rt_entity::user::RealtimeUser;
 use database::collab::select_last_updated_database_row_ids;
 use database::collab::select_workspace_database_oid;
@@ -39,7 +38,6 @@ use database::publish::select_workspace_id_for_publish_namespace;
 use database_entity::dto::QueryCollab;
 use database_entity::dto::QueryCollabResult;
 use database_entity::dto::{CollabParams, WorkspaceCollabIdentify};
-use serde_json::json;
 use shared_entity::dto::workspace_dto::AFDatabase;
 use shared_entity::dto::workspace_dto::AFDatabaseField;
 use shared_entity::dto::workspace_dto::AFDatabaseRow;
@@ -77,14 +75,12 @@ use super::folder_view::section_items_to_recent_folder_view;
 use super::folder_view::section_items_to_trash_folder_view;
 use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
-use super::utils::collab_from_doc_state;
 use super::utils::collab_to_bin;
 use super::utils::create_row_document;
 use super::utils::field_by_id_name_uniq;
 use super::utils::get_latest_collab;
 use super::utils::get_latest_collab_database_body;
 use super::utils::get_latest_collab_database_row_body;
-use super::utils::get_latest_collab_encoded;
 use super::utils::get_latest_collab_folder;
 use super::utils::get_row_details_serde;
 use super::utils::type_option_reader_by_id;
@@ -92,6 +88,8 @@ use super::utils::type_options_serde;
 use super::utils::write_to_database_row;
 use super::utils::CreatedRowDocument;
 use super::utils::DocChanges;
+use super::utils::DEFAULT_SPACE_ICON;
+use super::utils::DEFAULT_SPACE_ICON_COLOR;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -312,14 +310,18 @@ fn patch_old_workspace_folder(
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let space_id = Uuid::new_v4().to_string();
+
     let space_view = NestedChildViewBuilder::new(user.uid, workspace_id.to_string())
       .with_view_id(space_id.clone())
       .with_name("General")
-      .with_extra(|builder| {
-        let mut extra = builder.is_space(true, SpacePermission::PublicToAll).build();
-        extra["space_icon_color"] = json!("0xFFA34AFD");
-        extra["space_icon"] = json!("interface_essential/home-3");
+      .with_extra(|extra| {
         extra
+          .with_space_info(SpaceInfo {
+            space_icon: Some(DEFAULT_SPACE_ICON.to_string()),
+            space_icon_color: Some(DEFAULT_SPACE_ICON_COLOR.to_string()),
+            ..Default::default()
+          })
+          .build()
       })
       .build()
       .view;
@@ -429,17 +431,14 @@ pub async fn get_latest_workspace_database(
   workspace_id: Uuid,
 ) -> Result<(String, WorkspaceDatabase), AppError> {
   let workspace_database_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
-  let workspace_database_collab = {
-    let encoded_collab = get_latest_collab_encoded(
-      collab_storage,
-      collab_origin,
-      &workspace_id.to_string(),
-      &workspace_database_oid,
-      CollabType::WorkspaceDatabase,
-    )
-    .await?;
-    collab_from_doc_state(encoded_collab.doc_state.to_vec(), &workspace_database_oid)?
-  };
+  let workspace_database_collab = get_latest_collab(
+    collab_storage,
+    collab_origin,
+    &workspace_id.to_string(),
+    &workspace_database_oid,
+    CollabType::WorkspaceDatabase,
+  )
+  .await?;
 
   let workspace_database = WorkspaceDatabase::open(workspace_database_collab)
     .map_err(|err| AppError::Unhandled(format!("failed to open workspace database: {}", err)))?;

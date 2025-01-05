@@ -150,6 +150,14 @@ docker logs <NAME>
 
 - It is very common to reconfigure and restart. To do so, simply edit the `.env` and run `docker compose up -d` again
 
+### 6. Upgrading the services
+
+- To upgrade to the latest version, use `docker compose pull` and `git pull` to fetch the latest changes for
+  images, docker compose files, and the configuration files.
+- Then, run `docker compose up -d` to start the services.
+- Alternatively, you can use a specific image tag instead of `latest`, and checkout the corresponding tag for
+  the repository.
+
 ## Ports
 
 - After Deployment, you should see that AppFlowy-Cloud is serving 2 ports
@@ -160,44 +168,57 @@ docker logs <NAME>
 ## SSL Certificate
 
 - To use your own SSL certificates for https, replace `certificate.crt` and `private_key.key`
-  with your own in `nginx/ssl/` directory.
+  with your own in `nginx/ssl/` directory. Please note that the certificates in the repository are
+  for demonstration purpose only and will need to be replaced by a certificate that is trusted by your devices.
+  For example, you can use [Let's Encrypt](https://letsencrypt.org/), or CloudFlare Origin CA, if the AppFlowy
+  Cloud endpoint is placed behind a cloudflare proxy.
 
 ## Usage of AppFlowy Application with AppFlowy Cloud
 
 - [AppFlowy with AppFlowyCloud](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy)
 
-## 5. FAQ
+## FAQ
 
 ### How do I use a different `postgres`?
   The default url is using the postgres in docker compose, in service `appflowy_cloud` and `gotrue` respectively.
-  However it is possible to change the database storage for it. The following steps are listed below.
+  However it is possible to use an external postgres, as long as it is accessible by the services.
 
-1. You need set `APPFLOWY_DATABASE_URL` to another postgres url.
-
+- You need to change the following settings:
 ```
-APPFLOWY_DATABASE_URL=postgres://<postgres_user>:<password>@<host>:<port>/<dbname>
-```
-
-2. You also need to set `GOTRUE_DATABASE_URL` to use the same postgres database.
-
-```
-GOTRUE_DATABASE_URL=postgres://supabase_auth_admin:root@<host>:<port>/<dbname>
+POSTGRES_HOST=postgres
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=password
+POSTGRES_PORT=5432
+POSTGRES_DB=postgres
 ```
 
-- `supabase_auth_admin` and `root` must be kept in sync with the init migration scripts from `migrations/before`.
-  Currently it's possible to change the password, but probably can't change the username.
-- `dbname` for `appflowy_cloud` and `gotrue` must be the same.
-
-3. You would need to run the initialization sql file from `migrations/before` in your hosted postgres.
+- You would need to run the `supabase_auth.sh` from `migrations/before` in your hosted postgres. Make sure that the
+environmental variables referenced by the script (eg. $SUPABASE_PASSWORD) have been exported before running the script.
 
 ### How do I disable signups?
 
-The reason why you might want to disable signups is because your deployed AppFlowy-Cloud is publicly available and you do not want any other users to access it. We strongly recommend that you consider using VPN, IP whitelisting or other way to disallow public access to your AppFlowy-Cloud instance. Use the following steps to disable signups as a last resort.
+If your deployed AppFlowy-Cloud is publicly available and you do not want any other users to access it, you can disable sign up
+by setting the `GOTRUE_DISABLE_SIGNUP` environment variable to `true`.
 
-1. All your services need to be running properly. This step is important to ensure that the admin user is created properly. Run `docker ps -a` to check that all services are running without restarts.
-2. Edit the `docker-compose.yml` file and add the following environment variable to the `gotrue` service:
-```yaml
-    environment:
-      - GOTRUE_DISABLE_SIGNUP=true
-```
-3. Re run the services by running `docker compose up -d` again. Only the `gotrue` service will be restarted. Run `docker ps -a` to check that the `gotrue` service is running without restarts.
+### What port should I use for SMTP?
+
+The default configuration assumes that TLS is used for SMTP, typically on port 465. If you are using STARTTLS, such as when
+using port 587, please change `APPFLOWY_MAILER_SMTP_TLS_KIND` to `opportunistic`.
+
+### Can I sign in using only using email and password?
+
+The AppFlowy clients currently do not support email and password sign in. However, you can login to the admin portal using the admin
+email and password. In the admin section, you can then add users and set their passwords. Subseqently, users can login to the portal
+using their email and password, and launch the AppFlowy client via the portal.
+
+### What functionality will I lose if the SMTP server is not set up?
+
+Sign in via magic link will not be possible. Inviting users to workspace and accepting invitation will have to be
+performed via the admin portal as opposed to links provided in emails.
+
+### I already have an Nginx server running on my host server. How do I configure it to work with AppFlowy-Cloud?
+- First, remove the `nginx` service from the `docker-compose.yml` file.
+- Update the docker compose file such that the ports for `appflowy_cloud`, `gotrue`, and `admin_frontend` are mapped
+  to different ports on the host server. If possible, use firewall to make sure that these ports are not accessible
+  from the internet.
+- Update `proxy_pass` in `nginx/nginx.conf` to point to the above ports.

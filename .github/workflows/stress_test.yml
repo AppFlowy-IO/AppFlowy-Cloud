@@ -26,8 +26,8 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Copy and Rename deploy.env to .env
-        run: cp deploy.env .env
+      - name: Copy and Rename dev.env to .env
+        run: cp dev.env .env
 
       - name: Install Prerequisites
         run: |
@@ -51,8 +51,8 @@ jobs:
 
       - name: Start Docker Compose Services
         run: |
-          ./script/run_local_server.sh
+          SKIP_SQLX_PREPARE=true ./script/run_local_server.sh
 
       - name: Run Server and Test
         run: |
-          cargo run --package xtask -- --stress-test
+          cargo test stress_test

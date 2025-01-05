@@ -51,6 +51,7 @@ jobs:
       - name: Install Prerequisites
         run: |
           brew install protobuf
+      
 
       - name: Run Server and Test
         run: |

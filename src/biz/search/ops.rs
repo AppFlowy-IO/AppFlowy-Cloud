@@ -1,8 +1,14 @@
 use crate::api::metrics::RequestMetrics;
+use crate::biz::collab::folder_view::{
+  check_if_view_ancestors_fulfil_condition, private_and_nonviewable_view_ids,
+};
+use crate::biz::collab::utils::get_latest_collab_folder;
 use app_error::ErrorCode;
 use appflowy_ai_client::dto::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
 };
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use database::collab::GetCollabOrigin;
 use std::sync::Arc;
 
 use database::index::{search_documents, SearchDocumentParams};
@@ -17,6 +23,7 @@ use uuid::Uuid;
 
 pub async fn search_document(
   pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
   indexer_scheduler: &Arc<IndexerScheduler>,
   uid: i64,
   workspace_id: Uuid,
@@ -75,8 +82,23 @@ pub async fn search_document(
     results.len(),
     request.query
   );
+
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_id.to_string(),
+  )
+  .await?;
+  let private_and_nonviewable_views = private_and_nonviewable_view_ids(&folder);
+  let non_searchable_view_ids = private_and_nonviewable_views.nonviewable_view_ids;
+  let filtered_results = results.into_iter().filter(|item| {
+    !check_if_view_ancestors_fulfil_condition(&item.object_id, &folder, |view| {
+      non_searchable_view_ids.contains(&view.id)
+    })
+  });
+
   Ok(
-    results
+    filtered_results
       .into_iter()
       .map(|item| SearchDocumentResponseItem {
         object_id: item.object_id,

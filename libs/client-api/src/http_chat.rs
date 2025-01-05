@@ -12,7 +12,7 @@ use reqwest::Method;
 use serde_json::Value;
 use shared_entity::dto::ai_dto::{
   CalculateSimilarityParams, ChatQuestionQuery, RepeatedRelatedQuestion, SimilarityResponse,
-  STREAM_ANSWER_KEY, STREAM_METADATA_KEY,
+  STREAM_ANSWER_KEY, STREAM_IMAGE_KEY, STREAM_METADATA_KEY,
 };
 use shared_entity::dto::chat_dto::{ChatSettings, UpdateChatParams};
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -385,6 +385,13 @@ impl Stream for QuestionStream {
             .and_then(|s| s.as_str().map(ToString::to_string))
           {
             return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: answer })));
+          }
+
+          if let Some(image) = value
+            .remove(STREAM_IMAGE_KEY)
+            .and_then(|s| s.as_str().map(ToString::to_string))
+          {
+            return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: image })));
           }
 
           error!("Invalid streaming value: {:?}", value);

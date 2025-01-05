@@ -14,6 +14,7 @@ use tokio::time::{sleep, Duration};
 #[tokio::main]
 async fn main() -> Result<()> {
   let is_stress_test = std::env::args().any(|arg| arg == "--stress-test");
+  let disable_log = std::env::args().any(|arg| arg == "--disable-log");
   let target_dir = "./target";
   std::env::set_var("CARGO_TARGET_DIR", target_dir);
 
@@ -30,7 +31,7 @@ async fn main() -> Result<()> {
     "cargo",
     &["run", "--features", "history"],
     appflowy_cloud_bin_name,
-    is_stress_test,
+    disable_log,
   )?;
   wait_for_readiness(appflowy_cloud_bin_name).await?;
 
@@ -43,7 +44,7 @@ async fn main() -> Result<()> {
       "./services/appflowy-worker/Cargo.toml",
     ],
     worker_bin_name,
-    is_stress_test,
+    disable_log,
   )?;
   wait_for_readiness(worker_bin_name).await?;
 
@@ -94,7 +95,10 @@ fn spawn_server(
   name: &str,
   suppress_output: bool,
 ) -> Result<tokio::process::Child> {
-  println!("Spawning {} process...", name);
+  println!(
+    "Spawning {} process..., log enabled:{}",
+    name, suppress_output
+  );
   let mut cmd = Command::new(command);
   cmd.args(args);
 

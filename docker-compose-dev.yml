@@ -98,14 +98,6 @@ services:
     ports:
       - 9999:9999
 
-  portainer:
-    restart: on-failure
-    image: portainer/portainer-ce:latest
-    ports:
-      - 9442:9000
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
   pgadmin:
     restart: on-failure
     image: dpage/pgadmin4
@@ -118,17 +110,6 @@ services:
       - 5400:80
     volumes:
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
-
-  ai:
-    restart: on-failure
-    image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
-    ports:
-      - 5001:5001
-    environment:
-      - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
-      - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
-      - APPFLOWY_AI_DATABASE_URL=${APPFLOWY_AI_DATABASE_URL}
-      - APPFLOWY_AI_REDIS_URL=${APPFLOWY_AI_REDIS_URL}
 
 volumes:
   postgres_data:

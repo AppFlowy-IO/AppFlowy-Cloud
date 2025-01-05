@@ -7,15 +7,89 @@ use std::str::FromStr;
 
 pub const STREAM_METADATA_KEY: &str = "0";
 pub const STREAM_ANSWER_KEY: &str = "1";
+pub const STREAM_IMAGE_KEY: &str = "2";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
   pub text: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChatQuestionQuery {
+  pub chat_id: String,
+  pub question_id: i64,
+  pub format: ResponseFormat,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatQuestion {
   pub chat_id: String,
   pub data: MessageData,
+  #[serde(default)]
+  pub format: ResponseFormat,
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct ResponseFormat {
+  pub output_layout: OutputLayout,
+  pub output_content: OutputContent,
+  pub output_content_metadata: Option<OutputContentMetadata>,
+}
+
+#[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum OutputLayout {
+  #[default]
+  Paragraph = 0,
+  BulletList = 1,
+  NumberedList = 2,
+  SimpleTable = 3,
+}
+
+#[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum OutputContent {
+  #[default]
+  TEXT = 0,
+  IMAGE = 1,
+  RichTextImage = 2,
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct OutputContentMetadata {
+  /// Custom prompt for image generation.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub custom_image_prompt: Option<String>,
+
+  /// The image model to use for generation (default: "dall-e-2").
+  #[serde(default = "default_image_model")]
+  pub image_model: String,
+
+  /// Size of the image (default: "256x256").
+  #[serde(
+    default = "default_image_size",
+    skip_serializing_if = "Option::is_none"
+  )]
+  pub size: Option<String>,
+
+  /// Quality of the image (default: "standard").
+  #[serde(
+    default = "default_image_quality",
+    skip_serializing_if = "Option::is_none"
+  )]
+  pub quality: Option<String>,
+}
+
+// Default values for the fields
+fn default_image_model() -> String {
+  "dall-e-2".to_string()
+}
+
+fn default_image_size() -> Option<String> {
+  Some("256x256".to_string())
+}
+
+fn default_image_quality() -> Option<String> {
+  Some("standard".to_string())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

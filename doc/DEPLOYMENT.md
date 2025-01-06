@@ -158,6 +158,15 @@ docker logs <NAME>
 - Alternatively, you can use a specific image tag instead of `latest`, and checkout the corresponding tag for
   the repository.
 
+### 7. AppFlowy Web
+
+- AppFlowy Web is a Single Page Application (SPA) that calls the endpoints in  `appflowy_cloud`, and is assumed
+  to be served on a different origin that the one used for AppFlowy Cloud (eg. if you are hosting `appflowy cloud`
+  on `appflowy.home.com`, `appflowy_web` may be hosted on `web.appflowy.home.com`). The source code and deployment
+  guide can be found in this [repository](https://github.com/AppFlowy-IO/AppFlowy-Web).
+- To prevent CORS issues, you will need to change `set $appflowy_web "http://localhost:3000";` in `nginx/nginx.conf`
+  to the origin where you are hosting `appflowy_web`.
+
 ## Ports
 
 - After Deployment, you should see that AppFlowy-Cloud is serving 2 ports

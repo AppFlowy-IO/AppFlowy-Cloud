@@ -14,7 +14,7 @@ use crate::biz::workspace::ops::{
 use crate::biz::workspace::page_view::{
   create_page, create_space, delete_all_pages_from_trash, delete_trash, get_page_view_collab,
   move_page, move_page_to_trash, publish_page, restore_all_pages_from_trash,
-  restore_page_from_trash, update_page, update_page_collab_data, update_space,
+  restore_page_from_trash, unpublish_page, update_page, update_page_collab_data, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::biz::workspace::quick_note::{
@@ -192,6 +192,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/publish")
         .route(web::post().to(publish_page_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/unpublish")
+        .route(web::post().to(unpublish_page_handler)),
     )
     .service(
       web::resource("/{workspace_id}/batch/collab")
@@ -1288,6 +1292,10 @@ async fn publish_page_handler(
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .await?;
   let PublishPageParams {
     publish_name,
     visible_database_view_ids,
@@ -1302,6 +1310,31 @@ async fn publish_page_handler(
     &view_id,
     visible_database_view_ids,
     publish_name,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn unpublish_page_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, Uuid)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_uuid, view_uuid) = path.into_inner();
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_uuid.to_string(), AFRole::Member)
+    .await?;
+  unpublish_page(
+    state.published_collab_store.as_ref(),
+    workspace_uuid,
+    *user_uuid,
+    view_uuid,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

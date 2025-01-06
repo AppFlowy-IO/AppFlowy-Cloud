@@ -1254,6 +1254,17 @@ async fn generate_publish_data_for_database(
   Ok(serde_json::ser::to_vec(&data)?)
 }
 
+pub async fn unpublish_page(
+  publish_collab_store: &dyn PublishedCollabStore,
+  workspace_id: Uuid,
+  user_uuid: Uuid,
+  view_id: Uuid,
+) -> Result<(), AppError> {
+  publish_collab_store
+    .unpublish_collabs(&workspace_id, &[view_id], &user_uuid)
+    .await
+}
+
 pub async fn get_page_view_collab(
   pg_pool: &PgPool,
   collab_access_control_storage: &CollabAccessControlStorage,

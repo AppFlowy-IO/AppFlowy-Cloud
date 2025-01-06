@@ -26,6 +26,13 @@ pub struct ChatQuestion {
   pub data: MessageData,
   #[serde(default)]
   pub format: ResponseFormat,
+  pub metadata: QuestionMetadata,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuestionMetadata {
+  pub workspace_id: String,
+  pub rag_ids: Vec<String>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -97,8 +104,6 @@ pub struct MessageData {
   pub content: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<serde_json::Value>,
-  #[serde(default)]
-  pub rag_ids: Vec<String>,
   #[serde(default)]
   pub message_id: Option<String>,
 }

@@ -42,6 +42,7 @@ pub(crate) async fn delete_chat(pg_pool: &PgPool, chat_id: &str) -> Result<(), A
 }
 
 pub async fn update_chat_message(
+  workspace_id: String,
   pg_pool: &PgPool,
   params: UpdateChatMessageContentParams,
   ai_client: AppFlowyAIClient,
@@ -60,6 +61,7 @@ pub async fn update_chat_message(
   // TODO(nathan): query the metadata from the database
   let new_answer = ai_client
     .send_question(
+      &workspace_id,
       &params.chat_id,
       params.message_id,
       &params.content,
@@ -81,6 +83,7 @@ pub async fn update_chat_message(
 }
 
 pub async fn generate_chat_message_answer(
+  workspace_id: String,
   pg_pool: &PgPool,
   ai_client: AppFlowyAIClient,
   question_message_id: i64,
@@ -91,6 +94,7 @@ pub async fn generate_chat_message_answer(
     chat::chat_ops::select_chat_message_content(pg_pool, question_message_id).await?;
   let new_answer = ai_client
     .send_question(
+      &workspace_id,
       chat_id,
       question_message_id,
       &content,
@@ -145,6 +149,7 @@ pub async fn create_chat_message(
 pub async fn create_chat_message_stream(
   pg_pool: &PgPool,
   uid: i64,
+  workspace_id: String,
   chat_id: String,
   params: CreateChatMessageParams,
   ai_client: AppFlowyAIClient,
@@ -186,7 +191,7 @@ pub async fn create_chat_message_stream(
       match params.message_type {
           ChatMessageType::System => {}
           ChatMessageType::User => {
-              let answer = match ai_client.send_question(&chat_id,question_id, &params.content, &ai_model, Some(json!(params.metadata))).await {
+              let answer = match ai_client.send_question(&workspace_id, &chat_id,question_id, &params.content, &ai_model, Some(json!(params.metadata))).await {
                   Ok(response) => response,
                   Err(err) => {
                       error!("Failed to send question to AI: {}", err);

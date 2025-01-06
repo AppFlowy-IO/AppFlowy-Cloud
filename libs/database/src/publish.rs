@@ -669,6 +669,7 @@ pub async fn select_published_view_ids_for_workspace<'a, E: Executor<'a, Databas
       SELECT view_id
       FROM af_published_collab
       WHERE workspace_id = $1
+      AND unpublished_at IS NULL
     "#,
     workspace_id,
   )

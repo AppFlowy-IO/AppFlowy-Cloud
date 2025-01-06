@@ -136,6 +136,8 @@ services:
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
       - APPFLOWY_AI_OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
+      # Uncomment this line if AppFlowy Web has been deployed
+      # - APPFLOWY_WEB_URL=${APPFLOWY_WEB_URL}
     build:
       context: .
       dockerfile: Dockerfile

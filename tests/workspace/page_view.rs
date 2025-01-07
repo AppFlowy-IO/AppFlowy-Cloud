@@ -758,11 +758,12 @@ async fn publish_page() {
     .view_id
     .clone();
   let page_to_be_published = vec![database_page_id, document_page_id];
+  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
   for view_id in &page_to_be_published {
     web_client
       .api_client
       .publish_page(
-        Uuid::parse_str(&workspace_id).unwrap(),
+        workspace_uuid,
         view_id,
         &PublishPageParams {
           publish_name: None,
@@ -794,4 +795,17 @@ async fn publish_page() {
   for view_id in &page_to_be_published {
     assert!(published_view_ids.contains(view_id));
   }
+  for view_id in &page_to_be_published {
+    web_client
+      .api_client
+      .unpublish_page(workspace_uuid, view_id)
+      .await
+      .unwrap();
+  }
+  let published_view = web_client
+    .api_client
+    .get_published_outline(&publish_namespace)
+    .await
+    .unwrap();
+  assert_eq!(published_view.children.len(), 0);
 }

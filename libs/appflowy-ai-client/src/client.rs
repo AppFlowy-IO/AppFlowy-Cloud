@@ -276,7 +276,7 @@ impl AppFlowyAIClient {
       .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&question)
-      .timeout(Duration::from_secs(30))
+      .timeout(Duration::from_secs(60))
       .send()
       .await?;
     AIResponse::<()>::stream_response(resp).await

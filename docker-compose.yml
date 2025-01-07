@@ -161,11 +161,9 @@ services:
     image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
     environment:
       - OPENAI_API_KEY=${AI_OPENAI_API_KEY}
-      - AI_SERVER_PORT=${AI_SERVER_PORT}
-      - AI_DATABASE_URL=${AI_DATABASE_URL}
-      - AI_REDIS_URL=${AI_REDIS_URL}
-      - AI_APPFLOWY_BUCKET_NAME=${AI_APPFLOWY_BUCKET_NAME}
-      - AI_APPFLOWY_HOST=${AI_APPFLOWY_HOST}
+      - APPFLOWY_AI_SERVER_PORT=${AI_SERVER_PORT}
+      - APPFLOWY_AI_DATABASE_URL=${AI_DATABASE_URL}
+      - APPFLOWY_AI_REDIS_URL=${AI_REDIS_URL}
 
   appflowy_worker:
     restart: on-failure

@@ -136,6 +136,7 @@ services:
       - AI_SERVER_HOST=${AI_SERVER_HOST}
       - AI_SERVER_PORT=${AI_SERVER_PORT}
       - AI_OPENAI_API_KEY=${AI_OPENAI_API_KEY}
+      # Uncomment this line if AppFlowy Web has been deployed
     build:
       context: .
       dockerfile: Dockerfile

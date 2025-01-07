@@ -94,7 +94,7 @@ jobs:
           sed -i 's|GOTRUE_SMTP_ADMIN_EMAIL=.*|GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.CI_GOTRUE_SMTP_ADMIN_EMAIL }}|' .env
           sed -i 's|GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*|GOTRUE_EXTERNAL_GOOGLE_ENABLED=true|' .env
           sed -i 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
-          sed -i 's|API_EXTERNAL_URL=http://your-host|API_EXTERNAL_URL=http://localhost|' .env
+          sed -i 's|API_EXTERNAL_URL=http://your-host/gotrue|API_EXTERNAL_URL=http://localhost/gotrue|' .env
           sed -i 's|GOTRUE_RATE_LIMIT_EMAIL_SENT=100|GOTRUE_RATE_LIMIT_EMAIL_SENT=1000|' .env
           sed -i 's|APPFLOWY_MAILER_SMTP_USERNAME=.*|APPFLOWY_MAILER_SMTP_USERNAME=${{ secrets.CI_GOTRUE_SMTP_USER }}|' .env
           sed -i 's|APPFLOWY_MAILER_SMTP_PASSWORD=.*|APPFLOWY_MAILER_SMTP_PASSWORD=${{ secrets.CI_GOTRUE_SMTP_PASS }}|' .env
@@ -164,4 +164,3 @@ jobs:
           else
             echo "Successfully deleted Docker image tag for $IMAGE_TAG:${GITHUB_SHA}"
           fi
-

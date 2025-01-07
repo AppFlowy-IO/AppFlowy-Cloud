@@ -41,17 +41,17 @@ jobs:
           sed -i '' 's|RUST_LOG=.*|RUST_LOG=debug|' .env
           sed -i '' 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=http://localhost:9999|' .env
           sed -i '' 's|APPFLOWY_INDEXER_ENABLED=.*|APPFLOWY_INDEXER_ENABLED=false|' .env
-          
+
           sed -i '' 's|APPFLOWY_GOTRUE_BASE_URL=.*|APPFLOWY_GOTRUE_BASE_URL=http://localhost:9999|' .env
           sed -i '' 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
           sed -i '' 's|APPFLOWY_DATABASE_URL=.*|APPFLOWY_DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
-          
+
           cat .env
         shell: bash
 
       - name: Start Docker Compose Services
         run: |
-          docker compose -f docker-compose-dev.yml up -d 
+          docker compose -f docker-compose-dev.yml up -d
           ./script/code_gen.sh
           cargo sqlx database create && cargo sqlx migrate run
 

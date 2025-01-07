@@ -458,6 +458,7 @@ pub struct CalculateSimilarityParams {
   pub workspace_id: String,
   pub input: String,
   pub expected: String,
+  pub use_embedding: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

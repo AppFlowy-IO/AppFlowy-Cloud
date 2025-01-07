@@ -26,6 +26,13 @@ pub struct ChatQuestion {
   pub data: MessageData,
   #[serde(default)]
   pub format: ResponseFormat,
+  pub metadata: QuestionMetadata,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuestionMetadata {
+  pub workspace_id: String,
+  pub rag_ids: Vec<String>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -60,7 +67,7 @@ pub struct OutputContentMetadata {
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub custom_image_prompt: Option<String>,
 
-  /// The image model to use for generation (default: "dall-e-2").
+  /// The image model to use for generation (default: "dall-e-3").
   #[serde(default = "default_image_model")]
   pub image_model: String,
 
@@ -81,7 +88,7 @@ pub struct OutputContentMetadata {
 
 // Default values for the fields
 fn default_image_model() -> String {
-  "dall-e-2".to_string()
+  "dall-e-3".to_string()
 }
 
 fn default_image_size() -> Option<String> {
@@ -97,8 +104,6 @@ pub struct MessageData {
   pub content: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<serde_json::Value>,
-  #[serde(default)]
-  pub rag_ids: Vec<String>,
   #[serde(default)]
   pub message_id: Option<String>,
 }

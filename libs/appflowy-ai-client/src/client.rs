@@ -1,8 +1,9 @@
 use crate::dto::{
   AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextResponse,
   CompletionType, CreateChatContext, CustomPrompt, Document, LocalAIConfig, MessageData,
-  RepeatedLocalAIPackage, RepeatedRelatedQuestion, ResponseFormat, SearchDocumentsRequest,
-  SimilarityResponse, SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
+  QuestionMetadata, RepeatedLocalAIPackage, RepeatedRelatedQuestion, ResponseFormat,
+  SearchDocumentsRequest, SimilarityResponse, SummarizeRowResponse, TranslateRowData,
+  TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -173,6 +174,7 @@ impl AppFlowyAIClient {
 
   pub async fn send_question(
     &self,
+    workspace_id: &str,
     chat_id: &str,
     question_id: i64,
     content: &str,
@@ -184,10 +186,13 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
-        rag_ids: vec![],
         message_id: Some(question_id.to_string()),
       },
       format: Default::default(),
+      metadata: QuestionMetadata {
+        workspace_id: workspace_id.to_string(),
+        rag_ids: vec![],
+      },
     };
     let url = format!("{}/chat/message", self.url);
     let resp = self
@@ -203,6 +208,7 @@ impl AppFlowyAIClient {
 
   pub async fn stream_question(
     &self,
+    workspace_id: String,
     chat_id: &str,
     content: &str,
     metadata: Option<Value>,
@@ -214,10 +220,13 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
-        rag_ids,
         message_id: None,
       },
       format: Default::default(),
+      metadata: QuestionMetadata {
+        workspace_id,
+        rag_ids,
+      },
     };
     let url = format!("{}/chat/message/stream", self.url);
     let resp = self
@@ -230,8 +239,10 @@ impl AppFlowyAIClient {
     AIResponse::<()>::stream_response(resp).await
   }
 
+  #[allow(clippy::too_many_arguments)]
   pub async fn stream_question_v2(
     &self,
+    workspace_id: String,
     chat_id: &str,
     question_id: i64,
     content: &str,
@@ -244,10 +255,13 @@ impl AppFlowyAIClient {
       data: MessageData {
         content: content.to_string(),
         metadata,
-        rag_ids,
         message_id: Some(question_id.to_string()),
       },
       format: ResponseFormat::default(),
+      metadata: QuestionMetadata {
+        workspace_id,
+        rag_ids,
+      },
     };
     self.stream_question_v3(model, json).await
   }

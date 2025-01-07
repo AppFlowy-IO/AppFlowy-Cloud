@@ -210,7 +210,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     redis_worker_count: get_env_var("APPFLOWY_REDIS_WORKERS", "60").parse()?,
     ai: AISettings {
       port: get_env_var("APPFLOWY_AI_SERVER_PORT", "5001").parse()?,
-      host: get_env_var("APPFLOWY_AI_SERVER_HOST", "localhost"),
+      host: get_env_var("AI_SERVER_HOST", "localhost"),
     },
   };
   Ok(config)

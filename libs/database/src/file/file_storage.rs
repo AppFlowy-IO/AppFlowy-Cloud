@@ -67,7 +67,7 @@ pub trait BucketClient {
 pub trait BlobKey: Send + Sync {
   fn workspace_id(&self) -> &Uuid;
   fn object_key(&self) -> String;
-  fn meta_key(&self) -> String;
+  fn blob_metadata_key(&self) -> String;
   fn e_tag(&self) -> &str;
 }
 
@@ -99,11 +99,11 @@ where
     file_type: String,
     file_size: usize,
   ) -> Result<(), AppError> {
-    if is_blob_metadata_exists(&self.pg_pool, key.workspace_id(), &key.meta_key()).await? {
+    if is_blob_metadata_exists(&self.pg_pool, key.workspace_id(), &key.blob_metadata_key()).await? {
       warn!(
-        "file already exists, workspace_id: {}, meta_key: {}",
+        "file already exists, workspace_id: {}, blob_metadata_key: {}",
         key.workspace_id(),
-        key.meta_key()
+        key.blob_metadata_key()
       );
       return Ok(());
     }
@@ -114,7 +114,7 @@ where
       .await?;
     insert_blob_metadata(
       &self.pg_pool,
-      &key.meta_key(),
+      &key.blob_metadata_key(),
       key.workspace_id(),
       &file_type,
       file_size,
@@ -127,7 +127,7 @@ where
     self.client.delete_blob(&key.object_key()).await?;
 
     let mut tx = self.pg_pool.begin().await?;
-    delete_blob_metadata(&mut tx, key.workspace_id(), &key.meta_key()).await?;
+    delete_blob_metadata(&mut tx, key.workspace_id(), &key.blob_metadata_key()).await?;
     tx.commit().await?;
     Ok(())
   }
@@ -135,9 +135,9 @@ where
   pub async fn get_blob_metadata(
     &self,
     workspace_id: &Uuid,
-    meta_key: &str,
+    store_key: &str,
   ) -> Result<AFBlobMetadataRow, AppError> {
-    let metadata = get_blob_metadata(&self.pg_pool, workspace_id, meta_key).await?;
+    let metadata = get_blob_metadata(&self.pg_pool, workspace_id, store_key).await?;
     Ok(metadata)
   }
 
@@ -180,7 +180,7 @@ where
       self.client.complete_upload(&key.object_key(), req).await?;
     insert_blob_metadata(
       &self.pg_pool,
-      &key.meta_key(),
+      &key.blob_metadata_key(),
       key.workspace_id(),
       &content_type,
       content_length,

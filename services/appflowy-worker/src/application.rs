@@ -145,7 +145,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
         .parse::<bool>()
         .unwrap_or(true),
       open_api_key: Secret::new(appflowy_collaborate::config::get_env_var(
-        "APPFLOWY_AI_OPENAI_API_KEY",
+        "AI_OPENAI_API_KEY",
         "",
       )),
       tick_interval_secs: 10,

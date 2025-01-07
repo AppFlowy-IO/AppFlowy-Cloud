@@ -1,9 +1,6 @@
 use crate::appflowy_ai_client;
 
-use appflowy_ai_client::dto::{AIModel, STREAM_ANSWER_KEY};
-use appflowy_ai_client::error::AIError;
-use futures::stream::StreamExt;
-use infra::reqwest::JsonStream;
+use appflowy_ai_client::dto::AIModel;
 
 #[tokio::test]
 async fn qa_test() {
@@ -11,7 +8,14 @@ async fn qa_test() {
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
   let resp = client
-    .send_question("", &chat_id, 1, "I feel hungry", &AIModel::GPT4o, None)
+    .send_question(
+      &uuid::Uuid::new_v4().to_string(),
+      &chat_id,
+      1,
+      "I feel hungry",
+      &AIModel::GPT4o,
+      None,
+    )
     .await
     .unwrap();
   assert!(!resp.content.is_empty());

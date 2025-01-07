@@ -239,6 +239,7 @@ impl AppFlowyAIClient {
     AIResponse::<()>::stream_response(resp).await
   }
 
+  #[allow(clippy::too_many_arguments)]
   pub async fn stream_question_v2(
     &self,
     workspace_id: String,

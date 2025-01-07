@@ -380,7 +380,7 @@ async fn answer_stream_v3_handler(
   trace!("[Chat] stream v3 {:?}", question);
   match state
     .ai_client
-    .stream_question_v3(&ai_model, question)
+    .stream_question_v3(&ai_model, question, Some(60))
     .await
   {
     Ok(answer_stream) => {

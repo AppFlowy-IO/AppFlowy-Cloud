@@ -263,20 +263,21 @@ impl AppFlowyAIClient {
         rag_ids,
       },
     };
-    self.stream_question_v3(model, json).await
+    self.stream_question_v3(model, json, Some(30)).await
   }
 
   pub async fn stream_question_v3(
     &self,
     model: &AIModel,
     question: ChatQuestion,
+    timeout_secs: Option<u64>,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let url = format!("{}/v2/chat/message/stream", self.url);
     let resp = self
       .async_http_client(Method::POST, &url)?
       .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&question)
-      .timeout(Duration::from_secs(60))
+      .timeout(Duration::from_secs(timeout_secs.unwrap_or(30)))
       .send()
       .await?;
     AIResponse::<()>::stream_response(resp).await

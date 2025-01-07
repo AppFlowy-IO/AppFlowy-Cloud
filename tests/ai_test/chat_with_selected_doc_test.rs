@@ -111,7 +111,13 @@ async fn chat_with_multiple_selected_source_test() {
   .await;
   let expected_unknown_japan_answer = r#"I don’t know the date for your trip to Japan"#;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected_unknown_japan_answer, 0.7)
+    .assert_similarity(
+      &workspace_id,
+      &answer,
+      expected_unknown_japan_answer,
+      0.7,
+      true,
+    )
     .await;
 
   // update chat context to snowboarding_in_japan_plan
@@ -136,7 +142,7 @@ async fn chat_with_multiple_selected_source_test() {
   You take off to Japan on **January 7th**
   "#;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected, 0.8)
+    .assert_similarity(&workspace_id, &answer, expected, 0.8, false)
     .await;
 
   // Ask question for alex to make sure two documents are treated as chat context
@@ -149,7 +155,7 @@ async fn chat_with_multiple_selected_source_test() {
   .await;
   let expected = r#"Tennis, basketball, cycling, badminton, snowboarding."#;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected, 0.8)
+    .assert_similarity(&workspace_id, &answer, expected, 0.8, true)
     .await;
 
   // remove the Japan plan and check the response. After remove the Japan plan, the chat should not
@@ -172,7 +178,13 @@ async fn chat_with_multiple_selected_source_test() {
   )
   .await;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected_unknown_japan_answer, 0.7)
+    .assert_similarity(
+      &workspace_id,
+      &answer,
+      expected_unknown_japan_answer,
+      0.7,
+      true,
+    )
     .await;
 }
 
@@ -233,7 +245,7 @@ async fn chat_with_selected_source_override_test() {
 Overall, Alex balances his work as a software programmer with his passion for sports, finding excitement and freedom in each activity.
   "#;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected, 0.8)
+    .assert_similarity(&workspace_id, &answer, expected, 0.8, true)
     .await;
 
   // remove all content for given document
@@ -276,7 +288,7 @@ Overall, Alex balances his work as a software programmer with his passion for sp
   he certainly has many experiences in the culinary world, where he enjoys savoring flavors and discovering new dishes
   "#;
   test_client
-    .assert_similarity(&workspace_id, &answer, expected, 0.8)
+    .assert_similarity(&workspace_id, &answer, expected, 0.8, true)
     .await;
 }
 

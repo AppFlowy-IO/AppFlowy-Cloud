@@ -79,6 +79,7 @@ reprisal. Lack of Commitment Without clarity and buy-in, team decisions bec
 The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a Team by Patrick Lenci"
     "#
       .to_string(),
+      use_embedding: true,
     };
     let score = test_client
       .api_client
@@ -131,6 +132,7 @@ The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a T
        ultimately leading her team toward improved collaboration and performance.
     "#
           .to_string(),
+      use_embedding: true,
     };
     let score = test_client
       .api_client

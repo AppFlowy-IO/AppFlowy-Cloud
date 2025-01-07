@@ -92,7 +92,6 @@ where
       // Poll for the next chunk of data from the underlying stream
       match ready!(this.stream.as_mut().poll_next(cx)) {
         Some(Ok(bytes)) => {
-          // Append the new bytes to the buffer
           this.buffer.extend_from_slice(&bytes);
 
           // Create a StreamDeserializer to deserialize the bytes into T
@@ -112,7 +111,6 @@ where
               return Poll::Pending;
             },
             Some(Err(err)) => {
-              // Return other deserialization errors wrapped in SE
               return Poll::Ready(Some(Err(err.into())));
             },
             None => {

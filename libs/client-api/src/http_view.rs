@@ -188,6 +188,24 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  pub async fn unpublish_page(
+    &self,
+    workspace_id: Uuid,
+    view_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/unpublish",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&json!({}))
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
   pub async fn create_space(
     &self,
     workspace_id: Uuid,

@@ -241,8 +241,8 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       region: get_env_var("APPFLOWY_S3_REGION", ""),
     },
     appflowy_ai: AppFlowyAISetting {
-      port: get_env_var("APPFLOWY_AI_SERVER_PORT", "5001").into(),
-      host: get_env_var("APPFLOWY_AI_SERVER_HOST", "localhost").into(),
+      port: get_env_var("AI_SERVER_PORT", "5001").into(),
+      host: get_env_var("AI_SERVER_HOST", "localhost").into(),
     },
     grpc_history: GrpcHistorySetting {
       addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),

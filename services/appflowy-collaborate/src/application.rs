@@ -163,7 +163,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     enable: get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()
       .unwrap_or(true),
-    openai_api_key: Secret::new(get_env_var("APPFLOWY_AI_OPENAI_API_KEY", "")),
+    openai_api_key: Secret::new(get_env_var("AI_OPENAI_API_KEY", "")),
     embedding_buffer_size: get_env_var("APPFLOWY_INDEXER_EMBEDDING_BUFFER_SIZE", "2000")
       .parse::<usize>()
       .unwrap_or(2000),

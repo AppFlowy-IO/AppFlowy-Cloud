@@ -35,7 +35,7 @@ pub fn ai_test_enabled() -> bool {
   load_env();
 
   // local ai test is disable by default
-  let enabled = get_bool_from_env_var("APPFLOWY_LOCAL_AI_TEST_ENABLED");
+  let enabled = get_bool_from_env_var("LOCAL_AI_TEST_ENABLED");
   if enabled {
     trace!("Local AI test is enabled");
   }

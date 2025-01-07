@@ -102,9 +102,20 @@ impl WorkspaceTemplateBuilder {
       }
     }
 
+    // All views directly under the workspace should be space.
     let views = workspace_view_builder.build();
-    // Safe to unwrap because we have at least one view.
-    let first_view = views.first().unwrap().parent_view.clone();
+    // Safe to unwrap because we have at least one space with a document.
+    let default_current_view_id = views
+      .iter()
+      .find(|v| !v.child_views.is_empty())
+      .unwrap()
+      .child_views
+      .first()
+      .unwrap()
+      .parent_view
+      .id
+      .clone();
+
     let first_level_views = views
       .iter()
       .map(|value| ViewIdentifier {
@@ -127,7 +138,7 @@ impl WorkspaceTemplateBuilder {
     let folder_template = tokio::task::spawn_blocking(move || {
       let folder_data = FolderData {
         workspace,
-        current_view: first_view.id,
+        current_view: default_current_view_id,
         views: FlattedViews::flatten_views(views),
         favorites: Default::default(),
         recent: Default::default(),

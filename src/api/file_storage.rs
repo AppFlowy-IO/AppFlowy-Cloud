@@ -357,7 +357,7 @@ async fn get_blob_by_object_key(
   // Get the metadata
   let result = state
     .bucket_storage
-    .get_blob_metadata(key.workspace_id(), &key.meta_key())
+    .get_blob_metadata(key.workspace_id(), &key.blob_metadata_key())
     .await;
 
   if let Err(err) = result.as_ref() {
@@ -424,7 +424,7 @@ async fn get_blob_metadata_handler(
   // Get the metadata
   let metadata = state
     .bucket_storage
-    .get_blob_metadata(&path.workspace_id, &path.meta_key())
+    .get_blob_metadata(&path.workspace_id, &path.blob_metadata_key())
     .await
     .map(|meta| BlobMetadata {
       workspace_id: meta.workspace_id,
@@ -448,7 +448,7 @@ async fn get_blob_metadata_v1_handler(
   // Get the metadata
   let metadata = state
     .bucket_storage
-    .get_blob_metadata(&path.workspace_id, &path.meta_key())
+    .get_blob_metadata(&path.workspace_id, &path.blob_metadata_key())
     .await
     .map(|meta| BlobMetadata {
       workspace_id: meta.workspace_id,
@@ -589,7 +589,7 @@ impl BlobKey for BlobPathV0 {
     format!("{}/{}", self.workspace_id, self.file_id)
   }
 
-  fn meta_key(&self) -> String {
+  fn blob_metadata_key(&self) -> String {
     self.file_id.clone()
   }
 
@@ -615,7 +615,7 @@ impl BlobKey for BlobPathV1 {
     format!("{}/{}/{}", self.workspace_id, self.parent_dir, self.file_id)
   }
 
-  fn meta_key(&self) -> String {
+  fn blob_metadata_key(&self) -> String {
     format!("{}_{}", self.parent_dir, self.file_id)
   }
 

@@ -39,3 +39,4 @@ redis = { workspace = true, features = [
 ] }
 tokio-util = "0.7.12"
 secrecy = { workspace = true, features = ["serde"] }
+reqwest.workspace = true

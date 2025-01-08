@@ -164,7 +164,7 @@ impl Retry {
 }
 
 #[allow(clippy::result_large_err)]
-pub(crate) fn check_response(
+pub(crate) fn check_ureq_response(
   response: Result<ureq::Response, ureq::Error>,
 ) -> Result<ureq::Response, Retry> {
   match response {

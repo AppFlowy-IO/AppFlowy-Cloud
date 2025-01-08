@@ -13,6 +13,14 @@ impl Embedder {
       Self::OpenAI(embedder) => embedder.embed(params),
     }
   }
+  pub async fn async_embed(
+    &self,
+    params: EmbeddingRequest,
+  ) -> Result<OpenAIEmbeddingResponse, AppError> {
+    match self {
+      Self::OpenAI(embedder) => embedder.async_embed(params).await,
+    }
+  }
 
   pub fn model(&self) -> EmbeddingModel {
     EmbeddingModel::TextEmbedding3Small

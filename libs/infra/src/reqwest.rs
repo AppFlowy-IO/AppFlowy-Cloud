@@ -110,10 +110,11 @@ where
             },
             Some(Err(err)) if err.is_eof() => {
               // Wait for more data if EOF indicates incomplete data
+              error!("JsonStream eof: {}", err);
               return Poll::Pending;
             },
             Some(Err(err)) => {
-              error!("JsonStream: deserialization error: {}", err);
+              error!("JsonStream deserialization error: {}", err);
               return Poll::Ready(Some(Err(err.into())));
             },
             None => {
@@ -123,6 +124,7 @@ where
           }
         },
         Some(Err(err)) => {
+          error!("JsonStream error: {}", err);
           // Convert the error to SE
           return Poll::Ready(Some(Err(err)));
         },
@@ -151,6 +153,7 @@ where
               return Poll::Ready(Some(Err(err.into())));
             },
             None => {
+              error!("JsonStream buffer is not empty but no data");
               // No more data to process; end the stream
               return Poll::Ready(None);
             },

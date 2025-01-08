@@ -164,8 +164,18 @@ docker logs <NAME>
   to be served on a different origin that the one used for AppFlowy Cloud (eg. if you are hosting `appflowy cloud`
   on `appflowy.home.com`, `appflowy_web` may be hosted on `web.appflowy.home.com`). The source code and deployment
   guide can be found in this [repository](https://github.com/AppFlowy-IO/AppFlowy-Web).
-- To prevent CORS issues, you will need to change `set $appflowy_web "http://localhost:3000";` in `nginx/nginx.conf`
-  to the origin where you are hosting `appflowy_web`.
+- To prevent CORS issues, you will need to add your AppFlowy Web origin. By default, we allow requests from `localhost:3000`,
+  using, the configuration below:
+  ```
+  map $http_origin $cors_origin {
+    # AppFlowy Web origin
+    "~^http://localhost:3000$" $http_origin;
+    default "null";
+  }
+  ```
+  Replace `http://localhost:3000` with your AppFlowy Web origin.
+
+
 
 ## Ports
 

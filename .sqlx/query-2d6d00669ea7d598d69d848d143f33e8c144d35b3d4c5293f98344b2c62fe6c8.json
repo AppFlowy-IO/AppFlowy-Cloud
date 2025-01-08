@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT namespace\n      FROM af_workspace_namespace\n      WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)\n        AND is_original = FALSE\n      ORDER BY created_at DESC\n      LIMIT 1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "namespace",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2d6d00669ea7d598d69d848d143f33e8c144d35b3d4c5293f98344b2c62fe6c8"
+}

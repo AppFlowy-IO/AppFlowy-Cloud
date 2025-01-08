@@ -25,11 +25,23 @@ pub fn private_and_nonviewable_view_ids(folder: &Folder) -> PrivateAndNonviewabl
       if check_if_view_is_space(&private_view) && !my_private_view_ids.contains(&private_section.id)
       {
         nonviewable_view_ids.insert(private_section.id);
+        let private_view_ids_in_space: HashSet<String> = folder
+          .get_views_belong_to(&private_view.id)
+          .iter()
+          .map(|v| v.id.clone())
+          .collect();
+        nonviewable_view_ids.extend(private_view_ids_in_space);
       }
     }
   }
   for trash_view in folder.get_all_trash_sections() {
-    nonviewable_view_ids.insert(trash_view.id);
+    nonviewable_view_ids.insert(trash_view.id.clone());
+    let child_views_for_trash: HashSet<String> = folder
+      .get_views_belong_to(&trash_view.id)
+      .iter()
+      .map(|v| v.id.clone())
+      .collect();
+    nonviewable_view_ids.extend(child_views_for_trash);
   }
   PrivateAndNonviewableViews {
     my_private_view_ids,

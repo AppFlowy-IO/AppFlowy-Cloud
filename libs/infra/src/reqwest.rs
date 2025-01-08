@@ -11,6 +11,7 @@ use serde_json::de::SliceRead;
 use serde_json::StreamDeserializer;
 use std::error::Error as StdError;
 use std::task::{Context, Poll};
+use tracing::error;
 
 pub async fn check_response(resp: reqwest::Response) -> Result<(), Error> {
   let status_code = resp.status();
@@ -93,6 +94,7 @@ where
       match ready!(this.stream.as_mut().poll_next(cx)) {
         Some(Ok(bytes)) => {
           this.buffer.extend_from_slice(&bytes);
+          tracing::trace!("JsonStream: bytes: {}", bytes.len());
 
           // Create a StreamDeserializer to deserialize the bytes into T
           let mut de = StreamDeserializer::new(SliceRead::new(this.buffer));
@@ -111,6 +113,7 @@ where
               return Poll::Pending;
             },
             Some(Err(err)) => {
+              error!("JsonStream: deserialization error: {}", err);
               return Poll::Ready(Some(Err(err.into())));
             },
             None => {
@@ -139,9 +142,11 @@ where
             },
             Some(Err(err)) if err.is_eof() => {
               // If EOF and buffer is incomplete, return None to indicate stream end
+              error!("JsonStream deserialization error: {}", err);
               return Poll::Ready(None);
             },
             Some(Err(err)) => {
+              error!("JsonStream deserialization error: {}", err);
               // Return any other errors that occur during deserialization
               return Poll::Ready(Some(Err(err.into())));
             },

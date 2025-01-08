@@ -70,6 +70,24 @@
           {
             "insert": "$",
             "attributes": {
+              "mention": {
+                "type": "page",
+                "page_id": "<web_guide_id>"
+              },
+              "bold": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "heading",
+      "data": {
+        "level": 4,
+        "delta": [
+          {
+            "insert": "$",
+            "attributes": {
               "bold": true,
               "mention": {
                 "page_id": "<todos_id>",

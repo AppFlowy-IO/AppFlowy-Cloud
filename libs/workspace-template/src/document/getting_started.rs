@@ -23,6 +23,7 @@ use crate::{gen_view_id, TemplateData, TemplateObjectId, WorkspaceTemplate};
 //     |-- Getting started (document)
 //          |-- Desktop guide (document)
 //          |-- Mobile guide (document)
+//          |-- Web guide (document)
 //     |-- To-dos (board)
 // |-- Shared (space)
 //     |-- ... (empty)
@@ -99,6 +100,7 @@ impl GettingStartedTemplate {
     Ok(template_data)
   }
 
+  #[allow(clippy::too_many_arguments)]
   async fn create_document_and_database_data(
     &self,
     general_view_uuid: String,
@@ -106,8 +108,10 @@ impl GettingStartedTemplate {
     getting_started_view_uuid: String,
     desktop_guide_view_uuid: String,
     mobile_guide_view_uuid: String,
+    web_guide_view_uuid: String,
     todos_view_uuid: String,
   ) -> anyhow::Result<(
+    TemplateData,
     TemplateData,
     TemplateData,
     TemplateData,
@@ -135,6 +139,7 @@ impl GettingStartedTemplate {
       "mobile_guide_id".to_string(),
       mobile_guide_view_uuid.clone(),
     );
+    replacements.insert("web_guide_id".to_string(), web_guide_view_uuid.clone());
     replacements.insert("todos_id".to_string(), todos_view_uuid.clone());
     replace_json_placeholders(&mut getting_started_json, &replacements);
     let getting_started_data = self
@@ -154,6 +159,11 @@ impl GettingStartedTemplate {
       .create_document_from_json(mobile_guide_view_uuid.clone(), mobile_guide_json)
       .await?;
 
+    let web_guide_json = include_str!("../../assets/web_guide.json");
+    let web_guide_data = self
+      .create_document_from_json(web_guide_view_uuid.clone(), web_guide_json)
+      .await?;
+
     let todos_json = include_str!("../../assets/to-dos.json");
     let database_data = serde_json::from_str::<DatabaseData>(todos_json)?;
     let database_view_id = database_data.views[0].id.clone();
@@ -169,6 +179,7 @@ impl GettingStartedTemplate {
       getting_started_data,
       desktop_guide_data,
       mobile_guide_data,
+      web_guide_data,
       todos_data,
     ))
   }
@@ -179,6 +190,7 @@ impl GettingStartedTemplate {
     getting_started_view_uuid: String,
     desktop_guide_view_uuid: String,
     mobile_guide_view_uuid: String,
+    web_guide_view_uuid: String,
   ) -> ViewBuilder {
     // getting started view
     let mut view_builder = view_builder
@@ -214,6 +226,19 @@ impl GettingStartedTemplate {
       })
       .await;
 
+    view_builder = view_builder
+      .with_child_view_builder({
+        |child_view_builder| async {
+          // web guide view
+          let web_guide_view_uuid = web_guide_view_uuid.clone();
+          child_view_builder
+            .with_name("Web guide")
+            .with_view_id(web_guide_view_uuid)
+            .build()
+        }
+      })
+      .await;
+
     view_builder
   }
 }
@@ -238,6 +263,7 @@ impl WorkspaceTemplate for GettingStartedTemplate {
     let getting_started_view_uuid = gen_view_id().to_string();
     let desktop_guide_view_uuid = gen_view_id().to_string();
     let mobile_guide_view_uuid = gen_view_id().to_string();
+    let web_guide_view_uuid = gen_view_id().to_string();
     let todos_view_uuid = gen_view_id().to_string();
 
     let (
@@ -246,6 +272,7 @@ impl WorkspaceTemplate for GettingStartedTemplate {
       getting_started_data,
       desktop_guide_data,
       mobile_guide_data,
+      web_guide_data,
       todos_data,
     ) = self
       .create_document_and_database_data(
@@ -254,6 +281,7 @@ impl WorkspaceTemplate for GettingStartedTemplate {
         getting_started_view_uuid.clone(),
         desktop_guide_view_uuid.clone(),
         mobile_guide_view_uuid.clone(),
+        web_guide_view_uuid.clone(),
         todos_view_uuid.clone(),
       )
       .await?;
@@ -277,7 +305,8 @@ impl WorkspaceTemplate for GettingStartedTemplate {
             let getting_started_view_uuid = getting_started_view_uuid.clone();
             let desktop_guide_view_uuid = desktop_guide_view_uuid.clone();
             let mobile_guide_view_uuid = mobile_guide_view_uuid.clone();
-            let  child_view_builder = self.build_getting_started_view(child_view_builder, getting_started_view_uuid, desktop_guide_view_uuid, mobile_guide_view_uuid).await;
+            let web_guide_view_uuid = web_guide_view_uuid.clone();
+            let  child_view_builder = self.build_getting_started_view(child_view_builder, getting_started_view_uuid, desktop_guide_view_uuid, mobile_guide_view_uuid, web_guide_view_uuid).await;
             child_view_builder.build()
           }
         ).await;
@@ -319,6 +348,7 @@ impl WorkspaceTemplate for GettingStartedTemplate {
       getting_started_data,
       desktop_guide_data,
       mobile_guide_data,
+      web_guide_data,
     ];
     template_data.extend(todos_data);
     Ok(template_data)

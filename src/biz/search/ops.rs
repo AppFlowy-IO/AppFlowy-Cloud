@@ -30,12 +30,14 @@ pub async fn search_document(
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
-  let embeddings = indexer_scheduler.create_search_embeddings(EmbeddingRequest {
-    input: EmbeddingInput::String(request.query.clone()),
-    model: EmbeddingModel::TextEmbedding3Small.to_string(),
-    encoding_format: EmbeddingEncodingFormat::Float,
-    dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
-  })?;
+  let embeddings = indexer_scheduler
+    .create_search_embeddings(EmbeddingRequest {
+      input: EmbeddingInput::String(request.query.clone()),
+      model: EmbeddingModel::TextEmbedding3Small.to_string(),
+      encoding_format: EmbeddingEncodingFormat::Float,
+      dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
+    })
+    .await?;
   let total_tokens = embeddings.usage.total_tokens as u32;
   metrics.record_search_tokens_used(&workspace_id, total_tokens);
   tracing::info!(

@@ -153,12 +153,12 @@ impl IndexerScheduler {
     )))
   }
 
-  pub fn create_search_embeddings(
+  pub async fn create_search_embeddings(
     &self,
     request: EmbeddingRequest,
   ) -> Result<OpenAIEmbeddingResponse, AppError> {
     let embedder = self.create_embedder()?;
-    let embeddings = embedder.embed(request)?;
+    let embeddings = embedder.async_embed(request).await?;
     Ok(embeddings)
   }
 

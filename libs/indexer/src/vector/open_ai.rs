@@ -1,4 +1,4 @@
-use crate::vector::rest::check_response;
+use crate::vector::rest::check_ureq_response;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
@@ -14,32 +14,39 @@ pub const REQUEST_PARALLELISM: usize = 40;
 #[derive(Debug, Clone)]
 pub struct Embedder {
   bearer: String,
-  client: ureq::Agent,
+  sync_client: ureq::Agent,
+  async_client: reqwest::Client,
 }
 
 impl Embedder {
   pub fn new(api_key: String) -> Self {
     let bearer = format!("Bearer {api_key}");
-    let client = ureq::AgentBuilder::new()
+    let sync_client = ureq::AgentBuilder::new()
       .max_idle_connections(REQUEST_PARALLELISM * 2)
       .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
       .build();
 
-    Self { bearer, client }
+    let async_client = reqwest::Client::builder().build().unwrap();
+
+    Self {
+      bearer,
+      sync_client,
+      async_client,
+    }
   }
 
   pub fn embed(&self, params: EmbeddingRequest) -> Result<OpenAIEmbeddingResponse, AppError> {
     for attempt in 0..3 {
       let request = self
-        .client
+        .sync_client
         .post(OPENAI_EMBEDDINGS_URL)
         .set("Authorization", &self.bearer)
         .set("Content-Type", "application/json");
 
-      let result = check_response(request.send_json(&params));
+      let result = check_ureq_response(request.send_json(&params));
       let retry_duration = match result {
         Ok(response) => {
-          let data = from_response::<OpenAIEmbeddingResponse>(response)?;
+          let data = from_ureq_response::<OpenAIEmbeddingResponse>(response)?;
           return Ok(data);
         },
         Err(retry) => retry.into_duration(attempt),
@@ -53,9 +60,24 @@ impl Embedder {
       "Failed to generate embeddings after 3 attempts"
     )))
   }
+
+  pub async fn async_embed(
+    &self,
+    params: EmbeddingRequest,
+  ) -> Result<OpenAIEmbeddingResponse, AppError> {
+    let request = self
+      .async_client
+      .post(OPENAI_EMBEDDINGS_URL)
+      .header("Authorization", &self.bearer)
+      .header("Content-Type", "application/json");
+
+    let result = request.json(&params).send().await?;
+    let response = from_response::<OpenAIEmbeddingResponse>(result).await?;
+    Ok(response)
+  }
 }
 
-pub fn from_response<T>(resp: ureq::Response) -> Result<T, anyhow::Error>
+pub fn from_ureq_response<T>(resp: ureq::Response) -> Result<T, anyhow::Error>
 where
   T: DeserializeOwned,
 {
@@ -69,6 +91,19 @@ where
   Ok(resp)
 }
 
+pub async fn from_response<T>(resp: reqwest::Response) -> Result<T, anyhow::Error>
+where
+  T: DeserializeOwned,
+{
+  let status_code = resp.status();
+  if status_code != 200 {
+    let body = resp.text().await?;
+    anyhow::bail!("error code: {}, {}", status_code, body)
+  }
+
+  let resp = resp.json().await?;
+  Ok(resp)
+}
 /// ## Execution Time Comparison Results
 ///
 /// The following results were observed when running `execution_time_comparison_tests`:

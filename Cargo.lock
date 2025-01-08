@@ -4232,6 +4232,7 @@ dependencies = [
  "prometheus-client",
  "rayon",
  "redis 0.25.4",
+ "reqwest",
  "secrecy",
  "serde",
  "serde_json",

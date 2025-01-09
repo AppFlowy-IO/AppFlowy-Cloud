@@ -366,7 +366,9 @@ pub enum QuestionStreamValue {
   Metadata {
     value: serde_json::Value,
   },
-  KeepAlive,
+  KeepAlive {
+    value: String,
+  },
 }
 impl Stream for QuestionStream {
   type Item = Result<QuestionStreamValue, AppResponseError>;
@@ -395,8 +397,11 @@ impl Stream for QuestionStream {
             return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: image })));
           }
 
-          if value.remove(STREAM_KEEP_ALIVE_KEY).is_some() {
-            return Poll::Ready(Some(Ok(QuestionStreamValue::KeepAlive)));
+          if let Some(dump) = value
+            .remove(STREAM_KEEP_ALIVE_KEY)
+            .and_then(|s| s.as_str().map(ToString::to_string))
+          {
+            return Poll::Ready(Some(Ok(QuestionStreamValue::KeepAlive { value: dump })));
           }
 
           error!("Invalid streaming value: {:?}", value);

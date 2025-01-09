@@ -7,6 +7,7 @@ use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
+use collab_folder::ViewLayout;
 use shared_entity::dto::chat_dto::{CreateChatMessageParams, CreateChatParams};
 use tokio::time::sleep;
 use workspace_template::document::getting_started::getting_started_document_data;
@@ -15,7 +16,6 @@ use workspace_template::document::getting_started::getting_started_document_data
 async fn test_embedding_when_create_document() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-
   let object_id_1 = uuid::Uuid::new_v4().to_string();
   let the_five_dysfunctions_of_a_team =
     create_document_collab(&object_id_1, "the_five_dysfunctions_of_a_team.md").await;
@@ -29,6 +29,14 @@ async fn test_embedding_when_create_document() {
     )
     .await
     .unwrap();
+  test_client
+    .insert_view_to_general_space(
+      &workspace_id,
+      &object_id_1,
+      "five dysfunctional",
+      ViewLayout::Document,
+    )
+    .await;
 
   test_client
     .wait_until_get_embedding(&workspace_id, &object_id_1)
@@ -46,6 +54,9 @@ async fn test_embedding_when_create_document() {
     )
     .await
     .unwrap();
+  test_client
+    .insert_view_to_general_space(&workspace_id, &object_id_2, "tennis", ViewLayout::Document)
+    .await;
 
   test_client
     .wait_until_get_embedding(&workspace_id, &object_id_2)

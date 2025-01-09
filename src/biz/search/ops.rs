@@ -1,15 +1,18 @@
-use crate::api::metrics::RequestMetrics;
-use crate::biz::collab::folder_view::private_and_nonviewable_view_ids;
+use crate::biz::collab::folder_view::PrivateSpaceAndTrashViews;
 use crate::biz::collab::utils::get_latest_collab_folder;
+use crate::{
+  api::metrics::RequestMetrics, biz::collab::folder_view::private_space_and_trash_view_ids,
+};
 use app_error::AppError;
 use appflowy_ai_client::dto::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
 };
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use collab_folder::{Folder, View};
 use database::collab::GetCollabOrigin;
-use itertools::Itertools;
 use std::collections::HashSet;
 use std::sync::Arc;
+use tracing::info;
 
 use database::index::{search_documents, SearchDocumentParams};
 use shared_entity::dto::search_dto::{
@@ -20,12 +23,60 @@ use sqlx::PgPool;
 use indexer::scheduler::IndexerScheduler;
 use uuid::Uuid;
 
+static MAX_SEARCH_DEPTH: i32 = 10;
+
+fn is_view_searchable(view: &View, workspace_id: &str) -> bool {
+  view.id != workspace_id && view.parent_view_id != workspace_id && view.layout.is_document()
+}
+
+fn populate_searchable_view_ids(
+  folder: &Folder,
+  private_space_and_trash_views: &PrivateSpaceAndTrashViews,
+  searchable_view_ids: &mut HashSet<String>,
+  workspace_id: &str,
+  current_view_id: &str,
+  depth: i32,
+  max_depth: i32,
+) {
+  if depth > max_depth {
+    return;
+  }
+  let is_other_private_space = private_space_and_trash_views
+    .other_private_space_ids
+    .contains(current_view_id);
+  let is_trash = private_space_and_trash_views
+    .view_ids_in_trash
+    .contains(current_view_id);
+  if is_other_private_space || is_trash {
+    return;
+  }
+  let view = match folder.get_view(current_view_id) {
+    Some(view) => view,
+    None => return,
+  };
+
+  if is_view_searchable(&view, workspace_id) {
+    searchable_view_ids.insert(current_view_id.to_string());
+  }
+  for child in view.children.iter() {
+    populate_searchable_view_ids(
+      folder,
+      private_space_and_trash_views,
+      searchable_view_ids,
+      workspace_id,
+      &child.id,
+      depth + 1,
+      max_depth,
+    );
+  }
+}
+
 pub async fn search_document(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   indexer_scheduler: &Arc<IndexerScheduler>,
   uid: i64,
-  workspace_id: Uuid,
+  workspace_uuid: Uuid,
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppError> {
@@ -38,10 +89,10 @@ pub async fn search_document(
     })
     .await?;
   let total_tokens = embeddings.usage.total_tokens as u32;
-  metrics.record_search_tokens_used(&workspace_id, total_tokens);
+  metrics.record_search_tokens_used(&workspace_uuid, total_tokens);
   tracing::info!(
     "workspace {} OpenAI API search tokens used: {}",
-    workspace_id,
+    workspace_uuid,
     total_tokens
   );
 
@@ -61,32 +112,30 @@ pub async fn search_document(
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
-    &workspace_id.to_string(),
+    &workspace_uuid.to_string(),
   )
   .await?;
-  let private_and_nonviewable_views = private_and_nonviewable_view_ids(&folder);
-  let space_ids: HashSet<String> = folder
-    .get_view(&workspace_id.to_string())
-    .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Workspace view not found in folder")))?
-    .children
-    .iter()
-    .map(|c| c.id.clone())
-    .collect();
-
-  let mut non_searchable_view_ids = private_and_nonviewable_views.nonviewable_view_ids;
-  non_searchable_view_ids.extend(space_ids);
+  let private_space_and_trash_views = private_space_and_trash_view_ids(&folder);
+  let mut searchable_view_ids = HashSet::new();
+  populate_searchable_view_ids(
+    &folder,
+    &private_space_and_trash_views,
+    &mut searchable_view_ids,
+    &workspace_uuid.to_string(),
+    &workspace_uuid.to_string(),
+    0,
+    MAX_SEARCH_DEPTH,
+  );
+  info!("{:?}", searchable_view_ids);
   let results = search_documents(
     pg_pool,
     SearchDocumentParams {
       user_id: uid,
-      workspace_id,
+      workspace_id: workspace_uuid,
       limit: request.limit.unwrap_or(10) as i32,
       preview: request.preview_size.unwrap_or(500) as i32,
       embedding,
-      non_viewable_view_ids: non_searchable_view_ids
-        .iter()
-        .map(|uuid| uuid.to_string())
-        .collect_vec(),
+      searchable_view_ids: searchable_view_ids.into_iter().collect(),
     },
     total_tokens,
   )
@@ -94,7 +143,7 @@ pub async fn search_document(
   tracing::trace!(
     "user {} search request in workspace {} returned {} results for query: `{}`",
     uid,
-    workspace_id,
+    workspace_uuid,
     results.len(),
     request.query
   );

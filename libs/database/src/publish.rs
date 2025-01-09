@@ -525,7 +525,7 @@ pub async fn select_default_published_view_id<'a, E: Executor<'a, Database = Pos
   Ok(res)
 }
 
-async fn select_first_non_original_namespace(
+async fn select_most_recent_non_original_namespace(
   pg_pool: &PgPool,
   namespace: &str,
 ) -> Result<Option<String>, AppError> {
@@ -535,7 +535,7 @@ async fn select_first_non_original_namespace(
       FROM af_workspace_namespace
       WHERE workspace_id = (SELECT workspace_id FROM af_workspace_namespace WHERE namespace = $1)
         AND is_original = FALSE
-      ORDER BY created_at ASC
+      ORDER BY created_at DESC
       LIMIT 1
     "#,
     namespace,
@@ -575,7 +575,7 @@ pub async fn select_publish_info_for_view_ids(
     return Ok(res);
   }
   if let Some(non_original_namespace) =
-    select_first_non_original_namespace(pg_pool, &res[0].namespace).await?
+    select_most_recent_non_original_namespace(pg_pool, &res[0].namespace).await?
   {
     res.iter_mut().for_each(|info| {
       info.namespace.clone_from(&non_original_namespace);
@@ -633,7 +633,7 @@ async fn use_non_orginal_namespace_if_possible(
   }
 
   if let Some(non_original_namespace) =
-    select_first_non_original_namespace(pg_pool, &publish_infos[0].namespace).await?
+    select_most_recent_non_original_namespace(pg_pool, &publish_infos[0].namespace).await?
   {
     publish_infos.iter_mut().for_each(|info| {
       info.namespace.clone_from(&non_original_namespace);

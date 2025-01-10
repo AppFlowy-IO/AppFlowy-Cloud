@@ -50,6 +50,14 @@ async fn document_full_sync_then_search_test() {
     collab_type: CollabType::Document,
   };
   test_client.api_client.create_collab(params).await.unwrap();
+  test_client
+    .insert_view_to_general_space(
+      &workspace_id,
+      &object_id,
+      "AppFlowy",
+      collab_folder::ViewLayout::Document,
+    )
+    .await;
 
   let contents = vec![
     "AppFlowy is an open-source project.",

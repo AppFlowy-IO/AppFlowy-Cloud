@@ -17,7 +17,8 @@ use collab_database::database::{Database, DatabaseContext};
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use collab_folder::Folder;
+use collab_folder::hierarchy_builder::NestedChildViewBuilder;
+use collab_folder::{Folder, ViewLayout};
 use collab_user::core::UserAwareness;
 use mime::Mime;
 use serde::Deserialize;
@@ -33,7 +34,7 @@ use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::entity::id::user_awareness_object_id;
 use client_api::entity::{
   PublishCollabItem, PublishCollabMetadata, QueryWorkspaceMember, QuestionStream,
-  QuestionStreamValue,
+  QuestionStreamValue, UpdateCollabWebParams,
 };
 use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
@@ -138,6 +139,50 @@ impl TestClient {
   pub async fn new_user_without_ws_conn() -> Self {
     let registered_user = generate_unique_registered_user().await;
     Self::new(registered_user, false).await
+  }
+
+  pub async fn insert_view_to_general_space(
+    &self,
+    workspace_id: &str,
+    view_id: &str,
+    view_name: &str,
+    view_layout: ViewLayout,
+  ) {
+    let mut folder = self.get_folder(workspace_id).await;
+    let general_space_id = folder
+      .get_view(workspace_id)
+      .unwrap()
+      .children
+      .first()
+      .unwrap()
+      .clone();
+    let view = NestedChildViewBuilder::new(self.uid().await, general_space_id.id.clone())
+      .with_view_id(view_id.to_string())
+      .with_name(view_name)
+      .with_layout(view_layout)
+      .build()
+      .view;
+    {
+      let mut txn = folder.collab.transact_mut();
+      folder.body.views.insert(&mut txn, view, None);
+    }
+    let folder_collab_type = CollabType::Folder;
+    self
+      .api_client
+      .update_web_collab(
+        workspace_id,
+        workspace_id,
+        UpdateCollabWebParams {
+          doc_state: folder
+            .encode_collab_v1(|c| folder_collab_type.validate_require_data(c))
+            .unwrap()
+            .doc_state
+            .to_vec(),
+          collab_type: CollabType::Folder,
+        },
+      )
+      .await
+      .unwrap();
   }
 
   pub async fn get_folder(&self, workspace_id: &str) -> Folder {

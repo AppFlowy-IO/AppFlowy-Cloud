@@ -25,6 +25,7 @@ use crate::state::AppState;
 use anyhow::anyhow;
 use aws_sdk_s3::primitives::ByteStream;
 use collab_importer::util::FileId;
+use database::pg_row::AFBlobStatus;
 use serde::Deserialize;
 use shared_entity::dto::file_dto::PutFileResponse;
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
@@ -34,7 +35,7 @@ use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
-use tracing::{error, event, instrument, trace};
+use tracing::{error, event, instrument, trace, warn};
 
 pub fn file_storage_scope() -> Scope {
   web::scope("/api/file_storage")
@@ -369,6 +370,13 @@ async fn get_blob_by_object_key(
   }
 
   let metadata = result.unwrap();
+  match AFBlobStatus::from(metadata.status) {
+    AFBlobStatus::DallEContentPolicyViolation => {
+      return Ok(HttpResponse::UnprocessableEntity().finish());
+    },
+    AFBlobStatus::Ok => {},
+  };
+
   // Check if the file is modified since the last time
   if let Some(modified_since) = req
     .headers()

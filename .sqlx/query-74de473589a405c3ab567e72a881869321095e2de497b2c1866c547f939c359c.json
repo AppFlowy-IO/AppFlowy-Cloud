@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "modified_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "status",
+        "type_info": "Int2"
       }
     ],
     "parameters": {
@@ -35,6 +40,7 @@
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,

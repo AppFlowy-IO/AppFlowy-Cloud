@@ -32,9 +32,26 @@ jobs:
       - name: Install Prerequisites
         run: |
           brew update
-          brew install libpq
-          brew install sqlx-cli
-          brew install protobuf
+          if ! brew list libpq &>/dev/null; then
+            echo "Installing libpq..."
+            brew install libpq
+          else
+            echo "libpq is already installed."
+          fi
+
+          if ! brew list sqlx-cli &>/dev/null; then
+            echo "Installing sqlx-cli..."
+            brew install sqlx-cli
+          else
+            echo "sqlx-cli is already installed."
+          fi
+
+          if ! brew list protobuf &>/dev/null; then
+            echo "Installing protobuf..."
+            brew install protobuf
+          else
+            echo "protobuf is already installed."
+          fi
 
       - name: Replace Values in .env
         run: |
@@ -51,6 +68,7 @@ jobs:
 
       - name: Start Docker Compose Services
         run: |
+          docker compose -f docker-compose-dev.yml down
           docker compose -f docker-compose-dev.yml up -d
           ./script/code_gen.sh
           cargo sqlx database create && cargo sqlx migrate run

@@ -11,7 +11,7 @@ fn document_plain_text() {
   let collab = Collab::new_with_origin(CollabOrigin::Server, "1", vec![], false);
   let document = Document::create_with_data(collab, doc).unwrap();
   let text = document.to_plain_text(false, true).unwrap();
-  let expected = "Welcome to AppFlowy $ Download for macOS, Windows, and Linux link $ $ quick start Ask AI powered by advanced AI models: chat, search, write, and much more ✨ ❤\u{fe0f}Love AppFlowy and open source? Follow our latest product updates: Twitter : @appflowy Reddit : r/appflowy Github ";
+  let expected = "Welcome to AppFlowy $ Download for macOS, Windows, and Linux link $ $ $ quick start Ask AI powered by advanced AI models: chat, search, write, and much more ✨ ❤\u{fe0f}Love AppFlowy and open source? Follow our latest product updates: Twitter : @appflowy Reddit : r/appflowy Github ";
   assert_eq!(&text, expected);
 }
 

@@ -35,7 +35,7 @@ use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
-use tracing::{error, event, instrument, trace, warn};
+use tracing::{error, event, instrument, trace};
 
 pub fn file_storage_scope() -> Scope {
   web::scope("/api/file_storage")

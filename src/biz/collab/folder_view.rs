@@ -9,43 +9,43 @@ use shared_entity::dto::workspace_dto::{
 };
 use uuid::Uuid;
 
-pub struct PrivateAndNonviewableViews {
-  pub my_private_view_ids: HashSet<String>,
-  pub nonviewable_view_ids: HashSet<String>,
+pub struct PrivateSpaceAndTrashViews {
+  pub my_private_space_ids: HashSet<String>,
+  pub other_private_space_ids: HashSet<String>,
+  pub view_ids_in_trash: HashSet<String>,
 }
 
-pub fn private_and_nonviewable_view_ids(folder: &Folder) -> PrivateAndNonviewableViews {
-  let mut nonviewable_view_ids = HashSet::new();
-  let mut my_private_view_ids = HashSet::new();
+pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrashViews {
+  let mut view_ids_in_trash = HashSet::new();
+  let mut my_private_space_ids = HashSet::new();
+  let mut other_private_space_ids = HashSet::new();
   for private_section in folder.get_my_private_sections() {
-    my_private_view_ids.insert(private_section.id);
+    match folder.get_view(&private_section.id) {
+      Some(private_view) if check_if_view_is_space(&private_view) => {
+        my_private_space_ids.insert(private_section.id.clone());
+      },
+      _ => (),
+    }
   }
+
   for private_section in folder.get_all_private_sections() {
-    if let Some(private_view) = folder.get_view(&private_section.id) {
-      if check_if_view_is_space(&private_view) && !my_private_view_ids.contains(&private_section.id)
+    match folder.get_view(&private_section.id) {
+      Some(private_view)
+        if check_if_view_is_space(&private_view)
+          && !my_private_space_ids.contains(&private_section.id) =>
       {
-        nonviewable_view_ids.insert(private_section.id);
-        let private_view_ids_in_space: HashSet<String> = folder
-          .get_views_belong_to(&private_view.id)
-          .iter()
-          .map(|v| v.id.clone())
-          .collect();
-        nonviewable_view_ids.extend(private_view_ids_in_space);
-      }
+        other_private_space_ids.insert(private_section.id.clone());
+      },
+      _ => (),
     }
   }
   for trash_view in folder.get_all_trash_sections() {
-    nonviewable_view_ids.insert(trash_view.id.clone());
-    let child_views_for_trash: HashSet<String> = folder
-      .get_views_belong_to(&trash_view.id)
-      .iter()
-      .map(|v| v.id.clone())
-      .collect();
-    nonviewable_view_ids.extend(child_views_for_trash);
+    view_ids_in_trash.insert(trash_view.id.clone());
   }
-  PrivateAndNonviewableViews {
-    my_private_view_ids,
-    nonviewable_view_ids,
+  PrivateSpaceAndTrashViews {
+    my_private_space_ids,
+    other_private_space_ids,
+    view_ids_in_trash,
   }
 }
 
@@ -57,15 +57,14 @@ pub fn collab_folder_to_folder_view(
   max_depth: u32,
   pubished_view_ids: &HashSet<String>,
 ) -> Result<FolderView, AppError> {
-  let private_and_nonviewable_views = private_and_nonviewable_view_ids(folder);
+  let private_space_and_trash_view_ids = private_space_and_trash_view_ids(folder);
 
   to_folder_view(
     workspace_id,
     "",
     root_view_id,
     folder,
-    &private_and_nonviewable_views.nonviewable_view_ids,
-    &private_and_nonviewable_views.my_private_view_ids,
+    &private_space_and_trash_view_ids,
     pubished_view_ids,
     false,
     0,
@@ -83,14 +82,23 @@ fn to_folder_view(
   parent_view_id: &str,
   view_id: &str,
   folder: &Folder,
-  unviewable: &HashSet<String>,
-  private_view_ids: &HashSet<String>,
+  private_space_and_trash_views: &PrivateSpaceAndTrashViews,
   published_view_ids: &HashSet<String>,
   parent_is_private: bool,
   depth: u32,
   max_depth: u32,
 ) -> Option<FolderView> {
-  if depth > max_depth || unviewable.contains(view_id) {
+  let is_trash = private_space_and_trash_views
+    .view_ids_in_trash
+    .contains(view_id);
+  let is_my_private_space = private_space_and_trash_views
+    .my_private_space_ids
+    .contains(view_id);
+  let is_other_private_space = private_space_and_trash_views
+    .other_private_space_ids
+    .contains(view_id);
+
+  if depth > max_depth || is_other_private_space || is_trash {
     return None;
   }
 
@@ -114,7 +122,7 @@ fn to_folder_view(
     return None;
   }
 
-  let is_private = parent_is_private || (view_is_space && private_view_ids.contains(view_id));
+  let is_private = parent_is_private || is_my_private_space;
   let extra = view.extra.as_deref().map(|extra| {
     serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
       tracing::warn!("failed to parse extra field({}): {}", extra, e);
@@ -130,8 +138,7 @@ fn to_folder_view(
         view_id,
         &child_view_id.id,
         folder,
-        unviewable,
-        private_view_ids,
+        private_space_and_trash_views,
         published_view_ids,
         is_private,
         depth + 1,
@@ -267,7 +274,7 @@ pub fn check_if_view_ancestors_fulfil_condition(
       return true;
     }
     current_view_id = view.parent_view_id.clone();
-    if current_view_id.is_empty() {
+    if current_view_id.is_empty() || current_view_id == view.id {
       return false;
     }
   }

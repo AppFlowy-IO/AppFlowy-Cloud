@@ -4,8 +4,8 @@ use bytes::Bytes;
 use futures_core::Stream;
 use reqwest::Method;
 use shared_entity::dto::ai_dto::{
-  CompleteTextParams, CompleteTextResponse, LocalAIConfig, SummarizeRowParams,
-  SummarizeRowResponse, TranslateRowParams, TranslateRowResponse,
+  CompleteTextParams, LocalAIConfig, SummarizeRowParams, SummarizeRowResponse, TranslateRowParams,
+  TranslateRowResponse,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::time::Duration;
@@ -71,26 +71,6 @@ impl Client {
 
     log_request_id(&resp);
     AppResponse::<TranslateRowResponse>::from_response(resp)
-      .await?
-      .into_data()
-  }
-
-  #[instrument(level = "info", skip_all)]
-  pub async fn completion_text(
-    &self,
-    workspace_id: &str,
-    params: CompleteTextParams,
-  ) -> Result<CompleteTextResponse, AppResponseError> {
-    let url = format!("{}/api/ai/{}/complete", self.base_url, workspace_id);
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&params)
-      .timeout(Duration::from_secs(30))
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<CompleteTextResponse>::from_response(resp)
       .await?
       .into_data()
   }

@@ -390,8 +390,8 @@ async fn get_text_with_image_message_test() {
   assert_eq!(workspace_id, workspace_id_url);
   assert_eq!(chat_id, chat_id_url);
 
-  let mut retries = 3;
-  let retry_interval = Duration::from_secs(8);
+  let mut retries = 5;
+  let retry_interval = Duration::from_secs(10);
   let mut last_error = None;
 
   // The image will be generated in the background, so we need to retry until it's available

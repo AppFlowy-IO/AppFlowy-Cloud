@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        apc.view_id,\n        apc.publish_name,\n        au.email AS publisher_email,\n        apc.created_at AS publish_timestamp\n      FROM af_published_collab apc\n      JOIN af_user au ON apc.published_by = au.uid\n      WHERE workspace_id = $1\n      AND unpublished_at IS NULL\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "view_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "publish_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "publisher_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "publish_timestamp",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4787139d2189fc33ac25ac07bb9f585f578bde4cd3f75a7da95aa849a25bca9d"
+}

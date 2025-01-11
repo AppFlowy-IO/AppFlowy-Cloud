@@ -686,3 +686,10 @@ impl From<AFQuickNoteRow> for QuickNote {
     }
   }
 }
+
+pub struct AFPublishViewWithPublishInfo {
+  pub view_id: Uuid,
+  pub publish_name: String,
+  pub publisher_email: String,
+  pub publish_timestamp: DateTime<Utc>,
+}

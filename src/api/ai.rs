@@ -5,8 +5,8 @@ use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 use app_error::AppError;
 use appflowy_ai_client::dto::{
-  CalculateSimilarityParams, CompleteTextResponse, LocalAIConfig, SimilarityResponse,
-  TranslateRowParams, TranslateRowResponse,
+  CalculateSimilarityParams, LocalAIConfig, SimilarityResponse, TranslateRowParams,
+  TranslateRowResponse,
 };
 
 use futures_util::{stream, TryStreamExt};
@@ -15,13 +15,12 @@ use serde::Deserialize;
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };
-use shared_entity::response::{AppResponse, JsonAppResponse};
+use shared_entity::response::AppResponse;
 
 use tracing::{error, instrument, trace};
 
 pub fn ai_completion_scope() -> Scope {
   web::scope("/api/ai/{workspace_id}")
-    .service(web::resource("/complete").route(web::post().to(complete_text_handler)))
     .service(web::resource("/complete/stream").route(web::post().to(stream_complete_text_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
     .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
@@ -29,21 +28,6 @@ pub fn ai_completion_scope() -> Scope {
     .service(
       web::resource("/calculate_similarity").route(web::post().to(calculate_similarity_handler)),
     )
-}
-
-async fn complete_text_handler(
-  state: Data<AppState>,
-  payload: Json<CompleteTextParams>,
-  req: HttpRequest,
-) -> actix_web::Result<JsonAppResponse<CompleteTextResponse>> {
-  let ai_model = ai_model_from_header(&req);
-  let params = payload.into_inner();
-  let resp = state
-    .ai_client
-    .completion_text(&params.text, params.completion_type, None, ai_model)
-    .await
-    .map_err(|err| AppError::Internal(err.into()))?;
-  Ok(AppResponse::Ok().with_data(resp).into())
 }
 
 async fn stream_complete_text_handler(

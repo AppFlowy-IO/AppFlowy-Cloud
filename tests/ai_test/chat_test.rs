@@ -383,22 +383,22 @@ async fn get_text_with_image_message_test() {
   let answer = collect_answer(answer_stream).await;
   println!("answer:\n{}", answer);
   let image_url = extract_image_url(&answer).unwrap();
-  let (workspace_id_url, chat_id_url, file_id_url) = test_client
+  let (workspace_id_2, chat_id_2, file_id_2) = test_client
     .api_client
     .parse_blob_url_v1(&image_url)
     .unwrap();
-  assert_eq!(workspace_id, workspace_id_url);
-  assert_eq!(chat_id, chat_id_url);
+  assert_eq!(workspace_id, workspace_id_2);
+  assert_eq!(chat_id, chat_id_2);
 
-  let mut retries = 5;
-  let retry_interval = Duration::from_secs(10);
+  let mut retries = 6;
+  let retry_interval = Duration::from_secs(20);
   let mut last_error = None;
 
   // The image will be generated in the background, so we need to retry until it's available
   while retries > 0 {
     match test_client
       .api_client
-      .get_blob_v1(&workspace_id_url, &chat_id_url, &file_id_url)
+      .get_blob_v1(&workspace_id_2, &chat_id_2, &file_id_2)
       .await
     {
       Ok(_) => {
@@ -407,6 +407,7 @@ async fn get_text_with_image_message_test() {
         break;
       },
       Err(err) => {
+        eprintln!("Failed to get blob: {:?}", err);
         // Save the error and retry
         last_error = Some(err);
         retries -= 1;

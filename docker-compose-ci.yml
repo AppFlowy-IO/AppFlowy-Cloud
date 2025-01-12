@@ -180,6 +180,7 @@ services:
       - AI_APPFLOWY_BUCKET_NAME=${AI_APPFLOWY_BUCKET_NAME}
       - AI_APPFLOWY_HOST=${AI_APPFLOWY_HOST}
       - AI_USE_MINIO=${APPFLOWY_S3_USE_MINIO}
+      - SUPPORT_OPENAI_V3_IMAGE_MODEL=false
 
   appflowy_worker:
     restart: on-failure

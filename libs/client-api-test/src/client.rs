@@ -5,27 +5,27 @@ use std::env;
 use tracing::warn;
 use uuid::Uuid;
 
-#[cfg(not(target_arch = "wasm32"))]
-lazy_static! {
-  pub static ref LOCALHOST_URL: Cow<'static, str> =
-    get_env_var("LOCALHOST_URL", "http://localhost:8000");
-  pub static ref LOCALHOST_WS: Cow<'static, str> =
-    get_env_var("LOCALHOST_WS", "ws://localhost:8000/ws/v1");
-  pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
-    get_env_var("LOCALHOST_GOTRUE", "http://localhost:9999");
-}
-
-// Use following configuration when using local server with nginx
-//
 // #[cfg(not(target_arch = "wasm32"))]
 // lazy_static! {
 //   pub static ref LOCALHOST_URL: Cow<'static, str> =
-//     get_env_var("LOCALHOST_URL", "http://localhost");
+//     get_env_var("LOCALHOST_URL", "http://localhost:8000");
 //   pub static ref LOCALHOST_WS: Cow<'static, str> =
-//     get_env_var("LOCALHOST_WS", "ws://localhost/ws/v1");
+//     get_env_var("LOCALHOST_WS", "ws://localhost:8000/ws/v1");
 //   pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
-//     get_env_var("LOCALHOST_GOTRUE", "http://localhost/gotrue");
+//     get_env_var("LOCALHOST_GOTRUE", "http://localhost:9999");
 // }
+
+// Use following configuration when using local server with nginx
+//
+#[cfg(not(target_arch = "wasm32"))]
+lazy_static! {
+  pub static ref LOCALHOST_URL: Cow<'static, str> =
+    get_env_var("LOCALHOST_URL", "http://localhost");
+  pub static ref LOCALHOST_WS: Cow<'static, str> =
+    get_env_var("LOCALHOST_WS", "ws://localhost/ws/v1");
+  pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
+    get_env_var("LOCALHOST_GOTRUE", "http://localhost/gotrue");
+}
 
 // The env vars are not available in wasm32-unknown-unknown
 #[cfg(target_arch = "wasm32")]

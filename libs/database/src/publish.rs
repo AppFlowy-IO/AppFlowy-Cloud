@@ -5,6 +5,8 @@ use database_entity::dto::{
 use sqlx::{Executor, PgPool, Postgres};
 use uuid::Uuid;
 
+use crate::pg_row::AFPublishViewWithPublishInfo;
+
 pub async fn select_user_is_collab_publisher_for_all_views(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
@@ -668,6 +670,34 @@ pub async fn select_published_view_ids_for_workspace<'a, E: Executor<'a, Databas
     r#"
       SELECT view_id
       FROM af_published_collab
+      WHERE workspace_id = $1
+      AND unpublished_at IS NULL
+    "#,
+    workspace_id,
+  )
+  .fetch_all(executor)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn select_published_view_ids_with_publish_info_for_workspace<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  workspace_id: Uuid,
+) -> Result<Vec<AFPublishViewWithPublishInfo>, AppError> {
+  let res = sqlx::query_as!(
+    AFPublishViewWithPublishInfo,
+    r#"
+      SELECT
+        apc.view_id,
+        apc.publish_name,
+        au.email AS publisher_email,
+        apc.created_at AS publish_timestamp
+      FROM af_published_collab apc
+      JOIN af_user au ON apc.published_by = au.uid
       WHERE workspace_id = $1
       AND unpublished_at IS NULL
     "#,

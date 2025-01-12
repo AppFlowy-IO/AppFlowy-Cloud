@@ -411,10 +411,11 @@ async fn get_text_with_image_message_test() {
         // Save the error and retry
         last_error = Some(err);
         retries -= 1;
-        if retries > 0 {
-          tokio::time::sleep(retry_interval).await;
-        }
       },
+    }
+
+    if retries > 0 {
+      tokio::time::sleep(retry_interval).await;
     }
   }
 

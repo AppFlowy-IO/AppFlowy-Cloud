@@ -179,6 +179,7 @@ services:
       - AI_REDIS_URL=${AI_REDIS_URL}
       - AI_APPFLOWY_BUCKET_NAME=${AI_APPFLOWY_BUCKET_NAME}
       - AI_APPFLOWY_HOST=${AI_APPFLOWY_HOST}
+      - AI_USE_MINIO=${APPFLOWY_S3_USE_MINIO}
 
   appflowy_worker:
     restart: on-failure

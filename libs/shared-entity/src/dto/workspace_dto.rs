@@ -389,9 +389,18 @@ pub struct PublishedView {
   pub icon: Option<ViewIcon>,
   pub layout: ViewLayout,
   pub is_published: bool,
+  #[serde(flatten)]
+  pub info: Option<PublishedViewInfo>,
   /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<PublishedView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct PublishedViewInfo {
+  pub publisher_email: String,
+  pub publish_name: String,
+  pub publish_timestamp: DateTime<Utc>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

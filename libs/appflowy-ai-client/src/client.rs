@@ -1,8 +1,8 @@
 use crate::dto::{
-  AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompletionType, CreateChatContext,
-  CustomPrompt, Document, LocalAIConfig, MessageData, QuestionMetadata, RepeatedLocalAIPackage,
-  RepeatedRelatedQuestion, ResponseFormat, SearchDocumentsRequest, SimilarityResponse,
-  SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
+  AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextParams,
+  CreateChatContext, Document, LocalAIConfig, MessageData, QuestionMetadata,
+  RepeatedLocalAIPackage, RepeatedRelatedQuestion, ResponseFormat, SearchDocumentsRequest,
+  SimilarityResponse, SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -12,7 +12,7 @@ use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use std::borrow::Cow;
 use std::time::Duration;
 use tracing::{info, trace};
@@ -41,23 +41,14 @@ impl AppFlowyAIClient {
     Ok(())
   }
 
-  pub async fn stream_completion_text<T: Into<Option<CompletionType>>>(
+  pub async fn stream_completion_text(
     &self,
-    text: &str,
-    completion_type: T,
-    custom_prompt: Option<CustomPrompt>,
+    params: CompleteTextParams,
     model: AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
-    let completion_type = completion_type.into();
-    if text.is_empty() {
+    if params.text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
     }
-
-    let params = json!({
-      "text": text,
-      "type": completion_type.map(|t| t as u8),
-      "custom_prompt": custom_prompt,
-    });
 
     let url = format!("{}/completion/stream", self.url);
     let resp = self

@@ -135,9 +135,9 @@ where
   pub async fn get_blob_metadata(
     &self,
     workspace_id: &Uuid,
-    store_key: &str,
+    metadata_key: &str,
   ) -> Result<AFBlobMetadataRow, AppError> {
-    let metadata = get_blob_metadata(&self.pg_pool, workspace_id, store_key).await?;
+    let metadata = get_blob_metadata(&self.pg_pool, workspace_id, metadata_key).await?;
     Ok(metadata)
   }
 

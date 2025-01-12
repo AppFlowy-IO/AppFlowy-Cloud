@@ -37,14 +37,10 @@ async fn stream_complete_text_handler(
 ) -> actix_web::Result<HttpResponse> {
   let ai_model = ai_model_from_header(&req);
   let params = payload.into_inner();
+
   match state
     .ai_client
-    .stream_completion_text(
-      &params.text,
-      params.completion_type,
-      params.custom_prompt,
-      ai_model,
-    )
+    .stream_completion_text(params, ai_model)
     .await
   {
     Ok(stream) => Ok(

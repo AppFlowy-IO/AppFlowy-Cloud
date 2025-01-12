@@ -135,8 +135,14 @@ pub async fn delete_blob_metadata(
 pub async fn get_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  file_id: &str,
+  metadata_key: &str,
 ) -> Result<AFBlobMetadataRow, AppError> {
+  tracing::trace!(
+    "get_blob_metadata: workspace_id: {}, metadata_key: {}",
+    workspace_id,
+    metadata_key
+  );
+  // file_id is the BlobPath's blob_metadata_key
   let metadata = sqlx::query_as!(
     AFBlobMetadataRow,
     r#"
@@ -144,7 +150,7 @@ pub async fn get_blob_metadata(
         WHERE workspace_id = $1 AND file_id = $2
         "#,
     workspace_id,
-    file_id,
+    metadata_key,
   )
   .fetch_one(pg_pool)
   .await?;

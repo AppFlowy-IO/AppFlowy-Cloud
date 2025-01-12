@@ -131,7 +131,7 @@ pub async fn delete_blob_metadata(
   Ok(())
 }
 
-#[instrument(level = "trace", skip_all, err)]
+#[instrument(level = "trace", skip_all)]
 pub async fn get_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,

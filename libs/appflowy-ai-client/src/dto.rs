@@ -466,3 +466,34 @@ pub struct CalculateSimilarityParams {
 pub struct SimilarityResponse {
   pub score: f64,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompletionMetadata {
+  pub object_id: String,
+  pub rag_ids: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompleteTextParams {
+  pub text: String,
+  pub completion_type: Option<CompletionType>,
+  pub custom_prompt: Option<CustomPrompt>,
+  #[serde(default)]
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<CompletionMetadata>,
+}
+
+impl CompleteTextParams {
+  pub fn new_with_completion_type(
+    text: String,
+    completion_type: CompletionType,
+    metadata: Option<CompletionMetadata>,
+  ) -> Self {
+    Self {
+      text,
+      completion_type: Some(completion_type),
+      custom_prompt: None,
+      metadata,
+    }
+  }
+}

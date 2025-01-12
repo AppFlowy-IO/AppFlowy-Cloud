@@ -34,6 +34,7 @@ use database::collab::select_last_updated_database_row_ids;
 use database::collab::select_workspace_database_oid;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
+use database::publish::select_published_view_ids_with_publish_info_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
 use database_entity::dto::QueryCollab;
 use database_entity::dto::QueryCollabResult;
@@ -46,6 +47,7 @@ use shared_entity::dto::workspace_dto::AFInsertDatabaseField;
 use shared_entity::dto::workspace_dto::DatabaseRowUpdatedItem;
 use shared_entity::dto::workspace_dto::FavoriteFolderView;
 use shared_entity::dto::workspace_dto::FolderViewMinimal;
+use shared_entity::dto::workspace_dto::PublishedViewInfo;
 use shared_entity::dto::workspace_dto::RecentFolderView;
 use shared_entity::dto::workspace_dto::TrashFolderView;
 use sqlx::PgPool;
@@ -457,13 +459,28 @@ pub async fn get_published_view(
     &workspace_id.to_string(),
   )
   .await?;
-  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
-  let publish_view_ids: HashSet<String> = publish_view_ids
-    .into_iter()
-    .map(|id| id.to_string())
-    .collect();
-  let published_view: PublishedView =
-    collab_folder_to_published_outline(&workspace_id.to_string(), &folder, &publish_view_ids)?;
+  let publish_view_ids_with_publish_info =
+    select_published_view_ids_with_publish_info_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_id_to_info_map: HashMap<String, PublishedViewInfo> =
+    publish_view_ids_with_publish_info
+      .into_iter()
+      .map(|pv| {
+        (
+          pv.view_id.to_string(),
+          PublishedViewInfo {
+            publisher_email: pv.publisher_email.clone(),
+            publish_name: pv.publish_name.clone(),
+            publish_timestamp: pv.publish_timestamp,
+          },
+        )
+      })
+      .collect();
+
+  let published_view: PublishedView = collab_folder_to_published_outline(
+    &workspace_id.to_string(),
+    &folder,
+    &publish_view_id_to_info_map,
+  )?;
   Ok(published_view)
 }
 

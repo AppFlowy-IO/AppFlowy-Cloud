@@ -17,7 +17,7 @@ services:
     restart: on-failure
     image: minio/minio
     environment:
-      - MINIO_BROWSER_REDIRECT_URL=${API_EXTERNAL_URL}/minio
+      - MINIO_BROWSER_REDIRECT_URL=${FQDN?:err}/minio
       - MINIO_ROOT_USER=${APPFLOWY_S3_ACCESS_KEY:-minioadmin}
       - MINIO_ROOT_PASSWORD=${APPFLOWY_S3_SECRET_KEY:-minioadmin}
     command: server /data --console-address ":9001"
@@ -137,6 +137,7 @@ services:
       - AI_SERVER_PORT=${AI_SERVER_PORT}
       - AI_OPENAI_API_KEY=${AI_OPENAI_API_KEY}
       # Uncomment this line if AppFlowy Web has been deployed
+      # - APPFLOWY_WEB_URL=${APPFLOWY_WEB_URL}
     build:
       context: .
       dockerfile: Dockerfile

@@ -1,8 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use app_error::AppError;
 use collab_folder::Folder;
-use shared_entity::dto::workspace_dto::PublishedView;
+use shared_entity::dto::workspace_dto::{PublishedView, PublishedViewInfo};
 
 use super::folder_view::{to_dto_view_icon, to_dto_view_layout};
 
@@ -11,7 +11,7 @@ use super::folder_view::{to_dto_view_icon, to_dto_view_layout};
 pub fn collab_folder_to_published_outline(
   root_view_id: &str,
   folder: &Folder,
-  publish_view_ids: &HashSet<String>,
+  publish_view_id_to_info_map: &HashMap<String, PublishedViewInfo>,
 ) -> Result<PublishedView, AppError> {
   let mut unviewable = HashSet::new();
   for trash_view in folder.get_all_trash_sections() {
@@ -24,7 +24,7 @@ pub fn collab_folder_to_published_outline(
     root_view_id,
     folder,
     &unviewable,
-    publish_view_ids,
+    publish_view_id_to_info_map,
     0,
     max_depth,
   )
@@ -39,7 +39,7 @@ fn to_publish_view(
   view_id: &str,
   folder: &Folder,
   unviewable: &HashSet<String>,
-  publish_view_ids: &HashSet<String>,
+  publish_view_id_to_info_map: &HashMap<String, PublishedViewInfo>,
   depth: u32,
   max_depth: u32,
 ) -> Option<PublishedView> {
@@ -65,6 +65,8 @@ fn to_publish_view(
       serde_json::Value::Null
     })
   });
+  // If pruned_view is not empty, then one or more of the children is published.
+  // Hence, this view should be included in the published outline, even if it is not published itself.
   let pruned_view: Vec<PublishedView> = view
     .children
     .iter()
@@ -74,13 +76,13 @@ fn to_publish_view(
         &child_view_id.id,
         folder,
         unviewable,
-        publish_view_ids,
+        publish_view_id_to_info_map,
         depth + 1,
         max_depth,
       )
     })
     .collect();
-  let is_published = publish_view_ids.contains(view_id);
+  let is_published = publish_view_id_to_info_map.contains_key(view_id);
   if parent_view_id.is_empty() || is_published || !pruned_view.is_empty() {
     Some(PublishedView {
       view_id: view.id.clone(),
@@ -93,6 +95,7 @@ fn to_publish_view(
       layout: to_dto_view_layout(&view.layout),
       extra,
       children: pruned_view,
+      info: publish_view_id_to_info_map.get(view_id).cloned(),
     })
   } else {
     None

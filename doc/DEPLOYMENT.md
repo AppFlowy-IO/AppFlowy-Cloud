@@ -68,34 +68,16 @@ cp deploy.env .env
 ```
 
 - Kindly read through the comments for each option
-- Modify the values in `.env` according to your needs
+- Modify the values in `.env` according to your needs. Minimally, you will have to update $FQDN
+  to match your host server's domain, unless you are deploying on localhost.
 
-For authentication details, refer to the [Authentication](./AUTHENTICATION.md) documentation. You will need to update
-the
-redirect URI to match your host server's public IP or hostname, such
-as `http://<your-host-server-public-ip-or-hostname>/gotrue/callback`.
-If using localhost, then just keep the default value.
+If you would like to use one of the identity providers to log in, refer to the [Authentication](./AUTHENTICATION.md) documentation.
 
-```bash
-GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
-GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=
-GOTRUE_EXTERNAL_GOOGLE_SECRET=
-GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://your-host/gotrue/callback
+If you would like to use magic link to log in, you will need to set up env variables related to SMTP.
 
-# GitHub OAuth2
-GOTRUE_EXTERNAL_GITHUB_ENABLED=true
-GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=your-github-client-id
-GOTRUE_EXTERNAL_GITHUB_SECRET=your-github-secret
-GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=http://your-host/gotrue/callback
-
-# Discord OAuth2
-GOTRUE_EXTERNAL_DISCORD_ENABLED=true
-GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=your-discord-client-id
-GOTRUE_EXTERNAL_DISCORD_SECRET=your-discord-secret
-GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://your-host/gotrue/callback
-```
-
-### 3. Running the services
+If neither of the above are configured, then the only was to sign in is via the admin portal (the home page), using the admin email
+and password. After logging in as an admin, you can add users and set their passwords. The new user will be able to login to the admin
+portal using this credential.
 
 #### Start and run AppFlowy-Cloud
 
@@ -121,9 +103,6 @@ admin/debug tasks.
 - `portainer`/`portainer_init` (Web UI to provide some monitoring and ease of container management)
 - `tunnel` (Cloudflare tunnel to provide a secure way to connect AppFlowy to Cloudflare without a publicly routable IP
   address)
-- `admin_frontend` (admin portal to manage accounts and add authentication methods. We recommend to keep this)
-  If you wish to deploy those, edit the file accordingly and do:
-
 ```
 docker compose --file docker-compose-extras.yml up -d
 ```
@@ -223,12 +202,6 @@ by setting the `GOTRUE_DISABLE_SIGNUP` environment variable to `true`.
 
 The default configuration assumes that TLS is used for SMTP, typically on port 465. If you are using STARTTLS, such as when
 using port 587, please change `APPFLOWY_MAILER_SMTP_TLS_KIND` to `opportunistic`.
-
-### Can I sign in using only using email and password?
-
-The AppFlowy clients currently do not support email and password sign in. However, you can login to the admin portal using the admin
-email and password. In the admin section, you can then add users and set their passwords. Subseqently, users can login to the portal
-using their email and password, and launch the AppFlowy client via the portal.
 
 ### What functionality will I lose if the SMTP server is not set up?
 

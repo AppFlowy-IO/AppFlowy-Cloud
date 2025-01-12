@@ -389,6 +389,7 @@ async fn get_blob_by_object_key(
     }
   }
 
+  trace!("Get blob data from bucket storage: {:?}", key.object_key());
   let blob_result = state.bucket_storage.get_blob(key).await;
   match blob_result {
     Ok(blob) => {

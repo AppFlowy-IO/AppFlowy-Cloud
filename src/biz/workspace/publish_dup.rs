@@ -58,7 +58,7 @@ pub async fn duplicate_published_collab_to_workspace(
   publish_view_id: String,
   dest_workspace_id: String,
   dest_view_id: String,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
   let copier = PublishCollabDuplicator::new(
     pg_pool.clone(),
     bucket_client,
@@ -69,13 +69,13 @@ pub async fn duplicate_published_collab_to_workspace(
   );
 
   let time_now = chrono::Utc::now().timestamp_millis();
-  copier.duplicate(&publish_view_id).await?;
+  let root_view_id_for_duplicate = copier.duplicate(&publish_view_id).await?;
   let elapsed = chrono::Utc::now().timestamp_millis() - time_now;
   tracing::info!(
     "duplicate_published_collab_to_workspace: elapsed time: {}ms",
     elapsed
   );
-  Ok(())
+  Ok(root_view_id_for_duplicate)
 }
 
 pub struct PublishCollabDuplicator {
@@ -141,10 +141,14 @@ impl PublishCollabDuplicator {
     }
   }
 
-  async fn duplicate(mut self, publish_view_id: &str) -> Result<(), AppError> {
+  async fn duplicate(mut self, publish_view_id: &str) -> Result<String, AppError> {
     // new view after deep copy
     // this is the root of the document/database duplicated
-    let mut root_view = match self.deep_copy(gen_view_id(), publish_view_id).await? {
+    let root_view_id = gen_view_id();
+    let mut root_view = match self
+      .deep_copy(root_view_id.clone(), publish_view_id)
+      .await?
+    {
       Some(v) => v,
       None => {
         return Err(AppError::RecordNotFound(
@@ -363,7 +367,7 @@ impl PublishCollabDuplicator {
       dest_workspace_id,
       encoded_update,
     ));
-    Ok(())
+    Ok(root_view_id)
   }
 
   /// Deep copy a published collab to the destination workspace.

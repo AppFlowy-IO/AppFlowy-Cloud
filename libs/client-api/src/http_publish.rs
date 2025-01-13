@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use client_api_entity::publish_dto::DuplicatePublishedPageResponse;
 use client_api_entity::workspace_dto::{PublishInfoView, PublishedView};
 use client_api_entity::{workspace_dto::PublishedDuplicate, PublishInfo, UpdatePublishNamespace};
 use client_api_entity::{
@@ -410,7 +411,7 @@ impl Client {
     &self,
     workspace_id: &str,
     publish_duplicate: &PublishedDuplicate,
-  ) -> Result<(), AppResponseError> {
+  ) -> Result<DuplicatePublishedPageResponse, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/published-duplicate",
       self.base_url, workspace_id
@@ -422,7 +423,9 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    AppResponse::<DuplicatePublishedPageResponse>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   pub async fn get_published_view_reactions(

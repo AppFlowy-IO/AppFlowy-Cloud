@@ -102,8 +102,8 @@ mod tests {
       .await
       .unwrap();
 
-    // 2 spaces + 3 documents + 1 database + 5 database rows
-    assert_eq!(result.len(), 11);
+    // 2 spaces + 4 documents + 1 database + 5 database rows
+    assert_eq!(result.len(), 12);
 
     let views = workspace_view_builder.build();
 
@@ -118,7 +118,7 @@ mod tests {
     // generate space contains 1 document and 1 database at the first level
     assert_eq!(general_space.child_views.len(), 2);
     // the first document contains 2 children
-    assert_eq!(general_space.child_views[0].child_views.len(), 2);
+    assert_eq!(general_space.child_views[0].child_views.len(), 3);
     // the first database contains 0 children
     assert_eq!(general_space.child_views[1].child_views.len(), 0);
 

@@ -57,6 +57,7 @@ use indexer::scheduler::{UnindexedCollabTask, UnindexedData};
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
+use shared_entity::dto::publish_dto::DuplicatePublishedPageResponse;
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -1781,25 +1782,30 @@ async fn post_published_duplicate_handler(
   workspace_id: web::Path<String>,
   state: Data<AppState>,
   params: Json<PublishedDuplicate>,
-) -> Result<Json<AppResponse<()>>> {
+) -> Result<Json<AppResponse<DuplicatePublishedPageResponse>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
     .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
     .await?;
   let params = params.into_inner();
-  biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
-    &state.pg_pool,
-    state.bucket_client.clone(),
-    state.collab_access_control_storage.clone(),
-    uid,
-    params.published_view_id,
-    workspace_id.into_inner(),
-    params.dest_view_id,
-  )
-  .await?;
+  let root_view_id_for_duplicate =
+    biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
+      &state.pg_pool,
+      state.bucket_client.clone(),
+      state.collab_access_control_storage.clone(),
+      uid,
+      params.published_view_id,
+      workspace_id.into_inner(),
+      params.dest_view_id,
+    )
+    .await?;
 
-  Ok(Json(AppResponse::Ok()))
+  Ok(Json(AppResponse::Ok().with_data(
+    DuplicatePublishedPageResponse {
+      view_id: root_view_id_for_duplicate,
+    },
+  )))
 }
 
 async fn list_published_collab_info_handler(

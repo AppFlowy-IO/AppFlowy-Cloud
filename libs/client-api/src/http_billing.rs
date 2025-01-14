@@ -1,7 +1,7 @@
 use crate::Client;
 use client_api_entity::billing_dto::{
   SetSubscriptionRecurringInterval, SubscriptionCancelRequest, SubscriptionLinkRequest,
-  SubscriptionPlanDetail, SubscriptionTrialRequest, WorkspaceUsageAndLimit,
+  SubscriptionPlanDetail, WorkspaceUsageAndLimit,
 };
 use reqwest::Method;
 use shared_entity::{
@@ -221,25 +221,5 @@ impl Client {
     AppResponse::<Vec<SubscriptionPlanDetail>>::from_response(resp)
       .await?
       .into_data()
-  }
-
-  /// request a free trial for plan
-  pub async fn post_subscription_free_trial(
-    &self,
-    workspace_id: &str,
-    plan: SubscriptionPlan,
-  ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/billing/api/v1/subscription-trial/{}",
-      self.base_billing_url(),
-      workspace_id
-    );
-    let resp = self
-      .cloud_client
-      .post(&url)
-      .query(&SubscriptionTrialRequest { plan })
-      .send()
-      .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }

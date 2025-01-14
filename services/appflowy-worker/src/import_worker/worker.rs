@@ -50,6 +50,7 @@ use std::collections::{HashMap, HashSet};
 use std::env::temp_dir;
 use std::fmt::Display;
 use std::fs::Permissions;
+use std::io::ErrorKind;
 use std::ops::DerefMut;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -596,7 +597,11 @@ async fn process_task(
                 "[Import]: {} deleted unzip file: {:?}",
                 task.workspace_id, unzip_dir_path
               ),
-              Err(err) => error!("Failed to delete unzip file: {:?}", err),
+              Err(err) => {
+                if err.kind() != ErrorKind::NotFound {
+                  error!("Failed to delete unzip file: {:?}", err);
+                }
+              },
             }
           });
         },

@@ -102,7 +102,7 @@ impl Default for ClientConfiguration {
 ///
 #[derive(Clone)]
 pub struct Client {
-  pub(crate) cloud_client: reqwest::Client,
+  pub cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
   pub ws_addr: String,

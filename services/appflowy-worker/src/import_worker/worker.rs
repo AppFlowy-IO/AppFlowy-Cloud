@@ -472,7 +472,7 @@ fn is_task_expired(created_timestamp: i64, last_process_at: Option<i64>) -> Resu
 async fn push_task(
   redis_client: &mut ConnectionManager,
   stream_name: &str,
-  group_name: &str,
+  _group_name: &str,
   task: ImportTask,
   entry_id: &str,
 ) -> Result<(), ImportError> {
@@ -484,11 +484,10 @@ async fn push_task(
   let mut pipeline = redis::pipe();
   pipeline
       .atomic() // Ensures the commands are executed atomically
-      .cmd("XACK") // Acknowledge the task
+      .cmd("XDEL") // delete the task
       .arg(stream_name)
-      .arg(group_name)
       .arg(entry_id)
-      .ignore() // Ignore the result of XACK
+      .ignore() // Ignore the result of XDEL
       .cmd("XADD") // Re-add the task to the stream
       .arg(stream_name)
       .arg("*")

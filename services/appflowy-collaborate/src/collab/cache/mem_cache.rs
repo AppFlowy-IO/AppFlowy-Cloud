@@ -312,7 +312,7 @@ pub fn cache_exp_secs_from_collab_type(collab_type: &CollabType) -> u64 {
     CollabType::Database => SEVEN_DAYS * 2,
     CollabType::WorkspaceDatabase => ONE_MONTH,
     CollabType::Folder => SEVEN_DAYS,
-    CollabType::DatabaseRow => ONE_MONTH,
+    CollabType::DatabaseRow => SEVEN_DAYS,
     CollabType::UserAwareness => SEVEN_DAYS * 2,
     CollabType::Unknown => SEVEN_DAYS,
   }

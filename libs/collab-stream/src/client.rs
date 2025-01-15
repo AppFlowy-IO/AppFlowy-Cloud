@@ -182,7 +182,7 @@ impl CollabRedisStream {
     }
   }
 
-  pub async fn prune_stream(
+  pub async fn prune_update_stream(
     &self,
     stream_key: &str,
     mut message_id: MessageId,
@@ -201,11 +201,32 @@ impl CollabRedisStream {
     let count = usize::from_redis_value(&value)?;
     drop(conn);
     tracing::debug!(
-      "pruned redis stream `{}` <= `{}` ({} objects)",
+      "pruned redis update stream `{}` <= `{}` ({} objects)",
       stream_key,
       message_id,
       count
     );
     Ok(count)
+  }
+
+  pub async fn prune_awareness_stream(&self, stream_key: &str) -> Result<(), StreamError> {
+    let mut conn = self.connection_manager.clone();
+    let value = conn
+      .send_packed_command(
+        redis::cmd("XTRIM")
+          .arg(stream_key)
+          .arg("MAXLEN")
+          .arg("=")
+          .arg(0),
+      )
+      .await?;
+    let count = usize::from_redis_value(&value)?;
+    drop(conn);
+    tracing::debug!(
+      "pruned redis awareness stream {} ({} objects)",
+      stream_key,
+      count
+    );
+    Ok(())
   }
 }

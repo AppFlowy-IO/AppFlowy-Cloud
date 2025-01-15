@@ -377,7 +377,14 @@ pub async fn get_latest_collab_folder(
     workspace_id,
     CollabType::Folder,
   )
-  .await?;
+  .await
+  .map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Unable to retrieve workspace folder {}: {}",
+      workspace_id,
+      err
+    ))
+  })?;
   let folder = Folder::from_collab_doc_state(
     folder_uid,
     CollabOrigin::Server,
@@ -385,7 +392,13 @@ pub async fn get_latest_collab_folder(
     workspace_id,
     vec![],
   )
-  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  .map_err(|e| {
+    AppError::Internal(anyhow::anyhow!(
+      "Unable to decode workspace folder {}: {}",
+      workspace_id,
+      e
+    ))
+  })?;
   Ok(folder)
 }
 

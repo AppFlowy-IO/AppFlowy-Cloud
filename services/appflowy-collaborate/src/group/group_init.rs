@@ -33,7 +33,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
@@ -182,6 +182,10 @@ impl CollabGroup {
     loop {
       tokio::select! {
         _ = state.shutdown.cancelled() => {
+          match state.persister.trim_awareness().await {
+            Ok(_) => (),
+            Err(err) => warn!("unable to trim awareness due to {}", err),
+          };
           break;
         }
         res = updates.next() => {
@@ -807,61 +811,23 @@ impl CollabGroup {
   /// subscriber
   pub fn is_inactive(&self) -> bool {
     let modified_at = self.modified_at();
-
-    // In debug mode, we set the timeout to 60 seconds
-    if cfg!(debug_assertions) {
-      trace!(
+    let elapsed_secs = modified_at.elapsed().as_secs();
+    // Mark the group as inactive if it has been inactive for more than 3 hours, regardless of the number of subscribers.
+    // Otherwise, return `true` only if there are no subscribers remaining in the group.
+    // If a client modifies a group that has already been marked as inactive (removed),
+    // the client will automatically send an initialization sync to reinitialize the group.
+    const MAXIMUM_SECS: u64 = 3 * 60 * 60;
+    if elapsed_secs > MAXIMUM_SECS {
+      info!(
         "Group:{}:{} is inactive for {} seconds, subscribers: {}",
         self.state.object_id,
         self.state.collab_type,
         modified_at.elapsed().as_secs(),
         self.state.subscribers.len()
       );
-      modified_at.elapsed().as_secs() > 60 * 3
+      true
     } else {
-      let elapsed_secs = modified_at.elapsed().as_secs();
-      if elapsed_secs > self.timeout_secs() {
-        // Mark the group as inactive if it has been inactive for more than 3 hours, regardless of the number of subscribers.
-        // Otherwise, return `true` only if there are no subscribers remaining in the group.
-        // If a client modifies a group that has already been marked as inactive (removed),
-        // the client will automatically send an initialization sync to reinitialize the group.
-        const MAXIMUM_SECS: u64 = 3 * 60 * 60;
-        if elapsed_secs > MAXIMUM_SECS {
-          info!(
-            "Group:{}:{} is inactive for {} seconds, subscribers: {}",
-            self.state.object_id,
-            self.state.collab_type,
-            modified_at.elapsed().as_secs(),
-            self.state.subscribers.len()
-          );
-          true
-        } else {
-          self.state.subscribers.is_empty()
-        }
-      } else {
-        false
-      }
-    }
-  }
-
-  /// Returns the timeout duration in seconds for different collaboration types.
-  ///
-  /// Collaborative entities vary in their activity and interaction patterns, necessitating
-  /// different timeout durations to balance efficient resource management with a positive
-  /// user experience. This function assigns a timeout duration to each collaboration type,
-  /// ensuring that resources are utilized judiciously without compromising user engagement.
-  ///
-  /// # Returns
-  /// A `u64` representing the timeout duration in seconds for the collaboration type in question.
-  #[inline]
-  fn timeout_secs(&self) -> u64 {
-    match self.state.collab_type {
-      CollabType::Document => 30 * 60, // 30 minutes
-      CollabType::Database | CollabType::DatabaseRow => 30 * 60, // 30 minutes
-      CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 6 * 60 * 60, // 6 hours,
-      CollabType::Unknown => {
-        10 * 60 // 10 minutes
-      },
+      self.state.subscribers.is_empty()
     }
   }
 }
@@ -1174,12 +1140,21 @@ impl CollabPersister {
       let stream_key = CollabStreamUpdate::stream_key(&self.workspace_id, &self.object_id);
       self
         .collab_redis_stream
-        .prune_stream(&stream_key, msg_id)
+        .prune_update_stream(&stream_key, msg_id)
         .await?;
 
       let _ = lease.release().await;
     }
 
+    Ok(())
+  }
+
+  async fn trim_awareness(&self) -> Result<(), RealtimeError> {
+    let stream_key = AwarenessStreamUpdate::stream_key(&self.workspace_id, &self.object_id);
+    self
+      .collab_redis_stream
+      .prune_awareness_stream(&stream_key)
+      .await?;
     Ok(())
   }
 

@@ -265,7 +265,8 @@ pub async fn select_web_user_from_uid(pool: &PgPool, uid: i64) -> Result<AFWebUs
     uid
   )
   .fetch_one(pool)
-  .await?;
+  .await
+  .map_err(|err| anyhow::anyhow!("Unable to get user detail for {}: {}", uid, err))?;
 
   Ok(row)
 }

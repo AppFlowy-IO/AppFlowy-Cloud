@@ -1293,7 +1293,15 @@ pub async fn get_page_view_collab(
     Some(uid) => Some(select_web_user_from_uid(pg_pool, uid).await?),
     None => None,
   };
-  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id)
+    .await
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Unable to obtain published view id for workspace {}: {}",
+        workspace_id,
+        err
+      ))
+    })?;
   let publish_view_ids: HashSet<String> = publish_view_ids
     .into_iter()
     .map(|id| id.to_string())
@@ -1353,7 +1361,15 @@ async fn get_page_collab_data_for_database(
   workspace_id: Uuid,
   view_id: &str,
 ) -> Result<PageCollabData, AppError> {
-  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
+  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id)
+    .await
+    .map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Unable to find workspace database oid for {}: {}",
+        workspace_id,
+        err
+      ))
+    })?;
   let ws_db = get_latest_collab_encoded(
     collab_access_control_storage,
     GetCollabOrigin::User { uid },
@@ -1361,8 +1377,22 @@ async fn get_page_collab_data_for_database(
     &ws_db_oid,
     CollabType::WorkspaceDatabase,
   )
-  .await?;
-  let ws_db_collab = collab_from_doc_state(ws_db.doc_state.to_vec(), &ws_db_oid)?;
+  .await
+  .map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Unable to get latest workspace database collab {}: {}",
+      &ws_db_oid,
+      err
+    ))
+  })?;
+  let ws_db_collab =
+    collab_from_doc_state(ws_db.doc_state.to_vec(), &ws_db_oid).map_err(|err| {
+      AppError::Internal(anyhow::anyhow!(
+        "Unable to decode workspace database collab {}: {}",
+        &ws_db_oid,
+        err
+      ))
+    })?;
   let ws_db_body = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
     AppError::Internal(anyhow!("Failed to open workspace database body: {}", err))
   })?;
@@ -1382,7 +1412,14 @@ async fn get_page_collab_data_for_database(
     &db_oid,
     CollabType::Database,
   )
-  .await?;
+  .await
+  .map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Unable to get latest database collab {}: {}",
+      &db_oid,
+      err
+    ))
+  })?;
   let db_collab = Collab::new_with_source(
     CollabOrigin::Server,
     &db_oid,
@@ -1448,7 +1485,14 @@ async fn get_page_collab_data_for_database(
       .collect();
     row_collabs
   })
-  .await?;
+  .await
+  .map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Unable to get row data for database {}: {}",
+      &db_oid,
+      err
+    ))
+  })?;
 
   Ok(PageCollabData {
     encoded_collab: db.doc_state.to_vec(),
@@ -1469,7 +1513,14 @@ async fn get_page_collab_data_for_document(
     view_id,
     CollabType::Document,
   )
-  .await?;
+  .await
+  .map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Unable to get page collab data for {}: {}",
+      view_id,
+      err
+    ))
+  })?;
   Ok(PageCollabData {
     encoded_collab: collab.doc_state.clone().to_vec(),
     row_data: HashMap::default(),

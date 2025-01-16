@@ -228,6 +228,8 @@ async fn test_template_crud() {
         metadata: TemplateMetadata {},
       },
       data: "yrs_encoded_data_1".as_bytes(),
+      comments_enabled: true,
+      duplicate_enabled: true,
     })
     .collect();
 

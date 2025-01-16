@@ -471,6 +471,8 @@ pub async fn get_published_view(
             publisher_email: pv.publisher_email.clone(),
             publish_name: pv.publish_name.clone(),
             publish_timestamp: pv.publish_timestamp,
+            comments_enabled: pv.comments_enabled,
+            duplicate_enabled: pv.duplicate_enabled,
           },
         )
       })

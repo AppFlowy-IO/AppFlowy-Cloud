@@ -692,4 +692,6 @@ pub struct AFPublishViewWithPublishInfo {
   pub publish_name: String,
   pub publisher_email: String,
   pub publish_timestamp: DateTime<Utc>,
+  pub comments_enabled: bool,
+  pub duplicate_enabled: bool,
 }

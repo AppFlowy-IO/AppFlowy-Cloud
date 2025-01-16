@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_published_collab (workspace_id, view_id, publish_name, published_by, metadata, blob, comments_enabled, duplicate_enabled)\n      SELECT * FROM UNNEST(\n        (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $9))::uuid[],\n        $2::uuid[],\n        $3::text[],\n        (SELECT array_agg((SELECT uid FROM af_user WHERE uuid = $4)) FROM generate_series(1, $9))::bigint[],\n        $5::jsonb[],\n        $6::bytea[],\n        $7::boolean[],\n        $8::boolean[]\n      )\n      ON CONFLICT (workspace_id, view_id) DO UPDATE\n      SET metadata = EXCLUDED.metadata,\n          blob = EXCLUDED.blob,\n          published_by = EXCLUDED.published_by,\n          publish_name = EXCLUDED.publish_name\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "TextArray",
+        "Uuid",
+        "JsonbArray",
+        "ByteaArray",
+        "BoolArray",
+        "BoolArray",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "94555a25b986992bd3cfb67bd36ff015d39bdd78ac20d56570306616bf10faf3"
+}

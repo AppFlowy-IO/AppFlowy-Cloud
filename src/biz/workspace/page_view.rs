@@ -1076,6 +1076,8 @@ pub async fn publish_page(
   view_id: &str,
   visible_database_view_ids: Option<Vec<String>>,
   publish_name: Option<impl ToString>,
+  comments_enabled: bool,
+  duplicate_enabled: bool,
 ) -> Result<(), AppError> {
   let folder = get_latest_collab_folder(
     collab_access_control_storage,
@@ -1145,6 +1147,8 @@ pub async fn publish_page(
           metadata: serde_json::value::to_value(metadata).unwrap(),
         },
         data: publish_data,
+        comments_enabled,
+        duplicate_enabled,
       }],
       &workspace_id,
       &user_uuid,

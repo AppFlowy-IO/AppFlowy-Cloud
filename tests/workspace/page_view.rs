@@ -768,6 +768,8 @@ async fn publish_page() {
         &PublishPageParams {
           publish_name: None,
           visible_database_view_ids: None,
+          comments_enabled: None,
+          duplicate_enabled: None,
         },
       )
       .await

@@ -285,6 +285,8 @@ pub struct PublishInfoView {
 pub struct PublishPageParams {
   pub publish_name: Option<String>,
   pub visible_database_view_ids: Option<Vec<String>>,
+  pub comments_enabled: Option<bool>,
+  pub duplicate_enabled: Option<bool>,
 }
 
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
@@ -401,6 +403,8 @@ pub struct PublishedViewInfo {
   pub publisher_email: String,
   pub publish_name: String,
   pub publish_timestamp: DateTime<Utc>,
+  pub comments_enabled: bool,
+  pub duplicate_enabled: bool,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

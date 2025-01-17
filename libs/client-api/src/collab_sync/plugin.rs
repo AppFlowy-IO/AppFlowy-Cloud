@@ -192,7 +192,7 @@ where
         trace!("queue awareness: {:?}", update);
       }
 
-      ClientCollabMessage::new_update_sync(update_sync)
+      ClientCollabMessage::new_awareness_sync(update_sync)
     });
   }
 

@@ -274,6 +274,15 @@ where
   }
 
   async fn process_next_msg(&self) {
+    let is_empty_queue = self
+      .message_queue
+      .try_lock()
+      .map(|q| q.is_empty())
+      .unwrap_or(true);
+    if is_empty_queue {
+      return;
+    }
+
     let items = {
       let (mut msg_queue, mut sending_messages) = match (
         self.message_queue.try_lock(),
@@ -357,18 +366,33 @@ where
 
         // Try to merge the next message with the last message. Only merge when:
         // 1. The last message is not in the flying messages.
-        // 2. The last message can be merged.
+        // 2. The last message can be merged and the next message can be merged.
         // 3. The last message's payload size is less than the maximum payload size.
         if let Some(last) = items.last_mut() {
-          if !sending_messages.contains(&last.msg_id())
+          let can_merge = !sending_messages.contains(&last.msg_id())
             && last.message().payload_size() < self.config.maximum_payload_size
             && last.mergeable()
-            && last.merge(&next, &self.config.maximum_payload_size).is_ok()
-          {
+            && next.mergeable()
+            && last.merge(&next, &self.config.maximum_payload_size).is_ok();
+          if can_merge {
             merged_ids
               .entry(last.msg_id())
               .or_insert(vec![])
               .push(next.msg_id());
+
+            // let last_message = last.message();
+            // let next_message = next.message();
+            // if last_message.is_awareness_sync() && next_message.is_update_sync()
+            //   || (last_message.is_update_sync() && next_message.is_awareness_sync())
+            // {
+            //   error!(
+            //     "[collab_sync] ❎ different type of message: id: {:?}, type: {:?}, with message: {:?}, type: {:?}",
+            //     last.msg_id(),
+            //     last_message,
+            //     next.msg_id(),
+            //     next_message,
+            //   );
+            // }
 
             // If the last message is merged with the next message, don't push the next message
             continue;

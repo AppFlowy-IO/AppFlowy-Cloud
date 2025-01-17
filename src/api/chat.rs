@@ -271,6 +271,7 @@ async fn answer_stream_handler(
     chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
   let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &chat_id).await?;
   let ai_model = ai_model_from_header(&req);
+  state.metrics.ai_metrics.record_total_stream_count(1);
   match state
     .ai_client
     .stream_question(
@@ -291,13 +292,16 @@ async fn answer_stream_handler(
           .streaming(new_answer_stream),
       )
     },
-    Err(err) => Ok(
-      HttpResponse::Ok()
-        .content_type("text/event-stream")
-        .streaming(stream::once(async move {
-          Err(AppError::AIServiceUnavailable(err.to_string()))
-        })),
-    ),
+    Err(err) => {
+      state.metrics.ai_metrics.record_failed_stream_count(1);
+      Ok(
+        HttpResponse::Ok()
+          .content_type("text/event-stream")
+          .streaming(stream::once(async move {
+            Err(AppError::AIServiceUnavailable(err.to_string()))
+          })),
+      )
+    },
   }
 }
 
@@ -313,6 +317,7 @@ async fn answer_stream_v2_handler(
   let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &chat_id).await?;
   let ai_model = ai_model_from_header(&req);
 
+  state.metrics.ai_metrics.record_total_stream_count(1);
   trace!(
     "[Chat] stream answer for chat: {}, question: {}, rag_ids: {:?}",
     chat_id,
@@ -340,13 +345,16 @@ async fn answer_stream_v2_handler(
           .streaming(new_answer_stream),
       )
     },
-    Err(err) => Ok(
-      HttpResponse::ServiceUnavailable()
-        .content_type("text/event-stream")
-        .streaming(stream::once(async move {
-          Err(AppError::AIServiceUnavailable(err.to_string()))
-        })),
-    ),
+    Err(err) => {
+      state.metrics.ai_metrics.record_failed_stream_count(1);
+      Ok(
+        HttpResponse::ServiceUnavailable()
+          .content_type("text/event-stream")
+          .streaming(stream::once(async move {
+            Err(AppError::AIServiceUnavailable(err.to_string()))
+          })),
+      )
+    },
   }
 }
 
@@ -363,6 +371,10 @@ async fn answer_stream_v3_handler(
     chat::chat_ops::select_chat_message_content(&state.pg_pool, payload.question_id).await?;
   let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &payload.chat_id).await?;
   let ai_model = ai_model_from_header(&req);
+  state.metrics.ai_metrics.record_total_stream_count(1);
+  if payload.format.output_content.is_image() {
+    state.metrics.ai_metrics.record_stream_image_count(1);
+  }
 
   let question = ChatQuestion {
     chat_id: payload.chat_id,
@@ -377,6 +389,7 @@ async fn answer_stream_v3_handler(
       rag_ids,
     },
   };
+
   trace!("[Chat] stream v3 {:?}", question);
   match state
     .ai_client
@@ -391,13 +404,16 @@ async fn answer_stream_v3_handler(
           .streaming(new_answer_stream),
       )
     },
-    Err(err) => Ok(
-      HttpResponse::ServiceUnavailable()
-        .content_type("text/event-stream")
-        .streaming(stream::once(async move {
-          Err(AppError::AIServiceUnavailable(err.to_string()))
-        })),
-    ),
+    Err(err) => {
+      state.metrics.ai_metrics.record_failed_stream_count(1);
+      Ok(
+        HttpResponse::ServiceUnavailable()
+          .content_type("text/event-stream")
+          .streaming(stream::once(async move {
+            Err(AppError::AIServiceUnavailable(err.to_string()))
+          })),
+      )
+    },
   }
 }
 

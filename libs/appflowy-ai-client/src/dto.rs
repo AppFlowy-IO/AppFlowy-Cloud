@@ -53,13 +53,19 @@ pub enum OutputLayout {
   SimpleTable = 3,
 }
 
-#[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr, Eq, PartialEq)]
 #[repr(u8)]
 pub enum OutputContent {
   #[default]
   TEXT = 0,
   IMAGE = 1,
   RichTextImage = 2,
+}
+
+impl OutputContent {
+  pub fn is_image(&self) -> bool {
+    *self == OutputContent::IMAGE || *self == OutputContent::RichTextImage
+  }
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]

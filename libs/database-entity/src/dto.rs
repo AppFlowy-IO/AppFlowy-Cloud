@@ -801,12 +801,16 @@ pub struct PublishCollabKey {
 pub struct PublishCollabItem<Meta, Data> {
   pub meta: PublishCollabMetadata<Meta>,
   pub data: Data,
+  pub comments_enabled: bool,
+  pub duplicate_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PatchPublishedCollab {
   pub view_id: Uuid,
   pub publish_name: Option<String>,
+  pub comments_enabled: Option<bool>,
+  pub duplicate_enabled: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

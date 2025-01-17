@@ -121,12 +121,14 @@ async fn test_publish_doc() {
         vec![PublishCollabItem {
           meta: PublishCollabMetadata {
             view_id: uuid::Uuid::new_v4(),
-            publish_name: "(*&^%$#!".to_string(), // invalid chars
+            publish_name: "(*&^%$#!".to_string(),
             metadata: MyCustomMetadata {
               title: "my_title_1".to_string(),
             },
           },
           data: "yrs_encoded_data_1".as_bytes(),
+          comments_enabled: true,
+          duplicate_enabled: true,
         }],
       )
       .await
@@ -144,12 +146,14 @@ async fn test_publish_doc() {
         vec![PublishCollabItem {
           meta: PublishCollabMetadata {
             view_id: uuid::Uuid::new_v4(),
-            publish_name: "a".repeat(1001), // too long
+            publish_name: "a".repeat(1001),
             metadata: MyCustomMetadata {
               title: "my_title_1".to_string(),
             },
           },
           data: "yrs_encoded_data_1".as_bytes(),
+          comments_enabled: true,
+          duplicate_enabled: true,
         }],
       )
       .await
@@ -175,6 +179,8 @@ async fn test_publish_doc() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       },
       PublishCollabItem {
         meta: PublishCollabMetadata {
@@ -185,6 +191,8 @@ async fn test_publish_doc() {
           },
         },
         data: "yrs_encoded_data_2".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       },
     ],
   )
@@ -204,6 +212,8 @@ async fn test_publish_doc() {
           },
         },
         data: "some_other_yrs_data".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -278,6 +288,8 @@ async fn test_publish_doc() {
           },
         },
         data: "yrs_encoded_data_3".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       },
       PublishCollabItem {
         meta: PublishCollabMetadata {
@@ -288,6 +300,8 @@ async fn test_publish_doc() {
           },
         },
         data: "yrs_encoded_data_4".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       },
     ],
   )
@@ -357,8 +371,9 @@ async fn test_publish_doc() {
         &workspace_id,
         &[PatchPublishedCollab {
           view_id: view_id_1,
-          // publish_name_2 already exists
           publish_name: Some(publish_name_2.to_string()),
+          comments_enabled: None,
+          duplicate_enabled: None,
         }],
       )
       .await
@@ -373,6 +388,8 @@ async fn test_publish_doc() {
       &[PatchPublishedCollab {
         view_id: view_id_1,
         publish_name: Some(new_publish_name_1.to_string()),
+        comments_enabled: None,
+        duplicate_enabled: None,
       }],
     )
     .await
@@ -400,6 +417,8 @@ async fn test_publish_doc() {
       &[PatchPublishedCollab {
         view_id: view_id_1,
         publish_name: Some(publish_name_1.to_string()),
+        comments_enabled: None,
+        duplicate_enabled: None,
       }],
     )
     .await
@@ -474,6 +493,8 @@ async fn test_publish_comments() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -696,6 +717,8 @@ async fn test_excessive_comment_length() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -732,6 +755,8 @@ async fn test_publish_reactions() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -861,7 +886,9 @@ async fn test_publish_load_test() {
           title: format!("title_{}", i),
         },
       },
-      data: vec![0; 100_000], // 100 KB
+      data: vec![0; 100_000],
+      comments_enabled: true,
+      duplicate_enabled: true,
     })
     .collect();
 
@@ -903,6 +930,8 @@ async fn workspace_member_publish_unpublish() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -951,6 +980,8 @@ async fn duplicate_to_workspace_references() {
           published_data::GRID_1_DB_DATA,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -1036,6 +1067,8 @@ async fn duplicate_to_workspace_doc_inline_database() {
           published_data::VIEW_OF_GRID_1_DB_DATA,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -1209,6 +1242,8 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
           published_data::EMBEDDED_DB_HEX,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -1301,6 +1336,8 @@ async fn duplicate_to_workspace_db_with_relation() {
           published_data::RELATED_DB_HEX,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -1313,6 +1350,8 @@ async fn duplicate_to_workspace_db_with_relation() {
         published_data::DB_ROW_WITH_DOC_META,
         published_data::DB_ROW_WITH_DOC_HEX,
       )],
+      true,
+      true,
     )
     .await;
 
@@ -1406,6 +1445,8 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         published_data::DB_ROW_WITH_DOC_META,
         published_data::DB_ROW_WITH_DOC_HEX,
       )],
+      true,
+      true,
     )
     .await;
 
@@ -1496,6 +1537,8 @@ async fn duplicate_to_workspace_db_rel_self() {
         published_data::DB_REL_SELF_META,
         published_data::DB_REL_SELF_HEX,
       )],
+      true,
+      true,
     )
     .await;
 
@@ -1592,6 +1635,8 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
           published_data::GRID_2_HEX,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -1668,6 +1713,8 @@ async fn test_republish_doc() {
         },
       },
       data: "yrs_encoded_data_1".as_bytes(),
+      comments_enabled: true,
+      duplicate_enabled: true,
     }],
   )
   .await
@@ -1717,6 +1764,8 @@ async fn test_republish_doc() {
           },
         },
         data: "yrs_encoded_data_2".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -1762,6 +1811,8 @@ async fn test_republish_patch() {
         },
       },
       data: "yrs_encoded_data_1".as_bytes(),
+      comments_enabled: true,
+      duplicate_enabled: true,
     }],
   )
   .await
@@ -1786,6 +1837,8 @@ async fn test_republish_patch() {
         },
       },
       data: "yrs_encoded_data_1".as_bytes(),
+      comments_enabled: true,
+      duplicate_enabled: true,
     }],
   )
   .await
@@ -1798,6 +1851,8 @@ async fn test_republish_patch() {
     &[PatchPublishedCollab {
       view_id: view_id_2,
       publish_name: Some(publish_name.to_string()),
+      comments_enabled: None,
+      duplicate_enabled: None,
     }],
   )
   .await

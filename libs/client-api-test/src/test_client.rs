@@ -1047,7 +1047,13 @@ impl TestClient {
   }
 
   /// data: [(view_id, meta_json, blob_hex)]
-  pub async fn publish_collabs(&self, workspace_id: &str, data: Vec<(Uuid, &str, &str)>) {
+  pub async fn publish_collabs(
+    &self,
+    workspace_id: &str,
+    data: Vec<(Uuid, &str, &str)>,
+    comments_enabled: bool,
+    duplicate_enabled: bool,
+  ) {
     let pub_items = data
       .into_iter()
       .map(|(view_id, meta_json, blob_hex)| {
@@ -1060,6 +1066,8 @@ impl TestClient {
             metadata: meta,
           },
           data: blob,
+          comments_enabled,
+          duplicate_enabled,
         }
       })
       .collect();

@@ -1300,6 +1300,8 @@ async fn publish_page_handler(
   let PublishPageParams {
     publish_name,
     visible_database_view_ids,
+    comments_enabled,
+    duplicate_enabled,
   } = payload.into_inner();
   publish_page(
     &state.pg_pool,
@@ -1311,6 +1313,8 @@ async fn publish_page_handler(
     &view_id,
     visible_database_view_ids,
     publish_name,
+    comments_enabled.unwrap_or(true),
+    duplicate_enabled.unwrap_or(true),
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
@@ -1936,6 +1940,9 @@ async fn delete_published_collab_reaction_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+// FIXME: This endpoint currently has a different behaviour from the publish page endpoint,
+// as it doesn't accept parameters. We will need to deprecate this endpoint and use a new
+// one that accepts parameters.
 async fn post_publish_collabs_handler(
   workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
@@ -1974,7 +1981,14 @@ async fn post_publish_collabs_handler(
       data_buffer
     };
 
-    accumulator.push(PublishCollabItem { meta, data });
+    // Set comments_enabled and duplicate_enabled to true by default, as this is the default
+    // behaviour for the older web version.
+    accumulator.push(PublishCollabItem {
+      meta,
+      data,
+      comments_enabled: true,
+      duplicate_enabled: true,
+    });
   }
 
   if accumulator.is_empty() {

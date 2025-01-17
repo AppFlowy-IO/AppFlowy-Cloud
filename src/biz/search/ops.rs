@@ -12,7 +12,6 @@ use collab_folder::{Folder, View};
 use database::collab::GetCollabOrigin;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing::info;
 
 use database::index::{search_documents, SearchDocumentParams};
 use shared_entity::dto::search_dto::{
@@ -126,7 +125,6 @@ pub async fn search_document(
     0,
     MAX_SEARCH_DEPTH,
   );
-  info!("{:?}", searchable_view_ids);
   let results = search_documents(
     pg_pool,
     SearchDocumentParams {

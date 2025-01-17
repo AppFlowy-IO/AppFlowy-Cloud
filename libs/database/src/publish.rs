@@ -2,7 +2,7 @@ use app_error::AppError;
 use database_entity::dto::{
   PatchPublishedCollab, PublishCollabItem, PublishCollabKey, PublishInfo, WorkspaceNamespace,
 };
-use sqlx::{Executor, PgPool, Postgres};
+use sqlx::{Executor, PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
 
 use crate::pg_row::AFPublishViewWithPublishInfo;
@@ -253,11 +253,15 @@ pub async fn insert_or_replace_publish_collabs(
   let mut publish_names: Vec<String> = Vec::with_capacity(item_count);
   let mut metadatas: Vec<serde_json::Value> = Vec::with_capacity(item_count);
   let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(item_count);
+  let mut comments_enabled_list: Vec<bool> = Vec::with_capacity(item_count);
+  let mut duplicate_enabled_list: Vec<bool> = Vec::with_capacity(item_count);
   publish_items.into_iter().for_each(|item| {
     view_ids.push(item.meta.view_id);
     publish_names.push(item.meta.publish_name);
     metadatas.push(item.meta.metadata);
     blobs.push(item.data);
+    comments_enabled_list.push(item.comments_enabled);
+    duplicate_enabled_list.push(item.duplicate_enabled);
   });
 
   let mut txn = pg_pool.begin().await?;
@@ -265,14 +269,16 @@ pub async fn insert_or_replace_publish_collabs(
 
   let res = sqlx::query!(
     r#"
-      INSERT INTO af_published_collab (workspace_id, view_id, publish_name, published_by, metadata, blob)
+      INSERT INTO af_published_collab (workspace_id, view_id, publish_name, published_by, metadata, blob, comments_enabled, duplicate_enabled)
       SELECT * FROM UNNEST(
-        (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $7))::uuid[],
+        (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $9))::uuid[],
         $2::uuid[],
         $3::text[],
-        (SELECT array_agg((SELECT uid FROM af_user WHERE uuid = $4)) FROM generate_series(1, $7))::bigint[],
+        (SELECT array_agg((SELECT uid FROM af_user WHERE uuid = $4)) FROM generate_series(1, $9))::bigint[],
         $5::jsonb[],
-        $6::bytea[]
+        $6::bytea[],
+        $7::boolean[],
+        $8::boolean[]
       )
       ON CONFLICT (workspace_id, view_id) DO UPDATE
       SET metadata = EXCLUDED.metadata,
@@ -286,6 +292,8 @@ pub async fn insert_or_replace_publish_collabs(
     publisher_uuid,
     &metadatas,
     &blobs,
+    &comments_enabled_list,
+    &duplicate_enabled_list,
     item_count as i32,
   )
   .execute(txn.as_mut())
@@ -372,33 +380,45 @@ pub async fn update_published_collabs(
       .collect();
     delete_published_collabs(txn, workspace_id, &publish_names).await?;
   }
-
   for patch in patches {
-    let new_publish_name = match &patch.publish_name {
-      Some(new_publish_name) => new_publish_name,
-      None => continue,
-    };
-
-    let res = sqlx::query!(
+    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
       r#"
-        UPDATE af_published_collab
-        SET publish_name = $1
-        WHERE workspace_id = $2
-          AND view_id = $3
+        UPDATE af_published_collab SET
       "#,
-      patch.publish_name,
-      workspace_id,
-      patch.view_id,
-    )
-    .execute(txn.as_mut())
-    .await?;
+    );
+    let mut first_set = true;
+    if let Some(comments_enabled) = patch.comments_enabled {
+      first_set = false;
+      query_builder.push(" comments_enabled = ");
+      query_builder.push_bind(comments_enabled);
+    }
+    if let Some(duplicate_enabled) = patch.duplicate_enabled {
+      if !first_set {
+        query_builder.push(",");
+      }
+      first_set = false;
+      query_builder.push(" duplicate_enabled = ");
+      query_builder.push_bind(duplicate_enabled);
+    }
+    if let Some(publish_name) = &patch.publish_name {
+      if !first_set {
+        query_builder.push(",");
+      }
+      query_builder.push(" publish_name = ");
+      query_builder.push_bind(publish_name);
+    }
+    query_builder.push(" WHERE workspace_id = ");
+    query_builder.push_bind(workspace_id);
+    query_builder.push(" AND view_id = ");
+    query_builder.push_bind(patch.view_id);
+    let query = query_builder.build();
+    let res = query.execute(txn.as_mut()).await?;
 
     if res.rows_affected() != 1 {
       tracing::error!(
-          "Failed to update published collab publish name, workspace_id: {}, view_id: {}, new_publish_name: {}, rows_affected: {}",
+          "Failed to update published collab publish name, workspace_id: {}, view_id: {}, rows_affected: {}",
           workspace_id,
           patch.view_id,
-          new_publish_name,
           res.rows_affected()
         );
     }
@@ -695,7 +715,9 @@ pub async fn select_published_view_ids_with_publish_info_for_workspace<
         apc.view_id,
         apc.publish_name,
         au.email AS publisher_email,
-        apc.created_at AS publish_timestamp
+        apc.created_at AS publish_timestamp,
+        apc.comments_enabled,
+        apc.duplicate_enabled
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       WHERE workspace_id = $1

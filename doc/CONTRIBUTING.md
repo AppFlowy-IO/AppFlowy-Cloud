@@ -12,7 +12,7 @@ to know in order to contribute to AppFlowy Cloud and its different integrations.
 1. **You're familiar with [GitHub](https://github.com) and
    the [Pull Request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests)(
    PR) workflow.**
-2. **You know about the [AppFlowy community](https://discord.gg/9Q2xaN37tV"). Please use this for help.**
+2. **You know about the [AppFlowy community](https://discord.gg/9Q2xaN37tV). Please use this for help.**
 
 ## How to Contribute
 

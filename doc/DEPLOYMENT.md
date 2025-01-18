@@ -98,6 +98,7 @@ docker ps -a
 We have provided optional services in the file `docker-compose-extra.yml`.
 You do not need them for a fully functional installation of AppFlowy Cloud, but they could be helpful for various
 admin/debug tasks.
+We include all services in the file `docker-compose.yml`. It is easier to start all services and remove orphan containers warning message.
 
 - `pgadmin` (Web UI to visualize the provided postgres database)
 - `portainer`/`portainer_init` (Web UI to provide some monitoring and ease of container management)
@@ -106,8 +107,6 @@ admin/debug tasks.
 ```
 docker compose --file docker-compose-extras.yml up -d
 ```
-
-You may ignore the orphan containers warning message that docker will output.
 
 
 > When using the `docker compose up -d` command without specifying a tag, Docker Compose will pull the `latest`

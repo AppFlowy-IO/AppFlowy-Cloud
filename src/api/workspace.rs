@@ -144,13 +144,6 @@ pub fn workspace_scope() -> Scope {
         .route(web::post().to(post_web_update_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/collab/{object_id}/member")
-        .route(web::post().to(add_collab_member_handler))
-        .route(web::get().to(get_collab_member_handler))
-        .route(web::put().to(update_collab_member_handler))
-        .route(web::delete().to(remove_collab_member_handler)),
-    )
-    .service(
       web::resource("/{workspace_id}/collab/{object_id}/embed-info")
         .route(web::get().to(get_collab_embed_info_handler)),
     )
@@ -287,10 +280,6 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/published-outline/{publish_namespace}")
         .route(web::get().to(get_workspace_publish_outline_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/collab/{object_id}/member/list")
-        .route(web::get().to(get_collab_member_list_handler)),
     )
     .service(
       web::resource("/{workspace_id}/collab_list")
@@ -1577,91 +1566,6 @@ async fn delete_collab_handler(
   Ok(AppResponse::Ok().into())
 }
 
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn add_collab_member_handler(
-  payload: Json<InsertCollabMemberParams>,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<()>>> {
-  let payload = payload.into_inner();
-  if !state
-    .collab_cache
-    .is_exist(&payload.workspace_id, &payload.object_id)
-    .await?
-  {
-    return Err(
-      AppError::RecordNotFound(format!(
-        "Fail to insert collab member. The Collab with object_id {} does not exist",
-        payload.object_id
-      ))
-      .into(),
-    );
-  }
-
-  biz::collab::ops::create_collab_member(
-    &state.pg_pool,
-    &payload,
-    state.collab_access_control.clone(),
-  )
-  .await?;
-  Ok(Json(AppResponse::Ok()))
-}
-
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn update_collab_member_handler(
-  user_uuid: UserUuid,
-  payload: Json<UpdateCollabMemberParams>,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<()>>> {
-  let payload = payload.into_inner();
-
-  if !state
-    .collab_cache
-    .is_exist(&payload.workspace_id, &payload.object_id)
-    .await?
-  {
-    return Err(
-      AppError::RecordNotFound(format!(
-        "Fail to update collab member. The Collab with object_id {} does not exist",
-        payload.object_id
-      ))
-      .into(),
-    );
-  }
-  biz::collab::ops::upsert_collab_member(
-    &state.pg_pool,
-    &user_uuid,
-    &payload,
-    state.collab_access_control.clone(),
-  )
-  .await?;
-  Ok(Json(AppResponse::Ok()))
-}
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn get_collab_member_handler(
-  payload: Json<WorkspaceCollabIdentify>,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<AFCollabMember>>> {
-  let payload = payload.into_inner();
-  let member = biz::collab::ops::get_collab_member(&state.pg_pool, &payload).await?;
-  Ok(Json(AppResponse::Ok().with_data(member)))
-}
-
-#[instrument(skip(state, payload), err)]
-async fn remove_collab_member_handler(
-  payload: Json<WorkspaceCollabIdentify>,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<()>>> {
-  let payload = payload.into_inner();
-  biz::collab::ops::delete_collab_member(
-    &state.pg_pool,
-    &payload,
-    state.collab_access_control.clone(),
-  )
-  .await?;
-
-  Ok(Json(AppResponse::Ok()))
-}
-
 async fn put_workspace_default_published_view_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
@@ -2036,16 +1940,6 @@ async fn delete_published_collabs_handler(
     .unpublish_collabs(&workspace_id, &view_ids, &user_uuid)
     .await?;
   Ok(Json(AppResponse::Ok()))
-}
-
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn get_collab_member_list_handler(
-  payload: Json<QueryCollabMembers>,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<AFCollabMembers>>> {
-  let members =
-    biz::collab::ops::get_collab_member_list(&state.pg_pool, &payload.into_inner()).await?;
-  Ok(Json(AppResponse::Ok().with_data(AFCollabMembers(members))))
 }
 
 #[instrument(level = "info", skip_all, err)]

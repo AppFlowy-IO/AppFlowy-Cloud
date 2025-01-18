@@ -353,27 +353,6 @@ pub struct WorkspaceUsage {
   pub total_document_size: i64,
 }
 
-#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct InsertCollabMemberParams {
-  pub uid: i64,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
-  pub access_level: AFAccessLevel,
-}
-
-pub type UpdateCollabMemberParams = InsertCollabMemberParams;
-
-#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct WorkspaceCollabIdentify {
-  pub uid: i64,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct UpdatePublishNamespace {
   pub old_namespace: String,
@@ -405,13 +384,6 @@ pub struct QueryWorkspaceMember {
   pub workspace_id: String,
 
   pub uid: i64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AFCollabMember {
-  pub uid: i64,
-  pub oid: String,
-  pub permission: AFPermission,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -608,9 +580,6 @@ impl Ord for AFAccessLevel {
     left.cmp(&right)
   }
 }
-
-#[derive(Serialize, Deserialize)]
-pub struct AFCollabMembers(pub Vec<AFCollabMember>);
 
 pub type RawData = Vec<u8>;
 

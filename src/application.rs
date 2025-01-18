@@ -488,7 +488,7 @@ async fn create_bucket_if_not_exists(
         }
       } else {
         error!("Failed to create bucket: {:?}", err);
-        Ok(())
+        Err(err.into())
       }
     },
   }

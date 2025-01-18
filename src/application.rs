@@ -26,7 +26,6 @@ use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
   BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
 };
-use collab::lock::Mutex;
 use mailer::config::MailerSetting;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
@@ -50,14 +49,12 @@ use indexer::scheduler::{IndexerConfiguration, IndexerScheduler};
 use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
 use snowflake::Snowflake;
-use tonic_proto::history::history_client::HistoryClient;
 
 use crate::api::access_request::access_request_scope;
 use crate::api::ai::ai_completion_scope;
 use crate::api::chat::chat_scope;
 use crate::api::data_import::data_import_scope;
 use crate::api::file_storage::file_storage_scope;
-use crate::api::history::history_scope;
 use crate::api::metrics::metrics_scope;
 use crate::api::search::search_scope;
 use crate::api::server_info::server_info_scope;
@@ -165,7 +162,6 @@ pub async fn run_actix_server(
       .service(file_storage_scope())
       .service(chat_scope())
       .service(ai_completion_scope())
-      .service(history_scope())
       .service(metrics_scope())
       .service(search_scope())
       .service(template_scope())
@@ -315,16 +311,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     rt_cmd_tx,
   ));
 
-  info!(
-    "Connecting to history server: {}",
-    config.grpc_history.addrs
-  );
-  let channel = tonic::transport::Channel::from_shared(config.grpc_history.addrs.clone())?
-    .keep_alive_timeout(Duration::from_secs(20))
-    .keep_alive_while_idle(true)
-    .connect_lazy();
-
-  let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
   let mailer = get_mailer(&config.mailer).await?;
 
   info!("Setting up Indexer scheduler...");
@@ -371,7 +357,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     gotrue_admin,
     mailer,
     ai_client: appflowy_ai_client,
-    grpc_history_client,
     indexer_scheduler,
   })
 }

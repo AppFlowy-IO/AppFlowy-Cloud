@@ -4,7 +4,7 @@ use database::history::ops::{
   get_latest_snapshot, get_latest_snapshot_state, get_snapshot_meta_list, insert_history,
 };
 use sqlx::PgPool;
-use tonic_proto::history::{SnapshotMetaPb, SnapshotStatePb};
+use tonic_proto::history::SnapshotMetaPb;
 use uuid::Uuid;
 
 #[sqlx::test(migrations = false)]
@@ -38,19 +38,16 @@ async fn insert_snapshot_test(pool: PgPool) {
     },
   ];
 
-  let snapshot_state = SnapshotStatePb {
-    oid: object_id.clone(),
-    doc_state: vec![10, 11, 12],
-    doc_state_version: 1,
-    deps_snapshot_id: None,
-  };
+  let doc_state = vec![10, 11, 12];
+  let doc_state_version = 1;
+  let deps_snapshot_id = None;
 
   insert_history(
     &workspace_id,
-    &snapshot_state.oid,
-    snapshot_state.doc_state,
-    snapshot_state.doc_state_version,
-    snapshot_state.deps_snapshot_id,
+    &object_id,
+    doc_state,
+    doc_state_version,
+    deps_snapshot_id,
     collab_type.clone(),
     timestamp + 200,
     snapshots,

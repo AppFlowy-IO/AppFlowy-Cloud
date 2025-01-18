@@ -1,4 +1,6 @@
 # Non-essential additional services
+include:
+  - docker-compose.yml
 
 services:
   tunnel:
@@ -33,7 +35,3 @@ services:
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     volumes:
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
-
-volumes:
-  postgres_data:
-  minio_data:

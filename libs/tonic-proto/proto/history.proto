@@ -5,19 +5,6 @@ import "google/protobuf/wrappers.proto";
 // For optional string support
 package history;
 
-service History {
-    rpc GetSnapshots (SnapshotRequestPb) returns (RepeatedSnapshotMetaPb);
-    rpc GetNumOfSnapshot (SnapshotRequestPb) returns (RepeatedSnapshotInfoPb);
-    rpc GetLatestSnapshot (SnapshotRequestPb) returns (SingleSnapshotInfoPb);
-}
-
-message SnapshotRequestPb {
-    string workspace_id = 1;
-    string object_id = 2;
-    int32 collab_type = 3;
-    int32 num_snapshot = 4;
-}
-
 // SnapshotMetaPB represents metadata for a snapshot.
 message SnapshotMetaPb {
     // The unique identifier for the snapshot.
@@ -32,28 +19,9 @@ message SnapshotMetaPb {
     int64 created_at = 4;
 }
 
-// A container for repeated instances of SnapshotMetaPB.
-message RepeatedSnapshotMetaPb {
-    repeated SnapshotMetaPb items = 1;  // List of SnapshotMetaPB items
-}
-
-
-// SnapshotStatePB represents the state of a snapshot, including optional dependency IDs.
-message SnapshotStatePb {
-    string oid = 1;                        // Unique identifier for the snapshot
-    bytes doc_state = 2;                   // The document state as raw binary data
-    int32 doc_state_version = 3;           // Version of the document state format
-    google.protobuf.StringValue deps_snapshot_id = 4; // Optional dependency snapshot ID
-}
-
 message SingleSnapshotInfoPb {
     HistoryStatePb history_state = 1;
     SnapshotMetaPb snapshot_meta = 2;
-}
-
-message RepeatedSnapshotInfoPb {
-    HistoryStatePb history_state = 1;
-    repeated SnapshotMetaPb snapshots = 2;
 }
 
 message HistoryStatePb {

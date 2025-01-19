@@ -1290,11 +1290,11 @@ pub async fn get_page_view_collab(
     )))?;
 
   let owner = match view.created_by {
-    Some(uid) => Some(select_web_user_from_uid(pg_pool, uid).await?),
+    Some(uid) => select_web_user_from_uid(pg_pool, uid).await?,
     None => None,
   };
   let last_editor = match view.last_edited_by {
-    Some(uid) => Some(select_web_user_from_uid(pg_pool, uid).await?),
+    Some(uid) => select_web_user_from_uid(pg_pool, uid).await?,
     None => None,
   };
   let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id)

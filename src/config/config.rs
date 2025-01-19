@@ -22,7 +22,6 @@ pub struct Config {
   pub redis_worker_count: usize,
   pub s3: S3Setting,
   pub appflowy_ai: AppFlowyAISetting,
-  pub grpc_history: GrpcHistorySetting,
   pub collab: CollabSetting,
   pub published_collab: PublishedCollabSetting,
   pub mailer: MailerSetting,
@@ -137,11 +136,6 @@ impl DatabaseSetting {
 }
 
 #[derive(Clone, Debug)]
-pub struct GrpcHistorySetting {
-  pub addrs: String,
-}
-
-#[derive(Clone, Debug)]
 pub struct CollabSetting {
   pub group_persistence_interval_secs: u64,
   pub group_prune_grace_period_secs: u64,
@@ -243,9 +237,6 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     appflowy_ai: AppFlowyAISetting {
       port: get_env_var("AI_SERVER_PORT", "5001").into(),
       host: get_env_var("AI_SERVER_HOST", "localhost").into(),
-    },
-    grpc_history: GrpcHistorySetting {
-      addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),
     },
     collab: CollabSetting {
       group_persistence_interval_secs: get_env_var(

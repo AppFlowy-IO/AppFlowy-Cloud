@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
 use access_control::workspace::WorkspaceAccessControl;
-use collab::lock::Mutex;
 use dashmap::DashMap;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
@@ -25,7 +24,6 @@ use gotrue::grant::{Grant, PasswordGrant};
 use indexer::metrics::EmbeddingMetrics;
 use indexer::scheduler::IndexerScheduler;
 use snowflake::Snowflake;
-use tonic_proto::history::history_client::HistoryClient;
 
 use crate::api::metrics::{AppFlowyWebMetrics, PublishedCollabMetrics, RequestMetrics};
 use crate::biz::chat::metrics::AIMetrics;
@@ -57,7 +55,6 @@ pub struct AppState {
   pub gotrue_admin: GoTrueAdmin,
   pub mailer: AFCloudMailer,
   pub ai_client: AppFlowyAIClient,
-  pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
   pub indexer_scheduler: Arc<IndexerScheduler>,
 }
 

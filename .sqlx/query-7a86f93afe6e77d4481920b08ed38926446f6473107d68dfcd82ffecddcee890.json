@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        awn.namespace,\n        apc.publish_name,\n        apc.view_id,\n        au.email AS publisher_email,\n        apc.created_at AS publish_timestamp,\n        apc.unpublished_at AS unpublished_timestamp,\n        apc.comments_enabled,\n        apc.duplicate_enabled\n      FROM af_published_collab apc\n      JOIN af_user au ON apc.published_by = au.uid\n      JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id\n      JOIN af_workspace_namespace awn ON aw.workspace_id = awn.workspace_id AND awn.is_original = TRUE\n      WHERE apc.view_id = ANY($1);\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "publish_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "view_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "publisher_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "publish_timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "unpublished_timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "comments_enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "duplicate_enabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "7a86f93afe6e77d4481920b08ed38926446f6473107d68dfcd82ffecddcee890"
+}

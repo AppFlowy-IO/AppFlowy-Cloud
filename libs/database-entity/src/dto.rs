@@ -437,6 +437,18 @@ pub struct PublishInfo {
   pub publish_timestamp: DateTime<Utc>,
   #[serde(default)]
   pub unpublished_timestamp: Option<DateTime<Utc>>,
+  #[serde(default = "default_comments_enabled")]
+  pub comments_enabled: bool,
+  #[serde(default = "default_duplicate_enabled")]
+  pub duplicate_enabled: bool,
+}
+
+fn default_comments_enabled() -> bool {
+  true
+}
+
+fn default_duplicate_enabled() -> bool {
+  true
 }
 
 #[derive(Debug, Serialize, Deserialize)]

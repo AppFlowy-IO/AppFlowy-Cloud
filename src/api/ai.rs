@@ -37,6 +37,7 @@ async fn stream_complete_text_handler(
 ) -> actix_web::Result<HttpResponse> {
   let ai_model = ai_model_from_header(&req);
   let params = payload.into_inner();
+  state.metrics.ai_metrics.record_total_completion_count(1);
 
   match state
     .ai_client
@@ -80,6 +81,7 @@ async fn summarize_row_handler(
         );
       }
 
+      state.metrics.ai_metrics.record_total_summary_row_count(1);
       let ai_model = ai_model_from_header(&req);
       let result = state.ai_client.summarize_row(&content, ai_model).await;
       let resp = match result {
@@ -105,6 +107,7 @@ async fn translate_row_handler(
 ) -> actix_web::Result<Json<AppResponse<TranslateRowResponse>>> {
   let params = payload.into_inner();
   let ai_model = ai_model_from_header(&req);
+  state.metrics.ai_metrics.record_total_translate_row_count(1);
   match state.ai_client.translate_row(params.data, ai_model).await {
     Ok(resp) => Ok(AppResponse::Ok().with_data(resp).into()),
     Err(err) => {

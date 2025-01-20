@@ -581,7 +581,9 @@ pub async fn select_publish_info_for_view_ids(
         apc.view_id,
         au.email AS publisher_email,
         apc.created_at AS publish_timestamp,
-        apc.unpublished_at AS unpublished_timestamp
+        apc.unpublished_at AS unpublished_timestamp,
+        apc.comments_enabled,
+        apc.duplicate_enabled
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id
@@ -630,7 +632,9 @@ pub async fn select_all_published_collab_info(
         apc.view_id,
         au.email AS publisher_email,
         apc.created_at AS publish_timestamp,
-        apc.unpublished_at AS unpublished_timestamp
+        apc.unpublished_at AS unpublished_timestamp,
+        apc.comments_enabled,
+        apc.duplicate_enabled
       FROM af_published_collab apc
       JOIN af_user au ON apc.published_by = au.uid
       JOIN af_workspace aw ON apc.workspace_id = aw.workspace_id

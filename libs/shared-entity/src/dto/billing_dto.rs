@@ -116,6 +116,8 @@ pub struct WorkspaceUsageAndLimit {
   pub single_upload_limit: i64,
   pub single_upload_unlimited: bool,
   pub ai_responses_count: i64,
+  #[serde(default)]
+  pub ai_image_responses_count: i64,
   pub ai_responses_count_limit: i64,
 
   pub local_ai: bool,

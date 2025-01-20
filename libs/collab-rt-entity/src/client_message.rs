@@ -13,6 +13,7 @@ use std::hash::{Hash, Hasher};
 use yrs::merge_updates_v1;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+
 pub trait SinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn payload_size(&self) -> usize;
   fn mergeable(&self) -> bool;
@@ -20,8 +21,10 @@ pub trait SinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn is_client_init_sync(&self) -> bool;
   fn is_server_init_sync(&self) -> bool;
   fn is_update_sync(&self) -> bool;
+  fn is_awareness_sync(&self) -> bool;
   fn is_ping_sync(&self) -> bool;
 }
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ClientCollabMessage {
   ClientInitSync { data: InitSync },
@@ -42,6 +45,10 @@ impl ClientCollabMessage {
 
   pub fn new_server_init_sync(data: ServerInit) -> Self {
     Self::ServerInitSync(data)
+  }
+
+  pub fn new_awareness_sync(data: UpdateSync) -> Self {
+    Self::ClientAwarenessSync(data)
   }
 
   pub fn size(&self) -> usize {
@@ -183,6 +190,10 @@ impl SinkMessage for ClientCollabMessage {
 
   fn is_update_sync(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
+  }
+
+  fn is_awareness_sync(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientAwarenessSync { .. })
   }
 
   fn is_ping_sync(&self) -> bool {

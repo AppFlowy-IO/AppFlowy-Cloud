@@ -380,20 +380,6 @@ where
               .or_insert(vec![])
               .push(next.msg_id());
 
-            // let last_message = last.message();
-            // let next_message = next.message();
-            // if last_message.is_awareness_sync() && next_message.is_update_sync()
-            //   || (last_message.is_update_sync() && next_message.is_awareness_sync())
-            // {
-            //   error!(
-            //     "[collab_sync] ❎ different type of message: id: {:?}, type: {:?}, with message: {:?}, type: {:?}",
-            //     last.msg_id(),
-            //     last_message,
-            //     next.msg_id(),
-            //     next_message,
-            //   );
-            // }
-
             // If the last message is merged with the next message, don't push the next message
             continue;
           }

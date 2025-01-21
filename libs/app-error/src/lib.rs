@@ -430,6 +430,7 @@ pub enum ErrorCode {
   DecodeUpdateError = 1055,
   ApplyUpdateError = 1056,
   ActionTimeout = 1057,
+  AIImageResponseLimitExceeded = 1058,
 }
 
 impl ErrorCode {

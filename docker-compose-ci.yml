@@ -215,3 +215,7 @@ services:
 volumes:
   postgres_data:
   minio_data:
+
+networks:
+  appflowy_network:
+    driver: bridge

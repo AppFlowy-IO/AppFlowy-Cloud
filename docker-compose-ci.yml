@@ -61,10 +61,10 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "nc", "-z", "localhost", "9999" ]
+      test: "curl --fail http://127.0.0.1:9999/health || exit 1"
       interval: 5s
       timeout: 5s
-      retries: 6
+      retries: 12
     environment:
       # There are a lot of options to configure GoTrue. You can reference the example config:
       # https://github.com/supabase/gotrue/blob/master/example.env
@@ -165,6 +165,9 @@ services:
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
       - ADMIN_FRONTEND_GOTRUE_URL=${ADMIN_FRONTEND_GOTRUE_URL:-http://gotrue:9999}
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
+    depends_on:
+      appflowy_cloud:
+        condition: service_started
 
   ai:
     restart: on-failure

@@ -37,7 +37,7 @@ services:
       test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}" ]
       interval: 5s
       timeout: 5s
-      retries: 6
+      retries: 12
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
       - postgres_data:/var/lib/postgresql/data
@@ -144,6 +144,9 @@ services:
       args:
         FEATURES: ""
     image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
+    depends_on:
+      gotrue:
+        condition: service_healthy
 
   admin_frontend:
     restart: on-failure
@@ -156,6 +159,9 @@ services:
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
       - ADMIN_FRONTEND_GOTRUE_URL=${ADMIN_FRONTEND_GOTRUE_URL:-http://gotrue:9999}
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
+    depends_on:
+      appflowy_cloud:
+        condition: service_started
 
   ai:
     restart: on-failure
@@ -165,6 +171,9 @@ services:
       - APPFLOWY_AI_SERVER_PORT=${AI_SERVER_PORT}
       - APPFLOWY_AI_DATABASE_URL=${AI_DATABASE_URL}
       - APPFLOWY_AI_REDIS_URL=${AI_REDIS_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   appflowy_worker:
     restart: on-failure
@@ -190,6 +199,9 @@ services:
       - APPFLOWY_MAILER_SMTP_USERNAME=${APPFLOWY_MAILER_SMTP_USERNAME}
       - APPFLOWY_MAILER_SMTP_EMAIL=${APPFLOWY_MAILER_SMTP_EMAIL}
       - APPFLOWY_MAILER_SMTP_PASSWORD=${APPFLOWY_MAILER_SMTP_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
 volumes:
   postgres_data:
   minio_data:

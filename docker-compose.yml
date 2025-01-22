@@ -55,10 +55,10 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "nc", "-z", "localhost", "9999" ]
+      test: "curl --fail http://127.0.0.1:9999/health || exit 1"
       interval: 5s
       timeout: 5s
-      retries: 6
+      retries: 12
     image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     environment:
       # There are a lot of options to configure GoTrue. You can reference the example config:

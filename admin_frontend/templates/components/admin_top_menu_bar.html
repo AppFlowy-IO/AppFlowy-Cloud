@@ -5,7 +5,7 @@
 
     <div
       hx-target="#sidebar-content"
-      hx-get="/web/components/user/user"
+      hx-get="../../web/components/user/user"
       class="button red"
     >
       {{ user.email|escape }}
@@ -18,11 +18,11 @@
       document
         .getElementById("adminBtn")
         .addEventListener("click", function () {
-          window.location.href = "/web/home";
+          window.location.href = "{{ path_prefix }}/web/home";
         });
     </script>
 
-    <div class="button yellow" id="logoutBtn" hx-post="/web-api/logout">
+    <div class="button yellow" id="logoutBtn" hx-post="../../web-api/logout">
       Logout
     </div>
   </div>

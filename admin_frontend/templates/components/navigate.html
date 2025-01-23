@@ -2,7 +2,7 @@
   <tr class="nav-item">
     <td>Open AppFlowy</td>
     <td>
-      <div hx-post="/web-api/open_app" class="svg-container button">
+      <div hx-post="../web-api/open_app" class="svg-container button">
         {% include "../assets/logo.html" %}
       </div>
     </td>
@@ -10,7 +10,10 @@
   <tr class="nav-item">
     <td>Download AppFlowy</td>
     <td>
-      <div onclick="window.location.href='https://appflowy.io/download';" class="svg-container button">
+      <div
+        onclick="window.location.href='https://appflowy.io/download';"
+        class="svg-container button"
+      >
         {% include "../assets/logo.html" %}
       </div>
     </td>

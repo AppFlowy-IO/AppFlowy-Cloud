@@ -30,7 +30,7 @@ After executing `docker-compose up -d`, AppFlowy-Cloud is accessible at `http://
 - `/gotrue`: Redirects to the GoTrue Auth Server.
 - `/api`: AppFlowy-Cloud's HTTP API endpoint.
 - `/ws`: WebSocket endpoint for AppFlowy-Cloud.
-- `/web`: User Admin Frontend for AppFlowy.
+- `/console`: User Admin Frontend for AppFlowy.
 - `/pgadmin`: Interface for Postgres database management.
 - `/minio`: User interface for Minio object storage.
 - `/portainer`: Tool for container management.

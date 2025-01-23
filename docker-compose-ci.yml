@@ -179,7 +179,7 @@ services:
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
     depends_on:
       appflowy_cloud:
-        condition: service_healthy
+        condition: service_started
 
   ai:
     restart: on-failure

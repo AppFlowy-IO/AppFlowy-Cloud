@@ -158,6 +158,11 @@ services:
         FEATURES: ""
         PROFILE: ci
     image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
+    healthcheck:
+      test: "curl --fail http://localhost:8000/health || exit 1"
+      interval: 30s
+      timeout: 10s
+      retries: 5
     depends_on:
       gotrue:
         condition: service_healthy
@@ -177,7 +182,7 @@ services:
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
     depends_on:
       appflowy_cloud:
-        condition: service_started
+        condition: service_healthy
 
   ai:
     restart: on-failure

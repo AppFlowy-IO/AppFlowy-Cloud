@@ -159,6 +159,8 @@ services:
       args:
         FEATURES: ""
         PROFILE: ci
+    networks:
+      - shared_network
     image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
     depends_on:
       gotrue:
@@ -177,6 +179,8 @@ services:
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
       - ADMIN_FRONTEND_GOTRUE_URL=${ADMIN_FRONTEND_GOTRUE_URL:-http://gotrue:9999}
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
+    networks:
+      - shared_network
     depends_on:
       appflowy_cloud:
         condition: service_started
@@ -198,6 +202,8 @@ services:
       - AI_MINIO_URL=${AI_MINIO_URL}
       - AI_APPFLOWY_HOST=${AI_APPFLOWY_HOST}
       - SUPPORT_OPENAI_V3_IMAGE_MODEL=false
+    networks:
+      - shared_network
 
   appflowy_worker:
     restart: on-failure
@@ -223,6 +229,8 @@ services:
       - APPFLOWY_MAILER_SMTP_USERNAME=${APPFLOWY_MAILER_SMTP_USERNAME}
       - APPFLOWY_MAILER_SMTP_EMAIL=${APPFLOWY_MAILER_SMTP_EMAIL}
       - APPFLOWY_MAILER_SMTP_PASSWORD=${APPFLOWY_MAILER_SMTP_PASSWORD}
+    networks:
+      - shared_network
 
 volumes:
   postgres_data:

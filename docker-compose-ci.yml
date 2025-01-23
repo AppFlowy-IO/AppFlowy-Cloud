@@ -122,6 +122,8 @@ services:
 
   appflowy_cloud:
     restart: on-failure
+    ports:
+      - 8000:8000
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_ENVIRONMENT=production

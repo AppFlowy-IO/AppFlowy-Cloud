@@ -8,6 +8,7 @@ pub struct Config {
   pub gotrue_url: String,
   pub appflowy_cloud_url: String,
   pub oauth: OAuthConfig,
+  pub path_prefix: String,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +42,7 @@ impl Config {
         .map(|s| s.to_string())
         .collect(),
       },
+      path_prefix: get_or_default("ADMIN_FRONTEND_PATH_PREFIX", ""),
     };
     Ok(cfg)
   }

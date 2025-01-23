@@ -11,6 +11,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
       - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
+    networks:
+      - shared_network
       #- ./nginx_logs:/var/log/nginx
 
   # You do not need this if you have configured to use your own s3 file storage
@@ -28,6 +30,8 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    networks:
+      - shared_network
 
   postgres:
     restart: on-failure
@@ -55,6 +59,8 @@ services:
     image: redis
     ports:
       - "6379:6379"
+    networks:
+      - shared_network
 
   gotrue:
     restart: on-failure
@@ -111,6 +117,8 @@ services:
       - GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=${GOTRUE_EXTERNAL_DISCORD_CLIENT_ID}
       - GOTRUE_EXTERNAL_DISCORD_SECRET=${GOTRUE_EXTERNAL_DISCORD_SECRET}
       - GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=${GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI}
+    networks:
+      - shared_network
 
   appflowy_cloud:
     restart: on-failure

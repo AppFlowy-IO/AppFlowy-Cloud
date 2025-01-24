@@ -18,7 +18,7 @@ use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::middleware::NormalizePath;
-use actix_web::{dev::Server, web::Data, App, HttpServer};
+use actix_web::{dev::Server, web, web::Data, App, HttpResponse, HttpServer, Responder};
 use anyhow::{Context, Error};
 use appflowy_collaborate::collab::access_control::CollabStorageAccessControlImpl;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
@@ -159,6 +159,7 @@ pub async fn run_actix_server(
       .service(template_scope())
       .service(data_import_scope())
       .service(access_request_scope())
+      .route("/health", web::get().to(health_check))
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
@@ -501,4 +502,8 @@ async fn get_gotrue_client(setting: &GoTrueSetting) -> Result<gotrue::api::Clien
     .await
     .map_err(|e| anyhow::anyhow!("Failed to connect to GoTrue: {}", e));
   Ok(gotrue_client)
+}
+
+async fn health_check() -> impl Responder {
+  HttpResponse::Ok().body("OK")
 }

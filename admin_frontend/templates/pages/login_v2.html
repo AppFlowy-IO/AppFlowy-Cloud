@@ -6,8 +6,8 @@
 
 <!-- prettier-ignore -->
 {% block head %}
-<link href="/assets/login.css" rel="stylesheet" />
-<link href="/assets/google/logo.css" rel="stylesheet" />
+<link href="../assets/login.css" rel="stylesheet" />
+<link href="../assets/google/logo.css" rel="stylesheet" />
 {% endblock %}
 
 <!-- prettier-ignore -->
@@ -33,7 +33,7 @@
           placeholder="Please enter your email address"
         />
         <button
-          hx-post="/web-api/signin"
+          hx-post="../web-api/signin"
           hx-target="#none"
           class="button cyan"
           type="submit"
@@ -63,7 +63,7 @@
         {% for provider in oauth_providers %}
         <div class="oauth-item-inner">
           <a
-            href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|default("/web/login-callback")|escape }}"
+            href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|escape }}"
             style="text-decoration: none; color: inherit"
           >
             <div style="display: flex; align-items: center; justify-content: center; color: inherit">
@@ -122,4 +122,3 @@
   </div>
   {% endblock %}
 </div>
-

@@ -60,9 +60,10 @@ pub struct ChangePassword;
 #[derive(Template)]
 #[template(path = "pages/login.html")]
 pub struct Login<'a> {
+  pub path_prefix: &'a str,
   pub oauth_providers: &'a [&'a str],
   pub redirect_to: Option<&'a str>,
-  pub oauth_redirect_to: Option<&'a str>,
+  pub oauth_redirect_to: &'a str,
 }
 
 #[derive(Template)]
@@ -70,7 +71,8 @@ pub struct Login<'a> {
 pub struct LoginV2<'a> {
   pub oauth_providers: &'a [&'a str],
   pub redirect_to: Option<&'a str>,
-  pub oauth_redirect_to: Option<&'a str>,
+  pub oauth_redirect_to: &'a str,
+  pub path_prefix: &'a str,
 }
 
 #[derive(Template)]
@@ -78,6 +80,7 @@ pub struct LoginV2<'a> {
 pub struct Home<'a> {
   pub user: &'a User,
   pub is_admin: bool,
+  pub path_prefix: &'a str,
 }
 
 #[derive(Template)]
@@ -109,6 +112,7 @@ pub struct Navigate;
 #[derive(Template)]
 #[template(path = "pages/admin_home.html")]
 pub struct AdminHome<'a> {
+  pub path_prefix: &'a str,
   pub user: &'a User,
 }
 

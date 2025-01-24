@@ -136,8 +136,9 @@ services:
       - AI_SERVER_HOST=${AI_SERVER_HOST}
       - AI_SERVER_PORT=${AI_SERVER_PORT}
       - AI_OPENAI_API_KEY=${AI_OPENAI_API_KEY}
-      # Uncomment this line if AppFlowy Web has been deployed
-      # - APPFLOWY_WEB_URL=${APPFLOWY_WEB_URL}
+      - APPFLOWY_ADMIN_FRONTEND_PATH_PREFIX=${ADMIN_FRONTEND_PATH_PREFIX}
+      # If your AppFlowy Web is hosted on a different domain, update this variable to the correct domain
+      - APPFLOWY_WEB_URL=${FQDN}
     build:
       context: .
       dockerfile: Dockerfile
@@ -159,6 +160,7 @@ services:
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
       - ADMIN_FRONTEND_GOTRUE_URL=${ADMIN_FRONTEND_GOTRUE_URL:-http://gotrue:9999}
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
+      - ADMIN_FRONTEND_PATH_PREFIX=${ADMIN_FRONTEND_PATH_PREFIX:-}
     depends_on:
       appflowy_cloud:
         condition: service_started
@@ -184,7 +186,7 @@ services:
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_ENVIRONMENT=production
-      - APPFLOWY_WORKER_REDIS_URL=redis://redis:6379
+      - APPFLOWY_WORKER_REDIS_URL=${APPFLOWY_WORKER_REDIS_URL:-redis://redis:6379}
       - APPFLOWY_WORKER_ENVIRONMENT=production
       - APPFLOWY_WORKER_DATABASE_URL=${APPFLOWY_WORKER_DATABASE_URL}
       - APPFLOWY_WORKER_IMPORT_TICK_INTERVAL=30
@@ -202,6 +204,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  appflowy_web:
+    restart: on-failure
+    image: appflowyinc/appflowy_web:${APPFLOWY_WEB_VERSION:-latest}
+    depends_on:
+      - appflowy_cloud
+    environment:
+      - AF_BASE_URL=${FQDN}
+      - AF_GOTRUE_URL=${API_EXTERNAL_URL}
 volumes:
   postgres_data:
   minio_data:

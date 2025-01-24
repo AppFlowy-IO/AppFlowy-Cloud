@@ -30,7 +30,10 @@ impl AdminFrontendClient {
   }
 
   pub async fn web_api_sign_in(&mut self, email: &str, password: &str) {
-    let url = format!("{}/web-api/signin", self.test_config.hostname);
+    let url = format!(
+      "{}{}/web-api/signin",
+      self.test_config.hostname, self.server_config.path_prefix
+    );
     let resp = self
       .http_client
       .post(&url)
@@ -51,7 +54,10 @@ impl AdminFrontendClient {
     &mut self,
     oauth_redirect: &OAuthRedirect,
   ) -> reqwest::Response {
-    let url = format!("{}/web-api/oauth-redirect", self.test_config.hostname);
+    let url = format!(
+      "{}{}/web-api/oauth-redirect",
+      self.test_config.hostname, self.server_config.path_prefix
+    );
     let http_client = reqwest::Client::builder()
       .redirect(reqwest::redirect::Policy::none())
       .build()
@@ -70,7 +76,10 @@ impl AdminFrontendClient {
     &mut self,
     oauth_redirect: &OAuthRedirectToken,
   ) -> reqwest::Response {
-    let url = format!("{}/web-api/oauth-redirect/token", self.test_config.hostname);
+    let url = format!(
+      "{}{}/web-api/oauth-redirect/token",
+      self.test_config.hostname, self.server_config.path_prefix
+    );
     self
       .http_client
       .get(&url)

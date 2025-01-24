@@ -137,8 +137,8 @@ services:
       - AI_SERVER_PORT=${AI_SERVER_PORT}
       - AI_OPENAI_API_KEY=${AI_OPENAI_API_KEY}
       - APPFLOWY_ADMIN_FRONTEND_PATH_PREFIX=${ADMIN_FRONTEND_PATH_PREFIX}
-      # Uncomment this line if AppFlowy Web has been deployed
-      # - APPFLOWY_WEB_URL=${APPFLOWY_WEB_URL}
+      # If your AppFlowy Web is hosted on a different domain, update this variable to the correct domain
+      - APPFLOWY_WEB_URL=${FQDN}
     build:
       context: .
       dockerfile: Dockerfile
@@ -204,6 +204,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  appflowy_web:
+    restart: on-failure
+    image: appflowyinc/appflowy_web:${APPFLOWY_WEB_VERSION:-latest}
+    depends_on:
+      - appflowy_cloud
+    environment:
+      - AF_BASE_URL=${FQDN}
+      - AF_GOTRUE_URL=${API_EXTERNAL_URL}
 volumes:
   postgres_data:
   minio_data:

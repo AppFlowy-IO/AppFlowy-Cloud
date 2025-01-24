@@ -1,0 +1,33 @@
+name: AppFlowy Web image build and push
+on:
+  workflow_dispatch:
+    inputs:
+      appflowy_web_version:
+        description: 'AppFlowy Web version'
+        required: true
+jobs:
+  appflowy_web_image:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build AppFlowy Web
+        run: |
+          export VERSION=${{ github.event.inputs.appflowy_web_version }}
+          export TAG=${VERSION#v}
+          docker buildx build --build-arg VERSION=${VERSION} --platform linux/amd64,linux/arm64 -t appflowyinc/appflowy-web:${TAG} -t appflowyinc/appflowy-web:latest -f docker/web/Dockerfile docker/web

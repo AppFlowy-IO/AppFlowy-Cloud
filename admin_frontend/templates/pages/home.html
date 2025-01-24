@@ -6,10 +6,10 @@
 
 <!-- prettier-ignore -->
 {% block head %}
-<link href="/assets/sidebar.css" rel="stylesheet" />
-<link href="/assets/top_menu_bar.css" rel="stylesheet" />
-<link href="/assets/home.css" rel="stylesheet" />
-<link href="/assets/navigate.css" rel="stylesheet" />
+<link href="{{ path_prefix }}/assets/sidebar.css" rel="stylesheet" />
+<link href="{{ path_prefix }}/assets/top_menu_bar.css" rel="stylesheet" />
+<link href="{{ path_prefix }}/assets/home.css" rel="stylesheet" />
+<link href="{{ path_prefix }}/assets/navigate.css" rel="stylesheet" />
 {% endblock %}
 
 <!-- prettier-ignore -->
@@ -27,7 +27,7 @@
   </div>
 </div>
 <script>
-  window.history.replaceState(null, '', '/web/home');
+  window.history.replaceState(null, "", "{{ path_prefix }}/web/home");
 </script>
 
 {% endblock %}

@@ -2,7 +2,7 @@
   <div
     class="sidebar-item"
     hx-target="#sidebar-content"
-    hx-get="/web/components/user/navigate"
+    hx-get="../web/components/user/navigate"
     data-section="navigate"
   >
     Navigate
@@ -10,7 +10,7 @@
   <div
     class="sidebar-item"
     hx-target="#sidebar-content"
-    hx-get="/web/components/user/change-password"
+    hx-get="../web/components/user/change-password"
     data-section="change-password"
   >
     Change Password
@@ -18,7 +18,7 @@
   <div
     class="sidebar-item"
     hx-target="#sidebar-content"
-    hx-get="/web/components/user/invite"
+    hx-get="../web/components/user/invite"
     data-section="invite"
   >
     Invite
@@ -26,7 +26,7 @@
   <div
     class="sidebar-item"
     hx-target="#sidebar-content"
-    hx-get="/web/components/user/user-usage"
+    hx-get="../web/components/user/user-usage"
     data-section="user-usage"
   >
     User Usage
@@ -34,7 +34,7 @@
   <div
     class="sidebar-item"
     hx-target="#sidebar-content"
-    hx-get="/web/components/user/workspace-usage"
+    hx-get="../web/components/user/workspace-usage"
     data-section="workspace-usage"
   >
     Workspace Usage
@@ -42,14 +42,14 @@
 </div>
 
 <script>
-  document.addEventListener('DOMContentLoaded', (event) => {
-    const frag = window.location.href.split('#');
+  document.addEventListener("DOMContentLoaded", (event) => {
+    const frag = window.location.href.split("#");
     if (frag.length > 1) {
       const section = frag[1];
-      const sidebarItems = document.querySelectorAll('.sidebar-item');
+      const sidebarItems = document.querySelectorAll(".sidebar-item");
 
-      sidebarItems.forEach(item => {
-        if (item.getAttribute('data-section') === section) {
+      sidebarItems.forEach((item) => {
+        if (item.getAttribute("data-section") === section) {
           item.click();
         }
       });

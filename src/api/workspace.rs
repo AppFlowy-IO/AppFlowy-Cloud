@@ -453,6 +453,7 @@ async fn post_workspace_invite_handler(
     &workspace_id,
     invitations,
     state.config.appflowy_web_url.as_deref(),
+    &state.config.admin_frontend_path_prefix,
   )
   .await?;
   Ok(AppResponse::Ok().into())

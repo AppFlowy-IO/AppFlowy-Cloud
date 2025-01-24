@@ -1,19 +1,19 @@
 <table class="cyan-table table">
-<thead>
+  <thead>
+    <tr>
+      <th>Workspace Name</th>
+      <th>Owner Name</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  {% for shared_workspace in shared_workspaces %}
   <tr>
-    <th>Workspace Name</th>
-    <th>Owner Name</th>
-    <th>Action</th>
-  </tr>
-</thead>
-{% for shared_workspace in shared_workspaces %}
-  <tr>
-    <td> {{ shared_workspace.workspace_name|escape }} </td>
-    <td> {{ shared_workspace.owner_name|escape }} </td>
+    <td>{{ shared_workspace.workspace_name|escape }}</td>
+    <td>{{ shared_workspace.owner_name|escape }}</td>
     <td>
       <button
         class="button red"
-        hx-post="/web-api/workspace/{{ shared_workspace.workspace_id|escape }}/leave"
+        hx-post="../web-api/workspace/{{ shared_workspace.workspace_id|escape }}/leave"
         hx-confirm="Are you sure?"
         hx-target="closest tr"
         hx-swap="delete"
@@ -22,5 +22,5 @@
       </button>
     </td>
   </tr>
-{% endfor %}
+  {% endfor %}
 </table>

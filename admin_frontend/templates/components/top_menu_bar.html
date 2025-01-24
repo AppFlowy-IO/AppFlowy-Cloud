@@ -5,13 +5,13 @@
 
     <div
       hx-target="#sidebar-content"
-      hx-get="/web/components/user/user"
+      hx-get="../web/components/user/user"
       class="button cyan"
     >
       {{ user.email|escape }}
     </div>
     <div
-      hx-delete="/web-api/delete-account"
+      hx-delete="../web-api/delete-account"
       hx-confirm="This will erase all data associated with this account. Are you sure?"
       class="button red"
     >
@@ -27,12 +27,12 @@
       document
         .getElementById("adminBtn")
         .addEventListener("click", function () {
-          window.location.href = "/web/admin/home";
+          window.location.href = "../web/admin/home";
         });
     </script>
     {% endif %}
 
-    <div class="button yellow" id="logoutBtn" hx-post="/web-api/logout">
+    <div class="button yellow" id="logoutBtn" hx-post="../web-api/logout">
       Logout
     </div>
   </div>

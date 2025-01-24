@@ -133,7 +133,8 @@ async fn delete_account_handler(
   session: UserSession,
 ) -> Result<axum::response::Response, WebApiError<'static>> {
   delete_current_user(&session.token.access_token, &state.appflowy_cloud_url).await?;
-  Ok(Redirect::to("/web/login").into_response())
+  let redirect_url = state.prepend_with_path_prefix("/web/login");
+  Ok(Redirect::to(&redirect_url).into_response())
 }
 
 // Invite another user, this will trigger email sending
@@ -142,6 +143,11 @@ async fn invite_handler(
   State(state): State<AppState>,
   Form(param): Form<WebApiInviteUserRequest>,
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  let magic_link_redirect = if state.config.path_prefix.is_empty() {
+    "/".to_owned()
+  } else {
+    state.config.path_prefix.clone()
+  };
   state
     .gotrue_client
     .magic_link(
@@ -149,7 +155,7 @@ async fn invite_handler(
         email: param.email,
         ..Default::default()
       },
-      Some("/".to_owned()),
+      Some(magic_link_redirect),
     )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
@@ -558,10 +564,11 @@ async fn logout_handler(
     .value();
 
   state.session_store.del_user_session(session_id).await?;
+  let htmx_redirect_url = format!("{}/web/login", state.config.path_prefix);
   Ok(
     (
       jar.remove(Cookie::from("session_id")),
-      htmx_redirect("/web/login"),
+      htmx_redirect(&htmx_redirect_url),
     )
       .into_response(),
   )
@@ -599,11 +606,15 @@ async fn session_login(
       None
     },
   });
-
+  let default_htmx_redirect_url = format!("{}/web/home", state.config.path_prefix);
   Ok(
     (
       jar.add(new_session_cookie(new_session_id)),
-      htmx_redirect(decoded_redirect_to.as_deref().unwrap_or("/web/home")),
+      htmx_redirect(
+        decoded_redirect_to
+          .as_deref()
+          .unwrap_or(&default_htmx_redirect_url),
+      ),
     )
       .into_response(),
   )
@@ -620,7 +631,7 @@ async fn send_magic_link(
         email: email.to_owned(),
         ..Default::default()
       },
-      Some("/web/login-callback".to_owned()),
+      Some(format!("{}/web/login-callback", state.config.path_prefix)),
     )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Magic Link Sent".into()))

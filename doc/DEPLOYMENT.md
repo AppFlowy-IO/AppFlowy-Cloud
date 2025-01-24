@@ -212,4 +212,5 @@ performed via the admin portal as opposed to links provided in emails.
 - Update the docker compose file such that the ports for `appflowy_cloud`, `gotrue`, and `admin_frontend` are mapped
   to different ports on the host server. If possible, use firewall to make sure that these ports are not accessible
   from the internet.
-- Update `proxy_pass` in `nginx/nginx.conf` to point to the above ports.
+- Update `proxy_pass` in `nginx/nginx.conf` to point to the above ports. Then adapt this configuration for your
+  existing Nginx configuration.

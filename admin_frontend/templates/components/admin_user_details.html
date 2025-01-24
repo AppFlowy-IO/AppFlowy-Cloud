@@ -2,7 +2,10 @@
   {% include "user_details.html" %}
 
   <div>
-    <form hx-put="/web-api/admin/user/{{ user.id|escape }}" hx-target="#none">
+    <form
+      hx-put="../../web-api/admin/user/{{ user.id|escape }}"
+      hx-target="#none"
+    >
       <table>
         <tr>
           <td>Set Password:</td>
@@ -30,7 +33,7 @@
         <td>
           <button
             class="button cyan"
-            hx-post="/web-api/admin/user/{{ user.email|escape }}/generate-link"
+            hx-post="../../web-api/admin/user/{{ user.email|escape }}/generate-link"
             hx-target="#inviteLink"
             hx-trigger="click"
           >

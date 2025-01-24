@@ -49,6 +49,7 @@ async fn main() {
   let session_store = session::SessionStorage::new(redis_client);
 
   let address = format!("{}:{}", config.host, config.port);
+  let path_prefix = config.path_prefix.clone();
   let state = AppState {
     appflowy_cloud_url: config.appflowy_cloud_url.clone(),
     gotrue_client,
@@ -57,17 +58,33 @@ async fn main() {
   };
 
   let web_app_router = web_app::router(state.clone()).with_state(state.clone());
-  let web_api_router = web_api::router().with_state(state);
+  let web_api_router = web_api::router().with_state(state.clone());
 
-  let app = Router::new()
+  let favicon_redirect_url = state.prepend_with_path_prefix("/assets/favicon.ico");
+  let base_path_redirect_url = state.prepend_with_path_prefix("/web");
+  let base_app = Router::new()
     .route(
       "/favicon.ico",
-      get(|| async { Redirect::permanent("/assets/favicon.ico") }),
+      get(|| async {
+        let favicon_redirect_url = favicon_redirect_url;
+        Redirect::permanent(&favicon_redirect_url)
+      }),
     )
-    .route("/", get(|| async { Redirect::permanent("/web") }))
+    .route(
+      "/",
+      get(|| async {
+        let base_path_redirect_url = base_path_redirect_url;
+        Redirect::permanent(&base_path_redirect_url)
+      }),
+    )
     .nest_service("/web", web_app_router)
     .nest_service("/web-api", web_api_router)
     .nest_service("/assets", ServeDir::new("assets"));
+  let app = if path_prefix.is_empty() {
+    base_app
+  } else {
+    Router::new().nest(&path_prefix, base_app)
+  };
 
   let listener = TcpListener::bind(address)
     .await

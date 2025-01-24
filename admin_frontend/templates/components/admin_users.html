@@ -14,13 +14,13 @@
         <button
           class="button cyan"
           hx-target="#admin-users"
-          hx-get="/web/components/admin/users/{{ user.id|escape }}"
+          hx-get="../../web/components/admin/users/{{ user.id|escape }}"
         >
           More Info
         </button>
         <button
           class="deleteUserBtn button red"
-          hx-delete="/web-api/admin/user/{{ user.id|escape }}"
+          hx-delete="../../web-api/admin/user/{{ user.id|escape }}"
           hx-confirm="Are you sure?"
           hx-target="closest tr"
           hx-swap="delete"

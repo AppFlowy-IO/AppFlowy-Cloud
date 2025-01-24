@@ -361,6 +361,7 @@ pub async fn invite_workspace_members(
   workspace_id: &Uuid,
   invitations: Vec<WorkspaceMemberInvitation>,
   appflowy_web_url: Option<&str>,
+  admin_frontend_path_prefix: &str,
 ) -> Result<(), AppError> {
   let mut txn = pg_pool
     .begin()
@@ -432,7 +433,10 @@ pub async fn invite_workspace_members(
     // Generate a link such that when clicked, the user is added to the workspace.
     let accept_url = {
       match appflowy_web_url {
-        Some(appflowy_web_url) => format!("{}/accept-invitation?invited_id={}", appflowy_web_url, invite_id),
+        Some(appflowy_web_url) => format!(
+          "{}/accept-invitation?invited_id={}",
+          appflowy_web_url, invite_id
+        ),
         None => {
           gotrue_client
           .admin_generate_link(
@@ -441,8 +445,10 @@ pub async fn invite_workspace_members(
               type_: GenerateLinkType::MagicLink,
               email: invitation.email.clone(),
               redirect_to: format!(
-                "/web/login-callback?action=accept_workspace_invite&workspace_invitation_id={}&workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
-                invite_id, workspace_name,
+                "{}/web/login-callback?action=accept_workspace_invite&workspace_invitation_id={}&workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+                admin_frontend_path_prefix,
+                invite_id,
+                workspace_name,
                 workspace_icon_url,
                 inviter_name,
                 user_icon_url,

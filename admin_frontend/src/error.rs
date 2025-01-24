@@ -46,7 +46,7 @@ impl From<redis::RedisError> for WebApiError<'_> {
 
 pub enum WebAppError {
   Askama(askama::Error),
-  GoTrue(gotrue_entity::error::GoTrueError),
+  LoginRedirectRequired(String),
   ExtApi(ext::error::Error),
   Redis(redis::RedisError),
   BadRequest(String),
@@ -59,9 +59,8 @@ impl IntoResponse for WebAppError {
         tracing::error!("askama error: {:?}", e);
         status::StatusCode::INTERNAL_SERVER_ERROR.into_response()
       },
-      WebAppError::GoTrue(e) => {
-        tracing::error!("gotrue error: {:?}", e);
-        Redirect::to("/login").into_response()
+      WebAppError::LoginRedirectRequired(base_path) => {
+        Redirect::to(&format!("{}/login", base_path)).into_response()
       },
       WebAppError::ExtApi(e) => e.into_response(),
       WebAppError::Redis(e) => {
@@ -85,12 +84,6 @@ impl From<redis::RedisError> for WebAppError {
 impl From<askama::Error> for WebAppError {
   fn from(v: askama::Error) -> Self {
     WebAppError::Askama(v)
-  }
-}
-
-impl From<gotrue_entity::error::GoTrueError> for WebAppError {
-  fn from(v: gotrue_entity::error::GoTrueError) -> Self {
-    WebAppError::GoTrue(v)
   }
 }
 

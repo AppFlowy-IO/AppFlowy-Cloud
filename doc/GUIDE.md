@@ -34,6 +34,7 @@ After executing `docker-compose up -d`, AppFlowy-Cloud is accessible at `http://
 - `/pgadmin`: Interface for Postgres database management.
 - `/minio`: User interface for Minio object storage.
 - `/portainer`: Tool for container management.
+- `/`, `/app`: AppFlowy Web.
 
 ![Deployment Architecture](../assets/images/deployment_arch.png)
 
@@ -43,6 +44,7 @@ After executing `docker-compose up -d`, AppFlowy-Cloud is accessible at `http://
 AppFlowy leverages Docker for efficient deployment and scaling. Docker images are available at:
 - `appflowy_cloud`: [Docker Hub](https://hub.docker.com/repository/docker/appflowyinc/appflowy_cloud/general)
 - `admin_frontend`: [Docker Hub](https://hub.docker.com/repository/docker/appflowyinc/admin_frontend/general)
+- `appflowy_web`: [Docker Hub](https://hub.docker.com/repository/docker/appflowyinc/appflowy_web/general)
 
 #### Automated Builds with GitHub Tags
 The Docker images are automatically built and updated through a GitHub Actions workflow:

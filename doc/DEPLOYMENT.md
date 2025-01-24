@@ -135,15 +135,27 @@ docker logs <NAME>
 - Then, run `docker compose up -d` to start the services.
 - Alternatively, you can use a specific image tag instead of `latest`, and checkout the corresponding tag for
   the repository.
+- Sometimes there might be additional steps required for upgrade. Refer to the [upgrade notes](https://appflowy.com/docs/self-hosters-upgrade-notes)
+  for more information.
 
 ### 7. AppFlowy Web
+- AppFlowy Web is provided as part of the docker compose setup, and should work out of the box. It is accessible via `/app` or `/`.
+- For existing self hosters who upgraded their setup to include AppFlowy Web in the docker compose, `/` might redirect them to `/web`
+  instead of `/app`. This is because the home page `/` used to be occupied by the admin console, and redirects to `/web` by default.
+  The browser cache might need to be cleared to see the new behavior. Alternatively, just access the AppFlowy Web directly via `/app`.
 
-- AppFlowy Web is a Single Page Application (SPA) that calls the endpoints in  `appflowy_cloud`, and is assumed
-  to be served on a different origin that the one used for AppFlowy Cloud (eg. if you are hosting `appflowy cloud`
-  on `appflowy.home.com`, `appflowy_web` may be hosted on `web.appflowy.home.com`). The source code and deployment
-  guide can be found in this [repository](https://github.com/AppFlowy-IO/AppFlowy-Web).
-- To prevent CORS issues, you will need to add your AppFlowy Web origin. By default, we allow requests from `localhost:3000`,
-  using, the configuration below:
+- In order for login flow to succeed, we need to make sure that the necessary headers for redirect url can be passed
+  to AppFlowy Cloud. If you are using only the Nginx service running within the official docker compose setup, then
+  this is already taken care of and no further steps are required. Otherwise, if you have an external Nginx in front of
+  the service, then make sure that you have the following:
+  ```
+  proxy_pass_request_headers on;
+  underscores_in_headers on;
+  ```
+- You can also deploy AppFlowy Web on another domain, using tools such as Vercel, instead of using the existing docker compose setup.
+  You can follow the guide [here](https://appflowy.com/docs/self-host-appflowy-web-install-vercel).
+- If AppFlowy Web is served on a separate domain, you will need to modify the nginx conf to prevent CORS issues.
+  By default, we allow requests from `localhost:3000`, using, the configuration below:
   ```
   map $http_origin $cors_origin {
     # AppFlowy Web origin
@@ -152,7 +164,11 @@ docker logs <NAME>
   }
   ```
   Replace `http://localhost:3000` with your AppFlowy Web origin.
-
+- If you wish to build you own AppFlowy Web docker image, then run the following commands from the root directory of this repository:
+  ```
+  docker build --build-arg VERSION=v<insert version here> docker/web -f docker/web/Dockerfile -t appflowy-web
+  ```
+  The available versions can be found on [AppFlowy Web repository](https://github.com/AppFlowy-IO/AppFlowy-Web).
 
 
 ## Ports
@@ -214,3 +230,6 @@ performed via the admin portal as opposed to links provided in emails.
   from the internet.
 - Update `proxy_pass` in `nginx/nginx.conf` to point to the above ports. Then adapt this configuration for your
   existing Nginx configuration.
+
+### AppFlowy Web keeps redirecting to the desktop application after login.
+- Refer to the AppFlowy Web section in the deployment steps. Make sure that the necessary headers are present.

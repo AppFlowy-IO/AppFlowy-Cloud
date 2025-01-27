@@ -179,3 +179,15 @@ pub struct LicensedProductDetail {
   pub price_cents: i64,
   pub recurring_interval: RecurringInterval,
 }
+
+#[derive(Debug, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
+#[repr(u8)]
+pub enum LicensedProductType {
+  Unknown = 0,
+  AppFlowyAI = 1,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LicenseProductSubscriptionLinkQuery {
+  pub product_type: LicensedProductType,
+}

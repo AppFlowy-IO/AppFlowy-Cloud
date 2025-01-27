@@ -171,3 +171,11 @@ pub struct SubscriptionTrialRequest {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub period_days: Option<u32>,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LicensedProductDetail {
+  pub name: String,
+  pub currency: Currency,
+  pub price_cents: i64,
+  pub recurring_interval: RecurringInterval,
+}

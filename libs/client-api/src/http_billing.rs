@@ -4,6 +4,7 @@ use client_api_entity::billing_dto::{
   SubscriptionPlanDetail, WorkspaceUsageAndLimit,
 };
 use reqwest::Method;
+use shared_entity::dto::billing_dto::LicensedProductDetail;
 use shared_entity::{
   dto::billing_dto::{RecurringInterval, SubscriptionPlan, WorkspaceSubscriptionStatus},
   response::{AppResponse, AppResponseError},
@@ -219,6 +220,24 @@ impl Client {
       .await?;
 
     AppResponse::<Vec<SubscriptionPlanDetail>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_product_subscriptions(
+    &self,
+  ) -> Result<Vec<LicensedProductDetail>, AppResponseError> {
+    let url = format!(
+      "{}/billing/api/v1/license/products",
+      self.base_billing_url(),
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<Vec<LicensedProductDetail>>::from_response(resp)
       .await?
       .into_data()
   }

@@ -135,6 +135,7 @@ docker logs <NAME>
 - Then, run `docker compose up -d` to start the services.
 - Alternatively, you can use a specific image tag instead of `latest`, and checkout the corresponding tag for
   the repository.
+- If you found that `nginx.conf` or `deploy.env` has been updated, please update your env and nginx configuration based on the change.
 - Sometimes there might be additional steps required for upgrade. Refer to the [upgrade notes](https://appflowy.com/docs/self-hosters-upgrade-notes)
   for more information.
 

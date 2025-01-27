@@ -226,7 +226,7 @@ impl Client {
       .into_data()
   }
 
-  pub async fn get_product_subscriptions(
+  pub async fn get_license_product_subscriptions(
     &self,
   ) -> Result<Vec<LicensedProductDetail>, AppResponseError> {
     let url = format!(
@@ -247,20 +247,20 @@ impl Client {
   pub async fn get_license_product_subscription_link(
     &self,
     product_type: LicensedProductType,
-  ) -> Result<Vec<LicensedProductDetail>, AppResponseError> {
+  ) -> Result<String, AppResponseError> {
     let query = LicenseProductSubscriptionLinkQuery { product_type };
     let url = format!(
       "{}/billing/api/v1/license/subscription-link",
       self.base_billing_url(),
     );
     let resp = self
-      .http_client_with_auth(Method::GET, &url)
+      .http_client_without_auth(Method::GET, &url)
       .await?
       .query(&query)
       .send()
       .await?;
 
-    AppResponse::<Vec<LicensedProductDetail>>::from_response(resp)
+    AppResponse::<String>::from_response(resp)
       .await?
       .into_data()
   }

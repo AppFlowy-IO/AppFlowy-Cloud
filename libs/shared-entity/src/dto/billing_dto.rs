@@ -178,6 +178,7 @@ pub struct LicensedProductDetail {
   pub currency: Currency,
   pub price_cents: i64,
   pub recurring_interval: RecurringInterval,
+  pub product_type: LicensedProductType,
 }
 
 #[derive(Debug, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]

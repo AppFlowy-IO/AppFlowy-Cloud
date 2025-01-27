@@ -137,8 +137,7 @@ services:
       - AI_SERVER_PORT=${AI_SERVER_PORT}
       - AI_OPENAI_API_KEY=${AI_OPENAI_API_KEY}
       - APPFLOWY_ADMIN_FRONTEND_PATH_PREFIX=${ADMIN_FRONTEND_PATH_PREFIX}
-      # If your AppFlowy Web is hosted on a different domain, update this variable to the correct domain
-      - APPFLOWY_WEB_URL=${FQDN}
+      - APPFLOWY_WEB_URL=${APPFLOWY_WEB_URL}
     build:
       context: .
       dockerfile: Dockerfile

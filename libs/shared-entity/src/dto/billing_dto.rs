@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -186,6 +187,23 @@ pub struct LicensedProductDetail {
 pub enum LicensedProductType {
   Unknown = 0,
   AppFlowyAI = 1,
+}
+
+impl Display for LicensedProductType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", (self.clone() as u8).to_string())
+  }
+}
+
+impl TryFrom<&str> for LicensedProductType {
+  type Error = String;
+
+  fn try_from(value: &str) -> Result<Self, Self::Error> {
+    match value {
+      "1" => Ok(LicensedProductType::AppFlowyAI),
+      _ => Err(format!("Invalid LicensedProductType value: {}", value)),
+    }
+  }
 }
 
 #[derive(Serialize, Deserialize)]

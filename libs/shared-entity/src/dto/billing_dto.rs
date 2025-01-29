@@ -182,6 +182,12 @@ pub struct LicensedProductDetail {
   pub product_type: LicensedProductType,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserProduct {
+  pub email: String,
+  pub product_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
 #[repr(u8)]
 pub enum LicensedProductType {
@@ -191,7 +197,7 @@ pub enum LicensedProductType {
 
 impl Display for LicensedProductType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}", (self.clone() as u8).to_string())
+    write!(f, "{}", (self.clone() as u8))
   }
 }
 

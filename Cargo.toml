@@ -103,6 +103,7 @@ tonic.workspace = true
 prost.workspace = true
 tonic-proto.workspace = true
 appflowy-collaborate = { path = "services/appflowy-collaborate" }
+appflowy-ws = { path = "services/appflowy-ws" }
 percent-encoding = "2.3.1"
 
 # ai
@@ -221,7 +222,7 @@ members = [
   "xtask",
   "libs/tonic-proto",
   "libs/mailer",
-  "libs/indexer",
+  "libs/indexer", "services/appflowy-ws",
 ]
 
 [workspace.dependencies]

@@ -5,7 +5,8 @@ use client_api_entity::billing_dto::{
 };
 use reqwest::Method;
 use shared_entity::dto::billing_dto::{
-  LicenseProductSubscriptionLinkQuery, LicensedProductDetail, LicensedProductType, UserProduct,
+  LicenseProductSubscriptionLinkQuery, LicensedProductDetail, LicensedProductType,
+  SubscribeLicenseProductDetail, UserSubscribeProduct,
 };
 use shared_entity::{
   dto::billing_dto::{RecurringInterval, SubscriptionPlan, WorkspaceSubscriptionStatus},
@@ -226,6 +227,7 @@ impl Client {
       .into_data()
   }
 
+  /// Return all licensed products.
   pub async fn get_license_product_subscriptions(
     &self,
   ) -> Result<Vec<LicensedProductDetail>, AppResponseError> {
@@ -244,7 +246,8 @@ impl Client {
       .into_data()
   }
 
-  pub async fn get_user_license_products(&self) -> Result<UserProduct, AppResponseError> {
+  /// Returns products that user already subscribed to
+  pub async fn get_user_license_products(&self) -> Result<UserSubscribeProduct, AppResponseError> {
     let url = format!(
       "{}/billing/api/v1/license/user/products",
       self.base_billing_url(),
@@ -255,7 +258,27 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<UserProduct>::from_response(resp)
+    AppResponse::<UserSubscribeProduct>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_license_product_detail(
+    &self,
+    product_id: &str,
+  ) -> Result<Vec<SubscribeLicenseProductDetail>, AppResponseError> {
+    let url = format!(
+      "{}/billing/api/v1/license/user/product/{}",
+      self.base_billing_url(),
+      product_id
+    );
+    let resp = self
+      .http_client_without_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<Vec<SubscribeLicenseProductDetail>>::from_response(resp)
       .await?
       .into_data()
   }

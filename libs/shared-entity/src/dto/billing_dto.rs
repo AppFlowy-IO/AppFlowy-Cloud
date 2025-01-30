@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
@@ -183,9 +184,20 @@ pub struct LicensedProductDetail {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct UserProduct {
+pub struct UserSubscribeProduct {
   pub email: String,
   pub product_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubscribeLicenseProductDetail {
+  pub product_id: String,
+  pub policy_id: String,
+  pub license_id: String,
+  pub metadata: serde_json::Value,
+  pub max_machines: i32,
+  pub unlimited_devices: bool,
+  pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]

@@ -190,7 +190,7 @@ pub struct UserSubscribeProduct {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SubscribeLicenseProductDetail {
+pub struct SubscribeProductLicense {
   pub product_id: String,
   pub policy_id: String,
   pub license_id: String,

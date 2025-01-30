@@ -273,7 +273,7 @@ impl Client {
       product_id
     );
     let resp = self
-      .http_client_without_auth(Method::GET, &url)
+      .http_client_with_auth(Method::GET, &url)
       .await?
       .send()
       .await?;

@@ -1,20 +1,23 @@
 use super::{ConnectionError, Oid, WorkspaceId};
-use bytes::Bytes;
-use client_websocket::WebSocketStream;
+use futures_util::SinkExt;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio_tungstenite::tungstenite;
 use tokio_tungstenite::tungstenite::http;
+use tokio_tungstenite::{tungstenite, MaybeTlsStream};
+use yrs::block::ClientID;
+use yrs::encoding::write::Write;
+use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 
-pub struct Message {
-  oid: Oid,
-  data: Bytes,
+type WsConn = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+
+pub struct Envelope {
+  message: Vec<u8>,
   ack: tokio::sync::oneshot::Sender<Result<(), ConnectionError>>,
 }
 
 #[derive(Clone)]
 pub struct WorkspaceNetworkController {
   workspace_id: WorkspaceId,
-  queue: UnboundedSender<Message>,
+  queue: UnboundedSender<Envelope>,
 }
 
 impl WorkspaceNetworkController {
@@ -22,10 +25,15 @@ impl WorkspaceNetworkController {
     let (queue, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let mut conn = Self::establish_connection(&options)?;
     tokio::spawn(async move {
-      while let Some(msg) = rx.recv().await {
-        while let Err(err) = Self::send_message(&mut conn, &msg).await {
-          tracing::error!("failed to send message: {}", err);
-          conn = Self::establish_connection(&options).await?;
+      while let Some(envelope) = rx.recv().await {
+        match Self::send_message(&mut conn, envelope.message).await {
+          Ok(_) => {
+            let _ = envelope.ack.send(Ok(()));
+          },
+          Err(err) => {
+            let _ = envelope.ack.send(Err(err));
+            break;
+          },
         }
       }
     });
@@ -35,23 +43,26 @@ impl WorkspaceNetworkController {
     })
   }
 
-  pub async fn send<D>(&self, oid: Oid, data: D) -> Result<(), ConnectionError> {
+  pub async fn send(&self, oid: Oid, message: yrs::sync::Message) -> Result<(), ConnectionError> {
     let (tx, rx) = tokio::sync::oneshot::channel();
-    let msg = Message {
-      oid,
-      data: data.into_bytes(),
+    let mut encoder = EncoderV1::new();
+    encoder.write_string(&oid.to_string());
+    message.encode(&mut encoder);
+    let msg = Envelope {
+      message: encoder.to_vec(),
       ack: tx,
     };
     self.queue.send(msg).unwrap(); // as long as current object exists, the receiver will exist
-    rx.await
+    rx.await.unwrap()
   }
 
-  async fn establish_connection(options: &Options) -> Result<WebSocketStream, ConnectionError> {
+  async fn establish_connection(options: &Options) -> Result<WsConn, ConnectionError> {
     let url = format!("{}/ws/v2/{}", options.url, options.workspace_id);
     let req = http::Request::builder()
       .uri(url)
       .header("authorization", &options.auth_token)
       .header("device-id", &options.device_id)
+      .header("client-id", &options.client_id)
       .header("sec-websocket-key", "foo")
       .header("upgrade", "websocket")
       .header("connection", "upgrade")
@@ -61,8 +72,9 @@ impl WorkspaceNetworkController {
     Ok(stream.into())
   }
 
-  async fn send_message(conn: &mut WebSocketStream, msg: &Message) -> Result<(), ConnectionError> {
-    todo!()
+  async fn send_message(ws: &mut WsConn, message: Vec<u8>) -> Result<(), ConnectionError> {
+    ws.send(tungstenite::Message::Binary(message)).await?;
+    Ok(())
   }
 }
 
@@ -71,4 +83,5 @@ pub struct Options {
   pub workspace_id: WorkspaceId,
   pub auth_token: String,
   pub device_id: String,
+  pub client_id: ClientID,
 }

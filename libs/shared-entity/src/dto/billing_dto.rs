@@ -1,4 +1,6 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -170,4 +172,59 @@ pub struct SubscriptionTrialRequest {
   #[serde(default)]
   #[serde(skip_serializing_if = "Option::is_none")]
   pub period_days: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LicensedProductDetail {
+  pub name: String,
+  pub currency: Currency,
+  pub price_cents: i64,
+  pub recurring_interval: RecurringInterval,
+  pub product_type: LicensedProductType,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserSubscribeProduct {
+  pub email: String,
+  pub product_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubscribeProductLicense {
+  pub product_id: String,
+  pub policy_id: String,
+  pub license_id: String,
+  pub metadata: serde_json::Value,
+  pub max_machines: i32,
+  pub unlimited_devices: bool,
+  pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
+#[repr(u8)]
+pub enum LicensedProductType {
+  Unknown = 0,
+  AppFlowyAI = 1,
+}
+
+impl Display for LicensedProductType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", (self.clone() as u8))
+  }
+}
+
+impl TryFrom<&str> for LicensedProductType {
+  type Error = String;
+
+  fn try_from(value: &str) -> Result<Self, Self::Error> {
+    match value {
+      "1" => Ok(LicensedProductType::AppFlowyAI),
+      _ => Err(format!("Invalid LicensedProductType value: {}", value)),
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LicenseProductSubscriptionLinkQuery {
+  pub product_type: LicensedProductType,
 }

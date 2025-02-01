@@ -4,7 +4,6 @@ use actix_web::web::Payload;
 use app_error::AppError;
 
 use actix_web::HttpRequest;
-use appflowy_ai_client::dto::AIModel;
 use async_trait::async_trait;
 use byteorder::{ByteOrder, LittleEndian};
 use chrono::Utc;
@@ -212,15 +211,12 @@ fn copy_buffer(src: &[u8], dest: &mut [u8]) -> usize {
 }
 
 #[inline]
-pub(crate) fn ai_model_from_header(req: &HttpRequest) -> AIModel {
+pub(crate) fn ai_model_from_header(req: &HttpRequest) -> &str {
   req
     .headers()
     .get("ai-model")
-    .and_then(|header| {
-      let header = header.to_str().ok()?;
-      AIModel::from_str(header).ok()
-    })
-    .unwrap_or(AIModel::GPT4oMini)
+    .and_then(|header| header.to_str().ok())
+    .unwrap_or("Default")
 }
 
 #[cfg(test)]

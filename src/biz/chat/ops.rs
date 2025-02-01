@@ -19,7 +19,6 @@ use shared_entity::dto::chat_dto::{
 use sqlx::PgPool;
 use tracing::{error, info, trace};
 
-use appflowy_ai_client::dto::AIModel;
 use validator::Validate;
 
 pub(crate) async fn create_chat(
@@ -46,7 +45,7 @@ pub async fn update_chat_message(
   pg_pool: &PgPool,
   params: UpdateChatMessageContentParams,
   ai_client: AppFlowyAIClient,
-  ai_model: AIModel,
+  ai_model: &str,
 ) -> Result<(), AppError> {
   let mut txn = pg_pool.begin().await?;
   delete_answer_message_by_question_message_id(&mut txn, params.message_id).await?;
@@ -65,7 +64,7 @@ pub async fn update_chat_message(
       &params.chat_id,
       params.message_id,
       &params.content,
-      &ai_model,
+      ai_model,
       None,
     )
     .await?;
@@ -88,7 +87,7 @@ pub async fn generate_chat_message_answer(
   ai_client: AppFlowyAIClient,
   question_message_id: i64,
   chat_id: &str,
-  ai_model: AIModel,
+  ai_model: &str,
 ) -> Result<ChatMessage, AppError> {
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(pg_pool, question_message_id).await?;
@@ -98,7 +97,7 @@ pub async fn generate_chat_message_answer(
       chat_id,
       question_message_id,
       &content,
-      &ai_model,
+      ai_model,
       Some(metadata),
     )
     .await
@@ -153,8 +152,9 @@ pub async fn create_chat_message_stream(
   chat_id: String,
   params: CreateChatMessageParams,
   ai_client: AppFlowyAIClient,
-  ai_model: AIModel,
+  ai_model: &str,
 ) -> impl Stream<Item = Result<Bytes, AppError>> {
+  let ai_model = ai_model.to_string();
   let params = params.clone();
   let chat_id = chat_id.clone();
   let pg_pool = pg_pool.clone();

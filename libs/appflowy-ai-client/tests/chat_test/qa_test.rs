@@ -1,7 +1,5 @@
 use crate::appflowy_ai_client;
 
-use appflowy_ai_client::dto::AIModel;
-
 #[tokio::test]
 async fn qa_test() {
   let client = appflowy_ai_client();
@@ -13,7 +11,7 @@ async fn qa_test() {
       &chat_id,
       1,
       "I feel hungry",
-      &AIModel::GPT4o,
+      "gpt-4o",
       None,
     )
     .await
@@ -21,7 +19,7 @@ async fn qa_test() {
   assert!(!resp.content.is_empty());
 
   let questions = client
-    .get_related_question(&chat_id, &1, &AIModel::GPT4oMini)
+    .get_related_question(&chat_id, &1, "gpt-4o-mini")
     .await
     .unwrap()
     .items;

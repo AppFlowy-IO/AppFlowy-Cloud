@@ -23,7 +23,7 @@ pub mod notify;
 mod ping;
 mod retry;
 pub mod ws;
-mod ws2;
+pub mod ws2;
 
 pub mod error {
   pub use shared_entity::response::AppResponseError;

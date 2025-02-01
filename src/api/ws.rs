@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use crate::state::AppState;
-use actix::{Actor, Addr};
+use actix::Addr;
 use actix_http::header::AUTHORIZATION;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
@@ -14,7 +14,6 @@ use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_ws::WsSession;
 use authentication::jwt::{authorization_from_token, UserUuid};
-use collab_folder::UserId;
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
 use database_entity::dto::AFRole;

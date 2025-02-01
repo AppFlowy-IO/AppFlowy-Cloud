@@ -5,7 +5,7 @@ use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 use app_error::AppError;
 use appflowy_ai_client::dto::{
-  CalculateSimilarityParams, LocalAIConfig, SimilarityResponse, TranslateRowParams,
+  CalculateSimilarityParams, LocalAIConfig, ModelList, SimilarityResponse, TranslateRowParams,
   TranslateRowResponse,
 };
 
@@ -28,6 +28,7 @@ pub fn ai_completion_scope() -> Scope {
     .service(
       web::resource("/calculate_similarity").route(web::post().to(calculate_similarity_handler)),
     )
+    .service(web::resource("/model/list").route(web::get().to(model_list_handler)))
 }
 
 async fn stream_complete_text_handler(
@@ -126,6 +127,7 @@ struct ConfigQuery {
   platform: String,
   app_version: Option<String>,
 }
+
 #[instrument(level = "debug", skip_all, err)]
 async fn local_ai_config_handler(
   state: web::Data<AppState>,
@@ -164,4 +166,16 @@ async fn calculate_similarity_handler(
     .await
     .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
   Ok(AppResponse::Ok().with_data(response).into())
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn model_list_handler(
+  state: web::Data<AppState>,
+) -> actix_web::Result<Json<AppResponse<ModelList>>> {
+  let model_list = state
+    .ai_client
+    .get_model_list()
+    .await
+    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
+  Ok(AppResponse::Ok().with_data(model_list).into())
 }

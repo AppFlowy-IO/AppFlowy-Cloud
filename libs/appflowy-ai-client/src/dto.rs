@@ -415,6 +415,11 @@ pub struct LocalAIConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModelList {
+  pub models: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateChatContext {
   pub chat_id: String,
   pub context_loader: String,

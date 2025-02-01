@@ -3,8 +3,6 @@ use serde_json::json;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::str::FromStr;
-
 pub const STREAM_METADATA_KEY: &str = "0";
 pub const STREAM_ANSWER_KEY: &str = "1";
 pub const STREAM_IMAGE_KEY: &str = "2";
@@ -336,44 +334,6 @@ impl Display for EmbeddingModel {
       EmbeddingModel::TextEmbedding3Small => write!(f, "text-embedding-3-small"),
       EmbeddingModel::TextEmbedding3Large => write!(f, "text-embedding-3-large"),
       EmbeddingModel::TextEmbeddingAda002 => write!(f, "text-embedding-ada-002"),
-    }
-  }
-}
-
-#[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]
-#[repr(u8)]
-pub enum AIModel {
-  #[default]
-  DefaultModel = 0,
-  GPT4oMini = 1,
-  GPT4o = 2,
-  Claude3Sonnet = 3,
-  Claude3Opus = 4,
-}
-
-impl AIModel {
-  pub fn to_str(&self) -> &str {
-    match self {
-      AIModel::DefaultModel => "default-model",
-      AIModel::GPT4oMini => "gpt-4o-mini",
-      AIModel::GPT4o => "gpt-4o",
-      AIModel::Claude3Sonnet => "claude-3-sonnet",
-      AIModel::Claude3Opus => "claude-3-opus",
-    }
-  }
-}
-
-impl FromStr for AIModel {
-  type Err = anyhow::Error;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "gpt-3.5-turbo" => Ok(AIModel::GPT4oMini),
-      "gpt-4o-mini" => Ok(AIModel::GPT4oMini),
-      "gpt-4o" => Ok(AIModel::GPT4o),
-      "claude-3-sonnet" => Ok(AIModel::Claude3Sonnet),
-      "claude-3-opus" => Ok(AIModel::Claude3Opus),
-      _ => Ok(AIModel::DefaultModel),
     }
   }
 }

@@ -1,4 +1,3 @@
-use appflowy_ai_client::dto::AIModel;
 use chrono::{DateTime, Utc};
 use infra::validate::validate_not_empty_str;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -209,7 +208,7 @@ pub struct UpdateChatMessageContentParams {
   pub message_id: i64,
   pub content: String,
   #[serde(default)]
-  pub model: AIModel,
+  pub model: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]

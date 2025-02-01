@@ -169,7 +169,7 @@ async fn get_related_message_handler(
   let ai_model = ai_model_from_header(&req);
   let resp = state
     .ai_client
-    .get_related_question(&chat_id, &message_id, &ai_model)
+    .get_related_question(&chat_id, &message_id, ai_model)
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
   Ok(AppResponse::Ok().with_data(resp).into())
@@ -280,7 +280,7 @@ async fn answer_stream_handler(
       &content,
       Some(metadata),
       rag_ids,
-      &ai_model,
+      ai_model,
     )
     .await
   {
@@ -333,7 +333,7 @@ async fn answer_stream_v2_handler(
       &content,
       Some(metadata),
       rag_ids,
-      &ai_model,
+      ai_model,
     )
     .await
   {
@@ -393,7 +393,7 @@ async fn answer_stream_v3_handler(
   trace!("[Chat] stream v3 {:?}", question);
   match state
     .ai_client
-    .stream_question_v3(&ai_model, question, Some(60))
+    .stream_question_v3(ai_model, question, Some(60))
     .await
   {
     Ok(answer_stream) => {

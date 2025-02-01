@@ -1,6 +1,6 @@
 use crate::appflowy_ai_client;
 use appflowy_ai_client::client::collect_stream_text;
-use appflowy_ai_client::dto::{AIModel, CompleteTextParams, CompletionType};
+use appflowy_ai_client::dto::{CompleteTextParams, CompletionType};
 #[tokio::test]
 async fn continue_writing_test() {
   let client = appflowy_ai_client();
@@ -11,7 +11,7 @@ async fn continue_writing_test() {
     metadata: None,
   };
   let stream = client
-    .stream_completion_text(params, AIModel::GPT4oMini)
+    .stream_completion_text(params, "gpt-4o-mini")
     .await
     .unwrap();
   let text = collect_stream_text(stream).await;
@@ -29,7 +29,7 @@ async fn improve_writing_test() {
     metadata: None,
   };
   let stream = client
-    .stream_completion_text(params, AIModel::GPT4oMini)
+    .stream_completion_text(params, "gpt-4o-mini")
     .await
     .unwrap();
 
@@ -49,7 +49,7 @@ async fn make_text_shorter_text() {
         metadata: None,
     };
   let stream = client
-    .stream_completion_text(params, AIModel::GPT4oMini)
+    .stream_completion_text(params, "gpt-4o-mini")
     .await
     .unwrap();
 

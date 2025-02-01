@@ -1,8 +1,8 @@
 use crate::dto::{
-  AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextParams,
-  CreateChatContext, Document, LocalAIConfig, MessageData, ModelList, QuestionMetadata,
-  RepeatedLocalAIPackage, RepeatedRelatedQuestion, ResponseFormat, SearchDocumentsRequest,
-  SimilarityResponse, SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
+  CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextParams, CreateChatContext,
+  Document, LocalAIConfig, MessageData, ModelList, QuestionMetadata, RepeatedLocalAIPackage,
+  RepeatedRelatedQuestion, ResponseFormat, SearchDocumentsRequest, SimilarityResponse,
+  SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -44,7 +44,7 @@ impl AppFlowyAIClient {
   pub async fn stream_completion_text(
     &self,
     params: CompleteTextParams,
-    model: AIModel,
+    model: &str,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     if params.text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
@@ -53,7 +53,7 @@ impl AppFlowyAIClient {
     let url = format!("{}/completion/stream", self.url);
     let resp = self
       .async_http_client(Method::POST, &url)?
-      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .header(AI_MODEL_HEADER_KEY, model)
       .json(&params)
       .send()
       .await?;
@@ -63,7 +63,7 @@ impl AppFlowyAIClient {
   pub async fn summarize_row(
     &self,
     params: &Map<String, Value>,
-    model: AIModel,
+    model: &str,
   ) -> Result<SummarizeRowResponse, AIError> {
     if params.is_empty() {
       return Err(AIError::InvalidRequest("Empty content".to_string()));
@@ -73,7 +73,7 @@ impl AppFlowyAIClient {
     trace!("summarize_row url: {}", url);
     let resp = self
       .async_http_client(Method::POST, &url)?
-      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .header(AI_MODEL_HEADER_KEY, model)
       .json(params)
       .send()
       .await?;
@@ -85,12 +85,12 @@ impl AppFlowyAIClient {
   pub async fn translate_row(
     &self,
     data: TranslateRowData,
-    model: AIModel,
+    model: &str,
   ) -> Result<TranslateRowResponse, AIError> {
     let url = format!("{}/translate_row", self.url);
     let resp = self
       .async_http_client(Method::POST, &url)?
-      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .header(AI_MODEL_HEADER_KEY, model)
       .json(&data)
       .send()
       .await?;
@@ -131,7 +131,7 @@ impl AppFlowyAIClient {
     chat_id: &str,
     question_id: i64,
     content: &str,
-    model: &AIModel,
+    model: &str,
     metadata: Option<Value>,
   ) -> Result<ChatAnswer, AIError> {
     let json = ChatQuestion {
@@ -150,7 +150,7 @@ impl AppFlowyAIClient {
     let url = format!("{}/chat/message", self.url);
     let resp = self
       .async_http_client(Method::POST, &url)?
-      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .header(AI_MODEL_HEADER_KEY, model)
       .json(&json)
       .send()
       .await?;
@@ -166,7 +166,7 @@ impl AppFlowyAIClient {
     content: &str,
     metadata: Option<Value>,
     rag_ids: Vec<String>,
-    model: &AIModel,
+    model: &str,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
@@ -184,7 +184,7 @@ impl AppFlowyAIClient {
     let url = format!("{}/chat/message/stream", self.url);
     let resp = self
       .async_http_client(Method::POST, &url)?
-      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .header(AI_MODEL_HEADER_KEY, model)
       .timeout(Duration::from_secs(30))
       .json(&json)
       .send()
@@ -201,7 +201,7 @@ impl AppFlowyAIClient {
     content: &str,
     metadata: Option<Value>,
     rag_ids: Vec<String>,
-    model: &AIModel,
+    model: &str,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
@@ -221,14 +221,14 @@ impl AppFlowyAIClient {
 
   pub async fn stream_question_v3(
     &self,
-    model: &AIModel,
+    model: &str,
     question: ChatQuestion,
     timeout_secs: Option<u64>,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let url = format!("{}/v2/chat/message/stream", self.url);
     let resp = self
       .async_http_client(Method::POST, &url)?
-      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .header(AI_MODEL_HEADER_KEY, model)
       .json(&question)
       .timeout(Duration::from_secs(timeout_secs.unwrap_or(30)))
       .send()
@@ -240,12 +240,12 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     message_id: &i64,
-    model: &AIModel,
+    model: &str,
   ) -> Result<RepeatedRelatedQuestion, AIError> {
     let url = format!("{}/chat/{chat_id}/{message_id}/related_question", self.url);
     let resp = self
       .async_http_client(Method::GET, &url)?
-      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .header(AI_MODEL_HEADER_KEY, model)
       .timeout(Duration::from_secs(30))
       .send()
       .await?;

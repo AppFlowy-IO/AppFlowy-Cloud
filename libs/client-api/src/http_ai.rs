@@ -4,8 +4,8 @@ use bytes::Bytes;
 use futures_core::Stream;
 use reqwest::Method;
 use shared_entity::dto::ai_dto::{
-  CompleteTextParams, LocalAIConfig, SummarizeRowParams, SummarizeRowResponse, TranslateRowParams,
-  TranslateRowResponse,
+  CompleteTextParams, LocalAIConfig, ModelList, SummarizeRowParams, SummarizeRowResponse,
+  TranslateRowParams, TranslateRowResponse,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::time::Duration;
@@ -93,6 +93,20 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<LocalAIConfig>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn get_model_list(&self, workspace_id: &str) -> Result<ModelList, AppResponseError> {
+    let url = format!("{}/api/ai/{workspace_id}/model/list", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<ModelList>::from_response(resp)
       .await?
       .into_data()
   }

@@ -484,6 +484,24 @@ async fn get_question_message_test() {
   assert_eq!(find_question.reply_message_id.unwrap(), answer.message_id);
 }
 
+#[tokio::test]
+async fn get_model_list_test() {
+  if !ai_test_enabled() {
+    return;
+  }
+  let test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let models = test_client
+    .api_client
+    .get_model_list(&workspace_id)
+    .await
+    .unwrap()
+    .models;
+  assert!(!models.is_empty());
+  assert!(models.len() >= 5, "models.len() = {}", models.len());
+  println!("models: {:?}", models);
+}
+
 async fn collect_answer(mut stream: QuestionStream) -> String {
   let mut answer = String::new();
   while let Some(value) = stream.next().await {

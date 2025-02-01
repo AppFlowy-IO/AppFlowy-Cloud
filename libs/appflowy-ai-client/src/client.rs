@@ -1,6 +1,6 @@
 use crate::dto::{
   AIModel, CalculateSimilarityParams, ChatAnswer, ChatQuestion, CompleteTextParams,
-  CreateChatContext, Document, LocalAIConfig, MessageData, QuestionMetadata,
+  CreateChatContext, Document, LocalAIConfig, MessageData, ModelList, QuestionMetadata,
   RepeatedLocalAIPackage, RepeatedRelatedQuestion, ResponseFormat, SearchDocumentsRequest,
   SimilarityResponse, SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
 };
@@ -280,6 +280,15 @@ impl AppFlowyAIClient {
 
     let resp = self.async_http_client(Method::GET, &url)?.send().await?;
     AIResponse::<LocalAIConfig>::from_reqwest_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_model_list(&self) -> Result<ModelList, AIError> {
+    let url = format!("{}/model/list", self.url);
+
+    let resp = self.async_http_client(Method::GET, &url)?.send().await?;
+    AIResponse::<ModelList>::from_reqwest_response(resp)
       .await?
       .into_data()
   }

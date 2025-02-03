@@ -433,6 +433,7 @@ pub enum ErrorCode {
   AIImageResponseLimitExceeded = 1058,
   MailerError = 1059,
   LicenseError = 1060,
+  AIMaxRequired = 1061,
 }
 
 impl ErrorCode {

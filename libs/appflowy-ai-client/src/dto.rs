@@ -375,8 +375,15 @@ pub struct LocalAIConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AvailableModel {
+  pub name: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModelList {
-  pub models: Vec<String>,
+  pub models: Vec<AvailableModel>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

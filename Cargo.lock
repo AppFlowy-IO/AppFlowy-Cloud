@@ -2125,6 +2125,7 @@ dependencies = [
  "serde_repr",
  "serde_urlencoded",
  "shared-entity",
+ "smallvec",
  "thiserror 1.0.63",
  "tokio",
  "tokio-retry",

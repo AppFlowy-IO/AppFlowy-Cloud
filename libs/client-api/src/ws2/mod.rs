@@ -10,4 +10,6 @@ pub enum ConnectionError {
   Ws(#[from] tokio_tungstenite::tungstenite::Error),
   #[error("HTTP error: {0}")]
   Http(#[from] tokio_tungstenite::tungstenite::http::Error),
+  #[error("collab decoding error: {0}")]
+  YrsDecoding(#[from] yrs::encoding::read::Error),
 }

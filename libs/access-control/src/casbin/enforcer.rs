@@ -201,7 +201,7 @@ async fn policies_for_subject_with_given_object(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
   use crate::{
     act::{Action, ActionVariant},
     casbin::access::{casbin_model, cmp_role_or_level},
@@ -213,7 +213,7 @@ mod tests {
 
   use super::AFEnforcer;
 
-  async fn test_enforcer() -> AFEnforcer {
+  pub async fn test_enforcer() -> AFEnforcer {
     let model = casbin_model().await.unwrap();
     let mut enforcer = casbin::Enforcer::new(model, MemoryAdapter::default())
       .await

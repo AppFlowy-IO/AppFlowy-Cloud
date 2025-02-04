@@ -58,6 +58,15 @@ impl AccessControl {
     })
   }
 
+  #[cfg(test)]
+  pub fn with_enforcer(enforcer: AFEnforcer) -> Self {
+    let access_control_metrics = Arc::new(AccessControlMetrics::init());
+    Self {
+      enforcer: Arc::new(enforcer),
+      access_control_metrics,
+    }
+  }
+
   pub async fn update_policy(
     &self,
     sub: SubjectType,

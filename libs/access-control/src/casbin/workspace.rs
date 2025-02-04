@@ -39,6 +39,26 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
       .await
   }
 
+  async fn has_role(&self, uid: &i64, workspace_id: &str, role: AFRole) -> Result<bool, AppError> {
+    let result = self
+      .access_control
+      .enforce(
+        workspace_id,
+        uid,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromRole(&role),
+      )
+      .await;
+    match result {
+      Ok(_) => Ok(true),
+      Err(AppError::NotEnoughPermissions {
+        user: _,
+        workspace_id: _,
+      }) => Ok(false),
+      Err(e) => Err(e),
+    }
+  }
+
   async fn enforce_action(
     &self,
     uid: &i64,
@@ -54,6 +74,31 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
         ActionVariant::FromAction(&action),
       )
       .await
+  }
+
+  async fn is_action_allowed(
+    &self,
+    uid: &i64,
+    workspace_id: &str,
+    action: Action,
+  ) -> Result<bool, AppError> {
+    let result = self
+      .access_control
+      .enforce(
+        workspace_id,
+        uid,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromAction(&action),
+      )
+      .await;
+    match result {
+      Ok(_) => Ok(true),
+      Err(AppError::NotEnoughPermissions {
+        user: _,
+        workspace_id: _,
+      }) => Ok(false),
+      Err(e) => Err(e),
+    }
   }
 
   #[instrument(level = "info", skip_all)]
@@ -96,5 +141,50 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
       )
       .await?;
     Ok(())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use database_entity::dto::AFRole;
+
+  use crate::{
+    act::ActionVariant,
+    casbin::{access::AccessControl, enforcer::tests::test_enforcer},
+    entity::{ObjectType, SubjectType},
+    workspace::WorkspaceAccessControl,
+  };
+
+  #[tokio::test]
+  pub async fn test_workspace_access_control() {
+    let enforcer = test_enforcer().await;
+    let uid = 1;
+    let workspace_id = "w1";
+    enforcer
+      .update_policy(
+        SubjectType::User(uid),
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromRole(&AFRole::Member),
+      )
+      .await
+      .unwrap();
+    let access_control = AccessControl::with_enforcer(enforcer);
+    let workspace_access_control = super::WorkspaceAccessControlImpl::new(access_control);
+    workspace_access_control
+      .enforce_role(&uid, workspace_id, AFRole::Member)
+      .await
+      .unwrap();
+    workspace_access_control
+      .enforce_action(&uid, workspace_id, crate::act::Action::Read)
+      .await
+      .unwrap();
+    assert!(workspace_access_control
+      .is_action_allowed(&uid, workspace_id, crate::act::Action::Read)
+      .await
+      .unwrap());
+    assert!(workspace_access_control
+      .has_role(&uid, workspace_id, AFRole::Member)
+      .await
+      .unwrap());
   }
 }

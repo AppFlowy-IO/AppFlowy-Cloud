@@ -2,13 +2,15 @@ use super::{ConnectionError, Oid, WorkspaceId};
 use bytes::Bytes;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{smallvec, ExtendFromSlice, SmallVec};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::time::MissedTickBehavior;
 use tokio::{join, try_join};
 use tokio_stream::wrappers::WatchStream;
 use tokio_tungstenite::tungstenite::http;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::{tungstenite, MaybeTlsStream};
 use tokio_util::sync::CancellationToken;
 use yrs::block::ClientID;
@@ -54,13 +56,13 @@ impl Message {
   }
 }
 
-pub struct WorkspaceNetworkController {
+pub struct WorkspaceController {
   inner: Arc<Inner>,
 }
 
-impl WorkspaceNetworkController {
+impl WorkspaceController {
   pub fn new(options: Options) -> Self {
-    WorkspaceNetworkController {
+    WorkspaceController {
       inner: Inner::new(options),
     }
   }
@@ -142,17 +144,17 @@ struct Inner {
 
 impl Inner {
   const RECONNECT_DELAY: Duration = Duration::from_secs(5);
+  const PING_INTERVAL: Duration = Duration::from_secs(4);
 
   fn new(options: Options) -> Arc<Self> {
     let (status_tx, status_rx) = tokio::sync::watch::channel(ConnectionStatus::default());
     let (message_tx, message_rx) = tokio::sync::broadcast::channel(1000);
-    let shutdown = CancellationToken::new();
     let inner = Arc::new(Inner {
       options,
       status_rx,
       status_tx,
       message_tx,
-      shutdown,
+      shutdown: CancellationToken::new(),
     });
     tokio::spawn(Self::remote_receiver_loop(inner.clone(), message_rx));
     inner
@@ -180,7 +182,7 @@ impl Inner {
           tracing::debug!("successfully connected to {}", inner.options.url);
           inner.set_connected(cancel.clone());
           let rx = message_rx.resubscribe();
-          match Self::handle_connection(&inner, conn, rx, cancel.clone()).await {
+          match Self::handle_connection(inner.clone(), conn, rx, cancel.clone()).await {
             Ok(()) => break, // connection closed gracefully
             Err(err) => {
               // error while sending messages
@@ -237,36 +239,114 @@ impl Inner {
   }
 
   async fn handle_connection(
-    inner: &Inner,
+    inner: Arc<Inner>,
     mut conn: WsConn,
     messages: CollabUpdateStream,
     cancel: CancellationToken,
   ) -> Result<(), ConnectionError> {
     let (sink, stream) = conn.split();
+    let reply_tx = inner.message_tx.clone();
     let send_messages_loop = tokio::spawn(Self::send_messages_loop(sink, messages, cancel.clone()));
-    let receive_messages_loop = tokio::spawn(Self::receive_messages_loop(stream, cancel));
-    try_join!(send_messages_loop, receive_messages_loop).unwrap();
+    let receive_messages_loop =
+      tokio::spawn(Self::receive_messages_loop(inner, stream, reply_tx, cancel));
+    let (send_res, recv_res) = try_join!(send_messages_loop, receive_messages_loop).unwrap();
+    // if connection ended on its own, check if it was not due to errors
+    send_res?;
+    recv_res?;
     Ok(())
   }
 
+  /// Loop task used to handle messages received from the server.
   async fn receive_messages_loop(
-    stream: SplitStream<WsConn>,
+    inner: Arc<Inner>,
+    mut stream: SplitStream<WsConn>,
+    mut reply_tx: CollabUpdateSink,
     cancel: CancellationToken,
   ) -> Result<(), ConnectionError> {
-    todo!()
+    let mut buf = Vec::new();
+    while let Some(res) = stream.next().await {
+      match res? {
+        tungstenite::Message::Binary(bytes) => {
+          inner.handle_server_message(bytes, &mut reply_tx)?;
+        },
+        tungstenite::Message::Text(_) => {
+          tracing::warn!("text messages are not supported")
+        },
+        tungstenite::Message::Ping(_) => { /* do nothing */ },
+        tungstenite::Message::Pong(_) => { /* do nothing */ },
+        tungstenite::Message::Frame(frame) => {
+          buf.extend_from_slice(frame.payload().as_slice());
+          if frame.header().is_final {
+            let bytes = std::mem::take(&mut buf);
+            inner.handle_server_message(bytes, &mut reply_tx)?;
+          }
+        },
+        tungstenite::Message::Close(close) => {
+          match close {
+            None => tracing::info!("received close request from server"),
+            Some(frame) => tracing::info!(
+              "received close request from server: {} - {}",
+              frame.code,
+              frame.reason
+            ),
+          }
+          cancel.cancel();
+          break;
+        },
+      }
+    }
+    Ok(())
   }
 
+  fn handle_server_message(
+    &self,
+    data: Vec<u8>,
+    reply_tx: &mut CollabUpdateSink,
+  ) -> Result<(), ConnectionError> {
+    let msg = Message::from_bytes(&data)?;
+    let object_id = msg.object_id;
+    match msg.sync_message {
+      yrs::sync::Message::Sync(SyncMessage::SyncStep1(sv)) => {
+        //TODO: get collab by object_id, compute sync step 2 and sent it back
+      },
+      yrs::sync::Message::Sync(SyncMessage::SyncStep2(update)) => {
+        //TODO: get collab by object_id, apply update to it
+      },
+      yrs::sync::Message::Sync(SyncMessage::Update(sv)) => {
+        //TODO: get collab by object_id, apply update to it
+      },
+      yrs::sync::Message::Auth(Some(deny_reason)) => {
+        //TODO: usually not used. Maybe just delete all local data about that collab?
+      },
+      yrs::sync::Message::Auth(None) => { /* do nothing */ },
+      yrs::sync::Message::AwarenessQuery => {
+        //TODO: get collab by object_id, get full awareness update and send it back
+      },
+      yrs::sync::Message::Awareness(awareness_update) => {
+        //TODO: get collab by object_id, apply awareness update to it
+      },
+      yrs::sync::Message::Custom(tag, _) => {
+        tracing::warn!("unknown message with tag {tag}")
+      },
+    }
+    Ok(())
+  }
+
+  /// Loop task used to handle messages to be send to the server.
   async fn send_messages_loop(
     mut sink: SplitSink<WsConn, tungstenite::protocol::Message>,
     mut rx: CollabUpdateStream,
     cancel: CancellationToken,
   ) -> Result<(), ConnectionError> {
+    let mut keep_alive = tokio::time::interval(Self::PING_INTERVAL);
+    keep_alive.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
       tokio::select! {
         res = rx.recv() => {
           if let Ok(msg) = res {
             if let yrs::sync::Message::Sync(SyncMessage::Update(update)) = msg.sync_message {
-              // try to eagerly fetch more updates if possible
+              // try to eagerly fetch more updates if possible: this way we can merge multiple
+              // updates and send them as one bigger message
               let (m1, m2) = Self::eager_prefetch(&mut rx, msg.object_id, update)?;
               sink
                 .send(tungstenite::Message::Binary(m1.into_bytes()))
@@ -282,11 +362,16 @@ impl Inner {
                 .await?;
             }
             sink.flush().await?;
-
+            keep_alive.reset();
           } else {
             break;
           }
         },
+        _ = keep_alive.tick() => {
+          // we didn't receive any message for some time, so we send a ping to keep connection alive
+          sink.send(tungstenite::Message::Ping(Vec::default())).await?;
+          sink.flush().await?;
+        }
         _ = cancel.cancelled() => {
           break;
         }
@@ -295,6 +380,14 @@ impl Inner {
     Ok(())
   }
 
+  /// Given initial [SyncMessage::Update] payload, try to prefetch (without blocking or awaiting) as
+  /// many bending messages from the collab stream as possible.
+  ///
+  /// This is so that we can even the difference between frequent updates coming from the user with
+  /// slower responding server by merging a lot of small updates together into a bigger one.
+  ///
+  /// Returns a compacted update message and (optionally) the first message after it which couldn't
+  /// be compacted because it's of different type or doesn't belong to the same collab.
   fn eager_prefetch(
     rx: &mut CollabUpdateStream,
     current_oid: Oid,

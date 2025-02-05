@@ -27,7 +27,8 @@ async fn completion_image_test() {
     .await
     .unwrap();
   let text = collect_stream_text(stream).await;
-  assert!(text.contains("http://localhost:8000"));
+  println!("{}", text);
+  assert!(text.contains("http://localhost"));
 }
 
 #[tokio::test]

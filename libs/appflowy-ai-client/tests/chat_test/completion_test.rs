@@ -1,6 +1,35 @@
 use crate::appflowy_ai_client;
 use appflowy_ai_client::client::collect_stream_text;
-use appflowy_ai_client::dto::{CompleteTextParams, CompletionType};
+use appflowy_ai_client::dto::{
+  CompleteTextParams, CompletionMetadata, CompletionType, OutputContent, OutputLayout,
+  ResponseFormat,
+};
+
+#[tokio::test]
+async fn completion_image_test() {
+  let client = appflowy_ai_client();
+  let params = CompleteTextParams {
+    text: "A yellow cat".to_string(),
+    completion_type: Some(CompletionType::ImproveWriting),
+    custom_prompt: None,
+    metadata: Some(CompletionMetadata {
+      object_id: uuid::Uuid::new_v4().to_string(),
+      workspace_id: Some(uuid::Uuid::new_v4().to_string()),
+      rag_ids: None,
+    }),
+    format: ResponseFormat {
+      output_content: OutputContent::IMAGE,
+      ..Default::default()
+    },
+  };
+  let stream = client
+    .stream_completion_text(params, "gpt-4o-mini")
+    .await
+    .unwrap();
+  let text = collect_stream_text(stream).await;
+  assert!(text.contains("http://localhost:8000"));
+}
+
 #[tokio::test]
 async fn continue_writing_test() {
   let client = appflowy_ai_client();
@@ -9,6 +38,10 @@ async fn continue_writing_test() {
     completion_type: Some(CompletionType::ImproveWriting),
     custom_prompt: None,
     metadata: None,
+    format: ResponseFormat {
+      output_layout: OutputLayout::SimpleTable,
+      ..Default::default()
+    },
   };
   let stream = client
     .stream_completion_text(params, "gpt-4o-mini")
@@ -27,6 +60,7 @@ async fn improve_writing_test() {
     completion_type: Some(CompletionType::ImproveWriting),
     custom_prompt: None,
     metadata: None,
+    format: ResponseFormat::default(),
   };
   let stream = client
     .stream_completion_text(params, "gpt-4o-mini")
@@ -47,6 +81,7 @@ async fn make_text_shorter_text() {
         completion_type: Some(CompletionType::MakeShorter),
         custom_prompt: None,
         metadata: None,
+        format: ResponseFormat::default(),
     };
   let stream = client
     .stream_completion_text(params, "gpt-4o-mini")

@@ -447,7 +447,16 @@ pub struct SimilarityResponse {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompletionMetadata {
+  /// A unique identifier for the object.
   pub object_id: String,
+  /// The workspace identifier.
+  ///
+  /// This field must be provided when generating images.
+  pub workspace_id: Option<String>,
+  /// A list of relevant document IDs.
+  ///
+  /// When using completions for document-related tasks, this should include the document ID.
+  /// In some cases, `object_id` may be the same as the document ID.
   pub rag_ids: Option<Vec<String>>,
 }
 
@@ -459,6 +468,8 @@ pub struct CompleteTextParams {
   #[serde(default)]
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<CompletionMetadata>,
+  #[serde(default)]
+  pub format: ResponseFormat,
 }
 
 impl CompleteTextParams {
@@ -472,6 +483,7 @@ impl CompleteTextParams {
       completion_type: Some(completion_type),
       custom_prompt: None,
       metadata,
+      format: Default::default(),
     }
   }
 }

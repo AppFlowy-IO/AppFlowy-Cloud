@@ -95,7 +95,6 @@ pub async fn update_user(
 /// - If the user is newly created, it will also:
 ///   - Create a new workspace for the user in the `af_workspace` table.
 ///   - Assign the user a role in the `af_workspace_member` table.
-///   - Add the user to the `af_collab_member` table with the appropriate permissions.
 ///
 /// # Returns
 /// A `Result` containing the workspace_id of the user's newly created workspace

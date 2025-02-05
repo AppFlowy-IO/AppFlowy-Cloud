@@ -22,7 +22,7 @@ impl Indexer for DocumentIndexer {
   fn create_embedded_chunks_from_collab(
     &self,
     collab: &Collab,
-    embedding_model: EmbeddingModel,
+    model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
     let object_id = collab.object_id().to_string();
     let document = DocumentBody::from_collab(collab).ok_or_else(|| {
@@ -33,7 +33,7 @@ impl Indexer for DocumentIndexer {
     })?;
 
     let paragraphs = document.paragraphs(collab.transact());
-    self.create_embedded_chunks_from_text(object_id, paragraphs, embedding_model)
+    self.create_embedded_chunks_from_text(object_id, paragraphs, model)
   }
 
   fn create_embedded_chunks_from_text(
@@ -42,10 +42,10 @@ impl Indexer for DocumentIndexer {
     paragraphs: Vec<String>,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
-    split_text_into_chunks(object_id, paragraphs, CollabType::Document, &model)
+    split_text_into_chunks(object_id, paragraphs, CollabType::Document, model)
   }
 
-  fn embed(
+  async fn embed(
     &self,
     embedder: &Embedder,
     mut content: Vec<AFCollabEmbeddedChunk>,
@@ -56,14 +56,16 @@ impl Indexer for DocumentIndexer {
 
     let contents: Vec<_> = content
       .iter()
-      .map(|fragment| fragment.content.clone())
+      .map(|fragment| fragment.content.clone().unwrap_or_default())
       .collect();
-    let resp = embedder.embed(EmbeddingRequest {
-      input: EmbeddingInput::StringArray(contents),
-      model: embedder.model().name().to_string(),
-      encoding_format: EmbeddingEncodingFormat::Float,
-      dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
-    })?;
+    let resp = embedder
+      .async_embed(EmbeddingRequest {
+        input: EmbeddingInput::StringArray(contents),
+        model: embedder.model().name().to_string(),
+        encoding_format: EmbeddingEncodingFormat::Float,
+        dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
+      })
+      .await?;
 
     trace!(
       "[Embedding] request {} embeddings, received {} embeddings",
@@ -95,7 +97,7 @@ fn split_text_into_chunks(
   object_id: String,
   paragraphs: Vec<String>,
   collab_type: CollabType,
-  embedding_model: &EmbeddingModel,
+  embedding_model: EmbeddingModel,
 ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
   debug_assert!(matches!(
     embedding_model,
@@ -120,7 +122,7 @@ fn split_text_into_chunks(
           fragment_id: format!("{:x}", consistent_hash),
           object_id: object_id.clone(),
           content_type: EmbeddingContentType::PlainText,
-          content,
+          content: Some(content),
           embedding: None,
           metadata: metadata.clone(),
           fragment_index: index as i32,

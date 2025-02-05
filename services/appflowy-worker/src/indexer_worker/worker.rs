@@ -1,6 +1,6 @@
 use app_error::AppError;
 use collab_entity::CollabType;
-use database::index::get_collabs_indexed_at;
+use database::index::{get_collab_embedding_framgent_ids, get_collabs_indexed_at};
 use indexer::collab_indexer::{Indexer, IndexerProvider};
 use indexer::entity::EmbeddingRecord;
 use indexer::error::IndexerError;
@@ -138,7 +138,10 @@ async fn process_upcoming_tasks(
             .map(|task| (task.object_id.clone(), task.collab_type.clone()))
             .collect();
 
-          let indexed_collabs = get_collabs_indexed_at(&pg_pool, collab_ids)
+          let indexed_collabs = get_collabs_indexed_at(&pg_pool, &collab_ids)
+            .await
+            .unwrap_or_default();
+          let existing_embeddings = get_collab_embedding_framgent_ids(&pg_pool, collab_ids)
             .await
             .unwrap_or_default();
 

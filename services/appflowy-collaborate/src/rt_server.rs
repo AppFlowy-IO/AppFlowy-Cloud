@@ -1,20 +1,22 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use anyhow::Result;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
-use tokio::sync::Notify;
-use tokio::time::interval;
-use tracing::{error, info, trace};
-
 use access_control::collab::RealtimeAccessControl;
+use anyhow::{anyhow, Result};
+use app_error::AppError;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::MessageByObjectId;
-
-use database::collab::CollabStorage;
+use collab_stream::client::CollabRedisStream;
+use collab_stream::stream_router::StreamRouter;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
+use redis::aio::ConnectionManager;
+use tokio::sync::mpsc::Sender;
+use tokio::task::yield_now;
+use tokio::time::interval;
+use tracing::{error, info, trace, warn};
+use yrs::updates::decoder::Decode;
+use yrs::StateVector;
 
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::command::{spawn_collaboration_command, CLCommandReceiver};
@@ -23,10 +25,11 @@ use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
-use crate::indexer::IndexerProvider;
-use crate::metrics::spawn_metrics;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
+use database::collab::CollabStorage;
+use indexer::scheduler::IndexerScheduler;
 
+use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
@@ -50,10 +53,11 @@ where
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
+    redis_stream_router: Arc<StreamRouter>,
+    redis_connection_manager: ConnectionManager,
     group_persistence_interval: Duration,
-    edit_state_max_count: u32,
-    edit_state_max_secs: i64,
-    indexer_provider: Arc<IndexerProvider>,
+    prune_grace_period: Duration,
+    indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
     let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
       .parse::<bool>()
@@ -66,15 +70,17 @@ where
     }
 
     let connect_state = ConnectState::new();
+    let collab_stream =
+      CollabRedisStream::new_with_connection_manager(redis_connection_manager, redis_stream_router);
     let group_manager = Arc::new(
       GroupManager::new(
         storage.clone(),
         access_control.clone(),
         metrics.clone(),
+        collab_stream,
         group_persistence_interval,
-        edit_state_max_count,
-        edit_state_max_secs,
-        indexer_provider.clone(),
+        prune_grace_period,
+        indexer_scheduler.clone(),
       )
       .await?,
     );
@@ -88,10 +94,6 @@ where
       &group_sender_by_object_id,
       Arc::downgrade(&group_manager),
     );
-
-    spawn_metrics(metrics.clone(), storage.clone());
-
-    spawn_handle_unindexed_collabs(indexer_provider, storage);
 
     Ok(Self {
       group_manager,
@@ -113,22 +115,20 @@ where
     &self,
     connected_user: RealtimeUser,
     conn_sink: impl RealtimeClientWebsocketSink,
-  ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
+  ) -> Result<(), RealtimeError> {
     let new_client_router = ClientMessageRouter::new(conn_sink);
-    let group_manager = self.group_manager.clone();
-    let connect_state = self.connect_state.clone();
-    let metrics_calculate = self.metrics.clone();
-
-    Box::pin(async move {
-      if let Some(old_user) = connect_state.handle_user_connect(connected_user, new_client_router) {
-        // Remove the old user from all collaboration groups.
-        group_manager.remove_user(&old_user).await;
-      }
-      metrics_calculate
-        .connected_users
-        .set(connect_state.number_of_connected_users() as i64);
-      Ok(())
-    })
+    if let Some(old_user) = self
+      .connect_state
+      .handle_user_connect(connected_user, new_client_router)
+    {
+      // Remove the old user from all collaboration groups.
+      self.group_manager.remove_user(&old_user);
+    }
+    self
+      .metrics
+      .connected_users
+      .set(self.connect_state.number_of_connected_users() as i64);
+    Ok(())
   }
 
   /// Handles a user's disconnection from the collaboration server.
@@ -138,27 +138,19 @@ where
   ///    - If yes, proceeds with removal.
   ///    - If not, exits without action.
   /// 2. Removes the user from collaboration groups and client streams.
-  pub fn handle_disconnect(
-    &self,
-    disconnect_user: RealtimeUser,
-  ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
-    let group_manager = self.group_manager.clone();
-    let connect_state = self.connect_state.clone();
-    let metrics_calculate = self.metrics.clone();
+  pub fn handle_disconnect(&self, disconnect_user: RealtimeUser) -> Result<(), RealtimeError> {
+    trace!("[realtime]: disconnect => {}", disconnect_user);
+    let was_removed = self.connect_state.handle_user_disconnect(&disconnect_user);
+    if was_removed.is_some() {
+      self
+        .metrics
+        .connected_users
+        .set(self.connect_state.number_of_connected_users() as i64);
 
-    Box::pin(async move {
-      trace!("[realtime]: disconnect => {}", disconnect_user);
-      let was_removed = connect_state.handle_user_disconnect(&disconnect_user);
-      if was_removed.is_some() {
-        metrics_calculate
-          .connected_users
-          .set(connect_state.number_of_connected_users() as i64);
+      self.group_manager.remove_user(&disconnect_user);
+    }
 
-        group_manager.remove_user(&disconnect_user).await;
-      }
-
-      Ok(())
-    })
+    Ok(())
   }
 
   #[inline]
@@ -166,87 +158,218 @@ where
     &self,
     user: RealtimeUser,
     message_by_oid: MessageByObjectId,
-  ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
-    let group_sender_by_object_id = self.group_sender_by_object_id.clone();
-    let client_msg_router_by_user = self.connect_state.client_message_routers.clone();
-    let group_manager = self.group_manager.clone();
-    let enable_custom_runtime = self.enable_custom_runtime;
-
-    Box::pin(async move {
-      for (object_id, collab_messages) in message_by_oid {
-        let old_sender = group_sender_by_object_id
-          .get(&object_id)
-          .map(|entry| entry.value().clone());
-
-        let sender = match old_sender {
-          Some(sender) => sender,
-          None => match group_sender_by_object_id.entry(object_id.clone()) {
-            Entry::Occupied(entry) => entry.get().clone(),
-            Entry::Vacant(entry) => {
-              let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
-              let notify = Arc::new(Notify::new());
-              let runner = GroupCommandRunner {
-                group_manager: group_manager.clone(),
-                msg_router_by_user: client_msg_router_by_user.clone(),
-                recv: Some(recv),
-              };
-
-              let object_id = entry.key().clone();
-              let clone_notify = notify.clone();
-              if enable_custom_runtime {
-                COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
-              } else {
-                tokio::spawn(runner.run(object_id, clone_notify));
+  ) -> Result<(), RealtimeError> {
+    for (object_id, collab_messages) in message_by_oid.into_inner() {
+      let group_cmd_sender = self.create_group_if_not_exist(&object_id);
+      let cloned_user = user.clone();
+      // Create a new task to send a message to the group command runner without waiting for the
+      // result. This approach is used to prevent potential issues with the actor's mailbox in
+      // single-threaded runtimes (like actix-web actors). By spawning a task, the actor can
+      // immediately proceed to process the next message.
+      tokio::spawn(async move {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        match group_cmd_sender
+          .send(GroupCommand::HandleClientCollabMessage {
+            user: cloned_user,
+            object_id,
+            collab_messages,
+            ret: tx,
+          })
+          .await
+        {
+          Ok(_) => {
+            if let Ok(Err(err)) = rx.await {
+              if !matches!(
+                err,
+                RealtimeError::CreateGroupFailed(
+                  CreateGroupFailedReason::CollabWorkspaceIdNotMatch { .. }
+                )
+              ) {
+                error!("Handle client collab message fail: {}", err);
               }
-
-              entry.insert(new_sender.clone());
-
-              // wait for the runner to be ready to handle the message.
-              notify.notified().await;
-              new_sender
-            },
+            }
           },
-        };
+          Err(err) => {
+            // it should not happen. Because the receiver is always running before acquiring the sender.
+            // Otherwise, the GroupCommandRunner might not be ready to handle the message.
+            error!("Send message to group fail: {}", err);
+          },
+        }
+      });
+    }
 
-        let cloned_user = user.clone();
-        // Create a new task to send a message to the group command runner without waiting for the
-        // result. This approach is used to prevent potential issues with the actor's mailbox in
-        // single-threaded runtimes (like actix-web actors). By spawning a task, the actor can
-        // immediately proceed to process the next message.
-        tokio::spawn(async move {
-          let (tx, rx) = tokio::sync::oneshot::channel();
-          match sender
-            .send(GroupCommand::HandleClientCollabMessage {
-              user: cloned_user,
-              object_id,
-              collab_messages,
-              ret: tx,
-            })
-            .await
-          {
-            Ok(_) => {
-              if let Ok(Err(err)) = rx.await {
-                if !matches!(
-                  err,
-                  RealtimeError::CreateGroupFailed(
-                    CreateGroupFailedReason::CollabWorkspaceIdNotMatch { .. }
-                  )
-                ) {
-                  error!("Handle client collab message fail: {}", err);
-                }
-              }
-            },
-            Err(err) => {
-              // it should not happen. Because the receiver is always running before acquiring the sender.
-              // Otherwise, the GroupCommandRunner might not be ready to handle the message.
-              error!("Send message to group fail: {}", err);
-            },
-          }
-        });
+    Ok(())
+  }
+
+  #[inline]
+  pub fn handle_client_http_update(
+    &self,
+    message: ClientHttpUpdateMessage,
+  ) -> Result<(), RealtimeError> {
+    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
+    tokio::spawn(async move {
+      let object_id = message.object_id.clone();
+      let (tx, rx) = tokio::sync::oneshot::channel();
+      let result = group_cmd_sender
+        .send(GroupCommand::HandleClientHttpUpdate {
+          user: message.user,
+          workspace_id: message.workspace_id,
+          object_id: message.object_id,
+          update: message.update,
+          collab_type: message.collab_type,
+          ret: tx,
+        })
+        .await;
+
+      let return_tx = message.return_tx;
+      if let Err(err) = result {
+        if let Some(return_rx) = return_tx {
+          let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+            "send update to group fail: {}",
+            err
+          ))));
+          return;
+        } else {
+          error!("send http update to group fail: {}", err);
+        }
       }
 
-      Ok(())
-    })
+      match rx.await {
+        Ok(Ok(())) => {
+          if message.state_vector.is_some() && return_tx.is_none() {
+            warn!(
+              "state_vector is not None, but return_tx is None, object_id: {}",
+              object_id
+            );
+          }
+
+          if let Some(return_rx) = return_tx {
+            if let Some(state_vector) = message
+              .state_vector
+              .and_then(|data| StateVector::decode_v1(&data).ok())
+            {
+              // yield
+              yield_now().await;
+
+              // Calculate missing update
+              let (tx, rx) = tokio::sync::oneshot::channel();
+              let _ = group_cmd_sender
+                .send(GroupCommand::CalculateMissingUpdate {
+                  object_id: object_id.clone(),
+                  state_vector,
+                  ret: tx,
+                })
+                .await;
+              match rx.await {
+                Ok(missing_update_result) => {
+                  let _ = group_cmd_sender
+                    .send(GroupCommand::GenerateCollabEmbedding { object_id })
+                    .await;
+
+                  let result = missing_update_result
+                    .map_err(|err| {
+                      AppError::Internal(anyhow!("fail to calculate missing update: {}", err))
+                    })
+                    .map(Some);
+                  let _ = return_rx.send(result);
+                },
+                Err(err) => {
+                  let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+                    "fail to calculate missing update: {}",
+                    err
+                  ))));
+                },
+              }
+            } else {
+              let _ = return_rx.send(Ok(None));
+            }
+          }
+        },
+        Ok(Err(err)) => {
+          if let Some(return_rx) = return_tx {
+            let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+              "apply http update to group fail: {}",
+              err
+            ))));
+          } else {
+            error!("apply http update to group fail: {}", err);
+          }
+        },
+        Err(err) => {
+          if let Some(return_rx) = return_tx {
+            let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+              "fail to receive applied result: {}",
+              err
+            ))));
+          } else {
+            error!("fail to receive applied result: {}", err);
+          }
+        },
+      }
+    });
+
+    Ok(())
+  }
+
+  #[inline]
+  fn create_group_if_not_exist(&self, object_id: &str) -> Sender<GroupCommand> {
+    let old_sender = self
+      .group_sender_by_object_id
+      .get(object_id)
+      .map(|entry| entry.value().clone());
+
+    let sender = match old_sender {
+      Some(sender) => sender,
+      None => match self.group_sender_by_object_id.entry(object_id.to_string()) {
+        Entry::Occupied(entry) => entry.get().clone(),
+        Entry::Vacant(entry) => {
+          let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
+          let runner = GroupCommandRunner {
+            group_manager: self.group_manager.clone(),
+            msg_router_by_user: self.connect_state.client_message_routers.clone(),
+            recv: Some(recv),
+          };
+
+          let object_id = entry.key().clone();
+          if self.enable_custom_runtime {
+            COLLAB_RUNTIME.spawn(runner.run(object_id));
+          } else {
+            tokio::spawn(runner.run(object_id));
+          }
+
+          entry.insert(new_sender.clone());
+          new_sender
+        },
+      },
+    };
+    sender
+  }
+
+  #[inline]
+  pub fn handle_client_generate_embedding_request(
+    &self,
+    message: ClientGenerateEmbeddingMessage,
+  ) -> Result<(), RealtimeError> {
+    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
+    tokio::spawn(async move {
+      let result = group_cmd_sender
+        .send(GroupCommand::GenerateCollabEmbedding {
+          object_id: message.object_id,
+        })
+        .await;
+
+      if let Err(err) = result {
+        if let Some(return_tx) = message.return_tx {
+          let _ = return_tx.send(Err(AppError::Internal(anyhow!(
+            "send generate embedding to group fail: {}",
+            err
+          ))));
+        } else {
+          error!("send generate embedding to group fail: {}", err);
+        }
+      }
+    });
+    Ok(())
   }
 
   pub fn get_user_by_device(&self, user_device: &UserDevice) -> Option<RealtimeUser> {
@@ -256,16 +379,6 @@ where
       .get(user_device)
       .map(|entry| entry.value().clone())
   }
-}
-
-fn spawn_handle_unindexed_collabs(
-  indexer_provider: Arc<IndexerProvider>,
-  storage: Arc<dyn CollabStorage>,
-) {
-  tokio::spawn(IndexerProvider::handle_unindexed_collabs(
-    indexer_provider,
-    storage,
-  ));
 }
 
 fn spawn_period_check_inactive_group<S>(
@@ -284,7 +397,7 @@ fn spawn_period_check_inactive_group<S>(
     loop {
       interval.tick().await;
       if let Some(groups) = weak_groups.upgrade() {
-        let inactive_group_ids = groups.get_inactive_groups().await;
+        let inactive_group_ids = groups.get_inactive_groups();
         for id in inactive_group_ids {
           cloned_group_sender_by_object_id.remove(&id);
         }

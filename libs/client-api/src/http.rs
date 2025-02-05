@@ -45,7 +45,6 @@ use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use crate::ws::ConnectInfo;
 use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
-use shared_entity::dto::ai_dto::AIModel;
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
@@ -102,7 +101,7 @@ impl Default for ClientConfiguration {
 ///
 #[derive(Clone)]
 pub struct Client {
-  pub(crate) cloud_client: reqwest::Client,
+  pub cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
   pub ws_addr: String,
@@ -112,7 +111,7 @@ pub struct Client {
   pub(crate) is_refreshing_token: Arc<AtomicBool>,
   pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
   pub(crate) config: ClientConfiguration,
-  pub(crate) ai_model: Arc<RwLock<AIModel>>,
+  pub(crate) ai_model: Arc<RwLock<String>>,
 }
 
 pub(crate) type RefreshTokenSender = tokio::sync::oneshot::Sender<Result<(), AppResponseError>>;
@@ -176,7 +175,7 @@ impl Client {
       );
     }
 
-    let ai_model = Arc::new(RwLock::new(AIModel::GPT4oMini));
+    let ai_model = Arc::new(RwLock::new("gpt-4o-mini".to_string()));
 
     Self {
       base_url: base_url.to_string(),
@@ -205,7 +204,7 @@ impl Client {
     &self.gotrue_client.base_url
   }
 
-  pub fn set_ai_model(&self, model: AIModel) {
+  pub fn set_ai_model(&self, model: String) {
     info!("using ai model: {:?}", model);
     *self.ai_model.write() = model;
   }
@@ -1086,8 +1085,8 @@ impl Client {
     let headers = [
       ("client-version", self.client_version.to_string()),
       ("client-timestamp", ts_now.to_string()),
-      ("device_id", self.device_id.clone()),
-      ("ai-model", self.ai_model.read().to_str().to_string()),
+      ("device-id", self.device_id.clone()),
+      ("ai-model", self.ai_model.read().clone()),
     ];
     trace!(
       "start request: {}, method: {}, headers: {:?}",

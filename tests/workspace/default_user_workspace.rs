@@ -27,6 +27,7 @@ async fn get_document_collab_from_remote(
 //     |-- Getting started (document)
 //          |-- Desktop guide (document)
 //          |-- Mobile guide (document)
+//          |-- Web guide (document)
 //     |-- To-dos (board)
 // |-- Shared (space)
 //     |-- ... (empty)
@@ -80,10 +81,10 @@ async fn get_user_default_workspace_test() {
     )
     .await;
     let document_data = getting_started_document.get_document_data().unwrap();
-    assert_eq!(document_data.blocks.len(), 15);
+    assert_eq!(document_data.blocks.len(), 16);
 
     let getting_started_sub_views = folder.get_views_belong_to(&getting_started_view.id);
-    assert_eq!(getting_started_sub_views.len(), 2);
+    assert_eq!(getting_started_sub_views.len(), 3);
 
     let desktop_guide_view = getting_started_sub_views[0].clone();
     assert_eq!(desktop_guide_view.name, "Desktop guide");
@@ -116,6 +117,16 @@ async fn get_user_default_workspace_test() {
     .await;
     let mobile_guide_document_data = mobile_guide_document.get_document_data().unwrap();
     assert_eq!(mobile_guide_document_data.blocks.len(), 33);
+
+    let web_guide_view = getting_started_sub_views[2].clone();
+    assert_eq!(web_guide_view.name, "Web guide");
+    assert_eq!(web_guide_view.layout, ViewLayout::Document);
+    assert_eq!(web_guide_view.icon, None);
+    let web_guide_document =
+      get_document_collab_from_remote(&mut test_client, workspace_id.clone(), &web_guide_view.id)
+        .await;
+    let web_guide_document_data = web_guide_document.get_document_data().unwrap();
+    assert_eq!(web_guide_document_data.blocks.len(), 31);
   }
 
   // the second view is the to-dos board, and contains 0 sub views

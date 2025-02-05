@@ -6,8 +6,8 @@ use database_entity::dto::{
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
+use crate::collab::CollabType;
 use collab::entity::EncodedCollab;
-use collab_rt_entity::ClientCollabMessage;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 use std::collections::HashMap;
@@ -59,14 +59,12 @@ pub enum GetCollabOrigin {
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
-  fn encode_collab_redis_query_state(&self) -> (u64, u64);
-
   /// Insert/update the collaboration object in the storage.
   /// # Arguments
   /// * `workspace_id` - The ID of the workspace.
   /// * `uid` - The ID of the user.
   /// * `params` - The parameters containing the data of the collaboration.
-  /// * `write_immediately` - A boolean value that indicates whether the data should be written immediately.
+  /// * `flush_to_disk` - A boolean value that indicates whether the data should be written immediately.
   /// if write_immediately is true, the data will be written to disk immediately. Otherwise, the data will
   /// be scheduled to be written to disk later.
   ///
@@ -75,7 +73,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    write_immediately: bool,
+    flush_to_disk: bool,
   ) -> AppResult<()>;
 
   async fn batch_insert_new_collab(
@@ -94,7 +92,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn insert_new_collab_with_transaction(
+  async fn upsert_new_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -118,16 +116,6 @@ pub trait CollabStorage: Send + Sync + 'static {
     params: QueryCollabParams,
     from_editing_collab: bool,
   ) -> AppResult<EncodedCollab>;
-
-  /// Sends a collab message to all connected clients.
-  /// # Arguments
-  /// * `object_id` - The ID of the collaboration object.
-  /// * `collab_messages` - The list of collab messages to broadcast.
-  async fn broadcast_encode_collab(
-    &self,
-    object_id: String,
-    collab_messages: Vec<ClientCollabMessage>,
-  ) -> Result<(), AppError>;
 
   async fn batch_get_collab(
     &self,
@@ -159,6 +147,13 @@ pub trait CollabStorage: Send + Sync + 'static {
     object_id: &str,
     snapshot_id: &i64,
   ) -> AppResult<SnapshotData>;
+
+  async fn get_latest_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> AppResult<Option<SnapshotData>>;
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
   async fn get_collab_snapshot_list(

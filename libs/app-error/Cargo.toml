@@ -11,20 +11,20 @@ crate-type = ["cdylib", "rlib"]
 thiserror = "1.0.56"
 serde_repr = "0.1.18"
 serde.workspace = true
-anyhow = "1.0.79"
+anyhow.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 sqlx = { workspace = true, default-features = false, features = [
   "postgres",
   "json",
 ], optional = true }
-validator = { version = "0.16", optional = true }
+validator = { workspace = true, optional = true }
 url = { version = "2.5.0" }
 actix-web = { version = "4.4.1", optional = true }
 reqwest.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, optional = true }
 bincode = { version = "1.3.3", optional = true }
-appflowy-ai-client = { workspace = true, optional = true, default-features = false }
+appflowy-ai-client = { workspace = true, optional = true, features = ["dto"] }
 
 [features]
 default = []

@@ -1,4 +1,3 @@
-use appflowy_ai_client::dto::AIModel;
 use chrono::{DateTime, Utc};
 use infra::validate::validate_not_empty_str;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -10,7 +9,7 @@ use validator::Validate;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateChatParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub chat_id: String,
   pub name: String,
   pub rag_ids: Vec<String>,
@@ -18,18 +17,18 @@ pub struct CreateChatParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct UpdateChatParams {
-  #[validate(custom = "validate_not_empty_str")]
-  pub chat_id: String,
-
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub name: Option<String>,
 
+  /// Key-value pairs of metadata to be updated.
   pub metadata: Option<serde_json::Value>,
+
+  pub rag_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateChatMessageParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
   pub message_type: ChatMessageType,
   #[serde(deserialize_with = "deserialize_metadata")]
@@ -40,7 +39,7 @@ pub struct CreateChatMessageParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateChatMessageParamsV2 {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
   pub message_type: ChatMessageType,
   #[serde(deserialize_with = "deserialize_metadata")]
@@ -209,7 +208,7 @@ pub struct UpdateChatMessageContentParams {
   pub message_id: i64,
   pub content: String,
   #[serde(default)]
-  pub model: AIModel,
+  pub model: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]
@@ -308,6 +307,14 @@ pub struct RepeatedChatMessage {
   pub total: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSettings {
+  // Currently we have not used the `name` field in the ChatSettings
+  pub name: String,
+  pub rag_ids: Vec<String>,
+  pub metadata: serde_json::Value,
+}
+
 #[derive(Debug, Default, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum ChatAuthorType {
@@ -353,7 +360,7 @@ pub struct UpdateChatMessageResponse {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateAnswerMessageParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
 
   #[serde(skip_serializing_if = "Option::is_none")]

@@ -1,9 +1,9 @@
-use crate::actix_ws::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
+use crate::actix_ws::entities::{ClientWebSocketMessage, Connect, Disconnect, RealtimeMessage};
 use crate::error::RealtimeError;
 use crate::RealtimeClientWebsocketSink;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, Context, ContextFutureSpawner,
-  Handler, MailboxError, Recipient, ResponseFuture, Running, StreamHandler, WrapFuture,
+  Handler, MailboxError, Recipient, Running, StreamHandler, WrapFuture,
 };
 use actix_web_actors::ws;
 use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError, WebsocketContext};
@@ -24,10 +24,10 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{debug, error, trace, warn};
 
-pub type HandlerResult = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+pub type HandlerResult = anyhow::Result<(), RealtimeError>;
 pub trait RealtimeServer:
   Actor<Context = Context<Self>>
-  + Handler<ClientMessage, Result = HandlerResult>
+  + Handler<ClientWebSocketMessage, Result = HandlerResult>
   + Handler<Connect, Result = HandlerResult>
   + Handler<Disconnect, Result = HandlerResult>
 {
@@ -103,11 +103,11 @@ where
 
     self
       .server
-      .try_send(ClientMessage {
+      .try_send(ClientWebSocketMessage {
         user: self.user.clone(),
         message,
       })
-      .map_err(|err| RealtimeError::Internal(err.into()))
+      .map_err(|err| RealtimeError::SendWSMessageFailed(err.to_string()))
   }
 }
 
@@ -127,7 +127,7 @@ where
     let fut = async move {
       match tokio::task::spawn_blocking(move || RealtimeMessage::decode(&bytes)).await {
         Ok(Ok(decoded_message)) => {
-          let mut client_message = Some(ClientMessage {
+          let mut client_message = Some(ClientWebSocketMessage {
             user,
             message: decoded_message,
           });

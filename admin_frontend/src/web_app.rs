@@ -10,12 +10,14 @@ use crate::models::{LoginParams, OAuthLoginAction, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
-use axum::response::{IntoResponse, Result};
+use axum::response::{IntoResponse, Redirect, Result};
 use axum::{response::Html, routing::get, Router};
 use axum_extra::extract::CookieJar;
 use gotrue_entity::dto::User;
 
 use crate::{templates, AppState};
+
+static DEFAULT_OAUTH_REDIRECT_TO_WITHOUT_PREFIX: &str = "/web/login-callback";
 
 pub fn router(state: AppState) -> Router<AppState> {
   Router::new()
@@ -27,6 +29,7 @@ fn page_router() -> Router<AppState> {
   Router::new()
     .route("/", get(home_handler))
     .route("/login", get(login_handler))
+    .route("/login-v2", get(login_v2_handler))
     .route("/login-callback", get(login_callback_handler))
     .route("/payment-success", get(payment_success_handler))
     .route("/login-callback-query", get(login_callback_query_handler))
@@ -117,7 +120,8 @@ async fn login_callback_query_handler(
     .token(&gotrue::grant::Grant::RefreshToken(
       gotrue::grant::RefreshTokenGrant { refresh_token },
     ))
-    .await?;
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?;
 
   verify_token_cloud(
     token.access_token.as_str(),
@@ -188,10 +192,10 @@ async fn login_callback_query_handler(
         },
         Err(err) => {
           tracing::error!("Error decoding redirect_url: {:?}", err);
-          home_handler(State(state), new_session, jar).await
+          home_handler(State(state), Some(new_session), jar).await
         },
       },
-      None => home_handler(State(state), new_session, jar).await,
+      None => home_handler(State(state), Some(new_session), jar).await,
     },
   }
 }
@@ -204,7 +208,8 @@ async fn admin_sso_detail_handler(
   let sso_provider = state
     .gotrue_client
     .admin_get_sso_provider(&session.token.access_token, &sso_provider_id)
-    .await?;
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?;
 
   let mapping_json =
     serde_json::to_string_pretty(&sso_provider.saml.attribute_mapping).unwrap_or("".to_owned());
@@ -226,7 +231,8 @@ async fn admin_sso_handler(
   let sso_providers = state
     .gotrue_client
     .admin_list_sso_providers(&session.token.access_token)
-    .await?
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?
     .items
     .unwrap_or_default();
 
@@ -353,7 +359,8 @@ async fn user_user_handler(
   let user = state
     .gotrue_client
     .user_info(&session.token.access_token)
-    .await?;
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?;
   render_template(templates::UserDetails { user: &user })
 }
 
@@ -367,18 +374,62 @@ async fn login_handler(
     .map(|r| urlencoding::encode(r).to_string());
   let oauth_redirect_to = login.redirect_to.as_ref().map(|r| {
     urlencoding::encode(&format!(
-      "/web/login-callback?redirect_to={}",
+      "{}/web/login-callback?redirect_to={}",
+      state.config.path_prefix,
       urlencoding::encode(r)
     ))
     .to_string()
   });
 
-  let external = state.gotrue_client.settings().await?.external;
+  let external = state
+    .gotrue_client
+    .settings()
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?
+    .external;
   let oauth_providers = external.oauth_providers();
+  let default_oauth_redirect_to = format!(
+    "{}{}",
+    state.config.path_prefix, DEFAULT_OAUTH_REDIRECT_TO_WITHOUT_PREFIX
+  );
   render_template(templates::Login {
+    path_prefix: &state.config.path_prefix,
     oauth_providers: &oauth_providers,
     redirect_to: redirect_to.as_deref(),
-    oauth_redirect_to: oauth_redirect_to.as_deref(),
+    oauth_redirect_to: oauth_redirect_to
+      .as_deref()
+      .unwrap_or(&default_oauth_redirect_to),
+  })
+}
+
+async fn login_v2_handler(
+  State(state): State<AppState>,
+  Query(login): Query<LoginParams>,
+) -> Result<Html<String>, WebAppError> {
+  let redirect_to = login
+    .redirect_to
+    .as_ref()
+    .map(|r| urlencoding::encode(r).to_string());
+  let oauth_redirect_to = login.redirect_to.as_ref().map(|r| {
+    urlencoding::encode(&format!(
+      "{}/web/login-callback?redirect_to={}",
+      state.config.path_prefix,
+      urlencoding::encode(r)
+    ))
+    .to_string()
+  });
+
+  let default_oauth_redirect_to = format!(
+    "{}{}",
+    state.config.path_prefix, DEFAULT_OAUTH_REDIRECT_TO_WITHOUT_PREFIX
+  );
+  render_template(templates::LoginV2 {
+    oauth_providers: &["Google", "Apple", "Github", "Discord"],
+    redirect_to: redirect_to.as_deref(),
+    oauth_redirect_to: oauth_redirect_to
+      .as_deref()
+      .unwrap_or(&default_oauth_redirect_to),
+    path_prefix: &state.config.path_prefix,
   })
 }
 
@@ -388,16 +439,24 @@ async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
 
 pub async fn home_handler(
   State(state): State<AppState>,
-  session: UserSession,
+  session: Option<UserSession>,
   jar: CookieJar,
 ) -> Result<axum::response::Response, WebAppError> {
+  let redirect_url = state.prepend_with_path_prefix("/web/login");
+  let session = match session {
+    Some(session) => session,
+    None => return Ok(Redirect::to(&redirect_url).into_response()),
+  };
+
   let user = state
     .gotrue_client
     .user_info(&session.token.access_token)
-    .await?;
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?;
   let home_html_str = render_template(templates::Home {
     user: &user,
     is_admin: is_admin(&user),
+    path_prefix: &state.config.path_prefix,
   })?;
   Ok((jar, home_html_str).into_response())
 }
@@ -409,8 +468,12 @@ async fn admin_home_handler(
   let user = state
     .gotrue_client
     .user_info(&session.token.access_token)
-    .await?;
-  render_template(templates::AdminHome { user: &user })
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?;
+  render_template(templates::AdminHome {
+    user: &user,
+    path_prefix: &state.config.path_prefix,
+  })
 }
 
 async fn admin_users_handler(
@@ -443,7 +506,8 @@ async fn admin_user_details_handler(
   let user = state
     .gotrue_client
     .admin_user_details(&session.token.access_token, &user_id)
-    .await?;
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?;
 
   render_template(templates::AdminUserDetails { user: &user })
 }

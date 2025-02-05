@@ -24,7 +24,7 @@ use collab_rt_entity::{HttpRealtimeMessage, RealtimeMessage};
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::actix_ws::client::RealtimeClient;
-use crate::actix_ws::entities::ClientStreamMessage;
+use crate::actix_ws::entities::ClientHttpStreamMessage;
 use crate::actix_ws::server::RealtimeServerActor;
 use crate::collab::storage::CollabAccessControlStorage;
 use crate::compression::{
@@ -101,7 +101,7 @@ async fn post_realtime_message_stream_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   // TODO(nathan): after upgrade the client application, then the device_id should not be empty
-  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let device_id = device_id_from_headers(req.headers()).unwrap_or("");
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)
@@ -113,11 +113,10 @@ async fn post_realtime_message_stream_handler(
     bytes.extend_from_slice(&item?);
   }
 
-  event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
 
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let stream_message = ClientStreamMessage {
+  let stream_message = ClientHttpStreamMessage {
     uid,
     device_id,
     message,
@@ -137,18 +136,29 @@ async fn post_realtime_message_stream_handler(
   }
 }
 
-fn device_id_from_headers(headers: &HeaderMap) -> std::result::Result<String, AppError> {
-  headers
-    .get("device_id")
-    .ok_or(AppError::InvalidRequest(
-      "Missing device_id header".to_string(),
-    ))
+fn value_from_headers<'a>(
+  headers: &'a HeaderMap,
+  keys: &[&str],
+  missing_msg: &str,
+) -> std::result::Result<&'a str, AppError> {
+  keys
+    .iter()
+    .find_map(|key| headers.get(*key))
+    .ok_or_else(|| AppError::InvalidRequest(missing_msg.to_string()))
     .and_then(|header| {
       header
         .to_str()
-        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse device_id: {}", err)))
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse header: {}", err)))
     })
-    .map(|s| s.to_string())
+}
+
+/// Retrieve device ID from headers
+pub fn device_id_from_headers(headers: &HeaderMap) -> Result<&str, AppError> {
+  value_from_headers(
+    headers,
+    &["Device-Id", "device-id", "device_id", "Device-ID"],
+    "Missing Device-Id or device_id header",
+  )
 }
 
 fn compress_type_from_header_value(

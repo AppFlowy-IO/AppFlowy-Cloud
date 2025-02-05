@@ -43,15 +43,21 @@ services:
 
   gotrue:
     restart: on-failure
-    image: supabase/gotrue:v2.159.1
+    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     depends_on:
       - postgres
     environment:
       # Gotrue config: https://github.com/supabase/gotrue/blob/master/example.env
+      - GOTRUE_ADMIN_EMAIL=${GOTRUE_ADMIN_EMAIL}
+      - GOTRUE_ADMIN_PASSWORD=${GOTRUE_ADMIN_PASSWORD}
+      - GOTRUE_DISABLE_SIGNUP=${GOTRUE_DISABLE_SIGNUP:-false}
       - GOTRUE_SITE_URL=appflowy-flutter://                           # redirected to AppFlowy application
       - URI_ALLOW_LIST=*                                              # adjust restrict if necessary
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_JWT_EXP=${GOTRUE_JWT_EXP}
+      # Without this environment variable, the createuser command will create an admin
+      # with the `admin` role as opposed to `supabase_admin`
+      - GOTRUE_JWT_ADMIN_GROUP_NAME=supabase_admin
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=${API_EXTERNAL_URL}
       - DATABASE_URL=${GOTRUE_DATABASE_URL}
@@ -92,14 +98,6 @@ services:
     ports:
       - 9999:9999
 
-  portainer:
-    restart: on-failure
-    image: portainer/portainer-ce:latest
-    ports:
-      - 9442:9000
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
   pgadmin:
     restart: on-failure
     image: dpage/pgadmin4
@@ -112,17 +110,6 @@ services:
       - 5400:80
     volumes:
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
-
-  ai:
-    restart: on-failure
-    image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
-    ports:
-      - 5001:5001
-    environment:
-      - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
-      - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
-      - APPFLOWY_AI_DATABASE_URL=${APPFLOWY_AI_DATABASE_URL}
-      - APPFLOWY_AI_REDIS_URL=${APPFLOWY_AI_REDIS_URL}
 
 volumes:
   postgres_data:

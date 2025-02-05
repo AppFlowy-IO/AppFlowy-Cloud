@@ -3,6 +3,7 @@ use secrecy::Secret;
 use semver::Version;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
+use std::env::VarError;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -15,6 +16,7 @@ pub struct Config {
   pub gotrue: GoTrueSetting,
   pub collab: CollabSetting,
   pub redis_uri: Secret<String>,
+  pub redis_worker_count: usize,
   pub ai: AISettings,
   pub s3: S3Setting,
 }
@@ -28,6 +30,7 @@ pub struct S3Setting {
   pub secret_key: Secret<String>,
   pub bucket: String,
   pub region: String,
+  pub presigned_url_endpoint: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -126,18 +129,26 @@ pub struct GoTrueSetting {
 #[derive(Clone, Debug)]
 pub struct CollabSetting {
   pub group_persistence_interval_secs: u64,
+  pub group_prune_grace_period_secs: u64,
   pub edit_state_max_count: u32,
   pub edit_state_max_secs: i64,
   pub s3_collab_threshold: u64,
 }
 
 pub fn get_env_var(key: &str, default: &str) -> String {
-  std::env::var(key).unwrap_or_else(|e| {
-    tracing::warn!(
-      "failed to read environment variable: {}, using default value: {}",
-      e,
-      default
-    );
+  std::env::var(key).unwrap_or_else(|err| {
+    match err {
+      VarError::NotPresent => {
+        tracing::info!("using default environment variable {}:{}", key, default)
+      },
+      VarError::NotUnicode(_) => {
+        tracing::error!(
+          "{} is not a valid UTF-8 string, use default value:{}",
+          key,
+          default
+        );
+      },
+    }
     default.to_owned()
   })
 }
@@ -180,6 +191,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
       region: get_env_var("APPFLOWY_S3_REGION", ""),
+      presigned_url_endpoint: None,
     },
     gotrue: GoTrueSetting {
       jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),
@@ -190,14 +202,17 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
         "60",
       )
       .parse()?,
+      group_prune_grace_period_secs: get_env_var("APPFLOWY_COLLAB_GROUP_GRACE_PERIOD_SECS", "60")
+        .parse()?,
       edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
       edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "60").parse()?,
       s3_collab_threshold: get_env_var("APPFLOWY_COLLAB_S3_THRESHOLD", "8000").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
+    redis_worker_count: get_env_var("APPFLOWY_REDIS_WORKERS", "60").parse()?,
     ai: AISettings {
-      port: get_env_var("APPFLOWY_AI_SERVER_PORT", "5001").parse()?,
-      host: get_env_var("APPFLOWY_AI_SERVER_HOST", "localhost"),
+      port: get_env_var("AI_SERVER_PORT", "5001").parse()?,
+      host: get_env_var("AI_SERVER_HOST", "localhost"),
     },
   };
   Ok(config)

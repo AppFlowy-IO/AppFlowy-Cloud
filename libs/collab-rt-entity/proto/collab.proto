@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package collab_proto;
+
+enum PayloadCompressionType {
+    NONE = 0;
+    ZSTD = 1;
+}
+
+message CollabDocStateParams {
+    string object_id = 1;
+    int32 collab_type = 2;
+    PayloadCompressionType compression = 3;
+    bytes sv = 4;
+    bytes doc_state = 5;
+}

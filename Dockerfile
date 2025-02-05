@@ -1,5 +1,5 @@
 # Using cargo-chef to manage Rust build cache effectively
-FROM lukemathwalker/cargo-chef:latest-rust-1.79 as chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.81 as chef
 
 WORKDIR /app
 RUN apt update && apt install lld clang -y
@@ -33,12 +33,12 @@ RUN cargo build --profile=${PROFILE} --features "${FEATURES}" --bin appflowy_clo
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl ca-certificates \
-    && update-ca-certificates \
-    # Clean up
-    && apt-get autoremove -y \
-    && apt-get clean -y \
-    && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends openssl ca-certificates curl \
+  && update-ca-certificates \
+  # Clean up
+  && apt-get autoremove -y \
+  && apt-get clean -y \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/appflowy_cloud /usr/local/bin/appflowy_cloud
 ENV APP_ENVIRONMENT production

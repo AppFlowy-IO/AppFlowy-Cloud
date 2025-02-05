@@ -3,6 +3,7 @@ pub mod gotrue;
 
 #[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
+use std::error::Error;
 use std::string::FromUtf8Error;
 
 #[cfg(feature = "appflowy_ai_error")]
@@ -177,6 +178,15 @@ pub enum AppError {
 
   #[error("{0}")]
   ServiceTemporaryUnavailable(String),
+
+  #[error("Decode update error: {0}")]
+  DecodeUpdateError(String),
+
+  #[error("{0}")]
+  ActionTimeout(String),
+
+  #[error("Apply update error:{0}")]
+  ApplyUpdateError(String),
 }
 
 impl AppError {
@@ -254,6 +264,9 @@ impl AppError {
         ErrorCode::CustomNamespaceInvalidCharacter
       },
       AppError::ServiceTemporaryUnavailable(_) => ErrorCode::ServiceTemporaryUnavailable,
+      AppError::DecodeUpdateError(_) => ErrorCode::DecodeUpdateError,
+      AppError::ApplyUpdateError(_) => ErrorCode::ApplyUpdateError,
+      AppError::ActionTimeout(_) => ErrorCode::ActionTimeout,
     }
   }
 }
@@ -269,13 +282,32 @@ impl From<reqwest::Error> for AppError {
       return AppError::RequestTimeout(error.to_string());
     }
 
-    if error.is_request() {
-      return if error.status() == Some(StatusCode::PAYLOAD_TOO_LARGE) {
-        AppError::PayloadTooLarge(error.to_string())
-      } else {
-        AppError::InvalidRequest(error.to_string())
-      };
+    if let Some(cause) = error.source() {
+      if cause
+        .to_string()
+        .contains("connection closed before message completed")
+      {
+        return AppError::ServiceTemporaryUnavailable(error.to_string());
+      }
     }
+
+    // Handle request-related errors
+    if let Some(status_code) = error.status() {
+      if error.is_request() {
+        match status_code {
+          StatusCode::PAYLOAD_TOO_LARGE => {
+            return AppError::PayloadTooLarge(error.to_string());
+          },
+          status_code if status_code.is_server_error() => {
+            return AppError::ServiceTemporaryUnavailable(error.to_string());
+          },
+          _ => {
+            return AppError::InvalidRequest(error.to_string());
+          },
+        }
+      }
+    }
+
     AppError::Unhandled(error.to_string())
   }
 }
@@ -288,6 +320,7 @@ impl From<sqlx::Error> for AppError {
       sqlx::Error::RowNotFound => {
         AppError::RecordNotFound(format!("Record not exist in db. {})", msg))
       },
+      sqlx::Error::PoolTimedOut => AppError::ActionTimeout(value.to_string()),
       _ => AppError::SqlxError(msg),
     }
   }
@@ -394,6 +427,13 @@ pub enum ErrorCode {
   PublishNameTooLong = 1052,
   CustomNamespaceInvalidCharacter = 1053,
   ServiceTemporaryUnavailable = 1054,
+  DecodeUpdateError = 1055,
+  ApplyUpdateError = 1056,
+  ActionTimeout = 1057,
+  AIImageResponseLimitExceeded = 1058,
+  MailerError = 1059,
+  LicenseError = 1060,
+  AIMaxRequired = 1061,
 }
 
 impl ErrorCode {
@@ -437,6 +477,7 @@ impl From<AIError> for AppError {
       AIError::PayloadTooLarge(err) => AppError::PayloadTooLarge(err),
       AIError::InvalidRequest(err) => AppError::InvalidRequest(err),
       AIError::SerdeError(err) => AppError::SerdeError(err),
+      AIError::ServiceUnavailable(err) => AppError::AIServiceUnavailable(err),
     }
   }
 }

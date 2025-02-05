@@ -30,7 +30,10 @@ impl AdminFrontendClient {
   }
 
   pub async fn web_api_sign_in(&mut self, email: &str, password: &str) {
-    let url = format!("{}/web-api/signin", self.test_config.hostname);
+    let url = format!(
+      "{}{}/web-api/signin",
+      self.test_config.hostname, self.server_config.path_prefix
+    );
     let resp = self
       .http_client
       .post(&url)
@@ -42,6 +45,7 @@ impl AdminFrontendClient {
       .send()
       .await
       .unwrap();
+    let resp = check_resp(resp).await;
     let c = resp.cookies().find(|c| c.name() == "session_id").unwrap();
     self.session_id = Some(c.value().to_string());
   }
@@ -50,7 +54,10 @@ impl AdminFrontendClient {
     &mut self,
     oauth_redirect: &OAuthRedirect,
   ) -> reqwest::Response {
-    let url = format!("{}/web-api/oauth-redirect", self.test_config.hostname);
+    let url = format!(
+      "{}{}/web-api/oauth-redirect",
+      self.test_config.hostname, self.server_config.path_prefix
+    );
     let http_client = reqwest::Client::builder()
       .redirect(reqwest::redirect::Policy::none())
       .build()
@@ -69,7 +76,10 @@ impl AdminFrontendClient {
     &mut self,
     oauth_redirect: &OAuthRedirectToken,
   ) -> reqwest::Response {
-    let url = format!("{}/web-api/oauth-redirect/token", self.test_config.hostname);
+    let url = format!(
+      "{}{}/web-api/oauth-redirect/token",
+      self.test_config.hostname, self.server_config.path_prefix
+    );
     self
       .http_client
       .get(&url)
@@ -83,4 +93,13 @@ impl AdminFrontendClient {
   fn session_id(&self) -> &str {
     self.session_id.as_ref().unwrap()
   }
+}
+
+async fn check_resp(resp: reqwest::Response) -> reqwest::Response {
+  if resp.status() != 200 {
+    println!("resp: {:#?}", resp);
+    let payload = resp.text().await.unwrap();
+    panic!("payload: {:#?}", payload)
+  }
+  resp
 }

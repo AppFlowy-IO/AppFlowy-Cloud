@@ -34,12 +34,24 @@ impl S3BucketStorage {
 pub struct AwsS3BucketClientImpl {
   client: Client,
   bucket: String,
+  endpoint: String,
+  presigned_url_endpoint: Option<String>,
 }
 
 impl AwsS3BucketClientImpl {
-  pub fn new(client: Client, bucket: String) -> Self {
+  pub fn new(
+    client: Client,
+    bucket: String,
+    endpoint: String,
+    presigned_url_endpoint: Option<String>,
+  ) -> Self {
     debug_assert!(!bucket.is_empty());
-    AwsS3BucketClientImpl { client, bucket }
+    AwsS3BucketClientImpl {
+      client,
+      bucket,
+      endpoint,
+      presigned_url_endpoint,
+    }
   }
 
   pub async fn gen_presigned_url(
@@ -71,7 +83,14 @@ impl AwsS3BucketClientImpl {
       .await
       .map_err(|err| AppError::Internal(anyhow!("Generate presigned url failed: {:?}", err)))?;
     let url = put_object_req.uri().to_string();
-    Ok(url)
+
+    let public_url = self
+      .presigned_url_endpoint
+      .as_ref()
+      .map_or(url.clone(), |presigned| {
+        url.replace(&self.endpoint, presigned)
+      });
+    Ok(public_url)
   }
 
   async fn complete_upload_and_get_metadata(
@@ -193,38 +212,47 @@ impl BucketClient for AwsS3BucketClientImpl {
     Ok(S3ResponseData::from(output))
   }
 
-  async fn delete_blobs(&self, object_keys: Vec<String>) -> Result<Self::ResponseData, AppError> {
-    let mut delete_object_ids: Vec<ObjectIdentifier> = vec![];
-    for obj in object_keys {
-      let obj_id = ObjectIdentifier::builder()
-        .key(obj)
-        .build()
-        .map_err(|err| {
-          AppError::Internal(anyhow!("Failed to create object identifier: {}", err))
-        })?;
-      delete_object_ids.push(obj_id);
-    }
-
-    let len = delete_object_ids.len();
-    let output = self
-      .client
-      .delete_objects()
-      .bucket(&self.bucket)
-      .delete(
-        Delete::builder()
-          .set_objects(Some(delete_object_ids))
+  async fn delete_blobs(&self, object_keys: Vec<String>) -> Result<(), AppError> {
+    const CHUNK_SIZE: usize = 500;
+    let mut deleted = 0;
+    for chunk in object_keys.chunks(CHUNK_SIZE) {
+      let mut delete_object_ids = Vec::with_capacity(CHUNK_SIZE);
+      for obj in chunk {
+        let obj_id = ObjectIdentifier::builder()
+          .key(obj)
           .build()
           .map_err(|err| {
-            AppError::Internal(anyhow!("Failed to create delete object request: {}", err))
-          })?,
-      )
-      .send()
-      .await
-      .map_err(|err| anyhow!("Failed to delete objects from S3: {}", err))?;
+            AppError::Internal(anyhow!("Failed to create object identifier: {}", err))
+          })?;
+        delete_object_ids.push(obj_id);
+      }
+      let len = delete_object_ids.len();
+      let res = self
+        .client
+        .delete_objects()
+        .bucket(&self.bucket)
+        .delete(
+          Delete::builder()
+            .set_objects(Some(delete_object_ids))
+            .build()
+            .map_err(|err| {
+              AppError::Internal(anyhow!("Failed to create delete object request: {}", err))
+            })?,
+        )
+        .send()
+        .await;
 
-    trace!("deleted {} objects from S3", len);
+      match res {
+        Ok(_) => deleted += len,
+        Err(err) => {
+          tracing::warn!("failed to deleted {} objects: {}", len, err);
+          tokio::time::sleep(Duration::from_millis(100)).await;
+        },
+      }
+    }
 
-    Ok(S3ResponseData::from(output))
+    trace!("deleted {} objects from S3", deleted);
+    Ok(())
   }
 
   async fn get_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError> {

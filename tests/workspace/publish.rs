@@ -1,6 +1,6 @@
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
-use appflowy_cloud::biz::collab::ops::collab_from_doc_state;
+use appflowy_cloud::biz::collab::utils::collab_from_doc_state;
 use client_api::entity::{
   AFRole, GlobalComment, PatchPublishedCollab, PublishCollabItem, PublishCollabMetadata,
   PublishInfoMeta,
@@ -23,6 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
+use uuid::Uuid;
 
 use crate::workspace::published_data::{self};
 
@@ -120,12 +121,14 @@ async fn test_publish_doc() {
         vec![PublishCollabItem {
           meta: PublishCollabMetadata {
             view_id: uuid::Uuid::new_v4(),
-            publish_name: "(*&^%$#!".to_string(), // invalid chars
+            publish_name: "(*&^%$#!".to_string(),
             metadata: MyCustomMetadata {
               title: "my_title_1".to_string(),
             },
           },
           data: "yrs_encoded_data_1".as_bytes(),
+          comments_enabled: true,
+          duplicate_enabled: true,
         }],
       )
       .await
@@ -143,12 +146,14 @@ async fn test_publish_doc() {
         vec![PublishCollabItem {
           meta: PublishCollabMetadata {
             view_id: uuid::Uuid::new_v4(),
-            publish_name: "a".repeat(1001), // too long
+            publish_name: "a".repeat(1001),
             metadata: MyCustomMetadata {
               title: "my_title_1".to_string(),
             },
           },
           data: "yrs_encoded_data_1".as_bytes(),
+          comments_enabled: true,
+          duplicate_enabled: true,
         }],
       )
       .await
@@ -174,6 +179,8 @@ async fn test_publish_doc() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       },
       PublishCollabItem {
         meta: PublishCollabMetadata {
@@ -184,6 +191,8 @@ async fn test_publish_doc() {
           },
         },
         data: "yrs_encoded_data_2".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       },
     ],
   )
@@ -203,6 +212,8 @@ async fn test_publish_doc() {
           },
         },
         data: "some_other_yrs_data".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -277,6 +288,8 @@ async fn test_publish_doc() {
           },
         },
         data: "yrs_encoded_data_3".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       },
       PublishCollabItem {
         meta: PublishCollabMetadata {
@@ -287,6 +300,8 @@ async fn test_publish_doc() {
           },
         },
         data: "yrs_encoded_data_4".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       },
     ],
   )
@@ -356,8 +371,9 @@ async fn test_publish_doc() {
         &workspace_id,
         &[PatchPublishedCollab {
           view_id: view_id_1,
-          // publish_name_2 already exists
           publish_name: Some(publish_name_2.to_string()),
+          comments_enabled: None,
+          duplicate_enabled: None,
         }],
       )
       .await
@@ -372,6 +388,8 @@ async fn test_publish_doc() {
       &[PatchPublishedCollab {
         view_id: view_id_1,
         publish_name: Some(new_publish_name_1.to_string()),
+        comments_enabled: None,
+        duplicate_enabled: None,
       }],
     )
     .await
@@ -399,6 +417,8 @@ async fn test_publish_doc() {
       &[PatchPublishedCollab {
         view_id: view_id_1,
         publish_name: Some(publish_name_1.to_string()),
+        comments_enabled: None,
+        duplicate_enabled: None,
       }],
     )
     .await
@@ -473,6 +493,8 @@ async fn test_publish_comments() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -695,6 +717,8 @@ async fn test_excessive_comment_length() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -731,6 +755,8 @@ async fn test_publish_reactions() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -860,7 +886,9 @@ async fn test_publish_load_test() {
           title: format!("title_{}", i),
         },
       },
-      data: vec![0; 100_000], // 100 KB
+      data: vec![0; 100_000],
+      comments_enabled: true,
+      duplicate_enabled: true,
     })
     .collect();
 
@@ -902,6 +930,8 @@ async fn workspace_member_publish_unpublish() {
           },
         },
         data: "yrs_encoded_data_1".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -950,6 +980,8 @@ async fn duplicate_to_workspace_references() {
           published_data::GRID_1_DB_DATA,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -973,7 +1005,7 @@ async fn duplicate_to_workspace_references() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &doc_2_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -983,7 +1015,12 @@ async fn duplicate_to_workspace_references() {
       .await
       .unwrap();
 
-    let doc_2_fv = fv.children.into_iter().find(|v| v.name == "doc2").unwrap();
+    let doc_2_fv = fv.children[0]
+      .children
+      .iter()
+      .find(|v| v.name == "doc2")
+      .unwrap()
+      .clone();
     assert_ne!(doc_2_fv.view_id, doc_1_view_id.to_string());
 
     let doc_1_fv = doc_2_fv
@@ -1030,12 +1067,15 @@ async fn duplicate_to_workspace_doc_inline_database() {
           published_data::VIEW_OF_GRID_1_DB_DATA,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
   {
     let mut client_2 = TestClient::new_user().await;
     let workspace_id_2 = client_2.workspace_id().await;
+    let workspace_uuid_2 = Uuid::parse_str(&workspace_id_2).unwrap();
 
     // Open workspace to trigger group creation
     client_2
@@ -1059,7 +1099,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &doc_3_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1069,7 +1109,12 @@ async fn duplicate_to_workspace_doc_inline_database() {
         .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
-      let doc_3_fv = fv.children.into_iter().find(|v| v.name == "doc3").unwrap();
+      let doc_3_fv = fv.children[0]
+        .children
+        .iter()
+        .find(|v| v.name == "doc3")
+        .unwrap()
+        .clone();
       let grid1_fv = doc_3_fv
         .children
         .into_iter()
@@ -1100,13 +1145,20 @@ async fn duplicate_to_workspace_doc_inline_database() {
     )
     .unwrap();
 
-    let folder_view =
-      collab_folder_to_folder_view(&workspace_id_2, &folder, 5, &HashSet::default()).unwrap();
-    let doc_3_fv = folder_view
+    let folder_view = collab_folder_to_folder_view(
+      workspace_uuid_2,
+      &workspace_id_2,
+      &folder,
+      5,
+      &HashSet::default(),
+    )
+    .unwrap();
+    let doc_3_fv = folder_view.children[0]
       .children
-      .into_iter()
+      .iter()
       .find(|v| v.name == "doc3")
-      .unwrap();
+      .unwrap()
+      .clone();
     assert_ne!(doc_3_fv.view_id, doc_3_view_id.to_string());
 
     let grid1_fv = doc_3_fv
@@ -1190,6 +1242,8 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
           published_data::EMBEDDED_DB_HEX,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -1217,7 +1271,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &doc_with_embedded_db_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1227,11 +1281,12 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
         .get_workspace_folder(&workspace_id_2, Some(5), None)
         .await
         .unwrap();
-      let doc_with_embedded_db = fv
+      let doc_with_embedded_db = fv.children[0]
         .children
-        .into_iter()
+        .iter()
         .find(|v| v.name == "docwithembeddeddb")
-        .unwrap();
+        .unwrap()
+        .clone();
       let doc_collab = client_2
         .get_collab_to_collab(
           workspace_id_2.clone(),
@@ -1281,6 +1336,8 @@ async fn duplicate_to_workspace_db_with_relation() {
           published_data::RELATED_DB_HEX,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -1293,6 +1350,8 @@ async fn duplicate_to_workspace_db_with_relation() {
         published_data::DB_ROW_WITH_DOC_META,
         published_data::DB_ROW_WITH_DOC_HEX,
       )],
+      true,
+      true,
     )
     .await;
 
@@ -1318,7 +1377,7 @@ async fn duplicate_to_workspace_db_with_relation() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &db_with_rel_col_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1329,12 +1388,12 @@ async fn duplicate_to_workspace_db_with_relation() {
         .await
         .unwrap();
       let db_with_rel_col = fv
-        .children
+        .children[0].children
         .iter()
         .find(|v| v.name == "grid3") // db_with_rel_col
         .unwrap();
       let related_db = fv
-        .children
+        .children[0].children
         .iter()
         .find(|v| v.name == "grid2") // related-db
         .unwrap();
@@ -1386,6 +1445,8 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         published_data::DB_ROW_WITH_DOC_META,
         published_data::DB_ROW_WITH_DOC_HEX,
       )],
+      true,
+      true,
     )
     .await;
 
@@ -1408,7 +1469,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &db_with_row_doc_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1419,7 +1480,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         .await
         .unwrap();
       let db_with_row_doc = fv
-        .children
+        .children[0].children
         .iter()
         .find(|v| v.name == "db_with_row_doc") // db_w ith_rel_col
         .unwrap();
@@ -1476,6 +1537,8 @@ async fn duplicate_to_workspace_db_rel_self() {
         published_data::DB_REL_SELF_META,
         published_data::DB_REL_SELF_HEX,
       )],
+      true,
+      true,
     )
     .await;
 
@@ -1492,7 +1555,7 @@ async fn duplicate_to_workspace_db_rel_self() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &db_rel_self_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1503,7 +1566,7 @@ async fn duplicate_to_workspace_db_rel_self() {
       .unwrap();
     println!("{:#?}", fv);
 
-    let db_rel_self = fv
+    let db_rel_self = fv.children[0]
       .children
       .iter()
       .find(|v| v.name == "self_ref_db")
@@ -1572,6 +1635,8 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
           published_data::GRID_2_HEX,
         ),
       ],
+      true,
+      true,
     )
     .await;
 
@@ -1588,7 +1653,7 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
       .duplicate_published_to_workspace(
         &workspace_id_2,
         &doc_4_view_id.to_string(),
-        &fv.view_id, // use the root view
+        &fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1598,13 +1663,21 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
       .await
       .unwrap();
 
-    let doc_4_fv = fv.children.iter().find(|v| v.name == "doc4").unwrap();
+    let doc_4_fv = fv.children[0]
+      .children
+      .iter()
+      .find(|v| v.name == "doc4")
+      .unwrap();
     let _ = doc_4_fv
       .children
       .iter()
       .find(|v| v.name == "grid3")
       .unwrap();
-    let _ = fv.children.iter().find(|v| v.name == "grid2").unwrap();
+    let _ = fv.children[0]
+      .children
+      .iter()
+      .find(|v| v.name == "grid2")
+      .unwrap();
   }
 }
 
@@ -1640,6 +1713,8 @@ async fn test_republish_doc() {
         },
       },
       data: "yrs_encoded_data_1".as_bytes(),
+      comments_enabled: true,
+      duplicate_enabled: true,
     }],
   )
   .await
@@ -1689,6 +1764,8 @@ async fn test_republish_doc() {
           },
         },
         data: "yrs_encoded_data_2".as_bytes(),
+        comments_enabled: true,
+        duplicate_enabled: true,
       }],
     )
     .await
@@ -1734,6 +1811,8 @@ async fn test_republish_patch() {
         },
       },
       data: "yrs_encoded_data_1".as_bytes(),
+      comments_enabled: true,
+      duplicate_enabled: true,
     }],
   )
   .await
@@ -1758,6 +1837,8 @@ async fn test_republish_patch() {
         },
       },
       data: "yrs_encoded_data_1".as_bytes(),
+      comments_enabled: true,
+      duplicate_enabled: true,
     }],
   )
   .await
@@ -1770,6 +1851,8 @@ async fn test_republish_patch() {
     &[PatchPublishedCollab {
       view_id: view_id_2,
       publish_name: Some(publish_name.to_string()),
+      comments_enabled: None,
+      duplicate_enabled: None,
     }],
   )
   .await

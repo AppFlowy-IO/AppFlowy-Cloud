@@ -1,4 +1,4 @@
-use validator::validate_email;
+use validator::ValidateEmail;
 
 #[derive(Debug)]
 pub struct UserEmail(pub String);
@@ -9,7 +9,7 @@ impl UserEmail {
       return Err("Email can not be empty or whitespace".to_string());
     }
 
-    if validate_email(&s) {
+    if s.validate_email() {
       Ok(Self(s))
     } else {
       Err("Invalid email".to_string())

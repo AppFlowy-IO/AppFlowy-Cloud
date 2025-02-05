@@ -8,7 +8,7 @@ use database::chat;
 use database::chat::chat_ops::{
   delete_answer_message_by_question_message_id, insert_answer_message,
   insert_answer_message_with_transaction, insert_chat, insert_question_message,
-  select_chat_messages,
+  select_chat_message_matching_reply_message_id, select_chat_messages,
 };
 use futures::stream::Stream;
 use serde_json::json;
@@ -19,7 +19,6 @@ use shared_entity::dto::chat_dto::{
 use sqlx::PgPool;
 use tracing::{error, info, trace};
 
-use appflowy_ai_client::dto::AIModel;
 use validator::Validate;
 
 pub(crate) async fn create_chat(
@@ -30,9 +29,7 @@ pub(crate) async fn create_chat(
   params.validate()?;
   trace!("[Chat] create chat {:?}", params);
 
-  let mut txn = pg_pool.begin().await?;
-  insert_chat(&mut txn, workspace_id, params).await?;
-  txn.commit().await?;
+  insert_chat(pg_pool, workspace_id, params).await?;
   Ok(())
 }
 
@@ -44,10 +41,11 @@ pub(crate) async fn delete_chat(pg_pool: &PgPool, chat_id: &str) -> Result<(), A
 }
 
 pub async fn update_chat_message(
+  workspace_id: String,
   pg_pool: &PgPool,
   params: UpdateChatMessageContentParams,
   ai_client: AppFlowyAIClient,
-  ai_model: AIModel,
+  ai_model: &str,
 ) -> Result<(), AppError> {
   let mut txn = pg_pool.begin().await?;
   delete_answer_message_by_question_message_id(&mut txn, params.message_id).await?;
@@ -62,10 +60,11 @@ pub async fn update_chat_message(
   // TODO(nathan): query the metadata from the database
   let new_answer = ai_client
     .send_question(
+      &workspace_id,
       &params.chat_id,
       params.message_id,
       &params.content,
-      &ai_model,
+      ai_model,
       None,
     )
     .await?;
@@ -83,23 +82,26 @@ pub async fn update_chat_message(
 }
 
 pub async fn generate_chat_message_answer(
+  workspace_id: String,
   pg_pool: &PgPool,
   ai_client: AppFlowyAIClient,
   question_message_id: i64,
   chat_id: &str,
-  ai_model: AIModel,
+  ai_model: &str,
 ) -> Result<ChatMessage, AppError> {
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(pg_pool, question_message_id).await?;
   let new_answer = ai_client
     .send_question(
+      &workspace_id,
       chat_id,
       question_message_id,
       &content,
-      &ai_model,
+      ai_model,
       Some(metadata),
     )
-    .await?;
+    .await
+    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
 
   info!("new_answer: {:?}", new_answer);
   // Save the answer to the database
@@ -146,11 +148,13 @@ pub async fn create_chat_message(
 pub async fn create_chat_message_stream(
   pg_pool: &PgPool,
   uid: i64,
+  workspace_id: String,
   chat_id: String,
   params: CreateChatMessageParams,
   ai_client: AppFlowyAIClient,
-  ai_model: AIModel,
+  ai_model: &str,
 ) -> impl Stream<Item = Result<Bytes, AppError>> {
+  let ai_model = ai_model.to_string();
   let params = params.clone();
   let chat_id = chat_id.clone();
   let pg_pool = pg_pool.clone();
@@ -187,7 +191,7 @@ pub async fn create_chat_message_stream(
       match params.message_type {
           ChatMessageType::System => {}
           ChatMessageType::User => {
-              let answer = match ai_client.send_question(&chat_id,question_id, &params.content, &ai_model, Some(json!(params.metadata))).await {
+              let answer = match ai_client.send_question(&workspace_id, &chat_id,question_id, &params.content, &ai_model, Some(json!(params.metadata))).await {
                   Ok(response) => response,
                   Err(err) => {
                       error!("Failed to send question to AI: {}", err);
@@ -233,4 +237,16 @@ pub async fn get_chat_messages(
   let messages = select_chat_messages(&mut txn, chat_id, params).await?;
   txn.commit().await?;
   Ok(messages)
+}
+
+pub async fn get_question_message(
+  pg_pool: &PgPool,
+  chat_id: &str,
+  answer_message_id: i64,
+) -> Result<Option<ChatMessage>, AppError> {
+  let mut txn = pg_pool.begin().await?;
+  let message =
+    select_chat_message_matching_reply_message_id(&mut txn, chat_id, answer_message_id).await?;
+  txn.commit().await?;
+  Ok(message)
 }

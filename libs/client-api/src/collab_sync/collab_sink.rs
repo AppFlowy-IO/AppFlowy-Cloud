@@ -244,7 +244,6 @@ where
         }
       }
     }
-
     // Check if all non-ping messages have been sent
     let all_non_ping_messages_sent = !message_queue
       .iter()
@@ -275,6 +274,15 @@ where
   }
 
   async fn process_next_msg(&self) {
+    let is_empty_queue = self
+      .message_queue
+      .try_lock()
+      .map(|q| q.is_empty())
+      .unwrap_or(true);
+    if is_empty_queue {
+      return;
+    }
+
     let items = {
       let (mut msg_queue, mut sending_messages) = match (
         self.message_queue.try_lock(),
@@ -358,14 +366,15 @@ where
 
         // Try to merge the next message with the last message. Only merge when:
         // 1. The last message is not in the flying messages.
-        // 2. The last message can be merged.
+        // 2. The last message can be merged and the next message can be merged.
         // 3. The last message's payload size is less than the maximum payload size.
         if let Some(last) = items.last_mut() {
-          if !sending_messages.contains(&last.msg_id())
+          let can_merge = !sending_messages.contains(&last.msg_id())
             && last.message().payload_size() < self.config.maximum_payload_size
             && last.mergeable()
-            && last.merge(&next, &self.config.maximum_payload_size).is_ok()
-          {
+            && next.mergeable()
+            && last.merge(&next, &self.config.maximum_payload_size).is_ok();
+          if can_merge {
             merged_ids
               .entry(last.msg_id())
               .or_insert(vec![])

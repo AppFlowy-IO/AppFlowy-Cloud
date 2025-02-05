@@ -7,11 +7,13 @@ use std::time::Duration;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+// use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use semver::Version;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
+use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
+use tokio_tungstenite::tungstenite::http::{HeaderMap, HeaderValue};
 use tracing::{error, info, trace, warn};
 
 use crate::ping::ServerFixIntervalPing;
@@ -302,7 +304,7 @@ impl WSClient {
                 RealtimeMessage::ServerCollabV1(collab_messages) => {
                   handle_collab_message(&weak_collab_channels, collab_messages);
                 },
-                RealtimeMessage::ClientCollabV1(_) | RealtimeMessage::ClientCollabV2(_) => {
+                RealtimeMessage::ClientCollabV2(_) | RealtimeMessage::ClientCollabV1(_) => {
                   // The message from server should not be collab message.
                   error!(
                     "received unexpected collab message from websocket: {:?}",
@@ -493,7 +495,7 @@ impl Display for ConnectInfo {
 }
 
 impl From<ConnectInfo> for HeaderMap {
-  fn from(info: ConnectInfo) -> Self {
+  fn from(info: ConnectInfo) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(
       "device-id",

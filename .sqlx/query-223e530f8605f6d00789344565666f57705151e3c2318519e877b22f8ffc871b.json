@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        apc.view_id,\n        apc.publish_name,\n        au.email AS publisher_email,\n        apc.created_at AS publish_timestamp,\n        apc.comments_enabled,\n        apc.duplicate_enabled\n      FROM af_published_collab apc\n      JOIN af_user au ON apc.published_by = au.uid\n      WHERE workspace_id = $1\n      AND unpublished_at IS NULL\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "view_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "publish_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "publisher_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "publish_timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "comments_enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "duplicate_enabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "223e530f8605f6d00789344565666f57705151e3c2318519e877b22f8ffc871b"
+}

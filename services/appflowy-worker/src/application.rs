@@ -11,16 +11,19 @@ use crate::import_worker::email_notifier::EmailNotifier;
 use crate::s3_client::S3ClientImpl;
 
 use axum::Router;
-use secrecy::ExposeSecret;
 
 use crate::mailer::AFWorkerMailer;
 use crate::metric::ImportMetrics;
+use appflowy_worker::indexer_worker::{run_background_indexer, BackgroundIndexerConfig};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
+use indexer::metrics::EmbeddingMetrics;
+use indexer::thread_pool::ThreadPoolNoAbortBuilder;
 use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
+use secrecy::{ExposeSecret, Secret};
 use std::sync::{Arc, Once};
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -124,6 +127,31 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
     maximum_import_file_size,
   ));
 
+  let threads = Arc::new(
+    ThreadPoolNoAbortBuilder::new()
+      .num_threads(30)
+      .thread_name(|index| format!("background-embedding-thread-{index}"))
+      .build()
+      .unwrap(),
+  );
+
+  tokio::spawn(run_background_indexer(
+    state.pg_pool.clone(),
+    state.redis_client.clone(),
+    state.metrics.embedder_metrics.clone(),
+    threads.clone(),
+    BackgroundIndexerConfig {
+      enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
+        .parse::<bool>()
+        .unwrap_or(true),
+      open_api_key: Secret::new(appflowy_collaborate::config::get_env_var(
+        "AI_OPENAI_API_KEY",
+        "",
+      )),
+      tick_interval_secs: 10,
+    },
+  ));
+
   let app = Router::new()
     .route("/metrics", get(metrics_handler))
     .with_state(Arc::new(state));
@@ -145,6 +173,7 @@ pub struct AppState {
   pub redis_client: ConnectionManager,
   pub pg_pool: PgPool,
   pub s3_client: S3ClientImpl,
+  #[allow(dead_code)]
   pub mailer: AFWorkerMailer,
   pub metrics: AppMetrics,
 }
@@ -156,6 +185,7 @@ async fn get_worker_mailer(config: &Config) -> Result<AFWorkerMailer, Error> {
     config.mailer.smtp_password.clone(),
     &config.mailer.smtp_host,
     config.mailer.smtp_port,
+    config.mailer.smtp_tls_kind.as_str(),
   )
   .await?;
 
@@ -210,15 +240,18 @@ pub struct AppMetrics {
   #[allow(dead_code)]
   registry: Arc<prometheus_client::registry::Registry>,
   import_metrics: Arc<ImportMetrics>,
+  embedder_metrics: Arc<EmbeddingMetrics>,
 }
 
 impl AppMetrics {
   pub fn new() -> Self {
     let mut registry = prometheus_client::registry::Registry::default();
     let import_metrics = Arc::new(ImportMetrics::register(&mut registry));
+    let embedder_metrics = Arc::new(EmbeddingMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       import_metrics,
+      embedder_metrics,
     }
   }
 }

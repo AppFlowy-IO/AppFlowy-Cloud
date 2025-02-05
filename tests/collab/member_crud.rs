@@ -3,41 +3,10 @@ use client_api_test::{generate_unique_registered_user_client, workspace_id_from_
 
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, CollabMemberIdentify, CreateCollabParams, InsertCollabMemberParams,
-  QueryCollabMembers, UpdateCollabMemberParams,
+  AFAccessLevel, CreateCollabParams, InsertCollabMemberParams, QueryCollabMembers,
+  UpdateCollabMemberParams, WorkspaceCollabIdentify,
 };
 use uuid::Uuid;
-
-#[tokio::test]
-async fn collab_owner_permission_test() {
-  let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = workspace_id_from_client(&c).await;
-  let object_id = Uuid::new_v4().to_string();
-  let uid = c.get_profile().await.unwrap().uid;
-  let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
-    .encode_to_bytes()
-    .unwrap();
-
-  c.create_collab(CreateCollabParams {
-    object_id: object_id.clone(),
-    encoded_collab_v1: encode_collab,
-    collab_type: CollabType::Unknown,
-    workspace_id: workspace_id.clone(),
-  })
-  .await
-  .unwrap();
-
-  let member = c
-    .get_collab_member(CollabMemberIdentify {
-      uid,
-      object_id,
-      workspace_id,
-    })
-    .await
-    .unwrap();
-
-  assert_eq!(member.permission.access_level, AFAccessLevel::FullAccess);
-}
 
 #[tokio::test]
 async fn update_collab_member_permission_test() {
@@ -68,7 +37,7 @@ async fn update_collab_member_permission_test() {
   .unwrap();
 
   let member = c
-    .get_collab_member(CollabMemberIdentify {
+    .get_collab_member(WorkspaceCollabIdentify {
       uid,
       object_id,
       workspace_id,
@@ -112,7 +81,7 @@ async fn add_collab_member_test() {
 
   // check the member is added and its permission is correct
   let member = c_1
-    .get_collab_member(CollabMemberIdentify {
+    .get_collab_member(WorkspaceCollabIdentify {
       uid: uid_2,
       object_id,
       workspace_id,
@@ -163,11 +132,11 @@ async fn add_collab_member_then_remove_test() {
     .await
     .unwrap()
     .0;
-  assert_eq!(members.len(), 2);
+  assert_eq!(members.len(), 1);
 
   // Delete the member
   c_1
-    .remove_collab_member(CollabMemberIdentify {
+    .remove_collab_member(WorkspaceCollabIdentify {
       uid: uid_2,
       object_id: object_id.clone(),
       workspace_id: workspace_id.clone(),
@@ -182,5 +151,5 @@ async fn add_collab_member_then_remove_test() {
     .await
     .unwrap()
     .0;
-  assert_eq!(members.len(), 1);
+  assert_eq!(members.len(), 0);
 }

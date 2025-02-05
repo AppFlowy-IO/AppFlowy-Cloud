@@ -10,18 +10,23 @@ redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager
 tokio = { version = "1.26", features = ["rt-multi-thread", "macros"] }
 tokio-stream = { version = "0.1.14" }
 thiserror = "1.0.58"
-anyhow = "1.0.81"
+anyhow.workspace = true
 futures = "0.3.30"
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
 bincode = "1.3.3"
 bytes.workspace = true
+collab.workspace = true
 collab-entity.workspace = true
 serde_json.workspace = true
 chrono = "0.4"
 tokio-util = { version = "0.7" }
 prost.workspace = true
-
+async-stream.workspace = true
+async-trait.workspace = true
+prometheus-client.workspace = true
+zstd = "0.13"
+loole = "0.4.0"
 
 [dev-dependencies]
 futures = "0.3.30"

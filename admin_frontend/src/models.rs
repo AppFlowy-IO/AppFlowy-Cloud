@@ -10,6 +10,12 @@ pub struct AppState {
   pub config: Config,
 }
 
+impl AppState {
+  pub fn prepend_with_path_prefix(&self, path: &str) -> String {
+    format!("{}{}", self.config.path_prefix, path)
+  }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct WebApiLoginRequest {
   pub email: String,

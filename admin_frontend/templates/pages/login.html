@@ -6,8 +6,8 @@
 
 <!-- prettier-ignore -->
 {% block head %}
-<link href="/assets/login.css" rel="stylesheet" />
-<link href="/assets/google/logo.css" rel="stylesheet" />
+<link href="../assets/login.css" rel="stylesheet" />
+<link href="../assets/google/logo.css" rel="stylesheet" />
 {% endblock %}
 
 <!-- prettier-ignore -->
@@ -16,14 +16,14 @@
   <div id="login-signin">
     <div id="login-splash">
       {% include "../assets/logo.html" %}
-      <h2 style="padding: 16px;">AppFlowy Cloud</h2>
+      <h2 style="padding: 16px">AppFlowy Cloud</h2>
     </div>
 
     <h3>Email Login</h3>
     <form>
       <table style="width: 100%">
         {% if let Some(redirect_to) = redirect_to %}
-          <input type="hidden" name="redirect_to" value="{{ redirect_to }}">
+        <input type="hidden" name="redirect_to" value="{{ redirect_to }}" />
         {% endif %}
 
         <tr>
@@ -61,7 +61,7 @@
       >
       <div style="display: flex; margin: 8px 0px">
         <button
-          hx-post="/web-api/signin"
+          hx-post="../web-api/signin"
           hx-target="#none"
           class="button cyan"
           type="submit"
@@ -70,7 +70,7 @@
           Sign In
         </button>
         <button
-          hx-post="/web-api/signup"
+          hx-post="../web-api/signup"
           hx-target="#none"
           class="button purple"
           type="submit"
@@ -84,24 +84,44 @@
     <!-- Load OAuth Providers if configured -->
     {% if oauth_providers.len() > 0 %}
     <br />
-    <table style="width: 100%">
-      <tr style="display: flex">
-        <td style="width: 100%; margin: auto"><hr /></td>
+    <table style="width: 100%; border-collapse: collapse">
+      <tr style="display: flex; align-items: center">
+        <td style="width: 100%; margin: auto">
+          <hr class="divider" />
+        </td>
         <td style="flex: 1; text-align: center">&nbsp;or&nbsp;</td>
-        <td style="width: 100%; margin: auto"><hr /></td>
+        <td style="width: 100%; margin: auto">
+          <hr class="divider" />
+        </td>
       </tr>
     </table>
 
     <h3>OAuth Login</h3>
     <div id="oauth-container">
-      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center">
+      <div
+        style="
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+        "
+      >
         {% for provider in oauth_providers %}
         <a
-          href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|default("/web/login-callback")|escape }}"
-          style="text-decoration: none"
+          href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|escape }}"
+          style="text-decoration: none; color: inherit"
         >
-          <div style="display: flex; align-items: center; border: 1px solid; margin: 4px; border-radius: 4px; height: 64px">
-            <div> &nbsp&nbsp{{ provider }} </div>
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              border: 1px solid #384967;
+              margin: 4px;
+              border-radius: 4px;
+              height: 64px;
+            "
+          >
+            <div>&nbsp&nbsp{{ provider }}</div>
             <div class="oauth-icon">
               <div
                 hx-get="../assets/{{ provider|escape }}/logo.html"
@@ -118,7 +138,12 @@
 
     <span> &nbsp </span>
     <div style="max-width: 256px; display: flex; align-items: center">
-      <img src="https://cdn.prod.website-files.com/5c14e387dab576fe667689cf/61e1116779fc0a9bd5bdbcc7_Frame%206.png" alt="kofi" width="32" height="32">
+      <img
+        src="https://cdn.prod.website-files.com/5c14e387dab576fe667689cf/61e1116779fc0a9bd5bdbcc7_Frame%206.png"
+        alt="kofi"
+        width="32"
+        height="32"
+      />
       <i>
         &nbsp Support AppFlowy on <a href="https://ko-fi.com/appflowy">Ko-fi</a>
       </i>
@@ -126,12 +151,14 @@
 
     <span> &nbsp </span>
     <div style="max-width: 256px">
-      <small style="color: #888; text-align: center;"><i>
-        &nbsp
-        By clicking logging in or signing up, you confirm that you have read, understood, and agreed to AppFlowy's
-        <a href="https://appflowy.io/terms">Terms</a> and
-        <a href="https://appflowy.io/privacy">Privacy Policy</a>.
-      </i></small>
+      <small style="color: #888; text-align: center"
+        ><i>
+          &nbsp By clicking logging in or signing up, you confirm that you have
+          read, understood, and agreed to AppFlowy's
+          <a href="https://appflowy.io/terms">Terms</a> and
+          <a href="https://appflowy.io/privacy">Privacy Policy</a>.
+        </i></small
+      >
     </div>
   </div>
   {% endblock %}

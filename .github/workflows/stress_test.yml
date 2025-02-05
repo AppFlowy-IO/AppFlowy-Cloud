@@ -1,0 +1,78 @@
+name: AppFlowy-Cloud Stress Test
+
+on: [ pull_request ]
+
+concurrency:
+  group: stress-test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  SQLX_OFFLINE: true
+  RUST_TOOLCHAIN: "1.80"
+  POSTGRES_HOST: localhost
+  REDIS_HOST: localhost
+  LOCALHOST_GOTRUE: http://localhost/gotrue
+  DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
+
+jobs:
+  test:
+    name: Collab Stress Tests
+    runs-on: self-hosted-appflowy3
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Copy and Rename dev.env to .env
+        run: cp dev.env .env
+
+      - name: Install Prerequisites
+        run: |
+          brew update
+          if ! brew list libpq &>/dev/null; then
+            echo "Installing libpq..."
+            brew install libpq
+          else
+            echo "libpq is already installed."
+          fi
+
+          if ! brew list sqlx-cli &>/dev/null; then
+            echo "Installing sqlx-cli..."
+            brew install sqlx-cli
+          else
+            echo "sqlx-cli is already installed."
+          fi
+
+          if ! brew list protobuf &>/dev/null; then
+            echo "Installing protobuf..."
+            brew install protobuf
+          else
+            echo "protobuf is already installed."
+          fi
+
+      - name: Replace Values in .env
+        run: |
+          sed -i '' 's|RUST_LOG=.*|RUST_LOG=debug|' .env
+          sed -i '' 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=http://localhost:9999|' .env
+          sed -i '' 's|APPFLOWY_INDEXER_ENABLED=.*|APPFLOWY_INDEXER_ENABLED=false|' .env
+
+          sed -i '' 's|APPFLOWY_GOTRUE_BASE_URL=.*|APPFLOWY_GOTRUE_BASE_URL=http://localhost:9999|' .env
+          sed -i '' 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
+          sed -i '' 's|APPFLOWY_DATABASE_URL=.*|APPFLOWY_DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
+
+          cat .env
+        shell: bash
+
+      - name: Start Docker Compose Services
+        run: |
+          docker compose -f docker-compose-dev.yml down
+          docker compose -f docker-compose-dev.yml up -d
+          ./script/code_gen.sh
+          cargo sqlx database create && cargo sqlx migrate run
+
+      - name: Run Server and Test
+        run: |
+          cargo run --package xtask -- --stress-test

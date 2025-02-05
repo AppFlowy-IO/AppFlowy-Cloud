@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytes = "1.5.0"
+bytes.workspace = true
 mime = "0.3.17"
 serde_json = "1.0.111"
 tokio = { workspace = true, features = ["sync"] }
@@ -35,7 +35,7 @@ reqwest.workspace = true
 gotrue.workspace = true
 client-websocket.workspace = true
 futures = "0.3.30"
-anyhow = "1.0.80"
+anyhow.workspace = true
 serde = { version = "1.0.199", features = ["derive"] }
 hex = "0.4.3"
 async-trait.workspace = true

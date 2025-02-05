@@ -1,5 +1,5 @@
 use crate::response::{AppResponse, AppResponseError};
-use app_error::ErrorCode;
+use app_error::{AppError, ErrorCode};
 use bytes::{Buf, Bytes, BytesMut};
 use futures::{ready, Stream, TryStreamExt};
 
@@ -22,6 +22,11 @@ where
     resp: reqwest::Response,
   ) -> Result<impl Stream<Item = Result<T, AppResponseError>>, AppResponseError> {
     let status_code = resp.status();
+    if status_code.is_server_error() {
+      let body = resp.text().await?;
+      return Err(AppError::AIServiceUnavailable(body).into());
+    }
+
     if !status_code.is_success() {
       let body = resp.text().await?;
       return Err(AppResponseError::new(ErrorCode::Internal, body));

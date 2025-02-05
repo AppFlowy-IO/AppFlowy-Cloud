@@ -1,38 +1,37 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use access_control::collab::RealtimeAccessControl;
+use app_error::AppError;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use tracing::{instrument, trace};
-
-use access_control::collab::RealtimeAccessControl;
-use app_error::AppError;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
-
+use collab_stream::client::CollabRedisStream;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::QueryCollabParams;
+use tracing::{instrument, trace};
+use yrs::{ReadTxn, StateVector};
 
 use crate::client::client_msg_router::ClientMessageRouter;
-use crate::error::{CreateGroupFailedReason, RealtimeError};
+use crate::error::RealtimeError;
 use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
-use crate::indexer::IndexerProvider;
 use crate::metrics::CollabRealtimeMetrics;
+use indexer::scheduler::IndexerScheduler;
 
 pub struct GroupManager<S> {
   state: GroupManagementState,
   storage: Arc<S>,
   access_control: Arc<dyn RealtimeAccessControl>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
+  collab_redis_stream: Arc<CollabRedisStream>,
   persistence_interval: Duration,
-  edit_state_max_count: u32,
-  edit_state_max_secs: i64,
-  indexer_provider: Arc<IndexerProvider>,
+  prune_grace_period: Duration,
+  indexer_scheduler: Arc<IndexerScheduler>,
 }
 
 impl<S> GroupManager<S>
@@ -44,46 +43,42 @@ where
     storage: Arc<S>,
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
+    collab_stream: CollabRedisStream,
     persistence_interval: Duration,
-    edit_state_max_count: u32,
-    edit_state_max_secs: i64,
-    indexer_provider: Arc<IndexerProvider>,
+    prune_grace_period: Duration,
+    indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
+    let collab_stream = Arc::new(collab_stream);
     Ok(Self {
       state: GroupManagementState::new(metrics_calculate.clone()),
       storage,
       access_control,
       metrics_calculate,
+      collab_redis_stream: collab_stream,
       persistence_interval,
-      edit_state_max_count,
-      edit_state_max_secs,
-      indexer_provider,
+      prune_grace_period,
+      indexer_scheduler,
     })
   }
 
-  pub async fn get_inactive_groups(&self) -> Vec<String> {
-    self.state.get_inactive_group_ids().await
+  pub fn get_inactive_groups(&self) -> Vec<String> {
+    self.state.remove_inactive_groups()
   }
 
-  pub async fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
-    self.state.contains_user(object_id, user).await
+  pub fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
+    self.state.contains_user(object_id, user)
   }
 
-  pub async fn remove_user(&self, user: &RealtimeUser) {
-    self.state.remove_user(user).await;
+  pub fn remove_user(&self, user: &RealtimeUser) {
+    self.state.remove_user(user);
   }
 
-  pub async fn contains_group(&self, object_id: &str) -> bool {
-    self.state.contains_group(object_id).await
+  pub fn contains_group(&self, object_id: &str) -> bool {
+    self.state.contains_group(object_id)
   }
 
   pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
     self.state.get_group(object_id).await
-  }
-
-  #[instrument(skip(self))]
-  async fn remove_group(&self, object_id: &str) {
-    self.state.remove_group(object_id).await;
   }
 
   pub async fn subscribe_group(
@@ -94,21 +89,20 @@ where
     client_msg_router: &mut ClientMessageRouter,
   ) -> Result<(), RealtimeError> {
     // Lock the group and subscribe the user to the group.
-    if let Some(group) = self.state.get_mut_group(object_id).await {
+    if let Some(mut e) = self.state.get_mut_group(object_id).await {
+      let group = e.value_mut();
       trace!("[realtime]: {} subscribe group:{}", user, object_id,);
       let (sink, stream) = client_msg_router.init_client_communication::<CollabMessage>(
-        &group.workspace_id,
+        group.workspace_id(),
         user,
         object_id,
         self.access_control.clone(),
       );
-      group
-        .subscribe(user, message_origin.clone(), sink, stream)
-        .await;
+      group.subscribe(user, message_origin.clone(), sink, stream);
       // explicitly drop the group to release the lock.
-      drop(group);
+      drop(e);
 
-      self.state.insert_user(user, object_id).await?;
+      self.state.insert_user(user, object_id)?;
     } else {
       // When subscribing to a group, the group should exist. Otherwise, it's a bug.
       return Err(RealtimeError::GroupNotFound(object_id.to_string()));
@@ -124,30 +118,23 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) -> Result<(), RealtimeError> {
-    let mut is_new_collab = false;
     let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
-
-    let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
-    let (collab, _encode_collab) = {
-      let (mut collab, encode_collab) = match result {
-        Ok(value) => value,
-        Err(err) => {
-          if err.is_record_not_found() {
-            is_new_collab = true;
-            let collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![], false);
-            let encode_collab = collab.encode_collab_v1(|_| Ok::<_, RealtimeError>(()))?;
-            (collab, encode_collab)
-          } else {
-            return Err(RealtimeError::CreateGroupFailed(
-              CreateGroupFailedReason::CannotGetCollabData,
-            ));
-          }
-        },
-      };
-
-      collab.initialize();
-      let collab = Arc::new(RwLock::from(collab));
-      (collab, encode_collab)
+    let res = self
+      .storage
+      .get_encode_collab(GetCollabOrigin::Server, params, false)
+      .await;
+    let state_vector = match res {
+      Ok(collab) => Collab::new_with_source(
+        CollabOrigin::Server,
+        object_id,
+        DataSource::DocStateV1(collab.doc_state.into()),
+        vec![],
+        false,
+      )?
+      .transact()
+      .state_vector(),
+      Err(err) if err.is_record_not_found() => StateVector::default(),
+      Err(err) => return Err(RealtimeError::CannotCreateGroup(err.to_string())),
     };
 
     trace!(
@@ -158,39 +145,25 @@ where
       collab_type
     );
 
-    let mut indexer = self.indexer_provider.indexer_for(collab_type.clone());
-    if indexer.is_some()
-      && !self
-        .indexer_provider
-        .can_index_workspace(workspace_id)
-        .await
-        .map_err(|e| RealtimeError::Internal(e.into()))?
-    {
-      tracing::trace!("workspace {} indexing is disabled", workspace_id);
-      indexer = None;
-    }
-    let group = Arc::new(
-      CollabGroup::new(
-        user.uid,
-        workspace_id.to_string(),
-        object_id.to_string(),
-        collab_type,
-        collab,
-        self.metrics_calculate.clone(),
-        self.storage.clone(),
-        is_new_collab,
-        self.persistence_interval,
-        self.edit_state_max_count,
-        self.edit_state_max_secs,
-        indexer,
-      )
-      .await?,
-    );
-    self.state.insert_group(object_id, group.clone()).await;
+    let group = CollabGroup::new(
+      user.uid,
+      workspace_id.to_string(),
+      object_id.to_string(),
+      collab_type,
+      self.metrics_calculate.clone(),
+      self.storage.clone(),
+      self.collab_redis_stream.clone(),
+      self.persistence_interval,
+      self.prune_grace_period,
+      state_vector,
+      self.indexer_scheduler.clone(),
+    )?;
+    self.state.insert_group(object_id, group);
     Ok(())
   }
 }
 
+#[allow(dead_code)]
 #[instrument(level = "trace", skip_all)]
 async fn load_collab<S>(
   uid: i64,

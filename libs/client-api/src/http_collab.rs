@@ -1,16 +1,21 @@
+use crate::entity::CollabType;
 use crate::http::log_request_id;
 use crate::{blocking_brotli_compress, brotli_compress, Client};
+use anyhow::anyhow;
 use app_error::AppError;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use client_api_entity::workspace_dto::{
-  AFDatabase, AFDatabaseField, AFDatabaseRow, AFDatabaseRowDetail, DatabaseRowUpdatedItem,
-  ListDatabaseRowDetailParam, ListDatabaseRowUpdatedParam,
+  AFDatabase, AFDatabaseField, AFDatabaseRow, AFDatabaseRowDetail, AFInsertDatabaseField,
+  AddDatatabaseRow, DatabaseRowUpdatedItem, ListDatabaseRowDetailParam,
+  ListDatabaseRowUpdatedParam, UpsertDatatabaseRow,
 };
 use client_api_entity::{
-  BatchQueryCollabParams, BatchQueryCollabResult, CollabParams, CreateCollabParams,
-  DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams, UpdateCollabWebParams,
+  AFCollabEmbedInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams,
+  CreateCollabParams, DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams,
+  RepeatedAFCollabEmbedInfo, UpdateCollabWebParams,
 };
+use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
 use futures::Stream;
 use futures_util::stream;
@@ -18,9 +23,11 @@ use prost::Message;
 use rayon::prelude::*;
 use reqwest::{Body, Method};
 use serde::Serialize;
-use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
+use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam, EmbeddedCollabQuery};
 use shared_entity::response::{AppResponse, AppResponseError};
+use std::collections::HashMap;
 use std::future::Future;
+use std::io::Cursor;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -210,6 +217,28 @@ impl Client {
     AppResponse::from_response(resp).await?.into_data()
   }
 
+  // Adds a database field to the specified database.
+  // Returns the field id of the newly created field.
+  pub async fn add_database_field(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    insert_field: &AFInsertDatabaseField,
+  ) -> Result<String, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/fields",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(insert_field)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
   pub async fn list_database_row_ids_updated(
     &self,
     workspace_id: &str,
@@ -235,6 +264,7 @@ impl Client {
     workspace_id: &str,
     database_id: &str,
     row_ids: &[&str],
+    with_doc: bool,
   ) -> Result<Vec<AFDatabaseRowDetail>, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/database/{}/row/detail",
@@ -243,7 +273,66 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .query(&ListDatabaseRowDetailParam::from(row_ids))
+      .query(&ListDatabaseRowDetailParam::new(row_ids, with_doc))
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  /// Example payload:
+  /// {
+  ///   "Name": "some_data",        # using column name
+  ///   "_pIkG": "some other data"  # using field_id (can be obtained from [get_database_fields])
+  /// }
+  /// Upon success, returns the row id for the newly created row.
+  pub async fn add_database_item(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    cells_by_id: HashMap<String, serde_json::Value>,
+    row_doc_content: Option<String>,
+  ) -> Result<String, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&AddDatatabaseRow {
+        cells: cells_by_id,
+        document: row_doc_content,
+      })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::from_response(resp).await?.into_data()
+  }
+
+  /// Like [add_database_item], but use a [pre_hash] as identifier of the row
+  /// Given the same `pre_hash` value will result in the same row
+  /// Creates the row if now exists, else row will be modified
+  pub async fn upsert_database_item(
+    &self,
+    workspace_id: &str,
+    database_id: &str,
+    pre_hash: String,
+    cells_by_id: HashMap<String, serde_json::Value>,
+    row_doc_content: Option<String>,
+  ) -> Result<String, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/row",
+      self.base_url, workspace_id, database_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(&UpsertDatatabaseRow {
+        pre_hash,
+        cells: cells_by_id,
+        document: row_doc_content,
+      })
       .send()
       .await?;
     log_request_id(&resp);
@@ -354,6 +443,100 @@ impl Client {
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_collab_embed_info(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> Result<AFCollabEmbedInfo, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{workspace_id}/collab/{object_id}/embed-info",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .header("Content-Type", "application/json")
+      .query(&CollabTypeParam { collab_type })
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<AFCollabEmbedInfo>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn batch_get_collab_embed_info(
+    &self,
+    workspace_id: &str,
+    params: Vec<EmbeddedCollabQuery>,
+  ) -> Result<Vec<AFCollabEmbedInfo>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{workspace_id}/collab/embed-info/list",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    let data = AppResponse::<RepeatedAFCollabEmbedInfo>::from_response(resp)
+      .await?
+      .into_data()?;
+    Ok(data.0)
+  }
+
+  pub async fn collab_full_sync(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+    doc_state: Vec<u8>,
+    state_vector: Vec<u8>,
+  ) -> Result<Vec<u8>, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/v1/{workspace_id}/collab/{object_id}/full-sync",
+      self.base_url
+    );
+
+    // 3 is default level
+    let doc_state = zstd::encode_all(Cursor::new(doc_state), 3)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress text: {}", err)))?;
+
+    let sv = zstd::encode_all(Cursor::new(state_vector), 3)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress text: {}", err)))?;
+
+    let params = CollabDocStateParams {
+      object_id: object_id.to_string(),
+      collab_type: collab_type.value(),
+      compression: PayloadCompressionType::Zstd as i32,
+      sv,
+      doc_state,
+    };
+
+    let mut encoded_payload = Vec::new();
+    params.encode(&mut encoded_payload).map_err(|err| {
+      AppError::Internal(anyhow!("Failed to encode CollabDocStateParams: {}", err))
+    })?;
+
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .body(Bytes::from(encoded_payload))
+      .send()
+      .await?;
+    log_request_id(&resp);
+    if resp.status().is_success() {
+      let body = resp.bytes().await?;
+      let decompressed_body = zstd::decode_all(Cursor::new(body))?;
+      Ok(decompressed_body)
+    } else {
+      AppResponse::from_response(resp).await?.into_data()
+    }
   }
 }
 

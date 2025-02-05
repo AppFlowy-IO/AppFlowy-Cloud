@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
 use access_control::workspace::WorkspaceAccessControl;
-use collab::lock::Mutex;
 use dashmap::DashMap;
-use database::collab::cache::CollabCache;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -14,18 +12,21 @@ use uuid::Uuid;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::CollabRealtimeMetrics;
+use collab_stream::metrics::CollabStreamMetrics;
+use collab_stream::stream_router::StreamRouter;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
-
+use indexer::metrics::EmbeddingMetrics;
+use indexer::scheduler::IndexerScheduler;
 use snowflake::Snowflake;
-use tonic_proto::history::history_client::HistoryClient;
 
 use crate::api::metrics::{AppFlowyWebMetrics, PublishedCollabMetrics, RequestMetrics};
+use crate::biz::chat::metrics::AIMetrics;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::workspace::publish::PublishedCollabStore;
 use crate::config::config::Config;
@@ -39,6 +40,7 @@ pub struct AppState {
   pub user_cache: UserCache,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
+  pub redis_stream_router: Arc<StreamRouter>,
   pub redis_connection_manager: RedisConnectionManager,
   pub collab_cache: CollabCache,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
@@ -53,8 +55,7 @@ pub struct AppState {
   pub gotrue_admin: GoTrueAdmin,
   pub mailer: AFCloudMailer,
   pub ai_client: AppFlowyAIClient,
-  pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
-  pub indexer_provider: Arc<IndexerProvider>,
+  pub indexer_scheduler: Arc<IndexerScheduler>,
 }
 
 impl AppState {
@@ -125,6 +126,9 @@ pub struct AppMetrics {
   pub collab_metrics: Arc<CollabMetrics>,
   pub published_collab_metrics: Arc<PublishedCollabMetrics>,
   pub appflowy_web_metrics: Arc<AppFlowyWebMetrics>,
+  pub embedding_metrics: Arc<EmbeddingMetrics>,
+  pub collab_stream_metrics: Arc<CollabStreamMetrics>,
+  pub ai_metrics: Arc<AIMetrics>,
 }
 
 impl Default for AppMetrics {
@@ -142,6 +146,9 @@ impl AppMetrics {
     let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
     let published_collab_metrics = Arc::new(PublishedCollabMetrics::register(&mut registry));
     let appflowy_web_metrics = Arc::new(AppFlowyWebMetrics::register(&mut registry));
+    let embedding_metrics = Arc::new(EmbeddingMetrics::register(&mut registry));
+    let collab_stream_metrics = Arc::new(CollabStreamMetrics::register(&mut registry));
+    let ai_metrics = Arc::new(AIMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       request_metrics,
@@ -150,6 +157,9 @@ impl AppMetrics {
       collab_metrics,
       published_collab_metrics,
       appflowy_web_metrics,
+      embedding_metrics,
+      collab_stream_metrics,
+      ai_metrics,
     }
   }
 }

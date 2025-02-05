@@ -1,0 +1,124 @@
+<!-- prettier-ignore -->
+{% extends "layouts/base.html" %}
+
+<!-- prettier-ignore -->
+{% block title %} AppFlowy Cloud Login {% endblock %}
+
+<!-- prettier-ignore -->
+{% block head %}
+<link href="../assets/login.css" rel="stylesheet" />
+<link href="../assets/google/logo.css" rel="stylesheet" />
+{% endblock %}
+
+<!-- prettier-ignore -->
+{% block content %}
+<div id="login-parent">
+  <div id="login-signin">
+    <div id="login-splash">
+      {% include "../assets/logo.html" %}
+    </div>
+    <h2>Welcome to AppFlowy</h3>
+    <form>
+      {% if let Some(redirect_to) = redirect_to %}
+        <input type="hidden" name="redirect_to" value="{{ redirect_to }}">
+      {% endif %}
+
+      <div>
+        <input
+          class="input"
+          style="width: 100%; border-radius: 8px; padding: 8px; margin: 4px; margin-bottom: 8px;"
+          type="text"
+          id="email"
+          name="email"
+          placeholder="Please enter your email address"
+        />
+        <button
+          hx-post="../web-api/signin"
+          hx-target="#none"
+          class="button cyan"
+          type="submit"
+          style="width: 100%; padding: 8px 8px; border-radius: 8px; margin-top: 8px"
+        >
+          Continue
+        </button>
+      </div>
+    </form>
+
+    <!-- Load OAuth Providers if configured -->
+    {% if oauth_providers.len() > 0 %}
+    <table style="width: 100%; margin: 16px; border-collapse: collapse;">
+      <tr style="display: flex; align-items: center;">
+        <td style="width: 100%; margin: auto;">
+          <hr class="divider" />
+        </td>
+        <td style="flex: 1; text-align: center;">&nbsp;or&nbsp;</td>
+        <td style="width: 100%; margin: auto;">
+          <hr class="divider" />
+        </td>
+      </tr>
+    </table>
+
+    <div id="oauth-container">
+      <div style="display: flex; align-items: center; justify-content: center; flex-direction: column; width: 100%;">
+        {% for provider in oauth_providers %}
+        <div class="oauth-item-inner">
+          <a
+            href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to={{ oauth_redirect_to|escape }}"
+            style="text-decoration: none; color: inherit"
+          >
+            <div style="display: flex; align-items: center; justify-content: center; color: inherit">
+              <div>
+                <div
+                  hx-get="../assets/login/{{ provider|escape }}.svg"
+                  hx-trigger="load"
+                  hx-swap="innerHTML"
+                ></div>
+              </div>
+              <span> &nbsp </span>
+              <div> Continue with {{ provider }} </div>
+            </div>
+          </a>
+        </div>
+        {% endfor %}
+
+        <script>
+          document.addEventListener("htmx:afterSwap", (event) => {
+            const hxGet = event.target.getAttribute("hx-get");
+            if (hxGet && hxGet.includes("assets/login")) {
+              const svg = event.target.querySelector("svg");
+              if (svg) {
+                svg.style.width = "24px";
+                svg.style.height = "24px";
+                svg.style.margin = "8px";
+              }
+              if (hxGet.includes("Discord")) {
+                svg.style.transform = "translateY(4px)";
+              } else if (hxGet.includes("Google")) {
+                svg.style.transform = "translateY(2px)";
+              } else if (hxGet.includes("Apple")) {
+                svg.style.transform = "translateY(2px)";
+                svg.style.parentNode.filter = "invert(1)";
+              } else if (hxGet.includes("Github")) {
+                svg.style.transform = "translateY(2px)";
+                svg.style.parentNode.filter = "invert(1)";
+              }
+            }
+          });
+        </script>
+      </div>
+    </div>
+    {% endif %}
+
+    <span> &nbsp </span>
+    <span> &nbsp </span>
+    <span> &nbsp </span>
+    <div style="max-width: 256px">
+      <small style="color: #888; text-align: center; display: block">
+        By clicking "Continue" above, you agreed to AppFlowy's
+        <a href="https://appflowy.io/terms">Terms</a> and
+        <a href="https://appflowy.io/privacy">Privacy Policy</a>.
+      </small>
+    </div>
+  </div>
+  {% endblock %}
+</div>

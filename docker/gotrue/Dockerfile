@@ -10,7 +10,7 @@ RUN rm /go/src/supabase/auth/migrations/20240612123726_enable_rls_update_grants.
 FROM alpine:3.20
 RUN adduser -D -u 1000 supabase
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates curl
 USER supabase
 
 COPY --from=base /auth .

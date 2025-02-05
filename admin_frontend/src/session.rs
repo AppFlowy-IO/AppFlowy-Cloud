@@ -140,7 +140,8 @@ impl FromRequestParts<AppState> for UserSession {
       Ok(jar) => jar,
       Err(err) => {
         tracing::error!("failed to get cookie jar, error: {}", err);
-        return Err(Redirect::to("/web/login").into_response());
+        let redirect_url = state.prepend_with_path_prefix("/web/login");
+        return Err(Redirect::to(&redirect_url).into_response());
       },
     };
 
@@ -156,8 +157,15 @@ impl FromRequestParts<AppState> for UserSession {
       .map(|uri| urlencoding::encode(&uri.to_string()).to_string());
 
     match original_url {
-      Some(url) => Err(Redirect::to(&format!("/web/login?redirect_to={}", url)).into_response()),
-      None => Err(Redirect::to("/web/login").into_response()),
+      Some(url) => {
+        let redirect_url =
+          state.prepend_with_path_prefix(&format!("/web/login-v2?redirect_to={}", url));
+        Err(Redirect::to(&redirect_url).into_response())
+      },
+      None => {
+        let redirect_url = state.prepend_with_path_prefix("/web/login");
+        Err(Redirect::to(&redirect_url).into_response())
+      },
     }
   }
 }

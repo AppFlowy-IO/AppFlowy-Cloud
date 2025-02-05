@@ -43,6 +43,22 @@ pub struct CreateWorkspaceMember {
 pub struct WorkspaceMemberInvitation {
   pub email: String,
   pub role: AFRole,
+
+  #[serde(default)]
+  pub skip_email_send: bool,
+  #[serde(default)]
+  pub wait_email_send: bool,
+}
+
+impl Default for WorkspaceMemberInvitation {
+  fn default() -> Self {
+    Self {
+      email: "".to_string(),
+      role: AFRole::Member,
+      skip_email_send: false,
+      wait_email_send: false,
+    }
+  }
 }
 
 #[derive(Deserialize)]
@@ -104,9 +120,18 @@ pub struct PatchWorkspaceParam {
   pub workspace_icon: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CollabTypeParam {
   pub collab_type: CollabType,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepeatedEmbeddedCollabQuery(pub Vec<EmbeddedCollabQuery>);
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmbeddedCollabQuery {
+  pub collab_type: CollabType,
+  pub object_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +186,12 @@ pub struct UpdatePageParams {
   pub name: String,
   pub icon: Option<ViewIcon>,
   pub extra: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MovePageParams {
+  pub new_parent_view_id: String,
+  pub prev_view_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -250,6 +281,14 @@ pub struct PublishInfoView {
   pub info: PublishInfo,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublishPageParams {
+  pub publish_name: Option<String>,
+  pub visible_database_view_ids: Option<Vec<String>>,
+  pub comments_enabled: Option<bool>,
+  pub duplicate_enabled: Option<bool>,
+}
+
 #[derive(Eq, PartialEq, Debug, Hash, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum IconType {
@@ -311,6 +350,9 @@ pub struct ListDatabaseRowDetailParam {
   // Comma separated database row ids
   // e.g. "<uuid_1>,<uuid_2>,<uuid_3>"
   pub ids: String,
+  // if set to true, document data will be fetched (if exist)
+  // as markdown
+  pub with_doc: Option<bool>,
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
@@ -325,8 +367,11 @@ pub struct DatabaseRowUpdatedItem {
 }
 
 impl ListDatabaseRowDetailParam {
-  pub fn from(ids: &[&str]) -> Self {
-    Self { ids: ids.join(",") }
+  pub fn new(ids: &[&str], with_doc: bool) -> Self {
+    Self {
+      ids: ids.join(","),
+      with_doc: Some(with_doc),
+    }
   }
   pub fn into_ids(&self) -> Vec<&str> {
     self.ids.split(',').collect()
@@ -346,9 +391,20 @@ pub struct PublishedView {
   pub icon: Option<ViewIcon>,
   pub layout: ViewLayout,
   pub is_published: bool,
+  #[serde(flatten)]
+  pub info: Option<PublishedViewInfo>,
   /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<PublishedView>,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct PublishedViewInfo {
+  pub publisher_email: String,
+  pub publish_name: String,
+  pub publish_timestamp: DateTime<Utc>,
+  pub comments_enabled: bool,
+  pub duplicate_enabled: bool,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -365,7 +421,11 @@ pub struct AFDatabaseRow {
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AFDatabaseRowDetail {
   pub id: String,
-  pub cells: HashMap<String, HashMap<String, serde_json::Value>>,
+  // database field id -> cell data
+  pub cells: HashMap<String, serde_json::Value>,
+  pub has_doc: bool,
+  /// available if rows has doc and client request for it in [ListDatabaseRowDetailParam]
+  pub doc: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -375,4 +435,24 @@ pub struct AFDatabaseField {
   pub field_type: String,
   pub type_option: HashMap<String, serde_json::Value>,
   pub is_primary: bool,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct AFInsertDatabaseField {
+  pub name: String,
+  pub field_type: i64,                             // FieldType ID
+  pub type_option_data: Option<serde_json::Value>, // TypeOptionData
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AddDatatabaseRow {
+  pub cells: HashMap<String, serde_json::Value>,
+  pub document: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct UpsertDatatabaseRow {
+  pub pre_hash: String, // input which will be hashed into database row id
+  pub cells: HashMap<String, serde_json::Value>,
+  pub document: Option<String>,
 }

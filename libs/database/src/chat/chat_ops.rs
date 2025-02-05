@@ -1,12 +1,11 @@
 use crate::pg_row::AFChatRow;
-use crate::workspace::is_workspace_exist;
 use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatMessage, ChatMessageMetadata, CreateChatParams, GetChatMessageParams,
-  MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatMessageMetaParams,
-  UpdateChatParams,
+  ChatAuthor, ChatMessage, ChatMessageMetadata, ChatSettings, CreateChatParams,
+  GetChatMessageParams, MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
+  UpdateChatMessageMetaParams, UpdateChatParams,
 };
 
 use serde_json::json;
@@ -19,19 +18,13 @@ use tracing::warn;
 
 use uuid::Uuid;
 
-pub async fn insert_chat(
-  txn: &mut Transaction<'_, Postgres>,
+pub async fn insert_chat<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
   workspace_id: &str,
   params: CreateChatParams,
 ) -> Result<(), AppError> {
   let chat_id = Uuid::from_str(&params.chat_id)?;
   let workspace_id = Uuid::from_str(workspace_id)?;
-  if !is_workspace_exist(txn.deref_mut(), &workspace_id).await? {
-    return Err(AppError::RecordNotFound(format!(
-      "workspace with given id:{} is not found",
-      workspace_id
-    )));
-  }
   let rag_ids = json!(params.rag_ids);
   sqlx::query!(
     r#"
@@ -43,25 +36,40 @@ pub async fn insert_chat(
     workspace_id,
     rag_ids,
   )
-  .execute(txn.deref_mut())
+  .execute(executor)
   .await
   .map_err(|err| AppError::Internal(anyhow!("Failed to insert chat: {}", err)))?;
 
   Ok(())
 }
 
-/// Updates specific fields of a chat record in the database using transactional queries.
-///
-/// This function dynamically builds an SQL `UPDATE` query based on the provided parameters to
-/// update fields of a specific chat record identified by `chat_id`. It uses a transaction to ensure
-/// that the update operation is atomic.
-///
-pub async fn update_chat(
-  txn: &mut Transaction<'_, Postgres>,
+pub async fn select_chat_settings<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  chat_id: &Uuid,
+) -> Result<ChatSettings, AppError> {
+  let row = sqlx::query!(
+    r#"
+        SELECT name, meta_data, rag_ids
+        FROM af_chat
+        WHERE chat_id = $1 AND deleted_at IS NULL
+    "#,
+    &chat_id,
+  )
+  .fetch_one(executor)
+  .await?;
+  let rag_ids = serde_json::from_value::<Vec<String>>(row.rag_ids).unwrap_or_default();
+  Ok(ChatSettings {
+    name: row.name,
+    rag_ids,
+    metadata: row.meta_data,
+  })
+}
+pub async fn update_chat_settings<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
   chat_id: &Uuid,
   params: UpdateChatParams,
 ) -> Result<(), AppError> {
-  let mut query_parts = vec!["UPDATE af_chat SET".to_string()];
+  let mut query_parts = vec![];
   let mut args = PgArguments::default();
   let mut current_param_pos = 1; // Start counting SQL parameters from 1
 
@@ -77,7 +85,7 @@ pub async fn update_chat(
   }
 
   if let Some(ref metadata) = params.metadata {
-    query_parts.push(format!("metadata = metadata || ${}", current_param_pos));
+    query_parts.push(format!("meta_data = meta_data || ${}", current_param_pos));
     args
       .add(json!(metadata))
       .map_err(|err| AppError::SqlxArgEncodingError {
@@ -87,7 +95,27 @@ pub async fn update_chat(
     current_param_pos += 1;
   }
 
-  query_parts.push(format!("WHERE chat_id = ${}", current_param_pos));
+  if let Some(rag_ids) = params.rag_ids {
+    query_parts.push(format!("rag_ids = ${}", current_param_pos));
+    args
+      .add(json!(rag_ids))
+      .map_err(|err| AppError::SqlxArgEncodingError {
+        desc: format!("unable to encode rag ids for chat id {}", chat_id),
+        err,
+      })?;
+    current_param_pos += 1;
+  }
+
+  if query_parts.is_empty() {
+    // If no fields to update, skip execution
+    return Ok(());
+  }
+
+  let query = format!(
+    "UPDATE af_chat SET {} WHERE chat_id = ${}",
+    query_parts.join(", "),
+    current_param_pos
+  );
   args
     .add(chat_id)
     .map_err(|err| AppError::SqlxArgEncodingError {
@@ -95,9 +123,11 @@ pub async fn update_chat(
       err,
     })?;
 
-  let query = query_parts.join(", ") + ";";
-  let query = sqlx::query_with(&query, args);
-  query.execute(txn.deref_mut()).await?;
+  sqlx::query_with(&query, args)
+    .execute(executor)
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to update chat settings: {}", err)))?;
+
   Ok(())
 }
 
@@ -638,4 +668,41 @@ pub async fn select_chat_message_content<'a, E: Executor<'a, Database = Postgres
   .fetch_one(executor)
   .await?;
   Ok((row.content, row.meta_data))
+}
+
+pub async fn select_chat_message_matching_reply_message_id(
+  txn: &mut Transaction<'_, Postgres>,
+  chat_id: &str,
+  reply_message_id: i64,
+) -> Result<Option<ChatMessage>, AppError> {
+  let chat_id = Uuid::from_str(chat_id)?;
+  let row = sqlx::query!(
+    r#"
+        SELECT message_id, content, created_at, author, meta_data, reply_message_id
+        FROM af_chat_messages
+        WHERE chat_id = $1
+        AND reply_message_id = $2
+    "#,
+    &chat_id,
+    reply_message_id
+  )
+  .fetch_one(txn.deref_mut())
+  .await?;
+
+  let message = match serde_json::from_value::<ChatAuthor>(row.author) {
+    Ok(author) => Some(ChatMessage {
+      author,
+      message_id: row.message_id,
+      content: row.content,
+      created_at: row.created_at,
+      meta_data: row.meta_data,
+      reply_message_id: row.reply_message_id,
+    }),
+    Err(err) => {
+      warn!("Failed to deserialize author: {}", err);
+      None
+    },
+  };
+
+  Ok(message)
 }

@@ -1,5 +1,6 @@
+use anyhow::Context;
 use app_error::ErrorCode;
-use client_api_test::generate_unique_registered_user_client;
+use client_api_test::{generate_unique_registered_user_client, TestClient};
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use shared_entity::dto::workspace_dto::{QueryWorkspaceParam, WorkspaceMemberInvitation};
 
@@ -30,6 +31,8 @@ async fn invite_workspace_crud() {
       vec![WorkspaceMemberInvitation {
         email: bob.email.clone(),
         role: AFRole::Member,
+        skip_email_send: true,
+        ..Default::default()
       }],
     )
     .await
@@ -148,4 +151,26 @@ async fn invite_workspace_crud() {
       assert_eq!(bob_workspace.role, Some(AFRole::Owner));
     }
   }
+}
+
+#[tokio::test]
+async fn invite_wait_email_sending_success() {
+  let c1 = TestClient::new_user_without_ws_conn().await;
+  let c2 = TestClient::new_user_without_ws_conn().await;
+
+  let workspace_id = c1.workspace_id().await;
+  let _: () = c1
+    .api_client
+    .invite_workspace_members(
+      &workspace_id,
+      vec![WorkspaceMemberInvitation {
+        email: c2.user.email,
+        role: AFRole::Member,
+        skip_email_send: false,
+        wait_email_send: true,
+      }],
+    )
+    .await
+    .context("failed to send email to invite workspace members")
+    .unwrap();
 }

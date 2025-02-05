@@ -3,19 +3,105 @@ use serde_json::json;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::str::FromStr;
-
 pub const STREAM_METADATA_KEY: &str = "0";
 pub const STREAM_ANSWER_KEY: &str = "1";
+pub const STREAM_IMAGE_KEY: &str = "2";
+pub const STREAM_KEEP_ALIVE_KEY: &str = "3";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
   pub text: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChatQuestionQuery {
+  pub chat_id: String,
+  pub question_id: i64,
+  pub format: ResponseFormat,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatQuestion {
   pub chat_id: String,
   pub data: MessageData,
+  #[serde(default)]
+  pub format: ResponseFormat,
+  pub metadata: QuestionMetadata,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuestionMetadata {
+  pub workspace_id: String,
+  pub rag_ids: Vec<String>,
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct ResponseFormat {
+  pub output_layout: OutputLayout,
+  pub output_content: OutputContent,
+  pub output_content_metadata: Option<OutputContentMetadata>,
+}
+
+#[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum OutputLayout {
+  #[default]
+  Paragraph = 0,
+  BulletList = 1,
+  NumberedList = 2,
+  SimpleTable = 3,
+}
+
+#[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr, Eq, PartialEq)]
+#[repr(u8)]
+pub enum OutputContent {
+  #[default]
+  TEXT = 0,
+  IMAGE = 1,
+  RichTextImage = 2,
+}
+
+impl OutputContent {
+  pub fn is_image(&self) -> bool {
+    *self == OutputContent::IMAGE || *self == OutputContent::RichTextImage
+  }
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct OutputContentMetadata {
+  /// Custom prompt for image generation.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub custom_image_prompt: Option<String>,
+
+  /// The image model to use for generation (default: "dall-e-3").
+  #[serde(default = "default_image_model")]
+  pub image_model: String,
+
+  /// Size of the image (default: "256x256").
+  #[serde(
+    default = "default_image_size",
+    skip_serializing_if = "Option::is_none"
+  )]
+  pub size: Option<String>,
+
+  /// Quality of the image (default: "standard").
+  #[serde(
+    default = "default_image_quality",
+    skip_serializing_if = "Option::is_none"
+  )]
+  pub quality: Option<String>,
+}
+
+// Default values for the fields
+fn default_image_model() -> String {
+  "dall-e-3".to_string()
+}
+
+fn default_image_size() -> Option<String> {
+  Some("256x256".to_string())
+}
+
+fn default_image_quality() -> Option<String> {
+  Some("standard".to_string())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -23,8 +109,6 @@ pub struct MessageData {
   pub content: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<serde_json::Value>,
-  #[serde(default)]
-  pub rag_ids: Vec<String>,
   #[serde(default)]
   pub message_id: Option<String>,
 }
@@ -152,8 +236,9 @@ pub struct Embedding {
   pub embedding: EmbeddingOutput,
 }
 
+/// https://platform.openai.com/docs/api-reference/embeddings
 #[derive(Serialize, Deserialize, Debug)]
-pub struct EmbeddingResponse {
+pub struct OpenAIEmbeddingResponse {
   /// A string that is always set to "embedding".
   pub object: String,
   /// A list of `Embedding` objects.
@@ -161,31 +246,36 @@ pub struct EmbeddingResponse {
   /// A string representing the model used to generate the embeddings.
   pub model: String,
   /// An integer representing the total number of tokens used.
-  pub total_tokens: i32,
+  pub usage: EmbeddingUsage,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct EmbeddingUsage {
+  #[serde(default)]
+  pub prompt_tokens: i32,
+  pub total_tokens: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum EmbeddingEncodingFormat {
   Float,
   Base64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EmbeddingRequest {
   /// An instance of `EmbeddingInput` containing the data to be embedded.
   pub input: EmbeddingInput,
   /// A string representing the model to use for generating embeddings.
   pub model: String,
-  /// An integer representing the chunk size for processing.
-  pub chunk_size: i32,
   /// An instance of `EmbeddingEncodingFormat` representing the format of the embedding.
   pub encoding_format: EmbeddingEncodingFormat,
   /// An integer representing the number of dimensions for the embedding.
   pub dimensions: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EmbeddingModel {
   #[serde(rename = "text-embedding-3-small")]
   TextEmbedding3Small,
@@ -248,44 +338,6 @@ impl Display for EmbeddingModel {
   }
 }
 
-#[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]
-#[repr(u8)]
-pub enum AIModel {
-  #[default]
-  DefaultModel = 0,
-  GPT4oMini = 1,
-  GPT4o = 2,
-  Claude3Sonnet = 3,
-  Claude3Opus = 4,
-}
-
-impl AIModel {
-  pub fn to_str(&self) -> &str {
-    match self {
-      AIModel::DefaultModel => "default-model",
-      AIModel::GPT4oMini => "gpt-4o-mini",
-      AIModel::GPT4o => "gpt-4o",
-      AIModel::Claude3Sonnet => "claude-3-sonnet",
-      AIModel::Claude3Opus => "claude-3-opus",
-    }
-  }
-}
-
-impl FromStr for AIModel {
-  type Err = anyhow::Error;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "gpt-3.5-turbo" => Ok(AIModel::GPT4oMini),
-      "gpt-4o-mini" => Ok(AIModel::GPT4oMini),
-      "gpt-4o" => Ok(AIModel::GPT4o),
-      "claude-3-sonnet" => Ok(AIModel::Claude3Sonnet),
-      "claude-3-opus" => Ok(AIModel::Claude3Opus),
-      _ => Ok(AIModel::DefaultModel),
-    }
-  }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RepeatedLocalAIPackage(pub Vec<AppFlowyOfflineAI>);
 
@@ -320,6 +372,18 @@ pub struct ModelInfo {
 pub struct LocalAIConfig {
   pub models: Vec<LLMModel>,
   pub plugin: AppFlowyOfflineAI,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AvailableModel {
+  pub name: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModelList {
+  pub models: Vec<AvailableModel>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -373,9 +437,53 @@ pub struct CalculateSimilarityParams {
   pub workspace_id: String,
   pub input: String,
   pub expected: String,
+  pub use_embedding: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SimilarityResponse {
   pub score: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompletionMetadata {
+  /// A unique identifier for the object.
+  pub object_id: String,
+  /// The workspace identifier.
+  ///
+  /// This field must be provided when generating images.
+  pub workspace_id: Option<String>,
+  /// A list of relevant document IDs.
+  ///
+  /// When using completions for document-related tasks, this should include the document ID.
+  /// In some cases, `object_id` may be the same as the document ID.
+  pub rag_ids: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompleteTextParams {
+  pub text: String,
+  pub completion_type: Option<CompletionType>,
+  pub custom_prompt: Option<CustomPrompt>,
+  #[serde(default)]
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<CompletionMetadata>,
+  #[serde(default)]
+  pub format: ResponseFormat,
+}
+
+impl CompleteTextParams {
+  pub fn new_with_completion_type(
+    text: String,
+    completion_type: CompletionType,
+    metadata: Option<CompletionMetadata>,
+  ) -> Self {
+    Self {
+      text,
+      completion_type: Some(completion_type),
+      custom_prompt: None,
+      metadata,
+      format: Default::default(),
+    }
+  }
 }

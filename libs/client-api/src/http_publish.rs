@@ -1,5 +1,6 @@
 use bytes::Bytes;
-use client_api_entity::workspace_dto::PublishInfoView;
+use client_api_entity::publish_dto::DuplicatePublishedPageResponse;
+use client_api_entity::workspace_dto::{PublishInfoView, PublishedView};
 use client_api_entity::{workspace_dto::PublishedDuplicate, PublishInfo, UpdatePublishNamespace};
 use client_api_entity::{
   CreateGlobalCommentParams, CreateReactionParams, DeleteGlobalCommentParams, DeleteReactionParams,
@@ -302,6 +303,29 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all)]
+  pub async fn get_published_outline(
+    &self,
+    publish_namespace: &str,
+  ) -> Result<PublishedView, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-outline/{}",
+      self.base_url, publish_namespace,
+    );
+
+    let resp = self
+      .cloud_client
+      .get(&url)
+      .send()
+      .await?
+      .error_for_status()?;
+
+    log_request_id(&resp);
+    AppResponse::<PublishedView>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all)]
   pub async fn get_default_published_collab<T>(
     &self,
     publish_namespace: &str,
@@ -387,7 +411,7 @@ impl Client {
     &self,
     workspace_id: &str,
     publish_duplicate: &PublishedDuplicate,
-  ) -> Result<(), AppResponseError> {
+  ) -> Result<DuplicatePublishedPageResponse, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/published-duplicate",
       self.base_url, workspace_id
@@ -399,7 +423,9 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    AppResponse::<DuplicatePublishedPageResponse>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   pub async fn get_published_view_reactions(

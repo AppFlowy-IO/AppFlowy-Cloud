@@ -5,8 +5,9 @@ use chrono::{DateTime, Utc};
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWorkspace, AFWorkspaceInvitationStatus,
   AccessRequestMinimal, AccessRequestStatus, AccessRequestWithViewId, AccessRequesterInfo,
-  AccountLink, GlobalComment, Reaction, Template, TemplateCategory, TemplateCategoryMinimal,
-  TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
+  AccountLink, GlobalComment, QuickNote, Reaction, Template, TemplateCategory,
+  TemplateCategoryMinimal, TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal,
+  TemplateGroup, TemplateMinimal,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -197,6 +198,23 @@ pub struct AFCollabMemberRow {
   pub permission_id: i64,
 }
 
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[repr(i16)]
+pub enum AFBlobStatus {
+  Ok = 0,
+  DallEContentPolicyViolation = 1,
+}
+
+impl From<i16> for AFBlobStatus {
+  fn from(value: i16) -> Self {
+    match value {
+      0 => AFBlobStatus::Ok,
+      1 => AFBlobStatus::DallEContentPolicyViolation,
+      _ => AFBlobStatus::Ok,
+    }
+  }
+}
+
 #[derive(Debug, FromRow, Serialize, Deserialize)]
 pub struct AFBlobMetadataRow {
   pub workspace_id: Uuid,
@@ -204,6 +222,8 @@ pub struct AFBlobMetadataRow {
   pub file_type: String,
   pub file_size: i64,
   pub modified_at: DateTime<Utc>,
+  #[serde(default)]
+  pub status: i16,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -646,4 +666,32 @@ impl TryFrom<AFAccessRequestWithViewIdColumn> for AccessRequestWithViewId {
       created_at: value.created_at,
     })
   }
+}
+
+#[derive(FromRow, Serialize, Debug)]
+pub struct AFQuickNoteRow {
+  pub quick_note_id: Uuid,
+  pub data: serde_json::Value,
+  pub created_at: DateTime<Utc>,
+  pub updated_at: DateTime<Utc>,
+}
+
+impl From<AFQuickNoteRow> for QuickNote {
+  fn from(value: AFQuickNoteRow) -> Self {
+    Self {
+      id: value.quick_note_id,
+      data: value.data,
+      created_at: value.created_at,
+      last_updated_at: value.updated_at,
+    }
+  }
+}
+
+pub struct AFPublishViewWithPublishInfo {
+  pub view_id: Uuid,
+  pub publish_name: String,
+  pub publisher_email: String,
+  pub publish_timestamp: DateTime<Utc>,
+  pub comments_enabled: bool,
+  pub duplicate_enabled: bool,
 }

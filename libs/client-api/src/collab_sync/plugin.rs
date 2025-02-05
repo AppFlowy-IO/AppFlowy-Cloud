@@ -185,14 +185,14 @@ where
     _event: &Event,
     update: &AwarenessUpdate,
   ) {
-    let payload = Message::Awareness(update.clone()).encode_v1();
+    let payload = Message::Awareness(update.encode_v1()).encode_v1();
     self.sync_queue.queue_msg(|msg_id| {
       let update_sync = UpdateSync::new(origin.clone(), object_id.to_string(), payload, msg_id);
       if cfg!(feature = "sync_verbose_log") {
         trace!("queue awareness: {:?}", update);
       }
 
-      ClientCollabMessage::new_update_sync(update_sync)
+      ClientCollabMessage::new_awareness_sync(update_sync)
     });
   }
 

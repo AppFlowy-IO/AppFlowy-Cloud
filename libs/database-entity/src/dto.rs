@@ -24,13 +24,13 @@ pub const ZSTD_COMPRESSION_LEVEL: i32 = 3;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
 
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
 
-  #[validate(custom = "validate_not_empty_payload")]
+  #[validate(custom(function = "validate_not_empty_payload"))]
   pub encoded_collab_v1: Vec<u8>,
 
   pub collab_type: CollabType,
@@ -54,7 +54,6 @@ impl CreateCollabParams {
         object_id: self.object_id,
         encoded_collab_v1: Bytes::from(self.encoded_collab_v1),
         collab_type: self.collab_type,
-        embeddings: None,
       },
       self.workspace_id,
     )
@@ -88,13 +87,11 @@ impl PendingCollabWrite {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize, PartialEq)]
 pub struct CollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
-  #[validate(custom = "validate_not_empty_payload")]
+  #[validate(custom(function = "validate_not_empty_payload"))]
   pub encoded_collab_v1: Bytes,
   pub collab_type: CollabType,
-  #[serde(default)]
-  pub embeddings: Option<AFCollabEmbeddings>,
 }
 
 impl Display for CollabParams {
@@ -110,17 +107,16 @@ impl Display for CollabParams {
 }
 
 impl CollabParams {
-  pub fn new<T: ToString>(
+  pub fn new<T: ToString, B: Into<Bytes>>(
     object_id: T,
     collab_type: CollabType,
-    encoded_collab_v1: Vec<u8>,
+    encoded_collab_v1: B,
   ) -> Self {
     let object_id = object_id.to_string();
     Self {
       object_id,
       collab_type,
-      encoded_collab_v1: Bytes::from(encoded_collab_v1),
-      embeddings: None,
+      encoded_collab_v1: encoded_collab_v1.into(),
     }
   }
 
@@ -138,7 +134,6 @@ impl CollabParams {
           object_id: old.object_id,
           encoded_collab_v1: old.encoded_collab_v1.into(),
           collab_type: old.collab_type,
-          embeddings: None,
         })
       },
     }
@@ -149,10 +144,7 @@ impl CollabParams {
       object_id: self.object_id.clone(),
       encoded_collab: self.encoded_collab_v1.to_vec(),
       collab_type: self.collab_type.to_proto() as i32,
-      embeddings: self
-        .embeddings
-        .as_ref()
-        .map(|embeddings| embeddings.to_proto()),
+      embeddings: None,
     }
   }
 
@@ -174,15 +166,10 @@ impl TryFrom<proto::collab::CollabParams> for CollabParams {
   fn try_from(proto: proto::collab::CollabParams) -> Result<Self, Self::Error> {
     let collab_type_proto = proto::collab::CollabType::try_from(proto.collab_type).unwrap();
     let collab_type = CollabType::from_proto(&collab_type_proto);
-    let embeddings = proto
-      .embeddings
-      .map(AFCollabEmbeddings::from_proto)
-      .transpose()?;
     Ok(Self {
       object_id: proto.object_id,
       encoded_collab_v1: Bytes::from(proto.encoded_collab),
       collab_type,
-      embeddings,
     })
   }
 }
@@ -196,7 +183,7 @@ struct CollabParamsV0 {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct BatchCreateCollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
   pub params_list: Vec<CollabParams>,
 }
@@ -219,19 +206,19 @@ pub struct UpdateCollabWebParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct DeleteCollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
 }
 
 #[derive(Debug, Clone, Validate)]
 pub struct InsertSnapshotParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
-  #[validate(custom = "validate_not_empty_payload")]
-  pub data: Bytes,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_payload"))]
+  pub doc_state: Bytes,
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
   pub collab_type: CollabType,
 }
@@ -250,9 +237,9 @@ pub struct QuerySnapshotParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabParams {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  #[validate]
+  #[validate(nested)]
   pub inner: QueryCollab,
 }
 
@@ -267,13 +254,13 @@ impl Display for QueryCollabParams {
 }
 
 impl QueryCollabParams {
-  pub fn new<T1: ToString, T2: ToString>(
+  pub fn new<T1: Into<String>, T2: Into<String>>(
     object_id: T1,
     collab_type: CollabType,
     workspace_id: T2,
   ) -> Self {
-    let workspace_id = workspace_id.to_string();
-    let object_id = object_id.to_string();
+    let workspace_id = workspace_id.into();
+    let object_id = object_id.into();
     let inner = QueryCollab {
       object_id,
       collab_type,
@@ -295,7 +282,7 @@ impl Deref for QueryCollabParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollab {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
   pub collab_type: CollabType,
 }
@@ -369,9 +356,9 @@ pub struct WorkspaceUsage {
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct InsertCollabMemberParams {
   pub uid: i64,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
   pub access_level: AFAccessLevel,
 }
@@ -379,11 +366,11 @@ pub struct InsertCollabMemberParams {
 pub type UpdateCollabMemberParams = InsertCollabMemberParams;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct CollabMemberIdentify {
+pub struct WorkspaceCollabIdentify {
   pub uid: i64,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
 }
 
@@ -406,15 +393,15 @@ pub struct DefaultPublishViewInfoMeta {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabMembers {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryWorkspaceMember {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
 
   pub uid: i64,
@@ -427,6 +414,18 @@ pub struct AFCollabMember {
   pub permission: AFPermission,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AFCollabEmbedInfo {
+  pub object_id: String,
+  /// The timestamp when the object's embeddings updated
+  pub indexed_at: DateTime<Utc>,
+  /// The timestamp when the object's data updated
+  pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepeatedAFCollabEmbedInfo(pub Vec<AFCollabEmbedInfo>);
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PublishInfo {
   pub namespace: String,
@@ -438,6 +437,18 @@ pub struct PublishInfo {
   pub publish_timestamp: DateTime<Utc>,
   #[serde(default)]
   pub unpublished_timestamp: Option<DateTime<Utc>>,
+  #[serde(default = "default_comments_enabled")]
+  pub comments_enabled: bool,
+  #[serde(default = "default_duplicate_enabled")]
+  pub duplicate_enabled: bool,
+}
+
+fn default_comments_enabled() -> bool {
+  true
+}
+
+fn default_duplicate_enabled() -> bool {
+  true
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -740,79 +751,21 @@ impl From<i16> for AFWorkspaceInvitationStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AFCollabEmbeddingParams {
+pub struct AFCollabEmbeddedChunk {
   pub fragment_id: String,
   pub object_id: String,
-  pub collab_type: CollabType,
   pub content_type: EmbeddingContentType,
   pub content: String,
   pub embedding: Option<Vec<f32>>,
-}
-
-impl AFCollabEmbeddingParams {
-  pub fn from_proto(proto: &proto::collab::CollabEmbeddingsParams) -> Result<Self, EntityError> {
-    let collab_type_proto = proto::collab::CollabType::try_from(proto.collab_type).unwrap();
-    let collab_type = CollabType::from_proto(&collab_type_proto);
-    let content_type_proto =
-      proto::collab::EmbeddingContentType::try_from(proto.content_type).unwrap();
-    let content_type = EmbeddingContentType::from_proto(content_type_proto)?;
-    let embedding = if proto.embedding.is_empty() {
-      None
-    } else {
-      Some(proto.embedding.clone())
-    };
-    Ok(Self {
-      fragment_id: proto.fragment_id.clone(),
-      object_id: proto.object_id.clone(),
-      collab_type,
-      content_type,
-      content: proto.content.clone(),
-      embedding,
-    })
-  }
-
-  pub fn to_proto(&self) -> proto::collab::CollabEmbeddingsParams {
-    proto::collab::CollabEmbeddingsParams {
-      fragment_id: self.fragment_id.clone(),
-      object_id: self.object_id.clone(),
-      collab_type: self.collab_type.to_proto() as i32,
-      content_type: self.content_type.to_proto() as i32,
-      content: self.content.clone(),
-      embedding: self.embedding.clone().unwrap_or_default(),
-    }
-  }
-
-  pub fn to_protobuf_bytes(&self) -> Vec<u8> {
-    self.to_proto().encode_to_vec()
-  }
+  pub metadata: serde_json::Value,
+  pub fragment_index: i32,
+  pub embedded_type: i16,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AFCollabEmbeddings {
   pub tokens_consumed: u32,
-  pub params: Vec<AFCollabEmbeddingParams>,
-}
-
-impl AFCollabEmbeddings {
-  pub fn from_proto(proto: proto::collab::CollabEmbeddings) -> Result<Self, EntityError> {
-    let mut params = vec![];
-    for param in proto.embeddings {
-      params.push(AFCollabEmbeddingParams::from_proto(&param)?);
-    }
-    Ok(Self {
-      tokens_consumed: proto.tokens_consumed,
-      params,
-    })
-  }
-
-  pub fn to_proto(&self) -> proto::collab::CollabEmbeddings {
-    let embeddings: Vec<proto::collab::CollabEmbeddingsParams> =
-      self.params.iter().map(|param| param.to_proto()).collect();
-    proto::collab::CollabEmbeddings {
-      tokens_consumed: self.tokens_consumed,
-      embeddings,
-    }
-  }
+  pub params: Vec<AFCollabEmbeddedChunk>,
 }
 
 /// Type of content stored by the embedding.
@@ -860,12 +813,16 @@ pub struct PublishCollabKey {
 pub struct PublishCollabItem<Meta, Data> {
   pub meta: PublishCollabMetadata<Meta>,
   pub data: Data,
+  pub comments_enabled: bool,
+  pub duplicate_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PatchPublishedCollab {
   pub view_id: Uuid,
   pub publish_name: Option<String>,
+  pub comments_enabled: Option<bool>,
+  pub duplicate_enabled: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1207,7 +1164,7 @@ pub struct ApproveAccessRequestParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateImportTask {
-  #[validate(custom = "validate_not_empty_str")]
+  #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_name: String,
   pub content_length: u64,
 }
@@ -1227,15 +1184,44 @@ pub struct WorkspaceNamespace {
   pub is_original: bool,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct QuickNote {
+  pub id: Uuid,
+  pub data: serde_json::Value,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct QuickNotes {
+  pub quick_notes: Vec<QuickNote>,
+  pub has_more: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateQuickNoteParams {
+  pub data: Option<serde_json::Value>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateQuickNoteParams {
+  pub data: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ListQuickNotesQueryParams {
+  pub search_term: Option<String>,
+  pub offset: Option<i32>,
+  pub limit: Option<i32>,
+}
+
 #[cfg(test)]
 mod test {
-  use crate::dto::{
-    AFCollabEmbeddingParams, AFCollabEmbeddings, CollabParams, CollabParamsV0, EmbeddingContentType,
-  };
-  use crate::error::EntityError;
+  use crate::dto::{CollabParams, CollabParamsV0};
+
   use bytes::Bytes;
-  use collab_entity::{proto, CollabType};
-  use prost::Message;
+  use collab_entity::CollabType;
+
   use uuid::Uuid;
 
   #[test]
@@ -1312,17 +1298,6 @@ mod test {
       object_id: "object_id".to_string(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::default(),
-      embeddings: Some(AFCollabEmbeddings {
-        tokens_consumed: 100,
-        params: vec![AFCollabEmbeddingParams {
-          fragment_id: "fragment_id".to_string(),
-          object_id: "object_id".to_string(),
-          collab_type: CollabType::Document,
-          content_type: EmbeddingContentType::PlainText,
-          content: "content".to_string(),
-          embedding: Some(vec![1.0, 2.0, 3.0]),
-        }],
-      }),
     };
 
     let protobuf_encoded = collab_params_with_embeddings.to_protobuf_bytes();
@@ -1336,46 +1311,10 @@ mod test {
       object_id: "object_id".to_string(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::from(vec![1, 2, 3]),
-      embeddings: Some(AFCollabEmbeddings {
-        tokens_consumed: 100,
-        params: vec![AFCollabEmbeddingParams {
-          fragment_id: "fragment_id".to_string(),
-          object_id: "object_id".to_string(),
-          collab_type: CollabType::Document,
-          content_type: EmbeddingContentType::PlainText,
-          content: "content".to_string(),
-          embedding: None,
-        }],
-      }),
     };
 
     let protobuf_encoded = collab_params.to_protobuf_bytes();
     let collab_params_decoded = CollabParams::from_protobuf_bytes(&protobuf_encoded).unwrap();
     assert_eq!(collab_params, collab_params_decoded);
-  }
-
-  #[test]
-  fn deserialize_collab_params_with_unknown_embedding_type() {
-    let invalid_serialization = proto::collab::CollabParams {
-      object_id: "object_id".to_string(),
-      encoded_collab: vec![1, 2, 3],
-      collab_type: proto::collab::CollabType::Document as i32,
-      embeddings: Some(proto::collab::CollabEmbeddings {
-        tokens_consumed: 100,
-        embeddings: vec![proto::collab::CollabEmbeddingsParams {
-          fragment_id: "fragment_id".to_string(),
-          object_id: "object_id".to_string(),
-          collab_type: proto::collab::CollabType::Document as i32,
-          content_type: proto::collab::EmbeddingContentType::Unknown as i32,
-          content: "content".to_string(),
-          embedding: vec![1.0, 2.0, 3.0],
-        }],
-      }),
-    }
-    .encode_to_vec();
-
-    let result = CollabParams::from_protobuf_bytes(&invalid_serialization);
-    assert!(result.is_err());
-    assert!(matches!(result, Err(EntityError::InvalidData(_))));
   }
 }

@@ -19,14 +19,15 @@ pub struct Config {
   pub application: ApplicationSetting,
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
+  pub redis_worker_count: usize,
   pub s3: S3Setting,
   pub appflowy_ai: AppFlowyAISetting,
-  pub grpc_history: GrpcHistorySetting,
   pub collab: CollabSetting,
   pub published_collab: PublishedCollabSetting,
   pub mailer: MailerSetting,
   pub apple_oauth: AppleOAuthSetting,
   pub appflowy_web_url: Option<String>,
+  pub admin_frontend_path_prefix: String,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -58,6 +59,7 @@ pub struct S3Setting {
   pub secret_key: Secret<String>,
   pub bucket: String,
   pub region: String,
+  pub presigned_url_endpoint: Option<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -97,8 +99,6 @@ impl AppFlowyAISetting {
 pub struct ApplicationSetting {
   pub port: u16,
   pub host: String,
-  pub server_key: Secret<String>,
-  pub use_tls: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -136,13 +136,9 @@ impl DatabaseSetting {
 }
 
 #[derive(Clone, Debug)]
-pub struct GrpcHistorySetting {
-  pub addrs: String,
-}
-
-#[derive(Clone, Debug)]
 pub struct CollabSetting {
   pub group_persistence_interval_secs: u64,
+  pub group_prune_grace_period_secs: u64,
   pub edit_state_max_count: u32,
   pub edit_state_max_secs: i64,
   pub s3_collab_threshold: u64,
@@ -213,10 +209,6 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     application: ApplicationSetting {
       port: get_env_var("APPFLOWY_APPLICATION_PORT", "8000").parse()?,
       host: get_env_var("APPFLOWY_APPLICATION_HOST", "0.0.0.0"),
-      use_tls: get_env_var("APPFLOWY_APPLICATION_USE_TLS", "false")
-        .parse()
-        .context("fail to get APPFLOWY_APPLICATION_USE_TLS")?,
-      server_key: get_env_var("APPFLOWY_APPLICATION_SERVER_KEY", "server_key").into(),
     },
     websocket: WebsocketSetting {
       heartbeat_interval: get_env_var("APPFLOWY_WEBSOCKET_HEARTBEAT_INTERVAL", "6").parse()?,
@@ -224,6 +216,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       min_client_version: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_MIN_VERSION", "0.5.0").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
+    redis_worker_count: get_env_var("APPFLOWY_REDIS_WORKERS", "60").parse()?,
     s3: S3Setting {
       create_bucket: get_env_var("APPFLOWY_S3_CREATE_BUCKET", "true")
         .parse()
@@ -236,13 +229,11 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
       region: get_env_var("APPFLOWY_S3_REGION", ""),
+      presigned_url_endpoint: get_env_var_opt("APPFLOWY_S3_PRESIGNED_URL_ENDPOINT"),
     },
     appflowy_ai: AppFlowyAISetting {
-      port: get_env_var("APPFLOWY_AI_SERVER_PORT", "5001").into(),
-      host: get_env_var("APPFLOWY_AI_SERVER_HOST", "localhost").into(),
-    },
-    grpc_history: GrpcHistorySetting {
-      addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),
+      port: get_env_var("AI_SERVER_PORT", "5001").into(),
+      host: get_env_var("AI_SERVER_HOST", "localhost").into(),
     },
     collab: CollabSetting {
       group_persistence_interval_secs: get_env_var(
@@ -250,6 +241,8 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
         "60",
       )
       .parse()?,
+      group_prune_grace_period_secs: get_env_var("APPFLOWY_COLLAB_GROUP_GRACE_PERIOD_SECS", "60")
+        .parse()?,
       edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
       edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "60").parse()?,
       s3_collab_threshold: get_env_var("APPFLOWY_COLLAB_S3_THRESHOLD", "8000").parse()?,
@@ -265,12 +258,14 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
       smtp_email: get_env_var("APPFLOWY_MAILER_SMTP_EMAIL", "sender@example.com"),
       smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
+      smtp_tls_kind: get_env_var("APPFLOWY_MAILER_SMTP_TLS_KIND", "wrapper"),
     },
     apple_oauth: AppleOAuthSetting {
       client_id: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_ID", ""),
       client_secret: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_SECRET", "").into(),
     },
     appflowy_web_url: get_env_var_opt("APPFLOWY_WEB_URL"),
+    admin_frontend_path_prefix: get_env_var("APPFLOWY_ADMIN_FRONTEND_PATH_PREFIX", ""),
   };
   Ok(config)
 }

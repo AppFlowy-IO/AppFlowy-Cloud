@@ -59,3 +59,8 @@ pub struct PublishDatabaseData {
   /// Relation view id map
   pub database_relations: HashMap<String, String>,
 }
+
+#[derive(Default, Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
+pub struct DuplicatePublishedPageResponse {
+  pub view_id: String,
+}

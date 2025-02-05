@@ -20,28 +20,32 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
 
   match app_env {
     Environment::Local => {
-      let subscriber = builder
-        .with_ansi(true)
-        .with_timer(CustomTime)
-        .with_target(false)
-        .with_file(false)
-        .pretty()
-        .finish()
-        .with(env_filter);
-      set_global_default(subscriber).unwrap();
+      #[cfg(feature = "tokio-runtime-profile")]
+      console_subscriber::ConsoleLayer::builder()
+        .retention(std::time::Duration::from_secs(60))
+        .init();
+
+      #[cfg(not(feature = "tokio-runtime-profile"))]
+      {
+        let subscriber = builder
+          .with_ansi(true)
+          .with_timer(CustomTime)
+          .with_target(false)
+          .with_file(false)
+          .pretty()
+          .finish()
+          .with(env_filter);
+        set_global_default(subscriber).unwrap();
+      }
     },
     Environment::Production => {
-      // let name = "appflowy_cloud".to_string();
-      // let sink = std::io::stdout;
-      // let formatting_layer = BunyanFormattingLayer::new(name, sink);
       let subscriber = builder.json().finish().with(env_filter);
-      // .with(JsonStorageLayer)
-      // .with(formatting_layer);
       set_global_default(subscriber).unwrap();
     },
   }
 }
 
+#[allow(dead_code)]
 struct CustomTime;
 impl tracing_subscriber::fmt::time::FormatTime for CustomTime {
   fn format_time(&self, w: &mut Writer<'_>) -> std::fmt::Result {

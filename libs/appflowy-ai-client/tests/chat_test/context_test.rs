@@ -1,5 +1,5 @@
 use crate::appflowy_ai_client;
-use appflowy_ai_client::dto::{AIModel, CreateChatContext};
+use appflowy_ai_client::dto::CreateChatContext;
 #[tokio::test]
 async fn create_chat_context_test() {
   let client = appflowy_ai_client();
@@ -14,7 +14,14 @@ async fn create_chat_context_test() {
   };
   client.create_chat_text_context(context).await.unwrap();
   let resp = client
-    .send_question(&chat_id, 1, "Where I live?", &AIModel::GPT4oMini, None)
+    .send_question(
+      &uuid::Uuid::new_v4().to_string(),
+      &chat_id,
+      1,
+      "Where I live?",
+      "gpt-4o-mini",
+      None,
+    )
     .await
     .unwrap();
   // response will be something like:

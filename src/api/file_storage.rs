@@ -25,6 +25,7 @@ use crate::state::AppState;
 use anyhow::anyhow;
 use aws_sdk_s3::primitives::ByteStream;
 use collab_importer::util::FileId;
+use database::pg_row::AFBlobStatus;
 use serde::Deserialize;
 use shared_entity::dto::file_dto::PutFileResponse;
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
@@ -357,7 +358,7 @@ async fn get_blob_by_object_key(
   // Get the metadata
   let result = state
     .bucket_storage
-    .get_blob_metadata(key.workspace_id(), &key.meta_key())
+    .get_blob_metadata(key.workspace_id(), &key.blob_metadata_key())
     .await;
 
   if let Err(err) = result.as_ref() {
@@ -369,6 +370,13 @@ async fn get_blob_by_object_key(
   }
 
   let metadata = result.unwrap();
+  match AFBlobStatus::from(metadata.status) {
+    AFBlobStatus::DallEContentPolicyViolation => {
+      return Ok(HttpResponse::UnprocessableEntity().finish());
+    },
+    AFBlobStatus::Ok => {},
+  };
+
   // Check if the file is modified since the last time
   if let Some(modified_since) = req
     .headers()
@@ -381,6 +389,7 @@ async fn get_blob_by_object_key(
     }
   }
 
+  trace!("Get blob data from bucket storage: {:?}", key.object_key());
   let blob_result = state.bucket_storage.get_blob(key).await;
   match blob_result {
     Ok(blob) => {
@@ -424,7 +433,7 @@ async fn get_blob_metadata_handler(
   // Get the metadata
   let metadata = state
     .bucket_storage
-    .get_blob_metadata(&path.workspace_id, &path.meta_key())
+    .get_blob_metadata(&path.workspace_id, &path.blob_metadata_key())
     .await
     .map(|meta| BlobMetadata {
       workspace_id: meta.workspace_id,
@@ -448,7 +457,7 @@ async fn get_blob_metadata_v1_handler(
   // Get the metadata
   let metadata = state
     .bucket_storage
-    .get_blob_metadata(&path.workspace_id, &path.meta_key())
+    .get_blob_metadata(&path.workspace_id, &path.blob_metadata_key())
     .await
     .map(|meta| BlobMetadata {
       workspace_id: meta.workspace_id,
@@ -589,7 +598,7 @@ impl BlobKey for BlobPathV0 {
     format!("{}/{}", self.workspace_id, self.file_id)
   }
 
-  fn meta_key(&self) -> String {
+  fn blob_metadata_key(&self) -> String {
     self.file_id.clone()
   }
 
@@ -615,7 +624,7 @@ impl BlobKey for BlobPathV1 {
     format!("{}/{}/{}", self.workspace_id, self.parent_dir, self.file_id)
   }
 
-  fn meta_key(&self) -> String {
+  fn blob_metadata_key(&self) -> String {
     format!("{}_{}", self.parent_dir, self.file_id)
   }
 

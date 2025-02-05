@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.78 as chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.81 as chef
 
 # Set the initial working directory
 WORKDIR /app

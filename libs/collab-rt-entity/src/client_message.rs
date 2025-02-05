@@ -1,6 +1,6 @@
 use crate::message::RealtimeMessage;
 use crate::server_message::ServerInit;
-use crate::{CollabMessage, MsgId};
+use crate::{CollabMessage, MessageByObjectId, MsgId};
 use anyhow::{anyhow, Error};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
@@ -13,6 +13,7 @@ use std::hash::{Hash, Hasher};
 use yrs::merge_updates_v1;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+
 pub trait SinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn payload_size(&self) -> usize;
   fn mergeable(&self) -> bool;
@@ -20,8 +21,10 @@ pub trait SinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn is_client_init_sync(&self) -> bool;
   fn is_server_init_sync(&self) -> bool;
   fn is_update_sync(&self) -> bool;
+  fn is_awareness_sync(&self) -> bool;
   fn is_ping_sync(&self) -> bool;
 }
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ClientCollabMessage {
   ClientInitSync { data: InitSync },
@@ -47,6 +50,7 @@ impl ClientCollabMessage {
   pub fn new_awareness_sync(data: UpdateSync) -> Self {
     Self::ClientAwarenessSync(data)
   }
+
   pub fn size(&self) -> usize {
     match self {
       ClientCollabMessage::ClientInitSync { data, .. } => data.payload.len(),
@@ -136,7 +140,7 @@ impl TryFrom<CollabMessage> for ClientCollabMessage {
       },
       CollabMessage::ServerInitSync(msg) => Ok(ClientCollabMessage::ServerInitSync(msg)),
       _ => Err(anyhow!(
-        "Can't convert to ClientCollabMessage for given collab message:{}",
+        "Can't convert to ClientCollabMessage for value:{}",
         value
       )),
     }
@@ -146,7 +150,8 @@ impl TryFrom<CollabMessage> for ClientCollabMessage {
 impl From<ClientCollabMessage> for RealtimeMessage {
   fn from(msg: ClientCollabMessage) -> Self {
     let object_id = msg.object_id().to_string();
-    Self::ClientCollabV2([(object_id, vec![msg])].into())
+    let message = MessageByObjectId::new_with_message(object_id, vec![msg]);
+    Self::ClientCollabV2(message)
   }
 }
 
@@ -186,6 +191,11 @@ impl SinkMessage for ClientCollabMessage {
   fn is_update_sync(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
   }
+
+  fn is_awareness_sync(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientAwarenessSync { .. })
+  }
+
   fn is_ping_sync(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientCollabStateCheck { .. })
   }

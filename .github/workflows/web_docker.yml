@@ -1,0 +1,89 @@
+name: AppFlowy Web image build and push
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'AppFlowy Web version'
+        required: true
+env:
+  IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_web
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+        matrix:
+          include:
+            - os: ubuntu-24.04
+              platform: linux/amd64
+            - os: ubuntu-24.04-arm
+              platform: linux/arm64
+    steps:
+      - name: Prepare
+        run: |
+          PLATFORM=${{ matrix.platform }}
+          VERSION=${{ github.event.inputs.version }}
+          IMAGE_TAG=${VERSION#v}
+          echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
+
+      - name: Check out the repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          platforms: ${{ matrix.platform }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-${{ env.PLATFORM_PAIR }}
+            ${{ env.IMAGE_NAME }}:latest-${{ env.PLATFORM_PAIR }}
+          build-args: VERSION=${{ github.event.inputs.version }}
+          context: docker/web
+          provenance: false
+          push: true
+  merge:
+    runs-on: ubuntu-24.04
+    needs:
+      - build
+    steps:
+      - name: Prepare
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          IMAGE_TAG=${VERSION#v}
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create and push manifest
+        uses: Noelware/docker-manifest-action@master
+        with:
+          inputs: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          images: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-linux-amd64,${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-linux-arm64
+          push: true
+
+      - name: Create and push manifest
+        uses: Noelware/docker-manifest-action@master
+        with:
+          inputs: ${{ env.IMAGE_NAME }}:latest
+          images: ${{ env.IMAGE_NAME }}:latest-linux-amd64,${{ env.IMAGE_NAME }}:latest-linux-arm64
+          push: true

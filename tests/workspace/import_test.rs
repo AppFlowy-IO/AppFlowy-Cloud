@@ -187,7 +187,7 @@ async fn upload_file(
   upload_after_secs: Option<u64>,
 ) -> Result<(), Error> {
   let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
-  let mut url = client
+  let url = client
     .api_client
     .create_import(&file_path)
     .await?

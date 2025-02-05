@@ -34,12 +34,24 @@ impl S3BucketStorage {
 pub struct AwsS3BucketClientImpl {
   client: Client,
   bucket: String,
+  endpoint: String,
+  presigned_url_endpoint: Option<String>,
 }
 
 impl AwsS3BucketClientImpl {
-  pub fn new(client: Client, bucket: String) -> Self {
+  pub fn new(
+    client: Client,
+    bucket: String,
+    endpoint: String,
+    presigned_url_endpoint: Option<String>,
+  ) -> Self {
     debug_assert!(!bucket.is_empty());
-    AwsS3BucketClientImpl { client, bucket }
+    AwsS3BucketClientImpl {
+      client,
+      bucket,
+      endpoint,
+      presigned_url_endpoint,
+    }
   }
 
   pub async fn gen_presigned_url(
@@ -71,7 +83,14 @@ impl AwsS3BucketClientImpl {
       .await
       .map_err(|err| AppError::Internal(anyhow!("Generate presigned url failed: {:?}", err)))?;
     let url = put_object_req.uri().to_string();
-    Ok(url)
+
+    let public_url = self
+      .presigned_url_endpoint
+      .as_ref()
+      .map_or(url.clone(), |presigned| {
+        url.replace(&self.endpoint, presigned)
+      });
+    Ok(public_url)
   }
 
   async fn complete_upload_and_get_metadata(

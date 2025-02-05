@@ -59,6 +59,7 @@ pub struct S3Setting {
   pub secret_key: Secret<String>,
   pub bucket: String,
   pub region: String,
+  pub presigned_url_endpoint: Option<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -228,6 +229,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
       region: get_env_var("APPFLOWY_S3_REGION", ""),
+      presigned_url_endpoint: get_env_var_opt("APPFLOWY_S3_PRESIGNED_URL_ENDPOINT"),
     },
     appflowy_ai: AppFlowyAISetting {
       port: get_env_var("AI_SERVER_PORT", "5001").into(),

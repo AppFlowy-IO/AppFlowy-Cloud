@@ -128,6 +128,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let s3_client = AwsS3BucketClientImpl::new(
     get_aws_s3_client(&config.s3).await?,
     config.s3.bucket.clone(),
+    config.s3.minio_url.clone(),
+    config.s3.presigned_url_endpoint.clone(),
   );
 
   let collab_access_control = CollabAccessControlImpl::new(access_control.clone());

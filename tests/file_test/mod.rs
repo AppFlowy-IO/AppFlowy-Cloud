@@ -44,10 +44,13 @@ impl TestBucket {
       secret_key: Secret::new(LOCALHOST_MINIO_SECRET_KEY.to_string()),
       bucket: LOCALHOST_MINIO_BUCKET_NAME.to_string(),
       region: "".to_string(),
+      presigned_url_endpoint: None,
     };
     let client = AwsS3BucketClientImpl::new(
       get_aws_s3_client(&setting).await.unwrap(),
       setting.bucket.clone(),
+      LOCALHOST_MINIO_URL.to_string(),
+      setting.presigned_url_endpoint.clone(),
     );
     Self(client)
   }

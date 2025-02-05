@@ -143,7 +143,7 @@ jobs:
         run: docker logout
 
   admin_frontend_image:
-    runs-on: {{ matrix.job.os }}
+    runs-on: ${{ matrix.job.os }}
     env:
       IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend
     strategy:
@@ -240,7 +240,7 @@ jobs:
         run: docker logout
 
   appflowy_worker_image:
-    runs-on: {{ matrix.job.os }}
+    runs-on: ${{ matrix.job.os }}
     env:
       IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_worker
     strategy:

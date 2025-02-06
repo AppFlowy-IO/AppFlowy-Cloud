@@ -44,11 +44,12 @@ pub struct ResponseFormat {
 #[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum OutputLayout {
-  #[default]
   Paragraph = 0,
   BulletList = 1,
   NumberedList = 2,
   SimpleTable = 3,
+  #[default]
+  Flex = 4,
 }
 
 #[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr, Eq, PartialEq)]

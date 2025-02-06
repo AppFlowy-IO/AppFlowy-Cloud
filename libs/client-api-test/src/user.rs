@@ -29,9 +29,8 @@ static ADMIN_USER_CLIENT: OnceCell<Client> = OnceCell::const_new();
 
 pub async fn admin_user_client() -> Client {
   ADMIN_USER_CLIENT
-    .get_or_init(async {
+    .get_or_init(|| async {
       let client = localhost_client();
-      // Sign in the admin user.
       client
         .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
         .await

@@ -75,15 +75,18 @@ impl Indexer for DocumentIndexer {
 
     for embedding in resp.data {
       let param = &mut content[embedding.index as usize];
-      let embedding: Vec<f32> = match embedding.embedding {
-        EmbeddingOutput::Float(embedding) => embedding.into_iter().map(|f| f as f32).collect(),
-        EmbeddingOutput::Base64(_) => {
-          return Err(AppError::OpenError(
-            "Unexpected base64 encoding".to_string(),
-          ))
-        },
-      };
-      param.embedding = Some(embedding);
+      if param.content.is_some() {
+        // we only set the embedding if the content was not marked as unchanged
+        let embedding: Vec<f32> = match embedding.embedding {
+          EmbeddingOutput::Float(embedding) => embedding.into_iter().map(|f| f as f32).collect(),
+          EmbeddingOutput::Base64(_) => {
+            return Err(AppError::OpenError(
+              "Unexpected base64 encoding".to_string(),
+            ))
+          },
+        };
+        param.embedding = Some(embedding);
+      }
     }
 
     Ok(Some(AFCollabEmbeddings {

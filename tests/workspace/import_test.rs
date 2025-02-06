@@ -211,9 +211,9 @@ async fn import_notion_zip_until_complete(name: &str) -> (TestClient, String) {
   // Uncomment the following lines to use the predicated upload file API.
   // Currently, we use `upload_file` to send a file to appflowy_worker, which then
   // processes the upload task.
-  let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
-  client.api_client.import_file(&file_path).await.unwrap();
-  // upload_file(&client, name, None).await.unwrap();
+  // let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
+  // client.api_client.import_file(&file_path).await.unwrap();
+  upload_file(&client, name, None).await.unwrap();
 
   let default_workspace_id = client.workspace_id().await;
 

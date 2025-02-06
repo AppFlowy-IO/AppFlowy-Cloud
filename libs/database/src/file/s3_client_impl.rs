@@ -90,6 +90,13 @@ impl AwsS3BucketClientImpl {
       .map_or(url.clone(), |presigned| {
         url.replace(&self.endpoint, presigned)
       });
+    trace!(
+      "generated presigned url: {}, public presigned url:{}, endpoint:{}, presigned_url_endpoint:{:?}",
+      url,
+      public_url,
+      self.endpoint,
+      self.presigned_url_endpoint
+    );
     Ok(public_url)
   }
 

@@ -147,6 +147,7 @@ pub enum CompletionType {
   MakeShorter = 3,
   MakeLonger = 4,
   ContinueWriting = 5,
+  Explain = 6,
 }
 
 #[derive(Debug, Clone, Serialize)]

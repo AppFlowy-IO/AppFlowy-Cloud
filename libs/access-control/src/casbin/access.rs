@@ -1,6 +1,6 @@
 use super::adapter::PgAdapter;
 use super::enforcer::AFEnforcer;
-use crate::act::{Action, ActionVariant, Acts};
+use crate::act::{Action, Acts};
 use crate::entity::{ObjectType, SubjectType};
 use crate::metrics::{tick_metric, AccessControlMetrics};
 
@@ -58,36 +58,38 @@ impl AccessControl {
     })
   }
 
-  pub async fn update_policy(
+  #[cfg(test)]
+  pub fn with_enforcer(enforcer: AFEnforcer) -> Self {
+    let access_control_metrics = Arc::new(AccessControlMetrics::init());
+    Self {
+      enforcer: Arc::new(enforcer),
+      access_control_metrics,
+    }
+  }
+
+  pub async fn update_policy<T>(
     &self,
     sub: SubjectType,
-    obj: ObjectType<'_>,
-    act: ActionVariant<'_>,
-  ) -> Result<(), AppError> {
+    obj: ObjectType,
+    act: T,
+  ) -> Result<(), AppError>
+  where
+    T: Acts,
+  {
     self.enforcer.update_policy(sub, obj, act).await?;
     Ok(())
   }
 
-  pub async fn remove_policy(
-    &self,
-    sub: &SubjectType,
-    obj: &ObjectType<'_>,
-  ) -> Result<(), AppError> {
+  pub async fn remove_policy(&self, sub: SubjectType, obj: ObjectType) -> Result<(), AppError> {
     self.enforcer.remove_policy(sub, obj).await?;
     Ok(())
   }
 
-  pub async fn enforce(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    obj: ObjectType<'_>,
-    act: ActionVariant<'_>,
-  ) -> Result<(), AppError> {
-    self
-      .enforcer
-      .enforce_policy(workspace_id, uid, obj, act)
-      .await
+  pub async fn enforce<T>(&self, uid: &i64, obj: ObjectType, act: T) -> Result<bool, AppError>
+  where
+    T: Acts,
+  {
+    self.enforcer.enforce_policy(uid, obj, act).await
   }
 }
 
@@ -261,10 +263,6 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
     }
   }
 
-  let grouping_policies = grouping_policies
-    .into_iter()
-    .map(|actions| actions.into_iter().map(|a| a.to_string()).collect())
-    .collect();
   enforcer
     .add_grouping_policies(grouping_policies)
     .await

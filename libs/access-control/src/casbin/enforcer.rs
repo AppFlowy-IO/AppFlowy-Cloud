@@ -1,8 +1,8 @@
 use super::access::{load_group_policies, POLICY_FIELD_INDEX_OBJECT, POLICY_FIELD_INDEX_SUBJECT};
-use crate::act::ActionVariant;
+use crate::act::Acts;
 use crate::entity::{ObjectType, SubjectType};
 use crate::metrics::MetricsCalState;
-use crate::request::{PolicyRequest, WorkspacePolicyRequest};
+use crate::request::PolicyRequest;
 use anyhow::anyhow;
 use app_error::AppError;
 use casbin::{CoreApi, Enforcer, MgmtApi};
@@ -30,18 +30,19 @@ impl AFEnforcer {
   /// [`ObjectType::Workspace`] has to be paired with [`ActionType::Role`],
   /// [`ObjectType::Collab`] has to be paired with [`ActionType::Level`],
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn update_policy(
+  pub async fn update_policy<T>(
     &self,
     sub: SubjectType,
-    obj: ObjectType<'_>,
-    act: ActionVariant<'_>,
-  ) -> Result<(), AppError> {
-    validate_obj_action(&obj, &act)?;
-
+    obj: ObjectType,
+    act: T,
+  ) -> Result<(), AppError>
+  where
+    T: Acts,
+  {
     let policies = act
       .policy_acts()
       .into_iter()
-      .map(|act| vec![sub.policy_subject(), obj.policy_object(), act.to_string()])
+      .map(|act| vec![sub.policy_subject(), obj.policy_object(), act])
       .collect::<Vec<Vec<_>>>();
 
     trace!("[access control]: add policy:{:?}", policies);
@@ -59,8 +60,8 @@ impl AFEnforcer {
   /// Returns policies that match the filter.
   pub async fn remove_policy(
     &self,
-    sub: &SubjectType,
-    object_type: &ObjectType<'_>,
+    sub: SubjectType,
+    object_type: ObjectType,
   ) -> Result<(), AppError> {
     let mut enforcer = self.enforcer.write().await;
     self
@@ -68,29 +69,7 @@ impl AFEnforcer {
       .await
   }
 
-  /// Add a grouping policy.
-  #[allow(dead_code)]
-  pub async fn add_grouping_policy(
-    &self,
-    sub: &SubjectType,
-    group_sub: &SubjectType,
-  ) -> Result<(), AppError> {
-    let mut enforcer = self.enforcer.write().await;
-    enforcer
-      .add_grouping_policy(vec![sub.policy_subject(), group_sub.policy_subject()])
-      .await
-      .map_err(|e| AppError::Internal(anyhow!("fail to add grouping policy: {e:?}")))?;
-    Ok(())
-  }
-
-  /// 1. **Workspace Policy**: Initially, it checks if the user has permission at the workspace level. If the user
-  ///    has permission to perform the action on the workspace, the function returns `true` without further checks.
-  ///
-  /// 2. **Object-Specific Policy**: If workspace policy check fail, the function evaluates the policy
-  ///    specific to the object itself.
-  ///
   /// ## Parameters:
-  /// - `workspace_id`: The identifier for the workspace containing the object.
   /// - `uid`: The user ID of the user attempting the action.
   /// - `obj`: The type of object being accessed, encapsulated within an `ObjectType`.
   /// - `act`: The action being attempted, encapsulated within an `ActionVariant`.
@@ -101,59 +80,40 @@ impl AFEnforcer {
   /// - `Err(AppError)`: If an error occurs during policy enforcement.
   ///
   #[instrument(level = "debug", skip_all)]
-  pub async fn enforce_policy(
+  pub async fn enforce_policy<T>(
     &self,
-    workspace_id: &str,
     uid: &i64,
-    obj: ObjectType<'_>,
-    act: ActionVariant<'_>,
-  ) -> Result<(), AppError> {
+    obj: ObjectType,
+    act: T,
+  ) -> Result<bool, AppError>
+  where
+    T: Acts,
+  {
     self
       .metrics_state
       .total_read_enforce_result
       .fetch_add(1, Ordering::Relaxed);
 
-    // 1. First, check workspace-level permissions.
-    let workspace_policy_request = WorkspacePolicyRequest::new(workspace_id, uid, &obj, &act);
-    let policy = workspace_policy_request.to_policy();
-    let mut result = self
+    let policy_request = PolicyRequest::new(*uid, obj, act);
+    let policy = policy_request.to_policy();
+    let result = self
       .enforcer
       .read()
       .await
       .enforce(policy)
       .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
-
-    // 2. Finally, enforce object-specific policy if previous checks fail.
-    if !result {
-      let policy_request = PolicyRequest::new(*uid, &obj, &act);
-      let policy = policy_request.to_policy();
-      result = self
-        .enforcer
-        .read()
-        .await
-        .enforce(policy)
-        .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
-    }
-
-    if result {
-      Ok(())
-    } else {
-      Err(AppError::NotEnoughPermissions {
-        user: uid.to_string(),
-        workspace_id: workspace_id.to_string(),
-      })
-    }
+    Ok(result)
   }
 
   #[inline]
   async fn remove_with_enforcer(
     &self,
-    sub: &SubjectType,
-    object_type: &ObjectType<'_>,
+    sub: SubjectType,
+    object_type: ObjectType,
     enforcer: &mut Enforcer,
   ) -> Result<(), AppError> {
     let policies_for_user_on_object =
-      policies_for_subject_with_given_object(sub, object_type, enforcer).await;
+      policies_for_subject_with_given_object(sub.clone(), object_type.clone(), enforcer).await;
 
     event!(
       tracing::Level::INFO,
@@ -172,21 +132,10 @@ impl AFEnforcer {
   }
 }
 
-fn validate_obj_action(obj: &ObjectType<'_>, act: &ActionVariant) -> Result<(), AppError> {
-  match (obj, act) {
-    (ObjectType::Workspace(_), ActionVariant::FromRole(_))
-    | (ObjectType::Collab(_), ActionVariant::FromAccessLevel(_)) => Ok(()),
-    _ => Err(AppError::Internal(anyhow!(
-      "invalid object type and action type combination: object={:?}, action={:?}",
-      obj,
-      act.to_enforce_act()
-    ))),
-  }
-}
 #[inline]
 async fn policies_for_subject_with_given_object(
-  subject: &SubjectType,
-  object_type: &ObjectType<'_>,
+  subject: SubjectType,
+  object_type: ObjectType,
   enforcer: &Enforcer,
 ) -> Vec<Vec<String>> {
   let subject_id = subject.policy_subject();
@@ -201,19 +150,18 @@ async fn policies_for_subject_with_given_object(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
   use crate::{
-    act::{Action, ActionVariant},
+    act::Action,
     casbin::access::{casbin_model, cmp_role_or_level},
     entity::{ObjectType, SubjectType},
   };
-  use app_error::ErrorCode;
   use casbin::{function_map::OperatorFunction, prelude::*};
   use database_entity::dto::{AFAccessLevel, AFRole};
 
   use super::AFEnforcer;
 
-  async fn test_enforcer() -> AFEnforcer {
+  pub async fn test_enforcer() -> AFEnforcer {
     let model = casbin_model().await.unwrap();
     let mut enforcer = casbin::Enforcer::new(model, MemoryAdapter::default())
       .await
@@ -224,7 +172,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn workspace_group_policy_test() {
+  async fn policy_comparison_test() {
     let enforcer = test_enforcer().await;
     let uid = 1;
     let workspace_id = "w1";
@@ -233,528 +181,77 @@ mod tests {
     enforcer
       .update_policy(
         SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Member),
+        ObjectType::Workspace(workspace_id.to_string()),
+        AFRole::Member,
       )
       .await
-      .unwrap();
+      .expect("update policy failed");
 
-    // test the user has permission to write and read the workspace
+    // test if enforce can compare requested action and the role policy
     for action in [Action::Write, Action::Read] {
       let result = enforcer
         .enforce_policy(
-          workspace_id,
           &uid,
-          ObjectType::Workspace(workspace_id),
-          ActionVariant::FromAction(&action),
+          ObjectType::Workspace(workspace_id.to_string()),
+          action.clone(),
         )
-        .await;
-      assert!(result.is_ok(), "action={:?}", action);
+        .await
+        .expect(&format!("enforcing action={:?} failed", action));
+      assert!(result, "action={:?} should be allowed", action);
     }
-  }
-
-  #[tokio::test]
-  async fn workspace_owner_and_try_to_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
-
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // add user as a member of the workspace
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Owner),
+    let result = enforcer
+      .enforce_policy(
+        &uid,
+        ObjectType::Workspace(workspace_id.to_string()),
+        Action::Delete,
       )
       .await
-      .unwrap();
-
-    for action in [Action::Write, Action::Read, Action::Delete] {
-      let result = enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAction(&action),
-        )
-        .await;
-      assert!(result.is_ok(), "action={:?}", action);
-    }
-  }
-
-  #[tokio::test]
-  async fn workspace_member_collab_owner_try_to_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
-
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // add user as a member of the workspace
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Member),
-      )
-      .await
-      .unwrap();
-
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAccessLevel(&AFAccessLevel::FullAccess),
-      )
-      .await
-      .unwrap();
-
-    for action in [Action::Write, Action::Read, Action::Delete] {
-      let result = enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAction(&action),
-        )
-        .await;
-      assert!(result.is_ok(), "action={:?}", action);
-    }
-  }
-
-  #[tokio::test]
-  async fn workspace_owner_collab_member_try_to_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
-
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // add user as a member of the workspace
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Owner),
-      )
-      .await
-      .unwrap();
-
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAccessLevel(&AFAccessLevel::ReadAndWrite),
-      )
-      .await
-      .unwrap();
-
-    for action in [Action::Write, Action::Read, Action::Delete] {
-      let result = enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAction(&action),
-        )
-        .await;
-      assert!(result.is_ok(), "action={:?}", action);
-    }
-  }
-
-  #[tokio::test]
-  async fn workspace_member_collab_member_try_to_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
-
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // add user as a member of the workspace
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Member),
-      )
-      .await
-      .unwrap();
-
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAccessLevel(&AFAccessLevel::ReadAndWrite),
-      )
-      .await
-      .unwrap();
-
-    for action in [Action::Write, Action::Read] {
-      let result = enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAction(&action),
-        )
-        .await;
-      assert!(result.is_ok(), "action={:?}", action);
-    }
+      .expect("enforcing action=Delete failed");
+    assert!(!result, "action=Delete should not be allowed");
 
     let result = enforcer
       .enforce_policy(
-        workspace_id,
         &uid,
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAction(&Action::Delete),
-      )
-      .await;
-    assert!(result.is_err(), "only the owner can perform delete");
-    let error_code = result.unwrap_err().code();
-    assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
-  }
-
-  #[tokio::test]
-  async fn workspace_member_but_not_collab_member_and_try_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
-
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // add user as a member of the workspace
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Member),
+        ObjectType::Workspace(workspace_id.to_string()),
+        AFRole::Member,
       )
       .await
-      .unwrap();
-
-    // Although the user is not directly associated with the collab object, they are a member of the
-    // workspace containing it. Therefore, the system will evaluate their permissions based on the
-    // workspace policy as a fallback.
-    for action in [Action::Write, Action::Read] {
-      let result = enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAction(&action),
-        )
-        .await;
-      assert!(result.is_ok(), "action={:?}", action);
-    }
+      .expect("enforcing role=Member failed");
+    assert!(result, "role=Member should be allowed");
 
     let result = enforcer
       .enforce_policy(
-        workspace_id,
         &uid,
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAction(&Action::Delete),
-      )
-      .await;
-    assert!(result.is_err(), "only the owner can perform delete");
-    let error_code = result.unwrap_err().code();
-    assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
-  }
-
-  #[tokio::test]
-  async fn not_workspace_member_but_collab_owner_try_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAccessLevel(&AFAccessLevel::FullAccess),
+        ObjectType::Workspace(workspace_id.to_string()),
+        AFRole::Owner,
       )
       .await
-      .unwrap();
+      .expect("enforcing role=Owner failed");
+    assert!(!result, "role=Owner should not be allowed");
 
-    for action in [Action::Write, Action::Read, Action::Delete] {
-      let result = enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAction(&action),
-        )
-        .await;
-      assert!(result.is_ok(), "action={:?}", action);
-    }
-  }
-
-  #[tokio::test]
-  async fn not_workspace_member_not_collab_member_and_try_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // Since the user is not a member of the specified collaboration object, the access control system
-    // should check if the user has fallback permissions from being a member of the workspace.
-    // However, as the user is not a member of the workspace either, they should not have permission
-    // to perform the actions on the collaboration object.
-    // Therefore, for both actions, the expected result is `false`, indicating that the permission to
-    // perform the action is denied.
-    for action in [Action::Write, Action::Read] {
-      let result = enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAction(&action),
-        )
-        .await;
-      assert!(result.is_err(), "action={:?}", action);
-      let error_code = result.unwrap_err().code();
-      assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
-    }
-  }
-
-  #[tokio::test]
-  async fn cmp_owner_role_test() {
-    let enforcer = test_enforcer().await;
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // add user as a member of the workspace
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Owner),
-      )
-      .await
-      .unwrap();
-
-    for role in [AFRole::Owner, AFRole::Member, AFRole::Guest] {
-      assert!(enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Workspace(workspace_id),
-          ActionVariant::FromRole(&role),
-        )
-        .await
-        .is_ok());
-      assert!(enforcer
-        .enforce_policy(
-          workspace_id,
-          &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromRole(&role),
-        )
-        .await
-        .is_ok());
-    }
-  }
-
-  #[tokio::test]
-  async fn cmp_member_role_test() {
-    let enforcer = test_enforcer().await;
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // add user as a member of the workspace
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Member),
-      )
-      .await
-      .unwrap();
-
-    for role in [AFRole::Owner, AFRole::Member, AFRole::Guest] {
-      if role == AFRole::Owner {
-        let result = enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Workspace(workspace_id),
-            ActionVariant::FromRole(&role),
-          )
-          .await;
-        assert!(result.is_err());
-        let error_code = result.unwrap_err().code();
-        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
-
-        let result = enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Collab(object_1),
-            ActionVariant::FromRole(&role),
-          )
-          .await;
-        assert!(result.is_err());
-        let error_code = result.unwrap_err().code();
-        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
-      } else {
-        assert!(enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Workspace(workspace_id),
-            ActionVariant::FromRole(&role),
-          )
-          .await
-          .is_ok());
-        assert!(enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Collab(object_1),
-            ActionVariant::FromRole(&role),
-          )
-          .await
-          .is_ok());
-      }
-    }
-  }
-
-  #[tokio::test]
-  async fn cmp_guest_role_test() {
-    let enforcer = test_enforcer().await;
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    // add user as a member of the workspace
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromRole(&AFRole::Guest),
-      )
-      .await
-      .unwrap();
-
-    for role in [AFRole::Owner, AFRole::Member, AFRole::Guest] {
-      if role == AFRole::Owner || role == AFRole::Member {
-        let result = enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Collab(object_1),
-            ActionVariant::FromRole(&role),
-          )
-          .await;
-        assert!(result.is_err());
-        let error_code = result.unwrap_err().code();
-        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
-      } else {
-        assert!(enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Collab(object_1),
-            ActionVariant::FromRole(&role),
-          )
-          .await
-          .is_ok());
-      }
-    }
-  }
-
-  #[tokio::test]
-  async fn cmp_full_access_level_test() {
-    let enforcer = test_enforcer().await;
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAccessLevel(&AFAccessLevel::FullAccess),
-      )
-      .await
-      .unwrap();
-
-    for level in [
+    for access_level in [
+      AFAccessLevel::ReadOnly,
       AFAccessLevel::ReadAndComment,
       AFAccessLevel::ReadAndWrite,
-      AFAccessLevel::ReadOnly,
     ] {
-      assert!(enforcer
+      let result = enforcer
         .enforce_policy(
-          workspace_id,
           &uid,
-          ObjectType::Collab(object_1),
-          ActionVariant::FromAccessLevel(&level),
+          ObjectType::Workspace(workspace_id.to_string()),
+          access_level,
         )
         .await
-        .is_ok());
+        .expect(&format!("enforcing access_level={:?} failed", access_level));
+      assert!(result, "access_level={:?} should be allowed", access_level);
     }
-  }
-
-  #[tokio::test]
-  async fn cmp_read_only_level_test() {
-    let enforcer = test_enforcer().await;
-    let uid = 1;
-    let workspace_id = "w1";
-    let object_1 = "o1";
-
-    enforcer
-      .update_policy(
-        SubjectType::User(uid),
-        ObjectType::Collab(object_1),
-        ActionVariant::FromAccessLevel(&AFAccessLevel::ReadOnly),
+    let result = enforcer
+      .enforce_policy(
+        &uid,
+        ObjectType::Workspace(workspace_id.to_string()),
+        AFAccessLevel::FullAccess,
       )
       .await
-      .unwrap();
-
-    for level in [
-      AFAccessLevel::ReadAndComment,
-      AFAccessLevel::ReadAndWrite,
-      AFAccessLevel::ReadOnly,
-    ] {
-      if matches!(level, AFAccessLevel::ReadOnly) {
-        assert!(enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Collab(object_1),
-            ActionVariant::FromAccessLevel(&level),
-          )
-          .await
-          .is_ok());
-      } else {
-        let result = enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Collab(object_1),
-            ActionVariant::FromAccessLevel(&level),
-          )
-          .await;
-        assert!(result.is_err());
-        let error_code = result.unwrap_err().code();
-        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
-        let result = enforcer
-          .enforce_policy(
-            workspace_id,
-            &uid,
-            ObjectType::Collab(object_1),
-            ActionVariant::FromAccessLevel(&level),
-          )
-          .await;
-        assert!(result.is_err());
-        let error_code = result.unwrap_err().code();
-        assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
-      }
-    }
+      .expect("enforcing access_level=FullAccess failed");
+    assert!(!result, "access_level=FullAccess should not be allowed")
   }
 }

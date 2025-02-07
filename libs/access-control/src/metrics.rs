@@ -16,7 +16,7 @@ pub struct AccessControlMetrics {
 }
 
 impl AccessControlMetrics {
-  fn init() -> Self {
+  pub(crate) fn init() -> Self {
     Self {
       load_all_policies: Gauge::default(),
       total_read_enforce_count: Gauge::default(),

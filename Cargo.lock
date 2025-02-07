@@ -16,7 +16,6 @@ dependencies = [
  "futures-util",
  "lazy_static",
  "prometheus-client",
- "redis 0.25.4",
  "serde",
  "sqlx",
  "tokio",

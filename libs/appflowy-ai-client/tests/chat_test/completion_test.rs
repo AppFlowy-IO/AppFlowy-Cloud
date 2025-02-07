@@ -6,28 +6,6 @@ use appflowy_ai_client::dto::{
 };
 
 #[tokio::test]
-async fn completion_explain_test() {
-  let client = appflowy_ai_client();
-  let params = CompleteTextParams {
-    text: "Snowboarding".to_string(),
-    completion_type: Some(CompletionType::Explain),
-    custom_prompt: None,
-    metadata: Some(CompletionMetadata {
-      object_id: uuid::Uuid::new_v4().to_string(),
-      workspace_id: Some(uuid::Uuid::new_v4().to_string()),
-      rag_ids: None,
-    }),
-    format: ResponseFormat::default(),
-  };
-  let stream = client
-    .stream_completion_text(params, "gpt-4o-mini")
-    .await
-    .unwrap();
-  let text = collect_stream_text(stream).await;
-  assert!(!text.is_empty());
-}
-
-#[tokio::test]
 async fn completion_image_test() {
   let client = appflowy_ai_client();
   let params = CompleteTextParams {

@@ -20,7 +20,7 @@ use crate::{
   },
   state::AppState,
 };
-
+// dummy comment to trigger integration test
 pub fn access_request_scope() -> Scope {
   web::scope("/api/access-request")
     .service(web::resource("").route(web::post().to(post_access_request_handler)))

@@ -2,7 +2,6 @@ use crate::client::{localhost_client, LOCALHOST_GOTRUE};
 use crate::log::setup_log;
 use client_api::Client;
 use lazy_static::lazy_static;
-use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 lazy_static! {
@@ -13,6 +12,7 @@ lazy_static! {
       password: std::env::var("GOTRUE_ADMIN_PASSWORD").unwrap_or("password".to_string()),
     }
   };
+  static ref ADMIN_SIGN_IN_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::new(());
 }
 
 #[derive(Clone, Debug)]
@@ -25,20 +25,20 @@ pub fn generate_unique_email() -> String {
   format!("user_{}@appflowy.io", Uuid::new_v4())
 }
 
-static ADMIN_USER_CLIENT: OnceCell<Client> = OnceCell::const_new();
-
 pub async fn admin_user_client() -> Client {
-  ADMIN_USER_CLIENT
-    .get_or_init(|| async {
-      let client = localhost_client();
-      client
-        .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
-        .await
-        .expect("Failed to sign in admin user");
-      client
-    })
+  let admin_client = localhost_client();
+  #[cfg(target_arch = "wasm32")]
+  {
+    let msg = format!("{}", admin_client);
+    web_sys::console::log_1(&msg.into());
+  }
+
+  let _guard = ADMIN_SIGN_IN_MUTEX.lock().await;
+  let _is_new = admin_client
+    .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
     .await
-    .clone()
+    .unwrap();
+  admin_client
 }
 
 pub async fn generate_unique_registered_user() -> User {

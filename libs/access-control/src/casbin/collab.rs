@@ -4,7 +4,7 @@ use database_entity::dto::AFAccessLevel;
 use tracing::instrument;
 
 use crate::{
-  act::{Action, ActionVariant},
+  act::Action,
   collab::{CollabAccessControl, RealtimeAccessControl},
   entity::ObjectType,
 };
@@ -40,15 +40,19 @@ impl CollabAccessControl for CollabAccessControlImpl {
       Action::Delete => Action::Write,
     };
 
-    self
+    let result = self
       .access_control
       .enforce(
-        workspace_id,
         uid,
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromAction(&workspace_action),
+        ObjectType::Workspace(workspace_id.to_string()),
+        workspace_action,
       )
-      .await
+      .await;
+    match result {
+      Ok(true) => Ok(()),
+      Ok(false) => Err(AppError::NotEnoughPermissions),
+      Err(e) => Err(e),
+    }
   }
 
   async fn enforce_access_level(
@@ -68,15 +72,19 @@ impl CollabAccessControl for CollabAccessControlImpl {
       AFAccessLevel::FullAccess => Action::Write,
     };
 
-    self
+    let result = self
       .access_control
       .enforce(
-        workspace_id,
         uid,
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromAction(&workspace_action),
+        ObjectType::Workspace(workspace_id.to_string()),
+        workspace_action,
       )
-      .await
+      .await;
+    match result {
+      Ok(true) => Ok(()),
+      Ok(false) => Err(AppError::NotEnoughPermissions),
+      Err(e) => Err(e),
+    }
   }
 
   #[instrument(level = "info", skip_all)]
@@ -123,23 +131,14 @@ impl RealtimeCollabAccessControlImpl {
       Action::Delete => Action::Write,
     };
 
-    let enforcement_result = self
+    self
       .access_control
       .enforce(
-        workspace_id,
         uid,
-        ObjectType::Workspace(workspace_id),
-        ActionVariant::FromAction(&workspace_action),
+        ObjectType::Workspace(workspace_id.to_string()),
+        workspace_action,
       )
-      .await;
-    match enforcement_result {
-      Ok(_) => Ok(true),
-      Err(AppError::NotEnoughPermissions {
-        user: _user,
-        workspace_id: _workspace_id,
-      }) => Ok(false),
-      Err(e) => Err(e),
-    }
+      .await
   }
 }
 
@@ -165,5 +164,41 @@ impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
     self
       .can_perform_action(workspace_id, uid, oid, Action::Read)
       .await
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use database_entity::dto::AFRole;
+
+  use crate::{
+    act::Action,
+    casbin::{access::AccessControl, enforcer::tests::test_enforcer},
+    collab::CollabAccessControl,
+    entity::{ObjectType, SubjectType},
+  };
+
+  #[tokio::test]
+  pub async fn test_collab_access_control() {
+    let enforcer = test_enforcer().await;
+    let uid = 1;
+    let workspace_id = "w1";
+    let oid = "o1";
+    enforcer
+      .update_policy(
+        SubjectType::User(uid),
+        ObjectType::Workspace(workspace_id.to_string()),
+        AFRole::Member,
+      )
+      .await
+      .unwrap();
+    let access_control = AccessControl::with_enforcer(enforcer);
+    let collab_access_control = super::CollabAccessControlImpl::new(access_control);
+    for action in vec![Action::Read, Action::Write, Action::Delete] {
+      collab_access_control
+        .enforce_action(workspace_id, &uid, &oid, action.clone())
+        .await
+        .expect(format!("Failed to enforce action: {:?}", action).as_str());
+    }
   }
 }

@@ -79,13 +79,7 @@ pub async fn get_access_request(
     select_access_request_by_request_id(pg_pool, access_request_id).await?;
 
   if access_request_with_view_id.workspace.owner_uid != user_uid {
-    return Err(AppError::NotEnoughPermissions {
-      user: user_uid.to_string(),
-      workspace_id: access_request_with_view_id
-        .workspace
-        .workspace_id
-        .to_string(),
-    });
+    return Err(AppError::NotEnoughPermissions);
   }
   let folder = get_latest_collab_folder(
     collab_storage,

@@ -159,6 +159,7 @@ fn to_folder_view(
     layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
     last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
+    is_locked: view.is_locked,
     extra,
     children,
   })
@@ -184,6 +185,7 @@ pub fn section_items_to_favorite_folder_view(
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
+          is_locked: v.is_locked,
           extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
           children: vec![],
         };
@@ -216,6 +218,7 @@ pub fn section_items_to_recent_folder_view(
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
+          is_locked: v.is_locked,
           extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
           children: vec![],
         };
@@ -247,6 +250,7 @@ pub fn section_items_to_trash_folder_view(
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
+          is_locked: v.is_locked,
           extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
           children: vec![],
         };

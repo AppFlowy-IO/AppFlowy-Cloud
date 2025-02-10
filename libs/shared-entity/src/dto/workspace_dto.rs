@@ -261,6 +261,7 @@ pub struct FolderView {
   pub layout: ViewLayout,
   pub created_at: DateTime<Utc>,
   pub last_edited_time: DateTime<Utc>,
+  pub is_locked: Option<bool>,
   /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<FolderView>,

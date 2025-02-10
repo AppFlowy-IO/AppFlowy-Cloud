@@ -1,4 +1,5 @@
 mod actors;
+pub mod messages;
 
 pub use actors::server::WsServer;
 pub use actors::session::WsSession;

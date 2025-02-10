@@ -1,11 +1,15 @@
-use super::{ConnectionError, Oid, WorkspaceId};
+use super::{ConnectionError, ObjectId, WorkspaceId};
+use crate::ws2::collab_cache::CollabCache;
 use bytes::Bytes;
+use collab::core::collab::CollabContext;
+use collab::preclude::Collab;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use smallvec::{smallvec, ExtendFromSlice, SmallVec};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast::error::SendError;
 use tokio::time::MissedTickBehavior;
 use tokio::{join, try_join};
 use tokio_stream::wrappers::WatchStream;
@@ -18,6 +22,7 @@ use yrs::encoding::write::Write;
 use yrs::sync::SyncMessage;
 use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::{AsyncTransact, ReadTxn, Transaction, TransactionMut, Update};
 
 type WsConn = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 type CollabUpdateSink = tokio::sync::broadcast::Sender<Message>;
@@ -25,12 +30,12 @@ type CollabUpdateStream = tokio::sync::broadcast::Receiver<Message>;
 
 #[derive(Clone)]
 struct Message {
-  object_id: Oid,
+  object_id: ObjectId,
   sync_message: yrs::sync::Message,
 }
 
 impl Message {
-  fn new(object_id: Oid, sync_message: yrs::sync::Message) -> Self {
+  fn new(object_id: ObjectId, sync_message: yrs::sync::Message) -> Self {
     Message {
       object_id,
       sync_message,
@@ -45,8 +50,8 @@ impl Message {
   }
 
   fn from_bytes(data: &[u8]) -> Result<Self, yrs::encoding::read::Error> {
-    let object_id =
-      Oid::from_slice(data).map_err(|_| yrs::encoding::read::Error::EndOfBuffer(data.len()))?;
+    let object_id = ObjectId::from_slice(data)
+      .map_err(|_| yrs::encoding::read::Error::EndOfBuffer(data.len()))?;
     let mut decoder = DecoderV1::from(&data[16..]);
     let sync_message = yrs::sync::Message::decode(&mut decoder)?;
     Ok(Self {
@@ -140,6 +145,7 @@ struct Inner {
   status_rx: tokio::sync::watch::Receiver<ConnectionStatus>,
   message_tx: CollabUpdateSink,
   shutdown: CancellationToken,
+  collab_cache: CollabCache,
 }
 
 impl Inner {
@@ -149,12 +155,14 @@ impl Inner {
   fn new(options: Options) -> Arc<Self> {
     let (status_tx, status_rx) = tokio::sync::watch::channel(ConnectionStatus::default());
     let (message_tx, message_rx) = tokio::sync::broadcast::channel(1000);
+    let workspace_id = options.workspace_id.clone();
     let inner = Arc::new(Inner {
       options,
       status_rx,
       status_tx,
       message_tx,
       shutdown: CancellationToken::new(),
+      collab_cache: CollabCache::new(workspace_id),
     });
     tokio::spawn(Self::remote_receiver_loop(inner.clone(), message_rx));
     inner
@@ -307,23 +315,45 @@ impl Inner {
     let object_id = msg.object_id;
     match msg.sync_message {
       yrs::sync::Message::Sync(SyncMessage::SyncStep1(sv)) => {
-        //TODO: get collab by object_id, compute sync step 2 and sent it back
+        let collab = self.collab_cache.get(object_id)?;
+        let tx = collab.transact();
+        let update = tx.encode_state_as_update_v1(&sv);
+        let reply = Message::new(
+          object_id,
+          yrs::sync::Message::Sync(SyncMessage::SyncStep2(update)),
+        );
+        reply_tx.send(reply)?;
       },
-      yrs::sync::Message::Sync(SyncMessage::SyncStep2(update)) => {
-        //TODO: get collab by object_id, apply update to it
-      },
-      yrs::sync::Message::Sync(SyncMessage::Update(sv)) => {
-        //TODO: get collab by object_id, apply update to it
+      yrs::sync::Message::Sync(SyncMessage::SyncStep2(update))
+      | yrs::sync::Message::Sync(SyncMessage::Update(update)) => {
+        let mut collab = self.collab_cache.get_mut(object_id)?;
+        {
+          let mut tx = collab.transact_mut();
+          let update = Update::decode_v1(&update)?;
+          tx.apply_update(update)?;
+        }
+        // if after applying update we have detached blocks, we need to ask for missing updates
+        Self::check_missing_updates(collab.transact(), object_id, reply_tx)?;
       },
       yrs::sync::Message::Auth(Some(deny_reason)) => {
-        //TODO: usually not used. Maybe just delete all local data about that collab?
+        tracing::info!(
+          "removing collab from local storage {} - reason: {}",
+          object_id,
+          deny_reason
+        );
+        self.collab_cache.remove(&object_id)?;
       },
       yrs::sync::Message::Auth(None) => { /* do nothing */ },
       yrs::sync::Message::AwarenessQuery => {
-        //TODO: get collab by object_id, get full awareness update and send it back
+        let collab = self.collab_cache.get(object_id)?;
+        let awareness = collab.get_awareness().update()?;
+        let reply = Message::new(object_id, yrs::sync::Message::Awareness(awareness));
+        reply_tx.send(reply)?;
       },
       yrs::sync::Message::Awareness(awareness_update) => {
-        //TODO: get collab by object_id, apply awareness update to it
+        let mut collab = self.collab_cache.get_mut(object_id)?;
+        let awareness = collab.get_mut_awareness();
+        awareness.apply_update(awareness_update)?
       },
       yrs::sync::Message::Custom(tag, _) => {
         tracing::warn!("unknown message with tag {tag}")
@@ -332,7 +362,24 @@ impl Inner {
     Ok(())
   }
 
-  /// Loop task used to handle messages to be send to the server.
+  fn check_missing_updates(
+    tx: Transaction,
+    object_id: ObjectId,
+    reply_tx: &mut CollabUpdateSink,
+  ) -> Result<(), ConnectionError> {
+    let store = tx.store();
+    if store.pending_update().is_some() || store.pending_ds().is_some() {
+      let sv = tx.state_vector();
+      let reply = Message::new(
+        object_id,
+        yrs::sync::Message::Sync(SyncMessage::SyncStep1(sv)),
+      );
+      reply_tx.send(reply)?;
+    }
+    Ok(())
+  }
+
+  /// Loop task used to handle messages to be sent to the server.
   async fn send_messages_loop(
     mut sink: SplitSink<WsConn, tungstenite::protocol::Message>,
     mut rx: CollabUpdateStream,
@@ -390,7 +437,7 @@ impl Inner {
   /// be compacted because it's of different type or doesn't belong to the same collab.
   fn eager_prefetch(
     rx: &mut CollabUpdateStream,
-    current_oid: Oid,
+    current_oid: ObjectId,
     buf: Vec<u8>,
   ) -> Result<(Message, Option<Message>), ConnectionError> {
     const SIZE_THRESHOLD: usize = 64 * 1024;
@@ -490,5 +537,11 @@ impl Display for ConnectionStatus {
       ConnectionStatus::Connecting { .. } => write!(f, "connecting"),
       ConnectionStatus::Connected { .. } => write!(f, "connected"),
     }
+  }
+}
+
+impl From<SendError<Message>> for ConnectionError {
+  fn from(_: SendError<Message>) -> Self {
+    ConnectionError::Closed
   }
 }

@@ -42,6 +42,7 @@ serde.workspace = true
 app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 scraper = { version = "0.17.1", optional = true }
 arc-swap.workspace = true
+dashmap.workspace = true
 
 shared-entity = { workspace = true }
 collab-rt-entity = { workspace = true }

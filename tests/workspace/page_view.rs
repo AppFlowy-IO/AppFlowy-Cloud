@@ -208,6 +208,56 @@ async fn create_new_document_page() {
 }
 
 #[tokio::test]
+async fn create_new_chat_page() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspaces = c.get_workspaces().await.unwrap();
+  assert_eq!(workspaces.len(), 1);
+  let workspace_id = workspaces[0].workspace_id;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let page = c
+    .create_workspace_page_view(
+      workspace_id,
+      &CreatePageParams {
+        parent_view_id: general_space.view_id.clone(),
+        layout: ViewLayout::Chat,
+        name: Some("New chat".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  sleep(Duration::from_secs(1)).await;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  general_space
+    .children
+    .iter()
+    .find(|v| v.view_id == page.view_id)
+    .unwrap();
+  assert_eq!(
+    c.get_chat_settings(&workspace_id.to_string(), &page.view_id)
+      .await
+      .unwrap()
+      .name,
+    "New chat"
+  );
+}
+
+#[tokio::test]
 async fn move_page_to_another_space() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;

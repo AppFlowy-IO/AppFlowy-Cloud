@@ -185,6 +185,7 @@ pub struct CreatePageParams {
 pub struct UpdatePageParams {
   pub name: String,
   pub icon: Option<ViewIcon>,
+  pub is_locked: Option<bool>,
   pub extra: Option<Value>,
 }
 

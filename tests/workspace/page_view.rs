@@ -662,6 +662,7 @@ async fn update_page() {
           ty: IconType::Emoji,
           value: "🚀".to_string(),
         }),
+        is_locked: None,
         extra: Some(json!({"is_pinned": true})),
       },
     )
@@ -682,6 +683,7 @@ async fn update_page() {
     updated_view.extra,
     Some(json!({"is_pinned": true}).to_string())
   );
+  assert_eq!(updated_view.is_locked, None);
 }
 
 #[tokio::test]

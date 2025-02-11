@@ -1357,6 +1357,7 @@ async fn update_page_view_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let icon = payload.icon.as_ref();
+  let is_locked = payload.is_locked;
   let extra = payload
     .extra
     .as_ref()
@@ -1371,6 +1372,7 @@ async fn update_page_view_handler(
     &view_id,
     &payload.name,
     icon,
+    is_locked,
     extra.as_ref(),
   )
   .await?;

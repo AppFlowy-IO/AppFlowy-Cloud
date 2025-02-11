@@ -33,6 +33,7 @@ zstd = { version = "0.13.2" }
 tokio-tungstenite.workspace = true
 
 collab = { workspace = true, optional = true }
+collab-plugins.workspace = true
 yrs = { workspace = true, optional = true }
 smallvec = { workspace = true, optional = true }
 collab-rt-protocol = { workspace = true }

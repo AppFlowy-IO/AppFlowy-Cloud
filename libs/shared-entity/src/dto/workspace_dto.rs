@@ -179,6 +179,7 @@ pub struct CreatePageParams {
   pub parent_view_id: String,
   pub layout: ViewLayout,
   pub name: Option<String>,
+  pub page_data: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

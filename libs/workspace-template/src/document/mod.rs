@@ -1,2 +1,2 @@
 pub mod getting_started;
-mod parser;
+pub mod parser;

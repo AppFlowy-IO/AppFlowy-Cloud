@@ -101,6 +101,7 @@ async fn create_new_page_with_database() {
         parent_view_id: general_space.view_id.clone(),
         layout: ViewLayout::Calendar,
         name: Some("New calendar".to_string()),
+        page_data: None,
       },
     )
     .await
@@ -112,6 +113,7 @@ async fn create_new_page_with_database() {
         parent_view_id: general_space.view_id.clone(),
         layout: ViewLayout::Grid,
         name: Some("New grid".to_string()),
+        page_data: None,
       },
     )
     .await
@@ -123,6 +125,7 @@ async fn create_new_page_with_database() {
         parent_view_id: general_space.view_id.clone(),
         layout: ViewLayout::Grid,
         name: Some("New board".to_string()),
+        page_data: None,
       },
     )
     .await
@@ -176,6 +179,33 @@ async fn create_new_document_page() {
         parent_view_id: general_space.view_id.clone(),
         layout: ViewLayout::Document,
         name: Some("New document".to_string()),
+        page_data: None,
+      },
+    )
+    .await
+    .unwrap();
+  let page_with_initial_data = c
+    .create_workspace_page_view(
+      workspace_id,
+      &CreatePageParams {
+        parent_view_id: general_space.view_id.clone(),
+        layout: ViewLayout::Document,
+        name: Some("Message extracted from why is the sky blue".to_string()),
+        page_data: Some(json!({
+          "type": "page",
+          "children": [
+            {
+              "type": "paragraph",
+              "data": {
+                "delta": [
+                  {
+                    "insert": "The sky appears blue due to a phenomenon called Rayleigh scattering."
+                  }
+                ]
+              }
+            },
+          ]
+        })),
       },
     )
     .await
@@ -205,6 +235,20 @@ async fn create_new_document_page() {
   })
   .await
   .unwrap();
+  general_space
+    .children
+    .iter()
+    .find(|v| v.view_id == page_with_initial_data.view_id)
+    .unwrap();
+  c.get_collab(QueryCollabParams {
+    workspace_id: workspace_id.to_string(),
+    inner: QueryCollab {
+      object_id: page_with_initial_data.view_id,
+      collab_type: CollabType::Document,
+    },
+  })
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -229,6 +273,7 @@ async fn create_new_chat_page() {
         parent_view_id: general_space.view_id.clone(),
         layout: ViewLayout::Chat,
         name: Some("New chat".to_string()),
+        page_data: None,
       },
     )
     .await

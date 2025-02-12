@@ -37,6 +37,9 @@ pub enum AppError {
   #[error("Invalid password:{0}")]
   InvalidPassword(String),
 
+  #[error("Invalid page data:{0}")]
+  InvalidPageData(String),
+
   #[error("{0}")]
   OAuthError(String),
 
@@ -251,6 +254,7 @@ impl AppError {
       AppError::InvalidContentType(_) => ErrorCode::InvalidContentType,
       AppError::InvalidPublishedOutline(_) => ErrorCode::InvalidPublishedOutline,
       AppError::InvalidFolderView(_) => ErrorCode::InvalidFolderView,
+      AppError::InvalidPageData(_) => ErrorCode::InvalidPageData,
       AppError::NotInviteeOfWorkspaceInvitation(_) => ErrorCode::NotInviteeOfWorkspaceInvitation,
       AppError::MissingView(_) => ErrorCode::MissingView,
       AppError::AccessRequestAlreadyExists { .. } => ErrorCode::AccessRequestAlreadyExists,
@@ -432,6 +436,7 @@ pub enum ErrorCode {
   MailerError = 1059,
   LicenseError = 1060,
   AIMaxRequired = 1061,
+  InvalidPageData = 1062,
 }
 
 impl ErrorCode {

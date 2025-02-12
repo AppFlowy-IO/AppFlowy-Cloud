@@ -535,6 +535,7 @@ async fn update_view_properties(
   folder: &mut Folder,
   name: &str,
   icon: Option<&ViewIcon>,
+  is_locked: Option<bool>,
   extra: Option<impl AsRef<str>>,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
@@ -545,6 +546,7 @@ async fn update_view_properties(
         .set_name(name)
         .set_icon(icon)
         .set_extra_if_not_none(extra)
+        .set_is_locked(is_locked)
         .done()
     });
     txn.encode_update_v1()
@@ -1107,12 +1109,14 @@ pub async fn update_page(
   view_id: &str,
   name: &str,
   icon: Option<&ViewIcon>,
+  is_locked: Option<bool>,
   extra: Option<impl AsRef<str>>,
 ) -> Result<(), AppError> {
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
-  let folder_update = update_view_properties(view_id, &mut folder, name, icon, extra).await?;
+  let folder_update =
+    update_view_properties(view_id, &mut folder, name, icon, is_locked, extra).await?;
   update_workspace_folder_data(
     appflowy_web_metrics,
     server,
@@ -1405,6 +1409,7 @@ pub async fn get_page_view_collab(
     layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
     last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
+    is_locked: view.is_locked,
     extra: view.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
     children: vec![],
   };

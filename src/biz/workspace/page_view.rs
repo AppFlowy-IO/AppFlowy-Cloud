@@ -62,6 +62,7 @@ use std::time::{Duration, Instant};
 use tokio::time::timeout_at;
 use tracing::instrument;
 use uuid::Uuid;
+use workspace_template::document::parser::JsonToDocumentParser;
 
 use super::publish::PublishedCollabStore;
 
@@ -166,6 +167,7 @@ pub async fn create_page(
   parent_view_id: &str,
   view_layout: &ViewLayout,
   name: Option<&str>,
+  page_data: Option<&serde_json::Value>,
 ) -> Result<Page, AppError> {
   match view_layout {
     ViewLayout::Document => {
@@ -178,6 +180,7 @@ pub async fn create_page(
         workspace_id,
         parent_view_id,
         name,
+        page_data,
       )
       .await
     },
@@ -234,6 +237,30 @@ pub async fn create_page(
       .await
     },
   }
+}
+
+fn prepare_document_collab_param_with_initial_data(
+  page_data: serde_json::Value,
+) -> Result<CollabParams, AppError> {
+  let object_id = Uuid::new_v4().to_string();
+  let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
+  let document_data = JsonToDocumentParser::json_to_document(page_data)?;
+  let document = Document::create_with_data(collab, document_data)
+    .map_err(|err| AppError::InvalidPageData(err.to_string()))?;
+  let encoded_collab_v1 = document
+    .encode_collab()
+    .map_err(|err| {
+      AppError::Internal(anyhow!(
+        "Failed to encode document with initial data: {}",
+        err
+      ))
+    })?
+    .encode_to_bytes()?;
+  Ok(CollabParams {
+    object_id: object_id.clone(),
+    encoded_collab_v1: encoded_collab_v1.into(),
+    collab_type: CollabType::Document,
+  })
 }
 
 fn prepare_default_document_collab_param() -> Result<CollabParams, AppError> {
@@ -669,9 +696,13 @@ async fn create_document_page(
   workspace_id: Uuid,
   parent_view_id: &str,
   name: Option<&str>,
+  page_data: Option<&serde_json::Value>,
 ) -> Result<Page, AppError> {
-  let default_document_collab_params = prepare_default_document_collab_param()?;
-  let view_id = default_document_collab_params.object_id.clone();
+  let new_document_collab_params = match page_data {
+    Some(page_data) => prepare_document_collab_param_with_initial_data(page_data.clone()),
+    None => prepare_default_document_collab_param(),
+  }?;
+  let view_id = new_document_collab_params.object_id.clone();
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
@@ -691,7 +722,7 @@ async fn create_document_page(
     .upsert_new_collab_with_transaction(
       &workspace_id.to_string(),
       &user.uid,
-      default_document_collab_params,
+      new_document_collab_params,
       &mut transaction,
       &action,
     )

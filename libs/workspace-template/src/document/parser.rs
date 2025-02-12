@@ -12,9 +12,7 @@ pub struct JsonToDocumentParser;
 const DELTA: &str = "delta";
 const TEXT_EXTERNAL_TYPE: &str = "text";
 impl JsonToDocumentParser {
-  pub fn json_str_to_document(json_str: &str) -> Result<DocumentData> {
-    let root = serde_json::from_str::<SerdeBlock>(json_str)?;
-
+  pub fn serde_block_to_document(root: SerdeBlock) -> Result<DocumentData> {
     let page_id = nanoid!(10);
 
     // generate the blocks
@@ -34,6 +32,16 @@ impl JsonToDocumentParser {
         text_map: Some(text_map),
       },
     })
+  }
+
+  pub fn json_str_to_document(json_str: &str) -> Result<DocumentData> {
+    let root = serde_json::from_str::<SerdeBlock>(json_str)?;
+    Self::serde_block_to_document(root)
+  }
+
+  pub fn json_to_document(json_value: serde_json::Value) -> Result<DocumentData> {
+    let root = serde_json::from_value::<SerdeBlock>(json_value)?;
+    Self::serde_block_to_document(root)
   }
 
   fn generate_blocks(

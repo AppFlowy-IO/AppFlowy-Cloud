@@ -1128,6 +1128,7 @@ async fn post_page_view_handler(
     &payload.parent_view_id,
     &payload.layout,
     payload.name.as_deref(),
+    payload.page_data.as_ref(),
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))

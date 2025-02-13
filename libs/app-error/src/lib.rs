@@ -437,6 +437,7 @@ pub enum ErrorCode {
   LicenseError = 1060,
   AIMaxRequired = 1061,
   InvalidPageData = 1062,
+  MemberNotFound = 1063,
 }
 
 impl ErrorCode {

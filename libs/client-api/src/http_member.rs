@@ -1,9 +1,7 @@
 use crate::http::log_request_id;
 use crate::Client;
 use client_api_entity::{
-  AFCollabMember, AFCollabMembers, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
-  AFWorkspaceMember, InsertCollabMemberParams, QueryCollabMembers, QueryWorkspaceMember,
-  UpdateCollabMemberParams, WorkspaceCollabIdentify,
+  AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceMember, QueryWorkspaceMember,
 };
 use reqwest::Method;
 use shared_entity::dto::workspace_dto::{
@@ -181,105 +179,6 @@ impl Client {
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()?;
     Ok(())
-  }
-
-  #[instrument(level = "info", skip_all, err)]
-  pub async fn add_collab_member(
-    &self,
-    params: InsertCollabMemberParams,
-  ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab/{}/member",
-      self.base_url, params.workspace_id, &params.object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
-  }
-
-  #[instrument(level = "info", skip_all, err)]
-  pub async fn get_collab_member(
-    &self,
-    params: WorkspaceCollabIdentify,
-  ) -> Result<AFCollabMember, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab/{}/member",
-      self.base_url, params.workspace_id, &params.object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<AFCollabMember>::from_response(resp)
-      .await?
-      .into_data()
-  }
-
-  #[instrument(level = "info", skip_all, err)]
-  pub async fn update_collab_member(
-    &self,
-    params: UpdateCollabMemberParams,
-  ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab/{}/member",
-      self.base_url, params.workspace_id, &params.object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::PUT, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
-  }
-
-  #[instrument(level = "info", skip_all, err)]
-  pub async fn remove_collab_member(
-    &self,
-    params: WorkspaceCollabIdentify,
-  ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab/{}/member",
-      self.base_url, params.workspace_id, &params.object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::DELETE, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
-  }
-
-  #[instrument(level = "info", skip_all, err)]
-  pub async fn get_collab_members(
-    &self,
-    params: QueryCollabMembers,
-  ) -> Result<AFCollabMembers, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab/{}/member/list",
-      self.base_url, params.workspace_id, &params.object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<AFCollabMembers>::from_response(resp)
-      .await?
-      .into_data()
   }
 
   #[instrument(level = "info", skip_all, err)]

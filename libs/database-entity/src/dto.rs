@@ -407,13 +407,6 @@ pub struct QueryWorkspaceMember {
   pub uid: i64,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct AFCollabMember {
-  pub uid: i64,
-  pub oid: String,
-  pub permission: AFPermission,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AFCollabEmbedInfo {
   pub object_id: String,
@@ -620,9 +613,6 @@ impl Ord for AFAccessLevel {
     left.cmp(&right)
   }
 }
-
-#[derive(Serialize, Deserialize)]
-pub struct AFCollabMembers(pub Vec<AFCollabMember>);
 
 pub type RawData = Vec<u8>;
 

@@ -30,7 +30,7 @@ use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, HttpResponse, ResponseError, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
-use app_error::AppError;
+use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use bytes::BytesMut;
@@ -598,16 +598,24 @@ async fn get_workspace_member_handler(
   state: Data<AppState>,
   path: web::Path<(Uuid, i64)>,
 ) -> Result<JsonAppResponse<AFWorkspaceMember>> {
-  let (workspace_id, user_uuid_to_retrieved) = path.into_inner();
+  let (workspace_id, member_uid) = path.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   // Guest users can not get workspace members
   state
     .workspace_access_control
     .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
     .await?;
-  let member_row =
-    workspace::ops::get_workspace_member(&user_uuid_to_retrieved, &state.pg_pool, &workspace_id)
-      .await?;
+  let member_row = workspace::ops::get_workspace_member(&member_uid, &state.pg_pool, &workspace_id)
+    .await
+    .map_err(|_| {
+      AppResponseError::new(
+        ErrorCode::MemberNotFound,
+        format!(
+          "requested member uid {} is not present in workspace {}",
+          member_uid, workspace_id
+        ),
+      )
+    })?;
   let member = AFWorkspaceMember {
     name: member_row.name,
     email: member_row.email,

@@ -204,7 +204,6 @@ members = [
   "admin_frontend",
   "libs/app-error",
   "libs/workspace-template",
-  "libs/encrypt",
   "libs/authentication",
   "libs/access-control",
   "libs/collab-rt-protocol",

@@ -20,7 +20,7 @@ impl AFCloudMailer {
     param: WorkspaceInviteMailerParam,
   ) -> Result<(), anyhow::Error> {
     let subject = format!(
-      "Action required: {} invited you to {} in AppFlowy",
+      "{} invited you to {} in AppFlowy",
       param.username, param.workspace_name
     );
     self
@@ -51,7 +51,7 @@ impl AFCloudMailer {
     param: WorkspaceAccessRequestMailerParam,
   ) -> Result<(), anyhow::Error> {
     let subject = format!(
-      "Action required: {} requested access to {} in AppFlowy",
+      "{} requested access to {} in AppFlowy",
       param.username, param.workspace_name
     );
     self

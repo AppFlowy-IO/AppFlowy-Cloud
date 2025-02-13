@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, AFCollabEmbedInfo, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas,
-  CollabParams, QueryCollab, QueryCollabResult, RawData, RepeatedAFCollabEmbedInfo,
+  AFCollabEmbedInfo, AFSnapshotMeta, AFSnapshotMetas, CollabParams, QueryCollab, QueryCollabResult,
+  RawData, RepeatedAFCollabEmbedInfo,
 };
 use shared_entity::dto::workspace_dto::{DatabaseRowUpdatedItem, EmbeddedCollabQuery};
 
@@ -12,8 +12,7 @@ use crate::pg_row::AFSnapshotRow;
 use app_error::AppError;
 use chrono::{DateTime, Duration, Utc};
 
-use sqlx::postgres::PgRow;
-use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
+use sqlx::{Error, Executor, PgPool, Postgres, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::{ops::DerefMut, str::FromStr};
@@ -485,159 +484,6 @@ pub async fn get_all_collab_snapshot_meta(
   .fetch_all(pg_pool)
   .await?;
   Ok(AFSnapshotMetas(snapshots))
-}
-
-#[inline]
-#[instrument(level = "trace", skip(txn), err)]
-pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
-  uid: i64,
-  oid: T,
-  access_level: &AFAccessLevel,
-  txn: &mut Transaction<'_, sqlx::Postgres>,
-) -> Result<(), AppError> {
-  let oid = oid.as_ref();
-  let access_level: i32 = (*access_level).into();
-  let permission_id = sqlx::query_scalar!(
-    r#"
-     SELECT id
-     FROM af_permissions
-     WHERE access_level = $1
-    "#,
-    access_level
-  )
-  .fetch_one(txn.deref_mut())
-  .await
-  .context("Get permission id from access level fail")?;
-
-  sqlx::query!(
-    r#"
-    INSERT INTO af_collab_member (uid, oid, permission_id)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (uid, oid)
-    DO UPDATE
-      SET permission_id = excluded.permission_id;
-    "#,
-    uid,
-    oid,
-    permission_id
-  )
-  .execute(txn.deref_mut())
-  .await
-  .context(format!(
-    "failed to insert collab member: user:{} oid:{}",
-    uid, oid
-  ))?;
-
-  Ok(())
-}
-
-#[instrument(skip(txn), err)]
-#[inline]
-pub async fn insert_collab_member(
-  uid: i64,
-  oid: &str,
-  access_level: &AFAccessLevel,
-  txn: &mut Transaction<'_, sqlx::Postgres>,
-) -> Result<(), AppError> {
-  upsert_collab_member_with_txn(uid, oid, access_level, txn).await?;
-  Ok(())
-}
-
-pub async fn delete_collab_member(
-  uid: i64,
-  oid: &str,
-  txn: &mut Transaction<'_, sqlx::Postgres>,
-) -> Result<(), AppError> {
-  sqlx::query("DELETE FROM af_collab_member WHERE uid = $1 AND oid = $2")
-    .bind(uid)
-    .bind(oid)
-    .execute(txn.deref_mut())
-    .await?;
-  Ok(())
-}
-
-#[inline]
-pub async fn select_collab_members(
-  oid: &str,
-  pg_pool: &PgPool,
-) -> Result<Vec<AFCollabMember>, AppError> {
-  let members = sqlx::query(
-    r#"
-      SELECT af_collab_member.uid,
-        af_collab_member.oid,
-        af_permissions.id,
-        af_permissions.name,
-        af_permissions.access_level,
-        af_permissions.description
-      FROM af_collab_member
-      JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
-      WHERE af_collab_member.oid = $1
-      ORDER BY af_collab_member.created_at ASC
-    "#,
-  )
-  .bind(oid)
-  .try_map(collab_member_try_from_row)
-  .fetch_all(pg_pool)
-  .await?;
-
-  Ok(members)
-}
-
-#[inline]
-pub async fn select_collab_member<'a, E: Executor<'a, Database = Postgres>>(
-  uid: &i64,
-  oid: &str,
-  executor: E,
-) -> Result<AFCollabMember, AppError> {
-  let row = sqlx::query(
-  r#"
-    SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
-    FROM af_collab_member
-    JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
-    WHERE af_collab_member.uid = $1 AND af_collab_member.oid = $2
-  "#,
-  )
-  .bind(uid)
-  .bind(oid)
-  .fetch_one(executor)
-  .await?;
-
-  let member = collab_member_try_from_row(row)?;
-  Ok(member)
-}
-
-fn collab_member_try_from_row(row: PgRow) -> Result<AFCollabMember, sqlx::Error> {
-  let access_level = AFAccessLevel::from(row.try_get::<i32, _>(4)?);
-  let permission = AFPermission {
-    id: row.try_get(2)?,
-    name: row.try_get(3)?,
-    access_level,
-    description: row.try_get(5)?,
-  };
-
-  Ok(AFCollabMember {
-    uid: row.try_get(0)?,
-    oid: row.try_get(1)?,
-    permission,
-  })
-}
-
-#[inline]
-pub async fn is_collab_member_exists<'a, E: Executor<'a, Database = Postgres>>(
-  uid: i64,
-  oid: &str,
-  executor: E,
-) -> Result<bool, sqlx::Error> {
-  let result = sqlx::query_scalar!(
-    r#"
-      SELECT EXISTS (SELECT 1 FROM af_collab_member WHERE oid = $1 AND uid = $2 LIMIT 1)
-    "#,
-    &oid,
-    &uid,
-  )
-  .fetch_one(executor)
-  .await;
-  transform_record_not_found_error(result)
 }
 
 #[inline]

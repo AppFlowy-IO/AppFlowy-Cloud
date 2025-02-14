@@ -117,10 +117,15 @@ pub fn workspace_scope() -> Scope {
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
     )
+    // Deprecated since v0.9.24
     .service(
       web::resource("/{workspace_id}/member/user/{user_id}")
         .route(web::get().to(get_workspace_member_handler)),
     )
+    .service(
+      web::resource("v1/{workspace_id}/member/user/{user_id}")
+        .route(web::get().to(get_workspace_member_v1_handler)),
+      )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}")
         .app_data(
@@ -605,6 +610,42 @@ async fn get_workspace_member_handler(
         ),
       )
     })?;
+  let member = AFWorkspaceMember {
+    name: member_row.name,
+    email: member_row.email,
+    role: member_row.role,
+    avatar_url: None,
+  };
+
+  Ok(AppResponse::Ok().with_data(member).into())
+}
+
+// This use user uuid as opposed to uid
+#[instrument(skip_all, err)]
+async fn get_workspace_member_v1_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  path: web::Path<(Uuid, Uuid)>,
+) -> Result<JsonAppResponse<AFWorkspaceMember>> {
+  let (workspace_id, member_uuid) = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  // Guest users can not get workspace members
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .await?;
+  let member_row =
+    workspace::ops::get_workspace_member_by_uuid(member_uuid, &state.pg_pool, workspace_id)
+      .await
+      .map_err(|_| {
+        AppResponseError::new(
+          ErrorCode::MemberNotFound,
+          format!(
+            "requested member uid {} is not present in workspace {}",
+            member_uuid, workspace_id
+          ),
+        )
+      })?;
   let member = AFWorkspaceMember {
     name: member_row.name,
     email: member_row.email,

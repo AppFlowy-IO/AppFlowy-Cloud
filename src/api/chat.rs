@@ -1,6 +1,6 @@
 use crate::biz::chat::ops::{
   create_chat, create_chat_message, delete_chat, generate_chat_message_answer, get_chat_messages,
-  get_question_message, update_chat_message,
+  get_chat_messages_with_author_uuid, get_question_message, update_chat_message,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -23,7 +23,8 @@ use pin_project::pin_project;
 use shared_entity::dto::chat_dto::{
   ChatAuthor, ChatMessage, ChatSettings, CreateAnswerMessageParams, CreateChatMessageParams,
   CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatParams,
+  RepeatedChatMessage, RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
+  UpdateChatParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
@@ -61,6 +62,10 @@ pub fn chat_scope() -> Scope {
             .route(web::put().to(update_question_handler))
             .route(web::get().to(get_chat_message_handler))
       )
+      .service(
+        web::resource("/{chat_id}/v2/message")
+          .route(web::get().to(get_chat_message_v2_handler))
+        )
       .service(
         web::resource("/{chat_id}/message/question")
             .route(web::post().to(create_question_handler))
@@ -417,6 +422,7 @@ async fn answer_stream_v3_handler(
   }
 }
 
+// Depcrecated since v0.9.24
 #[instrument(level = "debug", skip_all, err)]
 async fn get_chat_message_handler(
   path: web::Path<(String, String)>,
@@ -443,6 +449,35 @@ async fn get_chat_message_handler(
   trace!("get chat messages: {:?}", params);
   let (_workspace_id, chat_id) = path.into_inner();
   let messages = get_chat_messages(&state.pg_pool, params, &chat_id).await?;
+  Ok(AppResponse::Ok().with_data(messages).into())
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn get_chat_message_v2_handler(
+  path: web::Path<(String, String)>,
+  query: web::Query<HashMap<String, String>>,
+  state: Data<AppState>,
+) -> actix_web::Result<JsonAppResponse<RepeatedChatMessageWithAuthorUuid>> {
+  let mut params = GetChatMessageParams {
+    cursor: MessageCursor::Offset(0),
+    limit: query
+      .get("limit")
+      .and_then(|s| s.parse::<u64>().ok())
+      .unwrap_or(10),
+  };
+  if let Some(value) = query.get("offset").and_then(|s| s.parse::<u64>().ok()) {
+    params.cursor = MessageCursor::Offset(value);
+  } else if let Some(value) = query.get("after").and_then(|s| s.parse::<i64>().ok()) {
+    params.cursor = MessageCursor::AfterMessageId(value);
+  } else if let Some(value) = query.get("before").and_then(|s| s.parse::<i64>().ok()) {
+    params.cursor = MessageCursor::BeforeMessageId(value);
+  } else {
+    params.cursor = MessageCursor::NextBack;
+  }
+
+  trace!("get chat messages: {:?}", params);
+  let (_workspace_id, chat_id) = path.into_inner();
+  let messages = get_chat_messages_with_author_uuid(&state.pg_pool, params, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(messages).into())
 }
 

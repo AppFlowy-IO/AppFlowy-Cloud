@@ -140,7 +140,7 @@ async fn create_chat_and_create_messages_test() {
   assert_eq!(messages[7].content, "hello world 2");
   let message_before_third = test_client
     .api_client
-    .get_chat_messages(
+    .get_chat_messages_with_author_uuid(
       &workspace_id,
       &chat_id,
       MessageCursor::BeforeMessageId(messages[7].message_id),
@@ -157,7 +157,7 @@ async fn create_chat_and_create_messages_test() {
   assert_eq!(messages[2].content, "hello world 7");
   let message_after_third = test_client
     .api_client
-    .get_chat_messages(
+    .get_chat_messages_with_author_uuid(
       &workspace_id,
       &chat_id,
       MessageCursor::AfterMessageId(messages[2].message_id),
@@ -172,7 +172,7 @@ async fn create_chat_and_create_messages_test() {
 
   let next_back = test_client
     .api_client
-    .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 3)
+    .get_chat_messages_with_author_uuid(&workspace_id, &chat_id, MessageCursor::NextBack, 3)
     .await
     .unwrap();
   assert!(next_back.has_more);
@@ -182,7 +182,7 @@ async fn create_chat_and_create_messages_test() {
 
   let next_back = test_client
     .api_client
-    .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 100)
+    .get_chat_messages_with_author_uuid(&workspace_id, &chat_id, MessageCursor::NextBack, 100)
     .await
     .unwrap();
   assert!(!next_back.has_more);

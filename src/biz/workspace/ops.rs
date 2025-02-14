@@ -604,6 +604,14 @@ pub async fn get_workspace_member(
   Ok(select_workspace_member(pg_pool, uid, workspace_id).await?)
 }
 
+pub async fn get_workspace_member_by_uuid(
+  member_uuid: Uuid,
+  pg_pool: &PgPool,
+  workspace_id: Uuid,
+) -> Result<AFWorkspaceMemberRow, AppResponseError> {
+  Ok(select_workspace_member_by_uuid(pg_pool, member_uuid, workspace_id).await?)
+}
+
 pub async fn update_workspace_member(
   uid: &i64,
   pg_pool: &PgPool,

@@ -293,6 +293,8 @@ impl Client {
       .into_data()
   }
 
+  /// Return list of chat messages for a chat. Each message will have author_uuid as
+  /// as the author's uid, as author_uid will face precision issue in the browser environment.
   pub async fn get_chat_messages_with_author_uuid(
     &self,
     workspace_id: &str,
@@ -301,7 +303,7 @@ impl Client {
     limit: u64,
   ) -> Result<RepeatedChatMessageWithAuthorUuid, AppResponseError> {
     let mut url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/v2/message",
+      "{}/api/chat/{workspace_id}/{chat_id}/message",
       self.base_url
     );
     let mut query_params = vec![("limit", limit.to_string())];

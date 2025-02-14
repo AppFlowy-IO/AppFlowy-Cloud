@@ -647,6 +647,7 @@ pub async fn select_chat_messages_with_author_uuid(
         match serde_json::from_value::<ChatAuthor>(author) {
           Ok(author) => Some(ChatMessageWithAuthorUuid {
             author: ChatAuthorWithUuid {
+              author_id: author.author_id,
               author_type: author.author_type,
               author_uuid,
               meta: author.meta,

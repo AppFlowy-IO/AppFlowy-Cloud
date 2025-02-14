@@ -373,6 +373,7 @@ impl ChatAuthor {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatAuthorWithUuid {
+  pub author_id: i64,
   pub author_uuid: Uuid,
   #[serde(default)]
   pub author_type: ChatAuthorType,
@@ -382,8 +383,9 @@ pub struct ChatAuthorWithUuid {
 }
 
 impl ChatAuthorWithUuid {
-  pub fn new(author_uuid: Uuid, author_type: ChatAuthorType) -> Self {
+  pub fn new(author_id: i64, author_uuid: Uuid, author_type: ChatAuthorType) -> Self {
     Self {
+      author_id,
       author_uuid,
       author_type,
       meta: None,
@@ -392,6 +394,7 @@ impl ChatAuthorWithUuid {
 
   pub fn ai() -> Self {
     Self {
+      author_id: 0,
       author_uuid: Uuid::nil(),
       author_type: ChatAuthorType::AI,
       meta: None,

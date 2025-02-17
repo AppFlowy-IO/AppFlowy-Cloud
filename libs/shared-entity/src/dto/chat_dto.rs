@@ -5,6 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::Display;
+use uuid::Uuid;
 use validator::Validate;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -295,6 +296,16 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageWithAuthorUuid {
+  pub author: ChatAuthorWithUuid,
+  pub message_id: i64,
+  pub content: String,
+  pub created_at: DateTime<Utc>,
+  pub meta_data: serde_json::Value,
+  pub reply_message_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QAChatMessage {
   pub question: ChatMessage,
   pub answer: Option<ChatMessage>,
@@ -303,6 +314,13 @@ pub struct QAChatMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepeatedChatMessage {
   pub messages: Vec<ChatMessage>,
+  pub has_more: bool,
+  pub total: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepeatedChatMessageWithAuthorUuid {
+  pub messages: Vec<ChatMessageWithAuthorUuid>,
   pub has_more: bool,
   pub total: i64,
 }
@@ -347,6 +365,37 @@ impl ChatAuthor {
   pub fn ai() -> Self {
     Self {
       author_id: 0,
+      author_type: ChatAuthorType::AI,
+      meta: None,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatAuthorWithUuid {
+  pub author_id: i64,
+  pub author_uuid: Uuid,
+  #[serde(default)]
+  pub author_type: ChatAuthorType,
+  #[serde(default)]
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub meta: Option<serde_json::Value>,
+}
+
+impl ChatAuthorWithUuid {
+  pub fn new(author_id: i64, author_uuid: Uuid, author_type: ChatAuthorType) -> Self {
+    Self {
+      author_id,
+      author_uuid,
+      author_type,
+      meta: None,
+    }
+  }
+
+  pub fn ai() -> Self {
+    Self {
+      author_id: 0,
+      author_uuid: Uuid::nil(),
       author_type: ChatAuthorType::AI,
       meta: None,
     }

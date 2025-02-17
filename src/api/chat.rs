@@ -1,6 +1,6 @@
 use crate::biz::chat::ops::{
-  create_chat, create_chat_message, delete_chat, generate_chat_message_answer, get_chat_messages,
-  get_question_message, update_chat_message,
+  create_chat, create_chat_message, delete_chat, generate_chat_message_answer,
+  get_chat_messages_with_author_uuid, get_question_message, update_chat_message,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -23,7 +23,7 @@ use pin_project::pin_project;
 use shared_entity::dto::chat_dto::{
   ChatAuthor, ChatMessage, ChatSettings, CreateAnswerMessageParams, CreateChatMessageParams,
   CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatParams,
+  RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams, UpdateChatParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
@@ -422,7 +422,7 @@ async fn get_chat_message_handler(
   path: web::Path<(String, String)>,
   query: web::Query<HashMap<String, String>>,
   state: Data<AppState>,
-) -> actix_web::Result<JsonAppResponse<RepeatedChatMessage>> {
+) -> actix_web::Result<JsonAppResponse<RepeatedChatMessageWithAuthorUuid>> {
   let mut params = GetChatMessageParams {
     cursor: MessageCursor::Offset(0),
     limit: query
@@ -442,7 +442,7 @@ async fn get_chat_message_handler(
 
   trace!("get chat messages: {:?}", params);
   let (_workspace_id, chat_id) = path.into_inner();
-  let messages = get_chat_messages(&state.pg_pool, params, &chat_id).await?;
+  let messages = get_chat_messages_with_author_uuid(&state.pg_pool, params, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(messages).into())
 }
 

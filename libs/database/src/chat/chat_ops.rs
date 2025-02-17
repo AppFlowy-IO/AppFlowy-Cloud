@@ -3,9 +3,10 @@ use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatMessage, ChatMessageMetadata, ChatSettings, CreateChatParams,
-  GetChatMessageParams, MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
-  UpdateChatMessageMetaParams, UpdateChatParams,
+  ChatAuthor, ChatAuthorWithUuid, ChatMessage, ChatMessageMetadata, ChatMessageWithAuthorUuid,
+  ChatSettings, CreateChatParams, GetChatMessageParams, MessageCursor, RepeatedChatMessage,
+  RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams, UpdateChatMessageMetaParams,
+  UpdateChatParams,
 };
 
 use serde_json::json;
@@ -361,6 +362,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   Ok(chat_message)
 }
 
+// Deprecated since v0.9.24
 pub async fn select_chat_messages(
   txn: &mut Transaction<'_, Postgres>,
   chat_id: &str,
@@ -527,6 +529,192 @@ pub async fn select_chat_messages(
   };
 
   Ok(RepeatedChatMessage {
+    messages,
+    total,
+    has_more,
+  })
+}
+
+pub async fn select_chat_messages_with_author_uuid(
+  txn: &mut Transaction<'_, Postgres>,
+  chat_id: &str,
+  params: GetChatMessageParams,
+) -> Result<RepeatedChatMessageWithAuthorUuid, AppError> {
+  let chat_id = Uuid::from_str(chat_id)?;
+  let mut query = r#"
+        SELECT
+          cm.message_id,
+          cm.content,
+          cm.created_at,
+          cm.author,
+          af_user.uuid AS author_uuid,
+          cm.meta_data,
+          cm.reply_message_id
+        FROM af_chat_messages AS cm
+        LEFT OUTER JOIN af_user ON (cm.author->>'uid')::BIGINT = af_user.uid
+        WHERE chat_id = $1
+    "#
+  .to_string();
+
+  let mut args = PgArguments::default();
+  args
+    .add(&chat_id)
+    .map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode chat id {}", chat_id),
+      err,
+    })?;
+
+  // Message IDs:   1    2    3    4    5
+  // AfterMessageId(3, 5):   [4]  [5]  has_more = false
+  // BeforeMessageId(3, 5):  [1]  [2]  has_more = false
+  // Offset(3, 5):           [4]  [5]  has_more = true
+  match params.cursor {
+    MessageCursor::AfterMessageId(after_message_id) => {
+      query += " AND message_id > $2";
+      args
+        .add(after_message_id)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode message id {}", after_message_id),
+          err,
+        })?;
+      query += " ORDER BY message_id DESC LIMIT $3";
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode row limit {}", params.limit as i64),
+          err,
+        })?;
+    },
+    MessageCursor::Offset(offset) => {
+      query += " ORDER BY message_id ASC LIMIT $2 OFFSET $3";
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode row limit {}", params.limit as i64),
+          err,
+        })?;
+      args
+        .add(offset as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode offset {}", offset as i64),
+          err,
+        })?;
+    },
+    MessageCursor::BeforeMessageId(before_message_id) => {
+      query += " AND message_id < $2";
+      args
+        .add(before_message_id)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode message id {}", before_message_id),
+          err,
+        })?;
+      query += " ORDER BY message_id DESC LIMIT $3";
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode row limit {}", params.limit as i64),
+          err,
+        })?;
+    },
+    MessageCursor::NextBack => {
+      query += " ORDER BY message_id DESC LIMIT $2";
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode row limit {}", params.limit as i64),
+          err,
+        })?;
+    },
+  }
+
+  #[allow(clippy::type_complexity)]
+  let rows: Vec<(
+    i64,
+    String,
+    DateTime<Utc>,
+    serde_json::Value,
+    Option<Uuid>,
+    serde_json::Value,
+    Option<i64>,
+  )> = sqlx::query_as_with(&query, args)
+    .fetch_all(txn.deref_mut())
+    .await?;
+
+  let messages = rows
+    .into_iter()
+    .flat_map(
+      |(message_id, content, created_at, author, author_uuid, meta_data, reply_message_id)| {
+        match serde_json::from_value::<ChatAuthor>(author) {
+          Ok(author) => Some(ChatMessageWithAuthorUuid {
+            author: ChatAuthorWithUuid {
+              author_id: author.author_id,
+              author_type: author.author_type,
+              author_uuid: author_uuid.unwrap_or(Uuid::nil()),
+              meta: author.meta,
+            },
+            message_id,
+            content,
+            created_at,
+            meta_data,
+            reply_message_id,
+          }),
+          Err(err) => {
+            warn!("Failed to deserialize author: {}", err);
+            None
+          },
+        }
+      },
+    )
+    .collect::<Vec<ChatMessageWithAuthorUuid>>();
+
+  let total = sqlx::query_scalar!(
+    r#"
+        SELECT COUNT(*)
+        FROM public.af_chat_messages
+        WHERE chat_id = $1
+        "#,
+    &chat_id
+  )
+  .fetch_one(txn.deref_mut())
+  .await?
+  .unwrap_or(0);
+
+  let has_more = match params.cursor {
+    MessageCursor::AfterMessageId(_) => {
+      if messages.is_empty() {
+        false
+      } else {
+        sqlx::query!(
+          "SELECT EXISTS(SELECT 1 FROM af_chat_messages WHERE chat_id = $1 AND message_id > $2)",
+          &chat_id,
+          messages[0].message_id
+        )
+        .fetch_one(txn.deref_mut())
+        .await?
+        .exists
+        .unwrap_or(false)
+      }
+    },
+    MessageCursor::Offset(offset) => (offset + params.limit) < total as u64,
+    MessageCursor::BeforeMessageId(_) => {
+      if messages.is_empty() {
+        false
+      } else {
+        sqlx::query!(
+          "SELECT EXISTS(SELECT 1 FROM af_chat_messages WHERE chat_id = $1 AND message_id < $2)",
+          &chat_id,
+          messages.last().as_ref().unwrap().message_id
+        )
+        .fetch_one(txn.deref_mut())
+        .await?
+        .exists
+        .unwrap_or(false)
+      }
+    },
+    MessageCursor::NextBack => params.limit < total as u64,
+  };
+
+  Ok(RepeatedChatMessageWithAuthorUuid {
     messages,
     total,
     has_more,

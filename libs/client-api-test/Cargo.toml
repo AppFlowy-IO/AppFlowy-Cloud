@@ -17,17 +17,18 @@ collab = { workspace = true }
 collab-document.workspace = true
 collab-user.workspace = true
 client-api = { path = "../client-api", features = ["test_util"] }
-once_cell = "1.19.0"
 tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
-scraper = "0.17.1"
-opener = "0.6.1"
-image = "0.23.14"
 database-entity.workspace = true
 collab-entity.workspace = true
 shared-entity.workspace = true
 collab-database.workspace = true
-tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json"] }
+tracing-subscriber = { version = "0.3.18", features = [
+  "registry",
+  "env-filter",
+  "ansi",
+  "json",
+] }
 uuid.workspace = true
 lazy_static = "1.4.0"
 dotenvy = "0.15.7"

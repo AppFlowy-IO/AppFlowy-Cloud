@@ -4,7 +4,7 @@ use crate::Client;
 use app_error::AppError;
 use client_api_entity::chat_dto::{
   ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageContentParams,
+  RepeatedChatMessage, RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
 };
 use futures_core::{ready, Stream};
 use pin_project::pin_project;
@@ -256,7 +256,7 @@ impl Client {
       .into_data()
   }
 
-  /// Return list of chat messages for a chat
+  /// Deprecated since v0.9.24. Return list of chat messages for a chat
   pub async fn get_chat_messages(
     &self,
     workspace_id: &str,
@@ -289,6 +289,44 @@ impl Client {
       .send()
       .await?;
     AppResponse::<RepeatedChatMessage>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  /// Return list of chat messages for a chat. Each message will have author_uuid as
+  /// as the author's uid, as author_uid will face precision issue in the browser environment.
+  pub async fn get_chat_messages_with_author_uuid(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    offset: MessageCursor,
+    limit: u64,
+  ) -> Result<RepeatedChatMessageWithAuthorUuid, AppResponseError> {
+    let mut url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/message",
+      self.base_url
+    );
+    let mut query_params = vec![("limit", limit.to_string())];
+    match offset {
+      MessageCursor::Offset(offset_value) => {
+        query_params.push(("offset", offset_value.to_string()));
+      },
+      MessageCursor::AfterMessageId(message_id) => {
+        query_params.push(("after", message_id.to_string()));
+      },
+      MessageCursor::BeforeMessageId(message_id) => {
+        query_params.push(("before", message_id.to_string()));
+      },
+      MessageCursor::NextBack => {},
+    }
+    let query = serde_urlencoded::to_string(&query_params).unwrap();
+    url = format!("{}?{}", url, query);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<RepeatedChatMessageWithAuthorUuid>::from_response(resp)
       .await?
       .into_data()
   }

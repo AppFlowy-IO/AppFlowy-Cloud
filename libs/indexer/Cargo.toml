@@ -27,8 +27,6 @@ serde_json.workspace = true
 anyhow.workspace = true
 infra.workspace = true
 prometheus-client = "0.22.3"
-bytes.workspace = true
-dashmap = "6.1.0"
 chrono = "0.4.39"
 ureq = "2.12.1"
 serde.workspace = true
@@ -37,6 +35,5 @@ redis = { workspace = true, features = [
   "tokio-comp",
   "connection-manager",
 ] }
-tokio-util = "0.7.12"
 secrecy = { workspace = true, features = ["serde"] }
 reqwest.workspace = true

@@ -8,7 +8,6 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bytes.workspace = true
 collab = { workspace = true }
 collab-folder = { workspace = true }
 collab-document = { workspace = true }

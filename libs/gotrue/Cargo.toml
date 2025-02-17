@@ -10,10 +10,8 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-futures-util = "0.3.30"
 anyhow.workspace = true
 reqwest = { workspace = true, features = ["json", "rustls-tls", "cookies"] }
-tokio = { workspace = true, features = ["sync", "macros"] }
 infra = { path = "../infra", features = ["request_util"] }
 gotrue-entity = { path = "../gotrue-entity" }
 tracing = "0.1"

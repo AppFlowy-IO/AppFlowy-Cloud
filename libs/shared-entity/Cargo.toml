@@ -32,8 +32,6 @@ actix-web = { version = "4.4.1", default-features = false, features = [
 validator = { workspace = true, features = ["validator_derive", "derive"] }
 futures = "0.3.30"
 bytes.workspace = true
-log = "0.4.21"
-tracing = { workspace = true }
 
 
 [features]

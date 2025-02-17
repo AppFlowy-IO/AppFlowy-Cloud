@@ -551,7 +551,7 @@ pub async fn select_chat_messages_with_author_uuid(
           cm.meta_data,
           cm.reply_message_id
         FROM af_chat_messages AS cm
-        LEFT OUTER JOIN af_user ON (cm.author->>'uid')::BIGINT = af_user.uid
+        LEFT OUTER JOIN af_user ON (cm.author->>'author_id')::BIGINT = af_user.uid
         WHERE chat_id = $1
     "#
   .to_string();

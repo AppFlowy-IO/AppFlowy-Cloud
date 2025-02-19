@@ -134,6 +134,11 @@ pub struct EmbeddedCollabQuery {
   pub object_id: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CollabJsonResponse {
+  pub collab: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollabResponse {
   #[serde(flatten)]

@@ -5,6 +5,7 @@ use crate::biz;
 use crate::biz::collab::ops::{
   get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
 };
+use crate::biz::collab::utils::collab_from_doc_state;
 use crate::biz::user::user_verify::verify_token;
 use crate::biz::workspace;
 use crate::biz::workspace::ops::{
@@ -139,6 +140,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}")
         .route(web::get().to(v1_get_collab_handler)),
+    )
+    .service(
+      web::resource("/v1/{workspace_id}/collab/{object_id}/json")
+        .route(web::get().to(get_collab_json_handler)),
     )
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}/full-sync")
@@ -1043,6 +1048,43 @@ async fn v1_get_collab_handler(
   let resp = CollabResponse {
     encode_collab,
     object_id,
+  };
+
+  Ok(Json(AppResponse::Ok().with_data(resp)))
+}
+
+async fn get_collab_json_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(String, String)>,
+  query: web::Query<CollabTypeParam>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<CollabJsonResponse>>> {
+  let (workspace_id, object_id) = path.into_inner();
+  let collab_type = query.into_inner().collab_type;
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  let param = QueryCollabParams {
+    workspace_id,
+    inner: QueryCollab {
+      object_id: object_id.clone(),
+      collab_type,
+    },
+  };
+
+  let doc_state = state
+    .collab_access_control_storage
+    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
+    .await
+    .map_err(AppResponseError::from)?
+    .doc_state;
+  let collab = collab_from_doc_state(doc_state.to_vec(), &object_id)?;
+
+  let resp = CollabJsonResponse {
+    collab: collab.to_json_value(),
   };
 
   Ok(Json(AppResponse::Ok().with_data(resp)))

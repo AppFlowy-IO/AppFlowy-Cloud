@@ -34,7 +34,7 @@ use collab_database::views::{
 };
 use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
 use collab_database::{database::DatabaseBody, rows::RowId};
-use collab_document::document::Document;
+use collab_document::document::{Document, DocumentBody};
 use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
@@ -62,7 +62,7 @@ use std::time::{Duration, Instant};
 use tokio::time::timeout_at;
 use tracing::instrument;
 use uuid::Uuid;
-use workspace_template::document::parser::JsonToDocumentParser;
+use workspace_template::document::parser::{JsonToDocumentParser, SerdeBlock};
 
 use super::publish::PublishedCollabStore;
 
@@ -446,6 +446,90 @@ async fn prepare_default_board_encoded_database(
     group_settings,
   )
   .await
+}
+
+pub async fn append_block_at_the_end_of_page(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  view_id: &str,
+  serde_blocks: &[SerdeBlock],
+) -> Result<(), AppError> {
+  let oid = Uuid::parse_str(view_id).unwrap();
+  let update =
+    append_block_to_document_collab(user.uid, collab_storage, workspace_id, oid, serde_blocks)
+      .await?;
+  update_page_collab_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    oid,
+    CollabType::Document,
+    update,
+  )
+  .await
+}
+
+async fn append_block_to_document_collab(
+  uid: i64,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  oid: Uuid,
+  serde_blocks: &[SerdeBlock],
+) -> Result<Vec<u8>, AppError> {
+  let original_doc_state = get_latest_collab_encoded(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_id.to_string(),
+    &oid.to_string(),
+    CollabType::Document,
+  )
+  .await?
+  .doc_state;
+  let mut collab = collab_from_doc_state(original_doc_state.to_vec(), &oid.to_string())?;
+  let document_body = DocumentBody::from_collab(&collab)
+    .ok_or_else(|| AppError::Internal(anyhow::anyhow!("invalid document collab")))?;
+  let document_data = {
+    let txn = collab.transact();
+    document_body
+      .get_document_data(&txn)
+      .map_err(|err| AppError::Internal(anyhow::anyhow!(err.to_string())))
+  }?;
+  let page_id = document_data.page_id.clone();
+  let page_id_children_id = document_data
+    .blocks
+    .get(&page_id)
+    .map(|block| block.children.clone());
+  let mut prev_id = page_id_children_id
+    .and_then(|children_id| document_data.meta.children_map.get(&children_id))
+    .and_then(|child_ids| child_ids.last().cloned());
+
+  let update = {
+    let mut txn = collab.transact_mut();
+    for serde_block in serde_blocks {
+      let (block_index_map, text_map) =
+        JsonToDocumentParser::generate_blocks(serde_block, None, page_id.clone());
+
+      for (block_id, block) in block_index_map.iter() {
+        document_body
+          .insert_block(&mut txn, block.clone(), prev_id.clone())
+          .map_err(|err| AppError::InvalidBlock(err.to_string()))?;
+        prev_id = Some(block_id.clone());
+      }
+
+      for (text_id, text) in text_map.iter() {
+        let delta = serde_json::from_str(text).unwrap_or_else(|_| vec![]);
+        document_body
+          .text_operation
+          .apply_delta(&mut txn, text_id, delta);
+      }
+    }
+    txn.encode_update_v1()
+  };
+  Ok(update)
 }
 
 #[allow(clippy::too_many_arguments)]

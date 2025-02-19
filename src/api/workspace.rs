@@ -13,9 +13,10 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  create_page, create_space, delete_all_pages_from_trash, delete_trash, get_page_view_collab,
-  move_page, move_page_to_trash, publish_page, restore_all_pages_from_trash,
-  restore_page_from_trash, unpublish_page, update_page, update_page_collab_data, update_space,
+  append_block_at_the_end_of_page, create_page, create_space, delete_all_pages_from_trash,
+  delete_trash, get_page_view_collab, move_page, move_page_to_trash, publish_page,
+  restore_all_pages_from_trash, restore_page_from_trash, unpublish_page, update_page,
+  update_page_collab_data, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::biz::workspace::quick_note::{
@@ -55,6 +56,7 @@ use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
 use database_entity::dto::*;
 use indexer::scheduler::{UnindexedCollabTask, UnindexedData};
+use itertools::Itertools;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -70,6 +72,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, event, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
+use workspace_template::document::parser::SerdeBlock;
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
@@ -172,6 +175,10 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/page-view/{view_id}")
         .route(web::get().to(get_page_view_handler))
         .route(web::patch().to(update_page_view_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/append-block")
+        .route(web::post().to(append_block_to_page_handler)),
     )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/move")
@@ -1212,6 +1219,40 @@ async fn post_page_view_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))
+}
+
+async fn append_block_to_page_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<AppendBlockToPageParams>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  let serde_blocks: Vec<Result<SerdeBlock, AppError>> = payload
+    .blocks
+    .iter()
+    .map(|value| {
+      serde_json::from_value(value.clone()).map_err(|err| AppError::InvalidBlock(err.to_string()))
+    })
+    .collect_vec();
+  let serde_blocks = serde_blocks
+    .into_iter()
+    .collect::<Result<Vec<SerdeBlock>, AppError>>()?;
+  append_block_at_the_end_of_page(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    &view_id,
+    &serde_blocks,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn move_page_handler(

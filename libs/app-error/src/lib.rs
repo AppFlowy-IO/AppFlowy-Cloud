@@ -188,6 +188,9 @@ pub enum AppError {
 
   #[error("Apply update error:{0}")]
   ApplyUpdateError(String),
+
+  #[error("{0}")]
+  InvalidBlock(String),
 }
 
 impl AppError {
@@ -269,6 +272,7 @@ impl AppError {
       AppError::DecodeUpdateError(_) => ErrorCode::DecodeUpdateError,
       AppError::ApplyUpdateError(_) => ErrorCode::ApplyUpdateError,
       AppError::ActionTimeout(_) => ErrorCode::ActionTimeout,
+      AppError::InvalidBlock(_) => ErrorCode::InvalidBlock,
     }
   }
 }
@@ -438,6 +442,7 @@ pub enum ErrorCode {
   AIMaxRequired = 1061,
   InvalidPageData = 1062,
   MemberNotFound = 1063,
+  InvalidBlock = 1064,
 }
 
 impl ErrorCode {

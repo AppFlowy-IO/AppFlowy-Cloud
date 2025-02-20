@@ -44,22 +44,23 @@ impl JsonToDocumentParser {
     Self::serde_block_to_document(root)
   }
 
-  fn generate_blocks(
+  pub fn generate_blocks(
     block: &SerdeBlock,
     id: Option<String>,
     parent_id: String,
   ) -> (IndexMap<String, Block>, IndexMap<String, String>) {
     let (block_pb, delta) = Self::block_to_block_pb(block, id, parent_id);
+    let block_id = block_pb.id.clone();
+    let external_id = block_pb.external_id.clone();
     let mut blocks = IndexMap::new();
+    blocks.insert(block_pb.id.clone(), block_pb);
     let mut text_map = IndexMap::new();
     for child in &block.children {
       let (child_blocks, child_blocks_text_map) =
-        Self::generate_blocks(child, None, block_pb.id.clone());
+        Self::generate_blocks(child, None, block_id.clone());
       blocks.extend(child_blocks);
       text_map.extend(child_blocks_text_map);
     }
-    let external_id = block_pb.external_id.clone();
-    blocks.insert(block_pb.id.clone(), block_pb);
     if let Some(delta) = delta {
       if let Some(external_id) = external_id {
         text_map.insert(external_id, delta);
@@ -75,7 +76,7 @@ impl JsonToDocumentParser {
       .collect()
   }
 
-  fn generate_children_map(blocks: &IndexMap<String, Block>) -> HashMap<String, Vec<String>> {
+  pub fn generate_children_map(blocks: &IndexMap<String, Block>) -> HashMap<String, Vec<String>> {
     let mut children_map = HashMap::new();
     for (id, block) in blocks.iter() {
       // add itself to it's parent's children

@@ -9,8 +9,8 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  CreatePageParams, CreateSpaceParams, IconType, MovePageParams, PublishPageParams,
-  SpacePermission, UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
+  AppendBlockToPageParams, CreatePageParams, CreateSpaceParams, IconType, MovePageParams,
+  PublishPageParams, SpacePermission, UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -247,6 +247,47 @@ async fn create_new_document_page() {
       collab_type: CollabType::Document,
     },
   })
+  .await
+  .unwrap();
+}
+
+#[tokio::test]
+async fn append_block_to_page() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspaces = c.get_workspaces().await.unwrap();
+  assert_eq!(workspaces.len(), 1);
+  let workspace_id = workspaces[0].workspace_id;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let getting_started = general_space
+    .children
+    .iter()
+    .find(|v| v.name == "Getting started")
+    .unwrap();
+  let getting_started_view_id = &getting_started.view_id;
+  c.append_block_to_page(
+    workspace_id,
+    getting_started_view_id,
+    &AppendBlockToPageParams {
+      blocks: vec![json!({
+        "type": "paragraph",
+        "data": {
+          "delta": [
+            {
+              "insert": "The sky appears blue due to a phenomenon called Rayleigh scattering."
+            }
+          ]
+        }
+      })],
+    },
+  )
   .await
   .unwrap();
 }

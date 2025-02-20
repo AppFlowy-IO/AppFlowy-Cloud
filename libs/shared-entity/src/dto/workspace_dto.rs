@@ -196,6 +196,11 @@ pub struct UpdatePageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppendBlockToPageParams {
+  pub blocks: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MovePageParams {
   pub new_parent_view_id: String,
   pub prev_view_id: Option<String>,

@@ -20,7 +20,6 @@ ARG PROFILE="release"
 
 COPY --from=planner /app/recipe.json recipe.json
 # Build our project dependencies
-ENV CARGO_BUILD_JOBS=4
 RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
@@ -28,6 +27,7 @@ ENV SQLX_OFFLINE true
 
 # Build the project
 RUN echo "Building with profile: ${PROFILE}, features: ${FEATURES}, "
+ENV CARGO_INCREMENTAL=false
 RUN cargo build --profile=${PROFILE} --features "${FEATURES}" --bin appflowy_cloud
 
 FROM debian:bookworm-slim AS runtime

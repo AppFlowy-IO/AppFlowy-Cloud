@@ -86,8 +86,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-
+          cache-all-crates: true
       - name: Copy and rename deploy.env to .env
         run: cp deploy.env .env
 

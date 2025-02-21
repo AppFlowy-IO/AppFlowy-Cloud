@@ -41,6 +41,7 @@ RUN apt-get update -y \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/appflowy_cloud /usr/local/bin/appflowy_cloud
+COPY --from=builder /app/recipe.json recipe.json
 ENV APP_ENVIRONMENT production
 ENV RUST_BACKTRACE 1
 

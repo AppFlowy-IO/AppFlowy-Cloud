@@ -9,7 +9,7 @@
 
 
 <p align="center">
-    <a href="https://www.appflowy.io"><b>Website</b></a> •
+    <a href="https://www.appflowy.com"><b>Website</b></a> •
     <a href="https://twitter.com/appflowy"><b>Twitter</b></a>
 </p>
 

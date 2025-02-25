@@ -183,6 +183,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
+      .timeout(Duration::from_secs(30))
       .json(&query)
       .send()
       .await?;

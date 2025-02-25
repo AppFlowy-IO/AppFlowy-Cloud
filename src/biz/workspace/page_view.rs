@@ -1,9 +1,12 @@
 use crate::api::metrics::AppFlowyWebMetrics;
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz::chat::ops::create_chat;
+use crate::biz::collab::database::{
+  resolve_dependencies_when_create_database_linked_view, LinkedViewDependencies,
+};
 use crate::biz::collab::folder_view::{
   check_if_view_is_space, parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
-  to_folder_view_icon, to_space_permission,
+  to_folder_view_icon, to_folder_view_layout, to_space_permission,
 };
 use crate::biz::collab::ops::get_latest_workspace_database;
 use crate::biz::collab::utils::{
@@ -25,7 +28,9 @@ use collab_database::entity::{CreateDatabaseParams, CreateViewParams, EncodedDat
 use collab_database::fields::select_type_option::{
   SelectOption, SelectOptionColor, SelectOptionIds, SingleSelectTypeOption,
 };
-use collab_database::fields::{default_field_settings_for_fields, Field};
+use collab_database::fields::{
+  default_field_settings_by_layout_map, default_field_settings_for_fields, Field,
+};
 use collab_database::rows::{new_cell_builder, CreateRowParams};
 use collab_database::template::entity::CELL_DATA;
 use collab_database::views::{
@@ -598,6 +603,26 @@ async fn update_space_properties(
         .set_private(is_private)
         .done()
     });
+    txn.encode_update_v1()
+  };
+  Ok(encoded_update)
+}
+
+async fn add_new_database_view_for_workspace_database(
+  workspace_database: &mut WorkspaceDatabase,
+  database_id: &str,
+  view_id: &str,
+) -> Result<Vec<u8>, AppError> {
+  let encoded_update = {
+    let mut txn = workspace_database.collab.transact_mut();
+    workspace_database
+      .body
+      .update_database(&mut txn, database_id, |record| {
+        // Check if the view is already linked to the database.
+        if !record.linked_views.contains(&view_id.to_string()) {
+          record.linked_views.push(view_id.to_string());
+        }
+      });
     txn.encode_update_v1()
   };
   Ok(encoded_update)
@@ -1733,6 +1758,170 @@ async fn get_page_collab_data_for_document(
   })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn create_database_view(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  database_view_id: &str,
+  view_layout: &ViewLayout,
+  name: Option<&str>,
+) -> Result<(), AppError> {
+  let database_layout = match view_layout {
+    ViewLayout::Grid => DatabaseLayout::Grid,
+    ViewLayout::Board => DatabaseLayout::Board,
+    ViewLayout::Calendar => DatabaseLayout::Calendar,
+    _ => {
+      return Err(AppError::InvalidRequest(
+        "The layout type is not supported for database view creation".to_string(),
+      ))
+    },
+  };
+
+  let timestamp = collab_database::database::timestamp();
+  let uid = user.uid;
+  let collab_origin = GetCollabOrigin::User { uid };
+  let (_, workspace_database) =
+    get_latest_workspace_database(collab_storage, pg_pool, collab_origin, workspace_id).await?;
+  let database_id = workspace_database
+    .get_database_meta_with_view_id(database_view_id)
+    .ok_or(AppError::NoRequiredData(format!(
+      "Database view {} not found",
+      database_view_id
+    )))?
+    .database_id
+    .clone();
+  let encoded_collab = get_latest_collab_encoded(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_id.to_string(),
+    &database_id,
+    CollabType::Database,
+  )
+  .await?;
+  let mut database_collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    &database_id,
+    encoded_collab.into(),
+    vec![],
+    false,
+  )
+  .map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Unable to create collab from object id {}: {}",
+      &database_id,
+      err
+    ))
+  })?;
+
+  let database_body = DatabaseBody::from_collab(
+    &database_collab,
+    Arc::new(NoPersistenceDatabaseCollabService),
+    None,
+  )
+  .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
+  let (row_orders, field_orders, fields) = {
+    let txn = database_collab.transact();
+    let inline_view_id = database_body.get_inline_view_id(&txn);
+    let row_orders = database_body.views.get_row_orders(&txn, &inline_view_id);
+    let field_orders = database_body.views.get_field_orders(&txn, &inline_view_id);
+    let fields = database_body.fields.get_all_fields(&txn);
+    (row_orders, field_orders, fields)
+  };
+  let LinkedViewDependencies {
+    layout_settings,
+    field_settings,
+    group_settings,
+    deps_fields,
+  } = resolve_dependencies_when_create_database_linked_view(database_layout, &fields)?;
+  let new_view_id = Uuid::new_v4().to_string();
+  let database_encoded_update = {
+    let mut txn = database_collab.transact_mut();
+    let deps_field_setting = vec![default_field_settings_by_layout_map()];
+    let params = CreateViewParams {
+      database_id: database_id.to_string(),
+      view_id: new_view_id.clone(),
+      name: name.unwrap_or_default().to_string(),
+      layout: database_layout,
+      layout_settings,
+      filters: vec![],
+      group_settings,
+      sorts: vec![],
+      field_settings,
+      created_at: timestamp,
+      modified_at: timestamp,
+      deps_fields,
+      deps_field_setting,
+    };
+    database_body
+      .create_linked_view(&mut txn, params, field_orders, row_orders)
+      .map_err(|err| {
+        AppError::Internal(anyhow!(
+          "Unable to create linked view for database view {}: {}",
+          database_view_id,
+          err
+        ))
+      })?;
+    txn.encode_update_v1()
+  };
+  let collab_origin = GetCollabOrigin::User { uid };
+  let (workspace_database_id, mut workspace_database) =
+    get_latest_workspace_database(collab_storage, pg_pool, collab_origin.clone(), workspace_id)
+      .await?;
+  let workspace_database_update = add_new_database_view_for_workspace_database(
+    &mut workspace_database,
+    &database_id,
+    &new_view_id,
+  )
+  .await?;
+  let mut folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    &workspace_id.to_string(),
+  )
+  .await?;
+  let folder_update = add_new_view_to_folder(
+    uid,
+    database_view_id,
+    &new_view_id,
+    &mut folder,
+    name,
+    to_folder_view_layout(view_layout.clone()),
+  )
+  .await?;
+  update_database_data(
+    appflowy_web_metrics,
+    server.clone(),
+    user.clone(),
+    workspace_id,
+    &database_id,
+    database_encoded_update,
+  )
+  .await?;
+  update_workspace_database_data(
+    appflowy_web_metrics,
+    server.clone(),
+    user.clone(),
+    workspace_id,
+    &workspace_database_id,
+    workspace_database_update,
+  )
+  .await?;
+  update_workspace_folder_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    folder_update,
+  )
+  .await?;
+
+  Ok(())
+}
+
 #[instrument(level = "debug", skip_all)]
 pub async fn update_page_collab_data(
   appflowy_web_metrics: &AppFlowyWebMetrics,
@@ -1852,7 +2041,12 @@ pub async fn update_workspace_database_data(
       err
     ))
   })?
-  .map_err(|err| AppError::Internal(anyhow!("Unable to receive folder update reply: {}", err)))?;
+  .map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Unable to receive workspace database update reply: {}",
+      err
+    ))
+  })?;
 
   match resp {
     Ok(_) => Ok(()),
@@ -1860,6 +2054,58 @@ pub async fn update_workspace_database_data(
       appflowy_web_metrics.incr_apply_update_failure_count(1);
       Err(AppError::Internal(anyhow!(
         "Failed to apply workspace database update: {}",
+        err
+      )))
+    },
+  }
+}
+
+#[instrument(level = "debug", skip_all)]
+pub async fn update_database_data(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  workspace_id: Uuid,
+  database_id: &str,
+  update: Vec<u8>,
+) -> Result<(), AppError> {
+  appflowy_web_metrics.record_update_size_bytes(update.len());
+
+  let (tx, rx) = tokio::sync::oneshot::channel();
+  let message = ClientHttpUpdateMessage {
+    user,
+    workspace_id: workspace_id.to_string(),
+    object_id: database_id.to_string(),
+    collab_type: CollabType::Database,
+    update: Bytes::from(update),
+    state_vector: None,
+    return_tx: Some(tx),
+  };
+
+  server
+    .try_send(message)
+    .map_err(|err| AppError::Internal(anyhow!("Failed to send message to server: {}", err)))?;
+
+  let resp = timeout_at(
+    tokio::time::Instant::now() + Duration::from_millis(2000),
+    rx,
+  )
+  .await
+  .map_err(|err| {
+    appflowy_web_metrics.incr_apply_update_timeout_count(1);
+    AppError::Internal(anyhow!(
+      "Failed to receive apply update within timeout: {}",
+      err
+    ))
+  })?
+  .map_err(|err| AppError::Internal(anyhow!("Unable to receive database update reply: {}", err)))?;
+
+  match resp {
+    Ok(_) => Ok(()),
+    Err(err) => {
+      appflowy_web_metrics.incr_apply_update_failure_count(1);
+      Err(AppError::Internal(anyhow!(
+        "Failed to apply database update: {}",
         err
       )))
     },

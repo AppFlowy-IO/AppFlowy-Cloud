@@ -207,6 +207,12 @@ pub struct MovePageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePageDatabaseViewParams {
+  pub layout: ViewLayout,
+  pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageCollabData {
   pub encoded_collab: Vec<u8>,
   pub row_data: HashMap<String, Vec<u8>>,

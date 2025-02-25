@@ -19,7 +19,7 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use tracing::error;
+use tracing::{error, info};
 
 impl Client {
   /// Create a new chat
@@ -450,7 +450,10 @@ impl Stream for QuestionStream {
         error!("Error while streaming answer: {:?}", err);
         Poll::Pending
       },
-      None => Poll::Ready(None),
+      None => {
+        info!("Stream ended");
+        Poll::Ready(None)
+      },
     }
   }
 }

@@ -254,6 +254,19 @@ impl AppFlowyAIClient {
       .into_data()
   }
 
+  pub async fn regenerate_image(&self, source_metadata: Value) -> Result<(), AIError> {
+    let url = format!("{}/chat/image/regenerate", self.url);
+    let resp = self
+      .async_http_client(Method::POST, &url)?
+      .json(&source_metadata)
+      .timeout(Duration::from_secs(30))
+      .send()
+      .await?;
+    AIResponse::<()>::from_reqwest_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn get_local_ai_package(
     &self,
     platform: &str,

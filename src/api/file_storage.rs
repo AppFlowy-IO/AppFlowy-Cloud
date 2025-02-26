@@ -23,9 +23,10 @@ use database_entity::file_dto::{
 use crate::biz::data_import::LimitedPayload;
 use crate::state::AppState;
 use anyhow::anyhow;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use aws_sdk_s3::primitives::ByteStream;
 use collab_importer::util::FileId;
-use database::pg_row::AFBlobStatus;
+use database::pg_row::{AFBlobSource, AFBlobStatus};
 use serde::Deserialize;
 use shared_entity::dto::file_dto::PutFileResponse;
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
@@ -35,7 +36,7 @@ use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
-use tracing::{error, event, instrument, trace};
+use tracing::{error, event, info, instrument, trace};
 
 pub fn file_storage_scope() -> Scope {
   web::scope("/api/file_storage")
@@ -370,12 +371,39 @@ async fn get_blob_by_object_key(
   }
 
   let metadata = result.unwrap();
-  match AFBlobStatus::from(metadata.status) {
-    AFBlobStatus::DallEContentPolicyViolation => {
-      return Ok(HttpResponse::UnprocessableEntity().finish());
+  let source = AFBlobSource::from(metadata.source);
+  trace!("blob metadata: {:?}", metadata);
+  match source {
+    AFBlobSource::UserUpload => {},
+    AFBlobSource::AIGen => {
+      let spawn_regenerate_image =
+        |client: AppFlowyAIClient, source_metadata: serde_json::Value| {
+          tokio::spawn(async move {
+            info!("Regenerate ai image: {:?}", source_metadata);
+            let _ = client.regenerate_image(source_metadata).await;
+          });
+        };
+      let source_metadata = metadata.source_metadata;
+      let status = AFBlobStatus::from(metadata.status);
+      trace!("AI image {}: {:?}", key.object_key(), status);
+      match status {
+        AFBlobStatus::PolicyViolation => {
+          return Ok(HttpResponse::UnprocessableEntity().finish());
+        },
+        AFBlobStatus::Pending => {
+          if metadata.modified_at + chrono::Duration::minutes(1) < chrono::Utc::now() {
+            spawn_regenerate_image(state.ai_client.clone(), source_metadata);
+          } else {
+            trace!("AI image is pending, wait for 1 minute");
+          }
+        },
+        AFBlobStatus::Failed => {
+          spawn_regenerate_image(state.ai_client.clone(), source_metadata);
+        },
+        _ => {},
+      };
     },
-    AFBlobStatus::Ok => {},
-  };
+  }
 
   // Check if the file is modified since the last time
   if let Some(modified_since) = req

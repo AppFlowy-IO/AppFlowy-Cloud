@@ -537,14 +537,17 @@ async fn get_model_list_test() {
   println!("models: {:?}", models);
 }
 
-async fn collect_answer(mut stream: QuestionStream, stop_when_num_of_char: Option<u8>) -> String {
+async fn collect_answer(
+  mut stream: QuestionStream,
+  stop_when_num_of_char: Option<usize>,
+) -> String {
   let mut answer = String::new();
-  let mut num_of_char = 0;
+  let mut num_of_char: usize = 0;
   while let Some(value) = stream.next().await {
     num_of_char += match value.unwrap() {
       QuestionStreamValue::Answer { value } => {
         answer.push_str(&value);
-        value.len() as u8
+        value.len()
       },
       QuestionStreamValue::Metadata { .. } => 0,
       QuestionStreamValue::KeepAlive => 0,

@@ -183,7 +183,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .timeout(Duration::from_secs(30))
+      .timeout(Duration::from_secs(60))
       .json(&query)
       .send()
       .await?;
@@ -446,7 +446,10 @@ impl Stream for QuestionStream {
           Poll::Ready(None)
         },
       },
-      Some(Err(err)) => Poll::Ready(Some(Err(err))),
+      Some(Err(err)) => {
+        error!("Error while streaming answer: {:?}", err);
+        Poll::Pending
+      },
       None => Poll::Ready(None),
     }
   }

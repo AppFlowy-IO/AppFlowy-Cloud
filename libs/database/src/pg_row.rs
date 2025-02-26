@@ -202,15 +202,36 @@ pub struct AFCollabMemberRow {
 #[repr(i16)]
 pub enum AFBlobStatus {
   Ok = 0,
-  DallEContentPolicyViolation = 1,
+  PolicyViolation = 1,
+  Failed = 2,
+  Pending = 3,
 }
 
 impl From<i16> for AFBlobStatus {
   fn from(value: i16) -> Self {
     match value {
       0 => AFBlobStatus::Ok,
-      1 => AFBlobStatus::DallEContentPolicyViolation,
+      1 => AFBlobStatus::PolicyViolation,
+      2 => AFBlobStatus::Failed,
+      3 => AFBlobStatus::Pending,
       _ => AFBlobStatus::Ok,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[repr(i16)]
+pub enum AFBlobSource {
+  UserUpload = 0,
+  AIGen = 1,
+}
+
+impl From<i16> for AFBlobSource {
+  fn from(value: i16) -> Self {
+    match value {
+      0 => AFBlobSource::UserUpload,
+      1 => AFBlobSource::AIGen,
+      _ => AFBlobSource::UserUpload,
     }
   }
 }
@@ -224,6 +245,10 @@ pub struct AFBlobMetadataRow {
   pub modified_at: DateTime<Utc>,
   #[serde(default)]
   pub status: i16,
+  #[serde(default)]
+  pub source: i16,
+  #[serde(default)]
+  pub source_metadata: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

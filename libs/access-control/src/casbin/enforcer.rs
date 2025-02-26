@@ -196,7 +196,7 @@ pub(crate) mod tests {
           action.clone(),
         )
         .await
-        .expect(&format!("enforcing action={:?} failed", action));
+        .unwrap_or_else(|_| panic!("enforcing action={:?} failed", action));
       assert!(result, "action={:?} should be allowed", action);
     }
     let result = enforcer
@@ -241,7 +241,7 @@ pub(crate) mod tests {
           access_level,
         )
         .await
-        .expect(&format!("enforcing access_level={:?} failed", access_level));
+        .unwrap_or_else(|_| panic!("enforcing access_level={:?} failed", access_level));
       assert!(result, "access_level={:?} should be allowed", access_level);
     }
     let result = enforcer

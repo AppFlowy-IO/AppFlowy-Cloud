@@ -194,11 +194,11 @@ mod tests {
       .unwrap();
     let access_control = AccessControl::with_enforcer(enforcer);
     let collab_access_control = super::CollabAccessControlImpl::new(access_control);
-    for action in vec![Action::Read, Action::Write, Action::Delete] {
+    for action in [Action::Read, Action::Write, Action::Delete] {
       collab_access_control
-        .enforce_action(workspace_id, &uid, &oid, action.clone())
+        .enforce_action(workspace_id, &uid, oid, action.clone())
         .await
-        .expect(format!("Failed to enforce action: {:?}", action).as_str());
+        .unwrap_or_else(|_| panic!("Failed to enforce action: {:?}", action));
     }
   }
 }

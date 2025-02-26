@@ -243,7 +243,7 @@ impl AppError {
       AppError::UrlError(_) => ErrorCode::InvalidUrl,
       AppError::SerdeError(_) => ErrorCode::SerdeError,
       AppError::Connect(_) => ErrorCode::NetworkError,
-      AppError::RequestTimeout(_) => ErrorCode::NetworkError,
+      AppError::RequestTimeout(_) => ErrorCode::RequestTimeout,
       #[cfg(feature = "tokio_error")]
       AppError::TokioJoinError(_) => ErrorCode::Internal,
       #[cfg(feature = "bincode_error")]
@@ -443,6 +443,7 @@ pub enum ErrorCode {
   InvalidPageData = 1062,
   MemberNotFound = 1063,
   InvalidBlock = 1064,
+  RequestTimeout = 1065,
 }
 
 impl ErrorCode {

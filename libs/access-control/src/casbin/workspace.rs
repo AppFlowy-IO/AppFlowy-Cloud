@@ -134,15 +134,15 @@ mod tests {
       .unwrap();
     let access_control = AccessControl::with_enforcer(enforcer);
     let workspace_access_control = super::WorkspaceAccessControlImpl::new(access_control);
-    for uid in vec![member_uid, owner_uid] {
+    for uid in [member_uid, owner_uid] {
       workspace_access_control
         .enforce_role(&uid, workspace_id, AFRole::Member)
         .await
-        .expect(&format!("Failed to enforce role for {}", uid));
+        .unwrap_or_else(|_| panic!("Failed to enforce role for {}", uid));
       workspace_access_control
         .enforce_action(&uid, workspace_id, crate::act::Action::Read)
         .await
-        .expect(&format!("Failed to enforce action for {}", uid));
+        .unwrap_or_else(|_| panic!("Failed to enforce action for {}", uid));
     }
     let result = workspace_access_control
       .enforce_action(&member_uid, workspace_id, crate::act::Action::Delete)

@@ -9,8 +9,9 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  AppendBlockToPageParams, CreatePageParams, CreateSpaceParams, IconType, MovePageParams,
-  PublishPageParams, SpacePermission, UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
+  AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams,
+  IconType, MovePageParams, PublishPageParams, SpacePermission, UpdatePageParams,
+  UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -948,4 +949,69 @@ async fn publish_page() {
     .await
     .unwrap();
   assert_eq!(published_view.children.len(), 0);
+}
+
+#[tokio::test]
+async fn create_database_page_view() {
+  let registered_user = generate_unique_registered_user().await;
+  let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let workspace_id = app_client.workspace_id().await;
+  app_client.open_workspace_collab(&workspace_id).await;
+  app_client
+    .wait_object_sync_complete(&workspace_id)
+    .await
+    .unwrap();
+  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let folder_view = web_client
+    .api_client
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let todo_folder_view = general_space
+    .children
+    .iter()
+    .find(|v| v.name == "To-dos")
+    .unwrap();
+  let todo_list_view_id = todo_folder_view.view_id.as_str();
+  web_client
+    .api_client
+    .create_database_view(
+      workspace_uuid,
+      todo_list_view_id,
+      &CreatePageDatabaseViewParams {
+        layout: ViewLayout::Grid,
+        name: Some("Grid View".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let todo_view = folder.get_view(todo_list_view_id).unwrap();
+  let grid_view = todo_view
+    .children
+    .iter()
+    .find_map(|v| {
+      folder.get_view(&v.id).map(|view| {
+        if view.name == "Grid View" {
+          Some(view)
+        } else {
+          None
+        }
+      })
+    })
+    .flatten()
+    .unwrap();
+  let page_collab = web_client
+    .api_client
+    .get_workspace_page_view(workspace_uuid, grid_view.id.as_str())
+    .await
+    .unwrap();
+  assert_eq!(page_collab.data.row_data.len(), 5);
+  assert_eq!(page_collab.view.layout, ViewLayout::Grid);
 }

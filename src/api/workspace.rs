@@ -8,6 +8,7 @@ use crate::biz::collab::ops::{
 use crate::biz::collab::utils::collab_from_doc_state;
 use crate::biz::user::user_verify::verify_token;
 use crate::biz::workspace;
+use crate::biz::workspace::duplicate::duplicate_view_tree_and_collab;
 use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
@@ -184,6 +185,10 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/page-view/{view_id}/move")
         .route(web::post().to(move_page_handler)),
     )
+    .service(
+          web::resource("/{workspace_id}/page-view/{view_id}/duplicate")
+            .route(web::post().to(duplicate_page_handler)),
+        )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/database-view")
         .route(web::post().to(post_page_database_view_handler)),
@@ -1281,6 +1286,33 @@ async fn move_page_handler(
     payload.prev_view_id.clone(),
   )
   .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn duplicate_page_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, Uuid)>,
+  payload: Json<DuplicatePageParams>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  let suffix = payload.suffix.as_deref().unwrap_or(" (Copy)").to_string();
+  duplicate_view_tree_and_collab(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    state.collab_access_control_storage.clone(),
+    &state.pg_pool,
+    workspace_uuid,
+    view_id,
+    &suffix,
+  )
+  .await
+  .unwrap();
   Ok(Json(AppResponse::Ok()))
 }
 

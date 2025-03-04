@@ -5,11 +5,12 @@ use database::chat::chat_ops::{
 };
 use serde_json::json;
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatAuthorType, CreateChatParams, GetChatMessageParams,
+  ChatAuthorType, ChatAuthorWithUuid, CreateChatParams, GetChatMessageParams,
 };
 
 use shared_entity::dto::chat_dto::UpdateChatParams;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 #[sqlx::test(migrations = false)]
 async fn chat_crud_test(pool: PgPool) {
@@ -90,10 +91,12 @@ async fn chat_message_crud_test(pool: PgPool) {
   }
 
   // create chat messages
+  let uid = 0;
+  let user_uuid = Uuid::new_v4();
   for i in 0..5 {
     let _ = insert_question_message(
       &pool,
-      ChatAuthor::new(0, ChatAuthorType::System),
+      ChatAuthorWithUuid::new(uid, user_uuid, ChatAuthorType::System),
       &chat_id,
       format!("message {}", i),
       vec![],

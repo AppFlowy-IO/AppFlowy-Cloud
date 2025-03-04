@@ -329,11 +329,11 @@ pub async fn insert_answer_message(
 
 pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  author: ChatAuthor,
+  author: ChatAuthorWithUuid,
   chat_id: &str,
   content: String,
   metadata: Vec<ChatMessageMetadata>,
-) -> Result<ChatMessage, AppError> {
+) -> Result<ChatMessageWithAuthorUuid, AppError> {
   let metadata = json!(metadata);
   let chat_id = Uuid::from_str(chat_id)?;
   let row = sqlx::query!(
@@ -351,7 +351,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   .await
   .map_err(|err| AppError::Internal(anyhow!("Failed to insert chat message: {}", err)))?;
 
-  let chat_message = ChatMessage {
+  let chat_message = ChatMessageWithAuthorUuid {
     author,
     message_id: row.message_id,
     content,

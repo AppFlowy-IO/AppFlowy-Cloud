@@ -14,13 +14,14 @@ use database::chat::chat_ops::{
 use futures::stream::Stream;
 use serde_json::json;
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatAuthorType, ChatMessage, ChatMessageType, CreateChatMessageParams,
-  CreateChatParams, GetChatMessageParams, RepeatedChatMessage, RepeatedChatMessageWithAuthorUuid,
-  UpdateChatMessageContentParams,
+  ChatAuthor, ChatAuthorType, ChatAuthorWithUuid, ChatMessage, ChatMessageType,
+  ChatMessageWithAuthorUuid, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
+  RepeatedChatMessage, RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
 };
 use sqlx::PgPool;
 use tracing::{error, info, trace};
 
+use uuid::Uuid;
 use validator::Validate;
 
 pub(crate) async fn create_chat(
@@ -130,15 +131,16 @@ pub async fn generate_chat_message_answer(
 pub async fn create_chat_message(
   pg_pool: &PgPool,
   uid: i64,
+  user_uuid: Uuid,
   chat_id: String,
   params: CreateChatMessageParams,
-) -> Result<ChatMessage, AppError> {
+) -> Result<ChatMessageWithAuthorUuid, AppError> {
   let chat_id = chat_id.clone();
   let pg_pool = pg_pool.clone();
 
   let question = insert_question_message(
     &pg_pool,
-    ChatAuthor::new(uid, ChatAuthorType::Human),
+    ChatAuthorWithUuid::new(uid, user_uuid, ChatAuthorType::Human),
     &chat_id,
     params.content,
     params.metadata,
@@ -147,9 +149,11 @@ pub async fn create_chat_message(
   Ok(question)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_chat_message_stream(
   pg_pool: &PgPool,
   uid: i64,
+  user_uuid: Uuid,
   workspace_id: String,
   chat_id: String,
   params: CreateChatMessageParams,
@@ -164,7 +168,7 @@ pub async fn create_chat_message_stream(
       // Insert question message
       let question = match insert_question_message(
           &pg_pool,
-          ChatAuthor::new(uid, ChatAuthorType::Human),
+          ChatAuthorWithUuid::new(uid, user_uuid, ChatAuthorType::Human),
           &chat_id,
           params.content.clone(),
           params.metadata.clone(),

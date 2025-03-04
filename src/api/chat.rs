@@ -21,9 +21,10 @@ use futures_util::stream;
 use futures_util::{FutureExt, TryStreamExt};
 use pin_project::pin_project;
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatMessage, ChatSettings, CreateAnswerMessageParams, CreateChatMessageParams,
-  CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams, UpdateChatParams,
+  ChatAuthor, ChatMessage, ChatMessageWithAuthorUuid, ChatSettings, CreateAnswerMessageParams,
+  CreateChatMessageParams, CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams,
+  MessageCursor, RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
+  UpdateChatParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
@@ -181,7 +182,7 @@ async fn create_question_handler(
   path: web::Path<(String, String)>,
   payload: Json<CreateChatMessageParams>,
   uuid: UserUuid,
-) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+) -> actix_web::Result<JsonAppResponse<ChatMessageWithAuthorUuid>> {
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
 
@@ -206,7 +207,7 @@ async fn create_question_handler(
   }
 
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  let resp = create_chat_message(&state.pg_pool, uid, chat_id, params).await?;
+  let resp = create_chat_message(&state.pg_pool, uid, *uuid, chat_id, params).await?;
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 

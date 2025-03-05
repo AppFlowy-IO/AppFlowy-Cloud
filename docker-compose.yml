@@ -17,7 +17,7 @@ services:
     restart: on-failure
     image: minio/minio
     environment:
-      - MINIO_BROWSER_REDIRECT_URL=${FQDN?:err}/minio
+      - MINIO_BROWSER_REDIRECT_URL=${APPFLOWY_BASE_URL?:err}/minio
       - MINIO_ROOT_USER=${APPFLOWY_S3_ACCESS_KEY:-minioadmin}
       - MINIO_ROOT_PASSWORD=${APPFLOWY_S3_SECRET_KEY:-minioadmin}
     command: server /data --console-address ":9001"
@@ -213,7 +213,7 @@ services:
     depends_on:
       - appflowy_cloud
     environment:
-      - AF_BASE_URL=${FQDN}
+      - AF_BASE_URL=${APPFLOWY_BASE_URL:?err}
       - AF_GOTRUE_URL=${API_EXTERNAL_URL}
 volumes:
   postgres_data:

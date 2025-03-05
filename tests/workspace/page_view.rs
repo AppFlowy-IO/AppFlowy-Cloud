@@ -10,8 +10,8 @@ use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
   AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams,
-  IconType, MovePageParams, PublishPageParams, SpacePermission, UpdatePageParams,
-  UpdateSpaceParams, ViewIcon, ViewLayout,
+  DuplicatePageParams, IconType, MovePageParams, PublishPageParams, SpacePermission,
+  UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -949,6 +949,53 @@ async fn publish_page() {
     .await
     .unwrap();
   assert_eq!(published_view.children.len(), 0);
+}
+
+#[tokio::test]
+async fn duplicate_view() {
+  let registered_user = generate_unique_registered_user().await;
+  let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let workspace_id = app_client.workspace_id().await;
+  app_client.open_workspace_collab(&workspace_id).await;
+  app_client
+    .wait_object_sync_complete(&workspace_id)
+    .await
+    .unwrap();
+  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let folder_view = web_client
+    .api_client
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  web_client
+    .api_client
+    .duplicate_view_and_children(
+      workspace_uuid,
+      &general_space.view_id,
+      &DuplicatePageParams {
+        suffix: Some(" (Copy)".to_string()),
+      },
+    )
+    .await
+    .unwrap();
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let duplicated_space_id = folder
+    .get_view(&workspace_id)
+    .unwrap()
+    .children
+    .iter()
+    .find(|v| folder.get_view(&v.id).unwrap().name == "General (Copy)")
+    .unwrap()
+    .id
+    .clone();
+  let duplicated_views = folder.get_view_recursively(&duplicated_space_id);
+  assert_eq!(duplicated_views.len(), 6);
 }
 
 #[tokio::test]

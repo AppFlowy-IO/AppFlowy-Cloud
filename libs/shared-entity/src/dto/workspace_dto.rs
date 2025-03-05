@@ -207,6 +207,11 @@ pub struct MovePageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuplicatePageParams {
+  pub suffix: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePageDatabaseViewParams {
   pub layout: ViewLayout,
   pub name: Option<String>,

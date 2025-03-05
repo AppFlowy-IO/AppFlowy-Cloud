@@ -1,6 +1,7 @@
 use client_api_entity::workspace_dto::{
   AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams,
-  MovePageParams, Page, PageCollab, PublishPageParams, Space, UpdatePageParams, UpdateSpaceParams,
+  DuplicatePageParams, MovePageParams, Page, PageCollab, PublishPageParams, Space,
+  UpdatePageParams, UpdateSpaceParams,
 };
 use reqwest::Method;
 use serde_json::json;
@@ -267,6 +268,25 @@ impl Client {
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/page-view/{}/database-view",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn duplicate_view_and_children(
+    &self,
+    workspace_id: Uuid,
+    view_id: &str,
+    params: &DuplicatePageParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/duplicate",
       self.base_url, workspace_id, view_id
     );
     let resp = self

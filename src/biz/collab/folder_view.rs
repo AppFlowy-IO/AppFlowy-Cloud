@@ -2,7 +2,9 @@ use std::collections::HashSet;
 
 use app_error::AppError;
 use chrono::DateTime;
-use collab_folder::{Folder, SectionItem, SpacePermission, ViewLayout as CollabFolderViewLayout};
+use collab_folder::{
+  Folder, SectionItem, SpacePermission, View, ViewLayout as CollabFolderViewLayout,
+};
 use shared_entity::dto::workspace_dto::{
   self, FavoriteFolderView, FolderView, FolderViewMinimal, RecentFolderView, TrashFolderView,
   ViewLayout,
@@ -261,6 +263,40 @@ pub fn section_items_to_trash_folder_view(
       })
     })
     .collect()
+}
+
+pub struct ViewTree {
+  pub view: View,
+  pub children: Vec<ViewTree>,
+}
+
+pub fn get_view_and_children(folder: &Folder, view_id: &str) -> Option<ViewTree> {
+  let private_space_and_trash_views = private_space_and_trash_view_ids(folder);
+  get_view_and_children_recursive(folder, &private_space_and_trash_views, view_id)
+}
+
+fn get_view_and_children_recursive(
+  folder: &Folder,
+  private_space_and_trash_views: &PrivateSpaceAndTrashViews,
+  view_id: &str,
+) -> Option<ViewTree> {
+  if private_space_and_trash_views
+    .view_ids_in_trash
+    .contains(view_id)
+  {
+    return None;
+  }
+
+  folder.get_view(view_id).map(|view| ViewTree {
+    view: View::clone(&view),
+    children: view
+      .children
+      .iter()
+      .filter_map(|child_view_id| {
+        get_view_and_children_recursive(folder, private_space_and_trash_views, child_view_id)
+      })
+      .collect(),
+  })
 }
 
 pub fn check_if_view_ancestors_fulfil_condition(

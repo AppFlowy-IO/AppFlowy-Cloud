@@ -149,6 +149,7 @@ pub enum CompletionType {
   MakeLonger = 4,
   ContinueWriting = 5,
   Explain = 6,
+  UserQuestion = 7,
 }
 
 #[derive(Debug, Clone, Serialize)]

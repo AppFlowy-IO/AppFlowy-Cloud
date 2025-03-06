@@ -770,6 +770,25 @@ pub async fn select_user_owned_workspaces_id<'a, E: Executor<'a, Database = Post
   Ok(workspace_ids)
 }
 
+pub async fn insert_workspace_ids_to_deleted_table<'a, E>(
+  executor: E,
+  workspace_ids: Vec<Uuid>,
+) -> Result<(), AppError>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  if workspace_ids.is_empty() {
+    return Ok(());
+  }
+
+  let query = "INSERT INTO public.af_workspace_deleted (workspace_id) SELECT unnest($1::uuid[])";
+  sqlx::query(query)
+    .bind(workspace_ids)
+    .execute(executor)
+    .await?;
+  Ok(())
+}
+
 pub async fn update_workspace_status<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,

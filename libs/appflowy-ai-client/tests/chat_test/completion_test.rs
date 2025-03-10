@@ -16,6 +16,7 @@ async fn completion_explain_test() {
       object_id: uuid::Uuid::new_v4().to_string(),
       workspace_id: Some(uuid::Uuid::new_v4().to_string()),
       rag_ids: None,
+      completion_history: None,
     }),
     format: ResponseFormat::default(),
   };
@@ -38,6 +39,7 @@ async fn completion_image_test() {
       object_id: uuid::Uuid::new_v4().to_string(),
       workspace_id: Some(uuid::Uuid::new_v4().to_string()),
       rag_ids: None,
+      completion_history: None,
     }),
     format: ResponseFormat {
       output_content: OutputContent::IMAGE,

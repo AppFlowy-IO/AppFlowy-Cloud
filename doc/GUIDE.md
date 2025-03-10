@@ -25,7 +25,7 @@
 ## Service Routing and Access
 
 ### Access Points Post Deployment
-After executing `docker-compose up -d`, AppFlowy-Cloud is accessible at `http://localhost` on ports 80 and 443 with the following routing:
+After executing `docker compose up -d`, AppFlowy-Cloud is accessible at `http://localhost` on ports 80 and 443 with the following routing:
 
 - `/gotrue`: Redirects to the GoTrue Auth Server.
 - `/api`: AppFlowy-Cloud's HTTP API endpoint.

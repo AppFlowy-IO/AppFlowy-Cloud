@@ -157,7 +157,8 @@ where
       self.prune_grace_period,
       state_vector,
       self.indexer_scheduler.clone(),
-    )?;
+    )
+    .await?;
     self.state.insert_group(object_id, group);
     Ok(())
   }

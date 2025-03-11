@@ -1,5 +1,6 @@
 use crate::error::{internal, StreamError};
 use bytes::Bytes;
+use collab::core::awareness::AwarenessUpdate;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::updates::decoder::Decode;
 use collab_entity::proto::collab::collab_update_event::Update;
@@ -433,39 +434,14 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
   }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AwarenessStreamUpdate {
-  pub data: Vec<u8>, // AwarenessUpdate::encode_v1
+  pub data: AwarenessUpdate,
   pub sender: CollabOrigin,
 }
 
-impl AwarenessStreamUpdate {
-  /// Returns Redis stream key, that's storing entries mapped to/from [AwarenessStreamUpdate].
-  pub fn stream_key(workspace_id: &str, object_id: &str) -> String {
-    format!("af:{}:{}:awareness", workspace_id, object_id)
-  }
-}
-
-impl TryFrom<HashMap<String, redis::Value>> for AwarenessStreamUpdate {
-  type Error = StreamError;
-
-  fn try_from(fields: HashMap<String, Value>) -> Result<Self, Self::Error> {
-    let sender = match fields.get("sender") {
-      None => CollabOrigin::Empty,
-      Some(sender) => {
-        let raw_origin = String::from_redis_value(sender)?;
-        collab_origin_from_str(&raw_origin)?
-      },
-    };
-    let data_raw = fields
-      .get("data")
-      .ok_or_else(|| internal("expecting field `data`"))?;
-    let data: Vec<u8> = FromRedisValue::from_redis_value(data_raw)?;
-    Ok(AwarenessStreamUpdate { data, sender })
-  }
-}
-
 //FIXME: this should be `impl FromStr for CollabOrigin`
-fn collab_origin_from_str(value: &str) -> RedisResult<CollabOrigin> {
+pub fn collab_origin_from_str(value: &str) -> RedisResult<CollabOrigin> {
   match value {
     "" => Ok(CollabOrigin::Empty),
     "server" => Ok(CollabOrigin::Server),

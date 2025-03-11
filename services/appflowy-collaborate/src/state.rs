@@ -13,6 +13,7 @@ use crate::pg_listener::PgListeners;
 use crate::CollabRealtimeMetrics;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
+use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::StreamRouter;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
@@ -27,6 +28,7 @@ pub struct AppState {
   pub pg_listeners: Arc<PgListeners>,
   pub user_cache: UserCache,
   pub redis_stream_router: Arc<StreamRouter>,
+  pub awareness_gossip: Arc<AwarenessGossip>,
   pub redis_connection_manager: RedisConnectionManager,
   pub access_control: AccessControl,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,

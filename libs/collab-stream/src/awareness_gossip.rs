@@ -38,7 +38,7 @@ impl AwarenessGossip {
     tracing::trace!("publishing awareness state for object {}", object_id);
     let mut conn = self.client.get_multiplexed_async_connection().await?;
     // delete existing redis stream from previous versions
-    conn
+    let _: redis::Value = conn
       .del(format!("af:{}:{}:awareness", workspace_id, object_id))
       .await?;
     let sink = AwarenessUpdateSink::new(conn, workspace_id, object_id);

@@ -10,29 +10,39 @@
   <p>Quickly build HTML emails with Tailwind CSS</p>
 <div>
 
-[![Version][npm-version-shield]][npm]
-[![Build][github-ci-shield]][github-ci]
-[![Downloads][npm-stats-shield]][npm-stats]
-[![License][license-shield]][license]
+  [![Version][npm-version-shield]][npm]
+  [![Build][github-ci-shield]][github-ci]
+  [![Downloads][npm-stats-shield]][npm-stats]
+  [![License][license-shield]][license]
 
   </div>
 </div>
 
-## Development
+## Getting Started
 
-Run this command and follow the prompts
-
-```bash
-npm install
-
-npm run dev
-```
-
-## Build
-
-Run this command to build the project to generate the final output in the assets/mailer_templates/build_production
-folder
+Run this command and follow the prompts:
 
 ```bash
-npm run build
+npx create-maizzle
 ```
+
+## Documentation
+
+Maizzle documentation is available at https://maizzle.com
+
+## Issues
+
+Please open all issues in the [framework repository](https://github.com/maizzle/framework).
+
+## License
+
+The Maizzle framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+[npm]: https://www.npmjs.com/package/@maizzle/framework
+[npm-stats]: https://npm-stat.com/charts.html?package=%40maizzle%2Fframework&from=2019-03-27
+[npm-version-shield]: https://img.shields.io/npm/v/@maizzle/framework.svg
+[npm-stats-shield]: https://img.shields.io/npm/dt/@maizzle/framework.svg?color=6875f5
+[github-ci]: https://github.com/maizzle/framework/actions
+[github-ci-shield]: https://github.com/maizzle/framework/actions/workflows/nodejs.yml/badge.svg
+[license]: ./LICENSE
+[license-shield]: https://img.shields.io/npm/l/@maizzle/framework.svg?color=0e9f6e

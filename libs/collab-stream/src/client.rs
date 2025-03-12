@@ -1,4 +1,5 @@
-use crate::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
+use crate::awareness_gossip::{AwarenessGossip, AwarenessUpdateSink};
+use crate::collab_update_sink::CollabUpdateSink;
 use crate::error::{internal, StreamError};
 use crate::lease::{Lease, LeaseAcquisition};
 use crate::metrics::CollabStreamMetrics;
@@ -17,6 +18,7 @@ use tracing::error;
 pub struct CollabRedisStream {
   connection_manager: ConnectionManager,
   stream_router: Arc<StreamRouter>,
+  awareness_gossip: Arc<AwarenessGossip>,
 }
 
 impl CollabRedisStream {
@@ -37,20 +39,24 @@ impl CollabRedisStream {
       metrics,
       router_options,
     )?);
+    let awareness_gossip = Arc::new(AwarenessGossip::new(redis_client.clone()));
     let connection_manager = redis_client.get_connection_manager().await?;
     Ok(Self::new_with_connection_manager(
       connection_manager,
       stream_router,
+      awareness_gossip,
     ))
   }
 
   pub fn new_with_connection_manager(
     connection_manager: ConnectionManager,
     stream_router: Arc<StreamRouter>,
+    awareness_gossip: Arc<AwarenessGossip>,
   ) -> Self {
     Self {
       connection_manager,
       stream_router,
+      awareness_gossip,
     }
   }
 
@@ -112,9 +118,12 @@ impl CollabRedisStream {
     CollabUpdateSink::new(self.connection_manager.clone(), stream_key)
   }
 
-  pub fn awareness_update_sink(&self, workspace_id: &str, object_id: &str) -> AwarenessUpdateSink {
-    let stream_key = AwarenessStreamUpdate::stream_key(workspace_id, object_id);
-    AwarenessUpdateSink::new(self.connection_manager.clone(), stream_key)
+  pub async fn awareness_update_sink(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> Result<AwarenessUpdateSink, StreamError> {
+    self.awareness_gossip.sink(workspace_id, object_id).await
   }
 
   /// Reads all collab updates for a given `workspace_id`:`object_id` entry, starting
@@ -168,18 +177,10 @@ impl CollabRedisStream {
     &self,
     workspace_id: &str,
     object_id: &str,
-    since: Option<MessageId>,
   ) -> impl Stream<Item = Result<AwarenessStreamUpdate, StreamError>> {
-    let stream_key = AwarenessStreamUpdate::stream_key(workspace_id, object_id);
-    let since = since.map(|id| id.to_string());
-    let mut reader = self.stream_router.observe(stream_key, since);
-    async_stream::try_stream! {
-      while let Some((message_id, fields)) = reader.recv().await {
-        tracing::trace!("incoming awareness update `{}`", message_id);
-        let awareness_update = AwarenessStreamUpdate::try_from(fields)?;
-        yield awareness_update;
-      }
-    }
+    self
+      .awareness_gossip
+      .awareness_stream(workspace_id, object_id)
   }
 
   pub async fn prune_update_stream(

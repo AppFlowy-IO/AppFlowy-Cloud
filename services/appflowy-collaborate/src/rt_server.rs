@@ -1,23 +1,6 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use access_control::collab::RealtimeAccessControl;
-use anyhow::{anyhow, Result};
-use app_error::AppError;
-use collab_rt_entity::user::{RealtimeUser, UserDevice};
-use collab_rt_entity::MessageByObjectId;
-use collab_stream::client::CollabRedisStream;
-use collab_stream::stream_router::StreamRouter;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
-use redis::aio::ConnectionManager;
-use tokio::sync::mpsc::Sender;
-use tokio::task::yield_now;
-use tokio::time::interval;
-use tracing::{error, info, trace, warn};
-use yrs::updates::decoder::Decode;
-use yrs::StateVector;
-
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::config::get_env_var;
@@ -26,8 +9,25 @@ use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
+use access_control::collab::RealtimeAccessControl;
+use anyhow::{anyhow, Result};
+use app_error::AppError;
+use collab_rt_entity::user::{RealtimeUser, UserDevice};
+use collab_rt_entity::MessageByObjectId;
+use collab_stream::awareness_gossip::AwarenessGossip;
+use collab_stream::client::CollabRedisStream;
+use collab_stream::stream_router::StreamRouter;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use database::collab::CollabStorage;
 use indexer::scheduler::IndexerScheduler;
+use redis::aio::ConnectionManager;
+use tokio::sync::mpsc::Sender;
+use tokio::task::yield_now;
+use tokio::time::interval;
+use tracing::{error, info, trace, warn};
+use yrs::updates::decoder::Decode;
+use yrs::StateVector;
 
 use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
@@ -54,6 +54,7 @@ where
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
     redis_stream_router: Arc<StreamRouter>,
+    awareness_gossip: Arc<AwarenessGossip>,
     redis_connection_manager: ConnectionManager,
     group_persistence_interval: Duration,
     prune_grace_period: Duration,
@@ -70,8 +71,11 @@ where
     }
 
     let connect_state = ConnectState::new();
-    let collab_stream =
-      CollabRedisStream::new_with_connection_manager(redis_connection_manager, redis_stream_router);
+    let collab_stream = CollabRedisStream::new_with_connection_manager(
+      redis_connection_manager,
+      redis_stream_router,
+      awareness_gossip,
+    );
     let group_manager = Arc::new(
       GroupManager::new(
         storage.clone(),

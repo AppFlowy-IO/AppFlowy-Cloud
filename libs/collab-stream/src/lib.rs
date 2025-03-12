@@ -1,3 +1,4 @@
+pub mod awareness_gossip;
 pub mod client;
 pub mod collab_update_sink;
 pub mod error;

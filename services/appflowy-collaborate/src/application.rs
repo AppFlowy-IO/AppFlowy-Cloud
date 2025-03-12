@@ -24,6 +24,7 @@ use crate::actix_ws::server::RealtimeServerActor;
 use crate::api::{collab_scope, ws_scope};
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use access_control::casbin::access::AccessControl;
+use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
@@ -82,6 +83,7 @@ pub async fn run_actix_server(
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
     state.redis_stream_router.clone(),
+    state.awareness_gossip.clone(),
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     Duration::from_secs(config.collab.group_prune_grace_period_secs),
@@ -111,7 +113,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let user_cache = UserCache::new(pg_pool.clone()).await;
 
   info!("Connecting to Redis...");
-  let (redis_conn_manager, redis_stream_router) = get_redis_client(
+  let (redis_conn_manager, redis_stream_router, awareness_gossip) = get_redis_client(
     config.redis_uri.expose_secret(),
     config.redis_worker_count,
     metrics.collab_stream_metrics.clone(),
@@ -184,6 +186,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     pg_listeners,
     user_cache,
     redis_stream_router,
+    awareness_gossip,
     redis_connection_manager: redis_conn_manager,
     access_control,
     collab_access_control_storage: collab_storage,
@@ -197,9 +200,18 @@ async fn get_redis_client(
   redis_uri: &str,
   worker_count: usize,
   metrics: Arc<CollabStreamMetrics>,
-) -> Result<(redis::aio::ConnectionManager, Arc<StreamRouter>), Error> {
+) -> Result<
+  (
+    redis::aio::ConnectionManager,
+    Arc<StreamRouter>,
+    Arc<AwarenessGossip>,
+  ),
+  Error,
+> {
   info!("Connecting to redis with uri: {}", redis_uri);
   let client = redis::Client::open(redis_uri).context("failed to connect to redis")?;
+
+  let awareness_gossip = Arc::new(AwarenessGossip::new(client.clone()));
 
   let router = StreamRouter::with_options(
     &client,
@@ -216,7 +228,7 @@ async fn get_redis_client(
     .get_connection_manager()
     .await
     .context("failed to get the connection manager")?;
-  Ok((manager, router.into()))
+  Ok((manager, router.into(), awareness_gossip))
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {

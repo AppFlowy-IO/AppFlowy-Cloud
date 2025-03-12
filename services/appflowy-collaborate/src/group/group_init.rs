@@ -15,11 +15,12 @@ use collab_rt_entity::{
 use collab_rt_entity::{ClientCollabMessage, CollabMessage};
 use collab_rt_protocol::{Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
-use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
+use collab_stream::collab_update_sink::CollabUpdateSink;
 
 use crate::metrics::CollabRealtimeMetrics;
 use bytes::Bytes;
 use collab_document::document::DocumentBody;
+use collab_stream::awareness_gossip::AwarenessUpdateSink;
 use collab_stream::error::StreamError;
 use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
@@ -35,6 +36,7 @@ use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
+use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Update};
@@ -73,7 +75,7 @@ impl Drop for CollabGroup {
 
 impl CollabGroup {
   #[allow(clippy::too_many_arguments)]
-  pub fn new<S>(
+  pub async fn new<S>(
     uid: i64,
     workspace_id: String,
     object_id: String,
@@ -100,7 +102,8 @@ impl CollabGroup {
       indexer_scheduler,
       metrics.clone(),
       prune_grace_period,
-    );
+    )
+    .await?;
 
     let state = Arc::new(CollabGroupState {
       workspace_id,
@@ -182,10 +185,6 @@ impl CollabGroup {
     loop {
       tokio::select! {
         _ = state.shutdown.cancelled() => {
-          match state.persister.trim_awareness().await {
-            Ok(_) => (),
-            Err(err) => warn!("unable to trim awareness due to {}", err),
-          };
           break;
         }
         res = updates.next() => {
@@ -256,11 +255,10 @@ impl CollabGroup {
 
   /// Task used to receive awareness updates from Redis.
   async fn inbound_awareness_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
-    let updates = state.persister.collab_redis_stream.awareness_updates(
-      &state.workspace_id,
-      &state.object_id,
-      None,
-    );
+    let updates = state
+      .persister
+      .collab_redis_stream
+      .awareness_updates(&state.workspace_id, &state.object_id);
     pin_mut!(updates);
     loop {
       tokio::select! {
@@ -288,14 +286,14 @@ impl CollabGroup {
 
   async fn handle_inbound_awareness(state: &CollabGroupState, update: AwarenessStreamUpdate) {
     tracing::trace!(
-      "broadcasting awareness update from {} ({} bytes)",
+      "broadcasting awareness update from {} (contains {} clients)",
       update.sender,
-      update.data.len()
+      update.data.clients.len()
     );
     let sender = update.sender;
     let message = AwarenessSync::new(
       state.object_id.clone(),
-      Message::Awareness(update.data).encode_v1(),
+      Message::Awareness(update.data.encode_v1()).encode_v1(),
       CollabOrigin::Empty,
     );
     for mut e in state.subscribers.iter_mut() {
@@ -788,9 +786,10 @@ impl CollabGroup {
     origin: &CollabOrigin,
     update: Vec<u8>,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+    let awareness_update = AwarenessUpdate::decode_v1(&update)?;
     state
       .persister
-      .send_awareness(origin, update)
+      .send_awareness(origin, awareness_update)
       .await
       .map_err(|err| RTProtocolError::Internal(err.into()))?;
     Ok(None)
@@ -888,7 +887,7 @@ struct CollabPersister {
 
 impl CollabPersister {
   #[allow(clippy::too_many_arguments)]
-  pub fn new(
+  pub async fn new(
     uid: i64,
     workspace_id: String,
     object_id: String,
@@ -898,10 +897,12 @@ impl CollabPersister {
     indexer_scheduler: Arc<IndexerScheduler>,
     metrics: Arc<CollabRealtimeMetrics>,
     prune_grace_period: Duration,
-  ) -> Self {
+  ) -> Result<Self, StreamError> {
     let update_sink = collab_redis_stream.collab_update_sink(&workspace_id, &object_id);
-    let awareness_sink = collab_redis_stream.awareness_update_sink(&workspace_id, &object_id);
-    Self {
+    let awareness_sink = collab_redis_stream
+      .awareness_update_sink(&workspace_id, &object_id)
+      .await?;
+    Ok(Self {
       uid,
       workspace_id,
       object_id,
@@ -913,7 +914,7 @@ impl CollabPersister {
       update_sink,
       awareness_sink,
       prune_grace_period,
-    }
+    })
   }
 
   async fn send_update(
@@ -937,23 +938,15 @@ impl CollabPersister {
   async fn send_awareness(
     &self,
     sender_session: &CollabOrigin,
-    awareness_update: Vec<u8>,
-  ) -> Result<MessageId, StreamError> {
-    // send awareness updates to redis queue:
-    // QUESTION: is it needed? Maybe we could reuse update_sink?
-    let len = awareness_update.len();
+    awareness_update: AwarenessUpdate,
+  ) -> Result<(), StreamError> {
     let update = AwarenessStreamUpdate {
       data: awareness_update,
       sender: sender_session.clone(),
     };
-    let msg_id = self.awareness_sink.send(&update).await?;
-    tracing::trace!(
-      "persisted awareness from {} ({} bytes) - msg id: {}",
-      update.sender,
-      len,
-      msg_id
-    );
-    Ok(msg_id)
+    self.awareness_sink.send(&update).await?;
+    tracing::trace!("broadcasted awareness from {}", update.sender);
+    Ok(())
   }
 
   /// Loads collab without its history. Used for handling y-sync protocol messages.
@@ -1149,15 +1142,6 @@ impl CollabPersister {
     Ok(())
   }
 
-  async fn trim_awareness(&self) -> Result<(), RealtimeError> {
-    let stream_key = AwarenessStreamUpdate::stream_key(&self.workspace_id, &self.object_id);
-    self
-      .collab_redis_stream
-      .prune_awareness_stream(&stream_key)
-      .await?;
-    Ok(())
-  }
-
   async fn write_collab(&self, doc_state_v1: Vec<u8>) -> Result<(), RealtimeError> {
     let encoded_collab = EncodedCollab::new_v1(Default::default(), doc_state_v1)
       .encode_to_bytes()
@@ -1188,11 +1172,9 @@ impl CollabPersister {
         .indexer_scheduler
         .index_pending_collab_one(indexed_collab, false)
       {
-        tracing::warn!(
+        warn!(
           "failed to index collab `{}/{}`: {}",
-          self.workspace_id,
-          self.object_id,
-          err
+          self.workspace_id, self.object_id, err
         );
       }
     }

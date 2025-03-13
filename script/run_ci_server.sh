@@ -27,7 +27,7 @@ if [[ -z "${SKIP_BUILD+x}" ]]; then
   docker build --platform=linux/amd64 -t appflowyinc/appflowy_cloud_local:$IMAGE_VERSION -f Dockerfile .
   docker build --platform=linux/amd64 -t appflowyinc/appflowy_worker_local:$IMAGE_VERSION -f ./services/appflowy-worker/Dockerfile .
   
-  cat > docker-compose.override.yml <<EOF
+  cat > compose.override.yaml <<EOF
 version: '3'
 services:
   appflowy_cloud:
@@ -38,8 +38,8 @@ EOF
 
 
   export RUST_LOG=trace
-  docker compose -f docker-compose-ci.yml -f docker-compose.override.yml up -d --build
-  rm docker-compose.override.yml
+  docker compose -f compose.ci.yaml -f compose.override.yaml up -d --build
+  rm compose.override.yaml
 else
   echo "Skipping the build process for appflowy services..."
   echo "Using image version: $IMAGE_VERSION"
@@ -49,10 +49,10 @@ else
   export APPFLOWY_CLOUD_VERSION=$IMAGE_VERSION
   export APPFLOWY_WORKER_VERSION=$IMAGE_VERSION
   export APPFLOWY_ADMIN_FRONTEND_VERSION=$IMAGE_VERSION
-  docker compose -f docker-compose-ci.yml pull
+  docker compose -f compose.ci.yaml pull
 
   echo "Printing the appflowy_cloud image version:"
   docker images appflowyinc/appflowy_cloud --format "{{.Repository}}:{{.Tag}} (Created: {{.CreatedSince}}, Size: {{.Size}})"
 
-  docker compose -f docker-compose-ci.yml up -d
+  docker compose -f compose.ci.yaml up -d
 fi

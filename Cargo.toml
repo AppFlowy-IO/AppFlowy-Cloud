@@ -199,6 +199,7 @@ members = [
   "libs/mailer",
   "libs/indexer",
   "libs/llm-client",
+  "libs/appflowy-proto",
 ]
 
 [workspace.dependencies]
@@ -211,6 +212,7 @@ shared-entity = { path = "libs/shared-entity" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 access-control = { path = "libs/access-control" }
 llm-client = { path = "libs/llm-client" }
+appflowy-proto = { path = "libs/appflowy-proto" }
 mailer = { path = "libs/mailer" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
@@ -269,6 +271,7 @@ chrono = { version = "0.4.39", features = [
 http = "0.2.12"
 tokio-tungstenite = "0.20"
 secrecy = { version = "0.8.0", features = ["serde"] }
+thiserror = "2.0"
 # collaboration
 yrs = { version = "0.21.3", features = ["sync"] }
 collab = { version = "0.2.0" }

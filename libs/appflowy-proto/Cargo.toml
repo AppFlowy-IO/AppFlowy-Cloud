@@ -1,0 +1,13 @@
+[package]
+name = "appflowy-proto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uuid.workspace = true
+bytes.workspace = true
+thiserror.workspace = true
+prost = { version = "0.13.4", features = ["derive"] }
+
+[build-dependencies]
+prost-build = "0.13.4"

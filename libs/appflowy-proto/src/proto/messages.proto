@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package af_proto.messages;
+
+// Redis message Id.
+message Rid {
+    fixed64 timestamp = 1;
+    uint32 counter = 2;
+}
+
+message Manifest {
+    bytes object_id = 1;
+    Rid last_message_id = 2;
+    bytes state_vector = 3;
+}
+
+message Update {
+    bytes object_id = 1;
+    uint32 flags = 2;
+    Rid message_id = 3;
+    bytes payload = 4;
+}
+
+message AwarenessUpdate {
+    bytes object_id = 1;
+    bytes payload = 2;
+}
+
+message PermissionRevoked {
+    bytes object_id = 1;
+    string reason = 2;
+}
+
+message Message {
+    oneof message {
+        Manifest manifest = 1;
+        Update update = 2;
+        AwarenessUpdate awareness_update = 3;
+        PermissionRevoked permission_revoked = 4;
+    }
+}

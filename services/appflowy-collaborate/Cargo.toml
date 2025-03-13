@@ -12,6 +12,7 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 [dependencies]
+appflowy-proto.workspace = true
 access-control.workspace = true
 actix.workspace = true
 actix-web.workspace = true

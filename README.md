@@ -1,12 +1,14 @@
 <p align="center">
-  <img src="assets/logos/appflowy_logo.svg"  width="500" height="200" />
+    <picture>
+        <source srcset="assets/logos/appflowy_logo_white.svg" media="(prefers-color-scheme: dark)"/>
+        <img src="assets/logos/appflowy_logo_black.svg"  width="500" height="200" />
+    </picture>
 </p>
 
 <h4 align="center">
-   <a href="https://discord.gg/9Q2xaN37tV"><img src="https://img.shields.io/badge/AppFlowy.IO-discord-orange"></a>
+    <a href="https://discord.gg/9Q2xaN37tV"><img src="https://img.shields.io/badge/AppFlowy.IO-discord-orange"></a>
     <a href="https://opensource.org/licenses/AGPL-3.0"><img src="https://img.shields.io/badge/license-AGPL-purple.svg" alt="License: AGPL"></a>
 </h4>
-
 
 <p align="center">
     <a href="https://www.appflowy.com"><b>Website</b></a> •

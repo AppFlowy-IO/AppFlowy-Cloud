@@ -449,18 +449,28 @@ pub struct SimilarityResponse {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompletionRecord {
+  pub role: String, // human, ai, or system
+  pub content: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompletionMetadata {
-  /// A unique identifier for the object.
+  /// A unique identifier for the object. Object could be a document id.
   pub object_id: String,
   /// The workspace identifier.
   ///
-  /// This field must be provided when generating images.
+  /// This field must be provided when generating images. We use workspace ID to track image usage.
   pub workspace_id: Option<String>,
   /// A list of relevant document IDs.
   ///
   /// When using completions for document-related tasks, this should include the document ID.
   /// In some cases, `object_id` may be the same as the document ID.
   pub rag_ids: Option<Vec<String>>,
+  /// For the AI completion feature (the AI writer), pass the conversation history as input.
+  /// This history helps the AI understand the context of the conversation.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub completion_history: Option<Vec<CompletionRecord>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

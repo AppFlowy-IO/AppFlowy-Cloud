@@ -288,6 +288,10 @@ impl From<reqwest::Error> for AppError {
       return AppError::RequestTimeout(error.to_string());
     }
 
+    if error.is_request() {
+      return AppError::ServiceTemporaryUnavailable(error.to_string());
+    }
+
     if let Some(cause) = error.source() {
       if cause
         .to_string()
@@ -314,7 +318,7 @@ impl From<reqwest::Error> for AppError {
       }
     }
 
-    AppError::Unhandled(error.to_string())
+    AppError::Internal(error.into())
   }
 }
 

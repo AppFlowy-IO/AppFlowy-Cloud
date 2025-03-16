@@ -11,6 +11,7 @@ use serde_json::de::SliceRead;
 use serde_json::StreamDeserializer;
 use std::error::Error as StdError;
 use std::task::{Context, Poll};
+use tracing::error;
 
 pub async fn check_response(resp: reqwest::Response) -> Result<(), Error> {
   let status_code = resp.status();
@@ -106,12 +107,14 @@ where
               this.buffer.drain(0..offset);
               return Poll::Ready(Some(Ok(value)));
             },
-            Some(Err(err)) if err.is_eof() => {
-              // Wait for more data if EOF indicates incomplete data
-              return Poll::Pending;
-            },
             Some(Err(err)) => {
-              return Poll::Ready(Some(Err(err.into())));
+              return if err.is_eof() {
+                // Wait for more data if EOF indicates incomplete data
+                Poll::Pending
+              } else {
+                error!("parse json stream failed: {:?}", err);
+                Poll::Ready(Some(Err(err.into())))
+              };
             },
             None => {
               // No complete object is ready, wait for more data

@@ -448,7 +448,7 @@ impl Stream for QuestionStream {
       },
       Some(Err(err)) => {
         error!("Error while streaming answer: {:?}", err);
-        Poll::Pending
+        Poll::Ready(Some(Err(err)))
       },
       None => Poll::Ready(None),
     }

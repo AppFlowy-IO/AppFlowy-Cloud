@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Using cargo-chef to manage Rust build cache effectively
 FROM lukemathwalker/cargo-chef:latest-rust-1.81 as chef
 

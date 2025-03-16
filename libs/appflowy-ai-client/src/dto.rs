@@ -469,7 +469,7 @@ pub struct CompletionMetadata {
   pub rag_ids: Option<Vec<String>>,
   /// For the AI completion feature (the AI writer), pass the conversation history as input.
   /// This history helps the AI understand the context of the conversation.
-  #[serde(default)]
+  #[serde(default, skip_serializing_if = "Option::is_none")]
   pub completion_history: Option<Vec<CompletionRecord>>,
 }
 

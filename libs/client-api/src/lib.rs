@@ -32,7 +32,9 @@ pub mod error {
 // Export all dto entities that will be used in the frontend application
 pub mod entity {
   #[cfg(not(target_arch = "wasm32"))]
-  pub use crate::http_chat::{QuestionStream, QuestionStreamValue};
+  pub use crate::http_chat::{
+    CompletionStream, CompletionStreamValue, QuestionStream, QuestionStreamValue,
+  };
   pub use client_api_entity::*;
 }
 

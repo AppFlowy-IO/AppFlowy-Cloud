@@ -60,6 +60,25 @@ impl AppFlowyAIClient {
     AIResponse::<()>::stream_response(resp).await
   }
 
+  pub async fn stream_completion_v2(
+    &self,
+    params: CompleteTextParams,
+    model: &str,
+  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+    if params.text.is_empty() {
+      return Err(AIError::InvalidRequest("Empty text".to_string()));
+    }
+
+    let url = format!("{}/v2/completion/stream", self.url);
+    let resp = self
+      .async_http_client(Method::POST, &url)?
+      .header(AI_MODEL_HEADER_KEY, model)
+      .json(&params)
+      .send()
+      .await?;
+    AIResponse::<()>::stream_response(resp).await
+  }
+
   pub async fn summarize_row(
     &self,
     params: &Map<String, Value>,

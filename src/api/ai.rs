@@ -22,6 +22,7 @@ use tracing::{error, instrument, trace};
 pub fn ai_completion_scope() -> Scope {
   web::scope("/api/ai/{workspace_id}")
     .service(web::resource("/complete/stream").route(web::post().to(stream_complete_text_handler)))
+    .service(web::resource("v2/complete/stream").route(web::post().to(stream_complete_v2_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
     .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
     .service(web::resource("/local/config").route(web::get().to(local_ai_config_handler)))
@@ -60,6 +61,30 @@ async fn stream_complete_text_handler(
   }
 }
 
+async fn stream_complete_v2_handler(
+  state: Data<AppState>,
+  payload: Json<CompleteTextParams>,
+  req: HttpRequest,
+) -> actix_web::Result<HttpResponse> {
+  let ai_model = ai_model_from_header(&req);
+  let params = payload.into_inner();
+  state.metrics.ai_metrics.record_total_completion_count(1);
+
+  match state.ai_client.stream_completion_v2(params, ai_model).await {
+    Ok(stream) => Ok(
+      HttpResponse::Ok()
+        .content_type("text/event-stream")
+        .streaming(stream.map_err(AppError::from)),
+    ),
+    Err(err) => Ok(
+      HttpResponse::Ok()
+        .content_type("text/event-stream")
+        .streaming(stream::once(async move {
+          Err(AppError::AIServiceUnavailable(err.to_string()))
+        })),
+    ),
+  }
+}
 #[instrument(level = "debug", skip(state, payload), err)]
 async fn summarize_row_handler(
   state: Data<AppState>,

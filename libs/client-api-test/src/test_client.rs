@@ -33,8 +33,8 @@ use uuid::Uuid;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::entity::id::user_awareness_object_id;
 use client_api::entity::{
-  PublishCollabItem, PublishCollabMetadata, QueryWorkspaceMember, QuestionStream,
-  QuestionStreamValue, UpdateCollabWebParams,
+  CompletionStream, CompletionStreamValue, PublishCollabItem, PublishCollabMetadata,
+  QueryWorkspaceMember, QuestionStream, QuestionStreamValue, UpdateCollabWebParams,
 };
 use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
@@ -1328,4 +1328,20 @@ pub async fn collect_answer(mut stream: QuestionStream) -> String {
     }
   }
   answer
+}
+
+pub async fn collect_completion_v2(mut stream: CompletionStream) -> (String, String) {
+  let mut answer = String::new();
+  let mut comment = String::new();
+  while let Some(value) = stream.next().await {
+    match value.unwrap() {
+      CompletionStreamValue::Answer { value } => {
+        answer.push_str(&value);
+      },
+      CompletionStreamValue::Comment { value } => {
+        comment.push_str(&value);
+      },
+    }
+  }
+  (answer, comment)
 }

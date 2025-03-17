@@ -3,6 +3,7 @@ use app_error::AppError;
 use app_error::ErrorCode;
 use client_api_entity::auth_dto::CreateNewPageParams;
 use client_api_entity::auth_dto::DeleteUserQuery;
+use client_api_entity::auth_dto::UpdatePageParams;
 use client_api_entity::server_info_dto::ServerInfoResponseItem;
 use client_api_entity::workspace_dto::FavoriteSectionItems;
 use client_api_entity::workspace_dto::RecentSectionItems;
@@ -1143,6 +1144,7 @@ impl Client {
     )
   }
 
+  /// Create a new page in the folder view.
   #[instrument(level = "info", skip_all, err)]
   pub async fn create_new_page(
     &self,
@@ -1152,6 +1154,28 @@ impl Client {
     let url = format!("{}/api/workspace/{}/page-view", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  /// Update the existing page.
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn update_page(
+    &self,
+    workspace_id: &str,
+    page_id: &str,
+    params: UpdatePageParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}",
+      self.base_url, workspace_id, page_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
       .await?
       .json(&params)
       .send()

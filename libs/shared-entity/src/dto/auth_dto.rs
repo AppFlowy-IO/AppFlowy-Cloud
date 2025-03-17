@@ -71,11 +71,3 @@ pub struct DeleteUserQuery {
   pub provider_access_token: Option<String>,
   pub provider_refresh_token: Option<String>,
 }
-
-#[derive(serde::Deserialize, serde::Serialize, Default)]
-pub struct CreateNewPageParams {
-  pub parent_view_id: String,
-  pub view_layout: u32,
-  pub name: Option<String>,
-  pub page_data: Option<serde_json::Value>,
-}

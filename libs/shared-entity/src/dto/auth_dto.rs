@@ -83,6 +83,14 @@ pub struct CreateNewPageParams {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
+pub struct CreateNewSpaceParams {
+  pub name: String,
+  pub space_icon: String,
+  pub space_icon_color: String,
+  pub space_permission: u32, // 0: PublicToAll, 1: Private
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct UpdatePageParams {
   pub name: Option<String>,
   pub icon: Option<ViewIcon>,
@@ -111,4 +119,44 @@ impl UpdatePageParams {
     self.extra = Some(extra.into());
     self
   }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Default)]
+pub struct UpdateSpaceParams {
+  pub space_permission: Option<u32>, // 0: PublicToAll, 1: Private
+  pub name: Option<String>,
+  pub space_icon: Option<ViewIcon>,
+  pub space_icon_color: Option<String>,
+}
+
+impl UpdateSpaceParams {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn with_space_permission<T: Into<u32>>(mut self, space_permission: T) -> Self {
+    self.space_permission = Some(space_permission.into());
+    self
+  }
+
+  pub fn with_name<T: ToString>(mut self, name: T) -> Self {
+    self.name = Some(name.to_string());
+    self
+  }
+
+  pub fn with_space_icon<T: Into<ViewIcon>>(mut self, space_icon: T) -> Self {
+    self.space_icon = Some(space_icon.into());
+    self
+  }
+
+  pub fn with_space_icon_color<T: ToString>(mut self, space_icon_color: T) -> Self {
+    self.space_icon_color = Some(space_icon_color.to_string());
+    self
+  }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Default)]
+pub struct MovePageParams {
+  pub new_parent_view_id: String,
+  pub prev_view_id: Option<String>,
 }

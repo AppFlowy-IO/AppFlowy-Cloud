@@ -2,8 +2,11 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
 use app_error::ErrorCode;
 use client_api_entity::auth_dto::CreateNewPageParams;
+use client_api_entity::auth_dto::CreateNewSpaceParams;
 use client_api_entity::auth_dto::DeleteUserQuery;
+use client_api_entity::auth_dto::MovePageParams;
 use client_api_entity::auth_dto::UpdatePageParams;
+use client_api_entity::auth_dto::UpdateSpaceParams;
 use client_api_entity::server_info_dto::ServerInfoResponseItem;
 use client_api_entity::workspace_dto::FavoriteSectionItems;
 use client_api_entity::workspace_dto::RecentSectionItems;
@@ -1173,6 +1176,108 @@ impl Client {
     let url = format!(
       "{}/api/workspace/{}/page-view/{}",
       self.base_url, workspace_id, page_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  /// Move the existing page to trash.
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn move_page_to_trash(
+    &self,
+    workspace_id: &str,
+    page_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/move-to-trash",
+      self.base_url, workspace_id, page_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  /// Move the existing page to another folder view.
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn move_page(
+    &self,
+    workspace_id: &str,
+    page_id: &str,
+    params: MovePageParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/move",
+      self.base_url, workspace_id, page_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  /// Duplicate the existing page.
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn duplicate_page(
+    &self,
+    workspace_id: &str,
+    page_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/duplicate",
+      self.base_url, workspace_id, page_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  /// Create a new space.
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn create_new_space(
+    &self,
+    workspace_id: &str,
+    params: CreateNewSpaceParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/space", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  /// Update the existing space.
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn update_space(
+    &self,
+    workspace_id: &str,
+    space_id: &str,
+    params: UpdateSpaceParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/space/{}",
+      self.base_url, workspace_id, space_id
     );
     let resp = self
       .http_client_with_auth(Method::PATCH, &url)

@@ -1,7 +1,7 @@
 use client_api_entity::workspace_dto::{
   AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams,
-  DuplicatePageParams, MovePageParams, Page, PageCollab, PublishPageParams, Space,
-  UpdatePageParams, UpdateSpaceParams,
+  DuplicatePageParams, FavoritePageParams, MovePageParams, Page, PageCollab, PublishPageParams,
+  Space, UpdatePageParams, UpdateSpaceParams,
 };
 use reqwest::Method;
 use serde_json::json;
@@ -24,6 +24,25 @@ impl Client {
       .send()
       .await?;
     AppResponse::<Page>::from_response(resp).await?.into_data()
+  }
+
+  pub async fn favorite_page_view(
+    &self,
+    workspace_id: Uuid,
+    view_id: &str,
+    params: &FavoritePageParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/favorite",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   pub async fn move_workspace_page_view(

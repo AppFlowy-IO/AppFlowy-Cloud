@@ -196,6 +196,11 @@ pub struct UpdatePageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FavoritePageParams {
+  pub is_favorite: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppendBlockToPageParams {
   pub blocks: Vec<serde_json::Value>,
 }

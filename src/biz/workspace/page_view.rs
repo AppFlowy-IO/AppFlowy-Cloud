@@ -666,6 +666,40 @@ async fn add_new_view_to_folder(
   Ok(encoded_update)
 }
 
+async fn update_favorite_view(
+  view_id: &str,
+  folder: &mut Folder,
+  is_favorite: bool,
+) -> Result<Vec<u8>, AppError> {
+  let existing_extra: Option<serde_json::Value> = folder
+    .get_view(view_id)
+    .ok_or_else(|| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to find view with id {} in folder",
+        view_id
+      ))
+    })?
+    .extra
+    .as_ref()
+    .map(|extra| serde_json::from_str(extra))
+    .transpose()?;
+  let extra = if let Some(mut existing_extra) = existing_extra {
+    existing_extra["is_pinned"] = serde_json::Value::Bool(is_favorite);
+    existing_extra.to_string()
+  } else {
+    json!({"is_pinned": is_favorite}).to_string().to_string()
+  };
+
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    folder.body.views.update_view(&mut txn, view_id, |update| {
+      update.set_favorite(is_favorite).set_extra(extra).done()
+    });
+    txn.encode_update_v1()
+  };
+  Ok(encoded_update)
+}
+
 async fn update_view_properties(
   view_id: &str,
   folder: &mut Folder,
@@ -1257,6 +1291,31 @@ pub async fn update_page(
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
   let folder_update =
     update_view_properties(view_id, &mut folder, name, icon, is_locked, extra).await?;
+  update_workspace_folder_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    folder_update,
+  )
+  .await?;
+
+  Ok(())
+}
+
+pub async fn favorite_page(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  view_id: &str,
+  is_favorite: bool,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid: user.uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = update_favorite_view(view_id, &mut folder, is_favorite).await?;
   update_workspace_folder_data(
     appflowy_web_metrics,
     server,

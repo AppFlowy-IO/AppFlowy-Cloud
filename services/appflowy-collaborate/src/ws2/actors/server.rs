@@ -1,5 +1,6 @@
 use super::session::{WsInput, WsSession};
 use super::workspace::{Terminate, Workspace};
+use crate::ws2::collab_store::CollabStore;
 use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
 use appflowy_proto::{ServerMessage, WorkspaceId};
 use std::collections::HashMap;

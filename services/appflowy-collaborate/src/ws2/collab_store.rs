@@ -1,9 +1,15 @@
 use crate::collab::cache::CollabCache;
+use crate::ws2::messages::UpdateStreamMessage;
 use anyhow::anyhow;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
+use collab_entity::CollabType;
+use collab_stream::awareness_gossip::AwarenessGossip;
+use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::StreamRouter;
+use database_entity::dto::QueryCollab;
 use redis::aio::ConnectionManager;
+use redis::streams::{StreamRangeReply, StreamTrimOptions, StreamTrimmingMode};
 use redis::{cmd, AsyncCommands, Client};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -16,7 +22,7 @@ use yrs::updates::decoder::Decode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
 
 pub struct CollabStore {
-  collab_cache: CollabCache,
+  collab_cache: Arc<CollabCache>,
   update_streams: StreamRouter,
   awareness_broadcast: AwarenessGossip,
   connection_manager: ConnectionManager,
@@ -36,15 +42,15 @@ impl CollabStore {
   const MAX_CONCURRENT_SNAPSHOTS: usize = 200;
 
   pub async fn new(
-    s3: Operator,
+    collab_cache: Arc<CollabCache>,
     client: Client,
     metrics: Arc<CollabStreamMetrics>,
-  ) -> crate::Result<Arc<Self>> {
+  ) -> anyhow::Result<Arc<Self>> {
     let connection_manager = ConnectionManager::new(client.clone()).await?;
     let update_streams = StreamRouter::new(&client, metrics.clone())?;
     let awareness_broadcast = AwarenessGossip::new(client);
     Ok(Arc::new(Self {
-      s3,
+      collab_cache,
       update_streams,
       awareness_broadcast,
       connection_manager,
@@ -63,14 +69,17 @@ impl CollabStore {
     &self,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
-  ) -> crate::Result<Option<Bytes>> {
+    collab_type: CollabType,
+  ) -> anyhow::Result<Bytes> {
     match self
-      .s3
-      .read(&format!("{}/{}/.state", workspace_id, object_id))
+      .collab_cache
+      .get_encode_collab(
+        &workspace_id.to_string(),
+        QueryCollab::new(object_id, collab_type),
+      )
       .await
     {
-      Ok(buffer) => Ok(Some(buffer.to_bytes())),
-      Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+      Ok(collab) => Ok(collab.doc_state),
       Err(err) => Err(err.into()),
     }
   }
@@ -83,7 +92,7 @@ impl CollabStore {
     object_id: ObjectId,
     state_vector: &StateVector,
     rid: Rid,
-  ) -> crate::Result<CollabState> {
+  ) -> anyhow::Result<CollabState> {
     let bytes = self
       .get_snapshot(workspace_id, object_id)
       .await?
@@ -136,7 +145,7 @@ impl CollabStore {
     workspace_id: WorkspaceId,
     object_id: ObjectId,
     state_vector: &StateVector,
-  ) -> crate::Result<CollabState> {
+  ) -> anyhow::Result<CollabState> {
     let bytes = self
       .get_snapshot(workspace_id, object_id)
       .await?
@@ -193,7 +202,7 @@ impl CollabStore {
     workspace_id: WorkspaceId,
     object_id: ObjectId,
     snapshot_rid: Rid,
-  ) -> crate::Result<Rid> {
+  ) -> anyhow::Result<Rid> {
     let updates = self
       .get_current_updates(workspace_id, Some(snapshot_rid), None)
       .await?;
@@ -222,7 +231,7 @@ impl CollabStore {
     workspace_id: WorkspaceId,
     from: Option<Rid>,
     to: Option<Rid>,
-  ) -> crate::Result<Vec<UpdateStreamMessage>> {
+  ) -> anyhow::Result<Vec<UpdateStreamMessage>> {
     let key = format!("af:u:{}", workspace_id);
     let from = from
       .map(|rid| rid.to_string())
@@ -246,7 +255,7 @@ impl CollabStore {
     object_id: ObjectId,
     sender: ClientID,
     update: Vec<u8>,
-  ) -> crate::Result<Rid> {
+  ) -> anyhow::Result<Rid> {
     let key = format!("af:u:{}", workspace_id);
     tracing::trace!("publishing update to {} - object id: {}", key, object_id);
     let mut conn = self.connection_manager.clone();
@@ -270,7 +279,7 @@ impl CollabStore {
     object_id: ObjectId,
     sender: ClientID,
     update: AwarenessUpdate,
-  ) -> crate::Result<()> {
+  ) -> anyhow::Result<()> {
     self
       .awareness_broadcast
       .patch_awareness_state(workspace_id, object_id, sender, update)
@@ -278,7 +287,7 @@ impl CollabStore {
   }
 
   async fn save_snapshot_task(
-    s3: Operator,
+    collab_cache: CollabCache,
     redis: ConnectionManager,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
@@ -287,8 +296,14 @@ impl CollabStore {
   ) {
     let key = format!("af:lease:{}", workspace_id);
     if let Ok(Some(_lease)) = redis.lease(key, Duration::from_secs(60)).await {
-      if let Err(err) =
-        Self::save_snapshot(s3, workspace_id, object_id, last_message_id, update).await
+      if let Err(err) = Self::save_snapshot(
+        collab_cache,
+        workspace_id,
+        object_id,
+        last_message_id,
+        update,
+      )
+      .await
       {
         tracing::error!("failed to save snapshot: {}", err);
       }
@@ -298,18 +313,13 @@ impl CollabStore {
   }
 
   async fn save_snapshot(
-    s3: Operator,
+    collab_cache: CollabCache,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
     last_message_id: Rid,
     update: Bytes,
-  ) -> crate::Result<()> {
-    let buf = Buffer::from(vec![
-      Bytes::copy_from_slice(&last_message_id.into_bytes()),
-      update,
-    ]);
-    let s3_key = format!("{}/{}/.state", workspace_id, object_id);
-    s3.write(&s3_key, buf).await?;
+  ) -> anyhow::Result<()> {
+    collab_cache.insert_encode_collab_to_disk().await?;
     Ok(())
   }
 
@@ -317,7 +327,7 @@ impl CollabStore {
     &self,
     workspace_id: WorkspaceId,
     mut up_to: Rid,
-  ) -> crate::Result<()> {
+  ) -> anyhow::Result<()> {
     use itertools::Itertools;
     let updates = self
       .get_current_updates(workspace_id, None, Some(up_to))
@@ -366,7 +376,7 @@ impl CollabStore {
           .encode_state_as_update_v2(&StateVector::default());
 
         join_set.spawn(Self::save_snapshot(
-          self.s3.clone(),
+          self.collab_cache.clone(),
           workspace_id,
           object_id,
           rid,
@@ -395,7 +405,7 @@ impl CollabStore {
     Ok(())
   }
 
-  pub async fn prune_updates(&self, workspace_id: WorkspaceId, up_to: Rid) -> crate::Result<()> {
+  pub async fn prune_updates(&self, workspace_id: WorkspaceId, up_to: Rid) -> anyhow::Result<()> {
     let key = format!("af:u:{}", workspace_id);
     let mut conn = self.connection_manager.clone();
     let options = StreamTrimOptions::minid(StreamTrimmingMode::Exact, up_to.to_string());
@@ -413,10 +423,9 @@ pub struct CollabState {
 
 #[cfg(test)]
 mod test {
-  use crate::collab_store::CollabStore;
-  use crate::metrics::CollabStreamMetrics;
-  use af_proto::{ObjectId, Rid, WorkspaceId};
-  use opendal::services::S3;
+  use crate::ws2::collab_store::CollabStore;
+  use appflowy_proto::{ObjectId, Rid, WorkspaceId};
+  use collab_stream::metrics::CollabStreamMetrics;
   use yrs::updates::decoder::Decode;
   use yrs::{Doc, GetString, Text, Transact, WriteTxn};
 

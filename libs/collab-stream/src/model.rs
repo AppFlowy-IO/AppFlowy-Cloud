@@ -80,7 +80,7 @@ impl TryFrom<String> for MessageId {
 impl FromRedisValue for MessageId {
   fn from_redis_value(v: &Value) -> RedisResult<Self> {
     match v {
-      Value::Data(stream_key) => MessageId::try_from(stream_key.as_slice()).map_err(|_| {
+      Value::BulkString(stream_key) => MessageId::try_from(stream_key.as_slice()).map_err(|_| {
         RedisError::from((
           redis::ErrorKind::TypeError,
           "invalid stream key",
@@ -89,6 +89,278 @@ impl FromRedisValue for MessageId {
       }),
       _ => Err(internal("expecting Value::Data")),
     }
+  }
+}
+
+#[derive(Debug)]
+pub struct StreamMessageByStreamKey(pub BTreeMap<String, Vec<StreamMessage>>);
+
+impl FromRedisValue for StreamMessageByStreamKey {
+  fn from_redis_value(v: &Value) -> RedisResult<Self> {
+    let mut map: BTreeMap<String, Vec<StreamMessage>> = BTreeMap::new();
+    if matches!(v, Value::Nil) {
+      return Ok(StreamMessageByStreamKey(map));
+    }
+
+    let value_by_id = bulk_from_redis_value(v)?.iter();
+    for value in value_by_id {
+      let key_values = bulk_from_redis_value(value)?;
+
+      if key_values.len() != 2 {
+        return Err(RedisError::from((
+          redis::ErrorKind::TypeError,
+          "Invalid length",
+          "Expected length of 2 for the outer bulk value".to_string(),
+        )));
+      }
+
+      let stream_key = RedisString::from_redis_value(&key_values[0])?.0;
+      let values = bulk_from_redis_value(&key_values[1])?.iter();
+      for value in values {
+        let value = StreamMessage::from_redis_value(value)?;
+        map.entry(stream_key.clone()).or_default().push(value);
+      }
+    }
+
+    Ok(StreamMessageByStreamKey(map))
+  }
+}
+
+/// A message in the Redis stream. It's the same as [StreamBinary] but with additional metadata.
+#[derive(Debug, Clone)]
+pub struct StreamMessage {
+  pub data: Bytes,
+  /// only applicable when reading from redis
+  pub id: MessageId,
+}
+
+impl FromRedisValue for StreamMessage {
+  // Optimized parsing function
+  fn from_redis_value(v: &Value) -> RedisResult<Self> {
+    let bulk = bulk_from_redis_value(v)?;
+    if bulk.len() != 2 {
+      return Err(RedisError::from((
+        redis::ErrorKind::TypeError,
+        "Invalid length",
+        format!(
+          "Expected length of 2 for the outer bulk value, but got:{}",
+          bulk.len()
+        ),
+      )));
+    }
+
+    let id = MessageId::from_redis_value(&bulk[0])?;
+    let fields = bulk_from_redis_value(&bulk[1])?;
+    if fields.len() != 2 {
+      return Err(RedisError::from((
+        redis::ErrorKind::TypeError,
+        "Invalid length",
+        format!(
+          "Expected length of 2 for the bulk value, but got {}",
+          fields.len()
+        ),
+      )));
+    }
+
+    verify_field(&fields[0], "data")?;
+    let raw_data = Vec::<u8>::from_redis_value(&fields[1])?;
+
+    Ok(StreamMessage {
+      data: Bytes::from(raw_data),
+      id,
+    })
+  }
+}
+
+impl TryFrom<StreamId> for StreamMessage {
+  type Error = StreamError;
+
+  fn try_from(value: StreamId) -> Result<Self, Self::Error> {
+    let id = MessageId::try_from(value.id.as_str())?;
+    let data = value
+      .get("data")
+      .ok_or(StreamError::UnexpectedValue("data".to_string()))?;
+    Ok(Self { data, id })
+  }
+}
+
+#[derive(Debug)]
+pub struct StreamBinary(pub Vec<u8>);
+
+impl From<StreamMessage> for StreamBinary {
+  fn from(m: StreamMessage) -> Self {
+    Self(m.data.to_vec())
+  }
+}
+
+impl Deref for StreamBinary {
+  type Target = Vec<u8>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl StreamBinary {
+  pub fn into_tuple_array(self) -> [(&'static str, Vec<u8>); 1] {
+    static DATA: &str = "data";
+    [(DATA, self.0)]
+  }
+}
+
+impl TryFrom<Vec<u8>> for StreamBinary {
+  type Error = StreamError;
+
+  fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+    Ok(Self(value))
+  }
+}
+
+impl TryFrom<&[u8]> for StreamBinary {
+  type Error = StreamError;
+
+  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    Ok(Self(value.to_vec()))
+  }
+}
+
+fn verify_field(field: &Value, expected: &str) -> RedisResult<()> {
+  let field_str = String::from_redis_value(field)?;
+  if field_str != expected {
+    return Err(RedisError::from((
+      redis::ErrorKind::TypeError,
+      "Invalid field",
+      format!("Expected '{}', found '{}'", expected, field_str),
+    )));
+  }
+  Ok(())
+}
+
+pub struct RedisString(String);
+impl FromRedisValue for RedisString {
+  fn from_redis_value(v: &Value) -> RedisResult<Self> {
+    match v {
+      Value::BulkString(bytes) => Ok(RedisString(String::from_utf8(bytes.to_vec())?)),
+      Value::SimpleString(str) => Ok(RedisString(str.clone())),
+      _ => Err(internal("expecting Value::Data")),
+    }
+  }
+}
+
+impl Display for RedisString {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.0.clone())
+  }
+}
+
+fn bulk_from_redis_value(v: &Value) -> Result<&Vec<Value>, RedisError> {
+  match v {
+    Value::Array(b) => Ok(b),
+    Value::Set(b) => Ok(b),
+    _ => Err(internal("expecting Value::Bulk")),
+  }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CollabControlEvent {
+  Open {
+    workspace_id: String,
+    object_id: String,
+    collab_type: CollabType,
+    doc_state: Vec<u8>,
+  },
+  Close {
+    object_id: String,
+  },
+}
+
+impl Display for CollabControlEvent {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      CollabControlEvent::Open {
+        workspace_id: _,
+        object_id,
+        collab_type,
+        doc_state: _,
+      } => f.write_fmt(format_args!(
+        "Open collab: object_id:{}|collab_type:{:?}",
+        object_id, collab_type,
+      )),
+      CollabControlEvent::Close { object_id } => {
+        f.write_fmt(format_args!("Close collab: object_id:{}", object_id))
+      },
+    }
+  }
+}
+
+impl CollabControlEvent {
+  pub fn encode(&self) -> Result<Vec<u8>, serde_json::Error> {
+    serde_json::to_vec(self)
+  }
+
+  pub fn decode(data: &[u8]) -> Result<Self, serde_json::Error> {
+    serde_json::from_slice(data)
+  }
+}
+
+impl TryFrom<CollabControlEvent> for StreamBinary {
+  type Error = StreamError;
+
+  fn try_from(value: CollabControlEvent) -> Result<Self, Self::Error> {
+    let raw_data = value.encode()?;
+    Ok(StreamBinary(raw_data))
+  }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CollabUpdateEvent {
+  UpdateV1 { encode_update: Vec<u8> },
+}
+
+impl CollabUpdateEvent {
+  #[allow(dead_code)]
+  fn to_proto(&self) -> proto::collab::CollabUpdateEvent {
+    match self {
+      CollabUpdateEvent::UpdateV1 { encode_update } => proto::collab::CollabUpdateEvent {
+        update: Some(Update::UpdateV1(encode_update.clone())),
+      },
+    }
+  }
+
+  fn from_proto(proto: &proto::collab::CollabUpdateEvent) -> Result<Self, StreamError> {
+    match &proto.update {
+      None => Err(StreamError::UnexpectedValue(
+        "update not set for CollabUpdateEvent proto".to_string(),
+      )),
+      Some(update) => match update {
+        Update::UpdateV1(encode_update) => Ok(CollabUpdateEvent::UpdateV1 {
+          encode_update: encode_update.to_vec(),
+        }),
+      },
+    }
+  }
+
+  pub fn encode(&self) -> Vec<u8> {
+    self.to_proto().encode_to_vec()
+  }
+
+  pub fn decode(data: &[u8]) -> Result<Self, StreamError> {
+    match prost::Message::decode(data) {
+      Ok(proto) => CollabUpdateEvent::from_proto(&proto),
+      Err(_) => match bincode::deserialize(data) {
+        Ok(event) => Ok(event),
+        Err(e) => Err(StreamError::BinCodeSerde(e)),
+      },
+    }
+  }
+}
+
+impl TryFrom<CollabUpdateEvent> for StreamBinary {
+  type Error = StreamError;
+
+  fn try_from(value: CollabUpdateEvent) -> Result<Self, Self::Error> {
+    let raw_data = value.encode();
+    Ok(StreamBinary(raw_data))
   }
 }
 
@@ -140,7 +412,8 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
       None => CollabOrigin::Empty,
       Some(sender) => {
         let raw_origin = String::from_redis_value(sender)?;
-        collab_origin_from_str(&raw_origin)?
+        CollabOrigin::from_str(&raw_origin)
+          .map_err(|e| StreamError::UnexpectedValue(e.to_string()))?
       },
     };
     let flags = match fields.get("flags") {
@@ -163,33 +436,6 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
 pub struct AwarenessStreamUpdate {
   pub data: AwarenessUpdate,
   pub sender: CollabOrigin,
-}
-
-//FIXME: this should be `impl FromStr for CollabOrigin`
-pub fn collab_origin_from_str(value: &str) -> RedisResult<CollabOrigin> {
-  match value {
-    "" => Ok(CollabOrigin::Empty),
-    "server" => Ok(CollabOrigin::Server),
-    other => {
-      let mut split = other.split('|');
-      match (split.next(), split.next()) {
-        (Some(uid), Some(device_id)) | (Some(device_id), Some(uid))
-          if uid.starts_with("uid:") && device_id.starts_with("device_id:") =>
-        {
-          let uid = uid.trim_start_matches("uid:");
-          let device_id = device_id.trim_start_matches("device_id:").to_string();
-          let uid: i64 = uid
-            .parse()
-            .map_err(|err| internal(format!("failed to parse uid: {}", err)))?;
-          Ok(CollabOrigin::Client(CollabClient { uid, device_id }))
-        },
-        _ => Err(internal(format!(
-          "couldn't parse collab origin from `{}`",
-          other
-        ))),
-      }
-    },
-  }
 }
 
 #[repr(transparent)]
@@ -253,30 +499,15 @@ impl Display for UpdateFlags {
 
 #[cfg(test)]
 mod test {
-  use crate::model::collab_origin_from_str;
-  use collab::core::origin::{CollabClient, CollabOrigin};
 
   #[test]
-  fn parse_collab_origin_empty() {
-    let expected = CollabOrigin::Empty;
-    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
-    assert_eq!(actual, expected);
-  }
-
-  #[test]
-  fn parse_collab_origin_server() {
-    let expected = CollabOrigin::Server;
-    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
-    assert_eq!(actual, expected);
-  }
-
-  #[test]
-  fn parse_collab_origin_client() {
-    let expected = CollabOrigin::Client(CollabClient {
-      uid: 123,
-      device_id: "test-device".to_string(),
-    });
-    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
-    assert_eq!(actual, expected);
+  fn test_collab_update_event_decoding() {
+    let encoded_update = vec![1, 2, 3, 4, 5];
+    let event = super::CollabUpdateEvent::UpdateV1 {
+      encode_update: encoded_update.clone(),
+    };
+    let encoded = event.encode();
+    let decoded = super::CollabUpdateEvent::decode(&encoded).unwrap();
+    assert_eq!(event, decoded);
   }
 }

@@ -64,7 +64,7 @@ collab-rt-protocol.workspace = true
 uuid = { version = "1", features = ["v4"] }
 prometheus-client = "0.22.1"
 semver = "1.0.22"
-redis = "0.25.2"
+redis = { version = "0.29", features = ["uuid", "bytes", "tokio-comp", "aio", "connection-manager"] }
 secrecy.workspace = true
 lazy_static = "1.4.0"
 itertools = "0.12.0"

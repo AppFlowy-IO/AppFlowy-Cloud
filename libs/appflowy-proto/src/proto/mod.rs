@@ -3,6 +3,7 @@ pub mod messages {
 }
 
 use bytes::Bytes;
+use collab_entity::CollabType;
 use prost::Message;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -71,16 +72,19 @@ impl FromStr for Rid {
 pub enum ClientMessage {
   Manifest {
     object_id: ObjectId,
+    collab_type: CollabType,
     last_message_id: Rid,
     state_vector: Vec<u8>,
   },
   Update {
     object_id: ObjectId,
+    collab_type: CollabType,
     flags: UpdateFlags,
     update: Vec<u8>,
   },
   AwarenessUpdate {
     object_id: ObjectId,
+    collab_type: CollabType,
     awareness: Vec<u8>,
   },
 }
@@ -91,6 +95,14 @@ impl ClientMessage {
       ClientMessage::Manifest { object_id, .. } => object_id,
       ClientMessage::Update { object_id, .. } => object_id,
       ClientMessage::AwarenessUpdate { object_id, .. } => object_id,
+    }
+  }
+
+  pub fn collab_type(&self) -> &CollabType {
+    match self {
+      ClientMessage::Manifest { collab_type, .. } => collab_type,
+      ClientMessage::Update { collab_type, .. } => collab_type,
+      ClientMessage::AwarenessUpdate { collab_type, .. } => collab_type,
     }
   }
 
@@ -110,11 +122,13 @@ impl From<ClientMessage> for messages::Message {
     match value {
       ClientMessage::Manifest {
         object_id,
+        collab_type,
         last_message_id,
         state_vector,
       } => crate::proto::messages::Message {
         message: Some(ProtoMessage::Manifest(messages::Manifest {
           object_id: object_id.as_bytes().to_vec(),
+          collab_type: collab_type as i32,
           last_message_id: Some(messages::Rid {
             timestamp: last_message_id.timestamp,
             counter: last_message_id.seq_no as u32,
@@ -124,11 +138,13 @@ impl From<ClientMessage> for messages::Message {
       },
       ClientMessage::Update {
         object_id,
+        collab_type,
         flags,
         update,
       } => messages::Message {
         message: Some(ProtoMessage::Update(messages::Update {
           object_id: object_id.as_bytes().to_vec(),
+          collab_type: collab_type as i32,
           flags: flags as u8 as u32,
           message_id: None,
           payload: update,
@@ -136,10 +152,12 @@ impl From<ClientMessage> for messages::Message {
       },
       ClientMessage::AwarenessUpdate {
         object_id,
+        collab_type,
         awareness,
       } => messages::Message {
         message: Some(ProtoMessage::AwarenessUpdate(messages::AwarenessUpdate {
           object_id: object_id.as_bytes().to_vec(),
+          collab_type: collab_type as i32,
           payload: awareness,
         })),
       },
@@ -155,6 +173,7 @@ impl TryFrom<messages::Message> for ClientMessage {
     match value.message {
       Some(ProtoMessage::Manifest(proto)) => Ok(ClientMessage::Manifest {
         object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+        collab_type: CollabType::from(proto.collab_type),
         last_message_id: Rid {
           timestamp: proto
             .last_message_id
@@ -171,11 +190,13 @@ impl TryFrom<messages::Message> for ClientMessage {
       }),
       Some(ProtoMessage::Update(proto)) => Ok(ClientMessage::Update {
         object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+        collab_type: CollabType::from(proto.collab_type),
         flags: UpdateFlags::try_from(proto.flags as u8)?,
         update: proto.payload,
       }),
       Some(ProtoMessage::AwarenessUpdate(proto)) => Ok(ClientMessage::AwarenessUpdate {
         object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+        collab_type: CollabType::from(proto.collab_type),
         awareness: proto.payload,
       }),
       _ => Err(Error::MissingFields),
@@ -187,21 +208,25 @@ impl TryFrom<messages::Message> for ClientMessage {
 pub enum ServerMessage {
   Manifest {
     object_id: ObjectId,
+    collab_type: CollabType,
     last_message_id: Rid,
     state_vector: Vec<u8>,
   },
   Update {
     object_id: ObjectId,
+    collab_type: CollabType,
     flags: UpdateFlags,
     last_message_id: Rid,
     update: Bytes,
   },
   AwarenessUpdate {
     object_id: ObjectId,
+    collab_type: CollabType,
     awareness: Bytes,
   },
   PermissionDenied {
     object_id: ObjectId,
+    collab_type: CollabType,
     reason: String,
   },
 }
@@ -232,11 +257,13 @@ impl From<ServerMessage> for messages::Message {
     match value {
       ServerMessage::Manifest {
         object_id,
+        collab_type,
         last_message_id,
         state_vector,
       } => messages::Message {
         message: Some(ProtoMessage::Manifest(messages::Manifest {
           object_id: object_id.as_bytes().to_vec(),
+          collab_type: collab_type as i32,
           last_message_id: Some(messages::Rid {
             timestamp: last_message_id.timestamp,
             counter: last_message_id.seq_no as u32,
@@ -246,12 +273,14 @@ impl From<ServerMessage> for messages::Message {
       },
       ServerMessage::Update {
         object_id,
+        collab_type,
         flags,
         last_message_id,
         update,
       } => messages::Message {
         message: Some(ProtoMessage::Update(messages::Update {
           object_id: object_id.as_bytes().to_vec(),
+          collab_type: collab_type as i32,
           flags: flags as u8 as u32,
           message_id: Some(messages::Rid {
             timestamp: last_message_id.timestamp,
@@ -262,17 +291,24 @@ impl From<ServerMessage> for messages::Message {
       },
       ServerMessage::AwarenessUpdate {
         object_id,
+        collab_type,
         awareness,
       } => messages::Message {
         message: Some(ProtoMessage::AwarenessUpdate(messages::AwarenessUpdate {
           object_id: object_id.as_bytes().to_vec(),
+          collab_type: collab_type as i32,
           payload: awareness.into(),
         })),
       },
-      ServerMessage::PermissionDenied { object_id, reason } => messages::Message {
+      ServerMessage::PermissionDenied {
+        object_id,
+        collab_type,
+        reason,
+      } => messages::Message {
         message: Some(ProtoMessage::PermissionRevoked(
           messages::PermissionRevoked {
             object_id: object_id.as_bytes().to_vec(),
+            collab_type: collab_type as i32,
             reason,
           },
         )),
@@ -291,6 +327,7 @@ impl TryFrom<messages::Message> for ServerMessage {
         let rid = proto.last_message_id.ok_or(Error::MissingFields)?;
         Ok(ServerMessage::Manifest {
           object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+          collab_type: CollabType::from(proto.collab_type),
           last_message_id: Rid {
             timestamp: rid.timestamp,
             seq_no: rid.counter as u16,
@@ -302,6 +339,7 @@ impl TryFrom<messages::Message> for ServerMessage {
         let rid = proto.message_id.ok_or(Error::MissingFields)?;
         Ok(ServerMessage::Update {
           object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+          collab_type: CollabType::from(proto.collab_type),
           flags: UpdateFlags::try_from(proto.flags as u8).map_err(|_| Error::MissingFields)?,
           last_message_id: Rid {
             timestamp: rid.timestamp,
@@ -312,10 +350,12 @@ impl TryFrom<messages::Message> for ServerMessage {
       },
       Some(ProtoMessage::AwarenessUpdate(proto)) => Ok(ServerMessage::AwarenessUpdate {
         object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+        collab_type: CollabType::from(proto.collab_type),
         awareness: proto.payload.into(),
       }),
       Some(ProtoMessage::PermissionRevoked(proto)) => Ok(ServerMessage::PermissionDenied {
         object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+        collab_type: CollabType::from(proto.collab_type),
         reason: proto.reason,
       }),
       _ => Err(Error::MissingFields),

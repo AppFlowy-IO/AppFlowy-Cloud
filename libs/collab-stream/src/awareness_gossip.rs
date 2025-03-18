@@ -50,6 +50,19 @@ impl AwarenessGossip {
     Ok(Self { conn, collabs })
   }
 
+  pub async fn send(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    update: &AwarenessStreamUpdate,
+  ) -> Result<(), StreamError> {
+    let json = serde_json::to_string(update)?;
+    let key = AwarenessGossip::publish_key(workspace_id, object_id);
+    let mut pubsub = self.client.get_multiplexed_async_connection().await?;
+    pubsub.publish(key, json).await?;
+    Ok(())
+  }
+
   pub async fn sink(
     &self,
     workspace_id: &Uuid,

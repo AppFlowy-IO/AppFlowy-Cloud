@@ -10,8 +10,8 @@ use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
   AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams,
-  DuplicatePageParams, IconType, MovePageParams, PublishPageParams, SpacePermission,
-  UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
+  DuplicatePageParams, FavoritePageParams, IconType, MovePageParams, PublishPageParams,
+  SpacePermission, UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -771,6 +771,43 @@ async fn update_page() {
     Some(json!({"is_pinned": true}).to_string())
   );
   assert_eq!(updated_view.is_locked, None);
+}
+
+#[tokio::test]
+async fn favorite_page() {
+  let registered_user = generate_unique_registered_user().await;
+  let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let workspace_id = app_client.workspace_id().await;
+  app_client.open_workspace_collab(&workspace_id).await;
+  app_client
+    .wait_object_sync_complete(&workspace_id)
+    .await
+    .unwrap();
+  let folder_view = web_client
+    .api_client
+    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let favorite_view_id = general_space.children[0].view_id.clone();
+  web_client
+    .api_client
+    .favorite_page_view(
+      Uuid::parse_str(&workspace_id).unwrap(),
+      &favorite_view_id,
+      &FavoritePageParams { is_favorite: true },
+    )
+    .await
+    .unwrap();
+
+  let folder = get_latest_folder(&app_client, &workspace_id).await;
+  let favorite_view = folder.get_view(&favorite_view_id).unwrap();
+  assert!(favorite_view.is_favorite);
 }
 
 #[tokio::test]

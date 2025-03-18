@@ -15,9 +15,9 @@ use crate::biz::workspace::ops::{
 };
 use crate::biz::workspace::page_view::{
   append_block_at_the_end_of_page, create_database_view, create_page, create_space,
-  delete_all_pages_from_trash, delete_trash, get_page_view_collab, move_page, move_page_to_trash,
-  publish_page, restore_all_pages_from_trash, restore_page_from_trash, unpublish_page, update_page,
-  update_page_collab_data, update_space,
+  delete_all_pages_from_trash, delete_trash, favorite_page, get_page_view_collab, move_page,
+  move_page_to_trash, publish_page, restore_all_pages_from_trash, restore_page_from_trash,
+  unpublish_page, update_page, update_page_collab_data, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::biz::workspace::quick_note::{
@@ -176,6 +176,10 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/page-view/{view_id}")
         .route(web::get().to(get_page_view_handler))
         .route(web::patch().to(update_page_view_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/favorite")
+        .route(web::post().to(favorite_page_view_handler)),
     )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/append-block")
@@ -1584,6 +1588,30 @@ async fn get_page_view_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page_collab)))
+}
+
+async fn favorite_page_view_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<FavoritePageParams>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  favorite_page(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    &view_id,
+    payload.is_favorite,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 #[instrument(level = "trace", skip_all, err)]

@@ -12,7 +12,8 @@ use reqwest::Method;
 use serde_json::Value;
 use shared_entity::dto::ai_dto::{
   CalculateSimilarityParams, ChatQuestionQuery, RepeatedRelatedQuestion, SimilarityResponse,
-  STREAM_ANSWER_KEY, STREAM_IMAGE_KEY, STREAM_KEEP_ALIVE_KEY, STREAM_METADATA_KEY,
+  STREAM_ANSWER_KEY, STREAM_COMMENT_KEY, STREAM_IMAGE_KEY, STREAM_KEEP_ALIVE_KEY,
+  STREAM_METADATA_KEY,
 };
 use shared_entity::dto::chat_dto::{ChatSettings, UpdateChatParams};
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -436,6 +437,67 @@ impl Stream for QuestionStream {
 
           if value.remove(STREAM_KEEP_ALIVE_KEY).is_some() {
             return Poll::Ready(Some(Ok(QuestionStreamValue::KeepAlive)));
+          }
+
+          error!("Invalid streaming value: {:?}", value);
+          Poll::Ready(None)
+        },
+        _ => {
+          error!("Unexpected JSON value type: {:?}", value);
+          Poll::Ready(None)
+        },
+      },
+      Some(Err(err)) => {
+        error!("Error while streaming answer: {:?}", err);
+        Poll::Ready(Some(Err(err)))
+      },
+      None => Poll::Ready(None),
+    }
+  }
+}
+
+#[pin_project]
+pub struct CompletionStream {
+  stream: Pin<Box<dyn Stream<Item = Result<serde_json::Value, AppResponseError>> + Send>>,
+  buffer: Vec<u8>,
+}
+
+impl CompletionStream {
+  pub fn new<S>(stream: S) -> Self
+  where
+    S: Stream<Item = Result<serde_json::Value, AppResponseError>> + Send + 'static,
+  {
+    CompletionStream {
+      stream: Box::pin(stream),
+      buffer: Vec::new(),
+    }
+  }
+}
+
+pub enum CompletionStreamValue {
+  Answer { value: String },
+  Comment { value: String },
+}
+impl Stream for CompletionStream {
+  type Item = Result<CompletionStreamValue, AppResponseError>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let this = self.project();
+    match ready!(this.stream.as_mut().poll_next(cx)) {
+      Some(Ok(value)) => match value {
+        Value::Object(mut value) => {
+          if let Some(answer) = value
+            .remove(STREAM_ANSWER_KEY)
+            .and_then(|s| s.as_str().map(ToString::to_string))
+          {
+            return Poll::Ready(Some(Ok(CompletionStreamValue::Answer { value: answer })));
+          }
+
+          if let Some(comment) = value
+            .remove(STREAM_COMMENT_KEY)
+            .and_then(|s| s.as_str().map(ToString::to_string))
+          {
+            return Poll::Ready(Some(Ok(CompletionStreamValue::Comment { value: comment })));
           }
 
           error!("Invalid streaming value: {:?}", value);

@@ -1,4 +1,5 @@
 use crate::http::log_request_id;
+use crate::http_chat::CompletionStream;
 use crate::Client;
 use bytes::Bytes;
 use futures_core::Stream;
@@ -26,6 +27,26 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<()>::answer_response_stream(resp).await
+  }
+
+  pub async fn stream_completion_v2(
+    &self,
+    workspace_id: &str,
+    params: CompleteTextParams,
+  ) -> Result<CompletionStream, AppResponseError> {
+    let url = format!(
+      "{}/api/ai/{}/v2/complete/stream",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    let stream = AppResponse::<serde_json::Value>::json_response_stream(resp).await?;
+    Ok(CompletionStream::new(stream))
   }
 
   #[instrument(level = "info", skip_all)]

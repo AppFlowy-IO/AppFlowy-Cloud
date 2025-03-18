@@ -7,6 +7,8 @@ pub const STREAM_METADATA_KEY: &str = "0";
 pub const STREAM_ANSWER_KEY: &str = "1";
 pub const STREAM_IMAGE_KEY: &str = "2";
 pub const STREAM_KEEP_ALIVE_KEY: &str = "3";
+pub const STREAM_COMMENT_KEY: &str = "4";
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
   pub text: String,

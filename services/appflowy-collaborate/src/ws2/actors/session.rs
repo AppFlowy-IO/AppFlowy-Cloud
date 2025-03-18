@@ -7,6 +7,8 @@ use actix_http::ws::{CloseCode, CloseReason, Item, ProtocolError};
 use actix_web_actors::ws;
 use appflowy_proto::{ClientMessage, ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::{Bytes, BytesMut};
+use collab::core::origin::{CollabClient, CollabOrigin};
+use collab_entity::CollabType;
 use std::time::{Duration, Instant};
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -30,6 +32,10 @@ impl SessionInfo {
       user_id,
       device_id,
     }
+  }
+
+  pub fn collab_origin(&self) -> CollabOrigin {
+    CollabOrigin::Client(CollabClient::new(self.user_id, self.device_id.clone()))
   }
 }
 
@@ -81,12 +87,14 @@ impl WsSession {
     match ClientMessage::from_bytes(&bytes) {
       Ok(message) => {
         let object_id = *message.object_id();
+        let collab_type = *message.collab_type();
         let message = match InputMessage::try_from(message) {
           Ok(msg) => msg,
           Err(err) => return ctx.close(Some(CloseReason::from((CloseCode::Invalid, err)))),
         };
         self.server.do_send(WsInput {
           message,
+          collab_type,
           workspace_id: self.current_workspace,
           object_id,
           sender: self.id(),
@@ -111,6 +119,7 @@ impl Actor for WsSession {
     self.hb(ctx);
     let join = Join {
       session_id: self.id(),
+      collab_origin: self.info.collab_origin(),
       addr: ctx.address(),
       workspace_id: self.current_workspace,
     };
@@ -226,6 +235,7 @@ pub struct WsInput {
   pub message: InputMessage,
   pub workspace_id: ObjectId,
   pub object_id: ObjectId,
+  pub collab_type: CollabType,
   pub sender: ClientID,
 }
 

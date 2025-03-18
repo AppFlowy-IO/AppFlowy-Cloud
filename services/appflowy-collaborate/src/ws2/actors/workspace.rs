@@ -7,18 +7,34 @@ use actix::{
   ResponseActFuture, Running, SpawnHandle, StreamHandler, WrapFuture,
 };
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
+use collab::core::origin::CollabOrigin;
+use collab_stream::error::StreamError;
 use collab_stream::model::AwarenessStreamUpdate;
 use std::collections::HashMap;
 use std::sync::Arc;
 use yrs::block::ClientID;
 use yrs::updates::encoder::Encode;
 
+struct SessionHandle {
+  collab_origin: CollabOrigin,
+  conn: Addr<WsSession>,
+}
+
+impl SessionHandle {
+  fn new(collab_origin: CollabOrigin, conn: Addr<WsSession>) -> Self {
+    Self {
+      collab_origin,
+      conn,
+    }
+  }
+}
+
 pub struct Workspace {
   server: Recipient<Terminate>,
   workspace_id: WorkspaceId,
   last_message_id: Rid,
   store: Arc<CollabStore>,
-  active_sessions: HashMap<ClientID, Addr<WsSession>>,
+  sessions_by_client_id: HashMap<ClientID, SessionHandle>,
   updates_handle: Option<SpawnHandle>,
   awareness_handle: Option<SpawnHandle>,
   snapshot_handle: Option<SpawnHandle>,
@@ -37,7 +53,7 @@ impl Workspace {
       workspace_id,
       store,
       last_message_id: Rid::default(),
-      active_sessions: HashMap::new(),
+      sessions_by_client_id: HashMap::new(),
       updates_handle: None,
       awareness_handle: None,
       snapshot_handle: None,
@@ -48,7 +64,12 @@ impl Workspace {
     match msg.message {
       InputMessage::Manifest(rid, state_vector) => {
         match store
-          .get_latest_state(msg.workspace_id, msg.object_id, &state_vector)
+          .get_latest_state(
+            msg.workspace_id,
+            msg.object_id,
+            msg.collab_type,
+            &state_vector,
+          )
           .await
         {
           Ok(state) => {
@@ -61,6 +82,7 @@ impl Workspace {
             sender.do_send(WsOutput {
               message: ServerMessage::Update {
                 object_id: msg.object_id,
+                collab_type: msg.collab_type,
                 flags: state.flags,
                 last_message_id: state.rid,
                 update: state.update.into(),
@@ -149,13 +171,14 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
           msg.object_id
         );
         self.last_message_id = msg.last_message_id.max(msg.last_message_id);
-        for (session_id, sender) in self.active_sessions.iter() {
+        for (session_id, sender) in self.sessions_by_client_id.iter() {
           if session_id == &msg.sender {
             continue; // skip the sender
           }
-          sender.do_send(WsOutput {
+          sender.conn.do_send(WsOutput {
             message: ServerMessage::Update {
               object_id: msg.object_id,
+              collab_type: msg.collab_type,
               flags: msg.update_flags,
               last_message_id: msg.last_message_id,
               update: msg.update.clone(),
@@ -175,10 +198,10 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
   }
 }
 
-impl StreamHandler<anyhow::Result<(ObjectId, AwarenessStreamUpdate)>> for Workspace {
+impl StreamHandler<Result<(ObjectId, AwarenessStreamUpdate), StreamError>> for Workspace {
   fn handle(
     &mut self,
-    item: anyhow::Result<(ObjectId, AwarenessStreamUpdate)>,
+    item: Result<(ObjectId, AwarenessStreamUpdate), StreamError>,
     ctx: &mut Self::Context,
   ) {
     match item {
@@ -188,14 +211,15 @@ impl StreamHandler<anyhow::Result<(ObjectId, AwarenessStreamUpdate)>> for Worksp
           self.workspace_id,
           object_id
         );
-        for (session_id, sender) in self.active_sessions.iter() {
-          if session_id == &msg.sender {
+        for (session_id, sender) in self.sessions_by_client_id.iter() {
+          if sender.collab_origin == msg.sender {
             continue; // skip the sender
           }
           tracing::trace!("sending awareness update to {}", session_id);
-          sender.do_send(WsOutput {
+          sender.conn.do_send(WsOutput {
             message: ServerMessage::AwarenessUpdate {
               object_id,
+              collab_type: msg.collab_type,
               awareness: msg.data.encode_v1().into(),
             },
           });
@@ -218,7 +242,8 @@ impl Handler<Join> for Workspace {
 
   fn handle(&mut self, msg: Join, _ctx: &mut Self::Context) -> Self::Result {
     if msg.workspace_id == self.workspace_id {
-      self.active_sessions.insert(msg.session_id, msg.addr);
+      let handle = SessionHandle::new(msg.collab_origin, msg.addr);
+      self.sessions_by_client_id.insert(msg.session_id, handle);
       tracing::trace!(
         "attached session `{}` to workspace {}",
         msg.session_id,
@@ -233,14 +258,14 @@ impl Handler<Leave> for Workspace {
 
   fn handle(&mut self, msg: Leave, ctx: &mut Self::Context) -> Self::Result {
     if msg.workspace_id == self.workspace_id {
-      self.active_sessions.remove(&msg.session_id);
+      self.sessions_by_client_id.remove(&msg.session_id);
       tracing::trace!(
         "detached session `{}` from workspace {}",
         msg.session_id,
         msg.workspace_id
       );
 
-      if self.active_sessions.is_empty() {
+      if self.sessions_by_client_id.is_empty() {
         ctx.notify_later(
           Terminate {
             workspace_id: self.workspace_id,
@@ -257,7 +282,7 @@ impl Handler<Terminate> for Workspace {
 
   fn handle(&mut self, msg: Terminate, ctx: &mut Self::Context) -> Self::Result {
     if msg.workspace_id == self.workspace_id {
-      if self.active_sessions.is_empty() {
+      if self.sessions_by_client_id.is_empty() {
         ctx.stop();
       }
     }
@@ -268,8 +293,8 @@ impl Handler<WsInput> for Workspace {
   type Result = AtomicResponse<Self, ()>;
   fn handle(&mut self, msg: WsInput, _: &mut Self::Context) -> Self::Result {
     let store = self.store.clone();
-    if let Some(sender) = self.active_sessions.get(&msg.sender) {
-      let sender = sender.clone();
+    if let Some(sender) = self.sessions_by_client_id.get(&msg.sender) {
+      let sender = sender.conn.clone();
       AtomicResponse::new(Box::pin(
         Self::hande_ws_input(store, sender, msg).into_actor(self),
       ))

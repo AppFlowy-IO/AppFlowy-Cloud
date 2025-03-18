@@ -1,4 +1,6 @@
 use crate::error::{internal, StreamError};
+use crate::stream_router::{FromRedisStream, RedisMap};
+use bytes::Bytes;
 use collab::core::awareness::AwarenessUpdate;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::updates::decoder::Decode;
@@ -429,6 +431,19 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
       sender,
       flags,
     })
+  }
+}
+
+impl FromRedisStream for (MessageId, CollabStreamUpdate) {
+  type Error = StreamError;
+
+  fn from_redis_stream(msg_id: String, fields: RedisMap) -> Result<Self, Self::Error>
+  where
+    Self: Sized,
+  {
+    let message_id = MessageId::try_from(msg_id)?;
+    let stream_update = CollabStreamUpdate::try_from(fields)?;
+    Ok((message_id, stream_update))
   }
 }
 

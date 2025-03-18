@@ -1545,6 +1545,7 @@ pub async fn get_page_view_collab(
       .map(|icon| to_dto_view_icon(icon.clone())),
     is_space: check_if_view_is_space(&view),
     is_private: false,
+    is_favorite: view.is_favorite,
     is_published: publish_view_ids.contains(view_id),
     layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),

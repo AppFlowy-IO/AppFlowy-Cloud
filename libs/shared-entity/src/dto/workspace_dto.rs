@@ -281,6 +281,7 @@ pub struct FolderView {
   pub is_space: bool,
   pub is_private: bool,
   pub is_published: bool,
+  pub is_favorite: bool,
   pub layout: ViewLayout,
   pub created_at: DateTime<Utc>,
   pub last_edited_time: DateTime<Utc>,

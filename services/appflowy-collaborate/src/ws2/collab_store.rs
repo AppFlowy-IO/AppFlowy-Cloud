@@ -5,8 +5,9 @@ use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
 use collab_entity::CollabType;
 use collab_stream::awareness_gossip::AwarenessGossip;
+use collab_stream::lease::Lease;
 use collab_stream::metrics::CollabStreamMetrics;
-use collab_stream::stream_router::StreamRouter;
+use collab_stream::stream_router::{FromRedisStream, StreamRouter};
 use database_entity::dto::QueryCollab;
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamRangeReply, StreamTrimOptions, StreamTrimmingMode};
@@ -90,13 +91,13 @@ impl CollabStore {
     &self,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
+    collab_type: CollabType,
     state_vector: &StateVector,
     rid: Rid,
   ) -> anyhow::Result<CollabState> {
     let bytes = self
-      .get_snapshot(workspace_id, object_id)
-      .await?
-      .unwrap_or_else(|| Bytes::from_static(Self::EMPTY_SNAPSHOT));
+      .get_snapshot(workspace_id, object_id, collab_type)
+      .await?;
     let (rid_bytes, update) = bytes.split_at(10);
     let snapshot_rid = Rid::from_bytes(rid_bytes)?;
 
@@ -144,12 +145,12 @@ impl CollabStore {
     &self,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
+    collab_type: CollabType,
     state_vector: &StateVector,
   ) -> anyhow::Result<CollabState> {
     let bytes = self
-      .get_snapshot(workspace_id, object_id)
-      .await?
-      .unwrap_or_else(|| Bytes::from_static(Self::EMPTY_SNAPSHOT));
+      .get_snapshot(workspace_id, object_id, collab_type)
+      .await?;
     let (rid_bytes, update) = bytes.split_at(10);
     let snapshot_rid = Rid::from_bytes(rid_bytes)?;
     let mut rid = snapshot_rid;
@@ -282,7 +283,7 @@ impl CollabStore {
   ) -> anyhow::Result<()> {
     self
       .awareness_broadcast
-      .patch_awareness_state(workspace_id, object_id, sender, update)
+      .sink(workspace_id, object_id, sender, update)
       .await
   }
 
@@ -476,11 +477,7 @@ mod test {
 
     // check the state of s3
     for (object_id, _) in objects {
-      let data = store
-        .get_snapshot(workspace_id, object_id)
-        .await
-        .unwrap()
-        .unwrap();
+      let data = store.get_snapshot(workspace_id, object_id).await.unwrap();
       let doc = Doc::new();
       let mut tx = doc.transact_mut();
       let txt = tx.get_or_insert_text("test");

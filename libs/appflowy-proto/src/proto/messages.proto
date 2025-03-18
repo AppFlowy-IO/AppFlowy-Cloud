@@ -10,25 +10,29 @@ message Rid {
 
 message Manifest {
     bytes object_id = 1;
-    Rid last_message_id = 2;
-    bytes state_vector = 3;
+    int32 collab_type = 2;
+    Rid last_message_id = 3;
+    bytes state_vector = 4;
 }
 
 message Update {
     bytes object_id = 1;
-    uint32 flags = 2;
-    Rid message_id = 3;
-    bytes payload = 4;
+    int32 collab_type = 2;
+    uint32 flags = 3;
+    Rid message_id = 4;
+    bytes payload = 5;
 }
 
 message AwarenessUpdate {
     bytes object_id = 1;
-    bytes payload = 2;
+    int32 collab_type = 2;
+    bytes payload = 3;
 }
 
 message PermissionRevoked {
     bytes object_id = 1;
-    string reason = 2;
+    int32 collab_type = 2;
+    string reason = 3;
 }
 
 message Message {

@@ -1,4 +1,6 @@
 use crate::metrics::CollabStreamMetrics;
+use anyhow::anyhow;
+use futures::Stream;
 use loole::{Receiver, Sender};
 use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::Client;
@@ -8,18 +10,63 @@ use redis::RedisError;
 use redis::RedisResult;
 use redis::Value;
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 
 /// Redis stream key.
 pub type StreamKey = String;
 
+pub trait FromRedisStream {
+  type Error: Display;
+  fn from_redis_stream(msg_id: String, fields: RedisMap) -> Result<Self, Self::Error>
+  where
+    Self: Sized;
+}
+
 /// Channel returned by [StreamRouter::observe], that allows to receive messages retrieved by
 /// the router.
-pub type StreamReader = tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>;
+pub struct StreamReader<T> {
+  receiver: tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>,
+  _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> StreamReader<T> {
+  pub fn new(receiver: tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>) -> Self {
+    Self {
+      receiver,
+      _phantom: std::marker::PhantomData,
+    }
+  }
+}
+
+impl<T> Stream for StreamReader<T>
+where
+  T: FromRedisStream,
+{
+  type Item = anyhow::Result<T>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let mut pin = unsafe { self.map_unchecked_mut(|s| &mut s.receiver) };
+    let (msg_id, map) = match pin.poll_recv(cx) {
+      Poll::Ready(Some(v)) => {
+        tracing::trace!("received message {}", v.0);
+        v
+      },
+      Poll::Ready(None) => return Poll::Ready(None),
+      Poll::Pending => return Poll::Pending,
+    };
+    match T::from_redis_stream(msg_id, map) {
+      Ok(value) => Poll::Ready(Some(Ok(value))),
+      Err(err) => Poll::Ready(Some(Err(anyhow!("{}", err)))),
+    }
+  }
+}
 
 /// Redis stream router used to multiplex multiple number of Redis stream read requests over a
 /// fixed number of Redis connections.
@@ -66,13 +113,13 @@ impl StreamRouter {
     })
   }
 
-  pub fn observe(&self, stream_key: StreamKey, last_id: Option<String>) -> StreamReader {
+  pub fn observe<T>(&self, stream_key: StreamKey, last_id: Option<String>) -> StreamReader<T> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let last_id = last_id.unwrap_or_else(|| "0".to_string());
     let h = StreamHandle::new(stream_key, last_id, tx);
     self.buf.send(h).unwrap();
     self.metrics.reads_enqueued.inc();
-    rx
+    StreamReader::new(rx)
   }
 }
 
@@ -276,7 +323,7 @@ impl Worker {
   }
 }
 
-type RedisMap = HashMap<String, Value>;
+pub type RedisMap = HashMap<String, Value>;
 type StreamSender = tokio::sync::mpsc::UnboundedSender<(String, RedisMap)>;
 
 struct StreamHandle {

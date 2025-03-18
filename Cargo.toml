@@ -61,6 +61,9 @@ redis = { workspace = true, features = [
   "json",
   "tokio-comp",
   "connection-manager",
+  "aio",
+  "bytes",
+  "uuid"
 ] }
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = { version = "0.3.19", features = [
@@ -222,7 +225,7 @@ collab-stream = { path = "libs/collab-stream" }
 dotenvy = "0.15.7"
 serde_json = "1.0.111"
 serde_repr = "0.1.18"
-serde = { version = "1.0.195", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 bytes = "1.9.0"
 workspace-template = { path = "libs/workspace-template" }
 uuid = { version = "1.6.1", features = ["v4", "v5"] }
@@ -243,7 +246,7 @@ client-websocket = { path = "libs/client-websocket" }
 infra = { path = "libs/infra" }
 tracing = { version = "0.1", features = ["log"] }
 gotrue = { path = "libs/gotrue" }
-redis = "0.25.2"
+redis = "0.29"
 sqlx = { version = "0.8.1", default-features = false }
 dashmap = "5.5.3"
 futures = "0.3.30"

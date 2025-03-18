@@ -189,9 +189,9 @@ impl CollabMemCache {
       // for executing a subsequent transaction (with MULTI/EXEC). If any of the watched keys are
       // altered by another client before the current client executes EXEC, the transaction will be
       // aborted by Redis (the EXEC will return nil indicating the transaction was not processed).
-      let () = redis::cmd("WATCH")
+      let _: redis::Value = redis::cmd("WATCH")
         .arg(&cache_object_id)
-        .query_async::<_, ()>(&mut conn)
+        .query_async(&mut conn)
         .await?;
     }
 
@@ -236,9 +236,7 @@ impl CollabMemCache {
     .await;
 
     // Always reset Watch State
-    redis::cmd("UNWATCH")
-      .query_async::<_, ()>(&mut conn)
-      .await?;
+    let _: redis::Value = redis::cmd("UNWATCH").query_async(&mut conn).await?;
 
     self.metrics.redis_write_collab_count.inc();
     result

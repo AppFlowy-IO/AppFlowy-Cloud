@@ -85,7 +85,7 @@ impl TryFrom<String> for MessageId {
 impl FromRedisValue for MessageId {
   fn from_redis_value(v: &Value) -> RedisResult<Self> {
     match v {
-      Value::Data(stream_key) => MessageId::try_from(stream_key.as_slice()).map_err(|_| {
+      Value::BulkString(stream_key) => MessageId::try_from(stream_key.as_slice()).map_err(|_| {
         RedisError::from((
           redis::ErrorKind::TypeError,
           "invalid stream key",
@@ -245,7 +245,8 @@ pub struct RedisString(String);
 impl FromRedisValue for RedisString {
   fn from_redis_value(v: &Value) -> RedisResult<Self> {
     match v {
-      Value::Data(bytes) => Ok(RedisString(String::from_utf8(bytes.to_vec())?)),
+      Value::BulkString(bytes) => Ok(RedisString(String::from_utf8(bytes.to_vec())?)),
+      Value::SimpleString(str) => Ok(RedisString(str.clone())),
       _ => Err(internal("expecting Value::Data")),
     }
   }
@@ -259,7 +260,8 @@ impl Display for RedisString {
 
 fn bulk_from_redis_value(v: &Value) -> Result<&Vec<Value>, RedisError> {
   match v {
-    Value::Bulk(b) => Ok(b),
+    Value::Array(b) => Ok(b),
+    Value::Set(b) => Ok(b),
     _ => Err(internal("expecting Value::Bulk")),
   }
 }
@@ -415,7 +417,8 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
       None => CollabOrigin::Empty,
       Some(sender) => {
         let raw_origin = String::from_redis_value(sender)?;
-        collab_origin_from_str(&raw_origin)?
+        CollabOrigin::from_str(&raw_origin)
+          .map_err(|e| StreamError::UnexpectedValue(e.to_string()))?
       },
     };
     let flags = match fields.get("flags") {
@@ -438,33 +441,6 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
 pub struct AwarenessStreamUpdate {
   pub data: AwarenessUpdate,
   pub sender: CollabOrigin,
-}
-
-//FIXME: this should be `impl FromStr for CollabOrigin`
-pub fn collab_origin_from_str(value: &str) -> RedisResult<CollabOrigin> {
-  match value {
-    "" => Ok(CollabOrigin::Empty),
-    "server" => Ok(CollabOrigin::Server),
-    other => {
-      let mut split = other.split('|');
-      match (split.next(), split.next()) {
-        (Some(uid), Some(device_id)) | (Some(device_id), Some(uid))
-          if uid.starts_with("uid:") && device_id.starts_with("device_id:") =>
-        {
-          let uid = uid.trim_start_matches("uid:");
-          let device_id = device_id.trim_start_matches("device_id:").to_string();
-          let uid: i64 = uid
-            .parse()
-            .map_err(|err| internal(format!("failed to parse uid: {}", err)))?;
-          Ok(CollabOrigin::Client(CollabClient { uid, device_id }))
-        },
-        _ => Err(internal(format!(
-          "couldn't parse collab origin from `{}`",
-          other
-        ))),
-      }
-    },
-  }
 }
 
 #[repr(transparent)]
@@ -528,32 +504,6 @@ impl Display for UpdateFlags {
 
 #[cfg(test)]
 mod test {
-  use crate::model::collab_origin_from_str;
-  use collab::core::origin::{CollabClient, CollabOrigin};
-
-  #[test]
-  fn parse_collab_origin_empty() {
-    let expected = CollabOrigin::Empty;
-    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
-    assert_eq!(actual, expected);
-  }
-
-  #[test]
-  fn parse_collab_origin_server() {
-    let expected = CollabOrigin::Server;
-    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
-    assert_eq!(actual, expected);
-  }
-
-  #[test]
-  fn parse_collab_origin_client() {
-    let expected = CollabOrigin::Client(CollabClient {
-      uid: 123,
-      device_id: "test-device".to_string(),
-    });
-    let actual = collab_origin_from_str(&expected.to_string()).unwrap();
-    assert_eq!(actual, expected);
-  }
 
   #[test]
   fn test_collab_update_event_decoding() {

@@ -1,10 +1,13 @@
 use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
+use crate::ws2::collab_store::CollabStore;
+use crate::ws2::messages::UpdateStreamMessage;
 use actix::{
   fut, Actor, ActorContext, Addr, AsyncContext, AtomicResponse, Handler, Recipient,
   ResponseActFuture, Running, SpawnHandle, StreamHandler, WrapFuture,
 };
-use appflowy_proto::{Rid, ServerMessage, WorkspaceId};
+use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
+use collab_stream::model::AwarenessStreamUpdate;
 use std::collections::HashMap;
 use std::sync::Arc;
 use yrs::block::ClientID;
@@ -113,7 +116,7 @@ impl Actor for Workspace {
     let stream = self
       .store
       .awareness()
-      .workspace_awareness_stream(self.workspace_id);
+      .awareness_workspace_stream(&self.workspace_id);
     self.awareness_handle = Some(ctx.add_stream(stream));
     self.snapshot_handle = Some(ctx.notify_later(Snapshot, Self::SNAPSHOT_INTERVAL));
   }
@@ -172,14 +175,18 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
   }
 }
 
-impl StreamHandler<anyhow::Result<AwarenessStreamMessage>> for Workspace {
-  fn handle(&mut self, item: anyhow::Result<AwarenessStreamMessage>, ctx: &mut Self::Context) {
+impl StreamHandler<anyhow::Result<(ObjectId, AwarenessStreamUpdate)>> for Workspace {
+  fn handle(
+    &mut self,
+    item: anyhow::Result<(ObjectId, AwarenessStreamUpdate)>,
+    ctx: &mut Self::Context,
+  ) {
     match item {
-      Ok(msg) => {
+      Ok((object_id, msg)) => {
         tracing::trace!(
           "received awareness update for {}/{}",
           self.workspace_id,
-          msg.object_id
+          object_id
         );
         for (session_id, sender) in self.active_sessions.iter() {
           if session_id == &msg.sender {
@@ -188,8 +195,8 @@ impl StreamHandler<anyhow::Result<AwarenessStreamMessage>> for Workspace {
           tracing::trace!("sending awareness update to {}", session_id);
           sender.do_send(WsOutput {
             message: ServerMessage::AwarenessUpdate {
-              object_id: msg.object_id,
-              awareness: msg.update.clone(),
+              object_id,
+              awareness: msg.data.encode_v1().into(),
             },
           });
         }

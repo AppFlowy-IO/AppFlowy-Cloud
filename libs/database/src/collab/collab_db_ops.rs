@@ -250,14 +250,14 @@ where
 pub async fn batch_select_collab_blob(
   pg_pool: &PgPool,
   queries: Vec<QueryCollab>,
-  results: &mut HashMap<String, QueryCollabResult>,
+  results: &mut HashMap<Uuid, QueryCollabResult>,
 ) {
-  let mut object_ids_by_collab_type: HashMap<CollabType, Vec<String>> = HashMap::new();
+  let mut object_ids_by_collab_type: HashMap<CollabType, Vec<Uuid>> = HashMap::new();
   for params in queries {
     object_ids_by_collab_type
       .entry(params.collab_type)
       .or_default()
-      .push(params.object_id);
+      .push(params.object_id.parse().unwrap());
   }
 
   for (collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
@@ -302,7 +302,7 @@ pub async fn batch_select_collab_blob(
 
 #[derive(Debug, sqlx::FromRow)]
 struct QueryCollabData {
-  oid: String,
+  oid: Uuid,
   blob: RawData,
 }
 
@@ -503,7 +503,7 @@ fn transform_record_not_found_error(
 /// For a more efficient lookup, especially in frequent checks, consider using the cached method [CollabCache::is_exist].
 #[inline]
 pub async fn is_collab_exists<'a, E: Executor<'a, Database = Postgres>>(
-  oid: &str,
+  oid: &Uuid,
   executor: E,
 ) -> Result<bool, sqlx::Error> {
   let result = sqlx::query_scalar!(
@@ -520,7 +520,7 @@ pub async fn is_collab_exists<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn select_workspace_database_oid<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-) -> Result<String, sqlx::Error> {
+) -> Result<Uuid, sqlx::Error> {
   let partition_key = partition_key_from_collab_type(&CollabType::WorkspaceDatabase);
   sqlx::query_scalar!(
     r#"
@@ -539,7 +539,7 @@ pub async fn select_workspace_database_oid<'a, E: Executor<'a, Database = Postgr
 pub async fn select_last_updated_database_row_ids(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  row_ids: &[String],
+  row_ids: &[Uuid],
   after: &DateTime<Utc>,
 ) -> Result<Vec<DatabaseRowUpdatedItem>, sqlx::Error> {
   let updated_row_items = sqlx::query_as!(
@@ -564,7 +564,7 @@ pub async fn select_last_updated_database_row_ids(
 
 pub async fn select_collab_embed_info<'a, E>(
   tx: E,
-  object_id: &str,
+  object_id: &Uuid,
 ) -> Result<Option<AFCollabEmbedInfo>, sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
@@ -602,7 +602,7 @@ pub async fn batch_select_collab_embed<'a, E>(
 where
   E: Executor<'a, Database = Postgres>,
 {
-  let object_ids: Vec<String> = embedded_collab
+  let object_ids: Vec<_> = embedded_collab
     .into_iter()
     .map(|query| query.object_id)
     .collect();

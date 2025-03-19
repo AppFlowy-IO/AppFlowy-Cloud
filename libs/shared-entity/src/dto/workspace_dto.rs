@@ -131,7 +131,7 @@ pub struct RepeatedEmbeddedCollabQuery(pub Vec<EmbeddedCollabQuery>);
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EmbeddedCollabQuery {
   pub collab_type: CollabType,
-  pub object_id: String,
+  pub object_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize)]

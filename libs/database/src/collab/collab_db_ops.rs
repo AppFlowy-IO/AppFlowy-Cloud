@@ -57,13 +57,14 @@ pub async fn insert_into_af_collab(
     params.encoded_collab_v1.len(),
   );
 
+  let oid = params.object_id.parse::<Uuid>()?;
   sqlx::query!(
     r#"
       INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
-      VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oid, partition_key)
+      VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oid)
       DO UPDATE SET blob = $2, len = $3, owner_uid = $5 WHERE excluded.workspace_id = af_collab.workspace_id;
     "#,
-    params.object_id,
+    oid,
     params.encoded_collab_v1.as_ref(),
     params.encoded_collab_v1.len() as i32,
     partition_key,
@@ -152,13 +153,13 @@ pub async fn insert_into_af_collab_bulk_for_user(
 
   // Insert values into `af_collab` tables in bulk
   let len = collab_params_list.len();
-  let mut object_ids: Vec<Uuid> = Vec::with_capacity(len);
+  let mut object_ids = Vec::with_capacity(len);
   let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(len);
   let mut lengths: Vec<i32> = Vec::with_capacity(len);
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
   let mut visited = HashSet::with_capacity(collab_params_list.len());
   for params in collab_params_list {
-    let oid = Uuid::from_str(&params.object_id)?;
+    let oid = params.object_id.parse::<Uuid>()?;
     if visited.insert(oid) {
       let partition_key = partition_key_from_collab_type(&params.collab_type);
       object_ids.push(oid);
@@ -202,7 +203,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
 pub async fn select_blob_from_af_collab<'a, E>(
   conn: E,
   collab_type: &CollabType,
-  object_id: &str,
+  object_id: &Uuid,
 ) -> Result<Vec<u8>, sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
@@ -224,7 +225,7 @@ where
 #[inline]
 pub async fn select_collab_meta_from_af_collab<'a, E>(
   conn: E,
-  object_id: &str,
+  object_id: &Uuid,
   collab_type: &CollabType,
 ) -> Result<Option<AFCollabRowMeta>, sqlx::Error>
 where
@@ -260,16 +261,14 @@ pub async fn batch_select_collab_blob(
   }
 
   for (collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
-    let partition_key = partition_key_from_collab_type(&collab_type);
     let par_results: Result<Vec<QueryCollabData>, sqlx::Error> = sqlx::query_as!(
       QueryCollabData,
       r#"
        SELECT oid, blob
        FROM af_collab
-       WHERE oid = ANY($1) AND partition_key = $2 AND deleted_at IS NULL;
+       WHERE oid = ANY($1) AND deleted_at IS NULL;
     "#,
-      &object_ids,
-      partition_key,
+      &object_ids
     )
     .fetch_all(pg_pool)
     .await;
@@ -570,22 +569,17 @@ pub async fn select_collab_embed_info<'a, E>(
 where
   E: Executor<'a, Database = Postgres>,
 {
-  tracing::info!(
-    "select_collab_embed_info: object_id: {}, collab_type: {:?}",
-    object_id
-  );
+  tracing::info!("select_collab_embed_info: object_id: {}", object_id);
   let record = sqlx::query!(
     r#"
       SELECT
-          ac.object_id,
+          ac.oid as object_id,
           ace.partition_key,
           ac.indexed_at,
           ace.updated_at
       FROM af_collab_embeddings ac
-      JOIN af_collab ace
-          ON ac.object_id = ace.oid
-          AND ac.partition_key = ace.partition_key
-      WHERE ac.object_id = $1
+      JOIN af_collab ace ON ac.oid = ace.oid
+      WHERE ac.oid = $1
     "#,
     object_id
   )
@@ -608,37 +602,24 @@ pub async fn batch_select_collab_embed<'a, E>(
 where
   E: Executor<'a, Database = Postgres>,
 {
-  let collab_types: Vec<CollabType> = embedded_collab
-    .iter()
-    .map(|query| query.collab_type)
-    .collect();
   let object_ids: Vec<String> = embedded_collab
     .into_iter()
     .map(|query| query.object_id)
-    .collect();
-
-  // Collect the partition keys for each collab_type
-  let partition_keys: Vec<i32> = collab_types
-    .iter()
-    .map(partition_key_from_collab_type)
     .collect();
 
   // Execute the query to fetch all matching rows
   let records = sqlx::query!(
     r#"
       SELECT
-          ac.oid AS object_id,
-          ac.partition_key,
+          ac.oid as object_id,
+          ace.partition_key,
           ac.indexed_at,
           ace.updated_at
       FROM af_collab_embeddings ac
-      JOIN af_collab ace
-          ON ac.oid = ace.oid
-          AND ac.partition_key = ace.partition_key
-      WHERE ac.oid = ANY($1) AND ac.partition_key = ANY($2)
+      JOIN af_collab ace ON ac.oid = ace.oid
+      WHERE ac.oid = ANY($1)
     "#,
-    &object_ids,
-    &partition_keys
+    &object_ids
   )
   .fetch_all(executor)
   .await?;

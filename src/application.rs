@@ -374,7 +374,7 @@ async fn get_redis_client(
   info!("Connecting to redis with uri: {}", redis_uri);
   let client = redis::Client::open(redis_uri).context("failed to connect to redis")?;
 
-  let awareness_gossip = AwarenessGossip::new(client.clone());
+  let awareness_gossip = AwarenessGossip::new(&client).await?;
   let router = StreamRouter::with_options(
     &client,
     metrics,

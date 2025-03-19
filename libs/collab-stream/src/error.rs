@@ -40,6 +40,9 @@ pub enum StreamError {
 
   #[error("Internal error: {0}")]
   Internal(anyhow::Error),
+
+  #[error("Couldn't parse stream key: {0}")]
+  InvalidStreamKey(String),
 }
 
 impl StreamError {

@@ -255,24 +255,22 @@ impl CollabGroup {
 
   /// Task used to receive awareness updates from Redis.
   async fn inbound_awareness_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
+    let object_id = Uuid::parse_str(&state.object_id)
+      .map_err(|e| RealtimeError::CollabSchemaError(format!("invalid uuid: {}", e)))?;
     let updates = state
       .persister
       .collab_redis_stream
-      .awareness_updates(&state.workspace_id, &state.object_id);
+      .awareness_updates(&object_id);
     pin_mut!(updates);
     loop {
       tokio::select! {
         _ = state.shutdown.cancelled() => {
           break;
         }
-        res = updates.next() => {
+        res = updates.recv() => {
           match res {
-            Some(Ok(awareness_update)) => {
+            Some(awareness_update) => {
               Self::handle_inbound_awareness(&state, awareness_update).await;
-            },
-            Some(Err(err)) => {
-              tracing::warn!("failed to handle incoming update for collab `{}`: {}", state.object_id, err);
-              break;
             },
             None => {
               break;

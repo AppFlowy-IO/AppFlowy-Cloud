@@ -264,8 +264,8 @@ impl IndexerScheduler {
           if !text.is_empty() {
             let pending = UnindexedCollabTask::new(
               Uuid::parse_str(workspace_id)?,
-              object_id.to_string(),
-              collab_type,
+              Uuid::parse_str(object_id)?,
+              collab_type.clone(),
               UnindexedData::Text(text),
             );
             self.embed_immediately(pending)?;
@@ -516,7 +516,7 @@ fn process_collab(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UnindexedCollabTask {
   pub workspace_id: Uuid,
-  pub object_id: String,
+  pub object_id: Uuid,
   pub collab_type: CollabType,
   pub data: UnindexedData,
   pub created_at: i64,
@@ -525,7 +525,7 @@ pub struct UnindexedCollabTask {
 impl UnindexedCollabTask {
   pub fn new(
     workspace_id: Uuid,
-    object_id: String,
+    object_id: Uuid,
     collab_type: CollabType,
     data: UnindexedData,
   ) -> Self {

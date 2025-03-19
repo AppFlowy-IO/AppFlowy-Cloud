@@ -15,8 +15,7 @@ use uuid::Uuid;
 pub async fn get_index_status<'a, E>(
   tx: E,
   workspace_id: &Uuid,
-  object_id: &str,
-  partition_key: i32,
+  object_id: &Uuid,
 ) -> Result<IndexingStatus, sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
@@ -29,13 +28,12 @@ SELECT
     WHEN w.settings['disable_search_indexing']::boolean THEN
       FALSE
     ELSE
-      EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.partition_key = $3 AND m.oid = $2)
+      EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.oid = $2::uuid)
   END as has_index
 FROM af_workspace w
 WHERE w.workspace_id = $1"#,
     workspace_id,
-    object_id,
-    partition_key
+    object_id
   )
   .fetch_one(tx)
   .await;
@@ -150,7 +148,7 @@ pub async fn stream_collabs_without_embeddings(
 
 pub async fn update_collab_indexed_at<'a, E>(
   tx: E,
-  object_id: &str,
+  object_id: &Uuid,
   collab_type: &CollabType,
   indexed_at: DateTime<Utc>,
 ) -> Result<(), Error>
@@ -176,26 +174,18 @@ where
 
 pub async fn get_collabs_indexed_at<'a, E>(
   executor: E,
-  collab_ids: Vec<(String, CollabType)>,
-) -> Result<HashMap<String, DateTime<Utc>>, Error>
+  oids: Vec<Uuid>,
+) -> Result<HashMap<Uuid, DateTime<Utc>>, Error>
 where
   E: Executor<'a, Database = Postgres>,
 {
-  let (oids, partition_keys): (Vec<String>, Vec<i32>) = collab_ids
-    .into_iter()
-    .map(|(object_id, collab_type)| (object_id, partition_key_from_collab_type(&collab_type)))
-    .unzip();
-
   let result = sqlx::query!(
     r#"
         SELECT oid, indexed_at
         FROM af_collab
-        WHERE (oid, partition_key) = ANY (
-            SELECT UNNEST($1::text[]), UNNEST($2::int[])
-        )
+        WHERE oid = ANY (SELECT UNNEST($1::uuid[]))
         "#,
-    &oids,
-    &partition_keys
+    &oids
   )
   .fetch_all(executor)
   .await?;
@@ -209,7 +199,7 @@ where
         None
       }
     })
-    .collect::<HashMap<String, DateTime<Utc>>>();
+    .collect::<HashMap<Uuid, DateTime<Utc>>>();
   Ok(map)
 }
 
@@ -217,7 +207,7 @@ where
 pub struct CollabId {
   pub collab_type: CollabType,
   pub workspace_id: Uuid,
-  pub object_id: String,
+  pub object_id: Uuid,
 }
 
 impl From<CollabId> for QueryCollabParams {
@@ -225,7 +215,7 @@ impl From<CollabId> for QueryCollabParams {
     QueryCollabParams {
       workspace_id: value.workspace_id.to_string(),
       inner: QueryCollab {
-        object_id: value.object_id,
+        object_id: value.object_id.to_string(),
         collab_type: value.collab_type,
       },
     }

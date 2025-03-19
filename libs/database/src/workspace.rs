@@ -1051,7 +1051,6 @@ pub async fn upsert_workspace_settings(
         DELETE FROM af_collab_embeddings e
         USING af_collab c
         WHERE e.oid = c.oid
-          AND e.partition_key = c.partition_key
           AND c.workspace_id = $1
       "#,
       workspace_id

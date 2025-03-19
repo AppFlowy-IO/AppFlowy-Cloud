@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)\n      VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oid, partition_key)\n      DO UPDATE SET blob = $2, len = $3, owner_uid = $5 WHERE excluded.workspace_id = af_collab.workspace_id;\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Int4",
+        "Int4",
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "435fb563d3f6da280483996dc1803cbea4a99f1136796c2aaeb20cf7bb897f5e"
+}

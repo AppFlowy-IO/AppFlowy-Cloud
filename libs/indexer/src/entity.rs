@@ -12,14 +12,14 @@ pub struct UnindexedCollab {
 
 pub struct EmbeddingRecord {
   pub workspace_id: Uuid,
-  pub object_id: String,
+  pub object_id: Uuid,
   pub collab_type: CollabType,
   pub tokens_used: u32,
   pub contents: Vec<AFCollabEmbeddedChunk>,
 }
 
 impl EmbeddingRecord {
-  pub fn empty(workspace_id: Uuid, object_id: String, collab_type: CollabType) -> Self {
+  pub fn empty(workspace_id: Uuid, object_id: Uuid, collab_type: CollabType) -> Self {
     Self {
       workspace_id,
       object_id,

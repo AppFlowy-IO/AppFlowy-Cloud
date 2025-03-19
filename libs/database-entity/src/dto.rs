@@ -407,7 +407,7 @@ pub struct QueryWorkspaceMember {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AFCollabEmbedInfo {
-  pub object_id: String,
+  pub object_id: Uuid,
   /// The timestamp when the object's embeddings updated
   pub indexed_at: DateTime<Utc>,
   /// The timestamp when the object's data updated

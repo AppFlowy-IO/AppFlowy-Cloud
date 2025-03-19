@@ -94,7 +94,7 @@ impl PgHasArrayType for Fragment {
 pub async fn upsert_collab_embeddings(
   transaction: &mut Transaction<'_, Postgres>,
   workspace_id: &Uuid,
-  object_id: &str,
+  object_id: &Uuid,
   collab_type: CollabType,
   tokens_used: u32,
   records: Vec<AFCollabEmbeddedChunk>,
@@ -107,7 +107,7 @@ pub async fn upsert_collab_embeddings(
   );
   sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4, $5::af_fragment_v3[])"#)
     .bind(*workspace_id)
-    .bind(object_id)
+    .bind(object_id.to_string())
     .bind(crate::collab::partition_key_from_collab_type(&collab_type))
     .bind(tokens_used as i32)
     .bind(fragments)

@@ -27,6 +27,7 @@ alter table af_collab_embeddings
 alter table af_collab_embeddings
 drop column oid,
     drop column partition_key;
+alter table af_collab_embeddings rename column object_id to oid;
 
 -- replace af_collab table
 drop table af_collab;
@@ -35,15 +36,15 @@ alter table af_collab_temp rename to af_collab;
 -- rebind embeddings foreign key to new af_collab table
 alter table af_collab_embeddings
     add constraint fk_af_collab_embeddings_af_collab
-        foreign key (object_id) references af_collab(oid);
-create index ix_af_collab_embeddings_oid on af_collab_embeddings(object_id);
+        foreign key (oid) references af_collab(oid);
+create index ix_af_collab_embeddings_oid on af_collab_embeddings(oid);
 
 -- add trigger for af_collab.updated_at
 create trigger set_updated_at
     before insert or update
-                         on af_collab
-                         for each row
-                         execute procedure update_updated_at_column();
+    on af_collab
+    for each row
+    execute procedure update_updated_at_column();
 
 -- add remaining indexes to new af_collab table
 create index if not exists idx_workspace_id_on_af_collab

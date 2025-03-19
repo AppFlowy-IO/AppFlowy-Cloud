@@ -113,3 +113,46 @@ impl AwarenessUpdateSink {
     Ok(())
   }
 }
+
+#[cfg(test)]
+mod test {
+  use crate::awareness_gossip::AwarenessGossip;
+  use crate::model::AwarenessStreamUpdate;
+  use collab::core::awareness::AwarenessUpdate;
+  use collab::core::origin::CollabOrigin;
+  use uuid::Uuid;
+
+  #[tokio::test]
+  async fn subscribe_awareness_change_for_many_collabs() {
+    let client = redis::Client::open("redis://127.0.0.1:6379/").unwrap();
+    let gossip = AwarenessGossip::new(&client).await.unwrap();
+    const COLLAB_COUNT: usize = 10_000;
+    let mut collabs = Vec::with_capacity(COLLAB_COUNT);
+    for _ in 0..COLLAB_COUNT {
+      let workspace_id = Uuid::new_v4();
+      let object_id = Uuid::new_v4();
+      let sink = gossip
+        .sink(&workspace_id.to_string(), &object_id.to_string())
+        .await
+        .unwrap();
+      let stream = gossip.awareness_stream(&object_id);
+      collabs.push((sink, stream));
+    }
+
+    for (sink, _) in collabs.iter() {
+      sink
+        .send(&AwarenessStreamUpdate {
+          data: AwarenessUpdate {
+            clients: Default::default(),
+          },
+          sender: CollabOrigin::Server,
+        })
+        .await
+        .unwrap();
+    }
+
+    for (_, stream) in collabs.iter_mut() {
+      stream.recv().await.unwrap();
+    }
+  }
+}

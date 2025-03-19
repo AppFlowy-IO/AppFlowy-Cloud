@@ -13,12 +13,12 @@ async fn generate_chat_message_answer_test() {
   let params = CompleteTextParams {
     text: "I seen the movie last night and it was amazing".to_string(),
     completion_type: Some(CompletionType::SpellingAndGrammar),
-    custom_prompt: None,
     metadata: Some(CompletionMetadata {
       object_id: doc_id,
       workspace_id: Some(workspace_id.clone()),
       rag_ids: None,
       completion_history: None,
+      custom_prompt: None,
     }),
     format: Default::default(),
   };

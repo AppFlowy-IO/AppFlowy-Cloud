@@ -49,7 +49,6 @@ pub async fn insert_into_af_collab(
   workspace_id: &str,
   params: &CollabParams,
 ) -> Result<(), AppError> {
-  let encrypt = 0;
   let partition_key = crate::collab::partition_key_from_collab_type(&params.collab_type);
   let workspace_id = Uuid::from_str(workspace_id)?;
   tracing::trace!(
@@ -60,15 +59,14 @@ pub async fn insert_into_af_collab(
 
   sqlx::query!(
     r#"
-      INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (oid, partition_key)
-      DO UPDATE SET blob = $2, len = $3, encrypt = $5, owner_uid = $6 WHERE excluded.workspace_id = af_collab.workspace_id;
+      INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
+      VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oid, partition_key)
+      DO UPDATE SET blob = $2, len = $3, owner_uid = $5 WHERE excluded.workspace_id = af_collab.workspace_id;
     "#,
     params.object_id,
     params.encoded_collab_v1.as_ref(),
     params.encoded_collab_v1.len() as i32,
     partition_key,
-    encrypt,
     uid,
     workspace_id,
   )
@@ -175,16 +173,15 @@ pub async fn insert_into_af_collab_bulk_for_user(
   // Bulk insert into `af_collab` for the provided collab params
   sqlx::query!(
       r#"
-        INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
-        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::int[], $6::bigint[], $7::uuid[])
+        INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
+        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::bigint[], $6::uuid[])
         ON CONFLICT (oid, partition_key)
-        DO UPDATE SET blob = excluded.blob, len = excluded.len, encrypt = excluded.encrypt where af_collab.workspace_id = excluded.workspace_id
+        DO UPDATE SET blob = excluded.blob, len = excluded.len where af_collab.workspace_id = excluded.workspace_id
       "#,
       &object_ids,
       &blobs,
       &lengths,
       &partition_keys,
-      &vec![encrypt; object_ids.len()],
       &uids,
       &workspace_ids
     )
@@ -552,7 +549,7 @@ pub async fn select_last_updated_database_row_ids(
       SELECT
         updated_at as updated_at,
         oid as row_id
-      FROM af_collab_database_row
+      FROM af_collab
       WHERE workspace_id = $1
         AND oid = ANY($2)
         AND updated_at > $3
@@ -569,32 +566,28 @@ pub async fn select_last_updated_database_row_ids(
 pub async fn select_collab_embed_info<'a, E>(
   tx: E,
   object_id: &str,
-  collab_type: CollabType,
 ) -> Result<Option<AFCollabEmbedInfo>, sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
 {
   tracing::info!(
     "select_collab_embed_info: object_id: {}, collab_type: {:?}",
-    object_id,
-    collab_type
+    object_id
   );
-  let partition_key = partition_key_from_collab_type(&collab_type);
   let record = sqlx::query!(
     r#"
       SELECT
-          ac.oid AS object_id,
-          ac.partition_key,
+          ac.object_id,
+          ace.partition_key,
           ac.indexed_at,
           ace.updated_at
       FROM af_collab_embeddings ac
       JOIN af_collab ace
-          ON ac.oid = ace.oid
+          ON ac.object_id = ace.oid
           AND ac.partition_key = ace.partition_key
-      WHERE ac.oid = $1 AND ac.partition_key = $2
+      WHERE ac.object_id = $1
     "#,
-    object_id,
-    partition_key
+    object_id
   )
   .fetch_optional(tx)
   .await?;

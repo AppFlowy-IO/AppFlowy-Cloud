@@ -12,7 +12,9 @@ use redis::streams::StreamReadReply;
 use redis::{AsyncCommands, FromRedisValue};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::error;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct CollabRedisStream {
@@ -39,7 +41,7 @@ impl CollabRedisStream {
       metrics,
       router_options,
     )?);
-    let awareness_gossip = Arc::new(AwarenessGossip::new(redis_client.clone()));
+    let awareness_gossip = Arc::new(AwarenessGossip::new(&redis_client).await?);
     let connection_manager = redis_client.get_connection_manager().await?;
     Ok(Self::new_with_connection_manager(
       connection_manager,
@@ -173,14 +175,8 @@ impl CollabRedisStream {
     }
   }
 
-  pub fn awareness_updates(
-    &self,
-    workspace_id: &str,
-    object_id: &str,
-  ) -> impl Stream<Item = Result<AwarenessStreamUpdate, StreamError>> {
-    self
-      .awareness_gossip
-      .awareness_stream(workspace_id, object_id)
+  pub fn awareness_updates(&self, object_id: &Uuid) -> UnboundedReceiver<AwarenessStreamUpdate> {
+    self.awareness_gossip.awareness_stream(object_id)
   }
 
   pub async fn prune_update_stream(

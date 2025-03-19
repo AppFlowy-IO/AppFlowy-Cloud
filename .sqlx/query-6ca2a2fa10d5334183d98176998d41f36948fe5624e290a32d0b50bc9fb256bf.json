@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        updated_at as updated_at,\n        oid as row_id\n      FROM af_collab\n      WHERE workspace_id = $1\n        AND oid = ANY($2)\n        AND updated_at > $3\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "row_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "6ca2a2fa10d5334183d98176998d41f36948fe5624e290a32d0b50bc9fb256bf"
+}

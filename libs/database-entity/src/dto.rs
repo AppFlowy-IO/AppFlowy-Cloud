@@ -282,13 +282,11 @@ impl Deref for QueryCollabParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollab {
-  #[validate(custom(function = "validate_not_empty_str"))]
   pub object_id: String,
   pub collab_type: CollabType,
 }
 impl QueryCollab {
-  pub fn new<T: ToString>(object_id: T, collab_type: CollabType) -> Self {
-    let object_id = object_id.to_string();
+  pub fn new(object_id: String, collab_type: CollabType) -> Self {
     Self {
       object_id,
       collab_type,

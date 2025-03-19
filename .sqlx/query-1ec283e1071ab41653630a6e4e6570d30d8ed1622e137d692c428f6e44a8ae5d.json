@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\nSELECT\n  w.settings['disable_search_indexing']::boolean as disable_search_indexing,\n  CASE\n    WHEN w.settings['disable_search_indexing']::boolean THEN\n      FALSE\n    ELSE\n      EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.oid = $2)\n  END as has_index\nFROM af_workspace w\nWHERE w.workspace_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "disable_search_indexing",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "has_index",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "1ec283e1071ab41653630a6e4e6570d30d8ed1622e137d692c428f6e44a8ae5d"
+}

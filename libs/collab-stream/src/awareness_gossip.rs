@@ -52,8 +52,8 @@ impl AwarenessGossip {
 
   pub async fn sink(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<AwarenessUpdateSink, StreamError> {
     let sink = AwarenessUpdateSink::new(self.conn.clone(), workspace_id, object_id);
     Ok(sink)

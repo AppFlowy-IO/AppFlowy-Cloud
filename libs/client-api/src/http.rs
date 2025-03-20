@@ -23,11 +23,15 @@ use parking_lot::RwLock;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 
+use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
+use crate::ws::ConnectInfo;
 use anyhow::anyhow;
+use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use client_api_entity::{
   AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
   QuerySnapshotParams, SnapshotData,
 };
+use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use semver::Version;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
@@ -40,11 +44,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
 use tracing::{debug, error, event, info, instrument, trace, warn};
 use url::Url;
-
-use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
-use crate::ws::ConnectInfo;
-use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
-use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
+use uuid::Uuid;
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
@@ -713,7 +713,7 @@ impl Client {
   }
 
   #[instrument(level = "info", skip_all, err)]
-  pub async fn open_workspace(&self, workspace_id: &str) -> Result<AFWorkspace, AppResponseError> {
+  pub async fn open_workspace(&self, workspace_id: &Uuid) -> Result<AFWorkspace, AppResponseError> {
     let url = format!("{}/api/workspace/{}/open", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
@@ -959,7 +959,7 @@ impl Client {
   #[instrument(level = "info", skip_all)]
   pub async fn get_workspace_usage(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<WorkspaceSpaceUsage, AppResponseError> {
     let url = format!("{}/api/file_storage/{}/usage", self.base_url, workspace_id);
     let resp = self

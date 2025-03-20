@@ -9,10 +9,11 @@ use shared_entity::dto::workspace_dto::{
 };
 use shared_entity::response::{AppResponse, AppResponseError};
 use tracing::instrument;
+use uuid::Uuid;
 
 impl Client {
   #[instrument(level = "info", skip_all, err)]
-  pub async fn leave_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
+  pub async fn leave_workspace(&self, workspace_id: &Uuid) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}/leave", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::POST, &url)
@@ -25,15 +26,11 @@ impl Client {
   }
 
   #[instrument(level = "info", skip_all, err)]
-  pub async fn get_workspace_members<W: AsRef<str>>(
+  pub async fn get_workspace_members(
     &self,
-    workspace_id: W,
+    workspace_id: &Uuid,
   ) -> Result<Vec<AFWorkspaceMember>, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/member",
-      self.base_url,
-      workspace_id.as_ref()
-    );
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -48,7 +45,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn invite_workspace_members(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     invitations: Vec<WorkspaceMemberInvitation>,
   ) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}/invite", self.base_url, workspace_id);
@@ -137,16 +134,12 @@ impl Client {
   }
 
   #[instrument(level = "info", skip_all, err)]
-  pub async fn update_workspace_member<T: AsRef<str>>(
+  pub async fn update_workspace_member(
     &self,
-    workspace_id: T,
+    workspace_id: &Uuid,
     changeset: WorkspaceMemberChangeset,
   ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/member",
-      self.base_url,
-      workspace_id.as_ref()
-    );
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
@@ -159,16 +152,12 @@ impl Client {
   }
 
   #[instrument(level = "info", skip_all, err)]
-  pub async fn remove_workspace_members<T: AsRef<str>>(
+  pub async fn remove_workspace_members(
     &self,
-    workspace_id: T,
+    workspace_id: &Uuid,
     member_emails: Vec<String>,
   ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/member",
-      self.base_url,
-      workspace_id.as_ref()
-    );
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_id);
     let payload = WorkspaceMembers::from(member_emails);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)

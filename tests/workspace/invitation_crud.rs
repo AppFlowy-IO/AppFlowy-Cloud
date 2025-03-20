@@ -27,7 +27,7 @@ async fn invite_workspace_crud() {
   // alice invite bob to alice's workspace
   alice_client
     .invite_workspace_members(
-      alice_workspace_id.to_string().as_str(),
+      &alice_workspace_id,
       vec![WorkspaceMemberInvitation {
         email: bob.email.clone(),
         role: AFRole::Member,

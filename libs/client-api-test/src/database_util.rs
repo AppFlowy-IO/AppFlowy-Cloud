@@ -16,7 +16,7 @@ use uuid::{Error, Uuid};
 
 pub struct TestDatabaseCollabService {
   pub api_client: client_api::Client,
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
 }
 
 #[async_trait]
@@ -30,7 +30,7 @@ impl DatabaseCollabService for TestDatabaseCollabService {
     let encoded_collab = match encoded_collab {
       None => {
         let params = QueryCollabParams {
-          workspace_id: self.workspace_id.parse()?,
+          workspace_id: self.workspace_id,
           inner: QueryCollab {
             object_id: object_id.parse()?,
             collab_type: object_type,

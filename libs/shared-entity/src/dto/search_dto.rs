@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use uuid::Uuid;
 
 /// Parameters used to customize the collab vector search query.
 /// In response, a list of [SearchDocumentResponseItem] is returned.
@@ -21,9 +22,9 @@ pub struct SearchDocumentRequest {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchDocumentResponseItem {
   /// Unique object identifier.
-  pub object_id: String,
+  pub object_id: Uuid,
   /// Workspace, result object belongs to.
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
   /// Match score of this search result to an original query.
   /// The lower the better. List of results is sorted by this value by default.
   pub score: f64,

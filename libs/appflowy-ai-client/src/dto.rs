@@ -3,6 +3,8 @@ use serde_json::json;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use uuid::Uuid;
+
 pub const STREAM_METADATA_KEY: &str = "0";
 pub const STREAM_ANSWER_KEY: &str = "1";
 pub const STREAM_IMAGE_KEY: &str = "2";
@@ -439,7 +441,7 @@ pub struct CustomPrompt {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CalculateSimilarityParams {
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
   pub input: String,
   pub expected: String,
   pub use_embedding: bool,
@@ -459,11 +461,11 @@ pub struct CompletionMessage {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompletionMetadata {
   /// A unique identifier for the object. Object could be a document id.
-  pub object_id: String,
+  pub object_id: Uuid,
   /// The workspace identifier.
   ///
   /// This field must be provided when generating images. We use workspace ID to track image usage.
-  pub workspace_id: Option<String>,
+  pub workspace_id: Option<Uuid>,
   /// A list of relevant document IDs.
   ///
   /// When using completions for document-related tasks, this should include the document ID.

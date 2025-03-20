@@ -610,7 +610,7 @@ impl Client {
   }
 
   #[instrument(level = "info", skip_all, err)]
-  pub async fn delete_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
+  pub async fn delete_workspace(&self, workspace_id: &Uuid) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
@@ -692,7 +692,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_folder(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     depth: Option<u32>,
     root_view_id: Option<String>,
   ) -> Result<FolderView, AppResponseError> {
@@ -729,7 +729,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_favorite(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<FavoriteSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/favorite", self.base_url, workspace_id);
     let resp = self
@@ -746,7 +746,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_recent(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<RecentSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/recent", self.base_url, workspace_id);
     let resp = self
@@ -763,7 +763,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_trash(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<TrashSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/trash", self.base_url, workspace_id);
     let resp = self
@@ -877,8 +877,8 @@ impl Client {
 
   pub async fn get_snapshot_list(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<AFSnapshotMetas, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/{}/snapshot/list",
@@ -897,8 +897,8 @@ impl Client {
 
   pub async fn get_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     params: QuerySnapshotParams,
   ) -> Result<SnapshotData, AppResponseError> {
     let url = format!(
@@ -919,8 +919,8 @@ impl Client {
 
   pub async fn create_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     collab_type: CollabType,
   ) -> Result<AFSnapshotMeta, AppResponseError> {
     let url = format!(
@@ -1151,7 +1151,7 @@ impl Client {
   }
 
   #[instrument(level = "info", skip_all)]
-  pub(crate) fn batch_create_collab_url(&self, workspace_id: &str) -> String {
+  pub(crate) fn batch_create_collab_url(&self, workspace_id: &Uuid) -> String {
     format!(
       "{}/api/workspace/{}/batch/collab",
       self.base_url, workspace_id

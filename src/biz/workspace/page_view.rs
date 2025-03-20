@@ -670,6 +670,7 @@ async fn update_favorite_view(
   view_id: &str,
   folder: &mut Folder,
   is_favorite: bool,
+  is_pinned: bool,
 ) -> Result<Vec<u8>, AppError> {
   let existing_extra: Option<serde_json::Value> = folder
     .get_view(view_id)
@@ -684,10 +685,10 @@ async fn update_favorite_view(
     .map(|extra| serde_json::from_str(extra))
     .transpose()?;
   let extra = if let Some(mut existing_extra) = existing_extra {
-    existing_extra["is_pinned"] = serde_json::Value::Bool(is_favorite);
+    existing_extra["is_pinned"] = serde_json::Value::Bool(is_pinned);
     existing_extra.to_string()
   } else {
-    json!({"is_pinned": is_favorite}).to_string().to_string()
+    json!({"is_pinned": is_pinned}).to_string().to_string()
   };
 
   let encoded_update = {
@@ -1303,6 +1304,7 @@ pub async fn update_page(
   Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn favorite_page(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
@@ -1311,11 +1313,12 @@ pub async fn favorite_page(
   workspace_id: Uuid,
   view_id: &str,
   is_favorite: bool,
+  is_pinned: bool,
 ) -> Result<(), AppError> {
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
-  let folder_update = update_favorite_view(view_id, &mut folder, is_favorite).await?;
+  let folder_update = update_favorite_view(view_id, &mut folder, is_favorite, is_pinned).await?;
   update_workspace_folder_data(
     appflowy_web_metrics,
     server,
@@ -1597,6 +1600,7 @@ pub async fn get_page_view_collab(
     .collect();
   let folder_view = FolderView {
     view_id: view_id.to_string(),
+    parent_view_id: view.parent_view_id.clone(),
     name: view.name.clone(),
     icon: view
       .icon
@@ -1608,6 +1612,8 @@ pub async fn get_page_view_collab(
     is_published: publish_view_ids.contains(view_id),
     layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
+    created_by: view.created_by,
+    last_edited_by: view.last_edited_by,
     last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
     is_locked: view.is_locked,
     extra: view.extra.as_ref().map(|e| parse_extra_field_as_json(e)),

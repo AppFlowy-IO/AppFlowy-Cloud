@@ -800,7 +800,10 @@ async fn favorite_page() {
     .favorite_page_view(
       Uuid::parse_str(&workspace_id).unwrap(),
       &favorite_view_id,
-      &FavoritePageParams { is_favorite: true },
+      &FavoritePageParams {
+        is_favorite: true,
+        is_pinned: true,
+      },
     )
     .await
     .unwrap();

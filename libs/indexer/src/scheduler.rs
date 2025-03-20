@@ -280,13 +280,12 @@ impl IndexerScheduler {
     Ok(())
   }
 
-  pub async fn can_index_workspace(&self, workspace_id: &str) -> Result<bool, AppError> {
+  pub async fn can_index_workspace(&self, workspace_id: &Uuid) -> Result<bool, AppError> {
     if !self.index_enabled() {
       return Ok(false);
     }
 
-    let uuid = Uuid::parse_str(workspace_id)?;
-    let settings = select_workspace_settings(&self.pg_pool, &uuid).await?;
+    let settings = select_workspace_settings(&self.pg_pool, workspace_id).await?;
     match settings {
       None => Ok(true),
       Some(settings) => Ok(!settings.disable_search_indexing),

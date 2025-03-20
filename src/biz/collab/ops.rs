@@ -347,8 +347,8 @@ pub async fn list_database(
   let mut ws_body_collab = get_latest_collab(
     collab_storage,
     GetCollabOrigin::Server,
-    &workspace_id,
-    &ws_db_oid,
+    workspace_id,
+    ws_db_oid,
     CollabType::WorkspaceDatabase,
   )
   .await?;
@@ -443,7 +443,7 @@ pub async fn insert_database_row(
     row_update.set_created_at(Utc::now().timestamp());
   });
 
-  let new_row_doc_creation: Option<(String, CreatedRowDocument)> = match row_doc_content {
+  let new_row_doc_creation: Option<(Uuid, CreatedRowDocument)> = match row_doc_content {
     Some(row_doc_content) if !row_doc_content.is_empty() => {
       // update row to indicate that the document is not empty
       let is_document_empty_id =
@@ -567,7 +567,7 @@ pub async fn insert_database_row(
       workspace_uuid,
       &uid,
       CollabParams {
-        object_id: new_db_row_id.to_string(),
+        object_id: new_db_row_id,
         encoded_collab_v1: new_db_row_ec_v1.into(),
         collab_type: CollabType::DatabaseRow,
       },
@@ -849,7 +849,7 @@ pub async fn list_database_row_ids_updated(
   let row_ids: Vec<_> = list_database_row_ids(collab_storage, workspace_uuid, database_uuid)
     .await?
     .into_iter()
-    .map_ok(|row| Uuid::parse_str(&row.id))
+    .flat_map(|row| Uuid::parse_str(&row.id))
     .collect();
 
   let updated_row_ids =

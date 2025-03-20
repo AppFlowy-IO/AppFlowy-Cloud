@@ -36,6 +36,7 @@ use crate::biz::collab::folder_view::to_folder_view_icon;
 use crate::biz::collab::folder_view::to_folder_view_layout;
 use crate::biz::collab::utils::collab_from_doc_state;
 use tracing::error;
+use uuid::Uuid;
 use workspace_template::gen_view_id;
 use yrs::Any;
 use yrs::Array;
@@ -97,7 +98,7 @@ pub struct PublishCollabDuplicator {
   /// A list of database linked views to be added to workspace database
   workspace_databases: HashMap<String, Vec<String>>,
   /// A list of collab objects to added to the workspace (oid -> collab)
-  collabs_to_insert: HashMap<String, (CollabType, Vec<u8>)>,
+  collabs_to_insert: HashMap<Uuid, (CollabType, Vec<u8>)>,
   /// time of duplication
   ts_now: i64,
   /// for fetching published data
@@ -108,7 +109,7 @@ pub struct PublishCollabDuplicator {
   /// user initiating the duplication
   duplicator_uid: i64,
   /// workspace to duplicate into
-  dest_workspace_id: String,
+  dest_workspace_id: Uuid,
   /// view of workspace to duplicate into
   dest_view_id: String,
 }
@@ -189,7 +190,7 @@ impl PublishCollabDuplicator {
       let action = format!("duplicate collab: {}", params);
       collab_storage
         .upsert_new_collab_with_transaction(
-          &dest_workspace_id,
+          dest_workspace_id,
           &duplicator_uid,
           params,
           &mut txn,

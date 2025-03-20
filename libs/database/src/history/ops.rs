@@ -164,7 +164,7 @@ async fn insert_snapshot_state<'a, E: Executor<'a, Database = Postgres>>(
 /// that has a `created_at` timestamp greater than or equal to the specified timestamp.
 ///
 pub async fn get_latest_snapshot_state<'a, E: Executor<'a, Database = Postgres>>(
-  oid: &str,
+  oid: &Uuid,
   timestamp: i64,
   collab_type: &CollabType,
   executor: E,
@@ -179,7 +179,7 @@ pub async fn get_latest_snapshot_state<'a, E: Executor<'a, Database = Postgres>>
         ORDER BY created_at ASC
         LIMIT 1
         "#,
-    oid,
+    oid.to_string(),
     partition_key,
     timestamp,
   )
@@ -190,7 +190,7 @@ pub async fn get_latest_snapshot_state<'a, E: Executor<'a, Database = Postgres>>
 
 /// Gets the latest snapshot for the specified object identifier and partition key.
 pub async fn get_latest_snapshot(
-  oid: &str,
+  oid: &Uuid,
   collab_type: &CollabType,
   pool: &PgPool,
 ) -> Result<Option<SingleSnapshotInfoPb>, sqlx::Error> {
@@ -206,7 +206,7 @@ pub async fn get_latest_snapshot(
         ORDER BY created_at DESC
         LIMIT 1
         "#,
-    oid,
+    oid.to_string(),
     partition_key,
   )
   .fetch_optional(transaction.deref_mut())

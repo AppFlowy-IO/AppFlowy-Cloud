@@ -25,7 +25,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn enforce_role(
     &self,
     uid: &i64,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     role: AFRole,
   ) -> Result<(), AppError> {
     let result = self
@@ -42,7 +42,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn enforce_action(
     &self,
     uid: &i64,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     action: Action,
   ) -> Result<(), AppError> {
     let result = self

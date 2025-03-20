@@ -8,6 +8,8 @@ use collab_rt_entity::user::RealtimeUser;
 pub use collab_rt_entity::RealtimeMessage;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::Debug;
+use uuid::Uuid;
+
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct Connect {
@@ -49,8 +51,8 @@ pub struct ClientHttpStreamMessage {
 #[rtype(result = "Result<(), AppError>")]
 pub struct ClientHttpUpdateMessage {
   pub user: RealtimeUser,
-  pub workspace_id: String,
-  pub object_id: String,
+  pub workspace_id: Uuid,
+  pub object_id: Uuid,
   /// Encoded yrs::Update or doc state
   pub update: Bytes,
   /// If the state_vector is not None, it will calculate missing updates base on
@@ -65,7 +67,7 @@ pub struct ClientHttpUpdateMessage {
 #[derive(Message)]
 #[rtype(result = "Result<(), AppError>")]
 pub struct ClientGenerateEmbeddingMessage {
-  pub workspace_id: String,
-  pub object_id: String,
+  pub workspace_id: Uuid,
+  pub object_id: Uuid,
   pub return_tx: Option<tokio::sync::oneshot::Sender<Result<(), AppError>>>,
 }

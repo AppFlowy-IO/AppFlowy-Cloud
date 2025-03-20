@@ -46,25 +46,23 @@ use uuid::Uuid;
 pub async fn insert_into_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   uid: &i64,
-  workspace_id: &str,
+  workspace_id: &Uuid,
   params: &CollabParams,
 ) -> Result<(), AppError> {
   let partition_key = crate::collab::partition_key_from_collab_type(&params.collab_type);
-  let workspace_id = Uuid::from_str(workspace_id)?;
   tracing::trace!(
     "upsert collab:{}, len:{}",
     params.object_id,
     params.encoded_collab_v1.len(),
   );
 
-  let oid = params.object_id.parse::<Uuid>()?;
   sqlx::query!(
     r#"
       INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oid)
       DO UPDATE SET blob = $2, len = $3, owner_uid = $5 WHERE excluded.workspace_id = af_collab.workspace_id;
     "#,
-    oid,
+    params.object_id,
     params.encoded_collab_v1.as_ref(),
     params.encoded_collab_v1.len() as i32,
     partition_key,
@@ -141,7 +139,7 @@ pub async fn insert_into_af_collab(
 pub async fn insert_into_af_collab_bulk_for_user(
   tx: &mut Transaction<'_, Postgres>,
   uid: &i64,
-  workspace_id: &str,
+  workspace_id: Uuid,
   collab_params_list: &[CollabParams],
 ) -> Result<(), AppError> {
   if collab_params_list.is_empty() {
@@ -149,7 +147,6 @@ pub async fn insert_into_af_collab_bulk_for_user(
   }
 
   let encrypt = 0;
-  let workspace_uuid = Uuid::from_str(workspace_id)?;
 
   // Insert values into `af_collab` tables in bulk
   let len = collab_params_list.len();
@@ -159,7 +156,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
   let mut visited = HashSet::with_capacity(collab_params_list.len());
   for params in collab_params_list {
-    let oid = params.object_id.parse::<Uuid>()?;
+    let oid = params.object_id;
     if visited.insert(oid) {
       let partition_key = partition_key_from_collab_type(&params.collab_type);
       object_ids.push(oid);
@@ -170,7 +167,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
   }
 
   let uids: Vec<i64> = vec![*uid; object_ids.len()];
-  let workspace_ids: Vec<Uuid> = vec![workspace_uuid; object_ids.len()];
+  let workspace_ids: Vec<Uuid> = vec![workspace_id; object_ids.len()];
   // Bulk insert into `af_collab` for the provided collab params
   sqlx::query!(
       r#"
@@ -257,7 +254,7 @@ pub async fn batch_select_collab_blob(
     object_ids_by_collab_type
       .entry(params.collab_type)
       .or_default()
-      .push(params.object_id.parse().unwrap());
+      .push(params.object_id);
   }
 
   for (collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
@@ -338,7 +335,7 @@ pub async fn create_snapshot(
 ///
 #[inline]
 pub async fn latest_snapshot_time<'a, E: Executor<'a, Database = Postgres>>(
-  oid: &str,
+  oid: &Uuid,
   executor: E,
 ) -> Result<Option<chrono::DateTime<Utc>>, sqlx::Error> {
   let latest_snapshot_time: Option<chrono::DateTime<Utc>> = sqlx::query_scalar(
@@ -352,7 +349,7 @@ pub async fn latest_snapshot_time<'a, E: Executor<'a, Database = Postgres>>(
 }
 #[inline]
 pub async fn should_create_snapshot2<'a, E: Executor<'a, Database = Postgres>>(
-  oid: &str,
+  oid: &Uuid,
   executor: E,
 ) -> Result<bool, sqlx::Error> {
   let hours = Utc::now() - Duration::hours(SNAPSHOT_PER_HOUR);
@@ -375,12 +372,11 @@ pub async fn should_create_snapshot2<'a, E: Executor<'a, Database = Postgres>>(
 ///
 pub async fn create_snapshot_and_maintain_limit<'a>(
   mut transaction: Transaction<'a, Postgres>,
-  workspace_id: &str,
-  oid: &str,
+  workspace_id: &Uuid,
+  oid: &Uuid,
   encoded_collab_v1: &[u8],
   snapshot_limit: i64,
 ) -> Result<AFSnapshotMeta, AppError> {
-  let workspace_id = Uuid::from_str(workspace_id)?;
   let snapshot_meta = sqlx::query_as!(
     AFSnapshotMeta,
     r#"
@@ -388,7 +384,7 @@ pub async fn create_snapshot_and_maintain_limit<'a>(
       VALUES ($1, $2, $3, $4, $5)
       RETURNING sid AS snapshot_id, oid AS object_id, created_at
     "#,
-    oid,
+    oid.to_string(),
     encoded_collab_v1,
     encoded_collab_v1.len() as i64,
     0,
@@ -420,11 +416,10 @@ pub async fn create_snapshot_and_maintain_limit<'a>(
 #[inline]
 pub async fn select_snapshot(
   pg_pool: &PgPool,
-  workspace_id: &str,
-  object_id: &str,
+  workspace_id: &Uuid,
+  object_id: &Uuid,
   snapshot_id: &i64,
 ) -> Result<Option<AFSnapshotRow>, Error> {
-  let workspace_id = Uuid::from_str(workspace_id).map_err(|err| Error::Decode(err.into()))?;
   let row = sqlx::query_as!(
     AFSnapshotRow,
     r#"
@@ -432,7 +427,7 @@ pub async fn select_snapshot(
       WHERE sid = $1 AND oid = $2 AND workspace_id = $3 AND deleted_at IS NULL;
     "#,
     snapshot_id,
-    object_id,
+    object_id.to_string(),
     workspace_id
   )
   .fetch_optional(pg_pool)
@@ -465,7 +460,7 @@ pub async fn select_latest_snapshot(
 /// Returns list of snapshots for given object_id in descending order of creation time.
 pub async fn get_all_collab_snapshot_meta(
   pg_pool: &PgPool,
-  object_id: &str,
+  object_id: &Uuid,
 ) -> Result<AFSnapshotMetas, Error> {
   let snapshots: Vec<AFSnapshotMeta> = sqlx::query_as!(
     AFSnapshotMeta,
@@ -475,7 +470,7 @@ pub async fn get_all_collab_snapshot_meta(
     WHERE oid = $1 AND deleted_at IS NULL
     ORDER BY created_at DESC;
     "#,
-    object_id
+    object_id.to_string()
   )
   .fetch_all(pg_pool)
   .await?;

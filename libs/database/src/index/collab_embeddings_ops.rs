@@ -213,9 +213,9 @@ pub struct CollabId {
 impl From<CollabId> for QueryCollabParams {
   fn from(value: CollabId) -> Self {
     QueryCollabParams {
-      workspace_id: value.workspace_id.to_string(),
+      workspace_id: value.workspace_id,
       inner: QueryCollab {
-        object_id: value.object_id.to_string(),
+        object_id: value.object_id,
         collab_type: value.collab_type,
       },
     }

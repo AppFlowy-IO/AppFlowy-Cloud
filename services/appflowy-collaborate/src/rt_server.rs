@@ -26,6 +26,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::task::yield_now;
 use tokio::time::interval;
 use tracing::{error, info, trace, warn};
+use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::StateVector;
 
@@ -37,7 +38,7 @@ pub struct CollaborationServer<S> {
   /// Keep track of all collab groups
   group_manager: Arc<GroupManager<S>>,
   connect_state: ConnectState,
-  group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
+  group_sender_by_object_id: Arc<DashMap<Uuid, GroupCommandSender>>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
   enable_custom_runtime: bool,
@@ -88,7 +89,7 @@ where
       )
       .await?,
     );
-    let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>> =
+    let group_sender_by_object_id: Arc<DashMap<_, GroupCommandSender>> =
       Arc::new(Default::default());
 
     spawn_period_check_inactive_group(Arc::downgrade(&group_manager), &group_sender_by_object_id);
@@ -164,7 +165,8 @@ where
     message_by_oid: MessageByObjectId,
   ) -> Result<(), RealtimeError> {
     for (object_id, collab_messages) in message_by_oid.into_inner() {
-      let group_cmd_sender = self.create_group_if_not_exist(&object_id);
+      let object_id = Uuid::parse_str(&object_id)?;
+      let group_cmd_sender = self.create_group_if_not_exist(object_id);
       let cloned_user = user.clone();
       // Create a new task to send a message to the group command runner without waiting for the
       // result. This approach is used to prevent potential issues with the actor's mailbox in
@@ -210,7 +212,7 @@ where
     &self,
     message: ClientHttpUpdateMessage,
   ) -> Result<(), RealtimeError> {
-    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
+    let group_cmd_sender = self.create_group_if_not_exist(message.object_id);
     tokio::spawn(async move {
       let object_id = message.object_id.clone();
       let (tx, rx) = tokio::sync::oneshot::channel();
@@ -316,15 +318,15 @@ where
   }
 
   #[inline]
-  fn create_group_if_not_exist(&self, object_id: &str) -> Sender<GroupCommand> {
+  fn create_group_if_not_exist(&self, object_id: Uuid) -> Sender<GroupCommand> {
     let old_sender = self
       .group_sender_by_object_id
-      .get(object_id)
+      .get(&object_id)
       .map(|entry| entry.value().clone());
 
     let sender = match old_sender {
       Some(sender) => sender,
-      None => match self.group_sender_by_object_id.entry(object_id.to_string()) {
+      None => match self.group_sender_by_object_id.entry(object_id) {
         Entry::Occupied(entry) => entry.get().clone(),
         Entry::Vacant(entry) => {
           let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
@@ -354,7 +356,7 @@ where
     &self,
     message: ClientGenerateEmbeddingMessage,
   ) -> Result<(), RealtimeError> {
-    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
+    let group_cmd_sender = self.create_group_if_not_exist(message.object_id);
     tokio::spawn(async move {
       let result = group_cmd_sender
         .send(GroupCommand::GenerateCollabEmbedding {
@@ -387,7 +389,7 @@ where
 
 fn spawn_period_check_inactive_group<S>(
   weak_groups: Weak<GroupManager<S>>,
-  group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
+  group_sender_by_object_id: &Arc<DashMap<Uuid, GroupCommandSender>>,
 ) where
   S: CollabStorage,
 {

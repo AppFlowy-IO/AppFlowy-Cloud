@@ -6,6 +6,7 @@ use redis::aio::MultiplexedConnection;
 use redis::{AsyncCommands, Client};
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
+use uuid::Uuid;
 
 pub struct AwarenessGossip {
   client: Client,
@@ -13,11 +14,11 @@ pub struct AwarenessGossip {
 
 impl AwarenessGossip {
   /// Returns Redis stream key, that's storing entries mapped to/from [AwarenessStreamUpdate].
-  pub fn publish_key(workspace_id: &str, object_id: &str) -> String {
+  pub fn publish_key(workspace_id: &Uuid, object_id: &Uuid) -> String {
     format!("af:awareness:{}:{}", workspace_id, object_id)
   }
 
-  pub fn state_key(workspace_id: &str, object_id: &str) -> String {
+  pub fn state_key(workspace_id: &Uuid, object_id: &Uuid) -> String {
     format!("af:awareness_state:{}:{}", workspace_id, object_id)
   }
 
@@ -27,8 +28,8 @@ impl AwarenessGossip {
 
   pub async fn sink(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<AwarenessUpdateSink, StreamError> {
     tracing::trace!("publishing awareness state for object {}", object_id);
     let mut conn = self.client.get_multiplexed_async_connection().await?;
@@ -42,8 +43,8 @@ impl AwarenessGossip {
 
   pub fn awareness_stream(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> impl Stream<Item = Result<AwarenessStreamUpdate, StreamError>> + 'static {
     let client = self.client.clone();
     let pubsub_key = Self::publish_key(workspace_id, object_id);
@@ -79,7 +80,7 @@ pub struct AwarenessUpdateSink {
 }
 
 impl AwarenessUpdateSink {
-  pub fn new(conn: MultiplexedConnection, workspace_id: &str, object_id: &str) -> Self {
+  pub fn new(conn: MultiplexedConnection, workspace_id: &Uuid, object_id: &Uuid) -> Self {
     let publish_key = AwarenessGossip::publish_key(workspace_id, object_id);
     AwarenessUpdateSink {
       conn: conn.into(),

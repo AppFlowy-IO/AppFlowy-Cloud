@@ -1,19 +1,19 @@
+use super::disk_cache::CollabDiskCache;
+use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
+use crate::CollabMetrics;
+use app_error::AppError;
 use bytes::Bytes;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
+use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{error, event, Level};
-
-use super::disk_cache::CollabDiskCache;
-use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
-use crate::CollabMetrics;
-use app_error::AppError;
-use database::file::s3_client_impl::AwsS3BucketClientImpl;
-use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
+use uuid::{Error, Uuid};
 
 #[derive(Clone)]
 pub struct CollabCache {
@@ -48,7 +48,7 @@ impl CollabCache {
 
   pub async fn bulk_insert_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params_list: Vec<CollabParams>,
   ) -> Result<(), AppError> {
@@ -86,7 +86,7 @@ impl CollabCache {
 
   pub async fn get_encode_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
@@ -123,9 +123,9 @@ impl CollabCache {
   /// returns a hashmap of the object_id to the encoded collab data.
   pub async fn batch_get_encode_collab<T: Into<QueryCollab>>(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     queries: Vec<T>,
-  ) -> HashMap<String, QueryCollabResult> {
+  ) -> HashMap<Uuid, QueryCollabResult> {
     let queries = queries.into_iter().map(Into::into).collect::<Vec<_>>();
     let mut results = HashMap::new();
     // 1. Processes valid queries against the in-memory cache to retrieve cached values.
@@ -166,7 +166,7 @@ impl CollabCache {
   /// The data is inserted into both the memory and disk cache.
   pub async fn insert_encode_collab_data(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
@@ -192,7 +192,7 @@ impl CollabCache {
     Ok(())
   }
 
-  fn cache_collab(&self, object_id: String, collab_type: CollabType, encode_collab_data: Bytes) {
+  fn cache_collab(&self, object_id: Uuid, collab_type: CollabType, encode_collab_data: Bytes) {
     let mem_cache = self.mem_cache.clone();
     tokio::spawn(async move {
       if let Err(err) = mem_cache
@@ -214,7 +214,7 @@ impl CollabCache {
 
   pub async fn insert_encode_collab_to_disk(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
     params: CollabParams,
   ) -> Result<(), AppError> {
@@ -227,7 +227,7 @@ impl CollabCache {
     Ok(())
   }
 
-  pub async fn delete_collab(&self, workspace_id: &str, object_id: &str) -> Result<(), AppError> {
+  pub async fn delete_collab(&self, workspace_id: &Uuid, object_id: &Uuid) -> Result<(), AppError> {
     self.mem_cache.remove_encode_collab(object_id).await?;
     self
       .disk_cache
@@ -236,7 +236,7 @@ impl CollabCache {
     Ok(())
   }
 
-  pub async fn is_exist(&self, workspace_id: &str, oid: &str) -> Result<bool, AppError> {
+  pub async fn is_exist(&self, workspace_id: &Uuid, oid: &Uuid) -> Result<bool, AppError> {
     if let Ok(value) = self.mem_cache.is_exist(oid).await {
       if value {
         return Ok(value);

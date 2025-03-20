@@ -1,13 +1,13 @@
-use app_error::AppError;
-use async_trait::async_trait;
-use database_entity::dto::AFAccessLevel;
-use tracing::instrument;
-
 use crate::{
   act::Action,
   collab::{CollabAccessControl, RealtimeAccessControl},
   entity::ObjectType,
 };
+use app_error::AppError;
+use async_trait::async_trait;
+use database_entity::dto::AFAccessLevel;
+use tracing::instrument;
+use uuid::Uuid;
 
 use super::access::AccessControl;
 
@@ -26,9 +26,9 @@ impl CollabAccessControlImpl {
 impl CollabAccessControl for CollabAccessControlImpl {
   async fn enforce_action(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
     action: Action,
   ) -> Result<(), AppError> {
     // TODO: allow non workspace member to read a collab.
@@ -57,9 +57,9 @@ impl CollabAccessControl for CollabAccessControlImpl {
 
   async fn enforce_access_level(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
     access_level: AFAccessLevel,
   ) -> Result<(), AppError> {
     // TODO: allow non workspace member to read a collab.
@@ -91,7 +91,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   async fn update_access_level_policy(
     &self,
     _uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
     _level: AFAccessLevel,
   ) -> Result<(), AppError> {
     // TODO: allow non workspace member to read a collab.
@@ -99,7 +99,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn remove_access_level(&self, _uid: &i64, _oid: &str) -> Result<(), AppError> {
+  async fn remove_access_level(&self, _uid: &i64, _oid: &Uuid) -> Result<(), AppError> {
     // TODO: allow non workspace member to read a collab.
     Ok(())
   }
@@ -117,9 +117,9 @@ impl RealtimeCollabAccessControlImpl {
 
   async fn can_perform_action(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
     required_action: Action,
   ) -> Result<bool, AppError> {
     // TODO: allow non workspace member to read a collab.
@@ -146,9 +146,9 @@ impl RealtimeCollabAccessControlImpl {
 impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
   async fn can_write_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
   ) -> Result<bool, AppError> {
     self
       .can_perform_action(workspace_id, uid, oid, Action::Write)
@@ -157,9 +157,9 @@ impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
 
   async fn can_read_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
   ) -> Result<bool, AppError> {
     self
       .can_perform_action(workspace_id, uid, oid, Action::Read)

@@ -33,7 +33,7 @@ impl Client {
     &self,
     workspace_id: &str,
     params: CompleteTextParams,
-  ) -> Result<CompletionStream, AppResponseError> {
+  ) -> Result<CompletionStream<AppResponseError>, AppResponseError> {
     let url = format!(
       "{}/api/ai/{}/v2/complete/stream",
       self.base_url, workspace_id

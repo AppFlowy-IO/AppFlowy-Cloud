@@ -455,17 +455,16 @@ impl Stream for QuestionStream {
     }
   }
 }
-
 #[pin_project]
-pub struct CompletionStream {
-  stream: Pin<Box<dyn Stream<Item = Result<serde_json::Value, AppResponseError>> + Send>>,
+pub struct CompletionStream<T> {
+  stream: Pin<Box<dyn Stream<Item = Result<serde_json::Value, T>> + Send>>,
   buffer: Vec<u8>,
 }
 
-impl CompletionStream {
+impl<T> CompletionStream<T> {
   pub fn new<S>(stream: S) -> Self
   where
-    S: Stream<Item = Result<serde_json::Value, AppResponseError>> + Send + 'static,
+    S: Stream<Item = Result<serde_json::Value, T>> + Send + 'static,
   {
     CompletionStream {
       stream: Box::pin(stream),
@@ -478,8 +477,12 @@ pub enum CompletionStreamValue {
   Answer { value: String },
   Comment { value: String },
 }
-impl Stream for CompletionStream {
-  type Item = Result<CompletionStreamValue, AppResponseError>;
+
+impl<T> Stream for CompletionStream<T>
+where
+  T: std::fmt::Debug, // Constraint T to be debug for logging
+{
+  type Item = Result<CompletionStreamValue, T>;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let this = self.project();

@@ -56,10 +56,10 @@ pub async fn duplicate_published_collab_to_workspace(
   bucket_client: AwsS3BucketClientImpl,
   collab_storage: Arc<CollabAccessControlStorage>,
   dest_uid: i64,
-  publish_view_id: String,
-  dest_workspace_id: String,
-  dest_view_id: String,
-) -> Result<String, AppError> {
+  publish_view_id: Uuid,
+  dest_workspace_id: Uuid,
+  dest_view_id: Uuid,
+) -> Result<Uuid, AppError> {
   let copier = PublishCollabDuplicator::new(
     pg_pool.clone(),
     bucket_client,
@@ -70,7 +70,7 @@ pub async fn duplicate_published_collab_to_workspace(
   );
 
   let time_now = chrono::Utc::now().timestamp_millis();
-  let root_view_id_for_duplicate = copier.duplicate(&publish_view_id).await?;
+  let root_view_id_for_duplicate = copier.duplicate(publish_view_id).await?;
   let elapsed = chrono::Utc::now().timestamp_millis() - time_now;
   tracing::info!(
     "duplicate_published_collab_to_workspace: elapsed time: {}ms",
@@ -85,18 +85,18 @@ pub struct PublishCollabDuplicator {
   collab_storage: Arc<CollabAccessControlStorage>,
   /// A map to store the old view_id that was duplicated and new view_id assigned.
   /// If value is none, it means the view_id is not published.
-  duplicated_refs: HashMap<String, Option<String>>,
+  duplicated_refs: HashMap<Uuid, Option<Uuid>>,
   /// published_database_id -> view_id
-  duplicated_db_main_view: HashMap<String, String>,
+  duplicated_db_main_view: HashMap<Uuid, Uuid>,
   /// published_database_view_id -> new_view_id
-  duplicated_db_view: HashMap<String, String>,
+  duplicated_db_view: HashMap<Uuid, Uuid>,
   /// published_database_row_id -> new_row_id
-  duplicated_db_row: HashMap<String, String>,
+  duplicated_db_row: HashMap<Uuid, Uuid>,
   /// new views to be added to the folder
   /// view_id -> view
-  views_to_add: HashMap<String, View>,
+  views_to_add: HashMap<Uuid, View>,
   /// A list of database linked views to be added to workspace database
-  workspace_databases: HashMap<String, Vec<String>>,
+  workspace_databases: HashMap<Uuid, Vec<Uuid>>,
   /// A list of collab objects to added to the workspace (oid -> collab)
   collabs_to_insert: HashMap<Uuid, (CollabType, Vec<u8>)>,
   /// time of duplication
@@ -111,7 +111,7 @@ pub struct PublishCollabDuplicator {
   /// workspace to duplicate into
   dest_workspace_id: Uuid,
   /// view of workspace to duplicate into
-  dest_view_id: String,
+  dest_view_id: Uuid,
 }
 
 impl PublishCollabDuplicator {
@@ -120,8 +120,8 @@ impl PublishCollabDuplicator {
     bucket_client: AwsS3BucketClientImpl,
     collab_storage: Arc<CollabAccessControlStorage>,
     dest_uid: i64,
-    dest_workspace_id: String,
-    dest_view_id: String,
+    dest_workspace_id: Uuid,
+    dest_view_id: Uuid,
   ) -> Self {
     let ts_now = chrono::Utc::now().timestamp();
     Self {
@@ -142,14 +142,11 @@ impl PublishCollabDuplicator {
     }
   }
 
-  async fn duplicate(mut self, publish_view_id: &str) -> Result<String, AppError> {
+  async fn duplicate(mut self, publish_view_id: Uuid) -> Result<Uuid, AppError> {
     // new view after deep copy
     // this is the root of the document/database duplicated
     let root_view_id = gen_view_id();
-    let mut root_view = match self
-      .deep_copy(root_view_id.clone(), publish_view_id)
-      .await?
-    {
+    let mut root_view = match self.deep_copy(root_view_id, publish_view_id).await? {
       Some(v) => v,
       None => {
         return Err(AppError::RecordNotFound(
@@ -157,7 +154,7 @@ impl PublishCollabDuplicator {
         ))
       },
     };
-    root_view.parent_view_id.clone_from(&self.dest_view_id);
+    root_view.parent_view_id = self.dest_view_id.to_string();
 
     // destructuring self to own inner values, avoids cloning
     let PublishCollabDuplicator {
@@ -201,15 +198,15 @@ impl PublishCollabDuplicator {
 
     // update database if any
     if !workspace_databases.is_empty() {
-      let ws_db_oid = select_workspace_database_oid(&pg_pool, &dest_workspace_id.parse()?).await?;
+      let ws_db_oid = select_workspace_database_oid(&pg_pool, &dest_workspace_id).await?;
       let ws_db_collab = {
         let ws_database_ec = get_latest_collab_encoded(
           &collab_storage,
           GetCollabOrigin::User {
             uid: duplicator_uid,
           },
-          &dest_workspace_id,
-          &ws_db_oid,
+          dest_workspace_id,
+          ws_db_oid,
           CollabType::WorkspaceDatabase,
         )
         .await?;
@@ -223,7 +220,15 @@ impl PublishCollabDuplicator {
         let ws_db_updates = {
           let view_ids_by_database_id = workspace_databases
             .into_iter()
-            .map(|(database_id, view_ids)| (database_id, view_ids.into_iter().collect()))
+            .map(|(database_id, view_ids)| {
+              (
+                database_id.to_string(),
+                view_ids
+                  .into_iter()
+                  .map(|view_id| view_id.to_string())
+                  .collect(),
+              )
+            })
             .collect::<HashMap<_, _>>();
 
           ws_db
@@ -246,7 +251,7 @@ impl PublishCollabDuplicator {
 
       collab_storage
         .upsert_new_collab_with_transaction(
-          &dest_workspace_id,
+          dest_workspace_id,
           &duplicator_uid,
           CollabParams {
             object_id: ws_db_oid.clone(),
@@ -257,7 +262,7 @@ impl PublishCollabDuplicator {
           "duplicate workspace database collab",
         )
         .await?;
-      broadcast_update(&collab_storage, &ws_db_oid, ws_db_updates).await?;
+      broadcast_update(&collab_storage, ws_db_oid, ws_db_updates).await?;
     }
 
     let collab_folder_encoded = get_latest_collab_encoded(
@@ -265,19 +270,18 @@ impl PublishCollabDuplicator {
       GetCollabOrigin::User {
         uid: duplicator_uid,
       },
-      &dest_workspace_id,
-      &dest_workspace_id,
+      dest_workspace_id,
+      dest_workspace_id,
       CollabType::Folder,
     )
     .await?;
 
-    let cloned_dest_workspace_id = dest_workspace_id.clone();
     let mut folder = tokio::task::spawn_blocking(move || {
       Folder::from_collab_doc_state(
         duplicator_uid,
         CollabOrigin::Server,
         collab_folder_encoded.into(),
-        &cloned_dest_workspace_id,
+        &dest_workspace_id.to_string(),
         vec![],
       )
       .map_err(|e| AppError::Unhandled(e.to_string()))
@@ -289,8 +293,8 @@ impl PublishCollabDuplicator {
         let mut folder_txn = folder.collab.transact_mut();
 
         let mut duplicated_view_ids = HashSet::new();
-        duplicated_view_ids.insert(root_view.id.clone());
         duplicated_view_ids.insert(dest_view_id);
+        duplicated_view_ids.insert(root_view.id.parse().unwrap());
         folder.body.views.insert(&mut folder_txn, root_view, None);
 
         // when child views are added, it must have a parent view that is previously added
@@ -302,10 +306,10 @@ impl PublishCollabDuplicator {
 
           let mut inserted = vec![];
           for (view_id, view) in views_to_add.iter() {
+            let parent_view_id = Uuid::parse_str(&view.parent_view_id).unwrap();
             // allow to insert if parent view is already inserted
             // or if view is standalone (view_id == parent_view_id)
-            if duplicated_view_ids.contains(&view.parent_view_id) || *view_id == view.parent_view_id
-            {
+            if duplicated_view_ids.contains(&parent_view_id) || *view_id == parent_view_id {
               folder
                 .body
                 .views
@@ -337,10 +341,10 @@ impl PublishCollabDuplicator {
 
     collab_storage
       .upsert_new_collab_with_transaction(
-        &dest_workspace_id,
+        dest_workspace_id,
         &duplicator_uid,
         CollabParams {
-          object_id: dest_workspace_id.clone(),
+          object_id: dest_workspace_id,
           encoded_collab_v1: updated_encoded_collab.await?.into(),
           collab_type: CollabType::Folder,
         },
@@ -377,8 +381,8 @@ impl PublishCollabDuplicator {
   /// Caller should set the parent_view_id to the parent view.
   async fn deep_copy(
     &mut self,
-    new_view_id: String,
-    publish_view_id: &str,
+    new_view_id: Uuid,
+    publish_view_id: Uuid,
   ) -> Result<Option<View>, AppError> {
     tracing::info!(
       "deep_copy: new_view_id: {}, publish_view_id: {}",
@@ -388,7 +392,7 @@ impl PublishCollabDuplicator {
 
     // attempt to get metadata and doc_state for published view
     let (metadata, published_blob) = match self
-      .get_published_data_for_view_id(&publish_view_id.parse()?)
+      .get_published_data_for_view_id(&publish_view_id)
       .await?
     {
       Some(published_data) => published_data,
@@ -405,11 +409,11 @@ impl PublishCollabDuplicator {
     // so we insert this knowledge into the duplicated_refs
     self
       .duplicated_refs
-      .insert(publish_view_id.to_string(), new_view_id.clone().into());
+      .insert(publish_view_id, new_view_id.clone().into());
 
     match metadata.view.layout {
       ViewLayout::Document => {
-        let doc_collab = collab_from_doc_state(published_blob, "")?;
+        let doc_collab = collab_from_doc_state(published_blob, &Uuid::default())?;
         let doc = Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
         let new_doc_view = self
           .deep_copy_doc(publish_view_id, new_view_id, doc, metadata)
@@ -417,7 +421,7 @@ impl PublishCollabDuplicator {
         Ok(Some(new_doc_view))
       },
       ViewLayout::Grid | ViewLayout::Board | ViewLayout::Calendar => {
-        let pub_view_id = metadata.view.view_id.clone();
+        let pub_view_id: Uuid = metadata.view.view_id.parse()?;
         let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
         let new_db_view = self
           .deep_copy_database_view(new_view_id, db_payload, &metadata, &pub_view_id)
@@ -433,13 +437,12 @@ impl PublishCollabDuplicator {
 
   async fn deep_copy_doc<'a>(
     &mut self,
-    pub_view_id: &str,
-    dup_view_id: String,
+    pub_view_id: Uuid,
+    dup_view_id: Uuid,
     doc: Document,
     metadata: PublishViewMetaData,
   ) -> Result<View, AppError> {
-    let mut ret_view =
-      self.new_folder_view(dup_view_id.clone(), &metadata.view, ViewLayout::Document);
+    let mut ret_view = self.new_folder_view(dup_view_id, &metadata.view, ViewLayout::Document);
 
     let mut doc_data = doc
       .get_document_data()
@@ -450,7 +453,7 @@ impl PublishCollabDuplicator {
     }
 
     if let Err(err) = self
-      .deep_copy_doc_databases(pub_view_id, &mut doc_data, &mut ret_view)
+      .deep_copy_doc_databases(&pub_view_id, &mut doc_data, &mut ret_view)
       .await
     {
       tracing::error!("failed to deep copy doc databases: {}", err);
@@ -467,7 +470,7 @@ impl PublishCollabDuplicator {
       let new_doc_bin = collab_to_bin(new_doc.split().0, CollabType::Document).await?;
       self
         .collabs_to_insert
-        .insert(ret_view.id.clone(), (CollabType::Document, new_doc_bin));
+        .insert(ret_view.id.parse()?, (CollabType::Document, new_doc_bin));
     }
     Ok(ret_view)
   }
@@ -504,10 +507,13 @@ impl PublishCollabDuplicator {
 
         for page_id in page_ids {
           let page_id_str = match page_id.as_str() {
-            Some(page_id_str) => page_id_str,
+            Some(page_id_str) => Uuid::parse_str(page_id_str)?,
             None => continue,
           };
-          if let Some(new_page_id) = self.deep_copy_view(page_id_str, &ret_view.id).await? {
+          if let Some(new_page_id) = self
+            .deep_copy_view(page_id_str, ret_view.id.parse()?)
+            .await?
+          {
             *page_id = serde_json::json!(new_page_id);
           } else {
             tracing::warn!("deep_copy_doc_pages: view not found: {}", page_id_str);
@@ -528,10 +534,10 @@ impl PublishCollabDuplicator {
   /// from param `parent_view_id`)
   async fn deep_copy_view(
     &mut self,
-    pub_view_id: &str,
-    parent_view_id: &String,
-  ) -> Result<Option<String>, AppError> {
-    match self.duplicated_refs.get(pub_view_id) {
+    pub_view_id: Uuid,
+    parent_view_id: Uuid,
+  ) -> Result<Option<Uuid>, AppError> {
+    match self.duplicated_refs.get(&pub_view_id) {
       Some(new_view_id) => {
         if let Some(vid) = new_view_id {
           Ok(Some(vid.clone()))
@@ -543,17 +549,15 @@ impl PublishCollabDuplicator {
         // Call deep_copy and await the result
         if let Some(mut new_view) = Box::pin(self.deep_copy(gen_view_id(), pub_view_id)).await? {
           if new_view.parent_view_id.is_empty() {
-            new_view.parent_view_id.clone_from(parent_view_id);
+            new_view.parent_view_id = parent_view_id.to_string();
           }
-          self
-            .duplicated_refs
-            .insert(pub_view_id.to_string(), Some(new_view.id.clone()));
-          let ret_view_id = new_view.id.clone();
-          self.views_to_add.insert(new_view.id.clone(), new_view);
-          Ok(Some(ret_view_id))
+          let new_view_id = Uuid::parse_str(&new_view.id)?;
+          self.duplicated_refs.insert(pub_view_id, Some(new_view_id));
+          self.views_to_add.insert(new_view_id, new_view);
+          Ok(Some(new_view_id))
         } else {
           tracing::warn!("view not found in deep_copy: {}", pub_view_id);
-          self.duplicated_refs.insert(pub_view_id.to_string(), None);
+          self.duplicated_refs.insert(pub_view_id, None);
           Ok(None)
         }
       },
@@ -562,7 +566,7 @@ impl PublishCollabDuplicator {
 
   async fn deep_copy_doc_databases(
     &mut self,
-    pub_view_id: &str,
+    pub_view_id: &Uuid,
     doc_data: &mut DocumentData,
     ret_view: &mut View,
   ) -> Result<(), AppError> {
@@ -573,21 +577,23 @@ impl PublishCollabDuplicator {
 
     for (block_id, block) in db_blocks {
       tracing::info!("deep_copy_doc_databases: block_id: {}", block_id);
-      let block_view_id = block
+      let block_view_id: Uuid = block
         .data
         .get("view_id")
         .ok_or_else(|| AppError::RecordNotFound("view_id not found in block data".to_string()))?
         .as_str()
-        .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
+        .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?
+        .parse()?;
 
-      let block_parent_id = block
+      let block_parent_id: Uuid = block
         .data
         .get("parent_id")
         .ok_or_else(|| AppError::RecordNotFound("view_id not found in block data".to_string()))?
         .as_str()
-        .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
+        .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?
+        .parse()?;
 
-      if pub_view_id == block_parent_id {
+      if pub_view_id == &block_parent_id {
         // inline database in doc
         if let Some(new_view_id) = self
           .deep_copy_inline_database_in_doc(block_view_id, &ret_view.id)
@@ -612,11 +618,11 @@ impl PublishCollabDuplicator {
         {
           block.data.insert(
             "view_id".to_string(),
-            serde_json::Value::String(new_view_id),
+            serde_json::Value::String(new_view_id.to_string()),
           );
           block.data.insert(
             "parent_id".to_string(),
-            serde_json::Value::String(new_parent_id),
+            serde_json::Value::String(new_parent_id.to_string()),
           );
         } else {
           tracing::warn!("deep_copy_doc_databases: view not found: {}", block_view_id);
@@ -632,13 +638,10 @@ impl PublishCollabDuplicator {
   /// parent_view_id is assumed to be doc itself
   async fn deep_copy_inline_database_in_doc<'a>(
     &mut self,
-    view_id: &str,
+    view_id: Uuid,
     doc_view_id: &String,
   ) -> Result<Option<String>, AppError> {
-    let (metadata, published_blob) = match self
-      .get_published_data_for_view_id(&view_id.parse()?)
-      .await?
-    {
+    let (metadata, published_blob) = match self.get_published_data_for_view_id(&view_id).await? {
       Some(published_data) => published_data,
       None => {
         tracing::warn!("No published collab data found for view_id: {}", view_id);
@@ -648,14 +651,13 @@ impl PublishCollabDuplicator {
 
     let published_db = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
     let mut parent_view = self
-      .deep_copy_database_view(gen_view_id(), published_db, &metadata, view_id)
+      .deep_copy_database_view(gen_view_id(), published_db, &metadata, &view_id)
       .await?;
     let parent_view_id = parent_view.id.clone();
     if parent_view.parent_view_id.is_empty() {
-      parent_view.parent_view_id.clone_from(doc_view_id);
-      self
-        .views_to_add
-        .insert(parent_view.id.clone(), parent_view);
+      parent_view.parent_view_id = doc_view_id.clone();
+      let parent_view_id = Uuid::parse_str(&parent_view.id)?;
+      self.views_to_add.insert(parent_view_id, parent_view);
     }
     Ok(Some(parent_view_id))
   }
@@ -664,14 +666,11 @@ impl PublishCollabDuplicator {
   /// returns new (view_id, parent_id)
   async fn deep_copy_ref_database_in_doc<'a>(
     &mut self,
-    view_id: &str,
-    parent_id: &str,
+    view_id: Uuid,
+    parent_id: Uuid,
     doc_view_id: &String,
-  ) -> Result<Option<(String, String)>, AppError> {
-    let (metadata, published_blob) = match self
-      .get_published_data_for_view_id(&view_id.parse()?)
-      .await?
-    {
+  ) -> Result<Option<(Uuid, Uuid)>, AppError> {
+    let (metadata, published_blob) = match self.get_published_data_for_view_id(&view_id).await? {
       Some(published_data) => published_data,
       None => {
         tracing::warn!("No published collab data found for view_id: {}", view_id);
@@ -681,31 +680,27 @@ impl PublishCollabDuplicator {
 
     let published_db = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
     let mut parent_view = self
-      .deep_copy_database_view(gen_view_id(), published_db, &metadata, parent_id)
+      .deep_copy_database_view(gen_view_id(), published_db, &metadata, &parent_id)
       .await?;
-    let parent_view_id = parent_view.id.clone();
+    let parent_view_id: Uuid = parent_view.id.parse()?;
     if parent_view.parent_view_id.is_empty() {
-      parent_view.parent_view_id.clone_from(doc_view_id);
-      self
-        .views_to_add
-        .insert(parent_view.id.clone(), parent_view);
+      parent_view.parent_view_id = doc_view_id.to_string();
+      self.views_to_add.insert(parent_view_id, parent_view);
     }
-    let duplicated_view_id = match self.duplicated_db_view.get(view_id) {
-      Some(v) => v.clone(),
+    let duplicated_view_id = match self.duplicated_db_view.get(&view_id) {
+      Some(v) => *v,
       None => {
         let view_info_by_id = view_info_by_view_id(&metadata);
-        let view_info = view_info_by_id.get(view_id).ok_or_else(|| {
+        let view_info = view_info_by_id.get(&view_id).ok_or_else(|| {
           AppError::RecordNotFound(format!("metadata not found for view: {}", view_id))
         })?;
         let mut new_folder_db_view =
-          self.new_folder_view(view_id.to_string(), view_info, view_info.layout.clone());
-        new_folder_db_view
-          .parent_view_id
-          .clone_from(&parent_view_id);
-        let new_folder_db_view_id = new_folder_db_view.id.clone();
+          self.new_folder_view(view_id, view_info, view_info.layout.clone());
+        new_folder_db_view.parent_view_id = parent_view_id.to_string();
+        let new_folder_db_view_id: Uuid = new_folder_db_view.id.parse()?;
         self
           .views_to_add
-          .insert(new_folder_db_view.id.clone(), new_folder_db_view);
+          .insert(new_folder_db_view_id, new_folder_db_view);
         new_folder_db_view_id
       },
     };
@@ -720,18 +715,21 @@ impl PublishCollabDuplicator {
   async fn deep_copy_database<'a>(
     &mut self,
     published_db: &PublishDatabaseData,
-    pub_view_id: &str,
-    new_view_id: String,
-  ) -> Result<(String, String, bool), AppError> {
+    pub_view_id: &Uuid,
+    new_view_id: Uuid,
+  ) -> Result<(Uuid, Uuid, bool), AppError> {
     // collab of database
-    let mut db_collab = collab_from_doc_state(published_db.database_collab.clone(), "")?;
+    let mut db_collab =
+      collab_from_doc_state(published_db.database_collab.clone(), &Uuid::default())?;
     let db_body = DatabaseBody::from_collab(
       &db_collab,
       Arc::new(NoPersistenceDatabaseCollabService),
       None,
     )
     .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
-    let pub_db_id = db_body.get_database_id(&db_collab.context.transact());
+    let pub_db_id: Uuid = db_body
+      .get_database_id(&db_collab.context.transact())
+      .parse()?;
 
     // check if the database is already duplicated
     if let Some(db_id) = self.duplicated_refs.get(&pub_db_id).cloned().flatten() {
@@ -747,9 +745,10 @@ impl PublishCollabDuplicator {
       // this will mark the database as duplicated
       let txn = db_collab.context.transact();
       let mut db_views = db_body.views.get_all_views(&txn);
-      let mut new_db_view_ids: Vec<String> = Vec::with_capacity(db_views.len());
+      let mut new_db_view_ids: Vec<_> = Vec::with_capacity(db_views.len());
       for db_view in db_views.iter_mut() {
-        let new_db_view_id = if db_view.id == pub_view_id {
+        let db_view_id: Uuid = db_view.id.parse()?;
+        let new_db_view_id = if &db_view_id == pub_view_id {
           self
             .duplicated_db_main_view
             .insert(pub_db_id.clone(), new_view_id.clone());
@@ -759,7 +758,7 @@ impl PublishCollabDuplicator {
         };
         self
           .duplicated_db_view
-          .insert(db_view.id.clone(), new_db_view_id.clone());
+          .insert(db_view_id, new_db_view_id.clone());
 
         new_db_view_ids.push(new_db_view_id);
       }
@@ -767,7 +766,7 @@ impl PublishCollabDuplicator {
       if !self.duplicated_db_main_view.contains_key(&pub_db_id) {
         self
           .duplicated_db_main_view
-          .insert(pub_db_id.clone(), db_body.get_inline_view_id(&txn));
+          .insert(pub_db_id.clone(), db_body.get_inline_view_id(&txn).parse()?);
       };
 
       // Add this database as linked view
@@ -780,10 +779,10 @@ impl PublishCollabDuplicator {
     // this will mark the rows as duplicated
     for pub_row_id in published_db.database_row_collabs.keys() {
       // assign a new id for the row
-      let dup_row_id = gen_row_id();
+      let dup_row_id = Uuid::new_v4();
       self
         .duplicated_db_row
-        .insert(pub_row_id.clone(), dup_row_id.to_string());
+        .insert(pub_row_id.clone(), dup_row_id);
     }
 
     {
@@ -795,20 +794,16 @@ impl PublishCollabDuplicator {
           if *key == FieldType::Relation.type_id() {
             if let Some(pub_db_id) = type_option_value.get_mut("database_id") {
               if let Any::String(pub_db_id_str) = pub_db_id {
-                if let Some(pub_rel_db_view) =
-                  published_db.database_relations.get(pub_db_id_str.as_ref())
-                {
+                let pub_db_uuid = Uuid::parse_str(&pub_db_id_str)?;
+                if let Some(&pub_rel_db_view) = published_db.database_relations.get(&pub_db_uuid) {
                   if let Some(_dup_view_id) = self
-                    .deep_copy_view(pub_rel_db_view, &self.dest_view_id.to_string())
+                    .deep_copy_view(pub_rel_db_view, self.dest_view_id)
                     .await?
                   {
-                    if let Some(dup_db_id) = self
-                      .duplicated_refs
-                      .get(pub_db_id_str.as_ref())
-                      .cloned()
-                      .flatten()
+                    if let Some(dup_db_id) =
+                      self.duplicated_refs.get(&pub_db_uuid).cloned().flatten()
                     {
-                      *pub_db_id = Any::String(dup_db_id.into());
+                      *pub_db_id = Any::from(dup_db_id.to_string());
                       db_body.fields.update_field(&mut txn, &field.id, |f| {
                         f.set_type_option(
                           FieldType::Relation.into(),
@@ -841,7 +836,7 @@ impl PublishCollabDuplicator {
         let mut txn = db_row_collab.context.transact_mut();
         // update database_id
         db_row_body.update(&mut txn, |u| {
-          u.set_database_id(new_db_id.clone());
+          u.set_database_id(new_db_id.to_string());
         });
 
         // get row document id before the id update
@@ -856,6 +851,7 @@ impl PublishCollabDuplicator {
 
         // duplicate row document if exists
         if let Some(pub_row_doc_id) = pub_row_doc_id {
+          let pub_row_doc_id: Uuid = pub_row_doc_id.parse()?;
           if let Some(row_doc_doc_state) = published_db
             .database_row_document_collabs
             .get(&pub_row_doc_id)
@@ -865,15 +861,15 @@ impl PublishCollabDuplicator {
                 let pub_doc =
                   Document::open(pub_doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
                 let dup_row_doc_id =
-                  meta_id_from_row_id(&dup_row_id.parse()?, RowMetaKey::DocumentId);
+                  meta_id_from_row_id(&dup_row_id, RowMetaKey::DocumentId).parse()?;
                 let mut new_doc_view = Box::pin(self.deep_copy_doc(
-                  &pub_row_doc_id,
-                  dup_row_doc_id.clone(),
+                  pub_row_doc_id,
+                  dup_row_doc_id,
                   pub_doc,
                   PublishViewMetaData::default(),
                 ))
                 .await?;
-                new_doc_view.parent_view_id.clone_from(&dup_row_doc_id); // orphan folder view
+                new_doc_view.parent_view_id = dup_row_doc_id.to_string(); // orphan folder view
                 self
                   .views_to_add
                   .insert(dup_row_doc_id.clone(), new_doc_view);
@@ -938,14 +934,11 @@ impl PublishCollabDuplicator {
             }
             rel_row_ids.remove_range(&mut txn, 0, num_refs);
             for pub_row_id in pub_row_ids {
-              let dup_row_id =
-                self
-                  .duplicated_db_row
-                  .get(pub_row_id.as_ref())
-                  .ok_or_else(|| {
-                    AppError::RecordNotFound(format!("row not found: {}", pub_row_id))
-                  })?;
-              let _ = rel_row_ids.push_back(&mut txn, dup_row_id.as_str());
+              let pub_row_id = Uuid::parse_str(&pub_row_id)?;
+              let dup_row_id = self.duplicated_db_row.get(&pub_row_id).ok_or_else(|| {
+                AppError::RecordNotFound(format!("row not found: {}", pub_row_id))
+              })?;
+              let _ = rel_row_ids.push_back(&mut txn, dup_row_id.to_string());
             }
           }
         }
@@ -953,32 +946,33 @@ impl PublishCollabDuplicator {
 
       // write new row collab to storage
       let db_row_ec_bytes = collab_to_bin(db_row_collab, CollabType::DatabaseRow).await?;
-      self.collabs_to_insert.insert(
-        dup_row_id.to_string(),
-        (CollabType::DatabaseRow, db_row_ec_bytes),
-      );
+      self
+        .collabs_to_insert
+        .insert(dup_row_id, (CollabType::DatabaseRow, db_row_ec_bytes));
     }
 
     // accumulate list of database views (Board, Cal, ...) to be linked to the database
     {
       let mut txn = db_collab.context.transact_mut();
-      db_body.root.insert(&mut txn, "id", new_db_id.clone());
+      db_body.root.insert(&mut txn, "id", new_db_id.to_string());
 
       let mut db_views = db_body.views.get_all_views(&txn);
       for db_view in db_views.iter_mut() {
-        let new_db_view_id = self.duplicated_db_view.get(&db_view.id).ok_or_else(|| {
+        let db_view_id = Uuid::parse_str(&db_view.id)?;
+        let new_db_view_id = self.duplicated_db_view.get(&db_view_id).ok_or_else(|| {
           AppError::Unhandled(format!(
             "view not found in duplicated_db_view: {}",
             db_view.id
           ))
         })?;
 
-        db_view.id.clone_from(new_db_view_id);
-        db_view.database_id.clone_from(&new_db_id);
+        db_view.id = new_db_view_id.to_string();
+        db_view.database_id = new_db_id.to_string();
 
         // update all views's row's id
         for row_order in db_view.row_orders.iter_mut() {
-          if let Some(new_id) = self.duplicated_db_row.get(row_order.id.as_str()) {
+          let row_order_id = Uuid::parse_str(&row_order.id)?;
+          if let Some(new_id) = self.duplicated_db_row.get(&row_order_id) {
             row_order.id = new_id.clone().into();
           } else {
             // skip if row not found
@@ -989,7 +983,9 @@ impl PublishCollabDuplicator {
       }
 
       // update database metas iid
-      db_body.metas.insert(&mut txn, "iid", new_view_id);
+      db_body
+        .metas
+        .insert(&mut txn, "iid", new_view_id.to_string());
 
       // insert updated views back to db
       db_body.views.clear(&mut txn);
@@ -1012,10 +1008,10 @@ impl PublishCollabDuplicator {
   /// If the database is already duplicated before, does not return the view with `new_view_id`
   async fn deep_copy_database_view<'a>(
     &mut self,
-    new_view_id: String,
+    new_view_id: Uuid,
     published_db: PublishDatabaseData,
     metadata: &PublishViewMetaData,
-    pub_view_id: &str,
+    pub_view_id: &Uuid,
   ) -> Result<View, AppError> {
     // flatten nested view info into a map
     let view_info_by_id = view_info_by_view_id(metadata);
@@ -1037,7 +1033,7 @@ impl PublishCollabDuplicator {
         None => {
           let main_view_id = self
             .duplicated_db_main_view
-            .get(pub_db_id.as_str())
+            .get(&pub_db_id)
             .ok_or_else(|| {
               AppError::RecordNotFound(format!("main view not found: {}", pub_view_id))
             })?;
@@ -1047,8 +1043,9 @@ impl PublishCollabDuplicator {
           })?;
 
           let mut view = self.new_folder_view(dup_view_id, view_info, view_info.layout.clone());
-          if *main_view_id != view.id {
-            view.parent_view_id.clone_from(main_view_id);
+          let main_view_id = main_view_id.to_string();
+          if main_view_id != view.id {
+            view.parent_view_id = main_view_id;
           }
           return Ok(view);
         },
@@ -1062,7 +1059,7 @@ impl PublishCollabDuplicator {
     // create the main view
     let main_view_id = self
       .duplicated_db_main_view
-      .get(pub_db_id.as_str())
+      .get(&pub_db_id)
       .ok_or_else(|| AppError::RecordNotFound(format!("main view not found: {}", pub_view_id)))?;
 
     let main_view_info = view_info_by_id.get(pub_view_id).ok_or_else(|| {
@@ -1076,7 +1073,7 @@ impl PublishCollabDuplicator {
 
     // create other visible view which are child to the main view
     for vis_view_id in published_db.visible_database_view_ids {
-      if vis_view_id == pub_view_id {
+      if &vis_view_id == pub_view_id {
         // skip main view
         continue;
       }
@@ -1097,10 +1094,10 @@ impl PublishCollabDuplicator {
         })?,
         child_view_info.layout.clone(),
       );
-      child_folder_view.parent_view_id.clone_from(main_view_id);
+      child_folder_view.parent_view_id = main_view_id.to_string();
       self
         .views_to_add
-        .insert(child_folder_view.id.clone(), child_folder_view);
+        .insert(child_folder_view.id.parse()?, child_folder_view);
     }
 
     Ok(main_folder_view)
@@ -1109,12 +1106,12 @@ impl PublishCollabDuplicator {
   /// creates a new folder view without parent_view_id set
   fn new_folder_view(
     &self,
-    new_view_id: String,
+    new_view_id: Uuid,
     view_info: &PublishViewInfo,
     layout: ViewLayout,
   ) -> View {
     View {
-      id: new_view_id,
+      id: new_view_id.to_string(),
       parent_view_id: "".to_string(), // to be filled by caller
       name: view_info.name.clone(),
       children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
@@ -1155,17 +1152,17 @@ impl PublishCollabDuplicator {
   }
 }
 
-fn view_info_by_view_id(meta: &PublishViewMetaData) -> HashMap<String, PublishViewInfo> {
+fn view_info_by_view_id(meta: &PublishViewMetaData) -> HashMap<Uuid, PublishViewInfo> {
   let mut acc = HashMap::new();
-  acc.insert(meta.view.view_id.clone(), meta.view.clone());
+  acc.insert(meta.view.view_id.parse().unwrap(), meta.view.clone());
   add_to_view_info(&mut acc, &meta.child_views);
   add_to_view_info(&mut acc, &meta.ancestor_views);
   acc
 }
 
-fn add_to_view_info(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[PublishViewInfo]) {
+fn add_to_view_info(acc: &mut HashMap<Uuid, PublishViewInfo>, view_infos: &[PublishViewInfo]) {
   for view_info in view_infos {
-    acc.insert(view_info.view_id.clone(), view_info.clone());
+    acc.insert(view_info.view_id.parse().unwrap(), view_info.clone());
     if let Some(child_views) = &view_info.child_views {
       add_to_view_info(acc, child_views);
     }

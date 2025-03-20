@@ -258,8 +258,9 @@ pub struct QuerySnapshotParams {
   pub snapshot_id: i64,
 }
 
-#[derive(Debug, Clone, Validate)]
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabParams {
+  #[serde(with = "uuid_str")]
   pub workspace_id: Uuid,
   #[validate(nested)]
   pub inner: QueryCollab,
@@ -361,7 +362,7 @@ pub enum QueryCollabResult {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct BatchQueryCollabResult(pub HashMap<String, QueryCollabResult>);
+pub struct BatchQueryCollabResult(pub HashMap<Uuid, QueryCollabResult>);
 
 #[derive(Serialize, Deserialize)]
 pub struct WorkspaceUsage {

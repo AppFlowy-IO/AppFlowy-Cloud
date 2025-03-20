@@ -443,7 +443,7 @@ where
     workspace_id: Uuid,
     queries: Vec<QueryCollab>,
     from_editing_collab: bool,
-  ) -> HashMap<String, QueryCollabResult> {
+  ) -> HashMap<Uuid, QueryCollabResult> {
     if queries.is_empty() {
       return HashMap::new();
     }
@@ -504,9 +504,6 @@ where
         .await,
     );
     results
-      .into_iter()
-      .map(|(k, v)| (k.to_string(), v))
-      .collect()
   }
 
   async fn delete_collab(&self, workspace_id: &Uuid, uid: &i64, object_id: &Uuid) -> AppResult<()> {

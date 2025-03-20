@@ -1,3 +1,4 @@
+use crate::{log_request_id, Client};
 use bytes::Bytes;
 use client_api_entity::publish_dto::DuplicatePublishedPageResponse;
 use client_api_entity::workspace_dto::{PublishInfoView, PublishedView};
@@ -10,8 +11,7 @@ use client_api_entity::{
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
 use tracing::instrument;
-
-use crate::{log_request_id, Client};
+use uuid::Uuid;
 
 // Publisher API
 impl Client {
@@ -409,7 +409,7 @@ impl Client {
 
   pub async fn duplicate_published_to_workspace(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     publish_duplicate: &PublishedDuplicate,
   ) -> Result<DuplicatePublishedPageResponse, AppResponseError> {
     let url = format!(

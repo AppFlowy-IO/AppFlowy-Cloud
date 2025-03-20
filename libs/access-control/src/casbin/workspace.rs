@@ -25,7 +25,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn enforce_role(
     &self,
     uid: &i64,
-    workspace_id: Uuid,
+    workspace_id: &Uuid,
     role: AFRole,
   ) -> Result<(), AppError> {
     let result = self
@@ -42,7 +42,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn enforce_action(
     &self,
     uid: &i64,
-    workspace_id: Uuid,
+    workspace_id: &Uuid,
     action: Action,
   ) -> Result<(), AppError> {
     let result = self
@@ -137,21 +137,21 @@ mod tests {
     let workspace_access_control = super::WorkspaceAccessControlImpl::new(access_control);
     for uid in [member_uid, owner_uid] {
       workspace_access_control
-        .enforce_role(&uid, workspace_id, AFRole::Member)
+        .enforce_role(&uid, &workspace_id, AFRole::Member)
         .await
         .unwrap_or_else(|_| panic!("Failed to enforce role for {}", uid));
       workspace_access_control
-        .enforce_action(&uid, workspace_id, crate::act::Action::Read)
+        .enforce_action(&uid, &workspace_id, crate::act::Action::Read)
         .await
         .unwrap_or_else(|_| panic!("Failed to enforce action for {}", uid));
     }
     let result = workspace_access_control
-      .enforce_action(&member_uid, workspace_id, crate::act::Action::Delete)
+      .enforce_action(&member_uid, &workspace_id, crate::act::Action::Delete)
       .await;
     let error_code = result.unwrap_err().code();
     assert_eq!(error_code, ErrorCode::NotEnoughPermissions);
     workspace_access_control
-      .enforce_action(&owner_uid, workspace_id, crate::act::Action::Delete)
+      .enforce_action(&owner_uid, &workspace_id, crate::act::Action::Delete)
       .await
       .unwrap();
   }

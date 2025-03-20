@@ -13,9 +13,10 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use shared_entity::dto::file_dto::PutFileResponse;
 use tracing::instrument;
 use url::Url;
+use uuid::Uuid;
 
 impl Client {
-  pub fn get_blob_url(&self, workspace_id: &str, file_id: &str) -> String {
+  pub fn get_blob_url(&self, workspace_id: &Uuid, file_id: &str) -> String {
     format!(
       "{}/api/file_storage/{}/blob/{}",
       self.base_url, workspace_id, file_id

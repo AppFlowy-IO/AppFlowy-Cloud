@@ -2088,6 +2088,7 @@ dependencies = [
  "thiserror 1.0.63",
  "tokio",
  "tracing",
+ "uuid",
  "yrs",
 ]
 

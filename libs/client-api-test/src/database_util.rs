@@ -9,8 +9,10 @@ use collab_database::workspace_database::{
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabResult::{Failed, Success};
 use database_entity::dto::{QueryCollab, QueryCollabParams};
+use futures::TryStreamExt;
 use std::sync::Arc;
 use tracing::error;
+use uuid::{Error, Uuid};
 
 pub struct TestDatabaseCollabService {
   pub api_client: client_api::Client,
@@ -28,9 +30,9 @@ impl DatabaseCollabService for TestDatabaseCollabService {
     let encoded_collab = match encoded_collab {
       None => {
         let params = QueryCollabParams {
-          workspace_id: self.workspace_id.clone(),
+          workspace_id: self.workspace_id.parse()?,
           inner: QueryCollab {
-            object_id: object_id.to_string(),
+            object_id: object_id.parse()?,
             collab_type: object_type,
           },
         };
@@ -62,7 +64,10 @@ impl DatabaseCollabService for TestDatabaseCollabService {
   ) -> Result<EncodeCollabByOid, DatabaseError> {
     let params = object_ids
       .into_iter()
-      .map(|object_id| QueryCollab::new(object_id, collab_type))
+      .flat_map(|object_id| match Uuid::parse_str(&object_id) {
+        Ok(object_id) => Ok(QueryCollab::new(object_id, collab_type.clone())),
+        Err(err) => Err(err),
+      })
       .collect();
     let results = self
       .api_client

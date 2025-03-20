@@ -1,3 +1,8 @@
+use crate::config::get_env_var;
+use crate::error::RealtimeError;
+use crate::group::group_init::CollabGroup;
+use crate::metrics::CollabRealtimeMetrics;
+use collab_rt_entity::user::RealtimeUser;
 use dashmap::mapref::one::RefMut;
 use dashmap::try_result::TryResult;
 use dashmap::DashMap;
@@ -6,16 +11,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, event, trace, warn};
-
-use crate::config::get_env_var;
-use crate::error::RealtimeError;
-use crate::group::group_init::CollabGroup;
-use crate::metrics::CollabRealtimeMetrics;
-use collab_rt_entity::user::RealtimeUser;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub(crate) struct GroupManagementState {
-  group_by_object_id: Arc<DashMap<String, Arc<CollabGroup>>>,
+  group_by_object_id: Arc<DashMap<Uuid, Arc<CollabGroup>>>,
   /// Keep track of all [Collab] objects that a user is subscribed to.
   editing_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
@@ -37,7 +37,7 @@ impl GroupManagementState {
   }
 
   /// Returns group ids of inactive groups.
-  pub fn remove_inactive_groups(&self) -> Vec<String> {
+  pub fn remove_inactive_groups(&self) -> Vec<Uuid> {
     let mut inactive_group_ids = vec![];
     for entry in self.group_by_object_id.iter() {
       let (object_id, group) = (entry.key(), entry.value());
@@ -57,7 +57,7 @@ impl GroupManagementState {
     inactive_group_ids
   }
 
-  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
+  pub async fn get_group(&self, object_id: &Uuid) -> Option<Arc<CollabGroup>> {
     let mut attempts = 0;
     let max_attempts = 3;
     let retry_delay = Duration::from_millis(100);
@@ -85,8 +85,8 @@ impl GroupManagementState {
   /// may deadlock when holding the RefMut and trying to read group_by_object_id.
   pub(crate) async fn get_mut_group(
     &self,
-    object_id: &str,
-  ) -> Option<RefMut<String, Arc<CollabGroup>>> {
+    object_id: &Uuid,
+  ) -> Option<RefMut<Uuid, Arc<CollabGroup>>> {
     let mut attempts = 0;
     let max_attempts = 3;
     let retry_delay = Duration::from_millis(300);
@@ -108,14 +108,12 @@ impl GroupManagementState {
     }
   }
 
-  pub(crate) fn insert_group(&self, object_id: &str, group: CollabGroup) {
-    self
-      .group_by_object_id
-      .insert(object_id.to_string(), group.into());
+  pub(crate) fn insert_group(&self, object_id: Uuid, group: CollabGroup) {
+    self.group_by_object_id.insert(object_id, group.into());
     self.metrics_calculate.opening_collab_count.inc();
   }
 
-  pub(crate) fn contains_group(&self, object_id: &str) -> bool {
+  pub(crate) fn contains_group(&self, object_id: &Uuid) -> bool {
     if let Some(group) = self.group_by_object_id.get(object_id) {
       let cancelled = group.is_cancelled();
       !cancelled
@@ -124,7 +122,7 @@ impl GroupManagementState {
     }
   }
 
-  pub(crate) fn remove_group(&self, object_id: &str) {
+  pub(crate) fn remove_group(&self, object_id: &Uuid) {
     let group_not_found = self.group_by_object_id.remove(object_id).is_none();
     if group_not_found {
       // Log error if the group doesn't exist
@@ -139,11 +137,9 @@ impl GroupManagementState {
   pub(crate) fn insert_user(
     &self,
     user: &RealtimeUser,
-    object_id: &str,
+    object_id: Uuid,
   ) -> Result<(), RealtimeError> {
-    let editing = Editing {
-      object_id: object_id.to_string(),
-    };
+    let editing = Editing { object_id };
 
     let entry = self.editing_by_user.entry(user.clone());
     match entry {
@@ -189,7 +185,7 @@ impl GroupManagementState {
     }
   }
 
-  pub fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
+  pub fn contains_user(&self, object_id: &Uuid, user: &RealtimeUser) -> bool {
     match self.group_by_object_id.try_get(object_id) {
       TryResult::Present(entry) => entry.value().contains_user(user),
       TryResult::Absent => false,
@@ -203,5 +199,5 @@ impl GroupManagementState {
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 struct Editing {
-  pub object_id: String,
+  pub object_id: Uuid,
 }

@@ -150,6 +150,7 @@ fn to_folder_view(
     .collect();
   Some(FolderView {
     view_id: view_id.to_string(),
+    parent_view_id: view.parent_view_id.clone(),
     name: view.name.clone(),
     icon: view
       .icon
@@ -161,6 +162,8 @@ fn to_folder_view(
     is_published: published_view_ids.contains(view_id),
     layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
+    created_by: view.created_by,
+    last_edited_by: view.last_edited_by,
     last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
     is_locked: view.is_locked,
     extra,
@@ -180,6 +183,7 @@ pub fn section_items_to_favorite_folder_view(
       view.map(|v| {
         let folder_view = FolderView {
           view_id: v.id.clone(),
+          parent_view_id: v.parent_view_id.clone(),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -187,6 +191,8 @@ pub fn section_items_to_favorite_folder_view(
           is_favorite: v.is_favorite,
           is_published: published_view_ids.contains(&v.id),
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          created_by: v.created_by,
+          last_edited_by: v.last_edited_by,
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
           is_locked: v.is_locked,
@@ -214,6 +220,7 @@ pub fn section_items_to_recent_folder_view(
       view.map(|v| {
         let folder_view = FolderView {
           view_id: v.id.clone(),
+          parent_view_id: v.parent_view_id.clone(),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -221,6 +228,8 @@ pub fn section_items_to_recent_folder_view(
           is_favorite: v.is_favorite,
           is_published: published_view_ids.contains(&v.id),
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          created_by: v.created_by,
+          last_edited_by: v.last_edited_by,
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
           is_locked: v.is_locked,
@@ -247,6 +256,7 @@ pub fn section_items_to_trash_folder_view(
       view.map(|v| {
         let folder_view = FolderView {
           view_id: v.id.clone(),
+          parent_view_id: v.parent_view_id.clone(),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -254,6 +264,8 @@ pub fn section_items_to_trash_folder_view(
           is_published: false,
           is_favorite: v.is_favorite,
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          created_by: v.created_by,
+          last_edited_by: v.last_edited_by,
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
           is_locked: v.is_locked,

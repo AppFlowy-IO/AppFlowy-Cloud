@@ -152,6 +152,7 @@ pub enum CompletionType {
   ContinueWriting = 5,
   Explain = 6,
   UserQuestion = 7,
+  CustomPrompt = 8,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -434,7 +435,6 @@ impl Display for CreateChatContext {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomPrompt {
   pub system: String,
-  pub user: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -451,7 +451,7 @@ pub struct SimilarityResponse {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CompletionRecord {
+pub struct CompletionMessage {
   pub role: String, // human, ai, or system
   pub content: String,
 }
@@ -472,14 +472,16 @@ pub struct CompletionMetadata {
   /// For the AI completion feature (the AI writer), pass the conversation history as input.
   /// This history helps the AI understand the context of the conversation.
   #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub completion_history: Option<Vec<CompletionRecord>>,
+  pub completion_history: Option<Vec<CompletionMessage>>,
+  /// When completion type is 'CustomPrompt', this field should be provided.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub custom_prompt: Option<CustomPrompt>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompleteTextParams {
   pub text: String,
   pub completion_type: Option<CompletionType>,
-  pub custom_prompt: Option<CustomPrompt>,
   #[serde(default)]
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<CompletionMetadata>,
@@ -496,7 +498,6 @@ impl CompleteTextParams {
     Self {
       text,
       completion_type: Some(completion_type),
-      custom_prompt: None,
       metadata,
       format: Default::default(),
     }

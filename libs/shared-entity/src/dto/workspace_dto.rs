@@ -1,3 +1,4 @@
+use app_error::AppError;
 use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
 use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus, PublishInfo};
@@ -236,7 +237,7 @@ pub struct CreatePageDatabaseViewParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageCollabData {
   pub encoded_collab: Vec<u8>,
-  pub row_data: HashMap<String, Vec<u8>>,
+  pub row_data: HashMap<Uuid, Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,8 +250,8 @@ pub struct PageCollab {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishedDuplicate {
-  pub published_view_id: String,
-  pub dest_view_id: String,
+  pub published_view_id: Uuid,
+  pub dest_view_id: Uuid,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -330,7 +331,7 @@ pub struct PublishInfoView {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PublishPageParams {
   pub publish_name: Option<String>,
-  pub visible_database_view_ids: Option<Vec<String>>,
+  pub visible_database_view_ids: Option<Vec<Uuid>>,
   pub comments_enabled: Option<bool>,
   pub duplicate_enabled: Option<bool>,
 }
@@ -419,8 +420,12 @@ impl ListDatabaseRowDetailParam {
       with_doc: Some(with_doc),
     }
   }
-  pub fn into_ids(&self) -> Vec<&str> {
-    self.ids.split(',').collect()
+  pub fn into_ids(&self) -> Result<Vec<Uuid>, AppError> {
+    let mut res = Vec::new();
+    for uuid in self.ids.split(',') {
+      res.push(Uuid::parse_str(uuid)?);
+    }
+    Ok(res)
   }
 }
 

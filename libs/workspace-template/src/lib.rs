@@ -162,6 +162,6 @@ impl WorkspaceTemplateBuilder {
   }
 }
 
-pub fn gen_view_id() -> String {
-  uuid::Uuid::new_v4().to_string()
+pub fn gen_view_id() -> Uuid {
+  uuid::Uuid::new_v4()
 }

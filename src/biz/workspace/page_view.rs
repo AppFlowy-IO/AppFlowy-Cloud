@@ -1073,12 +1073,14 @@ async fn create_database_page(
   let row_collab_params_list = encoded_database
     .encoded_row_collabs
     .iter()
-    .map(|row_collab| CollabParams {
-      object_id: row_collab.object_id,
-      encoded_collab_v1: row_collab.encoded_collab.encode_to_bytes().unwrap().into(),
-      collab_type: CollabType::DatabaseRow,
+    .flat_map(|row_collab| {
+      Some(CollabParams {
+        object_id: Uuid::parse_str(&row_collab.object_id).ok()?,
+        encoded_collab_v1: row_collab.encoded_collab.encode_to_bytes().unwrap().into(),
+        collab_type: CollabType::DatabaseRow,
+      })
     })
-    .collect_vec();
+    .collect();
 
   let mut transaction = pg_pool.begin().await?;
   let start = Instant::now();
@@ -1444,8 +1446,8 @@ pub async fn publish_page(
   uid: i64,
   user_uuid: Uuid,
   workspace_id: Uuid,
-  view_id: &str,
-  visible_database_view_ids: Option<Vec<String>>,
+  view_id: Uuid,
+  visible_database_view_ids: Option<Vec<Uuid>>,
   publish_name: Option<impl ToString>,
   comments_enabled: bool,
   duplicate_enabled: bool,
@@ -1457,7 +1459,7 @@ pub async fn publish_page(
   )
   .await?;
   let view = folder
-    .get_view(view_id)
+    .get_view(&view_id.to_string())
     .ok_or(AppError::InvalidFolderView(format!(
       "View {} not found",
       view_id
@@ -1511,10 +1513,10 @@ pub async fn publish_page(
     .publish_collabs(
       vec![PublishCollabItem {
         meta: PublishCollabMetadata {
-          view_id: Uuid::parse_str(view_id).unwrap(),
+          view_id,
           publish_name: publish_name
             .map(|name| name.to_string())
-            .unwrap_or_else(|| generate_publish_name(view_id, &view.name)),
+            .unwrap_or_else(|| generate_publish_name(&view.id, &view.name)),
           metadata: serde_json::value::to_value(metadata).unwrap(),
         },
         data: publish_data,
@@ -1532,7 +1534,7 @@ async fn generate_publish_data_for_document(
   collab_access_control_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
-  view_id: &str,
+  view_id: Uuid,
 ) -> Result<Vec<u8>, AppError> {
   let collab = get_latest_collab_encoded(
     collab_access_control_storage,
@@ -1550,8 +1552,8 @@ async fn generate_publish_data_for_database(
   collab_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
-  view_id: &str,
-  visible_database_view_ids: Option<Vec<String>>,
+  view_id: Uuid,
+  visible_database_view_ids: Option<Vec<Uuid>>,
 ) -> Result<Vec<u8>, AppError> {
   let (_, ws_db) = get_latest_workspace_database(
     collab_storage,
@@ -1562,7 +1564,7 @@ async fn generate_publish_data_for_database(
   .await?;
   let db_oid = {
     ws_db
-      .get_database_meta_with_view_id(view_id)
+      .get_database_meta_with_view_id(&view_id.to_string())
       .ok_or(AppError::NoRequiredData(format!(
         "Database view {} not found",
         view_id
@@ -1582,7 +1584,7 @@ async fn generate_publish_data_for_database(
       .views
       .get_row_orders(&txn, &inline_view_id)
       .iter()
-      .map(|ro| ro.id.to_string())
+      .flat_map(|ro| Uuid::parse_str(&ro.id))
       .collect()
   };
   let encoded_rows = batch_get_latest_collab_encoded(
@@ -1593,20 +1595,20 @@ async fn generate_publish_data_for_database(
     CollabType::DatabaseRow,
   )
   .await?;
-  let row_data: HashMap<String, Vec<u8>> = encoded_rows
+  let row_data: HashMap<_, Vec<u8>> = encoded_rows
     .into_iter()
     .map(|(oid, encoded_collab)| (oid, encoded_collab.doc_state.to_vec()))
     .collect();
 
-  let row_document_ids = row_ids
+  let row_document_ids: Vec<_> = row_ids
     .iter()
     .filter_map(|row_id| {
       db_body
         .block
         .get_row_document_id(&RowId::from(row_id.to_owned()))
-        .map(|doc_id| doc_id.to_string())
+        .and_then(|doc_id| Uuid::parse_str(&doc_id).ok())
     })
-    .collect_vec();
+    .collect();
   let encoded_row_documents = batch_get_latest_collab_encoded(
     collab_storage,
     GetCollabOrigin::User { uid },
@@ -1615,7 +1617,7 @@ async fn generate_publish_data_for_database(
     CollabType::Document,
   )
   .await?;
-  let row_document_data: HashMap<String, Vec<u8>> = encoded_row_documents
+  let row_document_data: HashMap<_, _> = encoded_row_documents
     .into_iter()
     .map(|(oid, encoded_collab)| (oid, encoded_collab.doc_state.to_vec()))
     .collect();
@@ -1624,8 +1626,8 @@ async fn generate_publish_data_for_database(
     database_collab: collab_to_doc_state(db_collab, CollabType::Database).await?,
     database_row_collabs: row_data,
     database_row_document_collabs: row_document_data,
-    visible_database_view_ids: visible_database_view_ids.unwrap_or(vec![view_id.to_string()]),
-    database_relations: HashMap::from([(db_oid, view_id.to_string())]),
+    visible_database_view_ids: visible_database_view_ids.unwrap_or(vec![view_id]),
+    database_relations: HashMap::from([(db_oid, view_id)]),
   };
   Ok(serde_json::ser::to_vec(&data)?)
 }
@@ -1827,19 +1829,19 @@ async fn get_page_collab_data_for_database(
     let txn = db_collab.transact();
     db_body.get_inline_view_id(&txn)
   };
-  let row_ids: Vec<RowId> = {
+  let row_ids: Vec<_> = {
     let txn = db_collab.transact();
     db_body
       .views
       .get_row_orders(&txn, &inline_view_id)
       .iter()
-      .map(|ro| ro.id.clone())
+      .flat_map(|ro| Uuid::parse_str(&ro.id).ok())
       .collect()
   };
   let queries: Vec<QueryCollab> = row_ids
     .iter()
     .map(|row_id| QueryCollab {
-      object_id: row_id.to_string(),
+      object_id: *row_id,
       collab_type: CollabType::DatabaseRow,
     })
     .collect();
@@ -1847,7 +1849,7 @@ async fn get_page_collab_data_for_database(
     .batch_get_collab(&uid, workspace_id, queries, true)
     .await;
   let row_data = tokio::task::spawn_blocking(move || {
-    let row_collabs: HashMap<String, Vec<u8>> = row_query_collab_results
+    let row_collabs: HashMap<_, _> = row_query_collab_results
       .into_par_iter()
       .filter_map(|(row_id, query_collab_result)| match query_collab_result {
         QueryCollabResult::Success { encode_collab_v1 } => {

@@ -275,7 +275,7 @@ pub async fn batch_get_latest_collab_encoded(
   workspace_id: Uuid,
   oid_list: &[Uuid],
   collab_type: CollabType,
-) -> Result<HashMap<String, EncodedCollab>, AppError> {
+) -> Result<HashMap<Uuid, EncodedCollab>, AppError> {
   let uid = match collab_origin {
     GetCollabOrigin::User { uid } => uid,
     _ => 0,
@@ -291,7 +291,7 @@ pub async fn batch_get_latest_collab_encoded(
     .batch_get_collab(&uid, workspace_id, queries, true)
     .await;
   let encoded_collabs = tokio::task::spawn_blocking(move || {
-    let collabs: HashMap<String, EncodedCollab> = query_collab_results
+    let collabs: HashMap<_, EncodedCollab> = query_collab_results
       .into_par_iter()
       .filter_map(|(oid, query_collab_result)| match query_collab_result {
         QueryCollabResult::Success { encode_collab_v1 } => {
@@ -523,15 +523,16 @@ pub async fn write_to_database_row(
 pub async fn create_row_document(
   workspace_id: Uuid,
   uid: i64,
-  new_doc_id: &str,
+  new_doc_id: Uuid,
   collab_storage: &CollabAccessControlStorage,
   row_doc_content: String,
 ) -> Result<CreatedRowDocument, AppError> {
   let md_importer = MDImporter::new(None);
+  let new_doc_id_str = new_doc_id.to_string();
   let doc_data = md_importer
-    .import(new_doc_id, row_doc_content)
+    .import(&new_doc_id_str, row_doc_content)
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e)))?;
-  let doc = Document::create(new_doc_id, doc_data)
+  let doc = Document::create(&new_doc_id_str, doc_data)
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create document: {:?}", e)))?;
   let doc_ec = doc.encode_collab().map_err(|e| {
     AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
@@ -543,7 +544,11 @@ pub async fn create_row_document(
     let mut folder_txn = folder.collab.transact_mut();
     folder.body.views.insert(
       &mut folder_txn,
-      collab_folder::View::orphan_view(new_doc_id, collab_folder::ViewLayout::Document, Some(uid)),
+      collab_folder::View::orphan_view(
+        &new_doc_id_str,
+        collab_folder::ViewLayout::Document,
+        Some(uid),
+      ),
       None,
     );
     folder_txn.encode_update_v1()
@@ -573,9 +578,9 @@ pub async fn get_database_row_doc_changes(
   row_doc_content: Option<String>,
   db_row_body: &DatabaseRowBody,
   db_row_txn: &mut yrs::TransactionMut<'_>,
-  row_id: &str,
+  row_id: &Uuid,
   uid: i64,
-) -> Result<Option<(String, DocChanges)>, AppError> {
+) -> Result<Option<(Uuid, DocChanges)>, AppError> {
   let row_doc_content = match row_doc_content {
     Some(row_doc_content) if !row_doc_content.is_empty() => row_doc_content,
     _ => return Ok(None),
@@ -587,11 +592,12 @@ pub async fn get_database_row_doc_changes(
 
   match doc_id {
     Some(doc_id) => {
+      let doc_uuid = Uuid::parse_str(&doc_id)?;
       let cur_doc = get_latest_collab_document(
         collab_storage,
         GetCollabOrigin::Server,
         workspace_id,
-        doc_id,
+        doc_uuid,
       )
       .await?;
 
@@ -628,11 +634,14 @@ pub async fn get_database_row_doc_changes(
       }
 
       let updated_doc = collab_to_bin(cur_doc_collab, CollabType::Document).await?;
-      Ok(Some((doc_id, DocChanges::Update(updated_doc, doc_update))))
+      Ok(Some((
+        doc_uuid,
+        DocChanges::Update(updated_doc, doc_update),
+      )))
     },
     None => {
       // update row to indicate that the document is not empty
-      let is_document_empty_id = meta_id_from_row_id(&row_id.parse()?, RowMetaKey::IsDocumentEmpty);
+      let is_document_empty_id = meta_id_from_row_id(row_id, RowMetaKey::IsDocumentEmpty);
       db_row_body
         .get_meta()
         .insert(db_row_txn, is_document_empty_id, false);
@@ -643,10 +652,11 @@ pub async fn get_database_row_doc_changes(
         .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err)))?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to get document id")))?;
 
+      let new_doc_id = Uuid::parse_str(&new_doc_id)?;
       let created_row_doc: CreatedRowDocument = create_row_document(
         workspace_id,
         uid,
-        &new_doc_id,
+        new_doc_id,
         collab_storage,
         row_doc_content,
       )

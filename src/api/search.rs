@@ -27,7 +27,7 @@ async fn document_search(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let metrics = &*state.metrics.request_metrics;
   let resp = search_document(

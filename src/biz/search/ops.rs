@@ -111,7 +111,7 @@ pub async fn search_document(
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
-    &workspace_uuid.to_string(),
+    workspace_uuid,
   )
   .await?;
   let private_space_and_trash_views = private_space_and_trash_view_ids(&folder);

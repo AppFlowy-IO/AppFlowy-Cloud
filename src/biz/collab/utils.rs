@@ -456,10 +456,10 @@ pub async fn collab_to_doc_state(
   .await?
 }
 
-pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
+pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &Uuid) -> Result<Collab, AppError> {
   let collab = Collab::new_with_source(
     CollabOrigin::Server,
-    object_id,
+    &object_id.to_string(),
     DataSource::DocStateV1(doc_state),
     vec![],
     false,

@@ -8,14 +8,13 @@ use client_api::entity::{
 use client_api_test::*;
 use uuid::Uuid;
 
-async fn get_first_workspace_string(c: &client_api::Client) -> String {
+async fn get_first_workspace(c: &client_api::Client) -> Uuid {
   c.get_workspaces()
     .await
     .unwrap()
     .first()
     .unwrap()
     .workspace_id
-    .to_string()
 }
 
 #[tokio::test]
@@ -212,10 +211,10 @@ async fn test_template_creator_crud() {
 #[tokio::test]
 async fn test_template_crud() {
   let (authorized_client, _) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&authorized_client).await;
+  let workspace_id = get_first_workspace(&authorized_client).await;
   let published_view_namespace = uuid::Uuid::new_v4().to_string();
   authorized_client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace.clone())
+    .set_workspace_publish_namespace(&workspace_id, published_view_namespace.clone())
     .await
     .unwrap();
   let published_view_ids: Vec<Uuid> = (0..4).map(|_| Uuid::new_v4()).collect();

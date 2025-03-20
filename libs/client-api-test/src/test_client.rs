@@ -61,7 +61,7 @@ pub struct TestClient {
   pub user: User,
   pub ws_client: WSClient,
   pub api_client: client_api::Client,
-  pub collabs: HashMap<String, TestCollab>,
+  pub collabs: HashMap<Uuid, TestCollab>,
   pub device_id: String,
 }
 pub struct TestCollab {
@@ -87,7 +87,7 @@ impl TestClient {
     Self::new_with_device_id(&device_id, registered_user, start_ws_conn).await
   }
 
-  pub async fn insert_into<S: Prelim>(&self, object_id: &str, key: &str, value: S) {
+  pub async fn insert_into<S: Prelim>(&self, object_id: &Uuid, key: &str, value: S) {
     let mut lock = self.collabs.get(object_id).unwrap().collab.write().await;
     let collab = (*lock).borrow_mut();
     collab.insert(key, value);
@@ -143,14 +143,14 @@ impl TestClient {
 
   pub async fn insert_view_to_general_space(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     view_id: &str,
     view_name: &str,
     view_layout: ViewLayout,
   ) {
-    let mut folder = self.get_folder(workspace_id.parse().unwrap()).await;
+    let mut folder = self.get_folder(*workspace_id).await;
     let general_space_id = folder
-      .get_view(workspace_id)
+      .get_view(&workspace_id.to_string())
       .unwrap()
       .children
       .first()
@@ -207,10 +207,10 @@ impl TestClient {
     .unwrap()
   }
 
-  pub async fn get_database(&self, workspace_id: &str, database_id: &str) -> Database {
+  pub async fn get_database(&self, workspace_id: Uuid, database_id: &str) -> Database {
     let service = TestDatabaseCollabService {
       api_client: self.api_client.clone(),
-      workspace_id: workspace_id.to_string(),
+      workspace_id,
     };
     let context = DatabaseContext::new(Arc::new(service));
     Database::open(database_id, context).await.unwrap()
@@ -250,7 +250,7 @@ impl TestClient {
     .unwrap()
   }
 
-  pub async fn get_connect_users(&self, object_id: &str) -> Vec<i64> {
+  pub async fn get_connect_users(&self, object_id: &Uuid) -> Vec<i64> {
     #[derive(Deserialize)]
     struct UserId {
       pub uid: i64,
@@ -270,14 +270,14 @@ impl TestClient {
       .collect()
   }
 
-  pub async fn clean_awareness_state(&self, object_id: &str) {
+  pub async fn clean_awareness_state(&self, object_id: &Uuid) {
     let test_collab = self.collabs.get(object_id).unwrap();
     let mut lock = test_collab.collab.write().await;
     let collab = (*lock).borrow_mut();
     collab.clean_awareness_state();
   }
 
-  pub async fn emit_awareness_state(&self, object_id: &str) {
+  pub async fn emit_awareness_state(&self, object_id: &Uuid) {
     let test_collab = self.collabs.get(object_id).unwrap();
     let mut lock = test_collab.collab.write().await;
     let collab = (*lock).borrow_mut();
@@ -403,11 +403,10 @@ impl TestClient {
 
   pub async fn try_update_workspace_member(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     other_client: &TestClient,
     role: AFRole,
   ) -> Result<(), AppResponseError> {
-    let workspace_id = Uuid::parse_str(workspace_id).unwrap().to_string();
     let email = other_client.email().await;
     self
       .api_client
@@ -420,7 +419,7 @@ impl TestClient {
 
   pub async fn invite_and_accepted_workspace_member(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     other_client: &TestClient,
     role: AFRole,
   ) -> Result<(), AppResponseError> {
@@ -447,7 +446,7 @@ impl TestClient {
 
     let target_invitation = invitations
       .iter()
-      .find(|inv| inv.workspace_id.to_string().as_str() == workspace_id)
+      .find(|inv| &inv.workspace_id == workspace_id)
       .unwrap();
 
     other_client
@@ -461,17 +460,17 @@ impl TestClient {
 
   pub async fn try_remove_workspace_member(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     other_client: &TestClient,
   ) -> Result<(), AppResponseError> {
     let email = other_client.email().await;
     self
       .api_client
-      .remove_workspace_members(workspace_id.to_string(), vec![email])
+      .remove_workspace_members(workspace_id, vec![email])
       .await
   }
 
-  pub async fn get_workspace_members(&self, workspace_id: &str) -> Vec<AFWorkspaceMember> {
+  pub async fn get_workspace_members(&self, workspace_id: &Uuid) -> Vec<AFWorkspaceMember> {
     self
       .api_client
       .get_workspace_members(workspace_id)
@@ -481,7 +480,7 @@ impl TestClient {
 
   pub async fn try_get_workspace_members(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<Vec<AFWorkspaceMember>, AppResponseError> {
     self.api_client.get_workspace_members(workspace_id).await
   }
@@ -507,7 +506,7 @@ impl TestClient {
     self.api_client.get_workspace_member(params).await
   }
 
-  pub async fn wait_object_sync_complete(&self, object_id: &str) -> Result<(), Error> {
+  pub async fn wait_object_sync_complete(&self, object_id: &Uuid) -> Result<(), Error> {
     self
       .wait_object_sync_complete_with_secs(object_id, 60)
       .await
@@ -515,11 +514,11 @@ impl TestClient {
 
   pub async fn wait_object_sync_complete_with_secs(
     &self,
-    object_id: &str,
+    object_id: &Uuid,
     secs: u64,
   ) -> Result<(), Error> {
     let mut sync_state = {
-      let lock = self.collabs.get(object_id).unwrap().collab.read().await;
+      let lock = self.collabs.get(&object_id).unwrap().collab.read().await;
       lock.subscribe_sync_state()
     };
 
@@ -587,7 +586,7 @@ impl TestClient {
 
   pub async fn wait_until_all_embedding(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     query: Vec<EmbeddedCollabQuery>,
   ) -> Vec<AFCollabEmbedInfo> {
     let timeout_duration = Duration::from_secs(30);
@@ -613,7 +612,7 @@ impl TestClient {
     }
   }
 
-  pub async fn wait_until_get_embedding(&self, workspace_id: &str, object_id: &str) {
+  pub async fn wait_until_get_embedding(&self, workspace_id: &Uuid, object_id: &Uuid) {
     let result = timeout(Duration::from_secs(30), async {
       while self
         .api_client
@@ -639,7 +638,7 @@ impl TestClient {
 
   pub async fn wait_unit_get_search_result(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     query: &str,
     limit: u32,
   ) -> Vec<SearchDocumentResponseItem> {
@@ -665,14 +664,14 @@ impl TestClient {
 
   pub async fn assert_similarity(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     input: &str,
     expected: &str,
     score: f64,
     use_embedding: bool,
   ) {
     let params = CalculateSimilarityParams {
-      workspace_id: workspace_id.to_string(),
+      workspace_id: *workspace_id,
       input: input.to_string(),
       expected: expected.to_string(),
       use_embedding,
@@ -690,8 +689,8 @@ impl TestClient {
 
   pub async fn get_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     snapshot_id: &i64,
   ) -> Result<SnapshotData, AppResponseError> {
     self
@@ -708,8 +707,8 @@ impl TestClient {
 
   pub async fn create_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     collab_type: CollabType,
   ) -> Result<AFSnapshotMeta, AppResponseError> {
     self
@@ -720,8 +719,8 @@ impl TestClient {
 
   pub async fn get_snapshot_list(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<AFSnapshotMetas, AppResponseError> {
     self
       .api_client
@@ -731,8 +730,8 @@ impl TestClient {
 
   pub async fn get_snapshot_list_until(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     f: impl Fn(&AFSnapshotMetas) -> bool + Send + Sync + 'static,
     timeout_secs: u64,
   ) -> Result<AFSnapshotMetas, AppResponseError> {
@@ -756,7 +755,7 @@ impl TestClient {
 
   pub async fn create_collab_list(
     &mut self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params: Vec<CollabParams>,
   ) -> Result<(), AppResponseError> {
     self
@@ -805,7 +804,7 @@ impl TestClient {
 
   pub async fn batch_get_collab(
     &mut self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params: Vec<QueryCollab>,
   ) -> Result<BatchQueryCollabResult, AppResponseError> {
     self.api_client.batch_get_collab(workspace_id, params).await
@@ -895,11 +894,8 @@ impl TestClient {
       collab.initialize();
     }
     let test_collab = TestCollab { origin, collab };
-    self.collabs.insert(object_id.to_string(), test_collab);
-    self
-      .wait_object_sync_complete(&object_id.to_string())
-      .await
-      .unwrap();
+    self.collabs.insert(object_id, test_collab);
+    self.wait_object_sync_complete(&object_id).await.unwrap();
   }
 
   pub async fn open_workspace_collab(&mut self, workspace_id: Uuid) {
@@ -972,7 +968,7 @@ impl TestClient {
       collab.initialize();
     }
     let test_collab = TestCollab { origin, collab };
-    self.collabs.insert(object_id.to_string(), test_collab);
+    self.collabs.insert(object_id, test_collab);
   }
 
   #[allow(unused_variables)]
@@ -1028,7 +1024,7 @@ impl TestClient {
     self.ws_client.connect().await.unwrap();
   }
 
-  pub async fn get_edit_collab_json(&self, object_id: &str) -> Value {
+  pub async fn get_edit_collab_json(&self, object_id: &Uuid) -> Value {
     let lock = self.collabs.get(object_id).unwrap().collab.read().await;
     lock.to_json_value()
   }
@@ -1036,7 +1032,7 @@ impl TestClient {
   /// data: [(view_id, meta_json, blob_hex)]
   pub async fn publish_collabs(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     data: Vec<(Uuid, &str, &str)>,
     comments_enabled: bool,
     duplicate_enabled: bool,
@@ -1091,13 +1087,11 @@ impl TestClient {
 
 pub async fn assert_server_snapshot(
   client: &client_api::Client,
-  workspace_id: &str,
-  object_id: &str,
+  workspace_id: &Uuid,
+  object_id: &Uuid,
   snapshot_id: &i64,
   expected: Value,
 ) {
-  let workspace_id = workspace_id.to_string();
-  let object_id = object_id.to_string();
   let mut retry_count = 0;
   loop {
     tokio::select! {
@@ -1113,7 +1107,7 @@ pub async fn assert_server_snapshot(
             EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
           let json = Collab::new_with_source(
             CollabOrigin::Empty,
-            &object_id,
+            &object_id.to_string(),
             DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()),
             vec![],
             false,
@@ -1206,12 +1200,11 @@ pub async fn assert_server_collab(
 
 pub async fn assert_client_collab_within_secs(
   client: &mut TestClient,
-  object_id: &str,
+  object_id: &Uuid,
   key: &str,
   expected: Value,
   secs: u64,
 ) {
-  let object_id = object_id.to_string();
   let mut retry_count = 0;
   loop {
     tokio::select! {
@@ -1244,11 +1237,10 @@ pub async fn assert_client_collab_within_secs(
 
 pub async fn assert_client_collab_include_value(
   client: &mut TestClient,
-  object_id: &str,
+  object_id: &Uuid,
   expected: Value,
 ) -> Result<(), Error> {
   let secs = 60;
-  let object_id = object_id.to_string();
   let mut retry_count = 0;
   loop {
     tokio::select! {

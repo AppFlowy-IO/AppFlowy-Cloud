@@ -161,12 +161,12 @@ async fn add_and_delete_workspace_for_user() {
     .unwrap();
 
   // Workspace need to have at least one collab
-  let workspace_id = newly_added_workspace.workspace_id.to_string();
+  let workspace_id = newly_added_workspace.workspace_id;
   let _ = c
     .get_collab(QueryCollabParams::new(
-      &workspace_id,
+      workspace_id,
       CollabType::Folder,
-      &workspace_id,
+      workspace_id,
     ))
     .await
     .unwrap();

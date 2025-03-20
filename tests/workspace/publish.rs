@@ -30,27 +30,27 @@ use crate::workspace::published_data::{self};
 #[tokio::test]
 async fn test_set_publish_namespace_set() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&c).await;
+  let workspace_id = get_first_workspace(&c).await;
 
   {
     // can get namespace before setting, which is random string
     let _ = c
-      .get_workspace_publish_namespace(&workspace_id.to_string())
+      .get_workspace_publish_namespace(&workspace_id)
       .await
       .unwrap();
   }
 
-  let new_namespace = format!("namespace_{}", uuid::Uuid::new_v4());
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace.clone())
+  let new_namespace = format!("namespace_{}", Uuid::new_v4());
+  c.set_workspace_publish_namespace(&workspace_id, new_namespace.clone())
     .await
     .unwrap();
 
   {
     // another workspace cannot have the same namespace
     let (c2, _user) = generate_unique_registered_user_client().await;
-    let workspace_id_2 = get_first_workspace_string(&c2).await;
+    let workspace_id_2 = get_first_workspace(&c2).await;
     let err = c2
-      .set_workspace_publish_namespace(&workspace_id_2.to_string(), new_namespace.clone())
+      .set_workspace_publish_namespace(&workspace_id_2, new_namespace.clone())
       .await
       .unwrap_err();
     assert_eq!(
@@ -64,7 +64,7 @@ async fn test_set_publish_namespace_set() {
   {
     // cannot set the same namespace
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace.clone())
+      .set_workspace_publish_namespace(&workspace_id, new_namespace.clone())
       .await
       .err()
       .unwrap();
@@ -75,15 +75,15 @@ async fn test_set_publish_namespace_set() {
       err
     );
   }
-  let new_namespace_2 = uuid::Uuid::new_v4().to_string();
+  let new_namespace_2 = Uuid::new_v4().to_string();
   {
     // can replace the namespace
-    c.set_workspace_publish_namespace(&workspace_id.to_string(), new_namespace_2.clone())
+    c.set_workspace_publish_namespace(&workspace_id, new_namespace_2.clone())
       .await
       .unwrap();
 
     let got_namespace = c
-      .get_workspace_publish_namespace(&workspace_id.to_string())
+      .get_workspace_publish_namespace(&workspace_id)
       .await
       .unwrap();
     assert_eq!(got_namespace, new_namespace_2);
@@ -91,7 +91,7 @@ async fn test_set_publish_namespace_set() {
   {
     // cannot set namespace with invalid chars
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), "/|(*&)(&#@!".to_string()) // invalid chars
+      .set_workspace_publish_namespace(&workspace_id, "/|(*&)(&#@!".to_string()) // invalid chars
       .await
       .err()
       .unwrap();
@@ -107,9 +107,9 @@ async fn test_set_publish_namespace_set() {
 #[tokio::test]
 async fn test_publish_doc() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&c).await;
-  let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
+  let workspace_id = get_first_workspace(&c).await;
+  let my_namespace = Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id, my_namespace.clone())
     .await
     .unwrap();
 
@@ -120,7 +120,7 @@ async fn test_publish_doc() {
         &workspace_id,
         vec![PublishCollabItem {
           meta: PublishCollabMetadata {
-            view_id: uuid::Uuid::new_v4(),
+            view_id: Uuid::new_v4(),
             publish_name: "(*&^%$#!".to_string(),
             metadata: MyCustomMetadata {
               title: "my_title_1".to_string(),
@@ -145,7 +145,7 @@ async fn test_publish_doc() {
         &workspace_id,
         vec![PublishCollabItem {
           meta: PublishCollabMetadata {
-            view_id: uuid::Uuid::new_v4(),
+            view_id: Uuid::new_v4(),
             publish_name: "a".repeat(1001),
             metadata: MyCustomMetadata {
               title: "my_title_1".to_string(),
@@ -162,9 +162,9 @@ async fn test_publish_doc() {
   }
 
   let publish_name_1 = "publish_name-1";
-  let view_id_1 = uuid::Uuid::new_v4();
+  let view_id_1 = Uuid::new_v4();
   let publish_name_2 = "publish_name-2";
-  let view_id_2 = uuid::Uuid::new_v4();
+  let view_id_2 = Uuid::new_v4();
 
   // User publishes two collabs
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
@@ -205,7 +205,7 @@ async fn test_publish_doc() {
       &workspace_id,
       vec![PublishCollabItem {
         meta: PublishCollabMetadata {
-          view_id: uuid::Uuid::new_v4(),
+          view_id: Uuid::new_v4(),
           publish_name: publish_name_1.to_string(),
           metadata: MyCustomMetadata {
             title: "some_other_title".to_string(),
@@ -472,15 +472,15 @@ async fn test_publish_doc() {
 #[tokio::test]
 async fn test_publish_comments() {
   let (page_owner_client, page_owner) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&page_owner_client).await;
-  let published_view_namespace = uuid::Uuid::new_v4().to_string();
+  let workspace_id = get_first_workspace(&page_owner_client).await;
+  let published_view_namespace = Uuid::new_v4().to_string();
   page_owner_client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id, published_view_namespace)
     .await
     .unwrap();
 
   let publish_name = "published-view";
-  let view_id = uuid::Uuid::new_v4();
+  let view_id = Uuid::new_v4();
   page_owner_client
     .publish_collabs::<MyCustomMetadata, &[u8]>(
       &workspace_id,
@@ -696,15 +696,15 @@ async fn test_publish_comments() {
 #[tokio::test]
 async fn test_excessive_comment_length() {
   let (client, _) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&client).await;
-  let published_view_namespace = uuid::Uuid::new_v4().to_string();
+  let workspace_id = get_first_workspace(&client).await;
+  let published_view_namespace = Uuid::new_v4().to_string();
   client
     .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
     .await
     .unwrap();
 
   let publish_name = "published-view";
-  let view_id = uuid::Uuid::new_v4();
+  let view_id = Uuid::new_v4();
   client
     .publish_collabs::<MyCustomMetadata, &[u8]>(
       &workspace_id,
@@ -734,15 +734,15 @@ async fn test_excessive_comment_length() {
 #[tokio::test]
 async fn test_publish_reactions() {
   let (page_owner_client, _) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&page_owner_client).await;
-  let published_view_namespace = uuid::Uuid::new_v4().to_string();
+  let workspace_id = get_first_workspace(&page_owner_client).await;
+  let published_view_namespace = Uuid::new_v4().to_string();
   page_owner_client
     .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
     .await
     .unwrap();
 
   let publish_name = "published-view";
-  let view_id = uuid::Uuid::new_v4();
+  let view_id = Uuid::new_v4();
   page_owner_client
     .publish_collabs::<MyCustomMetadata, &[u8]>(
       &workspace_id,
@@ -861,9 +861,9 @@ async fn test_publish_reactions() {
 #[tokio::test]
 async fn test_publish_load_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&c).await;
-  let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace)
+  let workspace_id = get_first_workspace(&c).await;
+  let my_namespace = Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id, my_namespace)
     .await
     .unwrap();
 
@@ -880,7 +880,7 @@ async fn test_publish_load_test() {
   let collabs: Vec<PublishCollabItem<MyCustomMetadata, Vec<u8>>> = (0..1000)
     .map(|i| PublishCollabItem {
       meta: PublishCollabMetadata {
-        view_id: uuid::Uuid::new_v4(),
+        view_id: Uuid::new_v4(),
         publish_name: format!("publish-name-{}", i),
         metadata: MyCustomMetadata {
           title: format!("title_{}", i),
@@ -895,14 +895,13 @@ async fn test_publish_load_test() {
   c.publish_collabs(&workspace_id, collabs).await.unwrap();
 }
 
-async fn get_first_workspace_string(c: &client_api::Client) -> String {
+async fn get_first_workspace(c: &client_api::Client) -> Uuid {
   c.get_workspaces()
     .await
     .unwrap()
     .first()
     .unwrap()
     .workspace_id
-    .to_string()
 }
 
 #[tokio::test]
@@ -915,7 +914,7 @@ async fn workspace_member_publish_unpublish() {
     .await
     .unwrap();
 
-  let view_id = uuid::Uuid::new_v4();
+  let view_id = Uuid::new_v4();
   // member can publish without owner setting namespace
   client_2
     .api_client
@@ -954,9 +953,9 @@ async fn duplicate_to_workspace_references() {
   let client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
 
-  let doc_2_view_id = uuid::Uuid::new_v4();
-  let doc_1_view_id: uuid::Uuid = "e8c4f99a-50ea-4758-bca0-afa7df5c2434".parse().unwrap();
-  let grid_1_view_id: uuid::Uuid = "8e062f61-d7ae-4f4b-869c-f44c43149399".parse().unwrap();
+  let doc_2_view_id = Uuid::new_v4();
+  let doc_1_view_id: Uuid = "e8c4f99a-50ea-4758-bca0-afa7df5c2434".parse().unwrap();
+  let grid_1_view_id: Uuid = "8e062f61-d7ae-4f4b-869c-f44c43149399".parse().unwrap();
   client_1
     .publish_collabs(
       &workspace_id,
@@ -1003,9 +1002,9 @@ async fn duplicate_to_workspace_references() {
     //         └── grid1
     client_2
       .duplicate_published_to_workspace(
-        &workspace_id_2,
-        &doc_2_view_id.to_string(),
-        &fv.children[0].view_id, // use the first space found in the workspace
+        workspace_id_2,
+        doc_2_view_id,
+        fv.children[0].view_id.parse().unwrap(), // use the first space found in the workspace
       )
       .await;
 
@@ -1045,10 +1044,10 @@ async fn duplicate_to_workspace_doc_inline_database() {
   let workspace_id = client_1.workspace_id().await;
 
   // doc3 contains inline database to a view in grid1 (view of grid1)
-  let doc_3_view_id = uuid::Uuid::new_v4();
+  let doc_3_view_id = Uuid::new_v4();
 
   // view of grid1
-  let view_of_grid_1_view_id: uuid::Uuid = "d8589e98-88fc-42e4-888c-b03338bf22bb".parse().unwrap();
+  let view_of_grid_1_view_id: Uuid = "d8589e98-88fc-42e4-888c-b03338bf22bb".parse().unwrap();
   let view_of_grid_1_db_data = hex::decode(published_data::VIEW_OF_GRID_1_DB_DATA).unwrap();
   let (pub_db_id, pub_row_ids) = get_database_id_and_row_ids(&view_of_grid_1_db_data);
 
@@ -1075,11 +1074,10 @@ async fn duplicate_to_workspace_doc_inline_database() {
   {
     let mut client_2 = TestClient::new_user().await;
     let workspace_id_2 = client_2.workspace_id().await;
-    let workspace_uuid_2 = Uuid::parse_str(&workspace_id_2).unwrap();
 
     // Open workspace to trigger group creation
     client_2
-      .open_collab(&workspace_id_2, &workspace_id_2, CollabType::Folder)
+      .open_collab(workspace_id_2, workspace_id_2, CollabType::Folder)
       .await;
 
     let fv = client_2
@@ -1097,9 +1095,9 @@ async fn duplicate_to_workspace_doc_inline_database() {
     //         └── View of grid1
     client_2
       .duplicate_published_to_workspace(
-        &workspace_id_2,
-        &doc_3_view_id.to_string(),
-        &fv.children[0].view_id, // use the first space found in the workspace
+        workspace_id_2,
+        doc_3_view_id,
+        fv.children[0].view_id.parse().unwrap(), // use the first space found in the workspace
       )
       .await;
 
@@ -1140,14 +1138,14 @@ async fn duplicate_to_workspace_doc_inline_database() {
       client_2.uid().await,
       CollabOrigin::Server,
       collab_resp.encode_collab.into(),
-      &workspace_id_2,
+      &workspace_id_2.to_string(),
       vec![],
     )
     .unwrap();
 
     let folder_view = collab_folder_to_folder_view(
-      workspace_uuid_2,
-      &workspace_id_2,
+      workspace_id_2,
+      &workspace_id_2.to_string(),
       &folder,
       5,
       &HashSet::default(),
@@ -1223,7 +1221,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
 
   // embedded doc with db
   // database is created in the doc, not linked from a separate view
-  let doc_with_embedded_db_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  let doc_with_embedded_db_view_id: Uuid = Uuid::new_v4();
 
   client_1
     .publish_collabs(
@@ -1253,7 +1251,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
 
     // Open workspace to trigger group creation
     client_2
-      .open_collab(&workspace_id_2, &workspace_id_2, CollabType::Folder)
+      .open_collab(workspace_id_2, workspace_id_2, CollabType::Folder)
       .await;
 
     let fv = client_2
@@ -1317,7 +1315,7 @@ async fn duplicate_to_workspace_db_with_relation() {
   let workspace_id = client_1.workspace_id().await;
 
   // database with relation column to another database
-  let db_with_rel_col_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  let db_with_rel_col_view_id: Uuid = Uuid::new_v4();
 
   client_1
     .publish_collabs(
@@ -1341,7 +1339,7 @@ async fn duplicate_to_workspace_db_with_relation() {
     )
     .await;
 
-  let db_with_row_doc_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  let db_with_row_doc_view_id: Uuid = Uuid::new_v4();
   client_1
     .publish_collabs(
       &workspace_id,
@@ -1436,7 +1434,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
   let client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
 
-  let db_with_row_doc_view_id: uuid::Uuid = uuid::Uuid::new_v4();
+  let db_with_row_doc_view_id: Uuid = Uuid::new_v4();
   client_1
     .publish_collabs(
       &workspace_id,
@@ -1486,7 +1484,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         .unwrap();
 
       let db_collab = client_2
-        .get_db_collab_from_view(&workspace_id_2, &db_with_row_doc.view_id)
+        .get_db_collab_from_view(workspace_id_2, &db_with_row_doc.view_id)
         .await;
 
       let db_body = DatabaseBody::from_collab(
@@ -1499,21 +1497,17 @@ async fn duplicate_to_workspace_db_row_with_doc() {
       // check that doc exists and can be fetched
       let first_row_id = &db_body.views.get_all_views(&db_collab.transact())[0].row_orders[0].id;
       let row_collab = client_2
-        .get_collab_to_collab(
-          workspace_id_2.clone(),
-          first_row_id.to_string(),
-          CollabType::DatabaseRow,
-        )
+        .get_collab_to_collab(workspace_id_2, first_row_id, CollabType::DatabaseRow)
         .await
         .unwrap();
       let row_detail = RowDetail::from_collab(&row_collab).unwrap();
       assert!(!row_detail.meta.is_document_empty);
-      let doc_id = row_detail.document_id;
+      let doc_id: Uuid = row_detail.document_id.parse().unwrap();
       let _doc_collab = client_2
-        .get_collab_to_collab(workspace_id_2.clone(), doc_id.clone(), CollabType::Document)
+        .get_collab_to_collab(workspace_id_2, doc_id, CollabType::Document)
         .await;
       let folder_collab = client_2
-        .get_collab_to_collab(workspace_id_2.clone(), workspace_id_2, CollabType::Folder)
+        .get_collab_to_collab(workspace_id_2, workspace_id_2, CollabType::Folder)
         .await
         .unwrap();
       let folder = Folder::open(UserId::from(client_2.uid().await), folder_collab, None).unwrap();
@@ -1528,7 +1522,7 @@ async fn duplicate_to_workspace_db_rel_self() {
   let client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
 
-  let db_rel_self_view_id: uuid::Uuid = "18d72589-80d7-4041-9342-5d572facb7c9".parse().unwrap();
+  let db_rel_self_view_id: Uuid = "18d72589-80d7-4041-9342-5d572facb7c9".parse().unwrap();
   client_1
     .publish_collabs(
       &workspace_id,
@@ -1614,7 +1608,7 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
 
   // database with a row referencing itself
   // uuid must be fixed because there is inline block that have parent_id that references this
-  let doc_4_view_id: uuid::Uuid = "bb429fb8-3bb8-4f8c-99d8-0d8c48047efc".parse().unwrap();
+  let doc_4_view_id: Uuid = "bb429fb8-3bb8-4f8c-99d8-0d8c48047efc".parse().unwrap();
   client_1
     .publish_collabs(
       &workspace_id,
@@ -1692,14 +1686,14 @@ fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<Str
 #[tokio::test]
 async fn test_republish_doc() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&c).await;
-  let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
+  let workspace_id = get_first_workspace(&c).await;
+  let my_namespace = Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id, my_namespace.clone())
     .await
     .unwrap();
 
   let publish_name = "my-publish-name";
-  let view_id = uuid::Uuid::new_v4();
+  let view_id = Uuid::new_v4();
 
   // User publishes 1 doc
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
@@ -1752,7 +1746,7 @@ async fn test_republish_doc() {
 
   {
     // User publish another doc with different id but same publish name
-    let view_id_2 = uuid::Uuid::new_v4();
+    let view_id_2 = Uuid::new_v4();
     c.publish_collabs::<MyCustomMetadata, &[u8]>(
       &workspace_id,
       vec![PublishCollabItem {
@@ -1790,14 +1784,14 @@ async fn test_republish_doc() {
 #[tokio::test]
 async fn test_republish_patch() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = get_first_workspace_string(&c).await;
-  let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace.clone())
+  let workspace_id = get_first_workspace(&c).await;
+  let my_namespace = Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id, my_namespace.clone())
     .await
     .unwrap();
 
   let publish_name = "my-publish-name";
-  let view_id = uuid::Uuid::new_v4();
+  let view_id = Uuid::new_v4();
 
   // User publishes 1 doc
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
@@ -1825,7 +1819,7 @@ async fn test_republish_patch() {
 
   // User publish another doc
   let publish_name_2 = "my-publish-name-2";
-  let view_id_2 = uuid::Uuid::new_v4();
+  let view_id_2 = Uuid::new_v4();
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
     &workspace_id,
     vec![PublishCollabItem {

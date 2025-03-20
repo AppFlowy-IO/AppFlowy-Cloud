@@ -11,10 +11,10 @@ use uuid::Uuid;
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_history<'a>(
   workspace_id: &Uuid,
-  oid: &str,
+  oid: &Uuid,
   doc_state: Vec<u8>,
   doc_state_version: i32,
-  deps_snapshot_id: Option<String>,
+  deps_snapshot_id: Option<&Uuid>,
   collab_type: CollabType,
   created_at: i64,
   snapshots: Vec<SnapshotMetaPb>,
@@ -61,7 +61,7 @@ pub async fn insert_history<'a>(
 
 async fn insert_snapshot_meta<'a, E: Executor<'a, Database = Postgres>>(
   workspace_id: &Uuid,
-  oid: &str,
+  oid: &Uuid,
   meta: SnapshotMetaPb,
   partition_key: i32,
   executor: E,
@@ -72,7 +72,7 @@ async fn insert_snapshot_meta<'a, E: Executor<'a, Database = Postgres>>(
     VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT DO NOTHING
     "#,
-    oid,
+    oid.to_string(),
     workspace_id,
     meta.snapshot,
     meta.snapshot_version,
@@ -95,7 +95,7 @@ async fn insert_snapshot_meta<'a, E: Executor<'a, Database = Postgres>>(
 /// Returns a vector of `AFSnapshotMetaPbRow` struct instances containing the snapshot data.
 /// This vector is empty if no records match the criteria.
 pub async fn get_snapshot_meta_list<'a>(
-  oid: &str,
+  oid: &Uuid,
   collab_type: &CollabType,
   pool: &PgPool,
 ) -> Result<Vec<AFSnapshotMetaPbRow>, sqlx::Error> {
@@ -130,24 +130,20 @@ pub async fn get_snapshot_meta_list<'a>(
 #[allow(clippy::too_many_arguments)]
 async fn insert_snapshot_state<'a, E: Executor<'a, Database = Postgres>>(
   workspace_id: &Uuid,
-  oid: &str,
+  oid: &Uuid,
   doc_state: Vec<u8>,
   doc_state_version: i32,
-  deps_snapshot_id: Option<String>,
+  deps_snapshot_id: Option<&Uuid>,
   partition_key: i32,
   created_at: i64,
   executor: E,
 ) -> Result<(), sqlx::Error> {
-  let deps_snapshot_id = match deps_snapshot_id {
-    Some(id) => Uuid::parse_str(&id).ok(),
-    None => None,
-  };
   sqlx::query!(
     r#"
     INSERT INTO af_snapshot_state (oid, workspace_id, doc_state, doc_state_version, deps_snapshot_id, partition_key, created_at)
     VALUES ($1, $2, $3, $4, $5, $6, $7)
     "#,
-    oid,
+    oid.to_string(),
     workspace_id,
     doc_state,
     doc_state_version,

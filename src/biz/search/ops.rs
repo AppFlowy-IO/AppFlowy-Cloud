@@ -151,7 +151,7 @@ pub async fn search_document(
       .into_iter()
       .map(|item| SearchDocumentResponseItem {
         object_id: item.object_id,
-        workspace_id: item.workspace_id.to_string(),
+        workspace_id: item.workspace_id,
         score: item.score,
         content_type: SearchContentType::from_record(item.content_type),
         preview: item.content_preview,

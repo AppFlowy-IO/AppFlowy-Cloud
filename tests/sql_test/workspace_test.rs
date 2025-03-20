@@ -31,7 +31,7 @@ async fn insert_collab_sql_test(pool: PgPool) {
   let start_time = std::time::Instant::now();
   for &data_size in &data_sizes {
     let encoded_collab_v1 = generate_random_bytes(data_size);
-    let object_id = uuid::Uuid::new_v4().to_string();
+    let object_id = uuid::Uuid::new_v4();
     object_ids.push(object_id.clone());
     let mut txn = pool.begin().await.unwrap();
     let params = CollabParams {
@@ -53,8 +53,8 @@ async fn insert_collab_sql_test(pool: PgPool) {
       .unwrap()
       .unwrap();
 
-    assert_eq!(meta.oid, object_id);
-    assert_eq!(meta.workspace_id.to_string(), user.workspace_id);
+    assert_eq!(meta.oid, object_id.to_string());
+    assert_eq!(meta.workspace_id, user.workspace_id);
     assert!(meta.created_at.is_some());
     assert!(meta.deleted_at.is_none());
   }
@@ -84,7 +84,7 @@ async fn insert_bulk_collab_sql_test(pool: PgPool) {
   // Prepare bulk insert data
   for &data_size in &data_sizes {
     let encoded_collab_v1 = generate_random_bytes(data_size);
-    let object_id = uuid::Uuid::new_v4().to_string();
+    let object_id = uuid::Uuid::new_v4();
     object_ids.push(object_id.clone());
 
     let params = CollabParams {
@@ -100,7 +100,7 @@ async fn insert_bulk_collab_sql_test(pool: PgPool) {
   // Perform bulk insert
   let start_time = std::time::Instant::now(); // Start timing
   let mut txn = pool.begin().await.unwrap();
-  insert_into_af_collab_bulk_for_user(&mut txn, &user.uid, &user.workspace_id, &collab_params_list)
+  insert_into_af_collab_bulk_for_user(&mut txn, &user.uid, user.workspace_id, &collab_params_list)
     .await
     .unwrap();
   txn.commit().await.unwrap();
@@ -142,7 +142,7 @@ async fn test_bulk_insert_empty_collab_list(pool: PgPool) {
   let result = insert_into_af_collab_bulk_for_user(
     &mut txn,
     &user.uid,
-    &user.workspace_id,
+    user.workspace_id,
     &collab_params_list,
   )
   .await;
@@ -159,7 +159,7 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
     .await
     .unwrap();
 
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = uuid::Uuid::new_v4();
   let encoded_collab_v1 = generate_random_bytes(1024); // 1KB of random data
 
   // Two items with the same oid and partition_key
@@ -170,14 +170,14 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
       encoded_collab_v1: encoded_collab_v1.clone().into(),
     },
     CollabParams {
-      object_id: object_id.clone(), // Duplicate oid
+      object_id, // Duplicate oid
       collab_type: CollabType::Unknown,
       encoded_collab_v1: generate_random_bytes(2048).into(), // Different data to test update
     },
   ];
 
   let mut txn = pool.begin().await.unwrap();
-  insert_into_af_collab_bulk_for_user(&mut txn, &user.uid, &user.workspace_id, &collab_params_list)
+  insert_into_af_collab_bulk_for_user(&mut txn, &user.uid, user.workspace_id, &collab_params_list)
     .await
     .unwrap();
   txn.commit().await.unwrap();
@@ -210,7 +210,7 @@ async fn test_batch_insert_comparison(pool: PgPool) {
       // Generate data for the total row count
       let collab_params_list: Vec<CollabParams> = (0..total_row_count)
         .map(|_| CollabParams {
-          object_id: uuid::Uuid::new_v4().to_string(),
+          object_id: uuid::Uuid::new_v4(),
           collab_type: CollabType::Unknown,
           encoded_collab_v1: generate_random_bytes(row_size).into(), // Generate random bytes for the given row size
         })
@@ -230,7 +230,7 @@ async fn test_batch_insert_comparison(pool: PgPool) {
       let result = insert_into_af_collab_bulk_for_user(
         &mut txn,
         &user.uid,
-        &user.workspace_id,
+        user.workspace_id,
         &collab_params_list,
       )
       .await;
@@ -252,7 +252,7 @@ async fn test_batch_insert_comparison(pool: PgPool) {
           let start_time = std::time::Instant::now();
           let mut txn = pool.begin().await.unwrap();
           let result =
-            insert_into_af_collab_bulk_for_user(&mut txn, &user.uid, &user.workspace_id, chunk)
+            insert_into_af_collab_bulk_for_user(&mut txn, &user.uid, user.workspace_id, chunk)
               .await;
 
           assert!(result.is_ok()); // Ensure the insert doesn't fail

@@ -151,7 +151,7 @@ pub struct CollabResponse {
   ///
   /// We can remove this 'serde(default)' after the 0325 version is stable.
   #[serde(default)]
-  pub object_id: String,
+  pub object_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

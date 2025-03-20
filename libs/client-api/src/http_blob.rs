@@ -50,7 +50,7 @@ impl Client {
   #[instrument(level = "info", skip_all)]
   pub async fn put_blob_v1<T: Into<Bytes>>(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     data: T,
     mime: &Mime,
@@ -102,7 +102,7 @@ impl Client {
       .await?
       .into_data()
   }
-  pub fn get_blob_url_v1(&self, workspace_id: &str, parent_dir: &str, file_id: &str) -> String {
+  pub fn get_blob_url_v1(&self, workspace_id: &Uuid, parent_dir: &str, file_id: &str) -> String {
     let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     format!(
       "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
@@ -111,7 +111,7 @@ impl Client {
   }
 
   /// Returns the workspace_id, parent_dir, and file_id from the given blob url.
-  pub fn parse_blob_url_v1(&self, url: &str) -> Option<(String, String, String)> {
+  pub fn parse_blob_url_v1(&self, url: &str) -> Option<(Uuid, String, String)> {
     let parsed_url = Url::parse(url).ok()?;
     let segments: Vec<&str> = parsed_url.path_segments()?.collect();
     // Check if the path has the expected number of segments
@@ -120,7 +120,7 @@ impl Client {
     }
 
     // Extract the workspace_id, parent_dir, and file_id from the segments
-    let workspace_id = segments[2].to_string();
+    let workspace_id: Uuid = segments[2].parse().ok()?;
     let encoded_parent_dir = segments[5].to_string();
     let file_id = segments[6].to_string();
 
@@ -136,7 +136,7 @@ impl Client {
   #[instrument(level = "info", skip_all)]
   pub async fn get_blob_v1(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     file_id: &str,
   ) -> Result<(Mime, Vec<u8>), AppResponseError> {

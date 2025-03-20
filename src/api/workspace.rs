@@ -1609,6 +1609,7 @@ async fn favorite_page_view_handler(
     workspace_uuid,
     &view_id,
     payload.is_favorite,
+    payload.is_pinned,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

@@ -49,12 +49,8 @@ pub async fn duplicate_view_tree_and_collab(
   suffix: &str,
 ) -> Result<(), AppError> {
   let uid = user.uid;
-  let mut folder: Folder = get_latest_collab_folder(
-    &collab_storage,
-    GetCollabOrigin::User { uid },
-    &workspace_id.to_string(),
-  )
-  .await?;
+  let mut folder: Folder =
+    get_latest_collab_folder(&collab_storage, GetCollabOrigin::User { uid }, workspace_id).await?;
   let trash_sections: HashSet<String> = folder
     .get_all_trash_sections()
     .iter()
@@ -79,8 +75,8 @@ pub async fn duplicate_view_tree_and_collab(
   let encoded_ws_db = get_latest_collab_encoded(
     &collab_storage,
     GetCollabOrigin::User { uid },
-    &workspace_id.to_string(),
-    &ws_db_oid,
+    workspace_id,
+    ws_db_oid,
     CollabType::WorkspaceDatabase,
   )
   .await
@@ -268,7 +264,7 @@ async fn duplicate_database(
       });
     }
     collab_storage
-      .batch_insert_new_collab(&workspace_id.to_string(), &uid, collab_params_list)
+      .batch_insert_new_collab(workspace_id, &uid, collab_params_list)
       .await?;
     let encoded_update = {
       let mut txn = workspace_database.collab.transact_mut();
@@ -307,7 +303,7 @@ async fn duplicate_document(
     })
     .collect();
   let query_results = collab_storage
-    .batch_get_collab(&uid, &workspace_id.to_string(), queries, true)
+    .batch_get_collab(&uid, workspace_id, queries, true)
     .await;
   let mut collab_params_list = vec![];
   for (collab_id, query_result) in query_results {
@@ -334,7 +330,7 @@ async fn duplicate_document(
     }
   }
   collab_storage
-    .batch_insert_new_collab(&workspace_id.to_string(), &uid, collab_params_list)
+    .batch_insert_new_collab(workspace_id, &uid, collab_params_list)
     .await?;
   Ok(())
 }
@@ -421,14 +417,14 @@ fn duplicate_views(views: &[View], suffix: &str) -> Result<DuplicateContext, App
 }
 
 fn duplicate_document_encoded_collab(
-  orig_object_id: &str,
-  new_object_id: &str,
+  orig_object_id: &Uuid,
+  new_object_id: Uuid,
   encoded_collab: EncodedCollab,
 ) -> Result<CollabParams, AppError> {
   let collab = collab_from_doc_state(encoded_collab.doc_state.to_vec(), orig_object_id)?;
   let document = Document::open(collab).unwrap();
   let data = document.get_document_data().unwrap();
-  let duplicated_document = Document::create(new_object_id, data)
+  let duplicated_document = Document::create(&new_object_id.to_string(), data)
     .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to create document: {}", err)))?;
   let encoded_collab: EncodedCollab = duplicated_document
     .encode_collab_v1(|c| CollabType::Document.validate_require_data(c))
@@ -436,7 +432,7 @@ fn duplicate_document_encoded_collab(
       AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {}", err))
     })?;
   Ok(CollabParams {
-    object_id: new_object_id.to_string(),
+    object_id: new_object_id,
     encoded_collab_v1: encoded_collab.encode_to_bytes()?.into(),
     collab_type: CollabType::Document,
   })

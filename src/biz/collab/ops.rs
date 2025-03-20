@@ -356,15 +356,14 @@ pub async fn list_database(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   uid: i64,
-  workspace_uuid_str: String,
+  workspace_id: Uuid,
 ) -> Result<Vec<AFDatabase>, AppError> {
-  let workspace_uuid: Uuid = workspace_uuid_str.as_str().parse()?;
-  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_uuid).await?;
+  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
 
   let mut ws_body_collab = get_latest_collab(
     collab_storage,
     GetCollabOrigin::Server,
-    &workspace_uuid_str,
+    &workspace_id,
     &ws_db_oid,
     CollabType::WorkspaceDatabase,
   )
@@ -378,12 +377,8 @@ pub async fn list_database(
   })?;
   let db_metas = ws_body.get_all_meta(&ws_body_collab.transact());
 
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::User { uid },
-    &workspace_uuid_str,
-  )
-  .await?;
+  let folder =
+    get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, &workspace_id).await?;
 
   let trash = folder
     .get_all_trash_sections()

@@ -395,7 +395,7 @@ async fn patch_workspace_handler(
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &params.workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, &params.workspace_id, Action::Write)
     .await?;
   let params = params.into_inner();
   workspace::ops::patch_workspace(
@@ -416,7 +416,7 @@ async fn delete_workspace_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Delete)
+    .enforce_action(&uid, &workspace_id, Action::Delete)
     .await?;
   workspace::ops::delete_workspace_for_user(
     state.pg_pool.clone(),
@@ -459,7 +459,7 @@ async fn post_workspace_invite_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
     .await?;
 
   let invitations = payload.into_inner();
@@ -531,7 +531,7 @@ async fn get_workspace_settings_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let settings = workspace::ops::get_workspace_settings(&state.pg_pool, &workspace_id).await?;
   Ok(AppResponse::Ok().with_data(settings).into())
@@ -549,7 +549,7 @@ async fn post_workspace_settings_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
   let settings =
     workspace::ops::update_workspace_settings(&state.pg_pool, &workspace_id, data).await?;
@@ -565,7 +565,7 @@ async fn get_workspace_members_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
     .await?;
   let members = workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
     .await?
@@ -591,7 +591,7 @@ async fn remove_workspace_member_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
     .await?;
 
   let member_emails = payload
@@ -622,7 +622,7 @@ async fn get_workspace_member_handler(
   // Guest users can not get workspace members
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
     .await?;
   let member_row = workspace::ops::get_workspace_member(&member_uid, &state.pg_pool, &workspace_id)
     .await
@@ -657,7 +657,7 @@ async fn get_workspace_member_v1_handler(
   // Guest users can not get workspace members
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
     .await?;
   let member_row =
     workspace::ops::get_workspace_member_by_uuid(member_uuid, &state.pg_pool, workspace_id)
@@ -691,7 +691,7 @@ async fn open_workspace_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let workspace = workspace::ops::open_workspace(&state.pg_pool, &user_uuid, &workspace_id).await?;
   Ok(AppResponse::Ok().with_data(workspace).into())
@@ -725,7 +725,7 @@ async fn update_workspace_member_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
     .await?;
 
   let changeset = payload.into_inner();
@@ -810,10 +810,8 @@ async fn create_collab_handler(
     .await?
   {
     if let Ok(text) = Document::open(collab).and_then(|doc| doc.to_plain_text(false, true)) {
-      let workspace_id_uuid =
-        Uuid::parse_str(&workspace_id).map_err(|err| AppError::Internal(err.into()))?;
       let pending = UnindexedCollabTask::new(
-        workspace_id_uuid,
+        workspace_id,
         params.object_id.clone(),
         params.collab_type.clone(),
         UnindexedData::Text(text),
@@ -835,7 +833,7 @@ async fn create_collab_handler(
   let action = format!("Create new collab: {}", params);
   state
     .collab_access_control_storage
-    .upsert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction, &action)
+    .upsert_new_collab_with_transaction(workspace_id, &uid, params, &mut transaction, &action)
     .await?;
 
   transaction
@@ -857,8 +855,7 @@ async fn batch_create_collab_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let workspace_id_uuid = workspace_id.into_inner();
-  let workspace_id = workspace_id_uuid.to_string();
+  let workspace_id = workspace_id.into_inner();
   let compress_type = compress_type_from_header_value(req.headers())?;
   event!(tracing::Level::DEBUG, "start decompressing collab list");
 
@@ -903,7 +900,7 @@ async fn batch_create_collab_handler(
                 EncodedCollab::decode_from_bytes(&params.encoded_collab_v1).ok()?;
               let collab = Collab::new_with_source(
                 CollabOrigin::Empty,
-                &params.object_id,
+                &params.object_id.to_string(),
                 DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
                 vec![],
                 false,
@@ -972,7 +969,7 @@ async fn batch_create_collab_handler(
         Some(text) => text
           .map(|text| {
             UnindexedCollabTask::new(
-              workspace_id_uuid,
+              workspace_id,
               value.1.object_id.clone(),
               value.1.collab_type.clone(),
               UnindexedData::Text(text),
@@ -991,7 +988,7 @@ async fn batch_create_collab_handler(
   let start = Instant::now();
   state
     .collab_access_control_storage
-    .batch_insert_new_collab(&workspace_id, &uid, collab_params_list)
+    .batch_insert_new_collab(workspace_id, &uid, collab_params_list)
     .await?;
 
   tracing::info!(
@@ -1127,12 +1124,7 @@ async fn post_web_update_handler(
   let (workspace_id, object_id) = path.into_inner();
   state
     .collab_access_control
-    .enforce_action(
-      &workspace_id.to_string(),
-      &uid,
-      &object_id.to_string(),
-      Action::Write,
-    )
+    .enforce_action(&workspace_id, &uid, &object_id.to_string(), Action::Write)
     .await?;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   trace!("create onetime web realtime user: {}", user);
@@ -1400,7 +1392,7 @@ async fn delete_page_from_trash_handler(
   let (workspace_id, view_id) = path.into_inner();
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   delete_trash(
@@ -1430,7 +1422,7 @@ async fn delete_all_pages_from_trash_handler(
   let workspace_id = path.into_inner();
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   delete_all_pages_from_trash(
@@ -1458,7 +1450,7 @@ async fn publish_page_handler(
     .map_err(AppResponseError::from)?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
     .await?;
   let PublishPageParams {
     publish_name,
@@ -1623,7 +1615,7 @@ async fn get_collab_snapshot_handler(
   let (workspace_id, object_id) = path.into_inner();
   let data = state
     .collab_access_control_storage
-    .get_collab_snapshot(&workspace_id.to_string(), &object_id, &payload.snapshot_id)
+    .get_collab_snapshot(&workspace_id, &object_id, &payload.snapshot_id)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -1801,7 +1793,7 @@ async fn put_workspace_default_published_view_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
     .await?;
   let new_default_pub_view_id = payload.into_inner().view_id;
   biz::workspace::publish::set_workspace_default_publish_view(
@@ -1821,7 +1813,7 @@ async fn delete_workspace_default_published_view_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
     .await?;
   biz::workspace::publish::unset_workspace_default_publish_view(&state.pg_pool, &workspace_id)
     .await?;
@@ -1849,7 +1841,7 @@ async fn put_publish_namespace_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
     .await?;
   let UpdatePublishNamespace {
     old_namespace,
@@ -1920,7 +1912,7 @@ async fn post_published_duplicate_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
   let params = params.into_inner();
   let root_view_id_for_duplicate =
@@ -2221,7 +2213,7 @@ async fn get_workspace_usage_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Owner)
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
     .await?;
   let res =
     biz::workspace::ops::get_workspace_document_total_bytes(&state.pg_pool, &workspace_id).await?;
@@ -2242,7 +2234,7 @@ async fn get_workspace_folder_handler(
   let workspace_id = workspace_id.into_inner();
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let root_view_id = if let Some(root_view_id) = query.root_view_id.as_ref() {
     root_view_id.to_string()
@@ -2272,7 +2264,7 @@ async fn get_recent_views_handler(
   let workspace_id = workspace_id.into_inner();
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let folder_views = get_user_recent_folder_views(
     &state.collab_access_control_storage,
@@ -2296,7 +2288,7 @@ async fn get_favorite_views_handler(
   let workspace_id = workspace_id.into_inner();
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let folder_views = get_user_favorite_folder_views(
     &state.collab_access_control_storage,
@@ -2320,7 +2312,7 @@ async fn get_trash_views_handler(
   let workspace_id = workspace_id.into_inner();
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Read)
+    .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let folder_views =
     get_user_trash_folder_views(&state.collab_access_control_storage, uid, workspace_id).await?;
@@ -2775,7 +2767,7 @@ async fn post_quick_note_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
     .await?;
   let data = data.into_inner();
   let quick_note = create_quick_note(&state.pg_pool, uid, workspace_id, data.data.as_ref()).await?;
@@ -2792,7 +2784,7 @@ async fn list_quick_notes_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
     .await?;
   let ListQuickNotesQueryParams {
     search_term,
@@ -2821,7 +2813,7 @@ async fn update_quick_note_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
     .await?;
   update_quick_note(&state.pg_pool, quick_note_id, &data.data).await?;
   Ok(Json(AppResponse::Ok()))
@@ -2836,7 +2828,7 @@ async fn delete_quick_note_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id.to_string(), AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
     .await?;
   delete_quick_note(&state.pg_pool, quick_note_id).await?;
   Ok(Json(AppResponse::Ok()))

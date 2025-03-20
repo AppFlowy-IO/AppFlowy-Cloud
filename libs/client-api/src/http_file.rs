@@ -23,11 +23,12 @@ use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::{error, trace};
+use uuid::Uuid;
 
 impl Client {
   pub async fn create_upload(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppResponseError> {
     trace!("create_upload: {}", req);
@@ -53,7 +54,7 @@ impl Client {
   /// which can be smaller.(https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html)
   pub async fn upload_part(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     file_id: &str,
     upload_id: &str,
@@ -86,7 +87,7 @@ impl Client {
 
   pub async fn complete_upload(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     req: CompleteUploadRequest,
   ) -> Result<(), AppResponseError> {
     let url = format!(

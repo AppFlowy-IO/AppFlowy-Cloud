@@ -12,13 +12,13 @@ use database_entity::dto::QueryCollabParams;
 
 #[tokio::test]
 async fn sync_collab_content_after_reconnect_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = uuid::Uuid::new_v4();
   let collab_type = CollabType::Unknown;
 
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   test_client
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type.clone())
     .await;
 
   // Disconnect the client and edit the collab. The updates will not be sent to the server.
@@ -33,9 +33,9 @@ async fn sync_collab_content_after_reconnect_test() {
   let err = test_client
     .api_client
     .get_collab(QueryCollabParams::new(
-      &object_id,
-      collab_type,
-      &workspace_id,
+      object_id,
+      collab_type.clone(),
+      workspace_id,
     ))
     .await
     .unwrap_err();
@@ -50,10 +50,10 @@ async fn sync_collab_content_after_reconnect_test() {
     .unwrap();
 
   assert_server_collab(
-    &workspace_id,
+    workspace_id,
     &mut test_client.api_client,
-    &object_id,
-    collab_type,
+    object_id,
+    &collab_type,
     10,
     json!( {
       "0": "0",
@@ -77,7 +77,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   // client 1 edit the collab
@@ -88,10 +88,10 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .unwrap();
 
   assert_server_collab(
-    &workspace_id,
+    workspace_id,
     &mut client_1.api_client,
-    &object_id,
-    collab_type,
+    object_id,
+    &collab_type,
     30,
     json!({
       "name": "workspace1"
@@ -101,7 +101,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
   .unwrap();
 
   client_2
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type.clone())
     .await;
   client_2
     .wait_object_sync_complete(&object_id)
@@ -139,10 +139,10 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
 
   // different devices create different collabs. the collab will be synced between devices
   let object_id_1 = device_1
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
   let object_id_2 = device_2
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   // client 1 edit the collab with object_id_1
@@ -161,7 +161,7 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
 
   // client1 open the collab with object_id_2
   device_1
-    .open_collab(&workspace_id, &object_id_2, collab_type)
+    .open_collab(workspace_id, object_id_2, collab_type.clone())
     .await;
   assert_client_collab_within_secs(
     &mut device_1,
@@ -176,7 +176,7 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
 
   // client2 open the collab with object_id_1
   device_2
-    .open_collab(&workspace_id, &object_id_1, collab_type)
+    .open_collab(workspace_id, object_id_1, collab_type.clone())
     .await;
   assert_client_collab_within_secs(
     &mut device_2,
@@ -198,7 +198,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   // add client 2 as a member of the workspace
@@ -209,7 +209,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
   client_1.disconnect().await;
 
   client_2
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type.clone())
     .await;
   client_2.disconnect().await;
 

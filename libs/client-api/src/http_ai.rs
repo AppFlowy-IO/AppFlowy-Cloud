@@ -11,6 +11,7 @@ use shared_entity::dto::ai_dto::{
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::time::Duration;
 use tracing::instrument;
+use uuid::Uuid;
 
 impl Client {
   pub async fn stream_completion_text(
@@ -31,7 +32,7 @@ impl Client {
 
   pub async fn stream_completion_v2(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params: CompleteTextParams,
     ai_model: Option<String>,
   ) -> Result<CompletionStream, AppResponseError> {
@@ -120,7 +121,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_model_list(&self, workspace_id: &str) -> Result<ModelList, AppResponseError> {
+  pub async fn get_model_list(&self, workspace_id: &Uuid) -> Result<ModelList, AppResponseError> {
     let url = format!("{}/api/ai/{workspace_id}/model/list", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)

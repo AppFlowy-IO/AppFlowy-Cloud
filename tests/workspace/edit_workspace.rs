@@ -13,8 +13,8 @@ async fn edit_workspace_without_permission() {
   let mut client_2 = TestClient::new_user().await;
 
   let workspace_id = client_1.workspace_id().await;
-  client_1.open_workspace_collab(&workspace_id).await;
-  client_2.open_workspace_collab(&workspace_id).await;
+  client_1.open_workspace_collab(workspace_id).await;
+  client_2.open_workspace_collab(workspace_id).await;
 
   client_1
     .insert_into(&workspace_id, "name", "AppFlowy")
@@ -39,7 +39,7 @@ async fn init_sync_workspace_with_member_permission() {
   let mut owner = TestClient::new_user().await;
   let mut guest = TestClient::new_user().await;
   let workspace_id = owner.workspace_id().await;
-  owner.open_workspace_collab(&workspace_id).await;
+  owner.open_workspace_collab(workspace_id).await;
 
   // TODO(nathan): write test for AFRole::Guest
   // add client 2 as the member of the workspace then the client 2 will receive the update.
@@ -47,7 +47,7 @@ async fn init_sync_workspace_with_member_permission() {
     .invite_and_accepted_workspace_member(&workspace_id, &guest, AFRole::Member)
     .await
     .unwrap();
-  guest.open_workspace_collab(&workspace_id).await;
+  guest.open_workspace_collab(workspace_id).await;
 
   owner.insert_into(&workspace_id, "name", "AppFlowy").await;
   owner
@@ -78,7 +78,7 @@ async fn edit_workspace_with_guest_permission() {
   let mut owner = TestClient::new_user().await;
   let mut guest = TestClient::new_user().await;
   let workspace_id = owner.workspace_id().await;
-  owner.open_workspace_collab(&workspace_id).await;
+  owner.open_workspace_collab(workspace_id).await;
 
   // add client 2 as the member of the workspace then the client 2 can receive the update.
   owner
@@ -92,7 +92,7 @@ async fn edit_workspace_with_guest_permission() {
     .await
     .unwrap();
 
-  guest.open_workspace_collab(&workspace_id).await;
+  guest.open_workspace_collab(workspace_id).await;
   // make sure the client 2 has received the remote updates before the client 2 edits the collab
   sleep(Duration::from_secs(3)).await;
 
@@ -107,10 +107,10 @@ async fn edit_workspace_with_guest_permission() {
     .unwrap();
 
   assert_server_collab(
-    &workspace_id,
+    workspace_id,
     &mut owner.api_client,
-    &workspace_id,
-    CollabType::Folder,
+    workspace_id,
+    &CollabType::Folder,
     30,
     json!({
       "name": "zack"

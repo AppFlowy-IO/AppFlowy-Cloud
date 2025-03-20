@@ -16,14 +16,17 @@ use workspace_template::document::getting_started::getting_started_document_data
 async fn test_embedding_when_create_document() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-  let object_id_1 = uuid::Uuid::new_v4().to_string();
-  let the_five_dysfunctions_of_a_team =
-    create_document_collab(&object_id_1, "the_five_dysfunctions_of_a_team.md").await;
+  let object_id_1 = uuid::Uuid::new_v4();
+  let the_five_dysfunctions_of_a_team = create_document_collab(
+    &object_id_1.to_string(),
+    "the_five_dysfunctions_of_a_team.md",
+  )
+  .await;
   let encoded_collab = the_five_dysfunctions_of_a_team.encode_collab().unwrap();
   test_client
     .create_collab_with_data(
-      &workspace_id,
-      &object_id_1,
+      workspace_id,
+      object_id_1,
       CollabType::Document,
       encoded_collab,
     )
@@ -32,7 +35,7 @@ async fn test_embedding_when_create_document() {
   test_client
     .insert_view_to_general_space(
       &workspace_id,
-      &object_id_1,
+      &object_id_1.to_string(),
       "five dysfunctional",
       ViewLayout::Document,
     )
@@ -42,20 +45,26 @@ async fn test_embedding_when_create_document() {
     .wait_until_get_embedding(&workspace_id, &object_id_1)
     .await;
 
-  let object_id_2 = uuid::Uuid::new_v4().to_string();
-  let tennis_player = create_document_collab(&object_id_2, "kathryn_tennis_story.md").await;
+  let object_id_2 = uuid::Uuid::new_v4();
+  let tennis_player =
+    create_document_collab(&object_id_2.to_string(), "kathryn_tennis_story.md").await;
   let encoded_collab = tennis_player.encode_collab().unwrap();
   test_client
     .create_collab_with_data(
-      &workspace_id,
-      &object_id_2,
+      workspace_id,
+      object_id_2,
       CollabType::Document,
       encoded_collab,
     )
     .await
     .unwrap();
   test_client
-    .insert_view_to_general_space(&workspace_id, &object_id_2, "tennis", ViewLayout::Document)
+    .insert_view_to_general_space(
+      &workspace_id,
+      &object_id_2.to_string(),
+      "tennis",
+      ViewLayout::Document,
+    )
     .await;
 
   test_client
@@ -78,7 +87,7 @@ async fn test_embedding_when_create_document() {
       .collect::<Vec<String>>()
       .join("\n");
     let params = CalculateSimilarityParams {
-      workspace_id: workspace_id.clone(),
+      workspace_id: workspace_id,
       input: previews,
       expected: r#"
       "Kathryn’s Journey to Becoming a Tennis Player Kathryn’s love for tennis began on a warm summer day w
@@ -110,7 +119,7 @@ The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a T
     let params = CreateChatParams {
       chat_id: chat_id.clone(),
       name: "chat with the five dysfunctions of a team".to_string(),
-      rag_ids: vec![object_id_1],
+      rag_ids: vec![object_id_1.to_string()],
     };
 
     test_client
@@ -167,14 +176,14 @@ async fn test_document_indexing_and_search() {
   // Set up all the required data
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = uuid::Uuid::new_v4();
 
   let collab_type = CollabType::Document;
   let encoded_collab = {
     let document_data = getting_started_document_data().unwrap();
     let collab = Collab::new(
       test_client.uid().await,
-      object_id.clone(),
+      object_id.to_string(),
       test_client.device_id.clone(),
       vec![],
       false,
@@ -183,10 +192,15 @@ async fn test_document_indexing_and_search() {
     document.encode_collab().unwrap()
   };
   test_client
-    .create_and_edit_collab_with_data(&object_id, &workspace_id, collab_type, Some(encoded_collab))
+    .create_and_edit_collab_with_data(
+      object_id,
+      workspace_id,
+      collab_type.clone(),
+      Some(encoded_collab),
+    )
     .await;
   test_client
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type.clone())
     .await;
 
   sleep(Duration::from_millis(2000)).await;

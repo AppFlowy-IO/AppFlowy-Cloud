@@ -10,7 +10,7 @@ async fn access_request_test() {
   let workspaces = owner_client.get_workspaces().await.unwrap();
   let workspace_id = workspaces[0].workspace_id;
   let folder_view = owner_client
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let view_id = folder_view
@@ -74,7 +74,7 @@ async fn access_request_test() {
     .await
     .unwrap();
   let workspace_members = owner_client
-    .get_workspace_members(workspace_id.to_string())
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert!(workspace_members.iter().any(|m| m.email == requester.email));

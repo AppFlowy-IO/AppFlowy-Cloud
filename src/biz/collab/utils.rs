@@ -196,23 +196,23 @@ pub fn type_options_serde(
 
 pub async fn get_latest_collab_database_row_body(
   collab_storage: &CollabAccessControlStorage,
-  workspace_uuid_str: &str,
-  db_row_uuid_str: &str,
+  workspace_id: Uuid,
+  db_row_id: Uuid,
 ) -> Result<(Collab, DatabaseRowBody), AppError> {
   let mut db_row_collab = get_latest_collab(
     collab_storage,
     GetCollabOrigin::Server,
-    workspace_uuid_str,
-    db_row_uuid_str,
+    workspace_id,
+    db_row_id,
     CollabType::DatabaseRow,
   )
   .await?;
 
-  let row_id: RowId = db_row_uuid_str.to_string().into();
+  let row_id: RowId = db_row_id.to_string().into();
   let db_row_body = DatabaseRowBody::open(row_id, &mut db_row_collab).map_err(|err| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to create database row body from collab, db_row_id: {}, err: {}",
-      db_row_uuid_str,
+      db_row_id,
       err
     ))
   })?;
@@ -222,14 +222,14 @@ pub async fn get_latest_collab_database_row_body(
 
 pub async fn get_latest_collab_database_body(
   collab_storage: &CollabAccessControlStorage,
-  workspace_uuid_str: &str,
-  database_uuid_str: &str,
+  workspace_id: Uuid,
+  database_id: Uuid,
 ) -> Result<(Collab, DatabaseBody), AppError> {
   let db_collab = get_latest_collab(
     collab_storage,
     GetCollabOrigin::Server,
-    workspace_uuid_str,
-    database_uuid_str,
+    workspace_id,
+    database_id,
     CollabType::Database,
   )
   .await?;
@@ -241,7 +241,7 @@ pub async fn get_latest_collab_database_body(
   .ok_or_else(|| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to create database body from collab, db_collab_id: {}",
-      database_uuid_str,
+      database_id,
     ))
   })?;
   Ok((db_collab, db_body))
@@ -344,15 +344,14 @@ pub async fn get_latest_collab_workspace_database_body(
   pg_pool: &PgPool,
   storage: &CollabAccessControlStorage,
   origin: GetCollabOrigin,
-  workspace_id: &str,
+  workspace_id: Uuid,
 ) -> Result<WorkspaceDatabaseBody, AppError> {
-  let workspace_uuid = Uuid::parse_str(workspace_id)?;
-  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_uuid).await?;
+  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
   let mut collab = get_latest_collab(
     storage,
     origin,
     workspace_id,
-    &ws_db_oid,
+    ws_db_oid,
     CollabType::WorkspaceDatabase,
   )
   .await?;
@@ -368,7 +367,7 @@ pub async fn get_latest_collab_workspace_database_body(
 pub async fn get_latest_collab_folder(
   collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
-  workspace_id: &str,
+  workspace_id: Uuid,
 ) -> Result<Folder, AppError> {
   let folder_uid = if let GetCollabOrigin::User { uid } = collab_origin {
     uid
@@ -395,7 +394,7 @@ pub async fn get_latest_collab_folder(
     folder_uid,
     CollabOrigin::Server,
     encoded_collab.into(),
-    workspace_id,
+    &workspace_id.to_string(),
     vec![],
   )
   .map_err(|e| {
@@ -411,8 +410,8 @@ pub async fn get_latest_collab_folder(
 pub async fn get_latest_collab_document(
   collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
-  workspace_id: &str,
-  doc_oid: &str,
+  workspace_id: Uuid,
+  doc_oid: Uuid,
 ) -> Result<Document, AppError> {
   let doc_collab = get_latest_collab(
     collab_storage,
@@ -522,7 +521,7 @@ pub async fn write_to_database_row(
 }
 
 pub async fn create_row_document(
-  workspace_id: &str,
+  workspace_id: Uuid,
   uid: i64,
   new_doc_id: &str,
   collab_storage: &CollabAccessControlStorage,
@@ -570,7 +569,7 @@ pub enum DocChanges {
 
 pub async fn get_database_row_doc_changes(
   collab_storage: &CollabAccessControlStorage,
-  workspace_uuid_str: &str,
+  workspace_id: Uuid,
   row_doc_content: Option<String>,
   db_row_body: &DatabaseRowBody,
   db_row_txn: &mut yrs::TransactionMut<'_>,
@@ -591,8 +590,8 @@ pub async fn get_database_row_doc_changes(
       let cur_doc = get_latest_collab_document(
         collab_storage,
         GetCollabOrigin::Server,
-        workspace_uuid_str,
-        &doc_id,
+        workspace_id,
+        doc_id,
       )
       .await?;
 
@@ -645,7 +644,7 @@ pub async fn get_database_row_doc_changes(
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to get document id")))?;
 
       let created_row_doc: CreatedRowDocument = create_row_document(
-        workspace_uuid_str,
+        workspace_id,
         uid,
         &new_doc_id,
         collab_storage,

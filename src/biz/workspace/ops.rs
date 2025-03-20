@@ -78,14 +78,14 @@ pub async fn create_empty_workspace(
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
     .await?;
-  let workspace_id = new_workspace_row.workspace_id.to_string();
+  let workspace_id = new_workspace_row.workspace_id;
 
   // create CollabType::Folder
   let mut txn = pg_pool.begin().await?;
   let start = Instant::now();
   create_workspace_collab(
     user_uid,
-    &workspace_id,
+    workspace_id,
     workspace_name,
     collab_storage,
     &mut txn,
@@ -93,12 +93,11 @@ pub async fn create_empty_workspace(
   .await?;
 
   // create CollabType::WorkspaceDatabase
-  if let Some(database_storage_id) = new_workspace_row.database_storage_id.as_ref() {
-    let workspace_database_object_id = database_storage_id.to_string();
+  if let Some(&database_storage_id) = new_workspace_row.database_storage_id.as_ref() {
     create_workspace_database_collab(
-      &workspace_id,
+      workspace_id,
       &user_uid,
-      &workspace_database_object_id,
+      database_storage_id,
       collab_storage,
       &mut txn,
       vec![],
@@ -107,14 +106,7 @@ pub async fn create_empty_workspace(
   }
 
   // create CollabType::UserAwareness
-  create_user_awareness(
-    &user_uid,
-    user_uuid,
-    &workspace_id,
-    collab_storage,
-    &mut txn,
-  )
-  .await?;
+  create_user_awareness(&user_uid, user_uuid, workspace_id, collab_storage, &mut txn).await?;
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
   txn.commit().await?;
   collab_storage.metrics().observe_pg_tx(start.elapsed());
@@ -743,7 +735,7 @@ pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppErro
 /// broadcast updates to collab group if exists
 pub async fn broadcast_update(
   collab_storage: &CollabAccessControlStorage,
-  oid: &str,
+  oid: Uuid,
   encoded_update: Vec<u8>,
 ) -> Result<(), AppError> {
   tracing::trace!("broadcasting update to group: {}", oid);
@@ -758,7 +750,7 @@ pub async fn broadcast_update(
   };
 
   collab_storage
-    .broadcast_encode_collab(oid.to_string(), vec![msg])
+    .broadcast_encode_collab(oid, vec![msg])
     .await?;
 
   Ok(())
@@ -768,14 +760,14 @@ pub async fn broadcast_update(
 /// waits for a maximum of 30 seconds for the broadcast to complete
 pub async fn broadcast_update_with_timeout(
   collab_storage: Arc<CollabAccessControlStorage>,
-  oid: String,
+  oid: Uuid,
   encoded_update: Vec<u8>,
 ) -> tokio::task::JoinHandle<()> {
   tokio::spawn(async move {
     tracing::info!("broadcasting update to group: {}", oid);
     let res = match tokio::time::timeout(
       Duration::from_secs(30),
-      broadcast_update(&collab_storage, &oid, encoded_update),
+      broadcast_update(&collab_storage, oid, encoded_update),
     )
     .await
     {

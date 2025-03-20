@@ -6,13 +6,13 @@ use async_trait::async_trait;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 
+use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{
   timestamp, Folder, FolderData, RepeatedViewIdentifier, ViewIdentifier, ViewLayout, Workspace,
 };
-
-use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
+use uuid::Uuid;
 
 pub mod database;
 pub mod document;
@@ -63,7 +63,7 @@ pub struct WorkspaceTemplateBuilder {
 }
 
 impl WorkspaceTemplateBuilder {
-  pub fn new(uid: i64, workspace_id: &str) -> Self {
+  pub fn new(uid: i64, workspace_id: &Uuid) -> Self {
     let handlers = WorkspaceTemplateHandlers::default();
     Self {
       uid,

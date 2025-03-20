@@ -176,11 +176,11 @@ pub struct PostgresDatabaseCollabService {
 }
 
 impl PostgresDatabaseCollabService {
-  pub async fn get_collab(&self, oid: &str, collab_type: CollabType) -> EncodedCollab {
+  pub async fn get_collab(&self, oid: Uuid, collab_type: CollabType) -> EncodedCollab {
     get_latest_collab_encoded(
       &self.collab_storage,
       GetCollabOrigin::Server,
-      &self.workspace_id.to_string(),
+      self.workspace_id,
       oid,
       collab_type,
     )
@@ -193,14 +193,14 @@ impl PostgresDatabaseCollabService {
 impl DatabaseCollabService for PostgresDatabaseCollabService {
   async fn build_collab(
     &self,
-    object_id: &str,
+    object_id: Uuid,
     object_type: CollabType,
     encoded_collab: Option<(EncodedCollab, bool)>,
   ) -> Result<Collab, DatabaseError> {
     match encoded_collab {
       None => Collab::new_with_source(
         CollabOrigin::Empty,
-        object_id,
+        &object_id.to_string(),
         self.get_collab(object_id, object_type).await.into(),
         vec![],
         false,
@@ -208,7 +208,7 @@ impl DatabaseCollabService for PostgresDatabaseCollabService {
       .map_err(|err| DatabaseError::Internal(err.into())),
       Some((encoded_collab, _)) => Collab::new_with_source(
         CollabOrigin::Empty,
-        object_id,
+        &object_id.to_string(),
         encoded_collab.into(),
         vec![],
         false,
@@ -219,13 +219,13 @@ impl DatabaseCollabService for PostgresDatabaseCollabService {
 
   async fn get_collabs(
     &self,
-    object_ids: Vec<String>,
+    object_ids: Vec<Uuid>,
     collab_type: CollabType,
   ) -> Result<EncodeCollabByOid, DatabaseError> {
     let encoded_collabs = batch_get_latest_collab_encoded(
       &self.collab_storage,
       GetCollabOrigin::Server,
-      &self.workspace_id.to_string(),
+      self.workspace_id,
       &object_ids,
       collab_type,
     )

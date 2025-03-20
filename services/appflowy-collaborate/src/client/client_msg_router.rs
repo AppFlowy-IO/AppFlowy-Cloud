@@ -1,15 +1,15 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
-use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
-use tokio_stream::StreamExt;
-use tracing::{error, trace};
-
 use access_control::collab::RealtimeAccessControl;
+use async_trait::async_trait;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::ClientCollabMessage;
 use collab_rt_entity::{MessageByObjectId, RealtimeMessage};
+use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
+use tokio_stream::StreamExt;
+use tracing::{error, trace};
+use uuid::Uuid;
 
 use crate::util::channel_ext::UnboundedSenderSink;
 
@@ -55,9 +55,9 @@ impl ClientMessageRouter {
   ///
   pub fn init_client_communication<T>(
     &mut self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     user: &RealtimeUser,
-    object_id: &str,
+    object_id: Uuid,
     access_control: Arc<dyn RealtimeAccessControl>,
   ) -> (UnboundedSenderSink<T>, ReceiverStream<MessageByObjectId>)
   where
@@ -65,19 +65,17 @@ impl ClientMessageRouter {
   {
     let client_ws_sink = self.sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
-    let target_object_id = object_id.to_string();
 
     // Send the message to the connected websocket client. When the client receive the message,
     // it will apply the changes.
     let (client_sink_tx, mut client_sink_rx) = tokio::sync::mpsc::unbounded_channel::<T>();
     let sink_access_control = access_control.clone();
-    let sink_workspace_id = workspace_id.to_string();
     let uid = user.uid;
     let client_sink = UnboundedSenderSink::<T>::new(client_sink_tx);
     tokio::spawn(async move {
       while let Some(msg) = client_sink_rx.recv().await {
         let result = sink_access_control
-          .can_read_collab(&sink_workspace_id, &uid, &target_object_id)
+          .can_read_collab(&workspace_id, &uid, &object_id)
           .await;
         match result {
           Ok(is_allowed) => {
@@ -85,7 +83,7 @@ impl ClientMessageRouter {
               let rt_msg = msg.into();
               client_ws_sink.do_send(rt_msg);
             } else {
-              trace!("user:{} is not allowed to read {}", uid, target_object_id);
+              trace!("user:{} is not allowed to read {}", uid, object_id);
               tokio::time::sleep(Duration::from_secs(2)).await;
             }
           },
@@ -96,14 +94,13 @@ impl ClientMessageRouter {
         }
       }
     });
-    let target_object_id = object_id.to_string();
-    let stream_workspace_id = workspace_id.to_string();
     let user = user.clone();
     // stream_rx continuously receive messages from the websocket client and then
     // forward the message to the subscriber which is the broadcast channel [CollabBroadcast].
     let (client_msg_rx, rx) = tokio::sync::mpsc::channel(100);
     let client_stream = ReceiverStream::new(rx);
     tokio::spawn(async move {
+      let target_object_id = object_id.to_string();
       while let Some(Ok(messages_by_oid)) = stream_rx.next().await {
         for (message_object_id, original_messages) in messages_by_oid.into_inner() {
           // if the message is not for the target object, skip it. The stream_rx receives different
@@ -116,9 +113,9 @@ impl ClientMessageRouter {
           // valid_messages contains the messages that the user is allowed to apply
           // invalid_message contains the messages that the user is not allowed to apply
           let (valid_messages, invalid_message) = Self::access_control(
-            &stream_workspace_id,
+            &workspace_id,
             &user.uid,
-            &message_object_id,
+            &object_id,
             access_control.clone(),
             original_messages,
           )
@@ -164,9 +161,9 @@ impl ClientMessageRouter {
 
   #[inline]
   async fn access_control(
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    object_id: &str,
+    object_id: &Uuid,
     access_control: Arc<dyn RealtimeAccessControl>,
     messages: Vec<ClientCollabMessage>,
   ) -> (Vec<ClientCollabMessage>, Vec<ClientCollabMessage>) {

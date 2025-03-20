@@ -12,6 +12,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, trace, warn};
+use uuid::Uuid;
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::Encode;
@@ -31,7 +32,7 @@ pub type CollabRef = Weak<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>
 
 /// Use to continuously receive updates from remote.
 pub struct ObserveCollab<Sink, Stream> {
-  object_id: String,
+  object_id: Uuid,
   #[allow(dead_code)]
   weak_collab: CollabRef,
   phantom_sink: PhantomData<Sink>,
@@ -76,7 +77,7 @@ where
         sink.clone(),
         cloned_weak_collab.clone(),
         interval,
-        object_id.clone(),
+        object_id.to_string(),
       ));
     }
     tokio::spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
@@ -339,7 +340,7 @@ where
         // before sending the SyncStep1 to the server.
         if is_server_sync_step_1 && sync_object.collab_type == CollabType::Folder {
           let lock = collab.read().await;
-          validate_data_for_folder((*lock).borrow(), &sync_object.workspace_id)
+          validate_data_for_folder((*lock).borrow(), &sync_object.workspace_id.to_string())
             .map_err(|err| SyncError::OverrideWithIncorrectData(err.to_string()))?;
         }
 
@@ -352,14 +353,14 @@ where
             if is_server_sync_step_1 {
               ClientCollabMessage::new_server_init_sync(ServerInit::new(
                 message_origin.clone(),
-                object_id,
+                object_id.to_string(),
                 return_payload,
                 msg_id,
               ))
             } else {
               ClientCollabMessage::new_update_sync(UpdateSync::new(
                 message_origin.clone(),
-                object_id,
+                object_id.to_string(),
                 return_payload,
                 msg_id,
               ))
@@ -450,7 +451,7 @@ impl SeqNumCounter {
   /// messages may have been missed, and an error is returned.
   pub fn check_broadcast_contiguous(
     &self,
-    _object_id: &str,
+    _object_id: &Uuid,
     broadcast_seq_num: u32,
   ) -> Result<(), SyncError> {
     let current = self.broadcast_seq_counter.load(Ordering::SeqCst);
@@ -467,7 +468,7 @@ impl SeqNumCounter {
     Ok(())
   }
 
-  pub fn check_ack_broadcast_contiguous(&self, object_id: &str) -> Result<(), SyncError> {
+  pub fn check_ack_broadcast_contiguous(&self, object_id: &Uuid) -> Result<(), SyncError> {
     let ack_seq_num = self.ack_seq_counter.load(Ordering::SeqCst);
     let broadcast_seq_num = self.broadcast_seq_counter.load(Ordering::SeqCst);
     if cfg!(feature = "sync_verbose_log") {

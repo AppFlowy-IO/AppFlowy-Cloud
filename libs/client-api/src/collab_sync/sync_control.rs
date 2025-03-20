@@ -209,9 +209,9 @@ where
       sink.queue_init_sync(|msg_id| {
         let init_sync = InitSync::new(
           origin,
-          sync_object.object_id.clone(),
-          sync_object.collab_type,
-          sync_object.workspace_id.clone(),
+          sync_object.object_id.to_string(),
+          sync_object.collab_type.clone(),
+          sync_object.workspace_id.to_string(),
           msg_id,
           payload,
         );
@@ -228,7 +228,7 @@ where
         sink.queue_msg(|msg_id| {
           let update_sync = UpdateSync::new(
             origin.clone(),
-            sync_object.object_id.clone(),
+            sync_object.object_id.to_string(),
             update,
             msg_id,
           );
@@ -250,9 +250,9 @@ where
       sink.queue_init_sync(|msg_id| {
         let init_sync = InitSync::new(
           origin,
-          sync_object.object_id.clone(),
-          sync_object.collab_type,
-          sync_object.workspace_id.clone(),
+          sync_object.object_id.to_string(),
+          sync_object.collab_type.clone(),
+          sync_object.workspace_id.to_string(),
           msg_id,
           payload,
         );

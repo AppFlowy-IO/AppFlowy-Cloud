@@ -250,17 +250,17 @@ pub async fn get_latest_collab_database_body(
 pub async fn get_latest_collab_encoded(
   collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
-  workspace_id: &str,
-  oid: &str,
+  workspace_id: Uuid,
+  object_id: Uuid,
   collab_type: CollabType,
 ) -> Result<EncodedCollab, AppError> {
   collab_storage
     .get_encode_collab(
       collab_origin,
       QueryCollabParams {
-        workspace_id: workspace_id.to_string(),
+        workspace_id,
         inner: QueryCollab {
-          object_id: oid.to_string(),
+          object_id,
           collab_type,
         },
       },
@@ -272,8 +272,8 @@ pub async fn get_latest_collab_encoded(
 pub async fn batch_get_latest_collab_encoded(
   collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
-  workspace_id: &str,
-  oid_list: &[String],
+  workspace_id: Uuid,
+  oid_list: &[Uuid],
   collab_type: CollabType,
 ) -> Result<HashMap<String, EncodedCollab>, AppError> {
   let uid = match collab_origin {
@@ -283,8 +283,8 @@ pub async fn batch_get_latest_collab_encoded(
   let queries: Vec<QueryCollab> = oid_list
     .iter()
     .map(|row_id| QueryCollab {
-      object_id: row_id.to_string(),
-      collab_type,
+      object_id: *row_id,
+      collab_type: collab_type.clone(),
     })
     .collect();
   let query_collab_results = collab_storage
@@ -319,18 +319,24 @@ pub async fn batch_get_latest_collab_encoded(
 pub async fn get_latest_collab(
   storage: &CollabAccessControlStorage,
   origin: GetCollabOrigin,
-  workspace_id: &str,
-  oid: &str,
+  workspace_id: Uuid,
+  oid: Uuid,
   collab_type: CollabType,
 ) -> Result<Collab, AppError> {
   let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
-  let collab: Collab = Collab::new_with_source(CollabOrigin::Server, oid, ec.into(), vec![], false)
-    .map_err(|e| {
-      AppError::Internal(anyhow::anyhow!(
-        "Failed to create collab from encoded collab: {:?}",
-        e
-      ))
-    })?;
+  let collab: Collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    &oid.to_string(),
+    ec.into(),
+    vec![],
+    false,
+  )
+  .map_err(|e| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create collab from encoded collab: {:?}",
+      e
+    ))
+  })?;
   Ok(collab)
 }
 

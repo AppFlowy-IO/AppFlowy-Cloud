@@ -241,8 +241,8 @@ impl IndexerScheduler {
 
   pub async fn index_collab_immediately(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: Uuid,
+    object_id: Uuid,
     collab: &Collab,
     collab_type: CollabType,
   ) -> Result<(), AppError> {
@@ -263,8 +263,8 @@ impl IndexerScheduler {
         if let Some(text) = text {
           if !text.is_empty() {
             let pending = UnindexedCollabTask::new(
-              Uuid::parse_str(workspace_id)?,
-              Uuid::parse_str(object_id)?,
+              workspace_id,
+              object_id,
               collab_type.clone(),
               UnindexedData::Text(text),
             );
@@ -342,8 +342,8 @@ async fn spawn_rayon_generate_embeddings(
         Ok(embedder) => {
           records.into_par_iter().for_each(|record| {
             let result = threads.install(|| {
-              let indexer = indexer_provider.indexer_for(record.collab_type);
-              match process_collab(&embedder, indexer, &record.object_id, record.data, &metrics) {
+              let indexer = indexer_provider.indexer_for(&record.collab_type);
+              match process_collab(&embedder, indexer, record.object_id, record.data, &metrics) {
                 Ok(Some((tokens_used, contents))) => {
                   if let Err(err) = write_embedding_tx.send(EmbeddingRecord {
                     workspace_id: record.workspace_id,
@@ -483,14 +483,14 @@ pub(crate) async fn batch_insert_records(
 fn process_collab(
   embedder: &Embedder,
   indexer: Option<Arc<dyn Indexer>>,
-  object_id: &str,
+  object_id: Uuid,
   data: UnindexedData,
   metrics: &EmbeddingMetrics,
 ) -> Result<Option<(u32, Vec<AFCollabEmbeddedChunk>)>, AppError> {
   if let Some(indexer) = indexer {
     let chunks = match data {
       UnindexedData::Text(text) => {
-        indexer.create_embedded_chunks_from_text(object_id.to_string(), text, embedder.model())?
+        indexer.create_embedded_chunks_from_text(object_id, text, embedder.model())?
       },
     };
 

@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use tokio::time::sleep;
 use tracing::{error, trace};
+use uuid::Uuid;
 use yrs::TransactionMut;
 
 use database::collab::CollabStorage;
@@ -13,8 +14,8 @@ use database_entity::dto::InsertSnapshotParams;
 
 /// [HistoryPlugin] will be moved to history collab server. For now, it's temporarily placed here.
 pub struct HistoryPlugin<S> {
-  workspace_id: String,
-  object_id: String,
+  workspace_id: Uuid,
+  object_id: Uuid,
   collab_type: CollabType,
   storage: Arc<S>,
   did_create_snapshot: AtomicBool,
@@ -29,8 +30,8 @@ where
 {
   #[allow(dead_code)]
   pub fn new(
-    workspace_id: String,
-    object_id: String,
+    workspace_id: Uuid,
+    object_id: Uuid,
     collab_type: CollabType,
     weak_collab: Weak<RwLock<Collab>>,
     storage: Arc<S>,
@@ -51,8 +52,8 @@ where
   async fn enqueue_snapshot(
     weak_collab: Weak<RwLock<Collab>>,
     storage: Arc<S>,
-    workspace_id: String,
-    object_id: String,
+    workspace_id: Uuid,
+    object_id: Uuid,
     collab_type: CollabType,
   ) -> Result<(), anyhow::Error> {
     trace!("trying to enqueue snapshot for object_id: {}", object_id);
@@ -96,10 +97,10 @@ where
     self.did_create_snapshot.store(true, Ordering::SeqCst);
     let storage = self.storage.clone();
     let weak_collab = self.weak_collab.clone();
-    let collab_type = self.collab_type;
-    let object_id = self.object_id.clone();
-    let workspace_id = self.workspace_id.clone();
+    let collab_type = self.collab_type.clone();
 
+    let workspace_id = self.workspace_id;
+    let object_id = self.object_id;
     tokio::spawn(async move {
       sleep(std::time::Duration::from_secs(2)).await;
       match storage

@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 pub struct UnindexedCollab {
   pub workspace_id: Uuid,
-  pub object_id: String,
+  pub object_id: Uuid,
   pub collab_type: CollabType,
   pub collab: EncodedCollab,
 }

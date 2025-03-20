@@ -362,7 +362,7 @@ pub async fn list_database(
   let db_metas = ws_body.get_all_meta(&ws_body_collab.transact());
 
   let folder =
-    get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, &workspace_id).await?;
+    get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, workspace_id).await?;
 
   let trash = folder
     .get_all_trash_sections()
@@ -422,22 +422,24 @@ pub async fn insert_database_row(
   workspace_uuid: Uuid,
   database_uuid: Uuid,
   uid: i64,
-  new_db_row_id: Option<&str>,
+  new_db_row_id: Option<Uuid>,
   cell_value_by_id: HashMap<String, serde_json::Value>,
   row_doc_content: Option<String>,
 ) -> Result<String, AppError> {
-  let new_db_row_id: RowId = new_db_row_id
-    .map(|id| RowId::from(id.to_string()))
-    .unwrap_or_else(gen_row_id);
-
+  let new_db_row_id = new_db_row_id.unwrap_or_else(Uuid::new_v4);
+  let new_db_row_id_str = RowId::from(new_db_row_id.to_string());
   let creation_time = Utc::now();
 
-  let mut new_db_row_collab =
-    Collab::new_with_origin(CollabOrigin::Empty, new_db_row_id.clone(), vec![], false);
+  let mut new_db_row_collab = Collab::new_with_origin(
+    CollabOrigin::Empty,
+    new_db_row_id.to_string(),
+    vec![],
+    false,
+  );
   let new_db_row_body = DatabaseRowBody::create(
-    new_db_row_id.clone(),
+    new_db_row_id_str.clone(),
     &mut new_db_row_collab,
-    Row::empty(new_db_row_id.clone(), &database_uuid.to_string()),
+    Row::empty(new_db_row_id_str, &database_uuid.to_string()),
   );
   new_db_row_body.update(&mut new_db_row_collab.transact_mut(), |row_update| {
     row_update.set_created_at(Utc::now().timestamp());
@@ -446,8 +448,7 @@ pub async fn insert_database_row(
   let new_row_doc_creation: Option<(Uuid, CreatedRowDocument)> = match row_doc_content {
     Some(row_doc_content) if !row_doc_content.is_empty() => {
       // update row to indicate that the document is not empty
-      let is_document_empty_id =
-        meta_id_from_row_id(&new_db_row_id.parse()?, RowMetaKey::IsDocumentEmpty);
+      let is_document_empty_id = meta_id_from_row_id(&new_db_row_id, RowMetaKey::IsDocumentEmpty);
       new_db_row_body.get_meta().insert(
         &mut new_db_row_collab.transact_mut(),
         is_document_empty_id,
@@ -460,10 +461,11 @@ pub async fn insert_database_row(
         .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to get document id: {:?}", err)))?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to get document id")))?;
 
+      let new_doc_id = Uuid::parse_str(&new_doc_id)?;
       let created_row_doc = create_row_document(
         workspace_uuid,
         uid,
-        &new_doc_id,
+        new_doc_id,
         &collab_storage,
         row_doc_content,
       )
@@ -488,7 +490,7 @@ pub async fn insert_database_row(
   let ts_now = creation_time.timestamp();
   let row_order = db_body
     .create_row(CreateRowParams {
-      id: new_db_row_id.clone(),
+      id: new_db_row_id.to_string().into(),
       database_id: database_uuid.to_string(),
       cells: new_db_row_body
         .cells(&new_db_row_collab.transact())
@@ -582,7 +584,7 @@ pub async fn insert_database_row(
       workspace_uuid,
       &uid,
       CollabParams {
-        object_id: database_uuid.to_string(),
+        object_id: database_uuid,
         encoded_collab_v1: updated_db_collab.into(),
         collab_type: CollabType::Database,
       },
@@ -592,7 +594,7 @@ pub async fn insert_database_row(
     .await?;
 
   db_txn.commit().await?;
-  broadcast_update_with_timeout(collab_storage, database_uuid.to_string(), db_collab_update).await;
+  broadcast_update_with_timeout(collab_storage, database_uuid, db_collab_update).await;
   Ok(new_db_row_id.to_string())
 }
 
@@ -603,7 +605,7 @@ pub async fn upsert_database_row(
   workspace_uuid: Uuid,
   database_uuid: Uuid,
   uid: i64,
-  row_id: &str,
+  row_id: Uuid,
   cell_value_by_id: HashMap<String, serde_json::Value>,
   row_doc_content: Option<String>,
 ) -> Result<(), AppError> {
@@ -644,13 +646,13 @@ pub async fn upsert_database_row(
   .await?;
 
   // determine if there are any document changes
-  let doc_changes: Option<(String, DocChanges)> = get_database_row_doc_changes(
+  let doc_changes: Option<(Uuid, DocChanges)> = get_database_row_doc_changes(
     &collab_storage,
     workspace_uuid,
     row_doc_content,
     &db_row_body,
     &mut db_row_txn,
-    row_id,
+    &row_id,
     uid,
   )
   .await?;
@@ -667,7 +669,7 @@ pub async fn upsert_database_row(
       workspace_uuid,
       &uid,
       CollabParams {
-        object_id: row_id.to_string(),
+        object_id: row_id,
         encoded_collab_v1: db_row_ec_v1.into(),
         collab_type: CollabType::DatabaseRow,
       },
@@ -675,12 +677,7 @@ pub async fn upsert_database_row(
       "inserting new database row from server",
     )
     .await?;
-  broadcast_update_with_timeout(
-    collab_storage.clone(),
-    row_id.to_string(),
-    db_row_collab_updates,
-  )
-  .await;
+  broadcast_update_with_timeout(collab_storage.clone(), row_id, db_row_collab_updates).await;
 
   // handle document changes
   if let Some((doc_id, doc_changes)) = doc_changes {
@@ -691,7 +688,7 @@ pub async fn upsert_database_row(
             workspace_uuid,
             &uid,
             CollabParams {
-              object_id: doc_id.clone(),
+              object_id: doc_id,
               encoded_collab_v1: updated_doc.into(),
               collab_type: CollabType::Document,
             },
@@ -862,7 +859,7 @@ pub async fn list_database_row_details(
   uid: i64,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
-  row_ids: &[&str],
+  row_ids: &[Uuid],
   unsupported_field_types: &[FieldType],
   with_doc: bool,
 ) -> Result<Vec<AFDatabaseRowDetail>, AppError> {
@@ -884,7 +881,7 @@ pub async fn list_database_row_details(
   let query_collabs: Vec<QueryCollab> = row_ids
     .iter()
     .map(|id| QueryCollab {
-      object_id: id.to_string(),
+      object_id: *id,
       collab_type: CollabType::DatabaseRow,
     })
     .collect();
@@ -901,14 +898,20 @@ pub async fn list_database_row_details(
             return None;
           },
         };
-        let collab =
-          match Collab::new_with_source(CollabOrigin::Server, &id, ec.into(), vec![], false) {
-            Ok(collab) => collab,
-            Err(err) => {
-              tracing::error!("Failed to create collab: {:?}", err);
-              return None;
-            },
-          };
+        let id = id.to_string();
+        let collab = match Collab::new_with_source(
+          CollabOrigin::Server,
+          &id.to_string(),
+          ec.into(),
+          vec![],
+          false,
+        ) {
+          Ok(collab) => collab,
+          Err(err) => {
+            tracing::error!("Failed to create collab: {:?}", err);
+            return None;
+          },
+        };
         let row_detail = match RowDetail::from_collab(&collab) {
           Some(row_detail) => row_detail,
           None => {
@@ -941,8 +944,10 @@ pub async fn list_database_row_details(
       .flat_map(|row| {
         row.id.parse::<Uuid>().ok().map(|row_uuid| {
           (
-            row.id.clone(),
-            meta_id_from_row_id(&row_uuid, RowMetaKey::DocumentId),
+            row_uuid,
+            meta_id_from_row_id(&row_uuid, RowMetaKey::DocumentId)
+              .parse::<Uuid>()
+              .unwrap(),
           )
         })
       })
@@ -950,7 +955,7 @@ pub async fn list_database_row_details(
     let query_db_docs = doc_id_by_row_id
       .values()
       .map(|doc_id| QueryCollab {
-        object_id: doc_id.to_string(),
+        object_id: *doc_id,
         collab_type: CollabType::Document,
       })
       .collect::<Vec<_>>();
@@ -969,16 +974,18 @@ pub async fn list_database_row_details(
 
 fn fill_in_db_row_doc(
   row_detail: &mut AFDatabaseRowDetail,
-  doc_id_by_row_id: &HashMap<String, String>,
-  query_res: &mut HashMap<String, QueryCollabResult>,
+  doc_id_by_row_id: &HashMap<Uuid, Uuid>,
+  query_res: &mut HashMap<Uuid, QueryCollabResult>,
 ) -> Result<(), AppError> {
-  let doc_id = doc_id_by_row_id.get(&row_detail.id).ok_or_else(|| {
-    AppError::Internal(anyhow::anyhow!(
-      "Failed to get document id for row id: {}",
-      row_detail.id
-    ))
-  })?;
-  let res = query_res.remove(doc_id.as_str()).ok_or_else(|| {
+  let doc_id = doc_id_by_row_id
+    .get(&row_detail.id.parse()?)
+    .ok_or_else(|| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to get document id for row id: {}",
+        row_detail.id
+      ))
+    })?;
+  let res = query_res.remove(doc_id).ok_or_else(|| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to get document collab for row id: {}",
       row_detail.id
@@ -990,13 +997,19 @@ fn fill_in_db_row_doc(
     QueryCollabResult::Failed { error } => return Err(AppError::Internal(anyhow::anyhow!(error))),
   };
   let ec = EncodedCollab::decode_from_bytes(&ec_bytes)?;
-  let doc_collab = Collab::new_with_source(CollabOrigin::Server, doc_id, ec.into(), vec![], false)
-    .map_err(|err| {
-      AppError::Internal(anyhow::anyhow!(
-        "Failed to create document collab: {:?}",
-        err
-      ))
-    })?;
+  let doc_collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    &doc_id.to_string(),
+    ec.into(),
+    vec![],
+    false,
+  )
+  .map_err(|err| {
+    AppError::Internal(anyhow::anyhow!(
+      "Failed to create document collab: {:?}",
+      err
+    ))
+  })?;
   let doc = Document::open(doc_collab)
     .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to open document: {:?}", err)))?;
   let plain_text = doc.to_plain_text(true, false).map_err(|err| {

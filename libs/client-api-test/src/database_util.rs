@@ -81,7 +81,7 @@ impl DatabaseCollabService for TestDatabaseCollabService {
         .flat_map(|(object_id, result)| match result {
           Success { encode_collab_v1 } => match EncodedCollab::decode_from_bytes(&encode_collab_v1)
           {
-            Ok(encode) => Some((object_id, encode)),
+            Ok(encode) => Some((object_id.to_string(), encode)),
             Err(err) => {
               error!("Failed to decode collab: {}", err);
               None

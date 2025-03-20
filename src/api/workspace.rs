@@ -1499,7 +1499,7 @@ async fn delete_all_pages_from_trash_handler(
 
 async fn publish_page_handler(
   user_uuid: UserUuid,
-  path: web::Path<(Uuid, String)>,
+  path: web::Path<(Uuid, Uuid)>,
   payload: Json<PublishPageParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -1526,7 +1526,7 @@ async fn publish_page_handler(
     uid,
     *user_uuid,
     workspace_id,
-    &view_id,
+    view_id,
     visible_database_view_ids,
     publish_name,
     comments_enabled.unwrap_or(true),
@@ -1767,7 +1767,7 @@ async fn update_collab_handler(
   let (params, workspace_id) = payload.into_inner().split();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
 
-  let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
+  let create_params = CreateCollabParams::from((workspace_id, params));
   let (params, workspace_id) = create_params.split();
   if state
     .indexer_scheduler
@@ -1984,7 +1984,7 @@ async fn post_published_duplicate_handler(
       state.collab_access_control_storage.clone(),
       uid,
       params.published_view_id,
-      workspace_id.into_inner().to_string(),
+      workspace_id.into_inner(),
       params.dest_view_id,
     )
     .await?;
@@ -2003,7 +2003,7 @@ async fn list_published_collab_info_handler(
   let publish_infos = biz::workspace::publish::list_collab_publish_info(
     state.published_collab_store.as_ref(),
     &state.collab_access_control_storage,
-    &workspace_id.into_inner(),
+    workspace_id.into_inner(),
   )
   .await?;
 
@@ -2400,7 +2400,7 @@ async fn get_workspace_publish_outline_handler(
 
 async fn list_database_handler(
   user_uuid: UserUuid,
-  workspace_id: web::Path<String>,
+  workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<Vec<AFDatabase>>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
@@ -2498,7 +2498,6 @@ async fn put_database_row_handler(
       hash[10], hash[11], hash[12], hash[13], hash[14], hash[15],
     ])
   };
-  let row_id_str = row_id.to_string();
 
   biz::collab::ops::upsert_database_row(
     state.collab_access_control_storage.clone(),
@@ -2506,12 +2505,12 @@ async fn put_database_row_handler(
     workspace_id,
     db_id,
     uid,
-    &row_id_str,
+    row_id,
     cells,
     document,
   )
   .await?;
-  Ok(Json(AppResponse::Ok().with_data(row_id_str)))
+  Ok(Json(AppResponse::Ok().with_data(row_id.to_string())))
 }
 
 async fn get_database_fields_handler(
@@ -2594,7 +2593,7 @@ async fn list_database_row_id_updated_handler(
 
 async fn list_database_row_details_handler(
   user_uuid: UserUuid,
-  path_param: web::Path<(Uuid, String)>,
+  path_param: web::Path<(Uuid, Uuid)>,
   state: Data<AppState>,
   param: web::Query<ListDatabaseRowDetailParam>,
 ) -> Result<Json<AppResponse<Vec<AFDatabaseRowDetail>>>> {
@@ -2602,17 +2601,7 @@ async fn list_database_row_details_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let list_db_row_query = param.into_inner();
   let with_doc = list_db_row_query.with_doc.unwrap_or_default();
-  let row_ids = list_db_row_query.into_ids();
-
-  if let Err(e) = Uuid::parse_str(&db_id) {
-    return Err(AppError::InvalidRequest(format!("invalid database id `{}`: {}", db_id, e)).into());
-  }
-
-  for id in row_ids.iter() {
-    if let Err(e) = Uuid::parse_str(id) {
-      return Err(AppError::InvalidRequest(format!("invalid row id `{}`: {}", id, e)).into());
-    }
-  }
+  let row_ids = list_db_row_query.into_ids()?;
 
   state
     .workspace_access_control
@@ -2679,7 +2668,7 @@ async fn parser_realtime_msg(
 
 #[instrument(level = "debug", skip_all)]
 async fn get_collab_embed_info_handler(
-  path: web::Path<(String, String)>,
+  path: web::Path<(String, Uuid)>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabEmbedInfo>>> {
   let (_, object_id) = path.into_inner();
@@ -2787,8 +2776,8 @@ async fn collab_full_sync_handler(
   let (tx, rx) = tokio::sync::oneshot::channel();
   let message = ClientHttpUpdateMessage {
     user,
-    workspace_id: workspace_id.to_string(),
-    object_id: object_id.to_string(),
+    workspace_id,
+    object_id,
     collab_type,
     update: Bytes::from(doc_state),
     state_vector: Some(Bytes::from(sv)),

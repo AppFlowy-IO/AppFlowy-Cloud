@@ -1029,7 +1029,7 @@ async fn get_collab_handler(
     .await
     .map_err(AppResponseError::from)?;
   let params = payload.into_inner();
-  let object_id = params.object_id.to_string();
+  let object_id = params.object_id;
   let encode_collab = state
     .collab_access_control_storage
     .get_encode_collab(GetCollabOrigin::User { uid }, params, true)
@@ -1074,7 +1074,7 @@ async fn v1_get_collab_handler(
 
   let resp = CollabResponse {
     encode_collab,
-    object_id: object_id.to_string(),
+    object_id,
   };
 
   Ok(Json(AppResponse::Ok().with_data(resp)))

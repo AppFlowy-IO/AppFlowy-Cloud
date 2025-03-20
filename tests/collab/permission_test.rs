@@ -24,11 +24,11 @@ async fn recv_updates_without_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   client_2
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type.clone())
     .await;
 
   // Edit the collab from client 1 and then the server will broadcast to client 2. But the client 2
@@ -49,7 +49,7 @@ async fn recv_updates_without_permission_test() {
 //
 //   let workspace_id = client_1.workspace_id().await;
 //   let object_id = client_1
-//     .create_and_edit_collab(&workspace_id, collab_type)
+//     .create_and_edit_collab(workspace_id, collab_type.clone())
 //     .await;
 //
 //   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -63,7 +63,7 @@ async fn recv_updates_without_permission_test() {
 //     .await;
 //
 //   client_2
-//     .open_collab(&workspace_id, &object_id, collab_type)
+//     .open_collab(workspace_id, object_id, collab_type.clone())
 //     .await;
 //
 //   // Edit the collab from client 1 and then the server will broadcast to client 2
@@ -103,7 +103,7 @@ async fn recv_updates_without_permission_test() {
 //
 //   let workspace_id = client_1.workspace_id().await;
 //   let object_id = client_1
-//     .create_and_edit_collab(&workspace_id, collab_type)
+//     .create_and_edit_collab(workspace_id, collab_type.clone())
 //     .await;
 //   client_1
 //     .collabs
@@ -144,7 +144,7 @@ async fn recv_updates_without_permission_test() {
 //     )
 //     .await;
 //   client_2
-//     .open_collab(&workspace_id, &object_id, collab_type)
+//     .open_collab(workspace_id, object_id, collab_type.clone())
 //     .await;
 //   assert_client_collab_include_value(&mut client_2, &object_id, expected)
 //     .await
@@ -159,7 +159,7 @@ async fn edit_collab_with_readonly_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -169,7 +169,7 @@ async fn edit_collab_with_readonly_permission_test() {
     .unwrap();
 
   client_2
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type.clone())
     .await;
 
   // client 2 edit the collab and then the server will reject the update which mean the
@@ -186,10 +186,10 @@ async fn edit_collab_with_readonly_permission_test() {
   .unwrap();
 
   assert_server_collab(
-    &workspace_id,
+    workspace_id,
     &mut client_1.api_client,
-    &object_id,
-    collab_type,
+    object_id,
+    &collab_type,
     5,
     json!({}),
   )
@@ -205,7 +205,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -215,7 +215,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
     .unwrap();
 
   client_2
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type.clone())
     .await;
 
   // client 2 edit the collab and then the server will broadcast the update
@@ -233,10 +233,10 @@ async fn edit_collab_with_read_and_write_permission_test() {
     .unwrap();
 
   assert_server_collab(
-    &workspace_id,
+    workspace_id,
     &mut client_1.api_client,
-    &object_id,
-    collab_type,
+    object_id,
+    &collab_type,
     5,
     expected,
   )
@@ -252,7 +252,7 @@ async fn edit_collab_with_full_access_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -262,7 +262,7 @@ async fn edit_collab_with_full_access_permission_test() {
     .unwrap();
 
   client_2
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type.clone())
     .await;
 
   // client 2 edit the collab and then the server will broadcast the update
@@ -278,10 +278,10 @@ async fn edit_collab_with_full_access_permission_test() {
   assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected.clone(), 30).await;
 
   assert_server_collab(
-    &workspace_id,
+    workspace_id,
     &mut client_1.api_client,
-    &object_id,
-    collab_type,
+    object_id,
+    &collab_type,
     5,
     expected,
   )
@@ -297,7 +297,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -309,7 +309,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
   // client 2 edit the collab and then the server will broadcast the update
   {
     client_2
-      .open_collab(&workspace_id, &object_id, collab_type)
+      .open_collab(workspace_id, object_id, collab_type.clone())
       .await;
     client_2
       .insert_into(&object_id, "title", "hello world")
@@ -343,10 +343,10 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
   .await
   .unwrap();
   assert_server_collab(
-    &workspace_id,
+    workspace_id,
     &mut client_1.api_client,
-    &object_id,
-    collab_type,
+    object_id,
+    &collab_type,
     5,
     json!({
       "title": "hello world"
@@ -360,11 +360,11 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
 async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let mut tasks = Vec::new();
   let mut owner = TestClient::new_user().await;
-  let object_id = Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let collab_type = CollabType::Unknown;
   let workspace_id = owner.workspace_id().await;
   owner
-    .create_and_edit_collab_with_data(&object_id, &workspace_id, collab_type, None)
+    .create_and_edit_collab_with_data(object_id, workspace_id, collab_type.clone(), None)
     .await;
 
   let arc_owner = Arc::new(owner);
@@ -385,7 +385,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
         .unwrap();
 
       new_member
-        .open_collab(&workspace_id, &object_id, collab_type)
+        .open_collab(workspace_id, object_id, collab_type.clone())
         .await;
 
       // generate random string and insert it to the collab
@@ -443,7 +443,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let collab_type = CollabType::Unknown;
   let workspace_id = owner.workspace_id().await;
   let object_id = owner
-    .create_and_edit_collab(&workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type.clone())
     .await;
 
   let arc_owner = Arc::new(owner);
@@ -462,7 +462,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
         .unwrap();
 
       new_user
-        .open_collab(&workspace_id, &object_id, collab_type)
+        .open_collab(workspace_id, object_id, collab_type.clone())
         .await;
 
       let random_str = generate_random_string(200);

@@ -72,7 +72,7 @@ pub struct SearchDocumentParams {
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SearchDocumentItem {
   /// Document identifier.
-  pub object_id: String,
+  pub object_id: Uuid,
   /// Workspace identifier, given document belongs to.
   pub workspace_id: Uuid,
   /// Partition key, which maps directly onto [collab_entity::CollabType].

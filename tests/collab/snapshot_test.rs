@@ -5,6 +5,7 @@ use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, JsonValue};
 use collab_entity::CollabType;
 use serde_json::json;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn read_write_snapshot() {
@@ -12,15 +13,15 @@ async fn read_write_snapshot() {
 
   // prepare initial document
   let wid = c.workspace_id().await;
-  let oid = c.create_and_edit_collab(&wid, CollabType::Unknown).await;
-  c.open_collab(&wid, &oid, CollabType::Unknown).await;
+  let oid = c.create_and_edit_collab(wid, CollabType::Unknown).await;
+  c.open_collab(wid, oid, CollabType::Unknown).await;
   c.insert_into(&oid, "title", "t1").await;
   c.wait_object_sync_complete(&oid).await.unwrap();
   assert_server_collab(
-    &wid,
+    wid,
     &mut c.api_client,
-    &oid,
-    CollabType::Unknown,
+    oid,
+    &CollabType::Unknown,
     10,
     json!({"title": "t1"}),
   )
@@ -35,10 +36,10 @@ async fn read_write_snapshot() {
   c.insert_into(&oid, "title", "t2").await;
   c.wait_object_sync_complete(&oid).await.unwrap();
   assert_server_collab(
-    &wid,
+    wid,
     &mut c.api_client,
-    &oid,
-    CollabType::Unknown,
+    oid,
+    &CollabType::Unknown,
     10,
     json!({"title": "t2"}),
   )
@@ -60,8 +61,8 @@ async fn read_write_snapshot() {
 
 async fn verify_snapshot_state(
   c: &TestClient,
-  workspace_id: &str,
-  oid: &str,
+  workspace_id: &Uuid,
+  oid: &Uuid,
   snapshot_id: &i64,
   expected: JsonValue,
 ) {
@@ -74,7 +75,7 @@ async fn verify_snapshot_state(
   let encoded_collab = EncodedCollab::decode_from_bytes(&snapshot.encoded_collab_v1).unwrap();
   let collab = Collab::new_with_source(
     CollabOrigin::Empty,
-    oid,
+    &oid.to_string(),
     DataSource::DocStateV1(encoded_collab.doc_state.into()),
     vec![],
     true,

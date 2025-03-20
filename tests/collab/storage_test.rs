@@ -21,7 +21,7 @@ use crate::collab::util::{redis_connection_manager, test_encode_collab_v1};
 async fn success_insert_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
-  let object_id = Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   c.create_collab(CreateCollabParams {
     object_id: object_id.clone(),
@@ -34,9 +34,9 @@ async fn success_insert_collab_test() {
 
   let doc_state = c
     .get_collab(QueryCollabParams::new(
-      &object_id,
+      object_id,
       CollabType::Document,
-      &workspace_id,
+      workspace_id,
     ))
     .await
     .unwrap()
@@ -52,15 +52,15 @@ async fn success_batch_get_collab_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let queries = vec![
     QueryCollab {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Unknown,
     },
     QueryCollab {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Unknown,
     },
     QueryCollab {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Unknown,
     },
   ];
@@ -102,15 +102,15 @@ async fn success_part_batch_get_collab_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let queries = vec![
     QueryCollab {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Unknown,
     },
     QueryCollab {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Unknown,
     },
     QueryCollab {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Unknown,
     },
   ];
@@ -158,7 +158,7 @@ async fn success_part_batch_get_collab_test() {
 async fn success_delete_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
-  let object_id = Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
     .encode_to_bytes()
     .unwrap();
@@ -181,9 +181,9 @@ async fn success_delete_collab_test() {
 
   let error = c
     .get_collab(QueryCollabParams::new(
-      &object_id,
+      object_id,
       CollabType::Document,
-      &workspace_id,
+      workspace_id,
     ))
     .await
     .unwrap_err();
@@ -197,7 +197,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let error = c
     .create_collab(CreateCollabParams {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       encoded_collab_v1: vec![],
       collab_type: CollabType::Document,
       workspace_id: workspace_id.clone(),
@@ -211,8 +211,8 @@ async fn fail_insert_collab_with_empty_payload_test() {
 #[tokio::test]
 async fn fail_insert_collab_with_invalid_workspace_id_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = Uuid::new_v4().to_string();
-  let object_id = Uuid::new_v4().to_string();
+  let workspace_id = Uuid::new_v4();
+  let object_id = Uuid::new_v4();
   let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
     .encode_to_bytes()
     .unwrap();
@@ -221,7 +221,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
       object_id,
       encoded_collab_v1: encode_collab,
       collab_type: CollabType::Unknown,
-      workspace_id: workspace_id.clone(),
+      workspace_id,
     })
     .await
     .unwrap_err();
@@ -235,7 +235,7 @@ async fn collab_mem_cache_read_write_test() {
   let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
 
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let timestamp = chrono::Utc::now().timestamp();
   mem_cache
     .insert_encode_collab_data(
@@ -256,7 +256,7 @@ async fn collab_mem_cache_read_write_test() {
 async fn collab_mem_cache_insert_override_test() {
   let conn = redis_connection_manager().await;
   let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
   let mut timestamp = chrono::Utc::now().timestamp();
   mem_cache
@@ -316,7 +316,7 @@ async fn collab_meta_redis_cache_test() {
   let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
   mem_cache.get_collab_meta("1").await.unwrap_err();
 
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let meta = CollabMetadata {
     object_id: object_id.clone(),
     workspace_id: "w1".to_string(),
@@ -331,7 +331,7 @@ async fn collab_meta_redis_cache_test() {
 async fn insert_empty_data_test() {
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
 
   // test all collab type
   for collab_type in [
@@ -361,7 +361,7 @@ async fn insert_empty_data_test() {
 async fn insert_invalid_data_test() {
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
 
   let doc = Doc::new();
   let encoded_collab_v1 = doc
@@ -401,7 +401,7 @@ async fn insert_invalid_data_test() {
 async fn insert_folder_data_success_test() {
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let uid = test_client.uid().await;
 
   let templates = WorkspaceTemplateBuilder::new(uid, &workspace_id)

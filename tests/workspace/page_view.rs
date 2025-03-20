@@ -16,7 +16,7 @@ use shared_entity::dto::workspace_dto::{
 use tokio::time::sleep;
 use uuid::Uuid;
 
-async fn get_latest_folder(test_client: &TestClient, workspace_id: &str) -> Folder {
+async fn get_latest_folder(test_client: &TestClient, workspace_id: &Uuid) -> Folder {
   // Wait for websocket updates
   sleep(Duration::from_secs(1)).await;
   let lock = test_client
@@ -35,7 +35,7 @@ async fn get_latest_folder(test_client: &TestClient, workspace_id: &str) -> Fold
     uid,
     CollabOrigin::Client(CollabClient::new(uid, test_client.device_id.clone())),
     encoded_collab.into(),
-    workspace_id,
+    &workspace_id.to_string(),
     vec![],
   )
   .unwrap()
@@ -48,7 +48,7 @@ async fn get_page_view() {
   assert_eq!(workspaces.len(), 1);
   let workspace_id = workspaces[0].workspace_id;
   let folder_view = c
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -87,7 +87,7 @@ async fn create_new_page_with_database() {
   assert_eq!(workspaces.len(), 1);
   let workspace_id = workspaces[0].workspace_id;
   let folder_view = c
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -133,7 +133,7 @@ async fn create_new_page_with_database() {
     .unwrap();
   sleep(Duration::from_secs(1)).await;
   let folder_view = c
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -165,7 +165,7 @@ async fn create_new_document_page() {
   assert_eq!(workspaces.len(), 1);
   let workspace_id = workspaces[0].workspace_id;
   let folder_view = c
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -213,7 +213,7 @@ async fn create_new_document_page() {
     .unwrap();
   sleep(Duration::from_secs(1)).await;
   let folder_view = c
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -228,9 +228,9 @@ async fn create_new_document_page() {
     .unwrap();
   assert_eq!(view.name, "New document");
   c.get_collab(QueryCollabParams {
-    workspace_id: workspace_id.to_string(),
+    workspace_id,
     inner: QueryCollab {
-      object_id: page.view_id,
+      object_id: page.view_id.parse().unwrap(),
       collab_type: CollabType::Document,
     },
   })
@@ -242,9 +242,9 @@ async fn create_new_document_page() {
     .find(|v| v.view_id == page_with_initial_data.view_id)
     .unwrap();
   c.get_collab(QueryCollabParams {
-    workspace_id: workspace_id.to_string(),
+    workspace_id,
     inner: QueryCollab {
-      object_id: page_with_initial_data.view_id,
+      object_id: page_with_initial_data.view_id.parse().unwrap(),
       collab_type: CollabType::Document,
     },
   })
@@ -259,7 +259,7 @@ async fn append_block_to_page() {
   assert_eq!(workspaces.len(), 1);
   let workspace_id = workspaces[0].workspace_id;
   let folder_view = c
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -300,7 +300,7 @@ async fn create_new_chat_page() {
   assert_eq!(workspaces.len(), 1);
   let workspace_id = workspaces[0].workspace_id;
   let folder_view = c
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -322,7 +322,7 @@ async fn create_new_chat_page() {
     .unwrap();
   sleep(Duration::from_secs(1)).await;
   let folder_view = c
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -336,7 +336,7 @@ async fn create_new_chat_page() {
     .find(|v| v.view_id == page.view_id)
     .unwrap();
   assert_eq!(
-    c.get_chat_settings(&workspace_id.to_string(), &page.view_id)
+    c.get_chat_settings(&workspace_id, &page.view_id)
       .await
       .unwrap()
       .name,
@@ -350,8 +350,7 @@ async fn move_page_to_another_space() {
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
-  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
@@ -382,7 +381,7 @@ async fn move_page_to_another_space() {
   web_client
     .api_client
     .move_workspace_page_view(
-      workspace_uuid,
+      workspace_id,
       &todo_view_id,
       &MovePageParams {
         new_parent_view_id: shared_space.view_id.clone(),
@@ -418,7 +417,7 @@ async fn move_page_to_trash_then_restore() {
     general_space.children[0].view_id.clone(),
     general_space.children[1].view_id.clone(),
   ];
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
@@ -426,7 +425,7 @@ async fn move_page_to_trash_then_restore() {
   for view_id in view_ids_to_be_deleted.iter() {
     web_client
       .api_client
-      .move_workspace_page_view_to_trash(Uuid::parse_str(&workspace_id).unwrap(), view_id)
+      .move_workspace_page_view_to_trash(workspace_id, view_id)
       .await
       .unwrap();
   }
@@ -454,10 +453,7 @@ async fn move_page_to_trash_then_restore() {
 
   web_client
     .api_client
-    .restore_workspace_page_view_from_trash(
-      Uuid::parse_str(&workspace_id).unwrap(),
-      &view_ids_to_be_deleted[0],
-    )
+    .restore_workspace_page_view_from_trash(workspace_id, &view_ids_to_be_deleted[0])
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
@@ -476,7 +472,7 @@ async fn move_page_to_trash_then_restore() {
   assert!(!view_found);
   web_client
     .api_client
-    .restore_all_workspace_page_views_from_trash(Uuid::parse_str(&workspace_id).unwrap())
+    .restore_all_workspace_page_views_from_trash(workspace_id)
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
@@ -511,17 +507,14 @@ async fn move_page_with_child_to_trash_then_restore() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
   web_client
     .api_client
-    .move_workspace_page_view_to_trash(
-      Uuid::parse_str(&workspace_id).unwrap(),
-      &general_space.view_id,
-    )
+    .move_workspace_page_view_to_trash(workspace_id, &general_space.view_id)
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
@@ -547,10 +540,7 @@ async fn move_page_with_child_to_trash_then_restore() {
 
   web_client
     .api_client
-    .restore_workspace_page_view_from_trash(
-      Uuid::parse_str(&workspace_id).unwrap(),
-      &general_space.view_id,
-    )
+    .restore_workspace_page_view_from_trash(workspace_id, &general_space.view_id)
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
@@ -585,17 +575,14 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
   web_client
     .api_client
-    .move_workspace_page_view_to_trash(
-      Uuid::parse_str(&workspace_id).unwrap(),
-      &general_space.view_id,
-    )
+    .move_workspace_page_view_to_trash(workspace_id, &general_space.view_id)
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
@@ -621,10 +608,7 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
 
   web_client
     .api_client
-    .delete_workspace_page_view_from_trash(
-      Uuid::parse_str(&workspace_id).unwrap(),
-      &general_space.view_id,
-    )
+    .delete_workspace_page_view_from_trash(workspace_id, &general_space.view_id)
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
@@ -660,17 +644,14 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
   web_client
     .api_client
-    .move_workspace_page_view_to_trash(
-      Uuid::parse_str(&workspace_id).unwrap(),
-      &general_space.view_id,
-    )
+    .move_workspace_page_view_to_trash(workspace_id, &general_space.view_id)
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
@@ -696,7 +677,7 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
 
   web_client
     .api_client
-    .delete_all_workspace_page_views_from_trash(Uuid::parse_str(&workspace_id).unwrap())
+    .delete_all_workspace_page_views_from_trash(workspace_id)
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
@@ -722,14 +703,14 @@ async fn update_page() {
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
   let folder_view = web_client
     .api_client
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -741,7 +722,7 @@ async fn update_page() {
   web_client
     .api_client
     .update_workspace_page_view(
-      Uuid::parse_str(&workspace_id).unwrap(),
+      workspace_id,
       &view_id_to_be_updated,
       &UpdatePageParams {
         name: "New Name".to_string(),
@@ -779,14 +760,14 @@ async fn favorite_page() {
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
   let folder_view = web_client
     .api_client
-    .get_workspace_folder(&workspace_id.to_string(), Some(2), None)
+    .get_workspace_folder(&workspace_id, Some(2), None)
     .await
     .unwrap();
   let general_space = &folder_view
@@ -798,7 +779,7 @@ async fn favorite_page() {
   web_client
     .api_client
     .favorite_page_view(
-      Uuid::parse_str(&workspace_id).unwrap(),
+      workspace_id,
       &favorite_view_id,
       &FavoritePageParams {
         is_favorite: true,
@@ -819,16 +800,16 @@ async fn create_space() {
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let workspace_id = workspace_id;
   let public_space = web_client
     .api_client
     .create_space(
-      workspace_uuid,
+      workspace_id,
       &CreateSpaceParams {
         space_permission: SpacePermission::PublicToAll,
         name: "Public Space".to_string(),
@@ -841,7 +822,7 @@ async fn create_space() {
   web_client
     .api_client
     .create_space(
-      workspace_uuid,
+      workspace_id,
       &CreateSpaceParams {
         space_permission: SpacePermission::Private,
         name: "Private Space".to_string(),
@@ -884,7 +865,7 @@ async fn create_space() {
   web_client
     .api_client
     .update_space(
-      workspace_uuid,
+      workspace_id,
       &private_space.view_id,
       &UpdateSpaceParams {
         space_permission: SpacePermission::PublicToAll,
@@ -937,12 +918,12 @@ async fn publish_page() {
     .view_id
     .clone();
   let page_to_be_published = vec![database_page_id, document_page_id];
-  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let workspace_id = workspace_id;
   for view_id in &page_to_be_published {
     web_client
       .api_client
       .publish_page(
-        workspace_uuid,
+        workspace_id,
         view_id,
         &PublishPageParams {
           publish_name: None,
@@ -979,7 +960,7 @@ async fn publish_page() {
   for view_id in &page_to_be_published {
     web_client
       .api_client
-      .unpublish_page(workspace_uuid, view_id)
+      .unpublish_page(workspace_id, view_id)
       .await
       .unwrap();
   }
@@ -997,12 +978,12 @@ async fn duplicate_view() {
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let workspace_id = workspace_id;
   let folder_view = web_client
     .api_client
     .get_workspace_folder(&workspace_id, Some(2), None)
@@ -1016,7 +997,7 @@ async fn duplicate_view() {
   web_client
     .api_client
     .duplicate_view_and_children(
-      workspace_uuid,
+      workspace_id,
       &general_space.view_id,
       &DuplicatePageParams {
         suffix: Some(" (Copy)".to_string()),
@@ -1026,7 +1007,7 @@ async fn duplicate_view() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   let duplicated_space_id = folder
-    .get_view(&workspace_id)
+    .get_view(&workspace_id.to_string())
     .unwrap()
     .children
     .iter()
@@ -1044,12 +1025,12 @@ async fn create_database_page_view() {
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
-  app_client.open_workspace_collab(&workspace_id).await;
+  app_client.open_workspace_collab(workspace_id).await;
   app_client
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let workspace_id = workspace_id;
   let folder_view = web_client
     .api_client
     .get_workspace_folder(&workspace_id, Some(2), None)
@@ -1069,7 +1050,7 @@ async fn create_database_page_view() {
   web_client
     .api_client
     .create_database_view(
-      workspace_uuid,
+      workspace_id,
       todo_list_view_id,
       &CreatePageDatabaseViewParams {
         layout: ViewLayout::Grid,
@@ -1096,7 +1077,7 @@ async fn create_database_page_view() {
     .unwrap();
   let page_collab = web_client
     .api_client
-    .get_workspace_page_view(workspace_uuid, grid_view.id.as_str())
+    .get_workspace_page_view(workspace_id, grid_view.id.as_str())
     .await
     .unwrap();
   assert_eq!(page_collab.data.row_data.len(), 5);

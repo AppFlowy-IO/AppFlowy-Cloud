@@ -255,6 +255,7 @@ pub struct FavoriteFolderView {
   #[serde(flatten)]
   pub view: FolderView,
   pub favorited_at: DateTime<Utc>,
+  pub is_pinned: bool,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

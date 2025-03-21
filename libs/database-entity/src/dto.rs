@@ -1234,7 +1234,7 @@ mod test {
   #[test]
   fn collab_params_serialization_from_old_format() {
     let v0 = CollabParamsV0 {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: vec![
         7, 0, 0, 0, 0, 0, 0, 0, 1, 209, 196, 206, 243, 15, 1, 26, 4, 0, 0, 0, 0, 0, 0, 1, 1, 209,
@@ -1302,7 +1302,7 @@ mod test {
   #[test]
   fn deserialization_using_protobuf() {
     let collab_params_with_embeddings = CollabParams {
-      object_id: "object_id".to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::default(),
     };
@@ -1315,7 +1315,7 @@ mod test {
   #[test]
   fn deserialize_collab_params_without_embeddings() {
     let collab_params = CollabParams {
-      object_id: "object_id".to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::from(vec![1, 2, 3]),
     };

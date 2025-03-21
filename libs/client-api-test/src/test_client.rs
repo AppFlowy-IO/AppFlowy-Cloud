@@ -235,7 +235,7 @@ impl TestClient {
     let collab = self
       .api_client
       .get_collab(QueryCollabParams::new(
-        workspace_database_id.clone(),
+        workspace_database_id,
         CollabType::WorkspaceDatabase,
         workspace_id,
       ))
@@ -518,7 +518,7 @@ impl TestClient {
     secs: u64,
   ) -> Result<(), Error> {
     let mut sync_state = {
-      let lock = self.collabs.get(&object_id).unwrap().collab.read().await;
+      let lock = self.collabs.get(object_id).unwrap().collab.read().await;
       lock.subscribe_sync_state()
     };
 
@@ -1098,7 +1098,7 @@ pub async fn assert_server_snapshot(
        _ = tokio::time::sleep(Duration::from_secs(10)) => {
          panic!("Query snapshot timeout");
        },
-       result = client.get_snapshot(&workspace_id, &object_id, QuerySnapshotParams {snapshot_id: *snapshot_id },
+       result = client.get_snapshot(workspace_id, object_id, QuerySnapshotParams {snapshot_id: *snapshot_id },
         ) => {
         retry_count += 1;
         match &result {
@@ -1214,7 +1214,7 @@ pub async fn assert_client_collab_within_secs(
        json = async {
         let lock = client
           .collabs
-          .get_mut(&object_id)
+          .get_mut(object_id)
           .unwrap()
           .collab
           .read()
@@ -1250,7 +1250,7 @@ pub async fn assert_client_collab_include_value(
        json = async {
         let lock = client
           .collabs
-          .get_mut(&object_id)
+          .get_mut(object_id)
           .unwrap()
           .collab
           .read()

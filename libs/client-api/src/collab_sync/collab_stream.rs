@@ -63,7 +63,7 @@ where
     sink: Weak<CollabSink<Sink>>,
     periodic_sync_interval: Option<Duration>,
   ) -> Self {
-    let object_id = object.object_id.clone();
+    let object_id = object.object_id;
     let cloned_weak_collab = weak_collab.clone() as CollabRef;
     let seq_num_counter = Arc::new(SeqNumCounter::default());
     let cloned_seq_num_counter = seq_num_counter.clone();
@@ -348,7 +348,7 @@ where
           .handle_message(&message_origin, &collab, msg)
           .await?
         {
-          let object_id = sync_object.object_id.clone();
+          let object_id = sync_object.object_id;
           sink.queue_msg(|msg_id| {
             if is_server_sync_step_1 {
               ClientCollabMessage::new_server_init_sync(ServerInit::new(

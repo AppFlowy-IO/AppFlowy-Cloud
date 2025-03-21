@@ -81,7 +81,7 @@ async fn index_then_write_embedding_to_disk(
     "[Embedding] process batch {:?} embeddings",
     unindexed_collabs
       .iter()
-      .map(|v| v.object_id.clone())
+      .map(|v| v.object_id)
       .collect::<Vec<_>>()
   );
 

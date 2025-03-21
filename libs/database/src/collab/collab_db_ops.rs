@@ -621,7 +621,7 @@ where
   let mut items = vec![];
   for row in records {
     let embed_info = AFCollabEmbedInfo {
-      object_id: row.object_id.clone(),
+      object_id: row.object_id,
       indexed_at: DateTime::<Utc>::from_naive_utc_and_offset(row.indexed_at, Utc),
       updated_at: row.updated_at,
     };

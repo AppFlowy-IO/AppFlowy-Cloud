@@ -125,7 +125,7 @@ fn split_text_into_chunks(
       .enumerate()
       .map(|(index, content)| AFCollabEmbeddedChunk {
         fragment_id: Uuid::new_v4().to_string(),
-        object_id: object_id.clone(),
+        object_id,
         content_type: EmbeddingContentType::PlainText,
         content,
         embedding: None,

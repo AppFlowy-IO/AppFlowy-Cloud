@@ -192,13 +192,7 @@ where
 
   let map = result
     .into_iter()
-    .filter_map(|r| {
-      if let Some(indexed_at) = r.indexed_at {
-        Some((r.oid, indexed_at))
-      } else {
-        None
-      }
-    })
+    .filter_map(|r| r.indexed_at.map(|indexed_at| (r.oid, indexed_at)))
     .collect::<HashMap<Uuid, DateTime<Utc>>>();
   Ok(map)
 }

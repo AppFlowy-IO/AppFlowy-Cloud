@@ -1126,11 +1126,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
     }
 
     let collab_resp = client_2
-      .get_collab(
-        workspace_id_2,
-        workspace_id_2,
-        CollabType::Folder,
-      )
+      .get_collab(workspace_id_2, workspace_id_2, CollabType::Folder)
       .await
       .unwrap();
 

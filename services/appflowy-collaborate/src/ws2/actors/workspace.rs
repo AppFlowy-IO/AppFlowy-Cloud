@@ -138,7 +138,7 @@ impl Actor for Workspace {
     let stream = self
       .store
       .awareness()
-      .awareness_workspace_stream(&self.workspace_id);
+      .collab_awareness_stream(&self.workspace_id);
     self.awareness_handle = Some(ctx.add_stream(stream));
     self.snapshot_handle = Some(ctx.notify_later(Snapshot, Self::SNAPSHOT_INTERVAL));
   }

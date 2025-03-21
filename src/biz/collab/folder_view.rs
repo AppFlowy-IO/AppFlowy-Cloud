@@ -181,6 +181,14 @@ pub fn section_items_to_favorite_folder_view(
     .filter_map(|section_item| {
       let view = folder.get_view(&section_item.id);
       view.map(|v| {
+        let extra = v.extra.as_ref().map(|e| parse_extra_field_as_json(e));
+        let is_pinned = match extra.as_ref() {
+          Some(extra) => extra
+            .get("is_pinned")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+          None => false,
+        };
         let folder_view = FolderView {
           view_id: v.id.clone(),
           parent_view_id: v.parent_view_id.clone(),
@@ -196,12 +204,13 @@ pub fn section_items_to_favorite_folder_view(
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
           is_locked: v.is_locked,
-          extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+          extra,
           children: vec![],
         };
         FavoriteFolderView {
           view: folder_view,
           favorited_at: DateTime::from_timestamp(section_item.timestamp, 0).unwrap_or_default(),
+          is_pinned,
         }
       })
     })

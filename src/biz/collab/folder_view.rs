@@ -154,7 +154,7 @@ fn to_folder_view(
     })
     .collect();
   Some(FolderView {
-    view_id: *view_id.to_string(),
+    view_id: *view_id,
     parent_view_id: view.parent_view_id.parse().unwrap(),
     name: view.name.clone(),
     icon: view

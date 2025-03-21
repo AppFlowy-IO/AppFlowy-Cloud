@@ -377,9 +377,12 @@ fn duplicate_views(views: &[View], suffix: &str) -> Result<DuplicateContext, App
     let mut duplicated_view = view.clone();
     let mut duplicated_children = vec![];
     for child in view.children.items.iter() {
-      let new_view_id = view_id_mapping.get(&child.id).cloned();
+      let child_id = Uuid::parse_str(&child.id)?;
+      let new_view_id = view_id_mapping.get(&child_id).cloned();
       if let Some(view_id) = new_view_id {
-        duplicated_children.push(ViewIdentifier { id: view_id });
+        duplicated_children.push(ViewIdentifier {
+          id: view_id.to_string(),
+        });
       }
     }
     duplicated_view.id = view_id_mapping

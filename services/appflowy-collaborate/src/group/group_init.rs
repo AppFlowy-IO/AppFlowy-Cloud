@@ -255,8 +255,7 @@ impl CollabGroup {
 
   /// Task used to receive awareness updates from Redis.
   async fn inbound_awareness_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
-    let object_id = Uuid::parse_str(&state.object_id)
-      .map_err(|e| RealtimeError::CollabSchemaError(format!("invalid uuid: {}", e)))?;
+    let object_id = state.object_id;
     let updates = state
       .persister
       .collab_redis_stream

@@ -29,7 +29,6 @@ prometheus-client.workspace = true
 zstd = "0.13"
 loole = "0.4.0"
 dashmap.workspace = true
-uuid.workspace = true
 
 [dev-dependencies]
 futures = "0.3.30"

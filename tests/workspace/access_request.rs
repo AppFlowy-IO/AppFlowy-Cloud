@@ -21,8 +21,7 @@ async fn access_request_test() {
     .iter()
     .find(|v| v.name == "To-dos")
     .unwrap()
-    .view_id
-    .clone();
+    .view_id;
   let data = CreateAccessRequestParams {
     workspace_id,
     view_id,

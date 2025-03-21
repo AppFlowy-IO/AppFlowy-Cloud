@@ -43,10 +43,10 @@ async fn web_and_native_app_edit_same_collab_test() {
   let collab_doc_state = web_client
     .api_client
     .get_collab(QueryCollabParams {
-      workspace_id: workspace_id.clone(),
+      workspace_id: workspace_id,
       inner: QueryCollab {
-        object_id: object_id.clone(),
-        collab_type,
+        object_id: object_id,
+        collab_type: collab_type.clone(),
       },
     })
     .await

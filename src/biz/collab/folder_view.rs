@@ -114,13 +114,13 @@ fn to_folder_view(
 ) -> Option<FolderView> {
   let is_trash = private_space_and_trash_views
     .view_ids_in_trash
-    .contains(&view_id);
+    .contains(view_id);
   let is_my_private_space = private_space_and_trash_views
     .my_private_space_ids
-    .contains(&view_id);
+    .contains(view_id);
   let is_other_private_space = private_space_and_trash_views
     .other_private_space_ids
-    .contains(&view_id);
+    .contains(view_id);
 
   if depth > max_depth || is_other_private_space || is_trash {
     return None;

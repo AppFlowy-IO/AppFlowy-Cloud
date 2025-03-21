@@ -372,8 +372,9 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   // simulate multiple users edit the same collab. All of them have read and write permission
   for i in 0..3 {
     let owner = arc_owner.clone();
-    let object_id = object_id.clone();
-    let workspace_id = workspace_id.clone();
+    let object_id = object_id;
+    let collab_type = collab_type.clone();
+    let workspace_id = workspace_id;
     let task = tokio::spawn(async move {
       let mut new_member = TestClient::new_user().await;
       // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
@@ -450,8 +451,9 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
 
   for i in 0..5 {
     let owner = arc_owner.clone();
-    let object_id = object_id.clone();
-    let workspace_id = workspace_id.clone();
+    let object_id = object_id;
+    let collab_type = collab_type.clone();
+    let workspace_id = workspace_id;
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user().await;
       // sleep 2 secs to make sure it do not trigger register user too fast in gotrue

@@ -32,7 +32,7 @@ async fn insert_collab_sql_test(pool: PgPool) {
   for &data_size in &data_sizes {
     let encoded_collab_v1 = generate_random_bytes(data_size);
     let object_id = uuid::Uuid::new_v4();
-    object_ids.push(object_id.clone());
+    object_ids.push(object_id);
     let mut txn = pool.begin().await.unwrap();
     let params = CollabParams {
       object_id,
@@ -85,7 +85,7 @@ async fn insert_bulk_collab_sql_test(pool: PgPool) {
   for &data_size in &data_sizes {
     let encoded_collab_v1 = generate_random_bytes(data_size);
     let object_id = uuid::Uuid::new_v4();
-    object_ids.push(object_id.clone());
+    object_ids.push(object_id);
 
     let params = CollabParams {
       object_id,
@@ -165,7 +165,7 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
   // Two items with the same oid and partition_key
   let collab_params_list = vec![
     CollabParams {
-      object_id: object_id.clone(),
+      object_id: object_id,
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encoded_collab_v1.clone().into(),
     },

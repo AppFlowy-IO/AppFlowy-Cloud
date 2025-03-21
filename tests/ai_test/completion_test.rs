@@ -15,7 +15,7 @@ async fn generate_chat_message_answer_test() {
     completion_type: Some(CompletionType::SpellingAndGrammar),
     metadata: Some(CompletionMetadata {
       object_id: doc_id,
-      workspace_id: Some(workspace_id.clone()),
+      workspace_id: Some(workspace_id),
       rag_ids: None,
       completion_history: None,
       custom_prompt: None,

@@ -99,7 +99,7 @@ async fn create_new_page_with_database() {
     .create_workspace_page_view(
       workspace_id,
       &CreatePageParams {
-        parent_view_id: general_space.view_id.clone(),
+        parent_view_id: general_space.view_id,
         layout: ViewLayout::Calendar,
         name: Some("New calendar".to_string()),
         page_data: None,
@@ -111,7 +111,7 @@ async fn create_new_page_with_database() {
     .create_workspace_page_view(
       workspace_id,
       &CreatePageParams {
-        parent_view_id: general_space.view_id.clone(),
+        parent_view_id: general_space.view_id,
         layout: ViewLayout::Grid,
         name: Some("New grid".to_string()),
         page_data: None,
@@ -123,7 +123,7 @@ async fn create_new_page_with_database() {
     .create_workspace_page_view(
       workspace_id,
       &CreatePageParams {
-        parent_view_id: general_space.view_id.clone(),
+        parent_view_id: general_space.view_id,
         layout: ViewLayout::Grid,
         name: Some("New board".to_string()),
         page_data: None,
@@ -144,9 +144,9 @@ async fn create_new_page_with_database() {
   let views_under_general_space: HashSet<_> =
     general_space.children.iter().map(|v| v.view_id).collect();
   for view_id in &[
-    calendar_page.view_id.clone(),
-    grid_page.view_id.clone(),
-    board_page.view_id.clone(),
+    calendar_page.view_id,
+    grid_page.view_id,
+    board_page.view_id,
   ] {
     assert!(views_under_general_space.contains(view_id));
     c.get_workspace_page_view(workspace_id, view_id)
@@ -174,7 +174,7 @@ async fn create_new_document_page() {
     .create_workspace_page_view(
       workspace_id,
       &CreatePageParams {
-        parent_view_id: general_space.view_id.clone(),
+        parent_view_id: general_space.view_id,
         layout: ViewLayout::Document,
         name: Some("New document".to_string()),
         page_data: None,
@@ -186,7 +186,7 @@ async fn create_new_document_page() {
     .create_workspace_page_view(
       workspace_id,
       &CreatePageParams {
-        parent_view_id: general_space.view_id.clone(),
+        parent_view_id: general_space.view_id,
         layout: ViewLayout::Document,
         name: Some("Message extracted from why is the sky blue".to_string()),
         page_data: Some(json!({
@@ -309,7 +309,7 @@ async fn create_new_chat_page() {
     .create_workspace_page_view(
       workspace_id,
       &CreatePageParams {
-        parent_view_id: general_space.view_id.clone(),
+        parent_view_id: general_space.view_id,
         layout: ViewLayout::Chat,
         name: Some("New chat".to_string()),
         page_data: None,
@@ -367,7 +367,7 @@ async fn move_page_to_another_space() {
     .children
     .iter()
     .find(|v| v.name == "To-dos")
-    .map(|v| v.view_id.clone())
+    .map(|v| v.view_id)
     .unwrap();
   let shared_space = &folder_view
     .children
@@ -415,8 +415,8 @@ async fn move_page_to_trash_then_restore() {
     .find(|v| v.name == "General")
     .unwrap();
   let view_ids_to_be_deleted = [
-    general_space.children[0].view_id.clone(),
-    general_space.children[1].view_id.clone(),
+    general_space.children[0].view_id,
+    general_space.children[1].view_id,
   ];
   app_client.open_workspace_collab(workspace_id).await;
   app_client
@@ -723,7 +723,7 @@ async fn update_page() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  let view_id_to_be_updated = general_space.children[0].view_id.clone();
+  let view_id_to_be_updated = general_space.children[0].view_id;
   web_client
     .api_client
     .update_workspace_page_view(
@@ -913,15 +913,13 @@ async fn publish_page() {
     .iter()
     .find(|v| v.name == "To-dos")
     .unwrap()
-    .view_id
-    .clone();
+    .view_id;
   let document_page_id = general_space
     .children
     .iter()
     .find(|v| v.name == "Getting started")
     .unwrap()
-    .view_id
-    .clone();
+    .view_id;
   let page_to_be_published = vec![database_page_id, document_page_id];
   let workspace_id = workspace_id;
   for view_id in &page_to_be_published {

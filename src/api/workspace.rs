@@ -826,8 +826,8 @@ async fn create_collab_handler(
     if let Ok(text) = Document::open(collab).and_then(|doc| doc.to_plain_text(false, true)) {
       let pending = UnindexedCollabTask::new(
         workspace_id,
-        params.object_id.clone(),
-        params.collab_type,
+        params.object_id,
+        params.collab_type.clone(),
         UnindexedData::Text(text),
       );
       state
@@ -980,8 +980,8 @@ async fn batch_create_collab_handler(
           .map(|text| {
             UnindexedCollabTask::new(
               workspace_id,
-              value.1.object_id.clone(),
-              value.1.collab_type,
+              value.1.object_id,
+              value.1.collab_type.clone(),
               UnindexedData::Text(text),
             )
           })
@@ -1794,8 +1794,8 @@ async fn update_collab_handler(
         if let Ok(text) = Document::open(collab).and_then(|doc| doc.to_plain_text(false, true)) {
           let pending = UnindexedCollabTask::new(
             workspace_id,
-            params.object_id.clone(),
-            params.collab_type,
+            params.object_id,
+            params.collab_type.clone(),
             UnindexedData::Text(text),
           );
           state
@@ -2480,9 +2480,8 @@ async fn put_database_row_handler(
 
   let row_id = {
     let mut hasher = Sha256::new();
-    // TODO: check if it is safe to use workspace_id directly
-    hasher.update(workspace_id.to_string());
-    hasher.update(&db_id);
+    hasher.update(workspace_id);
+    hasher.update(db_id);
     hasher.update(pre_hash);
     let hash = hasher.finalize();
     Uuid::from_bytes([

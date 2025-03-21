@@ -77,7 +77,7 @@ async fn get_user_default_workspace_test() {
 
     let getting_started_document = get_document_collab_from_remote(
       &mut test_client,
-      workspace_id.clone(),
+      workspace_id,
       getting_started_view.id.parse().unwrap(),
     )
     .await;
@@ -99,7 +99,7 @@ async fn get_user_default_workspace_test() {
     );
     let desktop_guide_document = get_document_collab_from_remote(
       &mut test_client,
-      workspace_id.clone(),
+      workspace_id,
       desktop_guide_view.id.parse().unwrap(),
     )
     .await;
@@ -112,7 +112,7 @@ async fn get_user_default_workspace_test() {
     assert_eq!(mobile_guide_view.icon, None);
     let mobile_guide_document = get_document_collab_from_remote(
       &mut test_client,
-      workspace_id.clone(),
+      workspace_id,
       mobile_guide_view.id.parse().unwrap(),
     )
     .await;
@@ -125,7 +125,7 @@ async fn get_user_default_workspace_test() {
     assert_eq!(web_guide_view.icon, None);
     let web_guide_document = get_document_collab_from_remote(
       &mut test_client,
-      workspace_id.clone(),
+      workspace_id,
       web_guide_view.id.parse().unwrap(),
     )
     .await;

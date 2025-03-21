@@ -246,7 +246,7 @@ fn prepare_document_collab_param_with_initial_data(
   page_data: serde_json::Value,
 ) -> Result<CollabParams, AppError> {
   let object_id = Uuid::new_v4();
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id.to_string(), vec![], false);
+  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id.to_string(), vec![], false);
   let document_data = JsonToDocumentParser::json_to_document(page_data)?;
   let document = Document::create_with_data(collab, document_data)
     .map_err(|err| AppError::InvalidPageData(err.to_string()))?;
@@ -1063,7 +1063,7 @@ async fn create_database_page(
   let workspace_database_update =
     add_new_database_to_workspace(&mut workspace_database, &database_id, view_id).await?;
   let database_collab_params = CollabParams {
-    object_id: database_id.clone(),
+    object_id: database_id,
     encoded_collab_v1: encoded_database
       .encoded_database_collab
       .encoded_collab

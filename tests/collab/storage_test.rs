@@ -314,12 +314,16 @@ async fn collab_mem_cache_insert_override_test() {
 async fn collab_meta_redis_cache_test() {
   let conn = redis_connection_manager().await;
   let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
-  mem_cache.get_collab_meta("1").await.unwrap_err();
+  mem_cache
+    .get_collab_meta(&Uuid::new_v4())
+    .await
+    .unwrap_err();
 
   let object_id = Uuid::new_v4();
+  let workspace_id = Uuid::new_v4();
   let meta = CollabMetadata {
-    object_id: object_id.clone(),
-    workspace_id: "w1".to_string(),
+    object_id,
+    workspace_id,
   };
   mem_cache.insert_collab_meta(meta.clone()).await.unwrap();
   let meta_from_cache = mem_cache.get_collab_meta(&object_id).await.unwrap();

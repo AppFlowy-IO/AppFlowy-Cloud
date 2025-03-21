@@ -24,7 +24,6 @@ async fn access_request_test() {
     .unwrap()
     .view_id
     .clone();
-  let view_id = Uuid::parse_str(&view_id).unwrap();
   let data = CreateAccessRequestParams {
     workspace_id,
     view_id,

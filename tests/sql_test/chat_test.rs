@@ -24,6 +24,8 @@ async fn chat_crud_test(pool: PgPool) {
     .unwrap();
 
   let chat_id = uuid::Uuid::new_v4().to_string();
+  let rag_id_1 = Uuid::new_v4();
+  let rag_id_2 = Uuid::new_v4();
   // create chat
   {
     insert_chat(
@@ -32,7 +34,7 @@ async fn chat_crud_test(pool: PgPool) {
       CreateChatParams {
         chat_id: chat_id.clone(),
         name: "my first chat".to_string(),
-        rag_ids: vec!["rag_id_1".to_string(), "rag_id_2".to_string()],
+        rag_ids: vec![rag_id_1, rag_id_2],
       },
     )
     .await
@@ -45,7 +47,7 @@ async fn chat_crud_test(pool: PgPool) {
     assert_eq!(chat.name, "my first chat");
     assert_eq!(
       chat.rag_ids,
-      json!(vec!["rag_id_1".to_string(), "rag_id_2".to_string()]),
+      json!(vec![rag_id_1.to_string(), rag_id_2.to_string()]),
     );
   }
 
@@ -75,6 +77,8 @@ async fn chat_message_crud_test(pool: PgPool) {
     .unwrap();
 
   let chat_id = uuid::Uuid::new_v4().to_string();
+  let rag_id_1 = Uuid::new_v4();
+  let rag_id_2 = Uuid::new_v4();
   // create chat
   {
     insert_chat(
@@ -83,7 +87,7 @@ async fn chat_message_crud_test(pool: PgPool) {
       CreateChatParams {
         chat_id: chat_id.clone(),
         name: "my first chat".to_string(),
-        rag_ids: vec!["rag_id_1".to_string(), "rag_id_2".to_string()],
+        rag_ids: vec![rag_id_1, rag_id_2],
       },
     )
     .await
@@ -196,12 +200,14 @@ async fn chat_setting_test(pool: PgPool) {
     .unwrap();
   let workspace_id = user.workspace_id;
   let chat_id = uuid::Uuid::new_v4();
+  let rag_id_1 = Uuid::new_v4();
+  let rag_id_2 = Uuid::new_v4();
 
   // Insert initial chat data with rag_ids
   let insert_params = CreateChatParams {
     chat_id: chat_id.to_string(),
     name: "Initial Chat".to_string(),
-    rag_ids: vec!["rag1".to_string(), "rag2".to_string()],
+    rag_ids: vec![rag_id_1, rag_id_2],
   };
 
   insert_chat(&pool, &workspace_id, insert_params)

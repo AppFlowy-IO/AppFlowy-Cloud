@@ -119,7 +119,7 @@ The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a T
     let params = CreateChatParams {
       chat_id: chat_id.clone(),
       name: "chat with the five dysfunctions of a team".to_string(),
-      rag_ids: vec![object_id_1.to_string()],
+      rag_ids: vec![object_id_1],
     };
 
     test_client

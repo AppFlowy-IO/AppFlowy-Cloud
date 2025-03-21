@@ -12,9 +12,9 @@ use shared_entity::dto::workspace_dto::{
 use uuid::Uuid;
 
 pub struct PrivateSpaceAndTrashViews {
-  pub my_private_space_ids: HashSet<String>,
-  pub other_private_space_ids: HashSet<String>,
-  pub view_ids_in_trash: HashSet<String>,
+  pub my_private_space_ids: HashSet<Uuid>,
+  pub other_private_space_ids: HashSet<Uuid>,
+  pub view_ids_in_trash: HashSet<Uuid>,
 }
 
 pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrashViews {
@@ -24,25 +24,28 @@ pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrash
   for private_section in folder.get_my_private_sections() {
     match folder.get_view(&private_section.id) {
       Some(private_view) if check_if_view_is_space(&private_view) => {
-        my_private_space_ids.insert(private_section.id.clone());
+        let section_id = Uuid::parse_str(&private_section.id).unwrap();
+        my_private_space_ids.insert(section_id);
       },
       _ => (),
     }
   }
 
   for private_section in folder.get_all_private_sections() {
+    let private_section_id = Uuid::parse_str(&private_section.id).unwrap();
     match folder.get_view(&private_section.id) {
       Some(private_view)
         if check_if_view_is_space(&private_view)
-          && !my_private_space_ids.contains(&private_section.id) =>
+          && !my_private_space_ids.contains(&private_section_id) =>
       {
-        other_private_space_ids.insert(private_section.id.clone());
+        other_private_space_ids.insert(private_section_id);
       },
       _ => (),
     }
   }
   for trash_view in folder.get_all_trash_sections() {
-    view_ids_in_trash.insert(trash_view.id.clone());
+    let trash_view_id = Uuid::parse_str(&trash_view.id).unwrap();
+    view_ids_in_trash.insert(trash_view_id);
   }
   PrivateSpaceAndTrashViews {
     my_private_space_ids,
@@ -54,16 +57,16 @@ pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrash
 /// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
 pub fn collab_folder_to_folder_view(
   workspace_id: Uuid,
-  root_view_id: &str,
+  root_view_id: &Uuid,
   folder: &Folder,
   max_depth: u32,
-  pubished_view_ids: &HashSet<String>,
+  pubished_view_ids: &HashSet<Uuid>,
 ) -> Result<FolderView, AppError> {
   let private_space_and_trash_view_ids = private_space_and_trash_view_ids(folder);
 
   to_folder_view(
     workspace_id,
-    "",
+    None,
     root_view_id,
     folder,
     &private_space_and_trash_view_ids,
@@ -78,9 +81,9 @@ pub fn collab_folder_to_folder_view(
   )))
 }
 
-pub fn get_prev_view_id(folder: &Folder, view_id: &str) -> Option<String> {
+pub fn get_prev_view_id(folder: &Folder, view_id: &Uuid) -> Option<Uuid> {
   folder
-    .get_view(view_id)
+    .get_view(&view_id.to_string())
     .and_then(|view| folder.get_view(&view.parent_view_id))
     .and_then(|parent_view| {
       parent_view
@@ -91,7 +94,7 @@ pub fn get_prev_view_id(folder: &Folder, view_id: &str) -> Option<String> {
           if pos == 0 {
             None
           } else {
-            Some(parent_view.children[pos - 1].id.clone())
+            parent_view.children[pos - 1].id.parse().ok()
           }
         })
     })
@@ -100,30 +103,30 @@ pub fn get_prev_view_id(folder: &Folder, view_id: &str) -> Option<String> {
 #[allow(clippy::too_many_arguments)]
 fn to_folder_view(
   workspace_id: Uuid,
-  parent_view_id: &str,
-  view_id: &str,
+  parent_view_id: Option<&Uuid>,
+  view_id: &Uuid,
   folder: &Folder,
   private_space_and_trash_views: &PrivateSpaceAndTrashViews,
-  published_view_ids: &HashSet<String>,
+  published_view_ids: &HashSet<Uuid>,
   parent_is_private: bool,
   depth: u32,
   max_depth: u32,
 ) -> Option<FolderView> {
   let is_trash = private_space_and_trash_views
     .view_ids_in_trash
-    .contains(view_id);
+    .contains(&view_id);
   let is_my_private_space = private_space_and_trash_views
     .my_private_space_ids
-    .contains(view_id);
+    .contains(&view_id);
   let is_other_private_space = private_space_and_trash_views
     .other_private_space_ids
-    .contains(view_id);
+    .contains(&view_id);
 
   if depth > max_depth || is_other_private_space || is_trash {
     return None;
   }
 
-  let view = match folder.get_view(view_id) {
+  let view = match folder.get_view(&view_id.to_string()) {
     Some(view) => view,
     None => {
       return None;
@@ -131,14 +134,16 @@ fn to_folder_view(
   };
 
   // There is currently a bug, in which the parent_view_id is not always set correctly
-  if !(parent_view_id.is_empty() || view.parent_view_id == parent_view_id) {
+  let view_parent = Uuid::parse_str(&view.parent_view_id).ok()?;
+  let parent_view_id = *parent_view_id?;
+  if view_parent != parent_view_id {
     return None;
   }
 
   let view_is_space = check_if_view_is_space(&view);
   // There is currently a bug, which a document that is not a space ended up as child
   // of the workspace
-  let parent_is_workspace = workspace_id.to_string() == parent_view_id;
+  let parent_is_workspace = workspace_id == parent_view_id;
   if !view_is_space && parent_is_workspace {
     return None;
   }
@@ -156,8 +161,8 @@ fn to_folder_view(
     .filter_map(|child_view_id| {
       to_folder_view(
         workspace_id,
-        view_id,
-        &child_view_id.id,
+        Some(view_id),
+        &Uuid::parse_str(&child_view_id.id).ok()?,
         folder,
         private_space_and_trash_views,
         published_view_ids,
@@ -168,8 +173,8 @@ fn to_folder_view(
     })
     .collect();
   Some(FolderView {
-    view_id: view_id.to_string(),
-    parent_view_id: view.parent_view_id.clone(),
+    view_id: *view_id.to_string(),
+    parent_view_id: view.parent_view_id.parse().unwrap(),
     prev_view_id: get_prev_view_id(folder, view_id),
     name: view.name.clone(),
     icon: view
@@ -209,10 +214,11 @@ pub fn section_items_to_favorite_folder_view(
             .unwrap_or(false),
           None => false,
         };
+        let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
-          view_id: v.id.clone(),
-          parent_view_id: v.parent_view_id.clone(),
-          prev_view_id: get_prev_view_id(folder, &v.id),
+          view_id,
+          parent_view_id: v.parent_view_id.parse().unwrap(),
+          prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -248,10 +254,11 @@ pub fn section_items_to_recent_folder_view(
     .filter_map(|section_item| {
       let view = folder.get_view(&section_item.id);
       view.map(|v| {
+        let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
-          view_id: v.id.clone(),
-          parent_view_id: v.parent_view_id.clone(),
-          prev_view_id: get_prev_view_id(folder, &v.id),
+          view_id,
+          parent_view_id: v.parent_view_id.parse().unwrap(),
+          prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -285,10 +292,11 @@ pub fn section_items_to_trash_folder_view(
     .filter_map(|section_item| {
       let view = folder.get_view(&section_item.id);
       view.map(|v| {
+        let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
-          view_id: v.id.clone(),
-          parent_view_id: v.parent_view_id.clone(),
-          prev_view_id: get_prev_view_id(folder, &v.id),
+          view_id,
+          parent_view_id: v.parent_view_id.parse().unwrap(),
+          prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -328,9 +336,10 @@ fn get_view_and_children_recursive(
   private_space_and_trash_views: &PrivateSpaceAndTrashViews,
   view_id: &str,
 ) -> Option<ViewTree> {
+  let view_uuid = Uuid::parse_str(view_id).ok()?;
   if private_space_and_trash_views
     .view_ids_in_trash
-    .contains(view_id)
+    .contains(&view_uuid)
   {
     return None;
   }

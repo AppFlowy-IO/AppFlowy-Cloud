@@ -149,11 +149,7 @@ async fn create_new_page_with_database() {
     .unwrap();
   let views_under_general_space: HashSet<_> =
     general_space.children.iter().map(|v| v.view_id).collect();
-  for view_id in &[
-    calendar_page.view_id,
-    grid_page.view_id,
-    board_page.view_id,
-  ] {
+  for view_id in &[calendar_page.view_id, grid_page.view_id, board_page.view_id] {
     assert!(views_under_general_space.contains(view_id));
     c.get_workspace_page_view(workspace_id, view_id)
       .await
@@ -822,7 +818,6 @@ async fn create_space() {
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  let workspace_id = workspace_id;
   let public_space = web_client
     .api_client
     .create_space(
@@ -935,7 +930,6 @@ async fn publish_page() {
     .unwrap()
     .view_id;
   let page_to_be_published = vec![database_page_id, document_page_id];
-  let workspace_id = workspace_id;
   for view_id in &page_to_be_published {
     web_client
       .api_client
@@ -1000,7 +994,6 @@ async fn duplicate_view() {
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  let workspace_id = workspace_id;
   let folder_view = web_client
     .api_client
     .get_workspace_folder(&workspace_id, Some(2), None)
@@ -1047,7 +1040,6 @@ async fn create_database_page_view() {
     .wait_object_sync_complete(&workspace_id)
     .await
     .unwrap();
-  let workspace_id = workspace_id;
   let folder_view = web_client
     .api_client
     .get_workspace_folder(&workspace_id, Some(2), None)

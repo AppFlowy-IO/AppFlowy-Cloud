@@ -94,8 +94,8 @@ impl CollabGroup {
     let is_new_collab = state_vector.is_empty();
     let persister = CollabPersister::new(
       uid,
-      workspace_id.clone(),
-      object_id.clone(),
+      workspace_id,
+      object_id,
       collab_type,
       storage,
       collab_redis_stream,
@@ -1187,11 +1187,8 @@ impl CollabPersister {
 
   async fn load_collab_full(&self) -> Result<Option<Collab>, RealtimeError> {
     // we didn't find a snapshot, or we want a lightweight collab version
-    let params = QueryCollabParams::new(
-      self.object_id.clone(),
-      self.collab_type,
-      self.workspace_id.clone(),
-    );
+    let params =
+      QueryCollabParams::new(self.object_id, self.collab_type, self.workspace_id);
     let result = self
       .storage
       .get_encode_collab(GetCollabOrigin::Server, params, false)

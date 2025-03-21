@@ -214,7 +214,7 @@ where
   ) -> Result<(), RealtimeError> {
     let group_cmd_sender = self.create_group_if_not_exist(message.object_id);
     tokio::spawn(async move {
-      let object_id = message.object_id.clone();
+      let object_id = message.object_id;
       let (tx, rx) = tokio::sync::oneshot::channel();
       let result = group_cmd_sender
         .send(GroupCommand::HandleClientHttpUpdate {
@@ -261,7 +261,7 @@ where
               let (tx, rx) = tokio::sync::oneshot::channel();
               let _ = group_cmd_sender
                 .send(GroupCommand::CalculateMissingUpdate {
-                  object_id: object_id.clone(),
+                  object_id,
                   state_vector,
                   ret: tx,
                 })
@@ -336,7 +336,7 @@ where
             recv: Some(recv),
           };
 
-          let object_id = entry.key().clone();
+          let object_id = *entry.key();
           if self.enable_custom_runtime {
             COLLAB_RUNTIME.spawn(runner.run(object_id));
           } else {

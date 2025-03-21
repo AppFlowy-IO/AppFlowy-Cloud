@@ -8,10 +8,7 @@ use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab_database::{
-  database::{
-    gen_database_id, gen_database_view_id, gen_row_id, timestamp, Database, DatabaseContext,
-    DatabaseData,
-  },
+  database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
   entity::{CreateDatabaseParams, CreateViewParams},
   rows::CreateRowParams,
   views::OrderObjectPosition,

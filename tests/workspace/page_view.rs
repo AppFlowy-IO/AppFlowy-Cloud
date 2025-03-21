@@ -147,11 +147,8 @@ async fn create_new_page_with_database() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  let views_under_general_space: HashSet<String> = general_space
-    .children
-    .iter()
-    .map(|v| v.view_id.clone())
-    .collect();
+  let views_under_general_space: HashSet<_> =
+    general_space.children.iter().map(|v| v.view_id).collect();
   for view_id in &[
     calendar_page.view_id.clone(),
     grid_page.view_id.clone(),
@@ -240,7 +237,7 @@ async fn create_new_document_page() {
   c.get_collab(QueryCollabParams {
     workspace_id,
     inner: QueryCollab {
-      object_id: page.view_id.parse().unwrap(),
+      object_id: page.view_id,
       collab_type: CollabType::Document,
     },
   })
@@ -254,7 +251,7 @@ async fn create_new_document_page() {
   c.get_collab(QueryCollabParams {
     workspace_id,
     inner: QueryCollab {
-      object_id: page_with_initial_data.view_id.parse().unwrap(),
+      object_id: page_with_initial_data.view_id,
       collab_type: CollabType::Document,
     },
   })
@@ -348,7 +345,7 @@ async fn create_new_chat_page() {
     .find(|v| v.view_id == page.view_id)
     .unwrap();
   assert_eq!(
-    c.get_chat_settings(&workspace_id, &page.view_id)
+    c.get_chat_settings(&workspace_id, &page.view_id.to_string())
       .await
       .unwrap()
       .name,
@@ -396,16 +393,20 @@ async fn move_page_to_another_space() {
       workspace_id,
       &todo_view_id,
       &MovePageParams {
-        new_parent_view_id: shared_space.view_id.clone(),
+        new_parent_view_id: shared_space.view_id.to_string(),
         prev_view_id: None,
       },
     )
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let first_children_id = folder.get_view(&shared_space.view_id).unwrap().children[0]
+  let first_children_id = folder
+    .get_view(&shared_space.view_id.to_string())
+    .unwrap()
+    .children[0]
     .id
-    .clone();
+    .parse::<Uuid>()
+    .unwrap();
   assert_eq!(first_children_id, todo_view_id);
 }
 
@@ -445,8 +446,8 @@ async fn move_page_to_trash_then_restore() {
   let views_in_trash_for_app = folder
     .get_my_trash_sections()
     .iter()
-    .map(|v| v.id.clone())
-    .collect::<HashSet<String>>();
+    .flat_map(|v| Uuid::parse_str(&v.id).ok())
+    .collect::<HashSet<_>>();
   for view_id in view_ids_to_be_deleted.iter() {
     assert!(views_in_trash_for_app.contains(view_id));
   }
@@ -457,8 +458,8 @@ async fn move_page_to_trash_then_restore() {
     .unwrap()
     .views
     .iter()
-    .map(|v| v.view.view_id.clone())
-    .collect::<HashSet<String>>();
+    .map(|v| v.view.view_id)
+    .collect::<HashSet<_>>();
   for view_id in view_ids_to_be_deleted.iter() {
     assert!(views_in_trash_for_web.contains(view_id));
   }
@@ -472,7 +473,7 @@ async fn move_page_to_trash_then_restore() {
   assert!(!folder
     .get_my_trash_sections()
     .iter()
-    .any(|v| v.id == view_ids_to_be_deleted[0]));
+    .any(|v| v.id == view_ids_to_be_deleted[0].to_string()));
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -491,7 +492,7 @@ async fn move_page_to_trash_then_restore() {
   assert!(!folder
     .get_my_trash_sections()
     .iter()
-    .any(|v| v.id == view_ids_to_be_deleted[1]));
+    .any(|v| v.id == view_ids_to_be_deleted[1].to_string()));
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -533,8 +534,8 @@ async fn move_page_with_child_to_trash_then_restore() {
   let views_in_trash_for_app = folder
     .get_my_trash_sections()
     .iter()
-    .map(|v| v.id.clone())
-    .collect::<HashSet<String>>();
+    .flat_map(|v| Uuid::parse_str(&v.id).ok())
+    .collect::<HashSet<_>>();
   assert!(views_in_trash_for_app.contains(&general_space.view_id));
   for view in general_space.children.iter() {
     assert!(!views_in_trash_for_app.contains(&view.view_id));
@@ -546,8 +547,8 @@ async fn move_page_with_child_to_trash_then_restore() {
     .unwrap()
     .views
     .iter()
-    .map(|v| v.view.view_id.clone())
-    .collect::<HashSet<String>>();
+    .map(|v| v.view.view_id)
+    .collect::<HashSet<_>>();
   assert!(views_in_trash_for_web.contains(&general_space.view_id));
 
   web_client
@@ -559,7 +560,7 @@ async fn move_page_with_child_to_trash_then_restore() {
   assert!(!folder
     .get_my_trash_sections()
     .iter()
-    .any(|v| v.id == general_space.view_id));
+    .any(|v| v.id == general_space.view_id.to_string()));
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -601,8 +602,8 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
   let views_in_trash_for_app = folder
     .get_my_trash_sections()
     .iter()
-    .map(|v| v.id.clone())
-    .collect::<HashSet<String>>();
+    .flat_map(|v| Uuid::parse_str(&v.id).ok())
+    .collect::<HashSet<_>>();
   assert!(views_in_trash_for_app.contains(&general_space.view_id));
   for view in general_space.children.iter() {
     assert!(!views_in_trash_for_app.contains(&view.view_id));
@@ -614,8 +615,8 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
     .unwrap()
     .views
     .iter()
-    .map(|v| v.view.view_id.clone())
-    .collect::<HashSet<String>>();
+    .map(|v| v.view.view_id)
+    .collect::<HashSet<_>>();
   assert!(views_in_trash_for_web.contains(&general_space.view_id));
 
   web_client
@@ -624,11 +625,13 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  assert!(folder.get_view(&general_space.view_id).is_none());
+  assert!(folder
+    .get_view(&general_space.view_id.to_string())
+    .is_none());
   assert!(!folder
     .get_my_trash_sections()
     .iter()
-    .any(|v| v.id == general_space.view_id));
+    .any(|v| v.id == general_space.view_id.to_string()));
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -670,8 +673,8 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
   let views_in_trash_for_app = folder
     .get_my_trash_sections()
     .iter()
-    .map(|v| v.id.clone())
-    .collect::<HashSet<String>>();
+    .flat_map(|v| Uuid::parse_str(&v.id).ok())
+    .collect::<HashSet<_>>();
   assert!(views_in_trash_for_app.contains(&general_space.view_id));
   for view in general_space.children.iter() {
     assert!(!views_in_trash_for_app.contains(&view.view_id));
@@ -683,8 +686,8 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
     .unwrap()
     .views
     .iter()
-    .map(|v| v.view.view_id.clone())
-    .collect::<HashSet<String>>();
+    .map(|v| v.view.view_id)
+    .collect::<HashSet<_>>();
   assert!(views_in_trash_for_web.contains(&general_space.view_id));
 
   web_client
@@ -693,11 +696,13 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  assert!(folder.get_view(&general_space.view_id).is_none());
+  assert!(folder
+    .get_view(&general_space.view_id.to_string())
+    .is_none());
   assert!(!folder
     .get_my_trash_sections()
     .iter()
-    .any(|v| v.id == general_space.view_id));
+    .any(|v| v.id == general_space.view_id.to_string()));
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -750,7 +755,7 @@ async fn update_page() {
     .unwrap();
 
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let updated_view = folder.get_view(&view_id_to_be_updated).unwrap();
+  let updated_view = folder.get_view(&view_id_to_be_updated.to_string()).unwrap();
   assert_eq!(updated_view.name, "New Name");
   assert_eq!(
     updated_view.icon,
@@ -787,7 +792,7 @@ async fn favorite_page() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  let favorite_view_id = general_space.children[0].view_id.clone();
+  let favorite_view_id = general_space.children[0].view_id;
   web_client
     .api_client
     .favorite_page_view(
@@ -802,7 +807,7 @@ async fn favorite_page() {
     .unwrap();
 
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let favorite_view = folder.get_view(&favorite_view_id).unwrap();
+  let favorite_view = folder.get_view(&favorite_view_id.to_string()).unwrap();
   assert!(favorite_view.is_favorite);
 }
 
@@ -861,7 +866,7 @@ async fn create_space() {
   );
   let folder_view = web_client
     .api_client
-    .get_workspace_folder(&workspace_id, Some(2), Some(workspace_id.to_string()))
+    .get_workspace_folder(&workspace_id, Some(2), Some(workspace_id))
     .await
     .unwrap();
   folder_view
@@ -891,7 +896,7 @@ async fn create_space() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let view = folder.get_view(&private_space.view_id).unwrap();
+  let view = folder.get_view(&private_space.view_id.to_string()).unwrap();
   let space_info: Value = serde_json::from_str(view.extra.as_ref().unwrap()).unwrap();
   assert!(space_info["is_space"].as_bool().unwrap());
   assert_eq!(
@@ -959,14 +964,14 @@ async fn publish_page() {
     .get_published_outline(&publish_namespace)
     .await
     .unwrap();
-  let published_view_ids: HashSet<String> = published_view
+  let published_view_ids: HashSet<_> = published_view
     .children
     .iter()
     .find(|v| v.name == "General")
     .unwrap()
     .children
     .iter()
-    .map(|v| v.view_id.clone())
+    .flat_map(|v| Uuid::parse_str(&v.view_id))
     .collect();
   for view_id in &page_to_be_published {
     assert!(published_view_ids.contains(view_id));
@@ -1060,12 +1065,12 @@ async fn create_database_page_view() {
     .iter()
     .find(|v| v.name == "To-dos")
     .unwrap();
-  let todo_list_view_id = todo_folder_view.view_id.as_str();
+  let todo_list_view_id = todo_folder_view.view_id;
   web_client
     .api_client
     .create_database_view(
       workspace_id,
-      todo_list_view_id,
+      &todo_list_view_id,
       &CreatePageDatabaseViewParams {
         layout: ViewLayout::Grid,
         name: Some("Grid View".to_string()),
@@ -1074,7 +1079,7 @@ async fn create_database_page_view() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let todo_view = folder.get_view(todo_list_view_id).unwrap();
+  let todo_view = folder.get_view(&todo_list_view_id.to_string()).unwrap();
   let grid_view = todo_view
     .children
     .iter()
@@ -1091,7 +1096,7 @@ async fn create_database_page_view() {
     .unwrap();
   let page_collab = web_client
     .api_client
-    .get_workspace_page_view(workspace_id, grid_view.id.as_str())
+    .get_workspace_page_view(workspace_id, &grid_view.id.parse().unwrap())
     .await
     .unwrap();
   assert_eq!(page_collab.data.row_data.len(), 5);

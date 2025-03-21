@@ -168,7 +168,7 @@ pub async fn create_page(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
-  parent_view_id: &str,
+  parent_view_id: &Uuid,
   view_layout: &ViewLayout,
   name: Option<&str>,
   page_data: Option<&serde_json::Value>,
@@ -290,8 +290,8 @@ fn prepare_default_document_collab_param(collab_id: Uuid) -> Result<CollabParams
 
 #[allow(clippy::too_many_arguments)]
 async fn prepare_new_encoded_database(
-  view_id: &str,
-  database_id: &str,
+  view_id: &Uuid,
+  database_id: &Uuid,
   name: &str,
   fields: Vec<Field>,
   rows: Vec<CreateRowParams>,
@@ -335,8 +335,8 @@ async fn prepare_new_encoded_database(
 }
 
 async fn prepare_default_calendar_encoded_database(
-  view_id: &str,
-  database_id: &str,
+  view_id: &Uuid,
+  database_id: &Uuid,
   name: &str,
 ) -> Result<EncodedDatabase, AppError> {
   let text_field = Field::from_field_type("Title", FieldType::RichText, true);
@@ -360,8 +360,8 @@ async fn prepare_default_calendar_encoded_database(
 }
 
 async fn prepare_default_grid_encoded_database(
-  view_id: &str,
-  database_id: &str,
+  view_id: &Uuid,
+  database_id: &Uuid,
   name: &str,
 ) -> Result<EncodedDatabase, AppError> {
   let text_field = Field::from_field_type("Name", FieldType::RichText, true);
@@ -386,8 +386,8 @@ async fn prepare_default_grid_encoded_database(
 }
 
 async fn prepare_default_board_encoded_database(
-  view_id: &str,
-  database_id: &str,
+  view_id: &Uuid,
+  database_id: &Uuid,
   name: &str,
 ) -> Result<EncodedDatabase, AppError> {
   let card_title_field = Field::from_field_type("Description", FieldType::RichText, true);
@@ -617,7 +617,7 @@ async fn update_space_properties(
 async fn add_new_database_view_for_workspace_database(
   workspace_database: &mut WorkspaceDatabase,
   database_id: &str,
-  view_id: &str,
+  view_id: &Uuid,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = workspace_database.collab.transact_mut();
@@ -636,14 +636,16 @@ async fn add_new_database_view_for_workspace_database(
 
 async fn add_new_database_to_workspace(
   workspace_database: &mut WorkspaceDatabase,
-  database_id: &str,
-  view_id: &str,
+  database_id: &Uuid,
+  view_id: &Uuid,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_updates = {
     let mut txn = workspace_database.collab.transact_mut();
-    workspace_database
-      .body
-      .add_database(&mut txn, database_id, vec![view_id.to_string()]);
+    workspace_database.body.add_database(
+      &mut txn,
+      &database_id.to_string(),
+      vec![view_id.to_string()],
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_updates)
@@ -651,8 +653,8 @@ async fn add_new_database_to_workspace(
 
 async fn add_new_view_to_folder(
   uid: i64,
-  parent_view_id: &str,
-  view_id: &str,
+  parent_view_id: &Uuid,
+  view_id: &Uuid,
   folder: &mut Folder,
   name: Option<&str>,
   layout: collab_folder::ViewLayout,
@@ -897,7 +899,7 @@ async fn create_document_page(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
-  parent_view_id: &str,
+  parent_view_id: &Uuid,
   name: Option<&str>,
   page_data: Option<&serde_json::Value>,
   view_id_override: Option<Uuid>,
@@ -911,9 +913,7 @@ async fn create_document_page(
     },
     None => prepare_default_document_collab_param(collab_id),
   }?;
-  let view_id = view_id_override
-    .map(|id| id.to_string())
-    .unwrap_or(collab_id.to_string());
+  let view_id = view_id_override.unwrap_or(collab_id);
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
   let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
   let folder_update = add_new_view_to_folder(
@@ -958,11 +958,11 @@ async fn create_grid_page(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
-  parent_view_id: &str,
+  parent_view_id: &Uuid,
   name: Option<&str>,
 ) -> Result<Page, AppError> {
-  let view_id = Uuid::new_v4().to_string();
-  let database_id = gen_database_id();
+  let view_id = Uuid::new_v4();
+  let database_id: Uuid = gen_database_id().parse().unwrap();
   let default_grid_encoded_database =
     prepare_default_grid_encoded_database(&view_id, &database_id, name.unwrap_or_default()).await?;
   create_database_page(
@@ -989,11 +989,11 @@ async fn create_board_page(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
-  parent_view_id: &str,
+  parent_view_id: &Uuid,
   name: Option<&str>,
 ) -> Result<Page, AppError> {
-  let view_id = Uuid::new_v4().to_string();
-  let database_id = gen_database_id();
+  let view_id = Uuid::new_v4();
+  let database_id = Uuid::new_v4();
   let default_board_encoded_database =
     prepare_default_board_encoded_database(&view_id, &database_id, name.unwrap_or_default())
       .await?;
@@ -1021,11 +1021,11 @@ async fn create_calendar_page(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
-  parent_view_id: &str,
+  parent_view_id: &Uuid,
   name: Option<&str>,
 ) -> Result<Page, AppError> {
-  let view_id = Uuid::new_v4().to_string();
-  let database_id = gen_database_id();
+  let view_id = Uuid::new_v4();
+  let database_id = Uuid::new_v4();
   let default_calendar_encoded_database =
     prepare_default_calendar_encoded_database(&view_id, &database_id, name.unwrap_or_default())
       .await?;
@@ -1053,8 +1053,8 @@ async fn create_database_page(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
-  parent_view_id: &str,
-  view_id: &str,
+  parent_view_id: &Uuid,
+  view_id: &Uuid,
   view_layout: collab_folder::ViewLayout,
   name: Option<&str>,
   encoded_database: &EncodedDatabase,
@@ -1073,10 +1073,9 @@ async fn create_database_page(
   .await?;
   let (workspace_database_id, mut workspace_database) =
     get_latest_workspace_database(collab_storage, pg_pool, collab_origin, workspace_id).await?;
-  let database_id = encoded_database.encoded_database_collab.object_id.clone();
+  let database_id: Uuid = encoded_database.encoded_database_collab.object_id.parse()?;
   let workspace_database_update =
     add_new_database_to_workspace(&mut workspace_database, &database_id, view_id).await?;
-  let database_id = Uuid::parse_str(&database_id)?;
   let database_collab_params = CollabParams {
     object_id: database_id.clone(),
     encoded_collab_v1: encoded_database
@@ -1132,13 +1131,12 @@ async fn create_database_page(
   .await?;
   transaction.commit().await?;
   collab_storage.metrics().observe_pg_tx(start.elapsed());
-  Ok(Page {
-    view_id: view_id.to_string(),
-  })
+  Ok(Page { view_id: *view_id })
 }
 
-async fn get_rag_ids(folder: &Folder, parent_view_id: &str) -> Vec<String> {
-  if let Some(view) = folder.get_view(parent_view_id) {
+async fn get_rag_ids(folder: &Folder, parent_view_id: &Uuid) -> Vec<Uuid> {
+  let parent_view_id_str = parent_view_id.to_string();
+  if let Some(view) = folder.get_view(&parent_view_id_str) {
     if view.space_info().is_some() {
       return vec![];
     }
@@ -1148,13 +1146,13 @@ async fn get_rag_ids(folder: &Folder, parent_view_id: &str) -> Vec<String> {
     .iter()
     .map(|s| s.id.clone())
     .collect();
-  let mut rag_ids: Vec<String> = folder
-    .get_views_belong_to(parent_view_id)
+  let mut rag_ids: Vec<_> = folder
+    .get_views_belong_to(&parent_view_id_str)
     .iter()
     .filter(|v| v.layout.is_document() && !trash_ids.contains(&v.id))
-    .map(|v| v.id.clone())
+    .flat_map(|v| Uuid::parse_str(&v.id).ok())
     .collect();
-  rag_ids.push(parent_view_id.to_string());
+  rag_ids.push(*parent_view_id);
   rag_ids
 }
 
@@ -1166,10 +1164,10 @@ async fn create_chat_page(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
-  parent_view_id: &str,
+  parent_view_id: &Uuid,
   name: Option<&str>,
 ) -> Result<Page, AppError> {
-  let view_id = Uuid::new_v4().to_string();
+  let view_id = Uuid::new_v4();
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin.clone(), workspace_id).await?;
@@ -1177,7 +1175,7 @@ async fn create_chat_page(
   create_chat(
     pg_pool,
     CreateChatParams {
-      chat_id: view_id.clone(),
+      chat_id: view_id.to_string(),
       name: name.unwrap_or_default().to_string(),
       rag_ids,
     },
@@ -1664,7 +1662,7 @@ pub async fn get_page_view_collab(
   collab_access_control_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
-  view_id: &str,
+  view_id: Uuid,
 ) -> Result<PageCollab, AppError> {
   let folder = get_latest_collab_folder(
     collab_access_control_storage,
@@ -1673,7 +1671,7 @@ pub async fn get_page_view_collab(
   )
   .await?;
   let view = folder
-    .get_view(view_id)
+    .get_view(&view_id.to_string())
     .ok_or(AppError::InvalidFolderView(format!(
       "View {} not found",
       view_id
@@ -1696,12 +1694,9 @@ pub async fn get_page_view_collab(
         err
       ))
     })?;
-  let publish_view_ids: HashSet<String> = publish_view_ids
-    .into_iter()
-    .map(|id| id.to_string())
-    .collect();
+  let publish_view_ids: HashSet<_> = publish_view_ids.into_iter().collect();
   let folder_view = FolderView {
-    view_id: view_id.to_string(),
+    view_id,
     parent_view_id: view.parent_view_id.clone(),
     prev_view_id: get_prev_view_id(&folder, view_id),
     name: view.name.clone(),
@@ -1712,7 +1707,7 @@ pub async fn get_page_view_collab(
     is_space: check_if_view_is_space(&view),
     is_private: false,
     is_favorite: view.is_favorite,
-    is_published: publish_view_ids.contains(view_id),
+    is_published: publish_view_ids.contains(&view_id),
     layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
     created_by: view.created_by,
@@ -1724,7 +1719,6 @@ pub async fn get_page_view_collab(
   };
   let page_collab_data = match view.layout {
     collab_folder::ViewLayout::Document => {
-      let view_id = Uuid::parse_str(view_id).unwrap();
       get_page_collab_data_for_document(collab_access_control_storage, uid, workspace_id, view_id)
         .await
     },
@@ -1760,7 +1754,7 @@ async fn get_page_collab_data_for_database(
   collab_access_control_storage: &CollabAccessControlStorage,
   uid: i64,
   workspace_id: Uuid,
-  view_id: &str,
+  view_id: Uuid,
 ) -> Result<PageCollabData, AppError> {
   let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id)
     .await
@@ -1799,7 +1793,7 @@ async fn get_page_collab_data_for_database(
   })?;
   let db_oid = {
     ws_db_body
-      .get_database_meta_with_view_id(view_id)
+      .get_database_meta_with_view_id(&view_id.to_string())
       .ok_or(AppError::NoRequiredData(format!(
         "Database view {} not found",
         view_id
@@ -1936,7 +1930,7 @@ pub async fn create_database_view(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
-  database_view_id: &str,
+  database_view_id: &Uuid,
   view_layout: &ViewLayout,
   name: Option<&str>,
 ) -> Result<(), AppError> {
@@ -1957,7 +1951,7 @@ pub async fn create_database_view(
   let (_, workspace_database) =
     get_latest_workspace_database(collab_storage, pg_pool, collab_origin, workspace_id).await?;
   let database_id: Uuid = workspace_database
-    .get_database_meta_with_view_id(database_view_id)
+    .get_database_meta_with_view_id(&database_view_id.to_string())
     .ok_or(AppError::NoRequiredData(format!(
       "Database view {} not found",
       database_view_id
@@ -2007,13 +2001,13 @@ pub async fn create_database_view(
     group_settings,
     deps_fields,
   } = resolve_dependencies_when_create_database_linked_view(database_layout, &fields)?;
-  let new_view_id = Uuid::new_v4().to_string();
+  let new_view_id = Uuid::new_v4();
   let database_encoded_update = {
     let mut txn = database_collab.transact_mut();
     let deps_field_setting = vec![default_field_settings_by_layout_map()];
     let params = CreateViewParams {
       database_id: database_id.to_string(),
-      view_id: new_view_id.clone(),
+      view_id: new_view_id.to_string(),
       name: name.unwrap_or_default().to_string(),
       layout: database_layout,
       layout_settings,

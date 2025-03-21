@@ -248,7 +248,7 @@ pub async fn get_user_workspace_structure(
   user: RealtimeUser,
   workspace_id: Uuid,
   depth: u32,
-  root_view_id: &str,
+  root_view_id: &Uuid,
 ) -> Result<FolderView, AppError> {
   let depth_limit = 10;
   if depth > depth_limit {
@@ -267,10 +267,7 @@ pub async fn get_user_workspace_structure(
     fix_old_workspace_folder(appflowy_web_metrics, server, user, folder, workspace_id).await?;
 
   let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
-  let publish_view_ids: HashSet<String> = publish_view_ids
-    .into_iter()
-    .map(|id| id.to_string())
-    .collect();
+  let publish_view_ids: HashSet<_> = publish_view_ids.into_iter().collect();
   collab_folder_to_folder_view(
     workspace_id,
     root_view_id,

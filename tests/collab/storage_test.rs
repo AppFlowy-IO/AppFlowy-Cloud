@@ -24,9 +24,9 @@ async fn success_insert_collab_test() {
   let object_id = Uuid::new_v4();
   let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   c.create_collab(CreateCollabParams {
-    object_id: object_id,
+    object_id,
     collab_type: CollabType::Unknown,
-    workspace_id: workspace_id,
+    workspace_id,
     encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
   })
   .await
@@ -81,10 +81,10 @@ async fn success_batch_get_collab_test() {
     );
 
     c.create_collab(CreateCollabParams {
-      object_id: object_id,
+      object_id,
       encoded_collab_v1: encode_collab.clone(),
       collab_type: collab_type.clone(),
-      workspace_id: workspace_id,
+      workspace_id,
     })
     .await
     .unwrap();
@@ -138,10 +138,10 @@ async fn success_part_batch_get_collab_test() {
         },
       );
       c.create_collab(CreateCollabParams {
-        object_id: object_id,
+        object_id,
         encoded_collab_v1: encode_collab.clone(),
         collab_type: collab_type.clone(),
-        workspace_id: workspace_id,
+        workspace_id,
       })
       .await
       .unwrap();
@@ -164,17 +164,17 @@ async fn success_delete_collab_test() {
     .unwrap();
 
   c.create_collab(CreateCollabParams {
-    object_id: object_id,
+    object_id,
     encoded_collab_v1: encode_collab,
     collab_type: CollabType::Unknown,
-    workspace_id: workspace_id,
+    workspace_id,
   })
   .await
   .unwrap();
 
   c.delete_collab(DeleteCollabParams {
-    object_id: object_id,
-    workspace_id: workspace_id,
+    object_id,
+    workspace_id,
   })
   .await
   .unwrap();
@@ -200,7 +200,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
       object_id: Uuid::new_v4(),
       encoded_collab_v1: vec![],
       collab_type: CollabType::Document,
-      workspace_id: workspace_id,
+      workspace_id,
     })
     .await
     .unwrap_err();
@@ -347,8 +347,8 @@ async fn insert_empty_data_test() {
     CollabType::DatabaseRow,
   ] {
     let params = CreateCollabParams {
-      workspace_id: workspace_id,
-      object_id: object_id,
+      workspace_id,
+      object_id,
       encoded_collab_v1: vec![],
       collab_type,
     };
@@ -382,8 +382,8 @@ async fn insert_invalid_data_test() {
     CollabType::DatabaseRow,
   ] {
     let params = CreateCollabParams {
-      workspace_id: workspace_id,
-      object_id: object_id,
+      workspace_id,
+      object_id,
       encoded_collab_v1: encoded_collab_v1.clone(),
       collab_type,
     };
@@ -420,8 +420,8 @@ async fn insert_folder_data_success_test() {
   for template in templates.into_iter() {
     let data = template.encoded_collab.encode_to_bytes().unwrap();
     let params = CreateCollabParams {
-      workspace_id: workspace_id,
-      object_id: object_id,
+      workspace_id,
+      object_id,
       encoded_collab_v1: data,
       collab_type: template.collab_type,
     };

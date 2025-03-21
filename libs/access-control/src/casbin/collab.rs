@@ -170,6 +170,7 @@ impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
 #[cfg(test)]
 mod tests {
   use database_entity::dto::AFRole;
+  use uuid::Uuid;
 
   use crate::{
     act::Action,
@@ -182,8 +183,8 @@ mod tests {
   pub async fn test_collab_access_control() {
     let enforcer = test_enforcer().await;
     let uid = 1;
-    let workspace_id = "w1";
-    let oid = "o1";
+    let workspace_id = Uuid::new_v4();
+    let oid = Uuid::new_v4();
     enforcer
       .update_policy(
         SubjectType::User(uid),
@@ -196,7 +197,7 @@ mod tests {
     let collab_access_control = super::CollabAccessControlImpl::new(access_control);
     for action in [Action::Read, Action::Write, Action::Delete] {
       collab_access_control
-        .enforce_action(workspace_id, &uid, oid, action.clone())
+        .enforce_action(&workspace_id, &uid, &oid, action.clone())
         .await
         .unwrap_or_else(|_| panic!("Failed to enforce action: {:?}", action));
     }

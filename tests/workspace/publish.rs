@@ -699,7 +699,7 @@ async fn test_excessive_comment_length() {
   let workspace_id = get_first_workspace(&client).await;
   let published_view_namespace = Uuid::new_v4().to_string();
   client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id, published_view_namespace)
     .await
     .unwrap();
 
@@ -737,7 +737,7 @@ async fn test_publish_reactions() {
   let workspace_id = get_first_workspace(&page_owner_client).await;
   let published_view_namespace = Uuid::new_v4().to_string();
   page_owner_client
-    .set_workspace_publish_namespace(&workspace_id.to_string(), published_view_namespace)
+    .set_workspace_publish_namespace(&workspace_id, published_view_namespace)
     .await
     .unwrap();
 
@@ -1004,7 +1004,7 @@ async fn duplicate_to_workspace_references() {
       .duplicate_published_to_workspace(
         workspace_id_2,
         doc_2_view_id,
-        fv.children[0].view_id.parse().unwrap(), // use the first space found in the workspace
+        fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1020,21 +1020,21 @@ async fn duplicate_to_workspace_references() {
       .find(|v| v.name == "doc2")
       .unwrap()
       .clone();
-    assert_ne!(doc_2_fv.view_id, doc_1_view_id.to_string());
+    assert_ne!(doc_2_fv.view_id, doc_1_view_id);
 
     let doc_1_fv = doc_2_fv
       .children
       .into_iter()
       .find(|v| v.name == "doc1")
       .unwrap();
-    assert_ne!(doc_1_fv.view_id, doc_1_view_id.to_string());
+    assert_ne!(doc_1_fv.view_id, doc_1_view_id);
 
     let grid_1_fv = doc_1_fv
       .children
       .into_iter()
       .find(|v| v.name == "grid1")
       .unwrap();
-    assert_ne!(grid_1_fv.view_id, grid_1_view_id.to_string());
+    assert_ne!(grid_1_fv.view_id, grid_1_view_id);
   }
 }
 
@@ -1097,7 +1097,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
       .duplicate_published_to_workspace(
         workspace_id_2,
         doc_3_view_id,
-        fv.children[0].view_id.parse().unwrap(), // use the first space found in the workspace
+        fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1145,7 +1145,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
 
     let folder_view = collab_folder_to_folder_view(
       workspace_id_2,
-      &workspace_id_2.to_string(),
+      &workspace_id_2,
       &folder,
       5,
       &HashSet::default(),
@@ -1157,39 +1157,46 @@ async fn duplicate_to_workspace_doc_inline_database() {
       .find(|v| v.name == "doc3")
       .unwrap()
       .clone();
-    assert_ne!(doc_3_fv.view_id, doc_3_view_id.to_string());
+    assert_ne!(doc_3_fv.view_id, doc_3_view_id);
 
     let grid1_fv = doc_3_fv
       .children
       .into_iter()
       .find(|v| v.name == "grid1")
       .unwrap();
-    assert_ne!(grid1_fv.view_id, view_of_grid_1_view_id.to_string());
+    assert_ne!(grid1_fv.view_id, view_of_grid_1_view_id);
 
     let view_of_grid1_fv = grid1_fv
       .children
       .into_iter()
       .find(|v| v.name == "View of grid1")
       .unwrap();
-    assert_ne!(view_of_grid1_fv.view_id, view_of_grid_1_view_id.to_string());
+    assert_ne!(view_of_grid1_fv.view_id, view_of_grid_1_view_id);
 
     {
       // check that database_id is different
-      let ws_db_collab = client_2
-        .get_workspace_database_collab(&workspace_id_2)
-        .await;
+      let ws_db_collab = client_2.get_workspace_database_collab(workspace_id_2).await;
       let ws_db_body = WorkspaceDatabase::open(ws_db_collab).unwrap();
-      let dup_grid1_db_id = ws_db_body
+      let dup_grid1_db_id: Uuid = ws_db_body
         .get_all_database_meta()
         .into_iter()
-        .find(|db_meta| db_meta.linked_views.contains(&view_of_grid1_fv.view_id))
+        .find(|db_meta| {
+          db_meta
+            .linked_views
+            .contains(&view_of_grid1_fv.view_id.to_string())
+        })
         .unwrap()
-        .database_id;
+        .database_id
+        .parse()
+        .unwrap();
       let db_collab = client_2
         .get_collab_to_collab(workspace_id_2, dup_grid1_db_id, CollabType::Database)
         .await
         .unwrap();
-      let dup_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
+      let dup_db_id: Uuid = DatabaseBody::database_id_from_collab(&db_collab)
+        .unwrap()
+        .parse()
+        .unwrap();
       assert_ne!(dup_db_id, pub_db_id);
 
       let txn = db_collab.transact();
@@ -1202,10 +1209,12 @@ async fn duplicate_to_workspace_doc_inline_database() {
       };
 
       for db_view in view_map.get_all_views(&txn) {
-        assert_eq!(db_view.database_id, dup_db_id);
+        let database_id: Uuid = db_view.database_id.parse().unwrap();
+        assert_eq!(database_id, dup_db_id);
         for row_order in db_view.row_orders {
+          let row_order_id: Uuid = row_order.id.parse().unwrap();
           assert!(
-            !pub_row_ids.contains(row_order.id.as_str()),
+            !pub_row_ids.contains(&row_order_id),
             "published row id is same as duplicated row id"
           );
         }
@@ -1267,9 +1276,9 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
     // └── db_with_embedded_db (inside should contain the database)
     client_2
       .duplicate_published_to_workspace(
-        &workspace_id_2,
-        &doc_with_embedded_db_view_id.to_string(),
-        &fv.children[0].view_id, // use the first space found in the workspace
+        workspace_id_2,
+        doc_with_embedded_db_view_id,
+        fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1288,7 +1297,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
       let doc_collab = client_2
         .get_collab_to_collab(
           workspace_id_2.clone(),
-          doc_with_embedded_db.view_id.clone(),
+          doc_with_embedded_db.view_id,
           CollabType::Folder,
         )
         .await
@@ -1303,7 +1312,14 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
         .1;
 
       // because it is embedded, the database parent's id is the view id of the doc
-      let parent_id = grid.data.get("parent_id").unwrap().as_str().unwrap();
+      let parent_id: Uuid = grid
+        .data
+        .get("parent_id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
       assert_ne!(parent_id, doc_with_embedded_db.view_id.clone());
     }
   }
@@ -1373,9 +1389,9 @@ async fn duplicate_to_workspace_db_with_relation() {
     // and are 2 different databases, so we just put them in the root (dest_id)
     client_2
       .duplicate_published_to_workspace(
-        &workspace_id_2,
-        &db_with_rel_col_view_id.to_string(),
-        &fv.children[0].view_id, // use the first space found in the workspace
+        workspace_id_2,
+        db_with_rel_col_view_id,
+        fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1396,10 +1412,10 @@ async fn duplicate_to_workspace_db_with_relation() {
         .find(|v| v.name == "grid2") // related-db
         .unwrap();
       let db_with_rel_col_collab = client_2
-        .get_db_collab_from_view(&workspace_id_2, &db_with_rel_col.view_id)
+        .get_db_collab_from_view(workspace_id_2, &db_with_rel_col.view_id)
         .await;
       let related_db_collab = client_2
-        .get_db_collab_from_view(&workspace_id_2, &related_db.view_id)
+        .get_db_collab_from_view(workspace_id_2, &related_db.view_id)
         .await;
 
       let related_db_id: String = related_db_collab
@@ -1465,9 +1481,9 @@ async fn duplicate_to_workspace_db_row_with_doc() {
     // └── db_with_row_doc
     client_2
       .duplicate_published_to_workspace(
-        &workspace_id_2,
-        &db_with_row_doc_view_id.to_string(),
-        &fv.children[0].view_id, // use the first space found in the workspace
+        workspace_id_2,
+        db_with_row_doc_view_id,
+        fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1495,7 +1511,10 @@ async fn duplicate_to_workspace_db_row_with_doc() {
       .unwrap();
 
       // check that doc exists and can be fetched
-      let first_row_id = &db_body.views.get_all_views(&db_collab.transact())[0].row_orders[0].id;
+      let first_row_id: Uuid = db_body.views.get_all_views(&db_collab.transact())[0].row_orders[0]
+        .id
+        .parse()
+        .unwrap();
       let row_collab = client_2
         .get_collab_to_collab(workspace_id_2, first_row_id, CollabType::DatabaseRow)
         .await
@@ -1511,7 +1530,7 @@ async fn duplicate_to_workspace_db_row_with_doc() {
         .await
         .unwrap();
       let folder = Folder::open(UserId::from(client_2.uid().await), folder_collab, None).unwrap();
-      let doc_view = folder.get_view(&doc_id).unwrap();
+      let doc_view = folder.get_view(&doc_id.to_string()).unwrap();
       assert_eq!(doc_view.id, doc_view.parent_view_id);
     }
   }
@@ -1547,9 +1566,9 @@ async fn duplicate_to_workspace_db_rel_self() {
 
     client_2
       .duplicate_published_to_workspace(
-        &workspace_id_2,
-        &db_rel_self_view_id.to_string(),
-        &fv.children[0].view_id, // use the first space found in the workspace
+        workspace_id_2,
+        db_rel_self_view_id,
+        fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1567,7 +1586,7 @@ async fn duplicate_to_workspace_db_rel_self() {
       .unwrap();
 
     let db_rel_self_collab = client_2
-      .get_db_collab_from_view(&workspace_id_2, &db_rel_self.view_id)
+      .get_db_collab_from_view(workspace_id_2, &db_rel_self.view_id)
       .await;
     let txn = db_rel_self_collab.transact();
     let db_rel_self_body = DatabaseBody::from_collab(
@@ -1645,9 +1664,9 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
 
     client_2
       .duplicate_published_to_workspace(
-        &workspace_id_2,
-        &doc_4_view_id.to_string(),
-        &fv.children[0].view_id, // use the first space found in the workspace
+        workspace_id_2,
+        doc_4_view_id,
+        fv.children[0].view_id, // use the first space found in the workspace
       )
       .await;
 
@@ -1675,11 +1694,14 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
   }
 }
 
-fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (String, HashSet<String>) {
+fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (Uuid, HashSet<Uuid>) {
   let pub_db_data = serde_json::from_slice::<PublishDatabaseData>(published_db_blob).unwrap();
-  let db_collab = collab_from_doc_state(pub_db_data.database_collab, "").unwrap();
-  let pub_db_id = DatabaseBody::database_id_from_collab(&db_collab).unwrap();
-  let row_ids: HashSet<String> = pub_db_data.database_row_collabs.into_keys().collect();
+  let db_collab = collab_from_doc_state(pub_db_data.database_collab, &Uuid::default()).unwrap();
+  let pub_db_id = DatabaseBody::database_id_from_collab(&db_collab)
+    .unwrap()
+    .parse::<Uuid>()
+    .unwrap();
+  let row_ids: HashSet<_> = pub_db_data.database_row_collabs.into_keys().collect();
   (pub_db_id, row_ids)
 }
 

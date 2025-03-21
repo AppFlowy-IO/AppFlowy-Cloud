@@ -220,7 +220,7 @@ async fn chat_with_selected_source_override_test() {
   let params = CreateChatParams {
     chat_id: chat_id.clone(),
     name: "my first chat".to_string(),
-    rag_ids: vec![object_id.to_string()],
+    rag_ids: vec![object_id],
   };
 
   // create a chat

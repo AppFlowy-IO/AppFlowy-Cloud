@@ -694,7 +694,7 @@ impl Client {
     &self,
     workspace_id: &Uuid,
     depth: Option<u32>,
-    root_view_id: Option<String>,
+    root_view_id: Option<Uuid>,
   ) -> Result<FolderView, AppResponseError> {
     let url = format!("{}/api/workspace/{}/folder", self.base_url, workspace_id);
     let resp = self

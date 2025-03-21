@@ -422,7 +422,7 @@ async fn workspace_member_through_user_id() {
   let workspace_id = owner.workspace_id().await;
 
   let owner_member = owner
-    .get_workspace_member(&workspace_id, owner.uid().await)
+    .get_workspace_member(workspace_id, owner.uid().await)
     .await;
   assert_eq!(owner_member.role, AFRole::Owner);
 
@@ -432,7 +432,7 @@ async fn workspace_member_through_user_id() {
     .unwrap();
 
   let member_1_member = member_1
-    .get_workspace_member(&workspace_id, member_1.uid().await)
+    .get_workspace_member(workspace_id, member_1.uid().await)
     .await;
   assert_eq!(member_1_member.role, AFRole::Member);
 

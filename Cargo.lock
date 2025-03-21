@@ -2112,6 +2112,7 @@ dependencies = [
  "chrono",
  "collab",
  "collab-entity",
+ "dashmap 5.5.3",
  "futures",
  "loole",
  "prometheus-client",

@@ -782,7 +782,10 @@ async fn favorite_page() {
     .favorite_page_view(
       workspace_id,
       &favorite_view_id,
-      &FavoritePageParams { is_favorite: true },
+      &FavoritePageParams {
+        is_favorite: true,
+        is_pinned: true,
+      },
     )
     .await
     .unwrap();

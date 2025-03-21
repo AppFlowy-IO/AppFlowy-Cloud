@@ -199,6 +199,7 @@ pub struct UpdatePageParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FavoritePageParams {
   pub is_favorite: bool,
+  pub is_pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,6 +256,7 @@ pub struct FavoriteFolderView {
   #[serde(flatten)]
   pub view: FolderView,
   pub favorited_at: DateTime<Utc>,
+  pub is_pinned: bool,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -282,6 +284,7 @@ pub struct TrashSectionItems {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FolderView {
   pub view_id: Uuid,
+  pub parent_view_id: Uuid,
   pub name: String,
   pub icon: Option<ViewIcon>,
   pub is_space: bool,
@@ -290,6 +293,8 @@ pub struct FolderView {
   pub is_favorite: bool,
   pub layout: ViewLayout,
   pub created_at: DateTime<Utc>,
+  pub created_by: Option<i64>,
+  pub last_edited_by: Option<i64>,
   pub last_edited_time: DateTime<Utc>,
   pub is_locked: Option<bool>,
   /// contains fields like `is_space`, and font information

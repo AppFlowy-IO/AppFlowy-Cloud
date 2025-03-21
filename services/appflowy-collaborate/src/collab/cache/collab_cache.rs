@@ -100,7 +100,7 @@ impl CollabCache {
     }
 
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
-    let object_id = query.object_id.clone();
+    let object_id = query.object_id;
     let expiration_secs = cache_exp_secs_from_collab_type(&query.collab_type);
     let encode_collab = self
       .disk_cache
@@ -139,7 +139,7 @@ impl CollabCache {
         {
           None => Either::Left(params),
           Some(data) => Either::Right((
-            params.object_id.clone(),
+            params.object_id,
             QueryCollabResult::Success {
               encode_collab_v1: data,
             },
@@ -171,8 +171,8 @@ impl CollabCache {
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
-    let collab_type = params.collab_type;
-    let object_id = params.object_id.clone();
+    let collab_type = params.collab_type.clone();
+    let object_id = params.object_id;
     let encode_collab_data = params.encoded_collab_v1.clone();
     let s3 = self.disk_cache.s3_client();
     CollabDiskCache::upsert_collab_with_transaction(
@@ -255,7 +255,7 @@ impl CollabCache {
       .iter()
       .map(|r| {
         (
-          r.params.object_id.clone(),
+          r.params.object_id,
           r.params.encoded_collab_v1.clone(),
           cache_exp_secs_from_collab_type(&r.params.collab_type),
         )

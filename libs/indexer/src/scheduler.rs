@@ -447,7 +447,7 @@ pub(crate) async fn batch_insert_records(
   let mut seen = HashSet::new();
   let records = records
     .into_iter()
-    .filter(|record| seen.insert(record.object_id.clone()))
+    .filter(|record| seen.insert(record.object_id))
     .collect::<Vec<_>>();
 
   let mut txn = pg_pool.begin().await?;

@@ -638,7 +638,7 @@ impl PublishCollabDuplicator {
   async fn deep_copy_inline_database_in_doc<'a>(
     &mut self,
     view_id: Uuid,
-    doc_view_id: &String,
+    doc_view_id: &str,
   ) -> Result<Option<String>, AppError> {
     let (metadata, published_blob) = match self.get_published_data_for_view_id(&view_id).await? {
       Some(published_data) => published_data,
@@ -654,7 +654,7 @@ impl PublishCollabDuplicator {
       .await?;
     let parent_view_id = parent_view.id.clone();
     if parent_view.parent_view_id.is_empty() {
-      parent_view.parent_view_id = doc_view_id.clone();
+      parent_view.parent_view_id = doc_view_id.to_string();
       let parent_view_id = Uuid::parse_str(&parent_view.id)?;
       self.views_to_add.insert(parent_view_id, parent_view);
     }
@@ -735,9 +735,7 @@ impl PublishCollabDuplicator {
       return Ok((pub_db_id, db_id, true));
     }
     let new_db_id = gen_view_id();
-    self
-      .duplicated_refs
-      .insert(pub_db_id, Some(new_db_id));
+    self.duplicated_refs.insert(pub_db_id, Some(new_db_id));
 
     {
       // assign new id to all views of database.
@@ -748,28 +746,24 @@ impl PublishCollabDuplicator {
       for db_view in db_views.iter_mut() {
         let db_view_id: Uuid = db_view.id.parse()?;
         let new_db_view_id = if &db_view_id == pub_view_id {
-          self
-            .duplicated_db_main_view
-            .insert(pub_db_id, new_view_id);
+          self.duplicated_db_main_view.insert(pub_db_id, new_view_id);
           new_view_id
         } else {
           gen_view_id()
         };
-        self
-          .duplicated_db_view
-          .insert(db_view_id, new_db_view_id);
+        self.duplicated_db_view.insert(db_view_id, new_db_view_id);
 
         new_db_view_ids.push(new_db_view_id);
       }
       // if there is no main view id, use the inline view id
-      if let std::collections::hash_map::Entry::Vacant(e) = self.duplicated_db_main_view.entry(pub_db_id) {
+      if let std::collections::hash_map::Entry::Vacant(e) =
+        self.duplicated_db_main_view.entry(pub_db_id)
+      {
         e.insert(db_body.get_inline_view_id(&txn).parse()?);
       };
 
       // Add this database as linked view
-      self
-        .workspace_databases
-        .insert(new_db_id, new_db_view_ids);
+      self.workspace_databases.insert(new_db_id, new_db_view_ids);
     }
 
     // assign new id to all rows of database.
@@ -777,9 +771,7 @@ impl PublishCollabDuplicator {
     for pub_row_id in published_db.database_row_collabs.keys() {
       // assign a new id for the row
       let dup_row_id = Uuid::new_v4();
-      self
-        .duplicated_db_row
-        .insert(*pub_row_id, dup_row_id);
+      self.duplicated_db_row.insert(*pub_row_id, dup_row_id);
     }
 
     {
@@ -866,9 +858,7 @@ impl PublishCollabDuplicator {
                 ))
                 .await?;
                 new_doc_view.parent_view_id = dup_row_doc_id.to_string(); // orphan folder view
-                self
-                  .views_to_add
-                  .insert(dup_row_doc_id, new_doc_view);
+                self.views_to_add.insert(dup_row_doc_id, new_doc_view);
               },
               Err(err) => tracing::error!("failed to open row document: {}", err),
             };
@@ -1061,11 +1051,8 @@ impl PublishCollabDuplicator {
     let main_view_info = view_info_by_id.get(pub_view_id).ok_or_else(|| {
       AppError::RecordNotFound(format!("metadata not found for view: {}", pub_view_id))
     })?;
-    let main_folder_view = self.new_folder_view(
-      *main_view_id,
-      main_view_info,
-      main_view_info.layout.clone(),
-    );
+    let main_folder_view =
+      self.new_folder_view(*main_view_id, main_view_info, main_view_info.layout.clone());
 
     // create other visible view which are child to the main view
     for vis_view_id in published_db.visible_database_view_ids {

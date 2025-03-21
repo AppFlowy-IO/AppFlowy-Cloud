@@ -2,7 +2,6 @@ use app_error::ErrorCode;
 use client_api::entity::CreateAccessRequestParams;
 use client_api_test::generate_unique_registered_user_client;
 use shared_entity::dto::workspace_dto::ViewLayout;
-use uuid::Uuid;
 
 #[tokio::test]
 async fn access_request_test() {

@@ -3,7 +3,6 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 
 use anyhow::anyhow;
 use bytes::Bytes;
-use collab_database::database::gen_row_id;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::meta_id_from_row_id;

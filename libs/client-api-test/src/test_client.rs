@@ -616,7 +616,7 @@ impl TestClient {
     let result = timeout(Duration::from_secs(30), async {
       while self
         .api_client
-        .get_collab_embed_info(workspace_id, object_id, CollabType::Document)
+        .get_collab_embed_info(workspace_id, object_id)
         .await
         .is_err()
       {
@@ -624,7 +624,7 @@ impl TestClient {
       }
       self
         .api_client
-        .get_collab_embed_info(workspace_id, object_id, CollabType::Document)
+        .get_collab_embed_info(workspace_id, object_id)
         .await
     })
     .await;

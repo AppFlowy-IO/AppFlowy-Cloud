@@ -2598,11 +2598,9 @@ async fn parser_realtime_msg(
 #[instrument(level = "debug", skip_all)]
 async fn get_collab_embed_info_handler(
   path: web::Path<(String, Uuid)>,
-  query: web::Query<CollabTypeParam>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabEmbedInfo>>> {
   let (_, object_id) = path.into_inner();
-  let collab_type = query.into_inner().collab_type;
   let info = database::collab::select_collab_embed_info(&state.pg_pool, &object_id)
     .await
     .map_err(AppResponseError::from)?

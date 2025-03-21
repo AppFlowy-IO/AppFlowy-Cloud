@@ -15,7 +15,7 @@ use chrono::{DateTime, Duration, Utc};
 use sqlx::{Error, Executor, PgPool, Postgres, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::{ops::DerefMut, str::FromStr};
+use std::ops::DerefMut;
 use tracing::{error, instrument};
 use uuid::Uuid;
 
@@ -146,8 +146,6 @@ pub async fn insert_into_af_collab_bulk_for_user(
     return Ok(());
   }
 
-  let encrypt = 0;
-
   // Insert values into `af_collab` tables in bulk
   let len = collab_params_list.len();
   let mut object_ids = Vec::with_capacity(len);
@@ -257,7 +255,7 @@ pub async fn batch_select_collab_blob(
       .push(params.object_id);
   }
 
-  for (collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
+  for (_collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
     let par_results: Result<Vec<QueryCollabData>, sqlx::Error> = sqlx::query_as!(
       QueryCollabData,
       r#"

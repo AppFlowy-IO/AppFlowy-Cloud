@@ -26,8 +26,8 @@ async fn get_collab_response_compatible_test() {
   // after 0.3.22, we use [CollabResponse] instead of EncodedCollab as the response
   let collab_resp = test_client
     .get_collab(
-      workspace_id.clone(),
-      workspace_id.clone(),
+      workspace_id,
+      workspace_id,
       CollabType::Folder,
     )
     .await
@@ -62,7 +62,7 @@ async fn create_collab_params_compatibility_serde_test() {
     .unwrap();
 
   let old_version_value = json!(InsertCollabParams {
-    object_id: object_id.clone(),
+    object_id: object_id,
     encoded_collab_v1: encoded_collab_v1.clone(),
     workspace_id: WORKSPACE_ID,
     collab_type: CollabType::Document,
@@ -130,7 +130,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     .json(&QueryCollabParams {
       workspace_id,
       inner: QueryCollab {
-        object_id: object_id.clone(),
+        object_id: object_id,
         collab_type: CollabType::Unknown,
       },
     })
@@ -182,8 +182,8 @@ async fn batch_insert_document_collab_test() {
   let params = params_list
     .iter()
     .map(|params| QueryCollab {
-      object_id: params.object_id.clone(),
-      collab_type: params.collab_type,
+      object_id: params.object_id,
+      collab_type: params.collab_type.clone(),
     })
     .collect::<Vec<_>>();
 

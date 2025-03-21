@@ -142,7 +142,7 @@ async fn simulate_30_put_blob_request_test() {
   let mut handles = vec![];
   for _ in 0..30 {
     let cloned_client = c1.clone();
-    let cloned_workspace_id = workspace_id.clone();
+    let cloned_workspace_id = workspace_id;
     let handle = tokio::spawn(async move {
       let mime = mime::TEXT_PLAIN_UTF_8;
       let file_id = Uuid::new_v4().to_string();

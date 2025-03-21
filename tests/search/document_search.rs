@@ -87,7 +87,7 @@ async fn test_embedding_when_create_document() {
       .collect::<Vec<String>>()
       .join("\n");
     let params = CalculateSimilarityParams {
-      workspace_id: workspace_id,
+      workspace_id,
       input: previews,
       expected: r#"
       "Kathryn’s Journey to Becoming a Tennis Player Kathryn’s love for tennis began on a warm summer day w

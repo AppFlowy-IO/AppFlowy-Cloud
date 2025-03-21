@@ -1077,7 +1077,7 @@ async fn create_database_page(
   let workspace_database_update =
     add_new_database_to_workspace(&mut workspace_database, &database_id, view_id).await?;
   let database_collab_params = CollabParams {
-    object_id: database_id.clone(),
+    object_id: database_id,
     encoded_collab_v1: encoded_database
       .encoded_database_collab
       .encoded_collab

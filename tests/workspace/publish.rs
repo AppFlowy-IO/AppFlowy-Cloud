@@ -1127,8 +1127,8 @@ async fn duplicate_to_workspace_doc_inline_database() {
 
     let collab_resp = client_2
       .get_collab(
-        workspace_id_2.clone(),
-        workspace_id_2.clone(),
+        workspace_id_2,
+        workspace_id_2,
         CollabType::Folder,
       )
       .await
@@ -1296,7 +1296,7 @@ async fn duplicate_to_workspace_db_embedded_in_doc() {
         .clone();
       let doc_collab = client_2
         .get_collab_to_collab(
-          workspace_id_2.clone(),
+          workspace_id_2,
           doc_with_embedded_db.view_id,
           CollabType::Folder,
         )

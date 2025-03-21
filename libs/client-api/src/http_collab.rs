@@ -23,7 +23,7 @@ use prost::Message;
 use rayon::prelude::*;
 use reqwest::{Body, Method};
 use serde::Serialize;
-use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam, EmbeddedCollabQuery};
+use shared_entity::dto::workspace_dto::{CollabResponse, EmbeddedCollabQuery};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::collections::HashMap;
 use std::future::Future;
@@ -450,7 +450,6 @@ impl Client {
     &self,
     workspace_id: &Uuid,
     object_id: &Uuid,
-    collab_type: CollabType,
   ) -> Result<AFCollabEmbedInfo, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{workspace_id}/collab/{object_id}/embed-info",
@@ -460,7 +459,6 @@ impl Client {
       .http_client_with_auth(Method::GET, &url)
       .await?
       .header("Content-Type", "application/json")
-      .query(&CollabTypeParam { collab_type })
       .send()
       .await?;
     log_request_id(&resp);
@@ -627,7 +625,6 @@ impl Action for GetCollabAction {
   fn run(&mut self) -> Self::Future {
     let client = self.client.clone();
     let params = self.params.clone();
-    let collab_type = self.params.collab_type;
 
     Box::pin(async move {
       let url = format!(
@@ -637,7 +634,6 @@ impl Action for GetCollabAction {
       let resp = client
         .http_client_with_auth(Method::GET, &url)
         .await?
-        .query(&CollabTypeParam { collab_type })
         .send()
         .await?;
       log_request_id(&resp);

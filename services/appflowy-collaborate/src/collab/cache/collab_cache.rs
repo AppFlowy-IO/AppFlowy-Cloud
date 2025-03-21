@@ -13,7 +13,7 @@ use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{error, event, Level};
-use uuid::{Error, Uuid};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct CollabCache {

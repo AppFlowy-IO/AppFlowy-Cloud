@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
 use sqlx::PgPool;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, trace};
 use uuid::Uuid;
 use validator::Validate;
 

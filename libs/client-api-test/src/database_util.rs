@@ -9,10 +9,9 @@ use collab_database::workspace_database::{
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabResult::{Failed, Success};
 use database_entity::dto::{QueryCollab, QueryCollabParams};
-use futures::TryStreamExt;
 use std::sync::Arc;
 use tracing::error;
-use uuid::{Error, Uuid};
+use uuid::Uuid;
 
 pub struct TestDatabaseCollabService {
   pub api_client: client_api::Client,

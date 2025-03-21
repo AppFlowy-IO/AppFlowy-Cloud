@@ -181,7 +181,7 @@ impl CollabStore {
           .into()
       };
       tokio::spawn(Self::save_snapshot_task(
-        self.s3.clone(),
+        self.collab_cache.clone(),
         self.connection_manager.clone(),
         workspace_id,
         object_id,
@@ -288,7 +288,7 @@ impl CollabStore {
   }
 
   async fn save_snapshot_task(
-    collab_cache: CollabCache,
+    collab_cache: Arc<CollabCache>,
     redis: ConnectionManager,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
@@ -314,7 +314,7 @@ impl CollabStore {
   }
 
   async fn save_snapshot(
-    collab_cache: CollabCache,
+    collab_cache: Arc<CollabCache>,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
     last_message_id: Rid,

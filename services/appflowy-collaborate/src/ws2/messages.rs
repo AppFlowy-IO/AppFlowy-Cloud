@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags};
 use bytes::Bytes;
+use collab_entity::CollabType;
 use collab_stream::stream_router::{FromRedisStream, RedisMap};
 use redis::FromRedisValue;
 use std::fmt::Display;
@@ -12,6 +13,7 @@ pub struct UpdateStreamMessage {
   pub last_message_id: Rid,
   pub sender: ClientID,
   pub object_id: ObjectId,
+  pub collab_type: CollabType,
   pub update_flags: UpdateFlags,
   pub update: Bytes,
 }

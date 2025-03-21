@@ -78,8 +78,6 @@ where
     tokio::spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
 
     // Create the observe collab stream.
-    let _cloned_protocol = protocol.clone();
-    let _object_id = object.object_id.clone();
     let stream = ObserveCollab::new(
       origin.clone(),
       object.clone(),

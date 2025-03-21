@@ -25,11 +25,7 @@ async fn get_collab_response_compatible_test() {
 
   // after 0.3.22, we use [CollabResponse] instead of EncodedCollab as the response
   let collab_resp = test_client
-    .get_collab(
-      workspace_id,
-      workspace_id,
-      CollabType::Folder,
-    )
+    .get_collab(workspace_id, workspace_id, CollabType::Folder)
     .await
     .unwrap();
   assert_eq!(collab_resp.object_id, workspace_id);

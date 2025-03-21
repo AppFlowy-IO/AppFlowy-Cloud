@@ -1,14 +1,14 @@
+use crate::collab::cache::encode_collab_from_bytes;
+use crate::CollabMetrics;
 use anyhow::anyhow;
+use app_error::AppError;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use database::collab::CollabMetadata;
 use redis::{pipe, AsyncCommands};
 use std::sync::Arc;
 use tracing::{error, instrument, trace};
-
-use crate::collab::cache::encode_collab_from_bytes;
-use crate::CollabMetrics;
-use app_error::AppError;
-use database::collab::CollabMetadata;
+use uuid::Uuid;
 
 const SEVEN_DAYS: u64 = 604800;
 const ONE_MONTH: u64 = 2592000;
@@ -43,7 +43,7 @@ impl CollabMemCache {
     Ok(())
   }
 
-  pub async fn get_collab_meta(&self, object_id: &str) -> Result<CollabMetadata, AppError> {
+  pub async fn get_collab_meta(&self, object_id: &Uuid) -> Result<CollabMetadata, AppError> {
     let key = collab_meta_key(object_id);
     let value: Option<String> = self
       .connection_manager
@@ -66,7 +66,7 @@ impl CollabMemCache {
   }
 
   /// Checks if an object with the given ID exists in the cache.
-  pub async fn is_exist(&self, object_id: &str) -> Result<bool, AppError> {
+  pub async fn is_exist(&self, object_id: &Uuid) -> Result<bool, AppError> {
     let cache_object_id = encode_collab_key(object_id);
     let exists: bool = self
       .connection_manager
@@ -77,7 +77,7 @@ impl CollabMemCache {
     Ok(exists)
   }
 
-  pub async fn remove_encode_collab(&self, object_id: &str) -> Result<(), AppError> {
+  pub async fn remove_encode_collab(&self, object_id: &Uuid) -> Result<(), AppError> {
     let cache_object_id = encode_collab_key(object_id);
     self
       .connection_manager
@@ -92,7 +92,7 @@ impl CollabMemCache {
       })
   }
 
-  pub async fn get_encode_collab_data(&self, object_id: &str) -> Option<Vec<u8>> {
+  pub async fn get_encode_collab_data(&self, object_id: &Uuid) -> Option<Vec<u8>> {
     match self.get_data_with_timestamp(object_id).await {
       Ok(None) => None,
       Ok(Some((_, bytes))) => Some(bytes),
@@ -104,7 +104,7 @@ impl CollabMemCache {
   }
 
   #[instrument(level = "trace", skip_all)]
-  pub async fn get_encode_collab(&self, object_id: &str) -> Option<EncodedCollab> {
+  pub async fn get_encode_collab(&self, object_id: &Uuid) -> Option<EncodedCollab> {
     match self.get_encode_collab_data(object_id).await {
       Some(bytes) => encode_collab_from_bytes(bytes).await.ok(),
       None => {
@@ -120,7 +120,7 @@ impl CollabMemCache {
   #[instrument(level = "trace", skip_all, fields(object_id=%object_id))]
   pub async fn insert_encode_collab(
     &self,
-    object_id: &str,
+    object_id: &Uuid,
     encoded_collab: EncodedCollab,
     timestamp: i64,
     expiration_seconds: u64,
@@ -149,7 +149,7 @@ impl CollabMemCache {
   /// if the expiration_seconds is None, the data will be expired after 7 days.
   pub async fn insert_encode_collab_data(
     &self,
-    object_id: &str,
+    object_id: &Uuid,
     data: &[u8],
     timestamp: i64,
     expiration_seconds: Option<u64>,
@@ -175,7 +175,7 @@ impl CollabMemCache {
   /// A Redis result indicating the success or failure of the operation.
   async fn insert_data_with_timestamp(
     &self,
-    object_id: &str,
+    object_id: &Uuid,
     data: &[u8],
     timestamp: i64,
     expiration_seconds: Option<u64>,
@@ -257,7 +257,7 @@ impl CollabMemCache {
   /// The function returns `Ok(None)` if no data is found for the given `object_id`.
   async fn get_data_with_timestamp(
     &self,
-    object_id: &str,
+    object_id: &Uuid,
   ) -> redis::RedisResult<Option<(i64, Vec<u8>)>> {
     let cache_object_id = encode_collab_key(object_id);
     let mut conn = self.connection_manager.clone();
@@ -296,12 +296,12 @@ impl CollabMemCache {
 /// changing the prefix, allowing the old data to expire naturally.
 ///
 #[inline]
-fn encode_collab_key(object_id: &str) -> String {
+fn encode_collab_key(object_id: &Uuid) -> String {
   format!("encode_collab_v0:{}", object_id)
 }
 
 #[inline]
-fn collab_meta_key(object_id: &str) -> String {
+fn collab_meta_key(object_id: &Uuid) -> String {
   format!("collab_meta_v0:{}", object_id)
 }
 

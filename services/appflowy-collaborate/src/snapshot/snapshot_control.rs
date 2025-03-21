@@ -5,7 +5,8 @@ use chrono::{DateTime, Utc};
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
 use sqlx::PgPool;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, trace};
+use uuid::Uuid;
 use validator::Validate;
 
 use app_error::AppError;
@@ -24,7 +25,7 @@ use crate::metrics::CollabMetrics;
 
 pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(2);
 
-fn collab_snapshot_key(workspace_id: &str, object_id: &str, snapshot_id: i64) -> String {
+fn collab_snapshot_key(workspace_id: &Uuid, object_id: &Uuid, snapshot_id: i64) -> String {
   let snapshot_id = u64::MAX - snapshot_id as u64;
   format!(
     "collabs/{}/{}/snapshot_{:16x}.v1.zstd",
@@ -32,7 +33,7 @@ fn collab_snapshot_key(workspace_id: &str, object_id: &str, snapshot_id: i64) ->
   )
 }
 
-fn collab_snapshot_prefix(workspace_id: &str, object_id: &str) -> String {
+fn collab_snapshot_prefix(workspace_id: &Uuid, object_id: &Uuid) -> String {
   format!("collabs/{}/{}/snapshot_", workspace_id, object_id)
 }
 
@@ -83,14 +84,9 @@ impl SnapshotControl {
 
   pub async fn should_create_snapshot(
     &self,
-    workspace_id: &str,
-    oid: &str,
+    workspace_id: &Uuid,
+    oid: &Uuid,
   ) -> Result<bool, AppError> {
-    if oid.is_empty() {
-      warn!("unexpected empty object id when checking should_create_snapshot");
-      return Ok(false);
-    }
-
     let latest_created_at = self.latest_snapshot_time(workspace_id, oid).await?;
     // Subtracting a fixed duration that is known not to cause underflow. If `checked_sub_signed` returns `None`,
     // it indicates an error in calculation, thus defaulting to creating a snapshot just in case.
@@ -151,18 +147,18 @@ impl SnapshotControl {
 
     Ok(AFSnapshotMeta {
       snapshot_id,
-      object_id: params.object_id,
+      object_id: params.object_id.to_string(),
       created_at: timestamp,
     })
   }
 
   pub async fn get_collab_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: Uuid,
+    object_id: Uuid,
     snapshot_id: &i64,
   ) -> AppResult<SnapshotData> {
-    let key = collab_snapshot_key(workspace_id, object_id, *snapshot_id);
+    let key = collab_snapshot_key(&workspace_id, &object_id, *snapshot_id);
     match self.s3.get_blob(&key).await {
       Ok(resp) => {
         self.collab_metrics.read_snapshot.inc();
@@ -173,9 +169,9 @@ impl SnapshotControl {
           version: EncoderVersion::V1,
         };
         Ok(SnapshotData {
-          object_id: object_id.to_string(),
+          object_id,
           encoded_collab_v1: encoded_collab.encode_to_bytes()?,
-          workspace_id: workspace_id.to_string(),
+          workspace_id,
         })
       },
       Err(AppError::RecordNotFound(_)) => {
@@ -183,15 +179,15 @@ impl SnapshotControl {
           "snapshot {} for `{}` not found in s3: fallback to postgres",
           snapshot_id, object_id
         );
-        match select_snapshot(&self.pg_pool, workspace_id, object_id, snapshot_id).await? {
+        match select_snapshot(&self.pg_pool, &workspace_id, &object_id, snapshot_id).await? {
           None => Err(AppError::RecordNotFound(format!(
             "Can't find the snapshot with id:{}",
             snapshot_id
           ))),
           Some(row) => Ok(SnapshotData {
-            object_id: object_id.to_string(),
+            object_id,
             encoded_collab_v1: row.blob,
-            workspace_id: workspace_id.to_string(),
+            workspace_id,
           }),
         }
       },
@@ -202,8 +198,8 @@ impl SnapshotControl {
   /// Returns list of snapshots for given object_id in descending order of creation time.
   pub async fn get_collab_snapshot_list(
     &self,
-    workspace_id: &str,
-    oid: &str,
+    workspace_id: &Uuid,
+    oid: &Uuid,
   ) -> AppResult<AFSnapshotMetas> {
     let snapshot_prefix = collab_snapshot_prefix(workspace_id, oid);
     let resp = self
@@ -233,8 +229,8 @@ impl SnapshotControl {
 
   pub async fn get_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: Uuid,
+    object_id: Uuid,
     snapshot_id: &i64,
   ) -> Result<SnapshotData, AppError> {
     self
@@ -244,11 +240,11 @@ impl SnapshotControl {
 
   pub async fn get_latest_snapshot(
     &self,
-    workspace_id: &str,
-    oid: &str,
+    workspace_id: Uuid,
+    oid: Uuid,
     collab_type: CollabType,
   ) -> Result<Option<SnapshotData>, AppError> {
-    let snapshot_prefix = collab_snapshot_prefix(workspace_id, oid);
+    let snapshot_prefix = collab_snapshot_prefix(&workspace_id, &oid);
     let mut resp = self.s3.list_dir(&snapshot_prefix, 1).await?;
     if let Some(key) = resp.pop() {
       let resp = self.s3.get_blob(&key).await?;
@@ -259,19 +255,19 @@ impl SnapshotControl {
         version: EncoderVersion::V1,
       };
       Ok(Some(SnapshotData {
-        object_id: oid.to_string(),
+        object_id: oid,
         encoded_collab_v1: encoded_collab.encode_to_bytes()?,
-        workspace_id: workspace_id.to_string(),
+        workspace_id,
       }))
     } else {
-      let snapshot = get_latest_snapshot(oid, &collab_type, &self.pg_pool).await?;
+      let snapshot = get_latest_snapshot(&oid, &collab_type, &self.pg_pool).await?;
       Ok(
         snapshot
           .and_then(|row| row.snapshot_meta)
           .map(|meta| SnapshotData {
-            object_id: oid.to_string(),
+            object_id: oid,
             encoded_collab_v1: meta.snapshot,
-            workspace_id: workspace_id.to_string(),
+            workspace_id,
           }),
       )
     }
@@ -279,8 +275,8 @@ impl SnapshotControl {
 
   async fn latest_snapshot_time(
     &self,
-    workspace_id: &str,
-    oid: &str,
+    workspace_id: &Uuid,
+    oid: &Uuid,
   ) -> Result<Option<DateTime<Utc>>, AppError> {
     let snapshot_prefix = collab_snapshot_prefix(workspace_id, oid);
     let mut resp = self.s3.list_dir(&snapshot_prefix, 1).await?;

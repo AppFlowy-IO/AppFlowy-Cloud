@@ -20,11 +20,11 @@ async fn stress_test_run_multiple_text_edits() {
   let mut writer = TestClient::new_user().await;
   sleep(Duration::from_secs(5)).await; // sleep 5 secs to make sure it do not trigger register user too fast in gotrue
 
-  let object_id = Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let workspace_id = writer.workspace_id().await;
 
   writer
-    .open_collab(&workspace_id, &object_id, CollabType::Unknown)
+    .open_collab(workspace_id, object_id, CollabType::Unknown)
     .await;
 
   // create readers and invite them into the same workspace
@@ -38,7 +38,7 @@ async fn stress_test_run_multiple_text_edits() {
       .unwrap();
 
     reader
-      .open_collab(&workspace_id, &object_id, CollabType::Unknown)
+      .open_collab(workspace_id, object_id, CollabType::Unknown)
       .await;
 
     readers.push(reader);
@@ -66,9 +66,9 @@ async fn stress_test_run_multiple_text_edits() {
 
   for mut reader in readers.drain(..) {
     assert_server_collab(
-      &workspace_id,
+      workspace_id,
       &mut reader.api_client,
-      &object_id,
+      object_id,
       &CollabType::Unknown,
       10,
       json!({

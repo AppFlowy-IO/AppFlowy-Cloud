@@ -15,22 +15,24 @@ use std::{
   sync::{Arc, Weak},
 };
 use tracing::error;
+use uuid::Uuid;
+
 pub type CLCommandSender = tokio::sync::mpsc::Sender<CollaborationCommand>;
 pub type CLCommandReceiver = tokio::sync::mpsc::Receiver<CollaborationCommand>;
 
 pub type EncodeCollabSender = tokio::sync::oneshot::Sender<Option<EncodedCollab>>;
-pub type BatchEncodeCollabSender = tokio::sync::oneshot::Sender<HashMap<String, EncodedCollab>>;
+pub type BatchEncodeCollabSender = tokio::sync::oneshot::Sender<HashMap<Uuid, EncodedCollab>>;
 pub enum CollaborationCommand {
   GetEncodeCollab {
-    object_id: String,
+    object_id: Uuid,
     ret: EncodeCollabSender,
   },
   BatchGetEncodeCollab {
-    object_ids: Vec<String>,
+    object_ids: Vec<Uuid>,
     ret: BatchEncodeCollabSender,
   },
   ServerSendCollabMessage {
-    object_id: String,
+    object_id: Uuid,
     collab_messages: Vec<ClientCollabMessage>,
     ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
   },
@@ -40,7 +42,7 @@ const BATCH_GET_ENCODE_COLLAB_CONCURRENCY: usize = 10;
 
 pub(crate) fn spawn_collaboration_command<S>(
   mut command_recv: CLCommandReceiver,
-  group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
+  group_sender_by_object_id: &Arc<DashMap<Uuid, GroupCommandSender>>,
   weak_groups: Weak<GroupManager<S>>,
 ) where
   S: CollabStorage,
@@ -53,10 +55,7 @@ pub(crate) fn spawn_collaboration_command<S>(
           match group_sender_by_object_id.get(&object_id) {
             Some(sender) => {
               if let Err(err) = sender
-                .send(GroupCommand::EncodeCollab {
-                  object_id: object_id.clone(),
-                  ret,
-                })
+                .send(GroupCommand::EncodeCollab { object_id, ret })
                 .await
               {
                 error!("Send group command error: {}", err);
@@ -85,7 +84,7 @@ pub(crate) fn spawn_collaboration_command<S>(
               .collect::<Vec<_>>()
               .await;
 
-            let mut outputs: HashMap<String, EncodedCollab> = HashMap::new();
+            let mut outputs: HashMap<_, EncodedCollab> = HashMap::new();
             for (object_id, encoded_collab) in tasks.into_iter().flatten() {
               if let Some(encoded_collab) = encoded_collab {
                 outputs.insert(object_id, encoded_collab);

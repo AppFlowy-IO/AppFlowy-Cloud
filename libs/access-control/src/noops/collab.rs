@@ -1,6 +1,7 @@
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::AFAccessLevel;
+use uuid::Uuid;
 
 use crate::{
   act::Action,
@@ -26,9 +27,9 @@ impl Default for CollabAccessControlImpl {
 impl CollabAccessControl for CollabAccessControlImpl {
   async fn enforce_action(
     &self,
-    _workspace_id: &str,
+    _workspace_id: &Uuid,
     _uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
     _action: Action,
   ) -> Result<(), AppError> {
     Ok(())
@@ -36,9 +37,9 @@ impl CollabAccessControl for CollabAccessControlImpl {
 
   async fn enforce_access_level(
     &self,
-    _workspace_id: &str,
+    _workspace_id: &Uuid,
     _uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
     _access_level: AFAccessLevel,
   ) -> Result<(), AppError> {
     Ok(())
@@ -47,13 +48,13 @@ impl CollabAccessControl for CollabAccessControlImpl {
   async fn update_access_level_policy(
     &self,
     _uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
     _level: AFAccessLevel,
   ) -> Result<(), AppError> {
     Ok(())
   }
 
-  async fn remove_access_level(&self, _uid: &i64, _oid: &str) -> Result<(), AppError> {
+  async fn remove_access_level(&self, _uid: &i64, _oid: &Uuid) -> Result<(), AppError> {
     Ok(())
   }
 }
@@ -77,18 +78,18 @@ impl Default for RealtimeCollabAccessControlImpl {
 impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
   async fn can_write_collab(
     &self,
-    _workspace_id: &str,
+    _workspace_id: &Uuid,
     _uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
   ) -> Result<bool, AppError> {
     Ok(true)
   }
 
   async fn can_read_collab(
     &self,
-    _workspace_id: &str,
+    _workspace_id: &Uuid,
     _uid: &i64,
-    _oid: &str,
+    _oid: &Uuid,
   ) -> Result<bool, AppError> {
     Ok(true)
   }

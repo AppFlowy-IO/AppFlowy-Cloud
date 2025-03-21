@@ -15,6 +15,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, RetryIf};
 use tokio_stream::StreamExt;
 use tracing::{error, trace};
+use uuid::Uuid;
 use yrs::updates::encoder::Encode;
 
 use client_api_entity::{CollabObject, CollabType};
@@ -170,7 +171,7 @@ where
     self.sync_queue.queue_msg(|msg_id| {
       let update_sync = UpdateSync::new(
         origin.clone(),
-        self.object.object_id.clone(),
+        self.object.object_id.to_string(),
         payload,
         msg_id,
       );
@@ -219,36 +220,37 @@ where
 
 #[derive(Clone, Debug)]
 pub struct SyncObject {
-  pub object_id: String,
-  pub workspace_id: String,
+  pub object_id: Uuid,
+  pub workspace_id: Uuid,
   pub collab_type: CollabType,
   pub device_id: String,
 }
 
 impl SyncObject {
   pub fn new(
-    object_id: &str,
-    workspace_id: &str,
+    object_id: Uuid,
+    workspace_id: Uuid,
     collab_type: CollabType,
     device_id: &str,
   ) -> Self {
     Self {
-      object_id: object_id.to_string(),
-      workspace_id: workspace_id.to_string(),
+      object_id,
+      workspace_id,
       collab_type,
       device_id: device_id.to_string(),
     }
   }
 }
 
-impl From<CollabObject> for SyncObject {
-  fn from(collab_object: CollabObject) -> Self {
-    Self {
-      object_id: collab_object.object_id,
-      workspace_id: collab_object.workspace_id,
+impl TryFrom<CollabObject> for SyncObject {
+  type Error = anyhow::Error;
+  fn try_from(collab_object: CollabObject) -> Result<Self, Self::Error> {
+    Ok(Self {
+      object_id: Uuid::parse_str(&collab_object.object_id)?,
+      workspace_id: Uuid::parse_str(&collab_object.workspace_id)?,
       collab_type: collab_object.collab_type,
       device_id: collab_object.device_id,
-    }
+    })
   }
 }
 

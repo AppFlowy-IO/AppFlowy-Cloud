@@ -21,11 +21,10 @@ use uuid::Uuid;
 
 pub async fn insert_chat<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  workspace_id: &str,
+  workspace_id: &Uuid,
   params: CreateChatParams,
 ) -> Result<(), AppError> {
   let chat_id = Uuid::from_str(&params.chat_id)?;
-  let workspace_id = Uuid::from_str(workspace_id)?;
   let rag_ids = json!(params.rag_ids);
   sqlx::query!(
     r#"

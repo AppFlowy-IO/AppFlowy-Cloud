@@ -35,8 +35,9 @@ pub fn generate_random_string(len: usize) -> String {
     .collect()
 }
 
-pub fn make_big_collab_doc_state(object_id: &str, key: &str, value: String) -> Vec<u8> {
-  let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+pub fn make_big_collab_doc_state(object_id: &Uuid, key: &str, value: String) -> Vec<u8> {
+  let mut collab =
+    Collab::new_with_origin(CollabOrigin::Empty, object_id.to_string(), vec![], false);
   collab.insert(key, value);
   collab
     .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
@@ -90,14 +91,15 @@ impl TestDocumentEditor {
   }
 }
 
-pub fn empty_document_editor(object_id: &str) -> TestDocumentEditor {
-  let doc_state = default_document_collab_data(object_id)
+pub fn empty_document_editor(object_id: &Uuid) -> TestDocumentEditor {
+  let object_id = object_id.to_string();
+  let doc_state = default_document_collab_data(&object_id)
     .unwrap()
     .doc_state
     .to_vec();
   let collab = Collab::new_with_source(
     CollabOrigin::Empty,
-    object_id,
+    &object_id,
     DataSource::DocStateV1(doc_state),
     vec![],
     false,
@@ -171,8 +173,9 @@ pub fn empty_collab_doc_state(object_id: &str, collab_type: CollabType) -> Vec<u
   }
 }
 
-pub fn test_encode_collab_v1(object_id: &str, key: &str, value: &str) -> EncodedCollab {
-  let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+pub fn test_encode_collab_v1(object_id: &Uuid, key: &str, value: &str) -> EncodedCollab {
+  let mut collab =
+    Collab::new_with_origin(CollabOrigin::Empty, object_id.to_string(), vec![], false);
   collab.insert(key, value);
   collab
     .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
@@ -210,6 +213,7 @@ use std::io::{BufReader, Read};
 use collab::preclude::MapExt;
 use flate2::bufread::GzDecoder;
 use serde::Deserialize;
+use uuid::Uuid;
 use yrs::{GetString, Text, TextRef};
 
 use client_api_test::CollabRef;

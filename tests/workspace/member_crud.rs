@@ -101,7 +101,7 @@ async fn add_duplicate_workspace_members() {
 
   let is_none = !invitations
     .iter()
-    .any(|inv| inv.workspace_id.to_string().as_str() == workspace_id);
+    .any(|inv| inv.workspace_id == workspace_id);
   assert!(is_none);
 }
 
@@ -322,10 +322,7 @@ async fn user_workspace_info() {
   let workspace_id = c1.workspace_id().await;
   let info = c1.get_user_workspace_info().await;
   assert_eq!(info.workspaces.len(), 1);
-  assert_eq!(
-    info.visiting_workspace.workspace_id.to_string(),
-    workspace_id
-  );
+  assert_eq!(info.visiting_workspace.workspace_id, workspace_id);
 
   let c2 = TestClient::new_user_without_ws_conn().await;
   c1.invite_and_accepted_workspace_member(&workspace_id, &c2, AFRole::Owner)
@@ -349,18 +346,12 @@ async fn get_user_workspace_info_after_open_workspace() {
 
   let info = c2.get_user_workspace_info().await;
   let workspace_id_c2 = c1.workspace_id().await;
-  assert_eq!(
-    info.visiting_workspace.workspace_id.to_string(),
-    workspace_id_c2
-  );
+  assert_eq!(info.visiting_workspace.workspace_id, workspace_id_c2);
 
   // After open workspace, the visiting workspace should be the workspace that user just opened
   c2.open_workspace(&workspace_id_c1).await;
   let info = c2.get_user_workspace_info().await;
-  assert_eq!(
-    info.visiting_workspace.workspace_id.to_string(),
-    workspace_id_c1
-  );
+  assert_eq!(info.visiting_workspace.workspace_id, workspace_id_c1);
 }
 
 #[tokio::test]
@@ -431,7 +422,7 @@ async fn workspace_member_through_user_id() {
   let workspace_id = owner.workspace_id().await;
 
   let owner_member = owner
-    .get_workspace_member(&workspace_id, owner.uid().await)
+    .get_workspace_member(workspace_id, owner.uid().await)
     .await;
   assert_eq!(owner_member.role, AFRole::Owner);
 
@@ -441,7 +432,7 @@ async fn workspace_member_through_user_id() {
     .unwrap();
 
   let member_1_member = member_1
-    .get_workspace_member(&workspace_id, member_1.uid().await)
+    .get_workspace_member(workspace_id, member_1.uid().await)
     .await;
   assert_eq!(member_1_member.role, AFRole::Member);
 

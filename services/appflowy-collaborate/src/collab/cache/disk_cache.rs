@@ -1,18 +1,9 @@
-use anyhow::{anyhow, Context};
-use bytes::Bytes;
-use collab::entity::{EncodedCollab, EncoderVersion};
-use sqlx::{Error, PgPool, Transaction};
-use std::collections::HashMap;
-use std::ops::DerefMut;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::task::JoinSet;
-use tokio::time::sleep;
-use tracing::{error, instrument};
-
 use crate::collab::cache::encode_collab_from_bytes;
 use crate::CollabMetrics;
+use anyhow::{anyhow, Context};
 use app_error::AppError;
+use bytes::Bytes;
+use collab::entity::{EncodedCollab, EncoderVersion};
 use database::collab::{
   batch_select_collab_blob, insert_into_af_collab, insert_into_af_collab_bulk_for_user,
   is_collab_exists, select_blob_from_af_collab, AppResult,
@@ -22,6 +13,15 @@ use database::file::{BucketClient, ResponseBlob};
 use database_entity::dto::{
   CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, ZSTD_COMPRESSION_LEVEL,
 };
+use sqlx::{Error, PgPool, Transaction};
+use std::collections::HashMap;
+use std::ops::DerefMut;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::task::JoinSet;
+use tokio::time::sleep;
+use tracing::{error, instrument};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct CollabDiskCache {
@@ -46,7 +46,7 @@ impl CollabDiskCache {
     }
   }
 
-  pub async fn is_exist(&self, workspace_id: &str, object_id: &str) -> AppResult<bool> {
+  pub async fn is_exist(&self, workspace_id: &Uuid, object_id: &Uuid) -> AppResult<bool> {
     let dir = collab_key_prefix(workspace_id, object_id);
     let resp = self.s3.list_dir(&dir, 1).await?;
     if resp.is_empty() {
@@ -59,7 +59,7 @@ impl CollabDiskCache {
 
   pub async fn upsert_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
     params: CollabParams,
   ) -> AppResult<()> {
@@ -100,7 +100,7 @@ impl CollabDiskCache {
   }
 
   pub async fn upsert_collab_with_transaction(
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
     mut params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
@@ -133,7 +133,7 @@ impl CollabDiskCache {
   #[instrument(level = "trace", skip_all)]
   pub async fn get_collab_encoded_from_disk(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
     tracing::debug!("try get {}:{} from s3", query.collab_type, query.object_id);
@@ -205,7 +205,7 @@ impl CollabDiskCache {
   //FIXME: this and `batch_insert_collab` duplicate similar logic.
   pub async fn bulk_insert_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     mut params_list: Vec<CollabParams>,
   ) -> Result<(), AppError> {
@@ -216,7 +216,7 @@ impl CollabDiskCache {
     let mut delete_from_s3 = Vec::new();
     let mut blobs = HashMap::new();
     for param in params_list.iter_mut() {
-      let key = collab_key(workspace_id, &param.object_id);
+      let key = collab_key(&workspace_id, &param.object_id);
       if param.encoded_collab_v1.len() > self.s3_collab_threshold {
         let blob = std::mem::take(&mut param.encoded_collab_v1);
         blobs.insert(key, blob);
@@ -315,9 +315,9 @@ impl CollabDiskCache {
 
   pub async fn batch_get_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     queries: Vec<QueryCollab>,
-  ) -> HashMap<String, QueryCollabResult> {
+  ) -> HashMap<Uuid, QueryCollabResult> {
     let mut results = HashMap::new();
     let not_found = batch_get_collab_from_s3(&self.s3, workspace_id, queries, &mut results).await;
     let s3_fetch = results.len() as u64;
@@ -328,7 +328,7 @@ impl CollabDiskCache {
     results
   }
 
-  pub async fn delete_collab(&self, workspace_id: &str, object_id: &str) -> AppResult<()> {
+  pub async fn delete_collab(&self, workspace_id: &Uuid, object_id: &Uuid) -> AppResult<()> {
     sqlx::query!(
       r#"
         UPDATE af_collab
@@ -420,19 +420,19 @@ async fn batch_put_collab_to_s3(
 
 async fn batch_get_collab_from_s3(
   s3: &AwsS3BucketClientImpl,
-  workspace_id: &str,
+  workspace_id: &Uuid,
   params: Vec<QueryCollab>,
-  results: &mut HashMap<String, QueryCollabResult>,
+  results: &mut HashMap<Uuid, QueryCollabResult>,
 ) -> Vec<QueryCollab> {
   enum GetResult {
-    Found(String, Vec<u8>),
+    Found(Uuid, Vec<u8>),
     NotFound(QueryCollab),
-    Error(String, String),
+    Error(Uuid, String),
   }
 
   async fn gather(
     join_set: &mut JoinSet<GetResult>,
-    results: &mut HashMap<String, QueryCollabResult>,
+    results: &mut HashMap<Uuid, QueryCollabResult>,
     not_found: &mut Vec<QueryCollab>,
   ) {
     while let Some(result) = join_set.join_next().await {
@@ -499,11 +499,11 @@ async fn batch_get_collab_from_s3(
   not_found
 }
 
-fn collab_key_prefix(workspace_id: &str, object_id: &str) -> String {
+fn collab_key_prefix(workspace_id: &Uuid, object_id: &Uuid) -> String {
   format!("collabs/{}/{}/", workspace_id, object_id)
 }
 
-fn collab_key(workspace_id: &str, object_id: &str) -> String {
+fn collab_key(workspace_id: &Uuid, object_id: &Uuid) -> String {
   format!(
     "collabs/{}/{}/encoded_collab.v1.zstd",
     workspace_id, object_id

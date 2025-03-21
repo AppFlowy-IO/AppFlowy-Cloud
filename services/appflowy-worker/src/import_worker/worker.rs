@@ -872,7 +872,7 @@ async fn process_unzip_file(
   redis_client: &mut ConnectionManager,
   s3_client: &Arc<dyn S3Client>,
 ) -> Result<(), ImportError> {
-  let workspace_id =
+  let _ =
     Uuid::parse_str(&import_task.workspace_id).map_err(|err| ImportError::Internal(err.into()))?;
   let notion_importer = NotionImporter::new(
     import_task.uid,
@@ -898,9 +898,10 @@ async fn process_unzip_file(
   );
 
   // 1. Open the workspace folder
+  let workspace_id = Uuid::parse_str(&imported.workspace_id)?;
   let folder_collab = get_encode_collab_from_bytes(
-    &imported.workspace_id,
-    &imported.workspace_id,
+    &workspace_id,
+    &workspace_id,
     &CollabType::Folder,
     pg_pool,
     s3_client,
@@ -942,7 +943,7 @@ async fn process_unzip_file(
         .imported_collabs
         .into_iter()
         .map(|imported_collab| CollabParams {
-          object_id: imported_collab.object_id,
+          object_id: imported_collab.object_id.parse().unwrap(),
           collab_type: imported_collab.collab_type,
           encoded_collab_v1: Bytes::from(imported_collab.encoded_collab.encode_to_bytes().unwrap()),
         })
@@ -971,13 +972,12 @@ async fn process_unzip_file(
         "Failed to select workspace database storage id: {:?}",
         err
       ))
-    })
-    .map(|id| id.to_string())?;
+    })?;
 
   // 4. Edit workspace database collab and then encode workspace database collab
   if !database_view_ids_by_database_id.is_empty() {
     let w_db_collab = get_encode_collab_from_bytes(
-      &import_task.workspace_id,
+      &workspace_id,
       &w_database_id,
       &CollabType::WorkspaceDatabase,
       pg_pool,
@@ -985,7 +985,7 @@ async fn process_unzip_file(
     )
     .await?;
     let mut w_database = WorkspaceDatabase::from_collab_doc_state(
-      &w_database_id,
+      &w_database_id.to_string(),
       CollabOrigin::Server,
       w_db_collab.into(),
     )
@@ -1003,7 +1003,7 @@ async fn process_unzip_file(
       Ok(bytes) => {
         if let Err(err) = redis_client
           .set_ex::<String, Vec<u8>, Value>(
-            encode_collab_key(&w_database_id),
+            encode_collab_key(&w_database_id.to_string()),
             bytes,
             2592000, // WorkspaceDatabase => 1 month
           )
@@ -1026,7 +1026,7 @@ async fn process_unzip_file(
       import_task.workspace_id
     );
     let w_database_collab_params = CollabParams {
-      object_id: w_database_id.clone(),
+      object_id: w_database_id,
       collab_type: CollabType::WorkspaceDatabase,
       encoded_collab_v1: Bytes::from(w_database_collab.encode_to_bytes().unwrap()),
     };
@@ -1066,7 +1066,7 @@ async fn process_unzip_file(
   }
 
   let folder_collab_params = CollabParams {
-    object_id: import_task.workspace_id.clone(),
+    object_id: workspace_id,
     collab_type: CollabType::Folder,
     encoded_collab_v1: Bytes::from(folder_collab.encode_to_bytes().unwrap()),
   };
@@ -1095,7 +1095,7 @@ async fn process_unzip_file(
   insert_into_af_collab_bulk_for_user(
     &mut transaction,
     &import_task.uid,
-    &import_task.workspace_id,
+    workspace_id,
     &collab_params_list,
   )
   .await
@@ -1349,8 +1349,8 @@ async fn upload_file_to_s3(
 }
 
 async fn get_encode_collab_from_bytes(
-  workspace_id: &str,
-  object_id: &str,
+  workspace_id: &Uuid,
+  object_id: &Uuid,
   collab_type: &CollabType,
   pg_pool: &PgPool,
   s3: &Arc<dyn S3Client>,
@@ -1605,13 +1605,13 @@ async fn insert_meta_from_path(
   })
 }
 
-fn collab_key(workspace_id: &str, object_id: &str) -> String {
+fn collab_key(workspace_id: &Uuid, object_id: &Uuid) -> String {
   format!(
     "collabs/{}/{}/encoded_collab.v1.zstd",
     workspace_id, object_id
   )
 }
 
-fn encode_collab_key(object_id: &str) -> String {
+fn encode_collab_key<T: Display>(object_id: T) -> String {
   format!("encode_collab_v0:{}", object_id)
 }

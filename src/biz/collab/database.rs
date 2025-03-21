@@ -176,11 +176,11 @@ pub struct PostgresDatabaseCollabService {
 }
 
 impl PostgresDatabaseCollabService {
-  pub async fn get_collab(&self, oid: &str, collab_type: CollabType) -> EncodedCollab {
+  pub async fn get_collab(&self, oid: Uuid, collab_type: CollabType) -> EncodedCollab {
     get_latest_collab_encoded(
       &self.collab_storage,
       GetCollabOrigin::Server,
-      &self.workspace_id.to_string(),
+      self.workspace_id,
       oid,
       collab_type,
     )
@@ -197,10 +197,11 @@ impl DatabaseCollabService for PostgresDatabaseCollabService {
     object_type: CollabType,
     encoded_collab: Option<(EncodedCollab, bool)>,
   ) -> Result<Collab, DatabaseError> {
+    let object_id = Uuid::parse_str(object_id)?;
     match encoded_collab {
       None => Collab::new_with_source(
         CollabOrigin::Empty,
-        object_id,
+        &object_id.to_string(),
         self.get_collab(object_id, object_type).await.into(),
         vec![],
         false,
@@ -208,7 +209,7 @@ impl DatabaseCollabService for PostgresDatabaseCollabService {
       .map_err(|err| DatabaseError::Internal(err.into())),
       Some((encoded_collab, _)) => Collab::new_with_source(
         CollabOrigin::Empty,
-        object_id,
+        &object_id.to_string(),
         encoded_collab.into(),
         vec![],
         false,
@@ -222,15 +223,22 @@ impl DatabaseCollabService for PostgresDatabaseCollabService {
     object_ids: Vec<String>,
     collab_type: CollabType,
   ) -> Result<EncodeCollabByOid, DatabaseError> {
+    let mut object_uuids = Vec::with_capacity(object_ids.len());
+    for object_id in object_ids {
+      object_uuids.push(Uuid::parse_str(&object_id)?);
+    }
     let encoded_collabs = batch_get_latest_collab_encoded(
       &self.collab_storage,
       GetCollabOrigin::Server,
-      &self.workspace_id.to_string(),
-      &object_ids,
+      self.workspace_id,
+      &object_uuids,
       collab_type,
     )
     .await
-    .unwrap();
+    .unwrap()
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect();
     Ok(encoded_collabs)
   }
 

@@ -115,15 +115,15 @@ impl CollabRedisStream {
     Ok(group)
   }
 
-  pub fn collab_update_sink(&self, workspace_id: &str, object_id: &str) -> CollabUpdateSink {
+  pub fn collab_update_sink(&self, workspace_id: &Uuid, object_id: &Uuid) -> CollabUpdateSink {
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
     CollabUpdateSink::new(self.connection_manager.clone(), stream_key)
   }
 
   pub async fn awareness_update_sink(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<AwarenessUpdateSink, StreamError> {
     self.awareness_gossip.sink(workspace_id, object_id).await
   }
@@ -132,8 +132,8 @@ impl CollabRedisStream {
   /// from a given message id. Once Redis stream return no more results, the stream will be closed.
   pub async fn current_collab_updates(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     since: Option<MessageId>,
   ) -> Result<Vec<(MessageId, CollabStreamUpdate)>, StreamError> {
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
@@ -158,8 +158,8 @@ impl CollabRedisStream {
   /// coming from corresponding Redis stream until explicitly closed.
   pub fn live_collab_updates(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     since: Option<MessageId>,
   ) -> impl Stream<Item = Result<(MessageId, CollabStreamUpdate), StreamError>> {
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);

@@ -81,6 +81,9 @@ pub enum RealtimeError {
 
   #[error("failed to send ws message: {0}")]
   SendWSMessageFailed(String),
+
+  #[error("failed to parse UUID: {0}")]
+  Uuid(#[from] uuid::Error),
 }
 
 #[derive(Debug)]

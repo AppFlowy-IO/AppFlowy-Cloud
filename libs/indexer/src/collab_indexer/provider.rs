@@ -9,6 +9,7 @@ use infra::env_util::get_env_var;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
+use uuid::Uuid;
 
 pub trait Indexer: Send + Sync {
   fn create_embedded_chunks_from_collab(
@@ -19,7 +20,7 @@ pub trait Indexer: Send + Sync {
 
   fn create_embedded_chunks_from_text(
     &self,
-    object_id: String,
+    object_id: Uuid,
     text: String,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError>;

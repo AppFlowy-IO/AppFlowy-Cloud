@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM af_collab_embeddings e\n        USING af_collab c\n        WHERE e.oid = c.oid\n          AND c.workspace_id = $1\n      ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5c2d58bfdedbb1be71337a97d5ed5a2921f83dd549507b2834a4d2582d2c361b"
+}

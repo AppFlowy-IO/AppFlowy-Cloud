@@ -87,7 +87,7 @@ pub struct AwarenessUpdateSink {
 }
 
 impl AwarenessUpdateSink {
-  pub fn new(conn: MultiplexedConnection, workspace_id: &str, object_id: &str) -> Self {
+  pub fn new(conn: MultiplexedConnection, workspace_id: &Uuid, object_id: &Uuid) -> Self {
     let publish_key = format!("af:awareness:{workspace_id}:{object_id}");
     AwarenessUpdateSink {
       conn: conn.into(),

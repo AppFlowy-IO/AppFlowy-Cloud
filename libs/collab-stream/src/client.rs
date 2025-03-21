@@ -6,7 +6,7 @@ use crate::metrics::CollabStreamMetrics;
 use crate::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId};
 use crate::stream_group::{StreamConfig, StreamGroup};
 use crate::stream_router::{StreamRouter, StreamRouterOptions};
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use redis::aio::ConnectionManager;
 use redis::streams::StreamReadReply;
 use redis::{AsyncCommands, FromRedisValue};
@@ -164,19 +164,19 @@ impl CollabRedisStream {
   ) -> impl Stream<Item = Result<(MessageId, CollabStreamUpdate), StreamError>> {
     let stream_key = CollabStreamUpdate::stream_key(workspace_id, object_id);
     let since = since.map(|id| id.to_string());
-    let mut reader = self.stream_router.observe(stream_key, since);
+    let mut reader = self
+      .stream_router
+      .observe::<(MessageId, CollabStreamUpdate)>(stream_key, since);
     async_stream::try_stream! {
-      while let Some((message_id, fields)) = reader.recv().await {
+      while let Some(Ok((message_id, collab_update))) = reader.next().await {
         tracing::trace!("incoming collab update `{}`", message_id);
-        let message_id = MessageId::try_from(message_id).map_err(|e| internal(e.to_string()))?;
-        let collab_update = CollabStreamUpdate::try_from(fields)?;
         yield (message_id, collab_update);
       }
     }
   }
 
   pub fn awareness_updates(&self, object_id: &Uuid) -> UnboundedReceiver<AwarenessStreamUpdate> {
-    self.awareness_gossip.awareness_stream(object_id)
+    self.awareness_gossip.collab_awareness_stream(object_id)
   }
 
   pub async fn prune_update_stream(

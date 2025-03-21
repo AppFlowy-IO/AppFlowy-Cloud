@@ -18,6 +18,7 @@ mod state;
 pub mod telemetry;
 pub mod thread_pool_no_abort;
 mod util;
+pub mod ws2;
 
 pub use metrics::*;
 pub use permission::*;

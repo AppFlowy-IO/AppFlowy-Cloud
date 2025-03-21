@@ -11,9 +11,7 @@ use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 #[tokio::test]
 async fn workspace_list_database() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = c.get_workspaces().await.unwrap()[0]
-    .workspace_id
-    .to_string();
+  let workspace_id = c.get_workspaces().await.unwrap()[0].workspace_id;
 
   {
     let dbs = c.list_databases(&workspace_id).await.unwrap();

@@ -314,7 +314,7 @@ async fn invalid_test() {
   for request in [
     CreateUploadRequest {
       file_id: "".to_string(),
-      parent_dir: parent_dir.clone(),
+      parent_dir: parent_dir.to_string(),
       content_type: mime.to_string(),
       file_size: Some(0),
     },
@@ -334,24 +334,16 @@ async fn invalid_test() {
   for request in vec![
     // workspace_id, parent_dir, file_id, upload_id, part_number, body
     (
+      workspace_id,
       "".to_string(),
-      parent_dir.clone(),
       file_id.clone(),
       upload_id.clone(),
       1,
       vec![1, 2, 3],
     ),
     (
-      workspace_id.to_string(),
-      Uuid::default(),
-      file_id.clone(),
-      upload_id.clone(),
-      1,
-      vec![1, 2, 3],
-    ),
-    (
-      workspace_id.to_string(),
-      parent_dir.clone(),
+      workspace_id,
+      parent_dir.to_string(),
       "".to_string(),
       upload_id.clone(),
       1,

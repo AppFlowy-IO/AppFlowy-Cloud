@@ -351,7 +351,7 @@ impl TestClient {
     Document::open(collab).unwrap()
   }
 
-  pub async fn get_db_collab_from_view(&mut self, workspace_id: Uuid, view_id: &str) -> Collab {
+  pub async fn get_db_collab_from_view(&mut self, workspace_id: Uuid, view_id: &Uuid) -> Collab {
     let ws_db_collab = self.get_workspace_database_collab(workspace_id).await;
     let ws_db_body = WorkspaceDatabase::open(ws_db_collab).unwrap();
     let db_id = ws_db_body

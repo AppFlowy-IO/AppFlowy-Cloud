@@ -161,7 +161,7 @@ pub struct Space {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Page {
-  pub view_id: String,
+  pub view_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,7 +182,7 @@ pub struct UpdateSpaceParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePageParams {
-  pub parent_view_id: String,
+  pub parent_view_id: Uuid,
   pub layout: ViewLayout,
   pub name: Option<String>,
   pub page_data: Option<serde_json::Value>,
@@ -293,9 +293,9 @@ pub struct TrashSectionItems {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FolderView {
-  pub view_id: String,
-  pub parent_view_id: String,
-  pub prev_view_id: Option<String>,
+  pub view_id: Uuid,
+  pub parent_view_id: Uuid,
+  pub prev_view_id: Option<Uuid>,
   pub name: String,
   pub icon: Option<ViewIcon>,
   pub is_space: bool,
@@ -432,7 +432,7 @@ impl ListDatabaseRowDetailParam {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceFolder {
   pub depth: Option<u32>,
-  pub root_view_id: Option<String>,
+  pub root_view_id: Option<Uuid>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

@@ -1560,7 +1560,7 @@ async fn unpublish_page_handler(
 
 async fn post_page_database_view_handler(
   user_uuid: UserUuid,
-  path: web::Path<(Uuid, String)>,
+  path: web::Path<(Uuid, Uuid)>,
   payload: Json<CreatePageDatabaseViewParams>,
   state: Data<AppState>,
   server: Data<RealtimeServerAddr>,
@@ -1619,7 +1619,7 @@ async fn update_page_view_handler(
 
 async fn get_page_view_handler(
   user_uuid: UserUuid,
-  path: web::Path<(Uuid, String)>,
+  path: web::Path<(Uuid, Uuid)>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PageCollab>>> {
   let (workspace_uuid, view_id) = path.into_inner();
@@ -1634,7 +1634,7 @@ async fn get_page_view_handler(
     &state.collab_access_control_storage,
     uid,
     workspace_uuid,
-    &view_id,
+    view_id,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page_collab)))
@@ -2296,11 +2296,7 @@ async fn get_workspace_folder_handler(
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
-  let root_view_id = if let Some(root_view_id) = query.root_view_id.as_ref() {
-    root_view_id.to_string()
-  } else {
-    workspace_id.to_string()
-  };
+  let root_view_id = query.root_view_id.unwrap_or(workspace_id);
   let folder_view = biz::collab::ops::get_user_workspace_structure(
     &state.metrics.appflowy_web_metrics,
     server,

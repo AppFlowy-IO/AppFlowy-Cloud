@@ -68,7 +68,7 @@ async fn chat_with_multiple_selected_source_test() {
     .iter()
     .map(|doc| EmbeddedCollabQuery {
       collab_type: CollabType::Document,
-      object_id: doc.object_id.clone(),
+      object_id: doc.object_id,
     })
     .collect();
   test_client

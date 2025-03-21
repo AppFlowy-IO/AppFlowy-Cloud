@@ -299,7 +299,7 @@ async fn duplicate_document(
     .document_view_ids
     .iter()
     .map(|id| QueryCollab {
-      object_id: id.clone(),
+      object_id: *id,
       collab_type: CollabType::Document,
     })
     .collect();

@@ -16,7 +16,7 @@ async fn generate_chat_message_answer_test() {
     custom_prompt: None,
     metadata: Some(CompletionMetadata {
       object_id: doc_id,
-      workspace_id: Some(workspace_id.clone()),
+      workspace_id: Some(workspace_id),
       rag_ids: None,
       completion_history: None,
     }),

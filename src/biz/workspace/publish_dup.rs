@@ -179,7 +179,7 @@ impl PublishCollabDuplicator {
     let start = Instant::now();
     for (oid, (collab_type, encoded_collab)) in collabs_to_insert.into_iter() {
       let params = CollabParams {
-        object_id: oid.clone(),
+        object_id: oid,
         encoded_collab_v1: encoded_collab.into(),
         collab_type,
       };
@@ -253,7 +253,7 @@ impl PublishCollabDuplicator {
           dest_workspace_id,
           &duplicator_uid,
           CollabParams {
-            object_id: ws_db_oid.clone(),
+            object_id: ws_db_oid,
             encoded_collab_v1: Bytes::from(updated_ws_w_db_collab),
             collab_type: CollabType::WorkspaceDatabase,
           },
@@ -313,8 +313,8 @@ impl PublishCollabDuplicator {
                 .body
                 .views
                 .insert(&mut folder_txn, view.clone(), None);
-              duplicated_view_ids.insert(view_id.clone());
-              inserted.push(view_id.clone());
+              duplicated_view_ids.insert(*view_id);
+              inserted.push(*view_id);
             }
           }
           if inserted.is_empty() {
@@ -408,7 +408,7 @@ impl PublishCollabDuplicator {
     // so we insert this knowledge into the duplicated_refs
     self
       .duplicated_refs
-      .insert(publish_view_id, new_view_id.clone().into());
+      .insert(publish_view_id, new_view_id.into());
 
     match metadata.view.layout {
       ViewLayout::Document => {
@@ -539,7 +539,7 @@ impl PublishCollabDuplicator {
     match self.duplicated_refs.get(&pub_view_id) {
       Some(new_view_id) => {
         if let Some(vid) = new_view_id {
-          Ok(Some(vid.clone()))
+          Ok(Some(*vid))
         } else {
           Ok(None)
         }
@@ -737,7 +737,7 @@ impl PublishCollabDuplicator {
     let new_db_id = gen_view_id();
     self
       .duplicated_refs
-      .insert(pub_db_id.clone(), Some(new_db_id.clone()));
+      .insert(pub_db_id, Some(new_db_id));
 
     {
       // assign new id to all views of database.
@@ -750,28 +750,26 @@ impl PublishCollabDuplicator {
         let new_db_view_id = if &db_view_id == pub_view_id {
           self
             .duplicated_db_main_view
-            .insert(pub_db_id.clone(), new_view_id.clone());
-          new_view_id.clone()
+            .insert(pub_db_id, new_view_id);
+          new_view_id
         } else {
           gen_view_id()
         };
         self
           .duplicated_db_view
-          .insert(db_view_id, new_db_view_id.clone());
+          .insert(db_view_id, new_db_view_id);
 
         new_db_view_ids.push(new_db_view_id);
       }
       // if there is no main view id, use the inline view id
-      if !self.duplicated_db_main_view.contains_key(&pub_db_id) {
-        self
-          .duplicated_db_main_view
-          .insert(pub_db_id.clone(), db_body.get_inline_view_id(&txn).parse()?);
+      if let std::collections::hash_map::Entry::Vacant(e) = self.duplicated_db_main_view.entry(pub_db_id) {
+        e.insert(db_body.get_inline_view_id(&txn).parse()?);
       };
 
       // Add this database as linked view
       self
         .workspace_databases
-        .insert(new_db_id.clone(), new_db_view_ids);
+        .insert(new_db_id, new_db_view_ids);
     }
 
     // assign new id to all rows of database.
@@ -781,7 +779,7 @@ impl PublishCollabDuplicator {
       let dup_row_id = Uuid::new_v4();
       self
         .duplicated_db_row
-        .insert(pub_row_id.clone(), dup_row_id);
+        .insert(*pub_row_id, dup_row_id);
     }
 
     {
@@ -793,7 +791,7 @@ impl PublishCollabDuplicator {
           if *key == FieldType::Relation.type_id() {
             if let Some(pub_db_id) = type_option_value.get_mut("database_id") {
               if let Any::String(pub_db_id_str) = pub_db_id {
-                let pub_db_uuid = Uuid::parse_str(&pub_db_id_str)?;
+                let pub_db_uuid = Uuid::parse_str(pub_db_id_str)?;
                 if let Some(&pub_rel_db_view) = published_db.database_relations.get(&pub_db_uuid) {
                   if let Some(_dup_view_id) = self
                     .deep_copy_view(pub_rel_db_view, self.dest_view_id)
@@ -821,14 +819,13 @@ impl PublishCollabDuplicator {
 
     // duplicate db collab rows
     for (pub_row_id, row_bin_data) in &published_db.database_row_collabs {
-      let dup_row_id = self
+      let dup_row_id = *self
         .duplicated_db_row
         .get(pub_row_id)
-        .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", pub_row_id)))?
-        .clone();
+        .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", pub_row_id)))?;
 
       let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
-      let mut db_row_body = DatabaseRowBody::open(pub_row_id.clone().into(), &mut db_row_collab)
+      let mut db_row_body = DatabaseRowBody::open((*pub_row_id).into(), &mut db_row_collab)
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
       {
@@ -845,7 +842,7 @@ impl PublishCollabDuplicator {
 
         // updates row id along with meta keys
         db_row_body
-          .update_id(&mut txn, dup_row_id.clone().into())
+          .update_id(&mut txn, dup_row_id.into())
           .map_err(|e| AppError::Unhandled(format!("failed to update row id: {:?}", e)))?;
 
         // duplicate row document if exists
@@ -871,7 +868,7 @@ impl PublishCollabDuplicator {
                 new_doc_view.parent_view_id = dup_row_doc_id.to_string(); // orphan folder view
                 self
                   .views_to_add
-                  .insert(dup_row_doc_id.clone(), new_doc_view);
+                  .insert(dup_row_doc_id, new_doc_view);
               },
               Err(err) => tracing::error!("failed to open row document: {}", err),
             };
@@ -972,7 +969,7 @@ impl PublishCollabDuplicator {
         for row_order in db_view.row_orders.iter_mut() {
           let row_order_id = Uuid::parse_str(&row_order.id)?;
           if let Some(new_id) = self.duplicated_db_row.get(&row_order_id) {
-            row_order.id = new_id.clone().into();
+            row_order.id = (*new_id).into();
           } else {
             // skip if row not found
             tracing::warn!("row not found: {}", row_order.id);
@@ -997,7 +994,7 @@ impl PublishCollabDuplicator {
     let db_encoded_collab = collab_to_bin(db_collab, CollabType::Database).await?;
     self
       .collabs_to_insert
-      .insert(new_db_id.clone(), (CollabType::Database, db_encoded_collab));
+      .insert(new_db_id, (CollabType::Database, db_encoded_collab));
 
     Ok((pub_db_id, new_db_id, false))
   }
@@ -1065,7 +1062,7 @@ impl PublishCollabDuplicator {
       AppError::RecordNotFound(format!("metadata not found for view: {}", pub_view_id))
     })?;
     let main_folder_view = self.new_folder_view(
-      main_view_id.clone(),
+      *main_view_id,
       main_view_info,
       main_view_info.layout.clone(),
     );
@@ -1087,7 +1084,7 @@ impl PublishCollabDuplicator {
       })?;
 
       let mut child_folder_view = self.new_folder_view(
-        child_view_id.clone(),
+        *child_view_id,
         view_info_by_id.get(&vis_view_id).ok_or_else(|| {
           AppError::RecordNotFound(format!("metadata not found for view: {}", vis_view_id))
         })?,

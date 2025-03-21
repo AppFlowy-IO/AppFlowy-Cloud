@@ -306,7 +306,7 @@ async fn perform_upload_test(
 async fn invalid_test() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;
-  let parent_dir = workspace_id.clone();
+  let parent_dir = workspace_id;
   let file_id = uuid::Uuid::new_v4().to_string();
   let mime = mime::TEXT_PLAIN_UTF_8;
 

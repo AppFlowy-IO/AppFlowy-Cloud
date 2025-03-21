@@ -25,7 +25,7 @@ async fn get_workpace_folder() {
     .get_workspace_folder(
       &workspace_id,
       Some(1),
-      Some(folder_view.children[0].view_id.clone()),
+      Some(folder_view.children[0].view_id),
     )
     .await
     .unwrap();

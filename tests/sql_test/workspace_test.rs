@@ -165,7 +165,7 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
   // Two items with the same oid and partition_key
   let collab_params_list = vec![
     CollabParams {
-      object_id: object_id,
+      object_id,
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encoded_collab_v1.clone().into(),
     },

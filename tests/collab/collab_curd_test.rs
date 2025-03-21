@@ -62,7 +62,7 @@ async fn create_collab_params_compatibility_serde_test() {
     .unwrap();
 
   let old_version_value = json!(InsertCollabParams {
-    object_id: object_id,
+    object_id,
     encoded_collab_v1: encoded_collab_v1.clone(),
     workspace_id: WORKSPACE_ID,
     collab_type: CollabType::Document,
@@ -130,7 +130,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     .json(&QueryCollabParams {
       workspace_id,
       inner: QueryCollab {
-        object_id: object_id,
+        object_id,
         collab_type: CollabType::Unknown,
       },
     })

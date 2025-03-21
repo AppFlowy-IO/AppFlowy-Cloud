@@ -52,3 +52,30 @@ create index if not exists idx_workspace_id_on_af_collab
 
 create index if not exists idx_af_collab_updated_at
     on af_collab (updated_at);
+
+create or replace procedure af_collab_embeddings_upsert(IN p_workspace_id uuid, IN p_oid text, IN p_tokens_used integer, IN p_fragments af_fragment_v3[])
+    language plpgsql
+as
+$$
+BEGIN
+DELETE FROM af_collab_embeddings WHERE oid = p_oid;
+INSERT INTO af_collab_embeddings (fragment_id, oid, content_type, content, embedding, indexed_at, metadata, fragment_index, embedder_type)
+SELECT
+    f.fragment_id,
+    p_oid,
+    f.content_type,
+    f.contents,
+    f.embedding,
+    NOW(),
+    f.metadata,
+    f.fragment_index,
+    f.embedder_type
+FROM UNNEST(p_fragments) as f;
+
+-- Update the usage tracking table
+INSERT INTO af_workspace_ai_usage(created_at, workspace_id, search_requests, search_tokens_consumed, index_tokens_consumed)
+VALUES (now()::date, p_workspace_id, 0, 0, p_tokens_used)
+    ON CONFLICT (created_at, workspace_id)
+    DO UPDATE SET index_tokens_consumed = af_workspace_ai_usage.index_tokens_consumed + p_tokens_used;
+END
+$$;

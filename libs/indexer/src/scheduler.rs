@@ -464,7 +464,6 @@ pub(crate) async fn batch_insert_records(
       &mut txn,
       &record.workspace_id,
       &record.object_id,
-      record.collab_type,
       record.tokens_used,
       record.contents,
     )

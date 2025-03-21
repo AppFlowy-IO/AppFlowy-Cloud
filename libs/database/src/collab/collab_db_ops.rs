@@ -171,7 +171,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
       r#"
         INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
         SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::bigint[], $6::uuid[])
-        ON CONFLICT (oid, partition_key)
+        ON CONFLICT (oid)
         DO UPDATE SET blob = excluded.blob, len = excluded.len where af_collab.workspace_id = excluded.workspace_id
       "#,
       &object_ids,

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT oid, indexed_at\n        FROM af_collab\n        WHERE oid = ANY (SELECT UNNEST($1::uuid[]))\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "oid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "indexed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "3865d921d76ac0d0eb16065738cddf82cb71945504116b0a04da759209b9c250"
+}

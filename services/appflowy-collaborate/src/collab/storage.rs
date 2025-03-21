@@ -481,7 +481,7 @@ where
                 },
               };
 
-              (object_id.clone(), query_collab_result)
+              (object_id, query_collab_result)
             })
             .collect()
         })

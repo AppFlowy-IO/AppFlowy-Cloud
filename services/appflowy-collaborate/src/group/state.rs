@@ -42,7 +42,7 @@ impl GroupManagementState {
     for entry in self.group_by_object_id.iter() {
       let (object_id, group) = (entry.key(), entry.value());
       if group.is_inactive() {
-        inactive_group_ids.push(object_id.clone());
+        inactive_group_ids.push(*object_id);
         if inactive_group_ids.len() > self.remove_batch_size {
           break;
         }

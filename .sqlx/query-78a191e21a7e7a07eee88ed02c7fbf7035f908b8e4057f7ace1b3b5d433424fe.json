@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE af_collab\n        SET deleted_at = $2\n        WHERE oid = $1;\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "78a191e21a7e7a07eee88ed02c7fbf7035f908b8e4057f7ace1b3b5d433424fe"
+}

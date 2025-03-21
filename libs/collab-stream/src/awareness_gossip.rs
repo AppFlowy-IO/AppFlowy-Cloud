@@ -12,33 +12,34 @@ use uuid::Uuid;
 pub struct AwarenessGossip {
   conn: MultiplexedConnection,
   collabs: Arc<DashMap<Uuid, UnboundedSender<AwarenessStreamUpdate>>>,
+  workspaces: Arc<DashMap<Uuid, UnboundedSender<(Uuid, AwarenessStreamUpdate)>>>,
 }
 
 impl AwarenessGossip {
   pub async fn new(client: &Client) -> Result<Self, RedisError> {
     let collabs: Arc<DashMap<Uuid, UnboundedSender<AwarenessStreamUpdate>>> =
       Arc::new(DashMap::new());
+    let workspaces: Arc<DashMap<Uuid, UnboundedSender<(Uuid, AwarenessStreamUpdate)>>> =
+      Arc::new(DashMap::new());
     let mut pub_sub = client.get_async_pubsub().await?;
     pub_sub.psubscribe("af:awareness:*").await?;
     let conn = client.get_multiplexed_async_connection().await?;
 
     let weak_collabs = Arc::downgrade(&collabs);
+    let workspaces_clone = workspaces.clone();
     let _receive_awareness_pubsub = tokio::spawn(async move {
       let mut stream = pub_sub.into_on_message();
       while let Some(message) = stream.next().await {
         if let Some(collabs) = weak_collabs.upgrade() {
-          let collabs_clone = collabs.clone();
           match Self::parse_update(message) {
-            Ok((object_id, awareness_update)) => {
-              let dropped = if let Some(channel) = collabs_clone.get(&object_id) {
-                let channel = channel.value();
-                channel.send(awareness_update).is_err()
-              } else {
-                false
-              };
-              if dropped {
-                collabs.remove(&object_id);
-              }
+            Ok((workspace_id, object_id, awareness_update)) => {
+              Self::dispatch_collab_awareness_update(
+                &collabs,
+                &workspaces_clone,
+                workspace_id,
+                object_id,
+                awareness_update,
+              );
             },
             Err(err) => tracing::error!("failed to parse awareness message: {}", err),
           }
@@ -47,7 +48,38 @@ impl AwarenessGossip {
         }
       }
     });
-    Ok(Self { conn, collabs })
+    Ok(Self {
+      conn,
+      collabs,
+      workspaces,
+    })
+  }
+
+  fn dispatch_collab_awareness_update(
+    collabs: &DashMap<Uuid, UnboundedSender<AwarenessStreamUpdate>>,
+    workspaces: &DashMap<Uuid, UnboundedSender<(Uuid, AwarenessStreamUpdate)>>,
+    workspace_id: Uuid,
+    object_id: Uuid,
+    awareness_update: AwarenessStreamUpdate,
+  ) {
+    // try new per-workspace awareness stream
+    if let Some(channel) = workspaces.get(&workspace_id) {
+      let channel = channel.value();
+      if channel.send((object_id, awareness_update)).is_err() {
+        workspaces.remove(&workspace_id);
+      }
+    } else {
+      // fallback to per-collab awareness stream
+      let dropped = if let Some(channel) = collabs.get(&object_id) {
+        let channel = channel.value();
+        channel.send(awareness_update).is_err()
+      } else {
+        false
+      };
+      if dropped {
+        collabs.remove(&object_id);
+      }
+    }
   }
 
   pub async fn send(
@@ -57,9 +89,9 @@ impl AwarenessGossip {
     update: &AwarenessStreamUpdate,
   ) -> Result<(), StreamError> {
     let json = serde_json::to_string(update)?;
-    let key = AwarenessGossip::publish_key(workspace_id, object_id);
-    let mut pubsub = self.client.get_multiplexed_async_connection().await?;
-    pubsub.publish(key, json).await?;
+    let publish_key = format!("af:awareness:{workspace_id}:{object_id}");
+    let mut pubsub = self.conn.clone();
+    pubsub.publish(publish_key, json).await?;
     Ok(())
   }
 
@@ -72,25 +104,39 @@ impl AwarenessGossip {
     Ok(sink)
   }
 
-  pub fn awareness_stream(&self, object_id: &Uuid) -> UnboundedReceiver<AwarenessStreamUpdate> {
+  pub fn collab_awareness_stream(
+    &self,
+    object_id: &Uuid,
+  ) -> UnboundedReceiver<AwarenessStreamUpdate> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     self.collabs.insert(*object_id, tx);
     rx
   }
 
-  fn parse_update(msg: redis::Msg) -> Result<(Uuid, AwarenessStreamUpdate), StreamError> {
+  fn parse_update(msg: redis::Msg) -> Result<(Uuid, Uuid, AwarenessStreamUpdate), StreamError> {
     let channel_name = msg.get_channel_name();
-    let last_segment = channel_name
-      .split(':')
-      .last()
+    tracing::trace!("received awareness stream update for {}", channel_name);
+    let (workspace_id, object_id) = Self::parse_channel_name(channel_name)
       .ok_or_else(|| StreamError::InvalidStreamKey(channel_name.to_string()))?;
-    let object_id =
-      Uuid::parse_str(last_segment).map_err(|e| StreamError::InvalidStreamKey(e.to_string()))?;
     let payload = msg.get_payload_bytes();
     let update = serde_json::from_slice::<AwarenessStreamUpdate>(payload)
       .map_err(StreamError::SerdeJsonError)?;
-    tracing::trace!("received awareness stream update for {}", channel_name);
-    Ok((object_id, update))
+    Ok((workspace_id, object_id, update))
+  }
+
+  fn parse_channel_name(channel_name: &str) -> Option<(Uuid, Uuid)> {
+    let mut channel_segments = channel_name.split(':');
+    if channel_segments.next() != Some("af") {
+      return None;
+    }
+    if channel_segments.next() != Some("awareness") {
+      return None;
+    }
+    let workspace_id = channel_segments.next()?;
+    let workspace_id = Uuid::parse_str(workspace_id).ok()?;
+    let object_id = channel_segments.next()?;
+    let object_id = Uuid::parse_str(object_id).ok()?;
+    Some((workspace_id, object_id))
   }
 }
 

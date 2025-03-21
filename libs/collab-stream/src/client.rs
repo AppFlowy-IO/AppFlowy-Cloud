@@ -133,7 +133,7 @@ impl CollabRedisStream {
   }
 
   pub fn awareness_updates(&self, object_id: &Uuid) -> UnboundedReceiver<AwarenessStreamUpdate> {
-    self.awareness_gossip.awareness_stream(object_id)
+    self.awareness_gossip.collab_awareness_stream(object_id)
   }
 
   pub async fn prune_update_stream(

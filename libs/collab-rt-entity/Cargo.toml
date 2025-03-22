@@ -21,7 +21,6 @@ database-entity.workspace = true
 yrs.workspace = true
 collab-rt-protocol.workspace = true
 serde_repr = "0.1"
-brotli = { version = "3.4.0", optional = true }
 chrono = "0.4"
 
 [build-dependencies]
@@ -31,4 +30,3 @@ prost-build = "0.12.3"
 [features]
 actix_message = ["actix"]
 tungstenite = ["tokio-tungstenite"]
-rt_compress = ["brotli"]

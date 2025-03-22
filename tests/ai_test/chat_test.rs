@@ -357,7 +357,7 @@ async fn get_format_question_message_test() {
 
   let answer_stream = test_client
     .api_client
-    .stream_answer_v3(&workspace_id, query)
+    .stream_answer_v3(&workspace_id, query, None)
     .await
     .unwrap();
   let answer = collect_answer(answer_stream, None).await;
@@ -412,7 +412,7 @@ async fn get_text_with_image_message_test() {
 
   let answer_stream = test_client
     .api_client
-    .stream_answer_v3(&workspace_id, query)
+    .stream_answer_v3(&workspace_id, query, None)
     .await
     .unwrap();
   let answer = collect_answer(answer_stream, None).await;

@@ -152,7 +152,7 @@ impl RealtimeMessage {
 
   #[cfg(feature = "rt_compress")]
   pub fn decode(data: &[u8]) -> Result<Self, Error> {
-    if data.starts_with(COMPRESSED_PREFIX) {
+    let data = if data.starts_with(COMPRESSED_PREFIX) {
       let data_without_prefix = &data[COMPRESSED_PREFIX.len()..];
       let mut decompressor = Decompressor::new(data_without_prefix, 4096);
       let mut decompressed_data = Vec::new();
@@ -160,7 +160,7 @@ impl RealtimeMessage {
       decompressed_data
     } else {
       data.to_vec()
-    }
+    };
 
     let message = DefaultOptions::new()
       .with_fixint_encoding()

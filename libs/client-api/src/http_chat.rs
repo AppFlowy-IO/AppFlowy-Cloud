@@ -176,13 +176,14 @@ impl Client {
     &self,
     workspace_id: &str,
     query: ChatQuestionQuery,
+    chat_model: Option<String>,
   ) -> Result<QuestionStream, AppResponseError> {
     let url = format!(
       "{}/api/chat/{workspace_id}/{}/answer/stream",
       self.base_url, query.chat_id
     );
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_model(Method::POST, &url, chat_model)
       .await?
       .timeout(Duration::from_secs(60))
       .json(&query)

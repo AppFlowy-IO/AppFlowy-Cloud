@@ -1107,6 +1107,20 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn http_client_with_model(
+    &self,
+    method: Method,
+    url: &str,
+    ai_model: Option<String>,
+  ) -> Result<RequestBuilder, AppResponseError> {
+    let mut builder = self.http_client_with_auth(method, url).await?;
+    if let Some(ai_model) = ai_model {
+      builder = builder.header("ai-model", ai_model)
+    }
+    Ok(builder)
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub(crate) async fn http_client_with_auth_compress(
     &self,
     method: Method,

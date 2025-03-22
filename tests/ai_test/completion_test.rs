@@ -25,7 +25,7 @@ async fn generate_chat_message_answer_test() {
 
   let stream = test_client
     .api_client
-    .stream_completion_v2(&workspace_id, params)
+    .stream_completion_v2(&workspace_id, params, None)
     .await
     .unwrap();
   let (answer, comment) = collect_completion_v2(stream).await;

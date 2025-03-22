@@ -29,7 +29,7 @@ where
 
     if !status_code.is_success() {
       let body = resp.text().await?;
-      return Err(AppResponseError::new(ErrorCode::Internal, body));
+      return Err(AppResponseError::new(ErrorCode::AIResponseError, body));
     }
 
     let stream = resp.bytes_stream().map_err(|err| {

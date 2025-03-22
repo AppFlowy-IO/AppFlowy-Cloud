@@ -1086,7 +1086,6 @@ impl Client {
       ("client-version", self.client_version.to_string()),
       ("client-timestamp", ts_now.to_string()),
       ("device-id", self.device_id.clone()),
-      ("ai-model", self.ai_model.read().clone()),
     ];
     trace!(
       "start request: {}, method: {}, headers: {:?}",
@@ -1104,6 +1103,23 @@ impl Client {
       request_builder = request_builder.header(header.0, header.1);
     }
     Ok(request_builder)
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn http_client_with_model(
+    &self,
+    method: Method,
+    url: &str,
+    ai_model: Option<String>,
+  ) -> Result<RequestBuilder, AppResponseError> {
+    let mut builder = self.http_client_with_auth(method, url).await?;
+    let effective_ai_model = match ai_model {
+      Some(model) => model,
+      None => self.ai_model.read().clone(),
+    };
+
+    builder = builder.header("ai-model", effective_ai_model);
+    Ok(builder)
   }
 
   #[instrument(level = "debug", skip_all, err)]

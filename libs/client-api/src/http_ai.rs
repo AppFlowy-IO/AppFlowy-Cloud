@@ -20,7 +20,7 @@ impl Client {
   ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
     let url = format!("{}/api/ai/{}/complete/stream", self.base_url, workspace_id);
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_model(Method::POST, &url, None)
       .await?
       .json(&params)
       .send()
@@ -33,13 +33,14 @@ impl Client {
     &self,
     workspace_id: &str,
     params: CompleteTextParams,
+    ai_model: Option<String>,
   ) -> Result<CompletionStream, AppResponseError> {
     let url = format!(
       "{}/api/ai/{}/v2/complete/stream",
       self.base_url, workspace_id
     );
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_model(Method::POST, &url, ai_model)
       .await?
       .json(&params)
       .send()
@@ -60,7 +61,7 @@ impl Client {
     );
 
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_model(Method::POST, &url, None)
       .await?
       .json(&params)
       .send()
@@ -83,7 +84,7 @@ impl Client {
     );
 
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_model(Method::POST, &url, None)
       .await?
       .json(&params)
       .timeout(Duration::from_secs(30))

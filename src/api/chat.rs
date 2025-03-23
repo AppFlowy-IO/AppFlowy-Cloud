@@ -347,6 +347,7 @@ async fn answer_stream_v2_handler(
       )
     },
     Err(err) => {
+      trace!("[Chat] stream answer failed: {}", err);
       state.metrics.ai_metrics.record_failed_stream_count(1);
       Ok(
         HttpResponse::ServiceUnavailable()

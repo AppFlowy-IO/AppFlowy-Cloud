@@ -448,6 +448,7 @@ pub enum ErrorCode {
   MemberNotFound = 1063,
   InvalidBlock = 1064,
   RequestTimeout = 1065,
+  AIResponseError = 1066,
 }
 
 impl ErrorCode {

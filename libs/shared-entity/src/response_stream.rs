@@ -29,10 +29,15 @@ where
 
     if !status_code.is_success() {
       let body = resp.text().await?;
-      return Err(AppResponseError::new(ErrorCode::Internal, body));
+      return Err(AppResponseError::new(ErrorCode::AIResponseError, body));
     }
 
-    let stream = resp.bytes_stream().map_err(AppResponseError::from);
+    let stream = resp.bytes_stream().map_err(|err| {
+      AppResponseError::new(
+        ErrorCode::SerdeError,
+        format!("Error reading response stream: {}", err),
+      )
+    });
     let stream = check_first_item_response_error(stream).await?;
     Ok(JsonStream::<T, _, AppResponseError>::new(stream))
   }

@@ -22,7 +22,7 @@ use tracing::{error, instrument, trace};
 pub fn ai_completion_scope() -> Scope {
   web::scope("/api/ai/{workspace_id}")
     .service(web::resource("/complete/stream").route(web::post().to(stream_complete_text_handler)))
-    .service(web::resource("v2/complete/stream").route(web::post().to(stream_complete_v2_handler)))
+    .service(web::resource("/v2/complete/stream").route(web::post().to(stream_complete_v2_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
     .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
     .service(web::resource("/local/config").route(web::get().to(local_ai_config_handler)))

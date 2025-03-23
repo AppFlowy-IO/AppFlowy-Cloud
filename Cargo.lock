@@ -2067,7 +2067,6 @@ dependencies = [
  "actix",
  "anyhow",
  "bincode",
- "brotli 3.5.0",
  "bytes",
  "chrono",
  "collab",

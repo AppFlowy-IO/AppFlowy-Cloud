@@ -6,14 +6,10 @@ use crate::client_message::ClientCollabMessage;
 use crate::server_message::ServerCollabMessage;
 use crate::user::UserMessage;
 use crate::{AwarenessSync, BroadcastSync, CollabAck, InitSync, ServerInit, UpdateSync};
-#[cfg(feature = "rt_compress")]
-use brotli::{CompressorReader, Decompressor};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-#[cfg(feature = "rt_compress")]
-use std::io::Read;
 use std::ops::{Deref, DerefMut};
 
 /// Maximum allowable size for a realtime message.
@@ -23,10 +19,6 @@ use std::ops::{Deref, DerefMut};
 /// This limit helps prevent server issues like overloads and denial-of-service attacks by rejecting
 /// overly large messages.
 pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
-
-/// 1 for using brotli compression
-#[cfg(feature = "rt_compress")]
-const COMPRESSED_PREFIX: &[u8] = b"COMPRESSED:1";
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MessageByObjectId(pub HashMap<String, Vec<ClientCollabMessage>>);
@@ -109,31 +101,6 @@ impl RealtimeMessage {
     }
   }
 
-  #[cfg(feature = "rt_compress")]
-  pub fn encode(&self) -> Result<Vec<u8>, Error> {
-    let data = DefaultOptions::new()
-      .with_fixint_encoding()
-      .allow_trailing_bytes()
-      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
-      .serialize(self)
-      .map_err(|e| {
-        anyhow!(
-          "Failed to encode realtime message: {}, object_id:{:?}",
-          e,
-          self.object_id()
-        )
-      })?;
-
-    let mut compressor = CompressorReader::new(&*data, 4096, 4, 22);
-    let mut compressed_data = Vec::new();
-    compressor.read_to_end(&mut compressed_data)?;
-    let mut data = Vec::new();
-    data.extend_from_slice(COMPRESSED_PREFIX);
-    data.extend(compressed_data);
-    Ok(data)
-  }
-
-  #[cfg(not(feature = "rt_compress"))]
   pub fn encode(&self) -> Result<Vec<u8>, Error> {
     let data = DefaultOptions::new()
       .with_fixint_encoding()
@@ -150,27 +117,6 @@ impl RealtimeMessage {
     Ok(data)
   }
 
-  #[cfg(feature = "rt_compress")]
-  pub fn decode(data: &[u8]) -> Result<Self, Error> {
-    let data = if data.starts_with(COMPRESSED_PREFIX) {
-      let data_without_prefix = &data[COMPRESSED_PREFIX.len()..];
-      let mut decompressor = Decompressor::new(data_without_prefix, 4096);
-      let mut decompressed_data = Vec::new();
-      decompressor.read_to_end(&mut decompressed_data)?;
-      decompressed_data
-    } else {
-      data.to_vec()
-    };
-
-    let message = DefaultOptions::new()
-      .with_fixint_encoding()
-      .allow_trailing_bytes()
-      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
-      .deserialize(&data)?;
-    Ok(message)
-  }
-
-  #[cfg(not(feature = "rt_compress"))]
   pub fn decode(data: &[u8]) -> Result<Self, Error> {
     let message = DefaultOptions::new()
       .with_fixint_encoding()

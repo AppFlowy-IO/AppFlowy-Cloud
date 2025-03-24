@@ -3,23 +3,12 @@ name = "appflowy-collaborate"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[[bin]]
-name = "appflowy_collaborate"
-path = "src/main.rs"
-
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
 access-control.workspace = true
 actix.workspace = true
-actix-web.workspace = true
-actix-http = { workspace = true, default-features = false, features = [
-  "openssl",
-  "compress-brotli",
-  "compress-gzip",
-] }
 actix-web-actors = { version = "4.3" }
 app-error = { workspace = true, features = [
   "sqlx_error",
@@ -28,10 +17,8 @@ app-error = { workspace = true, features = [
   "bincode_error",
   "appflowy_ai_error",
 ] }
-authentication.workspace = true
 brotli.workspace = true
 dashmap.workspace = true
-dotenvy.workspace = true
 async-stream.workspace = true
 futures.workspace = true
 tracing = "0.1.40"
@@ -57,7 +44,6 @@ sqlx = { workspace = true, default-features = false, features = [
   "chrono",
 ] }
 thiserror = "1.0.56"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 anyhow.workspace = true
 bytes.workspace = true
 arc-swap.workspace = true
@@ -79,15 +65,10 @@ prometheus-client = "0.22.1"
 semver = "1.0.22"
 redis = "0.25.2"
 secrecy.workspace = true
-shared-entity = { workspace = true, features = ["cloud"] }
 lazy_static = "1.4.0"
 itertools = "0.12.0"
 validator.workspace = true
 rayon.workspace = true
-aws-sdk-s3 = { version = "1.36.0", features = [
-  "behavior-version-latest",
-  "rt-tokio",
-] }
 zstd.workspace = true
 indexer.workspace = true
 

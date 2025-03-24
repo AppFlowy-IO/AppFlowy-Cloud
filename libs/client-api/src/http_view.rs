@@ -1,7 +1,7 @@
 use client_api_entity::workspace_dto::{
-  AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams,
-  DuplicatePageParams, FavoritePageParams, MovePageParams, Page, PageCollab, PublishPageParams,
-  Space, UpdatePageParams, UpdateSpaceParams,
+  AddRecentPagesParams, AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams,
+  CreateSpaceParams, DuplicatePageParams, FavoritePageParams, MovePageParams, Page, PageCollab,
+  PublishPageParams, Space, UpdatePageParams, UpdateSpaceParams,
 };
 use reqwest::Method;
 use serde_json::json;
@@ -112,6 +112,24 @@ impl Client {
       .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&json!({}))
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn add_recent_pages(
+    &self,
+    workspace_id: Uuid,
+    params: &AddRecentPagesParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/add-recent-pages",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()

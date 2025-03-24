@@ -15,6 +15,7 @@ use std::sync::Arc;
 use yrs::block::ClientID;
 use yrs::updates::encoder::Encode;
 
+#[derive(Clone)]
 struct SessionHandle {
   collab_origin: CollabOrigin,
   conn: Addr<WsSession>,
@@ -60,16 +61,11 @@ impl Workspace {
     }
   }
 
-  async fn hande_ws_input(store: Arc<CollabStore>, sender: Addr<WsSession>, msg: WsInput) {
+  async fn hande_ws_input(store: Arc<CollabStore>, sender: SessionHandle, msg: WsInput) {
     match msg.message {
-      InputMessage::Manifest(rid, state_vector) => {
+      InputMessage::Manifest(collab_type, rid, state_vector) => {
         match store
-          .get_latest_state(
-            msg.workspace_id,
-            msg.object_id,
-            msg.collab_type,
-            &state_vector,
-          )
+          .get_latest_state(msg.workspace_id, msg.object_id, collab_type, &state_vector)
           .await
         {
           Ok(state) => {
@@ -79,10 +75,10 @@ impl Workspace {
               rid,
               state.rid
             );
-            sender.do_send(WsOutput {
+            sender.conn.do_send(WsOutput {
               message: ServerMessage::Update {
                 object_id: msg.object_id,
-                collab_type: msg.collab_type,
+                collab_type,
                 flags: state.flags,
                 last_message_id: state.rid,
                 update: state.update.into(),
@@ -99,7 +95,7 @@ impl Workspace {
           },
         };
       },
-      InputMessage::Update(update) => {
+      InputMessage::Update(collab_type, update) => {
         if let Err(err) = store
           .publish_update(
             msg.workspace_id,
@@ -114,7 +110,12 @@ impl Workspace {
       },
       InputMessage::AwarenessUpdate(update) => {
         if let Err(err) = store
-          .publish_awareness_update(msg.workspace_id, msg.object_id, msg.sender, update)
+          .publish_awareness_update(
+            msg.workspace_id,
+            msg.object_id,
+            sender.collab_origin.clone(),
+            update,
+          )
           .await
         {
           tracing::error!("failed to publish awareness update: {:?}", err);
@@ -138,7 +139,7 @@ impl Actor for Workspace {
     let stream = self
       .store
       .awareness()
-      .collab_awareness_stream(&self.workspace_id);
+      .workspace_awareness_stream(&self.workspace_id);
     self.awareness_handle = Some(ctx.add_stream(stream));
     self.snapshot_handle = Some(ctx.notify_later(Snapshot, Self::SNAPSHOT_INTERVAL));
   }
@@ -198,41 +199,28 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
   }
 }
 
-impl StreamHandler<Result<(ObjectId, AwarenessStreamUpdate), StreamError>> for Workspace {
+impl StreamHandler<(ObjectId, AwarenessStreamUpdate)> for Workspace {
   fn handle(
     &mut self,
-    item: Result<(ObjectId, AwarenessStreamUpdate), StreamError>,
+    (object_id, msg): (ObjectId, AwarenessStreamUpdate),
     ctx: &mut Self::Context,
   ) {
-    match item {
-      Ok((object_id, msg)) => {
-        tracing::trace!(
-          "received awareness update for {}/{}",
-          self.workspace_id,
-          object_id
-        );
-        for (session_id, sender) in self.sessions_by_client_id.iter() {
-          if sender.collab_origin == msg.sender {
-            continue; // skip the sender
-          }
-          tracing::trace!("sending awareness update to {}", session_id);
-          sender.conn.do_send(WsOutput {
-            message: ServerMessage::AwarenessUpdate {
-              object_id,
-              collab_type: msg.collab_type,
-              awareness: msg.data.encode_v1().into(),
-            },
-          });
-        }
-      },
-      Err(err) => {
-        tracing::error!(
-          "failed to read awareness stream message for workpsace {}: {:?}",
-          self.workspace_id,
-          err
-        );
-        ctx.stop();
-      },
+    tracing::trace!(
+      "received awareness update for {}/{}",
+      self.workspace_id,
+      object_id
+    );
+    for (session_id, sender) in self.sessions_by_client_id.iter() {
+      if sender.collab_origin == msg.sender {
+        continue; // skip the sender
+      }
+      tracing::trace!("sending awareness update to {}", session_id);
+      sender.conn.do_send(WsOutput {
+        message: ServerMessage::AwarenessUpdate {
+          object_id,
+          awareness: msg.data.encode_v1().into(),
+        },
+      });
     }
   }
 }
@@ -294,9 +282,8 @@ impl Handler<WsInput> for Workspace {
   fn handle(&mut self, msg: WsInput, _: &mut Self::Context) -> Self::Result {
     let store = self.store.clone();
     if let Some(sender) = self.sessions_by_client_id.get(&msg.sender) {
-      let sender = sender.conn.clone();
       AtomicResponse::new(Box::pin(
-        Self::hande_ws_input(store, sender, msg).into_actor(self),
+        Self::hande_ws_input(store, sender.clone(), msg).into_actor(self),
       ))
     } else {
       AtomicResponse::new(Box::pin(fut::ready(())))

@@ -3,10 +3,12 @@ use crate::ws2::messages::UpdateStreamMessage;
 use anyhow::anyhow;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
+use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
 use collab_stream::metrics::CollabStreamMetrics;
+use collab_stream::model::AwarenessStreamUpdate;
 use collab_stream::stream_router::{FromRedisStream, StreamRouter};
 use database_entity::dto::QueryCollab;
 use redis::aio::ConnectionManager;
@@ -49,7 +51,7 @@ impl CollabStore {
   ) -> anyhow::Result<Arc<Self>> {
     let connection_manager = ConnectionManager::new(client.clone()).await?;
     let update_streams = StreamRouter::new(&client, metrics.clone())?;
-    let awareness_broadcast = AwarenessGossip::new(client);
+    let awareness_broadcast = AwarenessGossip::new(&client).await?;
     Ok(Arc::new(Self {
       collab_cache,
       update_streams,
@@ -278,13 +280,18 @@ impl CollabStore {
     &self,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
-    sender: ClientID,
+    sender: CollabOrigin,
     update: AwarenessUpdate,
   ) -> anyhow::Result<()> {
+    let msg = AwarenessStreamUpdate {
+      data: update,
+      sender,
+    };
     self
       .awareness_broadcast
-      .sink(workspace_id, object_id, sender, update)
-      .await
+      .send(&workspace_id.to_string(), &object_id.to_string(), &msg)
+      .await?;
+    Ok(())
   }
 
   async fn save_snapshot_task(
@@ -355,14 +362,21 @@ impl CollabStore {
       let mut join_set = JoinSet::new();
       let mut i = 0;
       for (object_id, updates) in updates {
+        let collab_type = if updates.is_empty() {
+          continue;
+        } else {
+          updates[0].collab_type
+        };
         let doc = Doc::new();
         let mut tx = doc.transact_mut();
         let mut rid = Rid::default();
-        if let Some(bytes) = self.get_snapshot(workspace_id, object_id).await? {
-          let (rid_bytes, update) = bytes.split_at(10);
-          rid = Rid::from_bytes(rid_bytes)?;
-          tx.apply_update(Update::decode_v2(&update)?)?;
-        }
+        let bytes = self
+          .get_snapshot(workspace_id, object_id, collab_type)
+          .await?;
+        let (rid_bytes, update) = bytes.split_at(10);
+        rid = Rid::from_bytes(rid_bytes)?;
+        tx.apply_update(Update::decode_v2(&update)?)?;
+
         for update in updates {
           rid = rid.max(update.last_message_id);
           let update = match update.update_flags {

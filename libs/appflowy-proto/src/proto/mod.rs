@@ -84,7 +84,6 @@ pub enum ClientMessage {
   },
   AwarenessUpdate {
     object_id: ObjectId,
-    collab_type: CollabType,
     awareness: Vec<u8>,
   },
 }
@@ -98,11 +97,11 @@ impl ClientMessage {
     }
   }
 
-  pub fn collab_type(&self) -> &CollabType {
+  pub fn collab_type(&self) -> Option<&CollabType> {
     match self {
-      ClientMessage::Manifest { collab_type, .. } => collab_type,
-      ClientMessage::Update { collab_type, .. } => collab_type,
-      ClientMessage::AwarenessUpdate { collab_type, .. } => collab_type,
+      ClientMessage::Manifest { collab_type, .. } => Some(collab_type),
+      ClientMessage::Update { collab_type, .. } => Some(collab_type),
+      ClientMessage::AwarenessUpdate { .. } => None,
     }
   }
 
@@ -152,12 +151,10 @@ impl From<ClientMessage> for messages::Message {
       },
       ClientMessage::AwarenessUpdate {
         object_id,
-        collab_type,
         awareness,
       } => messages::Message {
         message: Some(ProtoMessage::AwarenessUpdate(messages::AwarenessUpdate {
           object_id: object_id.as_bytes().to_vec(),
-          collab_type: collab_type as i32,
           payload: awareness,
         })),
       },
@@ -196,7 +193,6 @@ impl TryFrom<messages::Message> for ClientMessage {
       }),
       Some(ProtoMessage::AwarenessUpdate(proto)) => Ok(ClientMessage::AwarenessUpdate {
         object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
-        collab_type: CollabType::from(proto.collab_type),
         awareness: proto.payload,
       }),
       _ => Err(Error::MissingFields),
@@ -221,7 +217,6 @@ pub enum ServerMessage {
   },
   AwarenessUpdate {
     object_id: ObjectId,
-    collab_type: CollabType,
     awareness: Bytes,
   },
   PermissionDenied {
@@ -291,12 +286,10 @@ impl From<ServerMessage> for messages::Message {
       },
       ServerMessage::AwarenessUpdate {
         object_id,
-        collab_type,
         awareness,
       } => messages::Message {
         message: Some(ProtoMessage::AwarenessUpdate(messages::AwarenessUpdate {
           object_id: object_id.as_bytes().to_vec(),
-          collab_type: collab_type as i32,
           payload: awareness.into(),
         })),
       },
@@ -350,7 +343,6 @@ impl TryFrom<messages::Message> for ServerMessage {
       },
       Some(ProtoMessage::AwarenessUpdate(proto)) => Ok(ServerMessage::AwarenessUpdate {
         object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
-        collab_type: CollabType::from(proto.collab_type),
         awareness: proto.payload.into(),
       }),
       Some(ProtoMessage::PermissionRevoked(proto)) => Ok(ServerMessage::PermissionDenied {

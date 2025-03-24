@@ -115,6 +115,7 @@ async fn send_batch_message(
   sender: &AggregateMessagesSender,
   messages_map: HashMap<String, Vec<ClientCollabMessage>>,
 ) {
+  // TODO: Handle serialization format
   match RealtimeMessage::ClientCollabV2(MessageByObjectId(messages_map)).encode() {
     Ok(data) => {
       if let Err(e) = sender.send(Message::Binary(data)).await {

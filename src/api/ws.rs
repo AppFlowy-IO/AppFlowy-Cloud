@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::time::Duration;
 
 use actix::Addr;
@@ -6,6 +7,7 @@ use actix_http::header::AUTHORIZATION;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
+use appflowy_collaborate::actix_ws::client::WebSocketMessageFormat;
 use secrecy::Secret;
 use semver::Version;
 use tokio::sync::mpsc;
@@ -56,6 +58,7 @@ pub async fn establish_ws_connection(
     device_id,
     client_version,
     connect_at,
+    WebSocketMessageFormat::Bincode,
   )
   .await
 }
@@ -76,6 +79,7 @@ pub async fn establish_ws_connection_v1(
     client_version,
     device_id,
     connect_at,
+    serialization_format,
   } = match ConnectInfo::parse_from(&request) {
     Ok(info) => info,
     Err(_) => {
@@ -98,6 +102,7 @@ pub async fn establish_ws_connection_v1(
     device_id,
     client_version,
     connect_at,
+    serialization_format,
   )
   .await
 }
@@ -114,6 +119,7 @@ async fn start_connect(
   device_id: String,
   client_app_version: Version,
   connect_at: i64,
+  serialization_format: WebSocketMessageFormat,
 ) -> Result<HttpResponse> {
   let auth = authorization_from_token(access_token.as_str(), jwt_secret)?;
   let user_uuid = UserUuid::from_auth(auth)?;
@@ -143,6 +149,7 @@ async fn start_connect(
         client_app_version,
         external_source,
         10,
+        serialization_format,
       );
 
       // Receive user change notifications and send them to the client.
@@ -199,11 +206,13 @@ struct ConnectInfo {
   client_version: Version,
   device_id: String,
   connect_at: i64,
+  serialization_format: WebSocketMessageFormat,
 }
 
 const CLIENT_VERSION: &str = "client-version";
 const DEVICE_ID: &str = "device-id";
 const CONNECT_AT: &str = "connect-at";
+const SERIALIZATION_FORMAT: &str = "serialization-format";
 
 // Trait for parameter extraction
 trait ExtractParameter {
@@ -253,12 +262,17 @@ impl ConnectInfo {
         .unwrap_or_else(|_| chrono::Utc::now().timestamp()),
       Err(_) => chrono::Utc::now().timestamp(),
     };
+    let serialization_format = match source.extract_param(SERIALIZATION_FORMAT) {
+      Ok(format) => WebSocketMessageFormat::from_str(&format)?,
+      Err(_) => WebSocketMessageFormat::Bincode,
+    };
 
     Ok(Self {
       access_token,
       client_version,
       device_id,
       connect_at,
+      serialization_format,
     })
   }
 }

@@ -2,6 +2,7 @@ use actix::{Actor, Context, Handler};
 use appflowy_collaborate::actix_ws::client::rt_client::{
   HandlerResult, RealtimeClient, RealtimeServer,
 };
+use appflowy_collaborate::actix_ws::client::WebSocketMessageFormat;
 use appflowy_collaborate::actix_ws::entities::{ClientWebSocketMessage, Connect, Disconnect};
 use appflowy_collaborate::error::RealtimeError;
 use collab_rt_entity::user::RealtimeUser;
@@ -26,6 +27,7 @@ async fn test_handle_message() {
     client_version,
     external_source,
     10,
+    WebSocketMessageFormat::Bincode,
   );
 
   let message = RealtimeMessage::ClientCollabV2(MessageByObjectId::new_with_message(
@@ -62,6 +64,7 @@ async fn server_mailbox_full_test() {
         cloned_client_version,
         external_source,
         10,
+        WebSocketMessageFormat::Bincode,
       );
       for _ in 0..10 {
         let message = RealtimeMessage::ClientCollabV2(MessageByObjectId::new_with_message(
@@ -109,6 +112,7 @@ async fn client_rate_limit_hit_test() {
         cloned_client_version,
         external_source,
         1,
+        WebSocketMessageFormat::Bincode,
       );
       for _ in 0..10 {
         let message = RealtimeMessage::ClientCollabV2(MessageByObjectId::new_with_message(

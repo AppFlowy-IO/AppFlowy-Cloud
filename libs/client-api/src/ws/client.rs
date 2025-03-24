@@ -276,6 +276,7 @@ impl WSClient {
                 continue;
               }
             }
+            // TODO: handle serialization format
             match RealtimeMessage::decode(&data) {
               Ok(msg) => match msg {
                 RealtimeMessage::Collab(collab_msg) => {
@@ -483,13 +484,14 @@ pub struct ConnectInfo {
   pub access_token: String,
   pub client_version: Version,
   pub device_id: String,
+  pub serialization_format: String,
 }
 
 impl Display for ConnectInfo {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "access_token: xx, client_version: {}, device_id: {}",
-      self.client_version, self.device_id
+      "access_token: xx, client_version: {}, device_id: {}, serialization_format: {}",
+      self.client_version, self.device_id, self.serialization_format
     ))
   }
 }
@@ -513,6 +515,11 @@ impl From<ConnectInfo> for HeaderMap {
     headers.insert(
       "connect-at",
       HeaderValue::from(chrono::Utc::now().timestamp()),
+    );
+    headers.insert(
+      "serialization-format",
+      HeaderValue::from_str(&info.serialization_format)
+        .unwrap_or(HeaderValue::from_static("bincode")),
     );
     headers
   }

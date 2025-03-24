@@ -18,6 +18,7 @@ use governor::state::{InMemoryState, NotKeyed};
 use governor::{Quota, RateLimiter};
 use semver::Version;
 use std::num::NonZeroU32;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
@@ -31,6 +32,23 @@ pub trait RealtimeServer:
   + Handler<Connect, Result = HandlerResult>
   + Handler<Disconnect, Result = HandlerResult>
 {
+}
+
+pub enum WebSocketMessageFormat {
+  Bincode,
+  ProtoBuf,
+}
+
+impl FromStr for WebSocketMessageFormat {
+  type Err = anyhow::Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s {
+      "bincode" => Ok(WebSocketMessageFormat::Bincode),
+      "protobuf" => Ok(WebSocketMessageFormat::ProtoBuf),
+      _ => Err(anyhow!("Invalid serialization format")),
+    }
+  }
 }
 
 type BinaryRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
@@ -48,6 +66,7 @@ pub struct RealtimeClient<S: RealtimeServer> {
   /// mechanism. This limits the number of messages a client can send per second, ensuring the server's
   /// mailbox does not get full from receiving too many messages at the same time.
   binary_rate_limiter: Arc<BinaryRateLimiter>,
+  serialization_format: WebSocketMessageFormat,
 }
 
 impl<S> RealtimeClient<S>
@@ -62,6 +81,7 @@ where
     client_version: Version,
     external_source: mpsc::Receiver<RealtimeMessage>,
     rate_limit_times_per_sec: u32,
+    serialization_format: WebSocketMessageFormat,
   ) -> Self {
     let rate_limiter = gen_rate_limiter(rate_limit_times_per_sec);
     Self {
@@ -73,6 +93,7 @@ where
       external_source: Some(external_source),
       client_version,
       binary_rate_limiter: Arc::new(rate_limiter),
+      serialization_format,
     }
   }
 
@@ -125,6 +146,7 @@ where
     let user = self.user.clone();
 
     let fut = async move {
+      // TODO: Handle serialization format
       match tokio::task::spawn_blocking(move || RealtimeMessage::decode(&bytes)).await {
         Ok(Ok(decoded_message)) => {
           let mut client_message = Some(ClientWebSocketMessage {
@@ -272,6 +294,7 @@ where
   type Result = ();
 
   fn handle(&mut self, message: RealtimeMessage, ctx: &mut Self::Context) {
+    // TODO: Handle serialization format
     match message.encode() {
       Ok(data) => ctx.binary(Bytes::from(data)),
       Err(err) => error!("Error encoding message: {}", err),

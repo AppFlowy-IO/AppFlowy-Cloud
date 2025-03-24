@@ -65,6 +65,7 @@ pub fn localhost_client_with_device_id(device_id: &str) -> Client {
     device_id,
     ClientConfiguration::default(),
     "0.7.0",
+    "bincode",
   )
 }
 

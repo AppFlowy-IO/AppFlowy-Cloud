@@ -107,6 +107,7 @@ pub struct Client {
   pub ws_addr: String,
   pub device_id: String,
   pub client_version: Version,
+  pub serialization_format: String,
   pub(crate) token: Arc<RwLock<ClientToken>>,
   pub(crate) is_refreshing_token: Arc<AtomicBool>,
   pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
@@ -133,6 +134,7 @@ impl Client {
     device_id: &str,
     config: ClientConfiguration,
     client_id: &str,
+    serialization_format: &str,
   ) -> Self {
     let reqwest_client = reqwest::Client::new();
     let client_version = Version::parse(client_id).unwrap_or_else(|_| Version::new(0, 6, 7));
@@ -188,6 +190,7 @@ impl Client {
       config,
       device_id: device_id.to_string(),
       client_version,
+      serialization_format: serialization_format.to_string(),
       ai_model,
     }
   }
@@ -953,6 +956,7 @@ impl Client {
       access_token: self.access_token()?,
       client_version: self.client_version.clone(),
       device_id: self.device_id.clone(),
+      serialization_format: self.serialization_format.clone(),
     })
   }
 

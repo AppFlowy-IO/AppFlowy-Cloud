@@ -71,7 +71,7 @@ async fn success_batch_get_collab_test() {
     let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
       .encode_to_bytes()
       .unwrap();
-    let collab_type = query.collab_type.clone();
+    let collab_type = query.collab_type;
 
     expected_results.insert(
       object_id.clone(),
@@ -83,7 +83,7 @@ async fn success_batch_get_collab_test() {
     c.create_collab(CreateCollabParams {
       object_id: object_id.clone(),
       encoded_collab_v1: encode_collab.clone(),
-      collab_type: collab_type.clone(),
+      collab_type,
       workspace_id: workspace_id.clone(),
     })
     .await
@@ -118,7 +118,7 @@ async fn success_part_batch_get_collab_test() {
   let mut expected_results = HashMap::new();
   for (index, query) in queries.iter().enumerate() {
     let object_id = query.object_id.clone();
-    let collab_type = query.collab_type.clone();
+    let collab_type = query.collab_type;
     let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
       .encode_to_bytes()
       .unwrap();
@@ -140,7 +140,7 @@ async fn success_part_batch_get_collab_test() {
       c.create_collab(CreateCollabParams {
         object_id: object_id.clone(),
         encoded_collab_v1: encode_collab.clone(),
-        collab_type: collab_type.clone(),
+        collab_type,
         workspace_id: workspace_id.clone(),
       })
       .await
@@ -381,7 +381,7 @@ async fn insert_invalid_data_test() {
       workspace_id: workspace_id.clone(),
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab_v1.clone(),
-      collab_type: collab_type.clone(),
+      collab_type,
     };
     let error = test_client
       .api_client

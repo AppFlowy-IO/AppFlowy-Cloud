@@ -62,7 +62,7 @@ impl DatabaseCollabService for TestDatabaseCollabService {
   ) -> Result<EncodeCollabByOid, DatabaseError> {
     let params = object_ids
       .into_iter()
-      .map(|object_id| QueryCollab::new(object_id, collab_type.clone()))
+      .map(|object_id| QueryCollab::new(object_id, collab_type))
       .collect();
     let results = self
       .api_client

@@ -626,7 +626,7 @@ impl Action for GetCollabAction {
   fn run(&mut self) -> Self::Future {
     let client = self.client.clone();
     let params = self.params.clone();
-    let collab_type = self.params.collab_type.clone();
+    let collab_type = self.params.collab_type;
 
     Box::pin(async move {
       let url = format!(

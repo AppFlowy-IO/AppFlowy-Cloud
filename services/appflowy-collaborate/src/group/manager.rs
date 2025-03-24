@@ -118,7 +118,7 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) -> Result<(), RealtimeError> {
-    let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
+    let params = QueryCollabParams::new(object_id, collab_type, workspace_id);
     let res = self
       .storage
       .get_encode_collab(GetCollabOrigin::Server, params, false)

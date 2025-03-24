@@ -135,7 +135,7 @@ async fn process_upcoming_tasks(
 
           let collab_ids: Vec<(String, CollabType)> = tasks
             .iter()
-            .map(|task| (task.object_id.clone(), task.collab_type.clone()))
+            .map(|task| (task.object_id.clone(), task.collab_type))
             .collect();
 
           let indexed_collabs = get_collabs_indexed_at(&pg_pool, collab_ids)
@@ -160,7 +160,7 @@ async fn process_upcoming_tasks(
           let num_tasks = tasks.len();
           tasks.into_par_iter().for_each(|task| {
             let result = threads.install(|| {
-              if let Some(indexer) = indexer_provider.indexer_for(&task.collab_type) {
+              if let Some(indexer) = indexer_provider.indexer_for(task.collab_type) {
                 let embedder = create_embedder(&config);
                 let result = handle_task(embedder, indexer, task);
                 match result {

@@ -18,16 +18,16 @@ async fn collab_history_and_snapshot_test() {
   // Using [CollabType::Unknown] for testing purposes.
   let collab_type = CollabType::Unknown;
   test_client
-    .create_and_edit_collab_with_data(&object_id, &workspace_id, collab_type.clone(), None)
+    .create_and_edit_collab_with_data(&object_id, &workspace_id, collab_type, None)
     .await;
   test_client
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .open_collab(&workspace_id, &object_id, collab_type)
     .await;
 
   // from the beginning, there should be no snapshots
   let snapshots = test_client
     .api_client
-    .get_snapshots(&workspace_id, &object_id, collab_type.clone())
+    .get_snapshots(&workspace_id, &object_id, collab_type)
     .await
     .unwrap()
     .items;
@@ -50,7 +50,7 @@ async fn collab_history_and_snapshot_test() {
   sleep(std::time::Duration::from_secs(10)).await;
   let snapshots = test_client
     .api_client
-    .get_snapshots(&workspace_id, &object_id, collab_type.clone())
+    .get_snapshots(&workspace_id, &object_id, collab_type)
     .await
     .unwrap()
     .items;

@@ -96,7 +96,7 @@ where
     self.did_create_snapshot.store(true, Ordering::SeqCst);
     let storage = self.storage.clone();
     let weak_collab = self.weak_collab.clone();
-    let collab_type = self.collab_type.clone();
+    let collab_type = self.collab_type;
     let object_id = self.object_id.clone();
     let workspace_id = self.workspace_id.clone();
 

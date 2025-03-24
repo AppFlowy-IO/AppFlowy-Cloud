@@ -110,7 +110,7 @@ async fn edit_workspace_with_guest_permission() {
     &workspace_id,
     &mut owner.api_client,
     &workspace_id,
-    &CollabType::Folder,
+    CollabType::Folder,
     30,
     json!({
       "name": "zack"

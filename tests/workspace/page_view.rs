@@ -9,9 +9,9 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams,
-  DuplicatePageParams, FavoritePageParams, IconType, MovePageParams, PublishPageParams,
-  SpacePermission, UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
+  AddRecentPagesParams, AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams,
+  CreateSpaceParams, DuplicatePageParams, FavoritePageParams, IconType, MovePageParams,
+  PublishPageParams, SpacePermission, UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -1101,4 +1101,51 @@ async fn create_database_page_view() {
     .unwrap();
   assert_eq!(page_collab.data.row_data.len(), 5);
   assert_eq!(page_collab.view.layout, ViewLayout::Grid);
+}
+
+#[tokio::test]
+async fn add_recent_pages() {
+  let registered_user = generate_unique_registered_user().await;
+  let app_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let workspace_id = app_client.workspace_id().await;
+  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
+  let folder_view = app_client
+    .api_client
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let child_view_ids: Vec<String> = general_space
+    .children
+    .iter()
+    .map(|v| v.view_id.clone())
+    .collect();
+  for _ in 0..2 {
+    for view_id in &child_view_ids {
+      app_client
+        .api_client
+        .add_recent_pages(
+          workspace_uuid,
+          &AddRecentPagesParams {
+            recent_view_ids: vec![view_id.clone()],
+          },
+        )
+        .await
+        .unwrap();
+    }
+  }
+  let recent_section_ids = app_client
+    .api_client
+    .get_workspace_recent(&workspace_id)
+    .await
+    .unwrap()
+    .views
+    .iter()
+    .map(|v| v.view.view_id.clone())
+    .collect::<Vec<String>>();
+  assert_eq!(recent_section_ids, child_view_ids)
 }

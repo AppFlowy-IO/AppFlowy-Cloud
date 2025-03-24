@@ -501,6 +501,13 @@ impl Stream for CompletionStream {
             return Poll::Ready(Some(Ok(CompletionStreamValue::Comment { value: comment })));
           }
 
+          if let Some(image) = value
+            .remove(STREAM_IMAGE_KEY)
+            .and_then(|s| s.as_str().map(ToString::to_string))
+          {
+            return Poll::Ready(Some(Ok(CompletionStreamValue::Answer { value: image })));
+          }
+
           error!("Invalid streaming value: {:?}", value);
           Poll::Ready(None)
         },

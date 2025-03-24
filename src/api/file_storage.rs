@@ -105,7 +105,7 @@ async fn create_upload(
   let workspace_id = workspace_id.into_inner();
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, workspace_id, Action::Write)
     .await?;
 
   let key = BlobPathV1 {
@@ -152,7 +152,7 @@ async fn upload_part_handler(
   let workspace_id = path_params.workspace_id;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, workspace_id, Action::Write)
     .await?;
 
   let content_length = content_length.into_inner().into_inner();
@@ -203,7 +203,7 @@ async fn complete_upload_handler(
   let workspace_id = workspace_id.into_inner();
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, workspace_id, Action::Write)
     .await?;
 
   let key = BlobPathV1 {
@@ -234,7 +234,7 @@ async fn put_blob_handler(
   let workspace_id = path.workspace_id;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, workspace_id, Action::Write)
     .await?;
 
   let content_length = content_length.into_inner().into_inner();
@@ -308,7 +308,7 @@ async fn delete_blob_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, workspace_id, Action::Write)
     .await?;
   state
     .bucket_storage
@@ -340,7 +340,7 @@ async fn delete_blob_v1_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, workspace_id, Action::Write)
     .await?;
   state
     .bucket_storage
@@ -557,7 +557,7 @@ async fn put_blob_handler_v1(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   state
     .workspace_access_control
-    .enforce_action(&uid, &path.workspace_id.to_string(), Action::Write)
+    .enforce_action(&uid, path.workspace_id, Action::Write)
     .await?;
 
   let content_length = content_length.into_inner().into_inner();

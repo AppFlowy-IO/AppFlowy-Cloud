@@ -87,14 +87,12 @@ impl WsSession {
     match ClientMessage::from_bytes(&bytes) {
       Ok(message) => {
         let object_id = *message.object_id();
-        let collab_type = *message.collab_type();
         let message = match InputMessage::try_from(message) {
           Ok(msg) => msg,
           Err(err) => return ctx.close(Some(CloseReason::from((CloseCode::Invalid, err)))),
         };
         self.server.do_send(WsInput {
           message,
-          collab_type,
           workspace_id: self.current_workspace,
           object_id,
           sender: self.id(),
@@ -235,13 +233,12 @@ pub struct WsInput {
   pub message: InputMessage,
   pub workspace_id: ObjectId,
   pub object_id: ObjectId,
-  pub collab_type: CollabType,
   pub sender: ClientID,
 }
 
 pub enum InputMessage {
-  Manifest(Rid, StateVector),
-  Update(Update),
+  Manifest(CollabType, Rid, StateVector),
+  Update(CollabType, Update),
   AwarenessUpdate(AwarenessUpdate),
 }
 
@@ -253,18 +250,28 @@ impl TryFrom<ClientMessage> for InputMessage {
       ClientMessage::Manifest {
         last_message_id,
         state_vector,
+        collab_type,
         ..
       } => {
         let state_vector = StateVector::decode_v1(&state_vector).map_err(|err| err.to_string())?;
-        Ok(InputMessage::Manifest(last_message_id, state_vector))
+        Ok(InputMessage::Manifest(
+          collab_type,
+          last_message_id,
+          state_vector,
+        ))
       },
-      ClientMessage::Update { flags, update, .. } => {
+      ClientMessage::Update {
+        flags,
+        update,
+        collab_type,
+        ..
+      } => {
         let update = match flags {
           UpdateFlags::Lib0v1 => Update::decode_v1(&update),
           UpdateFlags::Lib0v2 => Update::decode_v2(&update),
         }
         .map_err(|err| err.to_string())?;
-        Ok(InputMessage::Update(update))
+        Ok(InputMessage::Update(collab_type, update))
       },
       ClientMessage::AwarenessUpdate { awareness, .. } => {
         let awareness = AwarenessUpdate::decode_v1(&awareness).map_err(|err| err.to_string())?;

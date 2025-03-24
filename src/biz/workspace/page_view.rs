@@ -43,7 +43,7 @@ use collab_document::document::{Document, DocumentBody};
 use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
-use collab_folder::{timestamp, CollabOrigin, Folder, SpaceInfo};
+use collab_folder::{timestamp, CollabOrigin, Folder, SectionItem, SpaceInfo};
 use collab_rt_entity::user::RealtimeUser;
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
@@ -797,6 +797,39 @@ async fn move_view_out_from_trash(view_id: &str, folder: &mut Folder) -> Result<
   Ok(encoded_update)
 }
 
+async fn extend_recent_views(
+  recent_view_ids: &[String],
+  folder: &mut Folder,
+) -> Result<Vec<u8>, AppError> {
+  let existing_recent_sections: HashSet<String> = folder
+    .get_all_recent_sections()
+    .iter()
+    .map(|s| s.id.clone())
+    .collect();
+  let section_id_to_be_removed = existing_recent_sections
+    .intersection(&recent_view_ids.iter().cloned().collect())
+    .cloned()
+    .collect_vec();
+  let section_item_to_be_added = recent_view_ids
+    .iter()
+    .map(|id| SectionItem::new(id.clone()))
+    .collect_vec();
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    if let Some(op) = folder
+      .body
+      .section
+      .section_op(&txn, collab_folder::Section::Recent)
+    {
+      op.delete_section_items_with_txn(&mut txn, section_id_to_be_removed);
+      op.add_sections_item(&mut txn, section_item_to_be_added);
+    };
+    txn.encode_update_v1()
+  };
+
+  Ok(encoded_update)
+}
+
 async fn move_all_views_out_from_trash(folder: &mut Folder) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
@@ -1253,6 +1286,29 @@ pub async fn restore_page_from_trash(
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
   let folder_update = move_view_out_from_trash(view_id, &mut folder).await?;
+  update_workspace_folder_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    folder_update,
+  )
+  .await?;
+  Ok(())
+}
+
+pub async fn add_recent_pages(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  recent_view_ids: Vec<String>,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid: user.uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = extend_recent_views(&recent_view_ids, &mut folder).await?;
   update_workspace_folder_data(
     appflowy_web_metrics,
     server,

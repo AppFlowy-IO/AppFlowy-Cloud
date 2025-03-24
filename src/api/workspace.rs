@@ -14,9 +14,9 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  append_block_at_the_end_of_page, create_database_view, create_page, create_space,
-  delete_all_pages_from_trash, delete_trash, favorite_page, get_page_view_collab, move_page,
-  move_page_to_trash, publish_page, reorder_favorite_page, restore_all_pages_from_trash,
+  add_recent_pages, append_block_at_the_end_of_page, create_database_view, create_page,
+  create_space, delete_all_pages_from_trash, delete_trash, favorite_page, get_page_view_collab,
+  move_page, move_page_to_trash, publish_page, reorder_favorite_page, restore_all_pages_from_trash,
   restore_page_from_trash, unpublish_page, update_page, update_page_collab_data, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
@@ -208,6 +208,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/restore-from-trash")
         .route(web::post().to(restore_page_from_trash_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/add-recent-pages")
+        .route(web::post().to(add_recent_pages_handler)),
     )
     .service(
       web::resource("/{workspace_id}/restore-all-pages-from-trash")
@@ -1383,6 +1387,30 @@ async fn restore_page_from_trash_handler(
     &state.collab_access_control_storage,
     workspace_uuid,
     &view_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn add_recent_pages_handler(
+  user_uuid: UserUuid,
+  path: web::Path<Uuid>,
+  payload: Json<AddRecentPagesParams>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_uuid = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  let AddRecentPagesParams { recent_view_ids } = payload.into_inner();
+  add_recent_pages(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    recent_view_ids,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

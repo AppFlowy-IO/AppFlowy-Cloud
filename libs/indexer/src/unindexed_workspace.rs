@@ -170,7 +170,7 @@ async fn create_embeddings(
   unindexed_records
     .into_par_iter()
     .flat_map(|unindexed| {
-      let indexer = indexer_provider.indexer_for(&unindexed.collab_type)?;
+      let indexer = indexer_provider.indexer_for(unindexed.collab_type)?;
       let collab = Collab::new_with_source(
         CollabOrigin::Empty,
         &unindexed.object_id,

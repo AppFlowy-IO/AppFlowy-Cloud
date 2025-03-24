@@ -701,6 +701,26 @@ async fn update_favorite_view(
   Ok(encoded_update)
 }
 
+async fn reorder_favorite_section(
+  view_id: &str,
+  prev_view_id: Option<&str>,
+  folder: &mut Folder,
+) -> Result<Vec<u8>, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    if let Some(op) = folder
+      .body
+      .section
+      .section_op(&txn, collab_folder::Section::Favorite)
+    {
+      op.move_section_item_with_txn(&mut txn, view_id, prev_view_id);
+    };
+    txn.encode_update_v1()
+  };
+
+  Ok(encoded_update)
+}
+
 async fn update_view_properties(
   view_id: &str,
   folder: &mut Folder,
@@ -1158,6 +1178,31 @@ pub async fn move_page(
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
   let folder_update = move_view(view_id, new_parent_view_id, prev_view_id, &mut folder).await?;
+  update_workspace_folder_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    folder_update,
+  )
+  .await?;
+  Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn reorder_favorite_page(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  view_id: &str,
+  prev_view_id: Option<&str>,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid: user.uid };
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let folder_update = reorder_favorite_section(view_id, prev_view_id, &mut folder).await?;
   update_workspace_folder_data(
     appflowy_web_metrics,
     server,

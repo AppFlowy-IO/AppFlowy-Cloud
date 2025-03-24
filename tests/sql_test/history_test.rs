@@ -48,7 +48,7 @@ async fn insert_snapshot_test(pool: PgPool) {
     doc_state,
     doc_state_version,
     deps_snapshot_id,
-    collab_type.clone(),
+    collab_type,
     timestamp + 200,
     snapshots,
     pool.clone(),

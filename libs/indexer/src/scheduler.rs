@@ -137,7 +137,7 @@ impl IndexerScheduler {
     true
   }
 
-  pub fn is_indexing_enabled(&self, collab_type: &CollabType) -> bool {
+  pub fn is_indexing_enabled(&self, collab_type: CollabType) -> bool {
     self.indexer_provider.is_indexing_enabled(collab_type)
   }
 
@@ -206,7 +206,7 @@ impl IndexerScheduler {
 
     let indexer = self
       .indexer_provider
-      .indexer_for(&pending_collab.collab_type);
+      .indexer_for(pending_collab.collab_type);
     if indexer.is_none() {
       return Ok(());
     }
@@ -228,7 +228,7 @@ impl IndexerScheduler {
       return Ok(());
     }
 
-    pending_collabs.retain(|collab| self.is_indexing_enabled(&collab.collab_type));
+    pending_collabs.retain(|collab| self.is_indexing_enabled(collab.collab_type));
     if pending_collabs.is_empty() {
       return Ok(());
     }
@@ -244,7 +244,7 @@ impl IndexerScheduler {
     workspace_id: &str,
     object_id: &str,
     collab: &Collab,
-    collab_type: &CollabType,
+    collab_type: CollabType,
   ) -> Result<(), AppError> {
     if !self.index_enabled() {
       return Ok(());
@@ -265,7 +265,7 @@ impl IndexerScheduler {
             let pending = UnindexedCollabTask::new(
               Uuid::parse_str(workspace_id)?,
               object_id.to_string(),
-              collab_type.clone(),
+              collab_type,
               UnindexedData::Text(text),
             );
             self.embed_immediately(pending)?;
@@ -342,7 +342,7 @@ async fn spawn_rayon_generate_embeddings(
         Ok(embedder) => {
           records.into_par_iter().for_each(|record| {
             let result = threads.install(|| {
-              let indexer = indexer_provider.indexer_for(&record.collab_type);
+              let indexer = indexer_provider.indexer_for(record.collab_type);
               match process_collab(&embedder, indexer, &record.object_id, record.data, &metrics) {
                 Ok(Some((tokens_used, contents))) => {
                   if let Err(err) = write_embedding_tx.send(EmbeddingRecord {

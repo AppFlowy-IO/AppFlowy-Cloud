@@ -96,7 +96,7 @@ impl CollabGroup {
       uid,
       workspace_id.clone(),
       object_id.clone(),
-      collab_type.clone(),
+      collab_type,
       storage,
       collab_redis_stream,
       indexer_scheduler,
@@ -363,7 +363,7 @@ impl CollabGroup {
     .map_err(|e| AppError::Internal(e.into()))?;
     let workspace_id = &self.state.workspace_id;
     let object_id = &self.state.object_id;
-    let collab_type = &self.state.collab_type;
+    let collab_type = self.state.collab_type;
     self
       .state
       .persister
@@ -1149,7 +1149,7 @@ impl CollabPersister {
       .metrics
       .collab_size
       .observe(encoded_collab.len() as f64);
-    let params = CollabParams::new(&self.object_id, self.collab_type.clone(), encoded_collab);
+    let params = CollabParams::new(&self.object_id, self.collab_type, encoded_collab);
     self
       .storage
       .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, true)
@@ -1163,7 +1163,7 @@ impl CollabPersister {
       let indexed_collab = UnindexedCollabTask::new(
         workspace_id,
         self.object_id.clone(),
-        self.collab_type.clone(),
+        self.collab_type,
         UnindexedData::Text(text),
       );
       if let Err(err) = self
@@ -1182,7 +1182,7 @@ impl CollabPersister {
     // we didn't find a snapshot, or we want a lightweight collab version
     let params = QueryCollabParams::new(
       self.object_id.clone(),
-      self.collab_type.clone(),
+      self.collab_type,
       self.workspace_id.clone(),
     );
     let result = self

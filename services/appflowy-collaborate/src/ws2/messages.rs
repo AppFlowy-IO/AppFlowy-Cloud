@@ -26,6 +26,10 @@ impl FromRedisStream for UpdateStreamMessage {
       .get("oid")
       .ok_or_else(|| anyhow!("expecting field `object_id`"))?;
     let object_id = ObjectId::from_redis_value(object_id).map_err(|err| anyhow!("{}", err))?;
+    let collab_type = fields
+      .get("ct")
+      .ok_or_else(|| anyhow!("expecting field `ct`"))?;
+    let collab_type = CollabType::from(i32::from_redis_value(collab_type)?);
     let sender = fields
       .get("sender")
       .ok_or_else(|| anyhow!("expecting field `sender`"))?;
@@ -42,6 +46,7 @@ impl FromRedisStream for UpdateStreamMessage {
       last_message_id,
       sender,
       object_id,
+      collab_type,
       update_flags,
       update,
     })

@@ -69,7 +69,7 @@ async fn stress_test_run_multiple_text_edits() {
       &workspace_id,
       &mut reader.api_client,
       &object_id,
-      &CollabType::Unknown,
+      CollabType::Unknown,
       10,
       json!({
         "text-id": &expected,

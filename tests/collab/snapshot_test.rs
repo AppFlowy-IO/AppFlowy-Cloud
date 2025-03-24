@@ -20,7 +20,7 @@ async fn read_write_snapshot() {
     &wid,
     &mut c.api_client,
     &oid,
-    &CollabType::Unknown,
+    CollabType::Unknown,
     10,
     json!({"title": "t1"}),
   )
@@ -38,7 +38,7 @@ async fn read_write_snapshot() {
     &wid,
     &mut c.api_client,
     &oid,
-    &CollabType::Unknown,
+    CollabType::Unknown,
     10,
     json!({"title": "t2"}),
   )

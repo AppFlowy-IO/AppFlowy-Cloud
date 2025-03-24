@@ -617,7 +617,7 @@ where
 {
   let collab_types: Vec<CollabType> = embedded_collab
     .iter()
-    .map(|query| query.collab_type.clone())
+    .map(|query| query.collab_type)
     .collect();
   let object_ids: Vec<String> = embedded_collab
     .into_iter()

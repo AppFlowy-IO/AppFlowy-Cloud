@@ -19,7 +19,7 @@ async fn viewing_document_editing_users_test() {
     .unwrap();
 
   let object_id = owner
-    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type)
     .await;
 
   let owner_uid = owner.uid().await;

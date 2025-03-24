@@ -874,7 +874,7 @@ impl TestClient {
       .create_collab(CreateCollabParams {
         object_id: object_id.to_string(),
         encoded_collab_v1,
-        collab_type: collab_type.clone(),
+        collab_type,
         workspace_id: workspace_id.to_string(),
       })
       .await
@@ -1018,7 +1018,7 @@ impl TestClient {
       .create_collab(CreateCollabParams {
         object_id: object_id.to_string(),
         encoded_collab_v1,
-        collab_type: collab_type.clone(),
+        collab_type,
         workspace_id: workspace_id.to_string(),
       })
       .await
@@ -1159,12 +1159,11 @@ pub async fn assert_server_collab(
   workspace_id: &str,
   client: &mut client_api::Client,
   object_id: &str,
-  collab_type: &CollabType,
+  collab_type: CollabType,
   timeout_secs: u64,
   expected: Value,
 ) -> Result<(), Error> {
   let duration = Duration::from_secs(timeout_secs);
-  let collab_type = collab_type.clone();
   let object_id = object_id.to_string();
   let final_json = Arc::new(Mutex::from(json!({})));
 
@@ -1175,7 +1174,7 @@ pub async fn assert_server_collab(
       let result = client
         .get_collab(QueryCollabParams::new(
           &object_id,
-          collab_type.clone(),
+          collab_type,
           workspace_id,
         ))
         .await;

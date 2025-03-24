@@ -403,12 +403,7 @@ where
     match collab_message {
       ClientCollabMessage::ClientInitSync { data, .. } => {
         self
-          .create_group(
-            user,
-            &data.workspace_id,
-            object_id,
-            data.collab_type.clone(),
-          )
+          .create_group(user, &data.workspace_id, object_id, data.collab_type)
           .await?;
         Ok(())
       },

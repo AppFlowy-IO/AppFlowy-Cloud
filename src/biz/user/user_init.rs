@@ -49,7 +49,7 @@ where
         database_id,
       } => (object_id.clone(), database_id.clone()),
     };
-    let object_type = template.collab_type.clone();
+    let object_type = template.collab_type;
     let encoded_collab_v1 = template
       .encoded_collab
       .encode_to_bytes()
@@ -57,7 +57,7 @@ where
     collab_params.push(CollabParams {
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab_v1.into(),
-      collab_type: object_type.clone(),
+      collab_type: object_type,
     });
 
     // push the database record

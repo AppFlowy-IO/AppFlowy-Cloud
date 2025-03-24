@@ -171,7 +171,7 @@ impl CollabCache {
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
-    let collab_type = params.collab_type.clone();
+    let collab_type = params.collab_type;
     let object_id = params.object_id.clone();
     let encode_collab_data = params.encoded_collab_v1.clone();
     let s3 = self.disk_cache.s3_client();

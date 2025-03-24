@@ -6,6 +6,7 @@ use redis::{AsyncCommands, Client, RedisError};
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -111,6 +112,15 @@ impl AwarenessGossip {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     self.collabs.insert(*object_id, tx);
     rx
+  }
+
+  pub fn workspace_awareness_stream(
+    &self,
+    workspace_id: &Uuid,
+  ) -> UnboundedReceiverStream<(Uuid, AwarenessStreamUpdate)> {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    self.workspaces.insert(*workspace_id, tx);
+    UnboundedReceiverStream::new(rx)
   }
 
   fn parse_update(msg: redis::Msg) -> Result<(Uuid, Uuid, AwarenessStreamUpdate), StreamError> {

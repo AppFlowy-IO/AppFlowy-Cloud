@@ -265,7 +265,7 @@ impl IndexerScheduler {
             let pending = UnindexedCollabTask::new(
               workspace_id,
               object_id,
-              collab_type.clone(),
+              collab_type,
               UnindexedData::Text(text),
             );
             self.embed_immediately(pending)?;

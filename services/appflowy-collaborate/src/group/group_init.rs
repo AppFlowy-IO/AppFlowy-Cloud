@@ -1157,7 +1157,7 @@ impl CollabPersister {
       .metrics
       .collab_size
       .observe(encoded_collab.len() as f64);
-    let params = CollabParams::new(self.object_id, self.collab_type.clone(), encoded_collab);
+    let params = CollabParams::new(self.object_id, self.collab_type, encoded_collab);
     self
       .storage
       .queue_insert_or_update_collab(self.workspace_id, &self.uid, params, true)
@@ -1170,7 +1170,7 @@ impl CollabPersister {
     let indexed_collab = UnindexedCollabTask::new(
       self.workspace_id,
       self.object_id,
-      self.collab_type.clone(),
+      self.collab_type,
       UnindexedData::Text(text),
     );
     if let Err(err) = self

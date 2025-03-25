@@ -399,7 +399,7 @@ where
       ClientCollabMessage::ClientInitSync { data, .. } => {
         let workspace_id = Uuid::parse_str(&data.workspace_id)?;
         self
-          .create_group(user, workspace_id, object_id, data.collab_type.clone())
+          .create_group(user, workspace_id, object_id, data.collab_type)
           .await?;
         Ok(())
       },

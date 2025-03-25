@@ -5,6 +5,4 @@ pub mod error;
 pub mod lease;
 pub mod metrics;
 pub mod model;
-pub mod pubsub;
-pub mod stream_group;
 pub mod stream_router;

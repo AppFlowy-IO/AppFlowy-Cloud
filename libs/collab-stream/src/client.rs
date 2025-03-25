@@ -4,7 +4,6 @@ use crate::error::{internal, StreamError};
 use crate::lease::{Lease, LeaseAcquisition};
 use crate::metrics::CollabStreamMetrics;
 use crate::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId};
-use crate::stream_group::{StreamConfig, StreamGroup};
 use crate::stream_router::{StreamRouter, StreamRouterOptions};
 use futures::Stream;
 use redis::aio::ConnectionManager;
@@ -13,7 +12,6 @@ use redis::{AsyncCommands, FromRedisValue};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::error;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -72,47 +70,6 @@ impl CollabRedisStream {
       .connection_manager
       .lease(lease_key, Self::LEASE_TTL)
       .await
-  }
-
-  pub async fn collab_control_stream(
-    &self,
-    key: &str,
-    group_name: &str,
-  ) -> Result<StreamGroup, StreamError> {
-    let mut group = StreamGroup::new_with_config(
-      key.to_string(),
-      group_name,
-      self.connection_manager.clone(),
-      StreamConfig::new().with_max_len(1000),
-    );
-
-    // don't return error when create consumer group failed
-    if let Err(err) = group.ensure_consumer_group().await {
-      error!("Failed to ensure consumer group: {}", err);
-    }
-
-    Ok(group)
-  }
-
-  pub async fn collab_update_stream_group(
-    &self,
-    workspace_id: &str,
-    oid: &str,
-    group_name: &str,
-  ) -> Result<StreamGroup, StreamError> {
-    let stream_key = format!("af_collab_update-{}-{}", workspace_id, oid);
-    let mut group = StreamGroup::new_with_config(
-      stream_key,
-      group_name,
-      self.connection_manager.clone(),
-      StreamConfig::new()
-        // 2000 messages
-        .with_max_len(2000)
-        // 12 hours
-        .with_expire_time(60 * 60 * 12),
-    );
-    group.ensure_consumer_group().await?;
-    Ok(group)
   }
 
   pub fn collab_update_sink(&self, workspace_id: &str, object_id: &str) -> CollabUpdateSink {

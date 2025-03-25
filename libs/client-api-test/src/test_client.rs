@@ -857,7 +857,7 @@ impl TestClient {
       .create_collab(CreateCollabParams {
         object_id,
         encoded_collab_v1,
-        collab_type: collab_type.clone(),
+        collab_type,
         workspace_id,
       })
       .await
@@ -1001,7 +1001,7 @@ impl TestClient {
       .create_collab(CreateCollabParams {
         object_id,
         encoded_collab_v1,
-        collab_type: collab_type.clone(),
+        collab_type,
         workspace_id,
       })
       .await
@@ -1145,7 +1145,7 @@ pub async fn assert_server_collab(
   expected: Value,
 ) -> Result<(), Error> {
   let duration = Duration::from_secs(timeout_secs);
-  let collab_type = collab_type.clone();
+  let collab_type = *collab_type;
   let final_json = Arc::new(Mutex::from(json!({})));
 
   // Use tokio::time::timeout to apply a timeout to the entire operation
@@ -1153,11 +1153,7 @@ pub async fn assert_server_collab(
   let operation = async {
     loop {
       let result = client
-        .get_collab(QueryCollabParams::new(
-          object_id,
-          collab_type.clone(),
-          workspace_id,
-        ))
+        .get_collab(QueryCollabParams::new(object_id, collab_type, workspace_id))
         .await;
 
       match &result {

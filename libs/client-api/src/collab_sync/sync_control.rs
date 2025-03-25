@@ -207,7 +207,7 @@ where
         let init_sync = InitSync::new(
           origin,
           sync_object.object_id.to_string(),
-          sync_object.collab_type.clone(),
+          sync_object.collab_type,
           sync_object.workspace_id.to_string(),
           msg_id,
           payload,
@@ -248,7 +248,7 @@ where
         let init_sync = InitSync::new(
           origin,
           sync_object.object_id.to_string(),
-          sync_object.collab_type.clone(),
+          sync_object.collab_type,
           sync_object.workspace_id.to_string(),
           msg_id,
           payload,

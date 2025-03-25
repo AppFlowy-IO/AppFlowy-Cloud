@@ -64,7 +64,7 @@ impl DatabaseCollabService for TestDatabaseCollabService {
     let params = object_ids
       .into_iter()
       .flat_map(|object_id| match Uuid::parse_str(&object_id) {
-        Ok(object_id) => Ok(QueryCollab::new(object_id, collab_type.clone())),
+        Ok(object_id) => Ok(QueryCollab::new(object_id, collab_type)),
         Err(err) => Err(err),
       })
       .collect();

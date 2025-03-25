@@ -122,7 +122,7 @@ jobs:
           export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           export APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
           export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
-          docker compose -f docker-compose-ci.yml up -d
+          docker compose -f compose.ci.yaml up -d
           docker ps -a
 
       - name: Install prerequisites
@@ -139,7 +139,7 @@ jobs:
         if: failure()
         run: |
           docker ps -a
-          docker compose -f docker-compose-ci.yml logs
+          docker compose -f compose.ci.yaml logs
 
       - name: AI Logs
         if: always()

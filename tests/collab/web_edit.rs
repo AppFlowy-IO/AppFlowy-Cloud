@@ -46,7 +46,7 @@ async fn web_and_native_app_edit_same_collab_test() {
       workspace_id,
       inner: QueryCollab {
         object_id,
-        collab_type: collab_type,
+        collab_type,
       },
     })
     .await

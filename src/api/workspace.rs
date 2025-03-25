@@ -1979,7 +1979,7 @@ async fn post_published_duplicate_handler(
       state.collab_access_control_storage.clone(),
       uid,
       params.published_view_id,
-      workspace_id.into_inner(),
+      workspace_id,
       params.dest_view_id,
     )
     .await?;
@@ -2603,7 +2603,7 @@ async fn list_database_row_details_handler(
   let db_rows = biz::collab::ops::list_database_row_details(
     &state.collab_access_control_storage,
     uid,
-    workspace_id.to_string(),
+    workspace_id,
     db_id,
     &row_ids,
     UNSUPPORTED_FIELD_TYPES,

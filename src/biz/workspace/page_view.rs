@@ -1224,8 +1224,7 @@ pub async fn reorder_favorite_page(
   prev_view_id: Option<&str>,
 ) -> Result<(), AppError> {
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder =
-    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
   let folder_update = reorder_favorite_section(view_id, prev_view_id, &mut folder).await?;
   update_workspace_folder_data(
     appflowy_web_metrics,
@@ -1295,8 +1294,7 @@ pub async fn add_recent_pages(
   recent_view_ids: Vec<String>,
 ) -> Result<(), AppError> {
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder =
-    get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
+  let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
   let folder_update = extend_recent_views(&recent_view_ids, &mut folder).await?;
   update_workspace_folder_data(
     appflowy_web_metrics,
@@ -1681,10 +1679,11 @@ pub async fn get_page_view_collab(
       ))
     })?;
   let publish_view_ids: HashSet<_> = publish_view_ids.into_iter().collect();
+  let parent_view_id = Uuid::parse_str(&view.parent_view_id)?;
   let folder_view = FolderView {
     view_id,
-    parent_view_id: view.parent_view_id.clone(),
-    prev_view_id: get_prev_view_id(&folder, view_id),
+    parent_view_id,
+    prev_view_id: get_prev_view_id(&folder, &view_id),
     name: view.name.clone(),
     icon: view
       .icon

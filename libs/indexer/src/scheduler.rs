@@ -341,7 +341,7 @@ async fn spawn_rayon_generate_embeddings(
         Ok(embedder) => {
           records.into_par_iter().for_each(|record| {
             let result = threads.install(|| {
-              let indexer = indexer_provider.indexer_for(&record.collab_type);
+              let indexer = indexer_provider.indexer_for(record.collab_type);
               match process_collab(&embedder, indexer, record.object_id, record.data, &metrics) {
                 Ok(Some((tokens_used, contents))) => {
                   if let Err(err) = write_embedding_tx.send(EmbeddingRecord {

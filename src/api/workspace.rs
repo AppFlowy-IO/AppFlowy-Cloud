@@ -827,7 +827,7 @@ async fn create_collab_handler(
       let pending = UnindexedCollabTask::new(
         workspace_id,
         params.object_id,
-        params.collab_type.clone(),
+        params.collab_type,
         UnindexedData::Text(text),
       );
       state
@@ -981,7 +981,7 @@ async fn batch_create_collab_handler(
             UnindexedCollabTask::new(
               workspace_id,
               value.1.object_id,
-              value.1.collab_type.clone(),
+              value.1.collab_type,
               UnindexedData::Text(text),
             )
           })
@@ -1697,7 +1697,7 @@ async fn create_collab_snapshot_handler(
     .collab_access_control_storage
     .get_encode_collab(
       GetCollabOrigin::User { uid },
-      QueryCollabParams::new(object_id, collab_type.clone(), workspace_id),
+      QueryCollabParams::new(object_id, collab_type, workspace_id),
       true,
     )
     .await?
@@ -1793,7 +1793,7 @@ async fn update_collab_handler(
           let pending = UnindexedCollabTask::new(
             workspace_id,
             params.object_id,
-            params.collab_type.clone(),
+            params.collab_type,
             UnindexedData::Text(text),
           );
           state

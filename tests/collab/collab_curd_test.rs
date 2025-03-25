@@ -179,7 +179,7 @@ async fn batch_insert_document_collab_test() {
     .iter()
     .map(|params| QueryCollab {
       object_id: params.object_id,
-      collab_type: params.collab_type.clone(),
+      collab_type: params.collab_type,
     })
     .collect::<Vec<_>>();
 

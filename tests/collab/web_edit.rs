@@ -14,7 +14,7 @@ async fn web_and_native_app_edit_same_collab_test() {
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
   let object_id = app_client
-    .create_and_edit_collab(workspace_id, collab_type.clone())
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // client 1 edit the collab
@@ -46,7 +46,7 @@ async fn web_and_native_app_edit_same_collab_test() {
       workspace_id,
       inner: QueryCollab {
         object_id,
-        collab_type: collab_type.clone(),
+        collab_type: collab_type,
       },
     })
     .await

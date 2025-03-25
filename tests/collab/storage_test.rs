@@ -83,7 +83,7 @@ async fn success_batch_get_collab_test() {
     c.create_collab(CreateCollabParams {
       object_id,
       encoded_collab_v1: encode_collab.clone(),
-      collab_type: collab_type.clone(),
+      collab_type: collab_type,
       workspace_id,
     })
     .await
@@ -118,7 +118,7 @@ async fn success_part_batch_get_collab_test() {
   let mut expected_results = HashMap::new();
   for (index, query) in queries.iter().enumerate() {
     let object_id = query.object_id;
-    let collab_type = query.collab_type.clone();
+    let collab_type = query.collab_type;
     let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
       .encode_to_bytes()
       .unwrap();
@@ -140,7 +140,7 @@ async fn success_part_batch_get_collab_test() {
       c.create_collab(CreateCollabParams {
         object_id,
         encoded_collab_v1: encode_collab.clone(),
-        collab_type: collab_type.clone(),
+        collab_type: collab_type,
         workspace_id,
       })
       .await

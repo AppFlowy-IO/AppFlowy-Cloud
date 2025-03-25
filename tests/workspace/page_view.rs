@@ -1111,7 +1111,7 @@ async fn add_recent_pages() {
   let child_view_ids: Vec<_> = general_space
     .children
     .iter()
-    .map(|v| v.view_id.clone())
+    .map(|v| v.view_id)
     .collect();
   for _ in 0..2 {
     for view_id in &child_view_ids {

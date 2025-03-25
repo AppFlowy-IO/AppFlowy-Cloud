@@ -25,7 +25,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn enforce_role(
     &self,
     uid: &i64,
-    workspace_id: &str,
+    workspace_id: Uuid,
     role: AFRole,
   ) -> Result<(), AppError> {
     let result = self
@@ -42,7 +42,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn enforce_action(
     &self,
     uid: &i64,
-    workspace_id: &str,
+    workspace_id: Uuid,
     action: Action,
   ) -> Result<(), AppError> {
     let result = self
@@ -103,6 +103,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
 mod tests {
   use app_error::ErrorCode;
   use database_entity::dto::AFRole;
+  use uuid::Uuid;
 
   use crate::{
     casbin::{access::AccessControl, enforcer::tests::test_enforcer},
@@ -115,7 +116,7 @@ mod tests {
     let enforcer = test_enforcer().await;
     let member_uid = 1;
     let owner_uid = 2;
-    let workspace_id = "w1";
+    let workspace_id = Uuid::new_v4();
     enforcer
       .update_policy(
         SubjectType::User(member_uid),

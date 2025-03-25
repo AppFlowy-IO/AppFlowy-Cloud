@@ -284,7 +284,7 @@ pub async fn batch_get_latest_collab_encoded(
     .iter()
     .map(|row_id| QueryCollab {
       object_id: *row_id,
-      collab_type: collab_type.clone(),
+      collab_type,
     })
     .collect();
   let query_collab_results = collab_storage

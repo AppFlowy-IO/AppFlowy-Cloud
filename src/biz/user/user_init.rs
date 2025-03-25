@@ -50,7 +50,7 @@ where
       } => (object_id.clone(), database_id.clone()),
     };
     let object_id = Uuid::parse_str(&object_id)?;
-    let object_type = template.collab_type.clone();
+    let object_type = template.collab_type;
     let encoded_collab_v1 = template
       .encoded_collab
       .encode_to_bytes()

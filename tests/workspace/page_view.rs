@@ -1098,7 +1098,6 @@ async fn add_recent_pages() {
   let registered_user = generate_unique_registered_user().await;
   let app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let workspace_id = app_client.workspace_id().await;
-  let workspace_uuid = Uuid::parse_str(&workspace_id).unwrap();
   let folder_view = app_client
     .api_client
     .get_workspace_folder(&workspace_id, Some(2), None)
@@ -1109,7 +1108,7 @@ async fn add_recent_pages() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  let child_view_ids: Vec<String> = general_space
+  let child_view_ids: Vec<_> = general_space
     .children
     .iter()
     .map(|v| v.view_id.clone())
@@ -1119,9 +1118,9 @@ async fn add_recent_pages() {
       app_client
         .api_client
         .add_recent_pages(
-          workspace_uuid,
+          workspace_id,
           &AddRecentPagesParams {
-            recent_view_ids: vec![view_id.clone()],
+            recent_view_ids: vec![view_id.to_string()],
           },
         )
         .await
@@ -1135,7 +1134,7 @@ async fn add_recent_pages() {
     .unwrap()
     .views
     .iter()
-    .map(|v| v.view.view_id.clone())
-    .collect::<Vec<String>>();
+    .map(|v| v.view.view_id)
+    .collect::<Vec<_>>();
   assert_eq!(recent_section_ids, child_view_ids)
 }

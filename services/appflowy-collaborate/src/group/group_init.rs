@@ -362,7 +362,7 @@ impl CollabGroup {
     .map_err(|e| AppError::Internal(e.into()))?;
     let workspace_id = self.state.workspace_id;
     let object_id = self.state.object_id;
-    let collab_type = &self.state.collab_type;
+    let collab_type = self.state.collab_type;
     self
       .state
       .persister

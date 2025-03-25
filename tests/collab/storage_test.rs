@@ -83,7 +83,7 @@ async fn success_batch_get_collab_test() {
     c.create_collab(CreateCollabParams {
       object_id,
       encoded_collab_v1: encode_collab.clone(),
-      collab_type: collab_type,
+      collab_type,
       workspace_id,
     })
     .await
@@ -140,7 +140,7 @@ async fn success_part_batch_get_collab_test() {
       c.create_collab(CreateCollabParams {
         object_id,
         encoded_collab_v1: encode_collab.clone(),
-        collab_type: collab_type,
+        collab_type,
         workspace_id,
       })
       .await

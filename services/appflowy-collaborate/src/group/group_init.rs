@@ -1186,8 +1186,7 @@ impl CollabPersister {
 
   async fn load_collab_full(&self) -> Result<Option<Collab>, RealtimeError> {
     // we didn't find a snapshot, or we want a lightweight collab version
-    let params =
-      QueryCollabParams::new(self.object_id, self.collab_type, self.workspace_id);
+    let params = QueryCollabParams::new(self.object_id, self.collab_type, self.workspace_id);
     let result = self
       .storage
       .get_encode_collab(GetCollabOrigin::Server, params, false)

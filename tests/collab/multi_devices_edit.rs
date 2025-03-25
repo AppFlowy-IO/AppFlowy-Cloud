@@ -32,11 +32,7 @@ async fn sync_collab_content_after_reconnect_test() {
   // it will return RecordNotFound error when trying to get the collab from the server
   let err = test_client
     .api_client
-    .get_collab(QueryCollabParams::new(
-      object_id,
-      collab_type,
-      workspace_id,
-    ))
+    .get_collab(QueryCollabParams::new(object_id, collab_type, workspace_id))
     .await
     .unwrap_err();
   assert!(err.is_record_not_found());

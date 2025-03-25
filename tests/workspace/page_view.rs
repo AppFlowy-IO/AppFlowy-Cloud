@@ -1094,11 +1094,7 @@ async fn add_recent_pages() {
     .into_iter()
     .find(|v| v.name == "General")
     .unwrap();
-  let child_view_ids: Vec<_> = general_space
-    .children
-    .iter()
-    .map(|v| v.view_id)
-    .collect();
+  let child_view_ids: Vec<_> = general_space.children.iter().map(|v| v.view_id).collect();
   for _ in 0..2 {
     for view_id in &child_view_ids {
       app_client

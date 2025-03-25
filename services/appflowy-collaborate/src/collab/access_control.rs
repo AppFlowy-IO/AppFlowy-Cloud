@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::collab::cache::CollabCache;
 use access_control::act::Action;
@@ -67,6 +68,7 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
   }
 
   async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<(), AppError> {
+    let workspace_id = Uuid::parse_str(workspace_id)?;
     self
       .workspace_access_control
       .enforce_action(uid, workspace_id, Action::Write)

@@ -85,6 +85,7 @@ services:
       - GOTRUE_MAILER_URLPATHS_INVITE=/gotrue/verify
       - GOTRUE_MAILER_URLPATHS_RECOVERY=/gotrue/verify
       - GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE=/gotrue/verify
+      - GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=${GOTRUE_MAILER_TEMPLATES_MAGIC_LINK}
       - GOTRUE_SMTP_ADMIN_EMAIL=${GOTRUE_SMTP_ADMIN_EMAIL}                # email with admin privileges e.g. internal@appflowy.io
       - GOTRUE_SMTP_MAX_FREQUENCY=${GOTRUE_SMTP_MAX_FREQUENCY:-1ns}       # set to 1ns for running tests
       - GOTRUE_RATE_LIMIT_EMAIL_SENT=${GOTRUE_RATE_LIMIT_EMAIL_SENT:-100} # number of email sendable per minute

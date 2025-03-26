@@ -6,19 +6,6 @@ use appflowy_cloud::telemetry::init_subscriber;
 async fn main() -> anyhow::Result<()> {
   let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
   println!("AppFlowy Cloud with RUST_LOG={}", level);
-  let mut filters = vec![];
-  filters.push(format!("actix_web={}", level));
-  filters.push(format!("collab={}", level));
-  filters.push(format!("collab_sync={}", level));
-  filters.push(format!("appflowy_cloud={}", level));
-  filters.push(format!("collab_plugins={}", level));
-  filters.push(format!("realtime={}", level));
-  filters.push(format!("database={}", level));
-  filters.push(format!("storage={}", level));
-  filters.push(format!("gotrue={}", level));
-  filters.push(format!("appflowy_collaborate={}", level));
-  filters.push(format!("appflowy_ai_client={}", level));
-  filters.push(format!("indexer={}", level));
 
   // Load environment variables from .env file
   dotenvy::dotenv().ok();
@@ -26,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
   let conf =
     get_configuration().map_err(|e| anyhow::anyhow!("Failed to read configuration: {}", e))?;
 
-  init_subscriber(&conf.app_env, filters);
+  init_subscriber(&conf.app_env);
 
   let (tx, rx) = tokio::sync::mpsc::channel(1000);
   let state = init_state(&conf, tx)

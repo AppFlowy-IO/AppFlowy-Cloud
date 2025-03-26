@@ -50,14 +50,10 @@ pub async fn run_server(
 pub fn init_subscriber(app_env: &Environment) {
   static START: Once = Once::new();
   START.call_once(|| {
-    let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
-    let mut filters = vec![];
-    filters.push(format!("appflowy_worker={}", level));
-    let env_filter = EnvFilter::new(filters.join(","));
+    let env_filter = EnvFilter::from_default_env();
 
     let builder = tracing_subscriber::fmt()
       .with_target(true)
-      .with_max_level(tracing::Level::TRACE)
       .with_thread_ids(false)
       .with_file(false);
 

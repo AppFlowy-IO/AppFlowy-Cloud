@@ -104,8 +104,8 @@ pub async fn get_snapshot_meta_list<'a>(
   let rows: Vec<_> = sqlx::query_as!(
     AFSnapshotMetaPbRow,
     r#"
-    SELECT oid, snapshot, snapshot_version, created_at 
-    FROM af_snapshot_meta 
+    SELECT oid, snapshot, snapshot_version, created_at
+    FROM af_snapshot_meta
     WHERE oid = $1 AND partition_key = $2
     ORDER BY created_at DESC"#,
     oid.to_string(),

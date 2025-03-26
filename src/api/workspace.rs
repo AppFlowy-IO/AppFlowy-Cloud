@@ -1047,6 +1047,7 @@ async fn get_collab_handler(
 async fn v1_get_collab_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, Uuid)>,
+  query: web::Query<CollabTypeParam>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<CollabResponse>>> {
   let (workspace_id, object_id) = path.into_inner();
@@ -1060,7 +1061,7 @@ async fn v1_get_collab_handler(
     workspace_id,
     inner: QueryCollab {
       object_id,
-      collab_type: CollabType::Unknown,
+      collab_type: query.collab_type,
     },
   };
 

@@ -294,6 +294,7 @@ pub struct TrashSectionItems {
 pub struct FolderView {
   pub view_id: String,
   pub parent_view_id: String,
+  pub prev_view_id: Option<String>,
   pub name: String,
   pub icon: Option<ViewIcon>,
   pub is_space: bool,

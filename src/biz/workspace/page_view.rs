@@ -5,8 +5,8 @@ use crate::biz::collab::database::{
   resolve_dependencies_when_create_database_linked_view, LinkedViewDependencies,
 };
 use crate::biz::collab::folder_view::{
-  check_if_view_is_space, parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
-  to_folder_view_icon, to_folder_view_layout, to_space_permission,
+  check_if_view_is_space, get_prev_view_id, parse_extra_field_as_json, to_dto_view_icon,
+  to_dto_view_layout, to_folder_view_icon, to_folder_view_layout, to_space_permission,
 };
 use crate::biz::collab::ops::get_latest_workspace_database;
 use crate::biz::collab::utils::{
@@ -1702,6 +1702,7 @@ pub async fn get_page_view_collab(
   let folder_view = FolderView {
     view_id: view_id.to_string(),
     parent_view_id: view.parent_view_id.clone(),
+    prev_view_id: get_prev_view_id(&folder, view_id),
     name: view.name.clone(),
     icon: view
       .icon

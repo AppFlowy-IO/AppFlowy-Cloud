@@ -135,7 +135,7 @@ fn to_folder_view(
 
   // There is currently a bug, in which the parent_view_id is not always set correctly
   let view_parent = Uuid::parse_str(&view.parent_view_id).ok();
-  if view_parent.as_ref() != parent_view_id {
+  if parent_view_id.is_some() && view_parent.as_ref() != parent_view_id {
     return None;
   }
 
@@ -158,10 +158,11 @@ fn to_folder_view(
     .children
     .iter()
     .filter_map(|child_view_id| {
+      let child_view_id = Uuid::parse_str(&child_view_id.id).ok()?;
       to_folder_view(
         workspace_id,
         Some(view_id),
-        &Uuid::parse_str(&child_view_id.id).ok()?,
+        &child_view_id,
         folder,
         private_space_and_trash_views,
         published_view_ids,

@@ -31,7 +31,7 @@ fn is_view_searchable(view: &View, workspace_id: &str) -> bool {
 fn populate_searchable_view_ids(
   folder: &Folder,
   private_space_and_trash_views: &PrivateSpaceAndTrashViews,
-  searchable_view_ids: &mut HashSet<String>,
+  searchable_view_ids: &mut HashSet<Uuid>,
   workspace_id: &Uuid,
   current_view_id: &Uuid,
   depth: i32,
@@ -55,7 +55,7 @@ fn populate_searchable_view_ids(
   };
 
   if is_view_searchable(&view, &workspace_id.to_string()) {
-    searchable_view_ids.insert(current_view_id.to_string());
+    searchable_view_ids.insert(*current_view_id);
   }
   for child in view.children.iter() {
     let child_id = Uuid::parse_str(&child.id).unwrap();

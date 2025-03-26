@@ -53,7 +53,7 @@ create index if not exists idx_workspace_id_on_af_collab
 create index if not exists idx_af_collab_updated_at
     on af_collab (updated_at);
 
-create or replace procedure af_collab_embeddings_upsert(IN p_workspace_id uuid, IN p_oid text, IN p_tokens_used integer, IN p_fragments af_fragment_v3[])
+create or replace procedure af_collab_embeddings_upsert(IN p_workspace_id uuid, IN p_oid uuid, IN p_tokens_used integer, IN p_fragments af_fragment_v3[])
     language plpgsql
 as
 $$

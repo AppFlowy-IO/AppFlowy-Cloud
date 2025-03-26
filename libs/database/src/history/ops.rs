@@ -100,17 +100,19 @@ pub async fn get_snapshot_meta_list<'a>(
   pool: &PgPool,
 ) -> Result<Vec<AFSnapshotMetaPbRow>, sqlx::Error> {
   let partition_key = partition_key_from_collab_type(collab_type);
-  let order_clause = "DESC";
-  let query = format!(
-        "SELECT oid, snapshot, snapshot_version, created_at FROM af_snapshot_meta WHERE oid = $1 AND partition_key = $2 ORDER BY created_at {}",
-        order_clause
-    );
 
-  let rows = sqlx::query_as::<_, AFSnapshotMetaPbRow>(&query)
-    .bind(oid)
-    .bind(partition_key)
-    .fetch_all(pool)
-    .await?;
+  let rows: Vec<_> = sqlx::query_as!(
+    AFSnapshotMetaPbRow,
+    r#"
+    SELECT oid, snapshot, snapshot_version, created_at 
+    FROM af_snapshot_meta 
+    WHERE oid = $1 AND partition_key = $2
+    ORDER BY created_at DESC"#,
+    oid.to_string(),
+    partition_key
+  )
+  .fetch_all(pool)
+  .await?;
 
   Ok(rows)
 }

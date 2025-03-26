@@ -106,7 +106,7 @@ pub async fn upsert_collab_embeddings(
   );
   sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4::af_fragment_v3[])"#)
     .bind(*workspace_id)
-    .bind(object_id.to_string())
+    .bind(object_id)
     .bind(tokens_used as i32)
     .bind(fragments)
     .execute(transaction.deref_mut())

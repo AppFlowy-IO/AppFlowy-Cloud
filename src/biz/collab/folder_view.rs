@@ -82,6 +82,7 @@ pub fn collab_folder_to_folder_view(
 }
 
 pub fn get_prev_view_id(folder: &Folder, view_id: &Uuid) -> Option<Uuid> {
+  let view_id = view_id.to_string();
   folder
     .get_view(&view_id.to_string())
     .and_then(|view| folder.get_view(&view.parent_view_id))

@@ -78,6 +78,25 @@ pub fn collab_folder_to_folder_view(
   )))
 }
 
+pub fn get_prev_view_id(folder: &Folder, view_id: &str) -> Option<String> {
+  folder
+    .get_view(view_id)
+    .and_then(|view| folder.get_view(&view.parent_view_id))
+    .and_then(|parent_view| {
+      parent_view
+        .children
+        .iter()
+        .position(|vid| vid.id == view_id)
+        .and_then(|pos| {
+          if pos == 0 {
+            None
+          } else {
+            Some(parent_view.children[pos - 1].id.clone())
+          }
+        })
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn to_folder_view(
   workspace_id: Uuid,
@@ -151,6 +170,7 @@ fn to_folder_view(
   Some(FolderView {
     view_id: view_id.to_string(),
     parent_view_id: view.parent_view_id.clone(),
+    prev_view_id: get_prev_view_id(folder, view_id),
     name: view.name.clone(),
     icon: view
       .icon
@@ -192,6 +212,7 @@ pub fn section_items_to_favorite_folder_view(
         let folder_view = FolderView {
           view_id: v.id.clone(),
           parent_view_id: v.parent_view_id.clone(),
+          prev_view_id: get_prev_view_id(folder, &v.id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -230,6 +251,7 @@ pub fn section_items_to_recent_folder_view(
         let folder_view = FolderView {
           view_id: v.id.clone(),
           parent_view_id: v.parent_view_id.clone(),
+          prev_view_id: get_prev_view_id(folder, &v.id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -266,6 +288,7 @@ pub fn section_items_to_trash_folder_view(
         let folder_view = FolderView {
           view_id: v.id.clone(),
           parent_view_id: v.parent_view_id.clone(),
+          prev_view_id: get_prev_view_id(folder, &v.id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,

@@ -1693,7 +1693,7 @@ pub async fn get_page_view_collab(
       ))
     })?;
   let publish_view_ids: HashSet<_> = publish_view_ids.into_iter().collect();
-  let parent_view_id = Uuid::parse_str(&view.parent_view_id)?;
+  let parent_view_id = Uuid::parse_str(&view.parent_view_id).ok();
   let folder_view = FolderView {
     view_id,
     parent_view_id,

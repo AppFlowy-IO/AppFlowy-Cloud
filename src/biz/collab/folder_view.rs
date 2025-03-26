@@ -134,16 +134,15 @@ fn to_folder_view(
   };
 
   // There is currently a bug, in which the parent_view_id is not always set correctly
-  let view_parent = Uuid::parse_str(&view.parent_view_id).ok()?;
-  let parent_view_id = *parent_view_id?;
-  if view_parent != parent_view_id {
+  let view_parent = Uuid::parse_str(&view.parent_view_id).ok();
+  if view_parent.as_ref() != parent_view_id {
     return None;
   }
 
   let view_is_space = check_if_view_is_space(&view);
   // There is currently a bug, which a document that is not a space ended up as child
   // of the workspace
-  let parent_is_workspace = workspace_id == parent_view_id;
+  let parent_is_workspace = Some(&workspace_id) == parent_view_id;
   if !view_is_space && parent_is_workspace {
     return None;
   }
@@ -174,7 +173,7 @@ fn to_folder_view(
     .collect();
   Some(FolderView {
     view_id: *view_id,
-    parent_view_id: view.parent_view_id.parse().unwrap(),
+    parent_view_id: view.parent_view_id.parse().ok(),
     prev_view_id: get_prev_view_id(folder, view_id),
     name: view.name.clone(),
     icon: view
@@ -217,7 +216,7 @@ pub fn section_items_to_favorite_folder_view(
         let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
           view_id,
-          parent_view_id: v.parent_view_id.parse().unwrap(),
+          parent_view_id: v.parent_view_id.parse().ok(),
           prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
@@ -257,7 +256,7 @@ pub fn section_items_to_recent_folder_view(
         let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
           view_id,
-          parent_view_id: v.parent_view_id.parse().unwrap(),
+          parent_view_id: v.parent_view_id.parse().ok(),
           prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
@@ -295,7 +294,7 @@ pub fn section_items_to_trash_folder_view(
         let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
           view_id,
-          parent_view_id: v.parent_view_id.parse().unwrap(),
+          parent_view_id: v.parent_view_id.parse().ok(),
           prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),

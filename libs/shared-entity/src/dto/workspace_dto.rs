@@ -297,7 +297,7 @@ pub struct TrashSectionItems {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FolderView {
   pub view_id: Uuid,
-  pub parent_view_id: Uuid,
+  pub parent_view_id: Option<Uuid>,
   pub prev_view_id: Option<Uuid>,
   pub name: String,
   pub icon: Option<ViewIcon>,

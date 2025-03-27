@@ -84,10 +84,7 @@ pub async fn get_access_request(
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::Server,
-    &access_request_with_view_id
-      .workspace
-      .workspace_id
-      .to_string(),
+    access_request_with_view_id.workspace.workspace_id,
   )
   .await?;
   let view = folder.get_view(&access_request_with_view_id.view_id.to_string());
@@ -125,7 +122,7 @@ pub async fn approve_or_reject_access_request(
 ) -> Result<(), AppError> {
   let access_request = select_access_request_by_request_id(pg_pool, request_id).await?;
   workspace_access_control
-    .enforce_role(&uid, access_request.workspace.workspace_id, AFRole::Owner)
+    .enforce_role(&uid, &access_request.workspace.workspace_id, AFRole::Owner)
     .await?;
 
   let mut txn = pg_pool.begin().await.context("approving request")?;

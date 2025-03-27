@@ -24,6 +24,8 @@ async fn chat_crud_test(pool: PgPool) {
     .unwrap();
 
   let chat_id = uuid::Uuid::new_v4().to_string();
+  let rag_id_1 = Uuid::new_v4();
+  let rag_id_2 = Uuid::new_v4();
   // create chat
   {
     insert_chat(
@@ -32,7 +34,7 @@ async fn chat_crud_test(pool: PgPool) {
       CreateChatParams {
         chat_id: chat_id.clone(),
         name: "my first chat".to_string(),
-        rag_ids: vec!["rag_id_1".to_string(), "rag_id_2".to_string()],
+        rag_ids: vec![rag_id_1, rag_id_2],
       },
     )
     .await
@@ -45,7 +47,7 @@ async fn chat_crud_test(pool: PgPool) {
     assert_eq!(chat.name, "my first chat");
     assert_eq!(
       chat.rag_ids,
-      json!(vec!["rag_id_1".to_string(), "rag_id_2".to_string()]),
+      json!(vec![rag_id_1.to_string(), rag_id_2.to_string()]),
     );
   }
 
@@ -75,6 +77,8 @@ async fn chat_message_crud_test(pool: PgPool) {
     .unwrap();
 
   let chat_id = uuid::Uuid::new_v4().to_string();
+  let rag_id_1 = Uuid::new_v4();
+  let rag_id_2 = Uuid::new_v4();
   // create chat
   {
     insert_chat(
@@ -83,7 +87,7 @@ async fn chat_message_crud_test(pool: PgPool) {
       CreateChatParams {
         chat_id: chat_id.clone(),
         name: "my first chat".to_string(),
-        rag_ids: vec!["rag_id_1".to_string(), "rag_id_2".to_string()],
+        rag_ids: vec![rag_id_1, rag_id_2],
       },
     )
     .await
@@ -196,12 +200,14 @@ async fn chat_setting_test(pool: PgPool) {
     .unwrap();
   let workspace_id = user.workspace_id;
   let chat_id = uuid::Uuid::new_v4();
+  let rag1 = Uuid::new_v4();
+  let rag2 = Uuid::new_v4();
 
   // Insert initial chat data with rag_ids
   let insert_params = CreateChatParams {
     chat_id: chat_id.to_string(),
     name: "Initial Chat".to_string(),
-    rag_ids: vec!["rag1".to_string(), "rag2".to_string()],
+    rag_ids: vec![rag1, rag2],
   };
 
   insert_chat(&pool, &workspace_id, insert_params)
@@ -212,7 +218,7 @@ async fn chat_setting_test(pool: PgPool) {
   let settings = select_chat_settings(&pool, &chat_id)
     .await
     .expect("Failed to get chat settings");
-  assert_eq!(settings.rag_ids, vec!["rag1", "rag2"]);
+  assert_eq!(settings.rag_ids, vec![rag1.to_string(), rag2.to_string()]);
 
   // Update metadata
   let update_params = UpdateChatParams {
@@ -232,10 +238,12 @@ async fn chat_setting_test(pool: PgPool) {
   assert_eq!(settings.metadata, json!({"key": "value"}));
 
   // Update rag_ids and metadata together
+  let rag3 = Uuid::new_v4();
+  let rag4 = Uuid::new_v4();
   let update_params = UpdateChatParams {
     name: None,
     metadata: Some(json!({"new_key": "new_value"})),
-    rag_ids: Some(vec!["rag3".to_string(), "rag4".to_string()]),
+    rag_ids: Some(vec![rag3.to_string(), rag4.to_string()]),
   };
 
   update_chat_settings(&pool, &chat_id, update_params)
@@ -250,5 +258,5 @@ async fn chat_setting_test(pool: PgPool) {
     settings.metadata,
     json!({"key": "value", "new_key": "new_value"})
   );
-  assert_eq!(settings.rag_ids, vec!["rag3", "rag4"]);
+  assert_eq!(settings.rag_ids, vec![rag3.to_string(), rag4.to_string()]);
 }

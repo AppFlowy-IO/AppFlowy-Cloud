@@ -11,10 +11,10 @@ use uuid::Uuid;
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_history<'a>(
   workspace_id: &Uuid,
-  oid: &str,
+  oid: &Uuid,
   doc_state: Vec<u8>,
   doc_state_version: i32,
-  deps_snapshot_id: Option<String>,
+  deps_snapshot_id: Option<&Uuid>,
   collab_type: CollabType,
   created_at: i64,
   snapshots: Vec<SnapshotMetaPb>,
@@ -61,7 +61,7 @@ pub async fn insert_history<'a>(
 
 async fn insert_snapshot_meta<'a, E: Executor<'a, Database = Postgres>>(
   workspace_id: &Uuid,
-  oid: &str,
+  oid: &Uuid,
   meta: SnapshotMetaPb,
   partition_key: i32,
   executor: E,
@@ -72,7 +72,7 @@ async fn insert_snapshot_meta<'a, E: Executor<'a, Database = Postgres>>(
     VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT DO NOTHING
     "#,
-    oid,
+    oid.to_string(),
     workspace_id,
     meta.snapshot,
     meta.snapshot_version,
@@ -95,22 +95,24 @@ async fn insert_snapshot_meta<'a, E: Executor<'a, Database = Postgres>>(
 /// Returns a vector of `AFSnapshotMetaPbRow` struct instances containing the snapshot data.
 /// This vector is empty if no records match the criteria.
 pub async fn get_snapshot_meta_list<'a>(
-  oid: &str,
+  oid: &Uuid,
   collab_type: &CollabType,
   pool: &PgPool,
 ) -> Result<Vec<AFSnapshotMetaPbRow>, sqlx::Error> {
   let partition_key = partition_key_from_collab_type(collab_type);
-  let order_clause = "DESC";
-  let query = format!(
-        "SELECT oid, snapshot, snapshot_version, created_at FROM af_snapshot_meta WHERE oid = $1 AND partition_key = $2 ORDER BY created_at {}",
-        order_clause
-    );
 
-  let rows = sqlx::query_as::<_, AFSnapshotMetaPbRow>(&query)
-    .bind(oid)
-    .bind(partition_key)
-    .fetch_all(pool)
-    .await?;
+  let rows: Vec<_> = sqlx::query_as!(
+    AFSnapshotMetaPbRow,
+    r#"
+    SELECT oid, snapshot, snapshot_version, created_at
+    FROM af_snapshot_meta
+    WHERE oid = $1 AND partition_key = $2
+    ORDER BY created_at DESC"#,
+    oid.to_string(),
+    partition_key
+  )
+  .fetch_all(pool)
+  .await?;
 
   Ok(rows)
 }
@@ -130,24 +132,20 @@ pub async fn get_snapshot_meta_list<'a>(
 #[allow(clippy::too_many_arguments)]
 async fn insert_snapshot_state<'a, E: Executor<'a, Database = Postgres>>(
   workspace_id: &Uuid,
-  oid: &str,
+  oid: &Uuid,
   doc_state: Vec<u8>,
   doc_state_version: i32,
-  deps_snapshot_id: Option<String>,
+  deps_snapshot_id: Option<&Uuid>,
   partition_key: i32,
   created_at: i64,
   executor: E,
 ) -> Result<(), sqlx::Error> {
-  let deps_snapshot_id = match deps_snapshot_id {
-    Some(id) => Uuid::parse_str(&id).ok(),
-    None => None,
-  };
   sqlx::query!(
     r#"
     INSERT INTO af_snapshot_state (oid, workspace_id, doc_state, doc_state_version, deps_snapshot_id, partition_key, created_at)
     VALUES ($1, $2, $3, $4, $5, $6, $7)
     "#,
-    oid,
+    oid.to_string(),
     workspace_id,
     doc_state,
     doc_state_version,
@@ -164,7 +162,7 @@ async fn insert_snapshot_state<'a, E: Executor<'a, Database = Postgres>>(
 /// that has a `created_at` timestamp greater than or equal to the specified timestamp.
 ///
 pub async fn get_latest_snapshot_state<'a, E: Executor<'a, Database = Postgres>>(
-  oid: &str,
+  oid: &Uuid,
   timestamp: i64,
   collab_type: &CollabType,
   executor: E,
@@ -179,7 +177,7 @@ pub async fn get_latest_snapshot_state<'a, E: Executor<'a, Database = Postgres>>
         ORDER BY created_at ASC
         LIMIT 1
         "#,
-    oid,
+    oid.to_string(),
     partition_key,
     timestamp,
   )
@@ -190,7 +188,7 @@ pub async fn get_latest_snapshot_state<'a, E: Executor<'a, Database = Postgres>>
 
 /// Gets the latest snapshot for the specified object identifier and partition key.
 pub async fn get_latest_snapshot(
-  oid: &str,
+  oid: &Uuid,
   collab_type: &CollabType,
   pool: &PgPool,
 ) -> Result<Option<SingleSnapshotInfoPb>, sqlx::Error> {
@@ -206,7 +204,7 @@ pub async fn get_latest_snapshot(
         ORDER BY created_at DESC
         LIMIT 1
         "#,
-    oid,
+    oid.to_string(),
     partition_key,
   )
   .fetch_optional(transaction.deref_mut())

@@ -31,9 +31,9 @@ fn is_view_searchable(view: &View, workspace_id: &str) -> bool {
 fn populate_searchable_view_ids(
   folder: &Folder,
   private_space_and_trash_views: &PrivateSpaceAndTrashViews,
-  searchable_view_ids: &mut HashSet<String>,
-  workspace_id: &str,
-  current_view_id: &str,
+  searchable_view_ids: &mut HashSet<Uuid>,
+  workspace_id: &Uuid,
+  current_view_id: &Uuid,
   depth: i32,
   max_depth: i32,
 ) {
@@ -49,21 +49,22 @@ fn populate_searchable_view_ids(
   if is_other_private_space || is_trash {
     return;
   }
-  let view = match folder.get_view(current_view_id) {
+  let view = match folder.get_view(&current_view_id.to_string()) {
     Some(view) => view,
     None => return,
   };
 
-  if is_view_searchable(&view, workspace_id) {
-    searchable_view_ids.insert(current_view_id.to_string());
+  if is_view_searchable(&view, &workspace_id.to_string()) {
+    searchable_view_ids.insert(*current_view_id);
   }
   for child in view.children.iter() {
+    let child_id = Uuid::parse_str(&child.id).unwrap();
     populate_searchable_view_ids(
       folder,
       private_space_and_trash_views,
       searchable_view_ids,
       workspace_id,
-      &child.id,
+      &child_id,
       depth + 1,
       max_depth,
     );
@@ -111,7 +112,7 @@ pub async fn search_document(
   let folder = get_latest_collab_folder(
     collab_storage,
     GetCollabOrigin::User { uid },
-    &workspace_uuid.to_string(),
+    workspace_uuid,
   )
   .await?;
   let private_space_and_trash_views = private_space_and_trash_view_ids(&folder);
@@ -120,8 +121,8 @@ pub async fn search_document(
     &folder,
     &private_space_and_trash_views,
     &mut searchable_view_ids,
-    &workspace_uuid.to_string(),
-    &workspace_uuid.to_string(),
+    &workspace_uuid,
+    &workspace_uuid,
     0,
     MAX_SEARCH_DEPTH,
   );
@@ -151,7 +152,7 @@ pub async fn search_document(
       .into_iter()
       .map(|item| SearchDocumentResponseItem {
         object_id: item.object_id,
-        workspace_id: item.workspace_id.to_string(),
+        workspace_id: item.workspace_id,
         score: item.score,
         content_type: SearchContentType::from_record(item.content_type),
         preview: item.content_preview,

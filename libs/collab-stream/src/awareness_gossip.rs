@@ -52,8 +52,8 @@ impl AwarenessGossip {
 
   pub async fn sink(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<AwarenessUpdateSink, StreamError> {
     let sink = AwarenessUpdateSink::new(self.conn.clone(), workspace_id, object_id);
     Ok(sink)
@@ -87,7 +87,7 @@ pub struct AwarenessUpdateSink {
 }
 
 impl AwarenessUpdateSink {
-  pub fn new(conn: MultiplexedConnection, workspace_id: &str, object_id: &str) -> Self {
+  pub fn new(conn: MultiplexedConnection, workspace_id: &Uuid, object_id: &Uuid) -> Self {
     let publish_key = format!("af:awareness:{workspace_id}:{object_id}");
     AwarenessUpdateSink {
       conn: conn.into(),
@@ -131,10 +131,7 @@ mod test {
     for _ in 0..COLLAB_COUNT {
       let workspace_id = Uuid::new_v4();
       let object_id = Uuid::new_v4();
-      let sink = gossip
-        .sink(&workspace_id.to_string(), &object_id.to_string())
-        .await
-        .unwrap();
+      let sink = gossip.sink(&workspace_id, &object_id).await.unwrap();
       let stream = gossip.awareness_stream(&object_id);
       collabs.push((sink, stream));
     }

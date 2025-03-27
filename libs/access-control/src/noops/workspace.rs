@@ -26,7 +26,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn enforce_role(
     &self,
     _uid: &i64,
-    _workspace_id: Uuid,
+    _workspace_id: &Uuid,
     _role: AFRole,
   ) -> Result<(), AppError> {
     Ok(())
@@ -35,7 +35,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn enforce_action(
     &self,
     _uid: &i64,
-    _workspace_id: Uuid,
+    _workspace_id: &Uuid,
     _action: Action,
   ) -> Result<(), AppError> {
     Ok(())

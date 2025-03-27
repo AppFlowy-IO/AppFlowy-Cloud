@@ -29,7 +29,7 @@ impl Client {
   pub async fn favorite_page_view(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
     params: &FavoritePageParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(
@@ -48,7 +48,7 @@ impl Client {
   pub async fn move_workspace_page_view(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
     params: &MovePageParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(
@@ -67,7 +67,7 @@ impl Client {
   pub async fn move_workspace_page_view_to_trash(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/page-view/{}/move-to-trash",
@@ -85,7 +85,7 @@ impl Client {
   pub async fn restore_workspace_page_view_from_trash(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/page-view/{}/restore-from-trash",
@@ -138,7 +138,7 @@ impl Client {
   pub async fn delete_workspace_page_view_from_trash(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/trash/{}",
@@ -172,7 +172,7 @@ impl Client {
   pub async fn update_workspace_page_view(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
     params: &UpdatePageParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(
@@ -191,7 +191,7 @@ impl Client {
   pub async fn get_workspace_page_view(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
   ) -> Result<PageCollab, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/page-view/{}",
@@ -210,7 +210,7 @@ impl Client {
   pub async fn publish_page(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
     params: &PublishPageParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(
@@ -229,7 +229,7 @@ impl Client {
   pub async fn unpublish_page(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/page-view/{}/unpublish",
@@ -262,7 +262,7 @@ impl Client {
   pub async fn update_space(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
     params: &UpdateSpaceParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(
@@ -281,7 +281,7 @@ impl Client {
   pub async fn append_block_to_page(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
     params: &AppendBlockToPageParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(
@@ -300,7 +300,7 @@ impl Client {
   pub async fn create_database_view(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
     params: &CreatePageDatabaseViewParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(
@@ -319,7 +319,7 @@ impl Client {
   pub async fn duplicate_view_and_children(
     &self,
     workspace_id: Uuid,
-    view_id: &str,
+    view_id: &Uuid,
     params: &DuplicatePageParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(

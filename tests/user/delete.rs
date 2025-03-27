@@ -49,7 +49,7 @@ async fn user_delete_self_shared_workspace() {
   let user_1_workspaces = user_1.api_client.get_workspaces().await.unwrap();
   let _workspace_a = user_1_workspaces
     .into_iter()
-    .find(|w| w.workspace_id.to_string() == workspace_a)
+    .find(|w| w.workspace_id == workspace_a)
     .unwrap();
 }
 

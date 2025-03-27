@@ -68,12 +68,11 @@ pub fn localhost_client_with_device_id(device_id: &str) -> Client {
   )
 }
 
-pub async fn workspace_id_from_client(c: &Client) -> String {
+pub async fn workspace_id_from_client(c: &Client) -> Uuid {
   c.get_workspaces()
     .await
     .unwrap()
     .first()
     .unwrap()
     .workspace_id
-    .to_string()
 }

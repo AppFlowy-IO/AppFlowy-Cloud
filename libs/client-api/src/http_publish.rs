@@ -1,3 +1,4 @@
+use crate::{log_request_id, Client};
 use bytes::Bytes;
 use client_api_entity::publish_dto::DuplicatePublishedPageResponse;
 use client_api_entity::workspace_dto::{PublishInfoView, PublishedView};
@@ -10,15 +11,14 @@ use client_api_entity::{
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
 use tracing::instrument;
-
-use crate::{log_request_id, Client};
+use uuid::Uuid;
 
 // Publisher API
 impl Client {
   #[instrument(level = "debug", skip_all)]
   pub async fn list_published_views(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<Vec<PublishInfoView>, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/published-info",
@@ -40,7 +40,7 @@ impl Client {
   /// or the original publish namespace if not exists.
   pub async fn set_workspace_publish_namespace(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     new_namespace: String,
   ) -> Result<(), AppResponseError> {
     let old_namespace = self.get_workspace_publish_namespace(workspace_id).await?;
@@ -65,7 +65,7 @@ impl Client {
 
   pub async fn get_workspace_publish_namespace(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<String, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/publish-namespace",
@@ -84,7 +84,7 @@ impl Client {
 
   pub async fn patch_published_collabs(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     patches: &[PatchPublishedCollab],
   ) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}/publish", self.base_url, workspace_id);
@@ -100,8 +100,8 @@ impl Client {
 
   pub async fn unpublish_collabs(
     &self,
-    workspace_id: &str,
-    view_ids: &[uuid::Uuid],
+    workspace_id: &Uuid,
+    view_ids: &[Uuid],
   ) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}/publish", self.base_url, workspace_id);
     let resp = self
@@ -116,9 +116,9 @@ impl Client {
 
   pub async fn create_comment_on_published_view(
     &self,
-    view_id: &uuid::Uuid,
+    view_id: &Uuid,
     comment_content: &str,
-    reply_comment_id: &Option<uuid::Uuid>,
+    reply_comment_id: &Option<Uuid>,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/published-info/{}/comment",
@@ -139,8 +139,8 @@ impl Client {
 
   pub async fn delete_comment_on_published_view(
     &self,
-    view_id: &uuid::Uuid,
-    comment_id: &uuid::Uuid,
+    view_id: &Uuid,
+    comment_id: &Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/published-info/{}/comment",
@@ -161,8 +161,8 @@ impl Client {
   pub async fn create_reaction_on_comment(
     &self,
     reaction_type: &str,
-    view_id: &uuid::Uuid,
-    comment_id: &uuid::Uuid,
+    view_id: &Uuid,
+    comment_id: &Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/published-info/{}/reaction",
@@ -184,8 +184,8 @@ impl Client {
   pub async fn delete_reaction_on_comment(
     &self,
     reaction_type: &str,
-    view_id: &uuid::Uuid,
-    comment_id: &uuid::Uuid,
+    view_id: &Uuid,
+    comment_id: &Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/published-info/{}/reaction",
@@ -206,8 +206,8 @@ impl Client {
 
   pub async fn set_default_publish_view(
     &self,
-    workspace_id: &str,
-    view_id: uuid::Uuid,
+    workspace_id: &Uuid,
+    view_id: Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/publish-default",
@@ -225,7 +225,7 @@ impl Client {
 
   pub async fn delete_default_publish_view(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/publish-default",
@@ -242,7 +242,7 @@ impl Client {
 
   pub async fn get_default_publish_view_info(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<PublishInfo, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/publish-default",
@@ -264,7 +264,7 @@ impl Client {
 impl Client {
   pub async fn get_published_view_comments(
     &self,
-    view_id: &uuid::Uuid,
+    view_id: &Uuid,
   ) -> Result<GlobalComments, AppResponseError> {
     let url = format!(
       "{}/api/workspace/published-info/{}/comment",
@@ -289,7 +289,7 @@ impl Client {
   #[instrument(level = "debug", skip_all)]
   pub async fn get_published_collab_info(
     &self,
-    view_id: &uuid::Uuid,
+    view_id: &Uuid,
   ) -> Result<PublishInfo, AppResponseError> {
     let url = format!(
       "{}/api/workspace/v1/published-info/{}",
@@ -409,7 +409,7 @@ impl Client {
 
   pub async fn duplicate_published_to_workspace(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     publish_duplicate: &PublishedDuplicate,
   ) -> Result<DuplicatePublishedPageResponse, AppResponseError> {
     let url = format!(
@@ -430,8 +430,8 @@ impl Client {
 
   pub async fn get_published_view_reactions(
     &self,
-    view_id: &uuid::Uuid,
-    comment_id: &Option<uuid::Uuid>,
+    view_id: &Uuid,
+    comment_id: &Option<Uuid>,
   ) -> Result<Reactions, AppResponseError> {
     let url = format!(
       "{}/api/workspace/published-info/{}/reaction",

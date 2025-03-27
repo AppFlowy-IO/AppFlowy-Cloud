@@ -21,12 +21,13 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tracing::error;
+use uuid::Uuid;
 
 impl Client {
   /// Create a new chat
   pub async fn create_chat(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params: CreateChatParams,
   ) -> Result<(), AppResponseError> {
     let url = format!("{}/api/chat/{workspace_id}", self.base_url);
@@ -42,7 +43,7 @@ impl Client {
 
   pub async fn update_chat_settings(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     params: UpdateChatParams,
   ) -> Result<(), AppResponseError> {
@@ -61,7 +62,7 @@ impl Client {
   }
   pub async fn get_chat_settings(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
   ) -> Result<ChatSettings, AppResponseError> {
     let url = format!(
@@ -82,7 +83,7 @@ impl Client {
   /// Delete a chat for given chat_id
   pub async fn delete_chat(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
   ) -> Result<(), AppResponseError> {
     let url = format!("{}/api/chat/{workspace_id}/{chat_id}", self.base_url);
@@ -98,7 +99,7 @@ impl Client {
   /// Save a question message to a chat
   pub async fn create_question(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     params: CreateChatMessageParams,
   ) -> Result<ChatMessage, AppResponseError> {
@@ -121,7 +122,7 @@ impl Client {
   /// save an answer message to a chat
   pub async fn save_answer(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     params: CreateAnswerMessageParams,
   ) -> Result<ChatMessage, AppResponseError> {
@@ -143,7 +144,7 @@ impl Client {
 
   pub async fn stream_answer_v2(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     question_id: i64,
   ) -> Result<QuestionStream, AppResponseError> {
@@ -174,7 +175,7 @@ impl Client {
 
   pub async fn stream_answer_v3(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     query: ChatQuestionQuery,
     chat_model: Option<String>,
   ) -> Result<QuestionStream, AppResponseError> {
@@ -196,7 +197,7 @@ impl Client {
 
   pub async fn get_answer(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     question_message_id: i64,
   ) -> Result<ChatMessage, AppResponseError> {
@@ -219,7 +220,7 @@ impl Client {
   /// A message can be a question or an answer
   pub async fn update_chat_message(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     params: UpdateChatMessageContentParams,
   ) -> Result<(), AppResponseError> {
@@ -240,7 +241,7 @@ impl Client {
   /// Get related question for a chat message. The message_d should be the question's id
   pub async fn get_chat_related_question(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     message_id: i64,
   ) -> Result<RepeatedRelatedQuestion, AppResponseError> {
@@ -262,7 +263,7 @@ impl Client {
   /// Deprecated since v0.9.24. Return list of chat messages for a chat
   pub async fn get_chat_messages(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     offset: MessageCursor,
     limit: u64,
@@ -300,7 +301,7 @@ impl Client {
   /// as the author's uid, as author_uid will face precision issue in the browser environment.
   pub async fn get_chat_messages_with_author_uuid(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     offset: MessageCursor,
     limit: u64,
@@ -336,7 +337,7 @@ impl Client {
 
   pub async fn get_question_message_from_answer_id(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     chat_id: &str,
     answer_message_id: i64,
   ) -> Result<Option<ChatMessage>, AppResponseError> {

@@ -11,9 +11,7 @@ use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 #[tokio::test]
 async fn workspace_list_database() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let workspace_id = c.get_workspaces().await.unwrap()[0]
-    .workspace_id
-    .to_string();
+  let workspace_id = c.get_workspaces().await.unwrap()[0].workspace_id;
 
   {
     let dbs = c.list_databases(&workspace_id).await.unwrap();
@@ -161,12 +159,12 @@ async fn add_and_delete_workspace_for_user() {
     .unwrap();
 
   // Workspace need to have at least one collab
-  let workspace_id = newly_added_workspace.workspace_id.to_string();
+  let workspace_id = newly_added_workspace.workspace_id;
   let _ = c
     .get_collab(QueryCollabParams::new(
-      &workspace_id,
+      workspace_id,
       CollabType::Folder,
-      &workspace_id,
+      workspace_id,
     ))
     .await
     .unwrap();

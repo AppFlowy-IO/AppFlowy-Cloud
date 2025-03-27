@@ -25,7 +25,7 @@ impl Indexer for DocumentIndexer {
     collab: &Collab,
     embedding_model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
-    let object_id = collab.object_id().to_string();
+    let object_id = collab.object_id().parse()?;
     let document = DocumentBody::from_collab(collab).ok_or_else(|| {
       anyhow!(
         "Failed to get document body from collab `{}`: schema is missing required fields",
@@ -48,7 +48,7 @@ impl Indexer for DocumentIndexer {
 
   fn create_embedded_chunks_from_text(
     &self,
-    object_id: String,
+    object_id: Uuid,
     text: String,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
@@ -102,7 +102,7 @@ impl Indexer for DocumentIndexer {
 }
 
 fn split_text_into_chunks(
-  object_id: String,
+  object_id: Uuid,
   content: String,
   collab_type: CollabType,
   embedding_model: &EmbeddingModel,
@@ -118,15 +118,14 @@ fn split_text_into_chunks(
   // We assume that every token is ~4 bytes. We're going to split document content into fragments
   // of ~2000 tokens each.
   let split_contents = split_text_by_max_content_len(content, 8000)?;
-  let metadata =
-    json!({"id": object_id, "source": "appflowy", "name": "document", "collab_type": collab_type });
+  let metadata = json!({"id": object_id.to_string(), "source": "appflowy", "name": "document", "collab_type": collab_type });
   Ok(
     split_contents
       .into_iter()
       .enumerate()
       .map(|(index, content)| AFCollabEmbeddedChunk {
         fragment_id: Uuid::new_v4().to_string(),
-        object_id: object_id.clone(),
+        object_id,
         content_type: EmbeddingContentType::PlainText,
         content,
         embedding: None,

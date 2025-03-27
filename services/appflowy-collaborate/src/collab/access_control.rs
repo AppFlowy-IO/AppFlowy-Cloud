@@ -1,14 +1,13 @@
-use async_trait::async_trait;
-use std::sync::Arc;
-use uuid::Uuid;
-
 use crate::collab::cache::CollabCache;
 use access_control::act::Action;
 use access_control::collab::CollabAccessControl;
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
+use async_trait::async_trait;
 use database::collab::CollabStorageAccessControl;
 use database_entity::dto::AFAccessLevel;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct CollabStorageAccessControlImpl {
@@ -22,7 +21,7 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
   async fn update_policy(
     &self,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
     level: AFAccessLevel,
   ) -> Result<(), AppError> {
     self
@@ -33,9 +32,9 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
 
   async fn enforce_read_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
   ) -> Result<(), AppError> {
     let collab_exists = self.cache.is_exist(workspace_id, oid).await?;
     if !collab_exists {
@@ -51,9 +50,9 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
 
   async fn enforce_write_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
   ) -> Result<(), AppError> {
     let collab_exists = self.cache.is_exist(workspace_id, oid).await?;
     if !collab_exists {
@@ -67,15 +66,19 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
       .await
   }
 
-  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<(), AppError> {
-    let workspace_id = Uuid::parse_str(workspace_id)?;
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
     self
       .workspace_access_control
       .enforce_action(uid, workspace_id, Action::Write)
       .await
   }
 
-  async fn enforce_delete(&self, workspace_id: &str, uid: &i64, oid: &str) -> Result<(), AppError> {
+  async fn enforce_delete(
+    &self,
+    workspace_id: &Uuid,
+    uid: &i64,
+    oid: &Uuid,
+  ) -> Result<(), AppError> {
     self
       .collab_access_control
       .enforce_access_level(workspace_id, uid, oid, AFAccessLevel::FullAccess)

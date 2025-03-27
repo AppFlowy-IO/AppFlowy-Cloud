@@ -241,8 +241,8 @@ impl IndexerScheduler {
 
   pub async fn index_collab_immediately(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: Uuid,
+    object_id: Uuid,
     collab: &Collab,
     collab_type: CollabType,
   ) -> Result<(), AppError> {
@@ -263,8 +263,8 @@ impl IndexerScheduler {
         if let Some(text) = text {
           if !text.is_empty() {
             let pending = UnindexedCollabTask::new(
-              Uuid::parse_str(workspace_id)?,
-              object_id.to_string(),
+              workspace_id,
+              object_id,
               collab_type,
               UnindexedData::Text(text),
             );
@@ -280,13 +280,12 @@ impl IndexerScheduler {
     Ok(())
   }
 
-  pub async fn can_index_workspace(&self, workspace_id: &str) -> Result<bool, AppError> {
+  pub async fn can_index_workspace(&self, workspace_id: &Uuid) -> Result<bool, AppError> {
     if !self.index_enabled() {
       return Ok(false);
     }
 
-    let uuid = Uuid::parse_str(workspace_id)?;
-    let settings = select_workspace_settings(&self.pg_pool, &uuid).await?;
+    let settings = select_workspace_settings(&self.pg_pool, workspace_id).await?;
     match settings {
       None => Ok(true),
       Some(settings) => Ok(!settings.disable_search_indexing),
@@ -343,7 +342,7 @@ async fn spawn_rayon_generate_embeddings(
           records.into_par_iter().for_each(|record| {
             let result = threads.install(|| {
               let indexer = indexer_provider.indexer_for(record.collab_type);
-              match process_collab(&embedder, indexer, &record.object_id, record.data, &metrics) {
+              match process_collab(&embedder, indexer, record.object_id, record.data, &metrics) {
                 Ok(Some((tokens_used, contents))) => {
                   if let Err(err) = write_embedding_tx.send(EmbeddingRecord {
                     workspace_id: record.workspace_id,
@@ -448,7 +447,7 @@ pub(crate) async fn batch_insert_records(
   let mut seen = HashSet::new();
   let records = records
     .into_iter()
-    .filter(|record| seen.insert(record.object_id.clone()))
+    .filter(|record| seen.insert(record.object_id))
     .collect::<Vec<_>>();
 
   let mut txn = pg_pool.begin().await?;
@@ -465,7 +464,6 @@ pub(crate) async fn batch_insert_records(
       &mut txn,
       &record.workspace_id,
       &record.object_id,
-      record.collab_type,
       record.tokens_used,
       record.contents,
     )
@@ -483,14 +481,14 @@ pub(crate) async fn batch_insert_records(
 fn process_collab(
   embedder: &Embedder,
   indexer: Option<Arc<dyn Indexer>>,
-  object_id: &str,
+  object_id: Uuid,
   data: UnindexedData,
   metrics: &EmbeddingMetrics,
 ) -> Result<Option<(u32, Vec<AFCollabEmbeddedChunk>)>, AppError> {
   if let Some(indexer) = indexer {
     let chunks = match data {
       UnindexedData::Text(text) => {
-        indexer.create_embedded_chunks_from_text(object_id.to_string(), text, embedder.model())?
+        indexer.create_embedded_chunks_from_text(object_id, text, embedder.model())?
       },
     };
 
@@ -516,7 +514,7 @@ fn process_collab(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UnindexedCollabTask {
   pub workspace_id: Uuid,
-  pub object_id: String,
+  pub object_id: Uuid,
   pub collab_type: CollabType,
   pub data: UnindexedData,
   pub created_at: i64,
@@ -525,7 +523,7 @@ pub struct UnindexedCollabTask {
 impl UnindexedCollabTask {
   pub fn new(
     workspace_id: Uuid,
-    object_id: String,
+    object_id: Uuid,
     collab_type: CollabType,
     data: UnindexedData,
   ) -> Self {

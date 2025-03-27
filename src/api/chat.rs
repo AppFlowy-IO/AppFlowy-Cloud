@@ -108,7 +108,7 @@ pub fn chat_scope() -> Scope {
       )
 }
 async fn create_chat_handler(
-  path: web::Path<String>,
+  path: web::Path<Uuid>,
   state: Data<AppState>,
   payload: Json<CreateChatParams>,
 ) -> actix_web::Result<JsonAppResponse<()>> {

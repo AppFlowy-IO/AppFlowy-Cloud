@@ -11,7 +11,7 @@
       {
         "ordinal": 1,
         "name": "oid",
-        "type_info": "Text"
+        "type_info": "Uuid"
       },
       {
         "ordinal": 2,

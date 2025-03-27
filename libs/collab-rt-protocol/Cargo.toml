@@ -18,6 +18,7 @@ tracing.workspace = true
 async-trait.workspace = true
 tokio = "1.36.0"
 collab-entity.workspace = true
+uuid.workspace = true
 
 [features]
 verbose_log = []

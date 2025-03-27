@@ -93,7 +93,7 @@ where
 
   async fn insert_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
     params: CollabParams,
   ) -> AppResult<()> {
@@ -106,7 +106,7 @@ where
 
   async fn check_write_workspace_permission(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
   ) -> Result<(), AppError> {
     // If the collab doesn't exist, check if the user has enough permissions to create collab.
@@ -120,9 +120,9 @@ where
 
   async fn check_write_collab_permission(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    object_id: &str,
+    object_id: &Uuid,
   ) -> Result<(), AppError> {
     // If the collab already exists, check if the user has enough permissions to update collab
     self
@@ -131,8 +131,7 @@ where
       .await?;
     Ok(())
   }
-  async fn get_encode_collab_from_editing(&self, oid: &str) -> Option<EncodedCollab> {
-    let object_id = oid.to_string();
+  async fn get_encode_collab_from_editing(&self, object_id: Uuid) -> Option<EncodedCollab> {
     let (ret, rx) = tokio::sync::oneshot::channel();
     let timeout_duration = Duration::from_secs(5);
 
@@ -153,20 +152,20 @@ where
     match timeout(timeout_duration, rx).await {
       Ok(Ok(Some(encode_collab))) => Some(encode_collab),
       Ok(Ok(None)) => {
-        trace!("Editing collab not found: `{}`", oid);
+        trace!("Editing collab not found: `{}`", object_id);
         None
       },
       Ok(Err(err)) => {
         error!(
           "Failed to get collab from realtime server `{}`: {}",
-          oid, err
+          object_id, err
         );
         None
       },
       Err(_) => {
         error!(
           "Timeout trying to read collab `{}` from realtime server",
-          oid
+          object_id
         );
         None
       },
@@ -175,8 +174,8 @@ where
 
   async fn batch_get_encode_collab_from_editing(
     &self,
-    object_ids: Vec<String>,
-  ) -> HashMap<String, EncodedCollab> {
+    object_ids: Vec<Uuid>,
+  ) -> HashMap<Uuid, EncodedCollab> {
     let (ret, rx) = tokio::sync::oneshot::channel();
     let timeout_duration = Duration::from_secs(10);
 
@@ -209,7 +208,7 @@ where
 
   async fn queue_insert_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params: CollabParams,
   ) -> Result<(), AppError> {
@@ -225,7 +224,7 @@ where
       )));
     }
 
-    let pending = PendingCollabWrite::new(workspace_id.into(), *uid, params);
+    let pending = PendingCollabWrite::new(workspace_id, *uid, params);
     if let Err(e) = self.queue.send(pending).await {
       error!("Failed to queue insert collab doc state: {}", e);
     }
@@ -234,7 +233,7 @@ where
 
   async fn batch_insert_collabs(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params_list: Vec<CollabParams>,
   ) -> Result<(), AppError> {
@@ -250,7 +249,7 @@ where
   /// * `collab_messages` - The list of collab messages to broadcast.
   pub async fn broadcast_encode_collab(
     &self,
-    object_id: String,
+    object_id: Uuid,
     collab_messages: Vec<ClientCollabMessage>,
   ) -> Result<(), AppError> {
     let (sender, recv) = tokio::sync::oneshot::channel();
@@ -291,22 +290,25 @@ where
 {
   async fn queue_insert_or_update_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params: CollabParams,
     flush_to_disk: bool,
   ) -> AppResult<()> {
     params.validate()?;
-    let is_exist = self.cache.is_exist(workspace_id, &params.object_id).await?;
+    let is_exist = self
+      .cache
+      .is_exist(&workspace_id, &params.object_id)
+      .await?;
     // If the collab already exists, check if the user has enough permissions to update collab
     // Otherwise, check if the user has enough permissions to create collab.
     if is_exist {
       self
-        .check_write_collab_permission(workspace_id, uid, &params.object_id)
+        .check_write_collab_permission(&workspace_id, uid, &params.object_id)
         .await?;
     } else {
       self
-        .check_write_workspace_permission(workspace_id, uid)
+        .check_write_workspace_permission(&workspace_id, uid)
         .await?;
       trace!(
         "Update policy for user:{} to create collab:{}",
@@ -319,7 +321,7 @@ where
         .await?;
     }
     if flush_to_disk {
-      self.insert_collab(workspace_id, uid, params).await?;
+      self.insert_collab(&workspace_id, uid, params).await?;
     } else {
       self.queue_insert_collab(workspace_id, uid, params).await?;
     }
@@ -328,12 +330,12 @@ where
 
   async fn batch_insert_new_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params_list: Vec<CollabParams>,
   ) -> AppResult<()> {
     self
-      .check_write_workspace_permission(workspace_id, uid)
+      .check_write_workspace_permission(&workspace_id, uid)
       .await?;
 
     // TODO(nathan): batch insert permission
@@ -362,7 +364,7 @@ where
   #[allow(clippy::blocks_in_conditions)]
   async fn upsert_new_collab_with_transaction(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
@@ -370,7 +372,7 @@ where
   ) -> AppResult<()> {
     params.validate()?;
     self
-      .check_write_workspace_permission(workspace_id, uid)
+      .check_write_workspace_permission(&workspace_id, uid)
       .await?;
     self
       .access_control
@@ -381,7 +383,7 @@ where
       Duration::from_secs(120),
       self
         .cache
-        .insert_encode_collab_data(workspace_id, uid, params, transaction),
+        .insert_encode_collab_data(&workspace_id, uid, params, transaction),
     )
     .await
     {
@@ -419,7 +421,7 @@ where
     // Early return if editing collab is initialized, as it indicates no need to query further.
     if from_editing_collab {
       // Attempt to retrieve encoded collab from the editing collab
-      if let Some(value) = self.get_encode_collab_from_editing(&params.object_id).await {
+      if let Some(value) = self.get_encode_collab_from_editing(params.object_id).await {
         trace!(
           "Did get encode collab {} from editing collab",
           params.object_id
@@ -438,10 +440,10 @@ where
   async fn batch_get_collab(
     &self,
     _uid: &i64,
-    workspace_id: &str,
+    workspace_id: Uuid,
     queries: Vec<QueryCollab>,
     from_editing_collab: bool,
-  ) -> HashMap<String, QueryCollabResult> {
+  ) -> HashMap<Uuid, QueryCollabResult> {
     if queries.is_empty() {
       return HashMap::new();
     }
@@ -462,14 +464,9 @@ where
     let cache_queries = if from_editing_collab {
       let editing_queries = valid_queries.clone();
       let editing_results = self
-        .batch_get_encode_collab_from_editing(
-          editing_queries
-            .iter()
-            .map(|q| q.object_id.clone())
-            .collect(),
-        )
+        .batch_get_encode_collab_from_editing(editing_queries.iter().map(|q| q.object_id).collect())
         .await;
-      let editing_query_collab_results: HashMap<String, QueryCollabResult> =
+      let editing_query_collab_results: HashMap<Uuid, QueryCollabResult> =
         tokio::task::spawn_blocking(move || {
           let par_iter = editing_results.into_par_iter();
           par_iter
@@ -484,13 +481,13 @@ where
                 },
               };
 
-              (object_id.clone(), query_collab_result)
+              (object_id, query_collab_result)
             })
             .collect()
         })
         .await
         .unwrap();
-      let editing_object_ids: Vec<String> = editing_query_collab_results.keys().cloned().collect();
+      let editing_object_ids: Vec<_> = editing_query_collab_results.keys().cloned().collect();
       results.extend(editing_query_collab_results);
       valid_queries
         .into_iter()
@@ -503,13 +500,13 @@ where
     results.extend(
       self
         .cache
-        .batch_get_encode_collab(workspace_id, cache_queries)
+        .batch_get_encode_collab(&workspace_id, cache_queries)
         .await,
     );
     results
   }
 
-  async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()> {
+  async fn delete_collab(&self, workspace_id: &Uuid, uid: &i64, object_id: &Uuid) -> AppResult<()> {
     self
       .access_control
       .enforce_delete(workspace_id, uid, object_id)
@@ -518,7 +515,11 @@ where
     Ok(())
   }
 
-  async fn should_create_snapshot(&self, workspace_id: &str, oid: &str) -> Result<bool, AppError> {
+  async fn should_create_snapshot(
+    &self,
+    workspace_id: &Uuid,
+    oid: &Uuid,
+  ) -> Result<bool, AppError> {
     self
       .snapshot_control
       .should_create_snapshot(workspace_id, oid)
@@ -535,8 +536,8 @@ where
 
   async fn get_collab_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: Uuid,
+    object_id: Uuid,
     snapshot_id: &i64,
   ) -> AppResult<SnapshotData> {
     self
@@ -547,8 +548,8 @@ where
 
   async fn get_latest_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: Uuid,
+    object_id: Uuid,
     collab_type: CollabType,
   ) -> AppResult<Option<SnapshotData>> {
     self
@@ -559,8 +560,8 @@ where
 
   async fn get_collab_snapshot_list(
     &self,
-    workspace_id: &str,
-    oid: &str,
+    workspace_id: &Uuid,
+    oid: &Uuid,
   ) -> AppResult<AFSnapshotMetas> {
     self
       .snapshot_control

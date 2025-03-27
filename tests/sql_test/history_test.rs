@@ -11,27 +11,27 @@ use uuid::Uuid;
 async fn insert_snapshot_test(pool: PgPool) {
   setup_db(&pool).await.unwrap();
 
-  let user_uuid = uuid::Uuid::new_v4();
+  let user_uuid = Uuid::new_v4();
   let name = user_uuid.to_string();
   let email = format!("{}@appflowy.io", name);
   let user = test_create_user(&pool, user_uuid, &email, &name)
     .await
     .unwrap();
 
-  let workspace_id = Uuid::parse_str(&user.workspace_id).unwrap();
+  let workspace_id = user.workspace_id;
   let timestamp = chrono::Utc::now().timestamp();
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let collab_type = CollabType::Document;
 
   let snapshots = vec![
     SnapshotMetaPb {
-      oid: object_id.clone(),
+      oid: object_id.to_string(),
       snapshot: vec![1, 2, 3],
       snapshot_version: 1,
       created_at: timestamp,
     },
     SnapshotMetaPb {
-      oid: object_id.clone(),
+      oid: object_id.to_string(),
       snapshot: vec![3, 4, 5],
       snapshot_version: 1,
       created_at: timestamp + 100,

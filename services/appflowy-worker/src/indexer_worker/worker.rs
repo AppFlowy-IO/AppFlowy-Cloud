@@ -1,5 +1,4 @@
 use app_error::AppError;
-use collab_entity::CollabType;
 use database::index::get_collabs_indexed_at;
 use indexer::collab_indexer::{Indexer, IndexerProvider};
 use indexer::entity::EmbeddingRecord;
@@ -133,10 +132,7 @@ async fn process_upcoming_tasks(
             .collect();
           tasks.retain(|task| !task.data.is_empty());
 
-          let collab_ids: Vec<(String, CollabType)> = tasks
-            .iter()
-            .map(|task| (task.object_id.clone(), task.collab_type))
-            .collect();
+          let collab_ids: Vec<_> = tasks.iter().map(|task| task.object_id).collect();
 
           let indexed_collabs = get_collabs_indexed_at(&pg_pool, collab_ids)
             .await

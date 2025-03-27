@@ -175,7 +175,7 @@ impl Client {
       );
     }
 
-    let ai_model = Arc::new(RwLock::new("gpt-4o-mini".to_string()));
+    let ai_model = Arc::new(RwLock::new("Auto".to_string()));
 
     Self {
       base_url: base_url.to_string(),

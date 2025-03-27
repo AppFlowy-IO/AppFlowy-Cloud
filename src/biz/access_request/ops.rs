@@ -125,7 +125,7 @@ pub async fn approve_or_reject_access_request(
 ) -> Result<(), AppError> {
   let access_request = select_access_request_by_request_id(pg_pool, request_id).await?;
   workspace_access_control
-    .enforce_role(&uid, access_request.workspace.workspace_id, AFRole::Owner)
+    .enforce_role(&uid, &access_request.workspace.workspace_id, AFRole::Owner)
     .await?;
 
   let mut txn = pg_pool.begin().await.context("approving request")?;

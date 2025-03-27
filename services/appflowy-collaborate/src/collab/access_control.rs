@@ -71,7 +71,7 @@ impl CollabStorageAccessControl for CollabStorageAccessControlImpl {
     let workspace_id = Uuid::parse_str(workspace_id)?;
     self
       .workspace_access_control
-      .enforce_action(uid, workspace_id, Action::Write)
+      .enforce_action(uid, &workspace_id, Action::Write)
       .await
   }
 

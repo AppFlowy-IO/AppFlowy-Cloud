@@ -659,7 +659,7 @@ impl Default for AFWorkspaceSettings {
   fn default() -> Self {
     Self {
       disable_search_indexing: false,
-      ai_model: "".to_string(),
+      ai_model: "Auto".to_string(),
     }
   }
 }

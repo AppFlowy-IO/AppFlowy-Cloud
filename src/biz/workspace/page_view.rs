@@ -119,9 +119,10 @@ pub async fn create_space(
   name: &str,
   space_icon: &str,
   space_color: &str,
+  view_id_override: Option<Uuid>,
 ) -> Result<Space, AppError> {
-  let default_document_collab_params = prepare_default_document_collab_param()?;
-  let view_id = default_document_collab_params.object_id.clone();
+  let view_id = view_id_override.unwrap_or(Uuid::new_v4());
+  let default_document_collab_params = prepare_default_document_collab_param(view_id)?;
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;
@@ -173,6 +174,8 @@ pub async fn create_page(
   view_layout: &ViewLayout,
   name: Option<&str>,
   page_data: Option<&serde_json::Value>,
+  view_id: Option<Uuid>,
+  collab_id: Option<Uuid>,
 ) -> Result<Page, AppError> {
   match view_layout {
     ViewLayout::Document => {
@@ -186,9 +189,12 @@ pub async fn create_page(
         parent_view_id,
         name,
         page_data,
+        view_id,
+        collab_id,
       )
       .await
     },
+    //TODO: allow view id and database id to be overriden
     ViewLayout::Grid => {
       create_grid_page(
         appflowy_web_metrics,
@@ -246,8 +252,9 @@ pub async fn create_page(
 
 fn prepare_document_collab_param_with_initial_data(
   page_data: serde_json::Value,
+  collab_id: Uuid,
 ) -> Result<CollabParams, AppError> {
-  let object_id = Uuid::new_v4().to_string();
+  let object_id = collab_id.to_string();
   let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
   let document_data = JsonToDocumentParser::json_to_document(page_data)?;
   let document = Document::create_with_data(collab, document_data)
@@ -268,8 +275,8 @@ fn prepare_document_collab_param_with_initial_data(
   })
 }
 
-fn prepare_default_document_collab_param() -> Result<CollabParams, AppError> {
-  let object_id = Uuid::new_v4().to_string();
+fn prepare_default_document_collab_param(collab_id: Uuid) -> Result<CollabParams, AppError> {
+  let object_id = collab_id.to_string();
   let document_data = default_document_data(&object_id);
   let document = Document::create(&object_id, document_data)
     .map_err(|err| AppError::Internal(anyhow!("Failed to create default document: {}", err)))?;
@@ -278,7 +285,7 @@ fn prepare_default_document_collab_param() -> Result<CollabParams, AppError> {
     .map_err(|err| AppError::Internal(anyhow!("Failed to encode default document: {}", err)))?
     .encode_to_bytes()?;
   Ok(CollabParams {
-    object_id: object_id.clone(),
+    object_id,
     encoded_collab_v1: encoded_collab_v1.into(),
     collab_type: CollabType::Document,
   })
@@ -541,7 +548,7 @@ async fn append_block_to_document_collab(
 async fn add_new_space_to_folder(
   uid: i64,
   workspace_id: &str,
-  view_id: &str,
+  view_id: &Uuid,
   folder: &mut Folder,
   space_permission: &SpacePermission,
   name: &str,
@@ -570,7 +577,9 @@ async fn add_new_space_to_folder(
       folder
         .body
         .views
-        .update_view(&mut txn, view_id, |update| update.set_private(true).done());
+        .update_view(&mut txn, &view_id.to_string(), |update| {
+          update.set_private(true).done()
+        });
     }
     txn.encode_update_v1()
   };
@@ -894,12 +903,20 @@ async fn create_document_page(
   parent_view_id: &str,
   name: Option<&str>,
   page_data: Option<&serde_json::Value>,
+  view_id_override: Option<Uuid>,
+  collab_id_override: Option<Uuid>,
 ) -> Result<Page, AppError> {
+  let collab_id = collab_id_override.unwrap_or(Uuid::new_v4());
+
   let new_document_collab_params = match page_data {
-    Some(page_data) => prepare_document_collab_param_with_initial_data(page_data.clone()),
-    None => prepare_default_document_collab_param(),
+    Some(page_data) => {
+      prepare_document_collab_param_with_initial_data(page_data.clone(), collab_id)
+    },
+    None => prepare_default_document_collab_param(collab_id),
   }?;
-  let view_id = new_document_collab_params.object_id.clone();
+  let view_id = view_id_override
+    .map(|id| id.to_string())
+    .unwrap_or(collab_id.to_string());
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
   let mut folder =
     get_latest_collab_folder(collab_storage, collab_origin, &workspace_id.to_string()).await?;

@@ -103,6 +103,8 @@ async fn create_new_page_with_database() {
         layout: ViewLayout::Calendar,
         name: Some("New calendar".to_string()),
         page_data: None,
+        view_id: None,
+        collab_id: None,
       },
     )
     .await
@@ -115,6 +117,8 @@ async fn create_new_page_with_database() {
         layout: ViewLayout::Grid,
         name: Some("New grid".to_string()),
         page_data: None,
+        view_id: None,
+        collab_id: None,
       },
     )
     .await
@@ -127,6 +131,8 @@ async fn create_new_page_with_database() {
         layout: ViewLayout::Grid,
         name: Some("New board".to_string()),
         page_data: None,
+        view_id: None,
+        collab_id: None,
       },
     )
     .await
@@ -181,6 +187,8 @@ async fn create_new_document_page() {
         layout: ViewLayout::Document,
         name: Some("New document".to_string()),
         page_data: None,
+        view_id: None,
+        collab_id: None,
       },
     )
     .await
@@ -207,6 +215,8 @@ async fn create_new_document_page() {
             },
           ]
         })),
+        view_id: None,
+        collab_id: None,
       },
     )
     .await
@@ -316,6 +326,8 @@ async fn create_new_chat_page() {
         layout: ViewLayout::Chat,
         name: Some("New chat".to_string()),
         page_data: None,
+        view_id: None,
+        collab_id: None,
       },
     )
     .await
@@ -834,6 +846,7 @@ async fn create_space() {
         name: "Public Space".to_string(),
         space_icon: "space_icon_1".to_string(),
         space_icon_color: "0xFFA34AFD".to_string(),
+        view_id: None,
       },
     )
     .await
@@ -847,12 +860,13 @@ async fn create_space() {
         name: "Private Space".to_string(),
         space_icon: "space_icon_2".to_string(),
         space_icon_color: "0xFFA34AFD".to_string(),
+        view_id: None,
       },
     )
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let view = folder.get_view(&public_space.view_id).unwrap();
+  let view = folder.get_view(&public_space.view_id.to_string()).unwrap();
   let space_info: Value = serde_json::from_str(view.extra.as_ref().unwrap()).unwrap();
   assert!(space_info["is_space"].as_bool().unwrap());
   assert_eq!(

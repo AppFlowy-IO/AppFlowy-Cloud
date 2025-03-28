@@ -1185,6 +1185,7 @@ async fn post_space_handler(
     &payload.name,
     &payload.space_icon,
     &payload.space_icon_color,
+    payload.view_id,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(space)))
@@ -1239,6 +1240,8 @@ async fn post_page_view_handler(
     &payload.layout,
     payload.name.as_deref(),
     payload.page_data.as_ref(),
+    payload.view_id,
+    payload.collab_id,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))

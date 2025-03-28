@@ -155,7 +155,7 @@ pub struct CollabResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Space {
-  pub view_id: String,
+  pub view_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +169,7 @@ pub struct CreateSpaceParams {
   pub name: String,
   pub space_icon: String,
   pub space_icon_color: String,
+  pub view_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,6 +186,8 @@ pub struct CreatePageParams {
   pub layout: ViewLayout,
   pub name: Option<String>,
   pub page_data: Option<serde_json::Value>,
+  pub view_id: Option<Uuid>,
+  pub collab_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

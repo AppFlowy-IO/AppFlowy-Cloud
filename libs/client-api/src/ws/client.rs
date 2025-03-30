@@ -401,10 +401,10 @@ impl WSClient {
     self.aggregate_queue.clear().await;
   }
 
-  pub fn send<M: Into<Message>>(&self, msg: M) -> Result<(), WSError> {
-    self.ws_msg_sender.send(msg.into()).unwrap();
-    Ok(())
-  }
+  // pub fn send<M: Into<Message>>(&self, msg: M) -> Result<(), WSError> {
+  //   self.ws_msg_sender.send(msg.into()).unwrap();
+  //   Ok(())
+  // }
 
   pub fn get_state(&self) -> ConnectState {
     self.state_notify.lock().state.clone()

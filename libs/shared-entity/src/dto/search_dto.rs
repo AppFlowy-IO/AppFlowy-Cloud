@@ -25,8 +25,9 @@ pub struct SearchDocumentResponseItem {
   pub object_id: Uuid,
   /// Workspace, result object belongs to.
   pub workspace_id: Uuid,
-  /// Match score of this search result to an original query.
-  /// The lower the better. List of results is sorted by this value by default.
+  /// Match score of this search result to an original query. Score represents cosine distance
+  /// between the query and the document embedding [-1.0..1.0]. The higher, the better.
+  /// List of results is sorted by this value by default.
   pub score: f64,
   /// Type of the content to be presented in preview field. This is a hint what
   /// kind of content was used to match the user query ie. document plain text, pdf attachment etc.

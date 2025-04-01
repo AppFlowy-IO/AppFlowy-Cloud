@@ -135,3 +135,8 @@ pub struct VerifyParams {
   pub email: String,
   pub token: String,
 }
+
+#[derive(Deserialize, Serialize)]
+pub struct RecoverParams {
+  pub email: String,
+}

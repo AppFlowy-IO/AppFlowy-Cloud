@@ -1,0 +1,131 @@
+---
+title: "Magic Link"
+preheader: "Sign in using magic link or OTP."
+bodyClass: bg-purple-50
+---
+
+<x-main>
+  <div
+    class="bg-purple-50 font-helvetica p-[24px] text-black flex flex-col justify-center"
+  >
+    <table align="center" class="bg-white w-[700px] p-[32px] flex flex-col justify-start items-center border-spacing-4">
+      <tr>
+        <td class="text-center">
+          <img
+            src="{{ cdnBaseUrl }}images/appflowy.png"
+            class="overflow-hidden object-cover w-[56px] h-[56px]"
+          />
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table align="center" class="p-0 flex flex-col items-center border-spacing-6">
+            <tr>
+              <td>
+                <p
+                  class="text-center text-3xl font-bold m-0"
+                >
+                  Your login code for AppFlowy
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <p
+                  class="text-center text-lg m-0"
+                >
+                  This link and code will be expire in 5 minutes for security reasons.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <x-button
+                  align="center"
+                  class="hover:opacity-90 cursor-pointer !bg-[#9327ff] m-0 rounded-2xl"
+                  href="@{{ .ConfirmationUrl }}"
+                >
+                  <div class="font-bold text-[16px]">Login to AppFlowy</div>
+                </x-button>
+              </td>
+            </tr>
+          </table
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="mx-auto leading-4.5 text-base text-center">
+            If the link does not work, you can use the verification code
+            directly:
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="text-center">
+          <p class="bg-gray-200 p-2 rounded text-center text-black text-lg font-bold inline-block m-0">@{{ .Token }}</p>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <x-divider space-x="10%" />
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <p class="m-0 text-sm text-gray-600 font-medium text-center">
+            Bring projects, knowledge, and teams together with the power of AI.
+          </p>
+
+          <p class="cursor-default text-center">
+            <a
+              href="https://twitter.com/appflowy"
+              class="[text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/twitter.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://www.reddit.com/r/AppFlowy"
+              class="[text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/reddit.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://github.com/AppFlowy-IO/AppFlowy"
+              class="[text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/github.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+            <a
+              href="https://discord.gg/9Q2xaN37tV"
+              class="[text-decoration:none] mr-4"
+            >
+              <img
+                src="{{ cdnBaseUrl }}images/discord.png"
+                width="20"
+                alt="Maizzle"
+              />
+            </a>
+          </p>
+          <p class="m-0 text-sm text-gray-600 font-medium text-center">
+            Copyright © 2025, AppFlowy Inc.
+          </p>
+          <p class="text-sm text-gray-600 font-medium text-center">
+            Need Help? <a href="mailto:support@appflowy.io" class="text-gray-600">support@appflowy.io</a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</x-main>

@@ -121,3 +121,17 @@ pub struct CreateSSOProviderParams {
   pub domains: Vec<String>,
   pub attribute_mapping: serde_json::Value,
 }
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VerifyType {
+  Recovery,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct VerifyParams {
+  #[serde(rename = "type")]
+  pub type_: VerifyType,
+  pub email: String,
+  pub token: String,
+}

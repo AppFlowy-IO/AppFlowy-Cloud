@@ -252,7 +252,7 @@ fn prepare_document_collab_param_with_initial_data(
   page_data: serde_json::Value,
   collab_id: Uuid,
 ) -> Result<CollabParams, AppError> {
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, &collab_id.to_string(), vec![], false);
+  let collab = Collab::new_with_origin(CollabOrigin::Empty, collab_id.to_string(), vec![], false);
   let document_data = JsonToDocumentParser::json_to_document(page_data)?;
   let document = Document::create_with_data(collab, document_data)
     .map_err(|err| AppError::InvalidPageData(err.to_string()))?;

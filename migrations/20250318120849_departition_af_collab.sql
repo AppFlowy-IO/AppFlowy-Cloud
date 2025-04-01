@@ -61,6 +61,7 @@ create index if not exists ix_af_collab_embeddings_oid
 alter table af_collab_embeddings
     add constraint fk_af_collab_embeddings_oid foreign key (oid)
     references af_collab (oid) on delete cascade;
+alter table af_collab_embeddings drop partition_key;
 
 -- add trigger for af_collab.updated_at
 create trigger set_updated_at

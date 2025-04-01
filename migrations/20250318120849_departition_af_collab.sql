@@ -36,23 +36,31 @@ select oid, workspace_id, owner_uid, partition_key, len, blob, deleted_at, creat
 from af_collab
 where oid !~ E'^[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12}$';
 
--- copy data from all collab partitions to new collab table (execution time: 7 min for 4mln rows)
+-- copy data from all collab partitions to new collab table (execution time: 7 mins)
 insert into af_collab_temp(oid, workspace_id, owner_uid, partition_key, len, blob, deleted_at, created_at, updated_at, indexed_at)
 select oid::uuid as oid, workspace_id, owner_uid, partition_key, len, blob, deleted_at, created_at, updated_at, indexed_at
 from af_collab
 where oid ~ E'^[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12}$';
 
--- modify embeddings to make use of new uuid columns
+-- prune embeddings table
+truncate table af_collab_embeddings;
 alter table af_collab_embeddings
-drop constraint af_collab_embeddings_oid_partition_key_fkey;
-
--- add index of oid (execution time: 5 secs)
-create index concurrently if not exists ix_af_collab_embeddings_oid
-    on af_collab_embeddings(oid);
+    drop constraint af_collab_embeddings_oid_partition_key_fkey;
 
 -- replace af_collab table
 drop table af_collab;
 alter table af_collab_temp rename to af_collab;
+
+-- modify embeddings to make use of new uuid columns
+alter table af_collab_embeddings
+    alter column oid type uuid using oid::uuid;
+create index if not exists ix_af_collab_embeddings_oid
+    on af_collab_embeddings(oid);
+
+-- add foreign key constraint to af_collab_embeddings
+alter table af_collab_embeddings
+    add constraint fk_af_collab_embeddings_oid foreign key (oid)
+    references af_collab (oid) on delete cascade;
 
 -- add trigger for af_collab.updated_at
 create trigger set_updated_at
@@ -62,9 +70,9 @@ create trigger set_updated_at
     execute procedure update_updated_at_column();
 
 -- add remaining indexes to new af_collab table (execution time: 25 sec + 25sec)
-create index concurrently if not exists idx_workspace_id_on_af_collab
+create index if not exists idx_workspace_id_on_af_collab
     on af_collab (workspace_id);
-create index concurrently if not exists idx_af_collab_updated_at
+create index if not exists idx_af_collab_updated_at
     on af_collab (updated_at);
 
 create or replace procedure af_collab_embeddings_upsert(IN p_workspace_id uuid, IN p_oid uuid, IN p_tokens_used integer, IN p_fragments af_fragment_v3[])

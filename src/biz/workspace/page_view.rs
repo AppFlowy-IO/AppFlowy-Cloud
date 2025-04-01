@@ -266,7 +266,7 @@ fn prepare_document_collab_param_with_initial_data(
     })?
     .encode_to_bytes()?;
   Ok(CollabParams {
-    object_id,
+    object_id: collab_id,
     encoded_collab_v1: encoded_collab_v1.into(),
     collab_type: CollabType::Document,
   })

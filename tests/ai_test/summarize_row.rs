@@ -11,7 +11,7 @@ async fn summarize_row_test() {
   let workspace_id = test_client.workspace_id().await;
 
   let params = SummarizeRowParams {
-    workspace_id: workspace_id.clone(),
+    workspace_id,
     data: SummarizeRowData::Content(
       json!({"name": "Jack", "age": 25, "city": "New York"})
         .as_object()

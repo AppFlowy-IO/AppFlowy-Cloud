@@ -2,6 +2,7 @@ use crate::act::Action;
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::AFAccessLevel;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait CollabAccessControl: Sync + Send + 'static {
@@ -9,9 +10,9 @@ pub trait CollabAccessControl: Sync + Send + 'static {
   /// Returns AppError::NotEnoughPermission if the user does not have the permission.
   async fn enforce_action(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
     action: Action,
   ) -> Result<(), AppError>;
 
@@ -19,9 +20,9 @@ pub trait CollabAccessControl: Sync + Send + 'static {
   /// Returns AppError::NotEnoughPermission if the user does not have the access level.
   async fn enforce_access_level(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
     access_level: AFAccessLevel,
   ) -> Result<(), AppError>;
 
@@ -29,11 +30,11 @@ pub trait CollabAccessControl: Sync + Send + 'static {
   async fn update_access_level_policy(
     &self,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
     level: AFAccessLevel,
   ) -> Result<(), AppError>;
 
-  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError>;
+  async fn remove_access_level(&self, uid: &i64, oid: &Uuid) -> Result<(), AppError>;
 }
 
 #[async_trait]
@@ -47,9 +48,9 @@ pub trait RealtimeAccessControl: Sync + Send + 'static {
   /// 3. If the collab object is not found which means the collab object is created by the user.
   async fn can_write_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
   ) -> Result<bool, AppError>;
 
   /// Return true if the user is allowed to observe the changes of given collab.
@@ -58,8 +59,8 @@ pub trait RealtimeAccessControl: Sync + Send + 'static {
   /// The user can recv the message if the user is the member of the collab object
   async fn can_read_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
   ) -> Result<bool, AppError>;
 }

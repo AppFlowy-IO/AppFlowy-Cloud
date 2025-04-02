@@ -16,7 +16,7 @@ use uuid::Uuid;
 async fn multiple_part_put_and_get_test() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;
-  let parent_dir = workspace_id.clone();
+  let parent_dir = workspace_id.to_string();
   let mime = mime::TEXT_PLAIN_UTF_8;
   let text = generate_random_string(8 * 1024 * 1024);
   let file_id = Uuid::new_v4().to_string();
@@ -26,7 +26,7 @@ async fn multiple_part_put_and_get_test() {
       &workspace_id,
       CreateUploadRequest {
         file_id: file_id.clone(),
-        parent_dir: parent_dir.clone(),
+        parent_dir: parent_dir.to_string(),
         content_type: mime.to_string(),
         file_size: Some(text.len() as u64),
       },
@@ -94,7 +94,7 @@ async fn single_part_put_and_get_test() {
       &workspace_id,
       CreateUploadRequest {
         file_id: file_id.clone(),
-        parent_dir: workspace_id.clone(),
+        parent_dir: workspace_id.to_string(),
         content_type: mime.to_string(),
         file_size: Some(text.len() as u64),
       },
@@ -111,7 +111,7 @@ async fn single_part_put_and_get_test() {
     let resp = c1
       .upload_part(
         &workspace_id,
-        &workspace_id,
+        &workspace_id.to_string(),
         &file_id,
         &upload.upload_id,
         index as i32 + 1,
@@ -130,14 +130,14 @@ async fn single_part_put_and_get_test() {
 
   let req = CompleteUploadRequest {
     file_id: file_id.clone(),
-    parent_dir: workspace_id.clone(),
+    parent_dir: workspace_id.to_string(),
     upload_id: upload.upload_id,
     parts: completed_parts,
   };
   c1.complete_upload(&workspace_id, req).await.unwrap();
 
   let blob = c1
-    .get_blob_v1(&workspace_id, &workspace_id, &file_id)
+    .get_blob_v1(&workspace_id, &workspace_id.to_string(), &file_id)
     .await
     .unwrap()
     .1;
@@ -158,7 +158,7 @@ async fn empty_part_upload_test() {
       &workspace_id,
       CreateUploadRequest {
         file_id: file_id.clone(),
-        parent_dir: workspace_id.clone(),
+        parent_dir: workspace_id.to_string(),
         content_type: mime.to_string(),
         file_size: Some(0),
       },
@@ -306,7 +306,7 @@ async fn perform_upload_test(
 async fn invalid_test() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;
-  let parent_dir = workspace_id.clone();
+  let parent_dir = workspace_id;
   let file_id = uuid::Uuid::new_v4().to_string();
   let mime = mime::TEXT_PLAIN_UTF_8;
 
@@ -314,7 +314,7 @@ async fn invalid_test() {
   for request in [
     CreateUploadRequest {
       file_id: "".to_string(),
-      parent_dir: parent_dir.clone(),
+      parent_dir: parent_dir.to_string(),
       content_type: mime.to_string(),
       file_size: Some(0),
     },
@@ -334,15 +334,7 @@ async fn invalid_test() {
   for request in vec![
     // workspace_id, parent_dir, file_id, upload_id, part_number, body
     (
-      "".to_string(),
-      parent_dir.clone(),
-      file_id.clone(),
-      upload_id.clone(),
-      1,
-      vec![1, 2, 3],
-    ),
-    (
-      workspace_id.clone(),
+      workspace_id,
       "".to_string(),
       file_id.clone(),
       upload_id.clone(),
@@ -350,8 +342,8 @@ async fn invalid_test() {
       vec![1, 2, 3],
     ),
     (
-      workspace_id.clone(),
-      parent_dir.clone(),
+      workspace_id,
+      parent_dir.to_string(),
       "".to_string(),
       upload_id.clone(),
       1,

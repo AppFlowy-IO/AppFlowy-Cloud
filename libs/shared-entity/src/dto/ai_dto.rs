@@ -1,12 +1,12 @@
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
-
 use crate::dto::chat_dto::ChatMessage;
 pub use appflowy_ai_client::dto::*;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowParams {
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
   pub data: SummarizeRowData,
 }
 

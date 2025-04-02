@@ -11,6 +11,7 @@ use collab::entity::EncodedCollab;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 pub const COLLAB_SNAPSHOT_LIMIT: i64 = 30;
 pub const SNAPSHOT_PER_HOUR: i64 = 6;
@@ -21,30 +22,39 @@ pub type AppResult<T, E = AppError> = core::result::Result<T, E>;
 #[async_trait]
 pub trait CollabStorageAccessControl: Send + Sync + 'static {
   /// Updates the cache of the access level of the user for given collab object.
-  async fn update_policy(&self, uid: &i64, oid: &str, level: AFAccessLevel)
-    -> Result<(), AppError>;
+  async fn update_policy(
+    &self,
+    uid: &i64,
+    oid: &Uuid,
+    level: AFAccessLevel,
+  ) -> Result<(), AppError>;
 
   /// Removes the access level of the user for given collab object.
   async fn enforce_read_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
   ) -> Result<(), AppError>;
 
   /// Enforce the user's permission to write to the collab object.
   async fn enforce_write_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     uid: &i64,
-    oid: &str,
+    oid: &Uuid,
   ) -> Result<(), AppError>;
 
   /// Enforce the user's permission to write to the workspace.
-  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<(), AppError>;
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
 
   /// Enforce the user's permission to delete the collab object.
-  async fn enforce_delete(&self, workspace_id: &str, uid: &i64, oid: &str) -> Result<(), AppError>;
+  async fn enforce_delete(
+    &self,
+    workspace_id: &Uuid,
+    uid: &i64,
+    oid: &Uuid,
+  ) -> Result<(), AppError>;
 }
 
 #[derive(Clone)]
@@ -70,7 +80,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   ///
   async fn queue_insert_or_update_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params: CollabParams,
     flush_to_disk: bool,
@@ -78,7 +88,7 @@ pub trait CollabStorage: Send + Sync + 'static {
 
   async fn batch_insert_new_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params: Vec<CollabParams>,
   ) -> AppResult<()>;
@@ -94,7 +104,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
   async fn upsert_new_collab_with_transaction(
     &self,
-    workspace_id: &str,
+    workspace_id: Uuid,
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
@@ -120,10 +130,10 @@ pub trait CollabStorage: Send + Sync + 'static {
   async fn batch_get_collab(
     &self,
     uid: &i64,
-    workspace_id: &str,
+    workspace_id: Uuid,
     queries: Vec<QueryCollab>,
     from_editing_collab: bool,
-  ) -> HashMap<String, QueryCollabResult>;
+  ) -> HashMap<Uuid, QueryCollabResult>;
 
   /// Deletes a collaboration from the storage.
   ///
@@ -134,37 +144,60 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
-  async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()>;
+  async fn delete_collab(&self, workspace_id: &Uuid, uid: &i64, object_id: &Uuid) -> AppResult<()>;
 
-  async fn should_create_snapshot(&self, workspace_id: &str, oid: &str) -> Result<bool, AppError>;
+  async fn should_create_snapshot(&self, workspace_id: &Uuid, oid: &Uuid)
+    -> Result<bool, AppError>;
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta>;
   async fn queue_snapshot(&self, params: InsertSnapshotParams) -> AppResult<()>;
 
   async fn get_collab_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: Uuid,
+    object_id: Uuid,
     snapshot_id: &i64,
   ) -> AppResult<SnapshotData>;
 
   async fn get_latest_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: Uuid,
+    object_id: Uuid,
     collab_type: CollabType,
   ) -> AppResult<Option<SnapshotData>>;
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
   async fn get_collab_snapshot_list(
     &self,
-    workspace_id: &str,
-    oid: &str,
+    workspace_id: &Uuid,
+    oid: &Uuid,
   ) -> AppResult<AFSnapshotMetas>;
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollabMetadata {
-  pub object_id: String,
-  pub workspace_id: String,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
+}
+
+mod uuid_str {
+  use serde::Deserialize;
+  use uuid::Uuid;
+
+  pub fn serialize<S>(uuid: &Uuid, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    serializer.serialize_str(&uuid.to_string())
+  }
+
+  pub fn deserialize<'de, D>(deserializer: D) -> Result<Uuid, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    let s = String::deserialize(deserializer)?;
+    Uuid::parse_str(&s).map_err(serde::de::Error::custom)
+  }
 }

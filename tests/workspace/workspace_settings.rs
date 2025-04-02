@@ -63,7 +63,7 @@ async fn invite_user_to_workspace(
 ) {
   owner
     .invite_workspace_members(
-      workspace_id.to_string().as_str(),
+      workspace_id,
       vec![WorkspaceMemberInvitation {
         email: member_email.to_string(),
         role: AFRole::Member,

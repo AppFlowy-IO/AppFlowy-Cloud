@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n          ac.oid AS object_id,\n          ac.partition_key,\n          ac.indexed_at,\n          ace.updated_at\n      FROM af_collab_embeddings ac\n      JOIN af_collab ace\n          ON ac.oid = ace.oid\n          AND ac.partition_key = ace.partition_key\n      WHERE ac.oid = ANY($1) AND ac.partition_key = ANY($2)\n    ",
+  "query": "\n      SELECT\n          ac.oid as object_id,\n          ace.partition_key,\n          ac.indexed_at,\n          ace.updated_at\n      FROM af_collab_embeddings ac\n      JOIN af_collab ace ON ac.oid = ace.oid\n      WHERE ac.oid = $1\n    ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "object_id",
-        "type_info": "Text"
+        "type_info": "Uuid"
       },
       {
         "ordinal": 1,
@@ -26,8 +26,7 @@
     ],
     "parameters": {
       "Left": [
-        "TextArray",
-        "Int4Array"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -37,5 +36,5 @@
       false
     ]
   },
-  "hash": "cdbbea42600d61b6541808867397de29e2e5df569faefa098254f1afd3aa662d"
+  "hash": "4fc0611c846f86be652d42eb8ae21a5da0353fe810856aaabe91d7963329d098"
 }

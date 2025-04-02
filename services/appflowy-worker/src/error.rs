@@ -51,6 +51,9 @@ pub enum ImportError {
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
+
+  #[error(transparent)]
+  InvalidUuid(#[from] uuid::Error),
 }
 
 impl From<WorkerError> for ImportError {
@@ -212,6 +215,16 @@ impl ImportError {
             max_size_in_mb,
           ),
           format!("Task ID: {} - Upload file too large: {} MB", task_id, file_size_in_mb),
+        )
+      }
+      ImportError::InvalidUuid(err) =>  {
+        (
+          format!(
+            "Task ID: {} - Identifier is not valid UUID: {}",
+            task_id,
+            err
+          ),
+          format!("Task ID: {} - Identifier is not valid UUID", task_id),
         )
       }
     }

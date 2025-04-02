@@ -8,10 +8,7 @@ use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab_database::{
-  database::{
-    gen_database_id, gen_database_view_id, gen_row_id, timestamp, Database, DatabaseContext,
-    DatabaseData,
-  },
+  database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
   entity::{CreateDatabaseParams, CreateViewParams},
   rows::CreateRowParams,
   views::OrderObjectPosition,
@@ -49,12 +46,8 @@ pub async fn duplicate_view_tree_and_collab(
   suffix: &str,
 ) -> Result<(), AppError> {
   let uid = user.uid;
-  let mut folder: Folder = get_latest_collab_folder(
-    &collab_storage,
-    GetCollabOrigin::User { uid },
-    &workspace_id.to_string(),
-  )
-  .await?;
+  let mut folder: Folder =
+    get_latest_collab_folder(&collab_storage, GetCollabOrigin::User { uid }, workspace_id).await?;
   let trash_sections: HashSet<String> = folder
     .get_all_trash_sections()
     .iter()
@@ -79,8 +72,8 @@ pub async fn duplicate_view_tree_and_collab(
   let encoded_ws_db = get_latest_collab_encoded(
     &collab_storage,
     GetCollabOrigin::User { uid },
-    &workspace_id.to_string(),
-    &ws_db_oid,
+    workspace_id,
+    ws_db_oid,
     CollabType::WorkspaceDatabase,
   )
   .await
@@ -172,9 +165,10 @@ fn duplicate_database_data_with_context(
       database_id: database_id.clone(),
       view_id: context
         .view_id_mapping
-        .get(&view.id)
+        .get(&Uuid::parse_str(&view.id).unwrap())
         .cloned()
-        .unwrap_or_else(gen_database_view_id),
+        .unwrap_or_else(Uuid::new_v4)
+        .to_string(),
       name: view.name.clone(),
       layout: view.layout,
       layout_settings: view.layout_settings.clone(),
@@ -212,7 +206,7 @@ async fn duplicate_database(
   });
   for database_view_id in &duplicate_context.database_view_ids {
     let database_id = workspace_database
-      .get_database_meta_with_view_id(database_view_id)
+      .get_database_meta_with_view_id(&database_view_id.to_string())
       .ok_or_else(|| {
         AppError::Internal(anyhow!("Database view id {} not found", database_view_id))
       })?
@@ -251,8 +245,9 @@ async fn duplicate_database(
         ))
       })?;
     let mut collab_params_list = vec![];
+    let database_id = Uuid::parse_str(&duplicated_database.get_database_id())?;
     collab_params_list.push(CollabParams {
-      object_id: duplicated_database.get_database_id().clone(),
+      object_id: database_id,
       encoded_collab_v1: encoded_database
         .encoded_database_collab
         .encoded_collab
@@ -261,14 +256,15 @@ async fn duplicate_database(
       collab_type: CollabType::Database,
     });
     for row in encoded_database.encoded_row_collabs {
+      let row_id = Uuid::parse_str(&row.object_id.clone())?;
       collab_params_list.push(CollabParams {
-        object_id: row.object_id.clone(),
+        object_id: row_id,
         encoded_collab_v1: row.encoded_collab.encode_to_bytes()?.into(),
         collab_type: CollabType::DatabaseRow,
       });
     }
     collab_storage
-      .batch_insert_new_collab(&workspace_id.to_string(), &uid, collab_params_list)
+      .batch_insert_new_collab(workspace_id, &uid, collab_params_list)
       .await?;
     let encoded_update = {
       let mut txn = workspace_database.collab.transact_mut();
@@ -279,12 +275,13 @@ async fn duplicate_database(
       );
       txn.encode_update_v1()
     };
+    let workspace_database_id = Uuid::parse_str(workspace_database.collab.object_id())?;
     update_workspace_database_data(
       appflowy_web_metrics,
       server.clone(),
       user.clone(),
       workspace_id,
-      workspace_database.collab.object_id(),
+      workspace_database_id,
       encoded_update,
     )
     .await?;
@@ -302,12 +299,12 @@ async fn duplicate_document(
     .document_view_ids
     .iter()
     .map(|id| QueryCollab {
-      object_id: id.clone(),
+      object_id: *id,
       collab_type: CollabType::Document,
     })
     .collect();
   let query_results = collab_storage
-    .batch_get_collab(&uid, &workspace_id.to_string(), queries, true)
+    .batch_get_collab(&uid, workspace_id, queries, true)
     .await;
   let mut collab_params_list = vec![];
   for (collab_id, query_result) in query_results {
@@ -325,7 +322,7 @@ async fn duplicate_document(
             ))
           })?;
         let new_collab_param =
-          duplicate_document_encoded_collab(&collab_id, new_collab_id, encoded_collab)?;
+          duplicate_document_encoded_collab(&collab_id, *new_collab_id, encoded_collab)?;
         collab_params_list.push(new_collab_param);
       },
       QueryCollabResult::Failed { error: _ } => {
@@ -334,16 +331,16 @@ async fn duplicate_document(
     }
   }
   collab_storage
-    .batch_insert_new_collab(&workspace_id.to_string(), &uid, collab_params_list)
+    .batch_insert_new_collab(workspace_id, &uid, collab_params_list)
     .await?;
   Ok(())
 }
 
 struct DuplicateContext {
-  view_id_mapping: HashMap<String, String>,
+  view_id_mapping: HashMap<Uuid, Uuid>,
   duplicated_views: Vec<View>,
-  database_view_ids: HashSet<String>,
-  document_view_ids: HashSet<String>,
+  database_view_ids: HashSet<Uuid>,
+  document_view_ids: HashSet<Uuid>,
 }
 
 fn duplicate_views(views: &[View], suffix: &str) -> Result<DuplicateContext, AppError> {
@@ -354,21 +351,23 @@ fn duplicate_views(views: &[View], suffix: &str) -> Result<DuplicateContext, App
     )))?
     .parent_view_id
     .clone();
-  let mut view_id_mapping: HashMap<String, String> = HashMap::new();
+  let mut view_id_mapping = HashMap::new();
   let mut duplicated_views = vec![];
   let mut database_view_ids = HashSet::new();
   let mut document_view_ids = HashSet::new();
   for view in views {
-    let duplicated_view_id = Uuid::new_v4().to_string();
-    view_id_mapping.insert(view.id.clone(), duplicated_view_id);
+    let view_id = Uuid::parse_str(&view.id)?;
+    let duplicated_view_id = Uuid::new_v4();
+    view_id_mapping.insert(view_id, duplicated_view_id);
   }
   for (index, view) in views.iter().enumerate() {
-    let orig_parent_view_id = view.parent_view_id.clone();
-    let duplicated_parent_view_id = if orig_parent_view_id == root_parent_id {
+    let view_id = Uuid::parse_str(&view.id)?;
+    let orig_parent_view_id = Uuid::parse_str(&view.parent_view_id)?;
+    let duplicated_parent_view_id = if view.parent_view_id == root_parent_id {
       orig_parent_view_id
     } else {
       view_id_mapping
-        .get(&view.parent_view_id)
+        .get(&orig_parent_view_id)
         .cloned()
         .ok_or(AppError::Internal(anyhow::anyhow!(
           "Failed to find duplicated parent view id {}",
@@ -378,19 +377,23 @@ fn duplicate_views(views: &[View], suffix: &str) -> Result<DuplicateContext, App
     let mut duplicated_view = view.clone();
     let mut duplicated_children = vec![];
     for child in view.children.items.iter() {
-      let new_view_id = view_id_mapping.get(&child.id).cloned();
+      let child_id = Uuid::parse_str(&child.id)?;
+      let new_view_id = view_id_mapping.get(&child_id).cloned();
       if let Some(view_id) = new_view_id {
-        duplicated_children.push(ViewIdentifier { id: view_id });
+        duplicated_children.push(ViewIdentifier {
+          id: view_id.to_string(),
+        });
       }
     }
     duplicated_view.id = view_id_mapping
-      .get(&view.id)
+      .get(&view_id)
       .cloned()
       .ok_or(AppError::Internal(anyhow::anyhow!(
         "Failed to find duplicated view id {}",
         view.id
-      )))?;
-    duplicated_view.parent_view_id = duplicated_parent_view_id.clone();
+      )))?
+      .to_string();
+    duplicated_view.parent_view_id = duplicated_parent_view_id.to_string();
     if index == 0 {
       duplicated_view.name = format!("{}{}", duplicated_view.name, suffix);
     }
@@ -404,10 +407,10 @@ fn duplicate_views(views: &[View], suffix: &str) -> Result<DuplicateContext, App
     duplicated_views.push(duplicated_view);
     match &view.layout {
       layout if layout.is_document() => {
-        document_view_ids.insert(view.id.clone());
+        document_view_ids.insert(view_id);
       },
       layout if layout.is_database() => {
-        database_view_ids.insert(view.id.clone());
+        database_view_ids.insert(view_id);
       },
       _ => (),
     }
@@ -421,14 +424,14 @@ fn duplicate_views(views: &[View], suffix: &str) -> Result<DuplicateContext, App
 }
 
 fn duplicate_document_encoded_collab(
-  orig_object_id: &str,
-  new_object_id: &str,
+  orig_object_id: &Uuid,
+  new_object_id: Uuid,
   encoded_collab: EncodedCollab,
 ) -> Result<CollabParams, AppError> {
   let collab = collab_from_doc_state(encoded_collab.doc_state.to_vec(), orig_object_id)?;
   let document = Document::open(collab).unwrap();
   let data = document.get_document_data().unwrap();
-  let duplicated_document = Document::create(new_object_id, data)
+  let duplicated_document = Document::create(&new_object_id.to_string(), data)
     .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to create document: {}", err)))?;
   let encoded_collab: EncodedCollab = duplicated_document
     .encode_collab_v1(|c| CollabType::Document.validate_require_data(c))
@@ -436,7 +439,7 @@ fn duplicate_document_encoded_collab(
       AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {}", err))
     })?;
   Ok(CollabParams {
-    object_id: new_object_id.to_string(),
+    object_id: new_object_id,
     encoded_collab_v1: encoded_collab.encode_to_bytes()?.into(),
     collab_type: CollabType::Document,
   })

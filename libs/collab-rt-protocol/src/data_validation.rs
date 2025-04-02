@@ -5,9 +5,10 @@ use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use tracing::instrument;
+use uuid::Uuid;
 
 #[inline]
-pub async fn collab_from_encode_collab(object_id: &str, data: &[u8]) -> Result<Collab, Error> {
+pub async fn collab_from_encode_collab(object_id: &Uuid, data: &[u8]) -> Result<Collab, Error> {
   let object_id = object_id.to_string();
   let data = data.to_vec();
 
@@ -29,7 +30,7 @@ pub async fn collab_from_encode_collab(object_id: &str, data: &[u8]) -> Result<C
 #[instrument(level = "trace", skip(data), fields(len = %data.len()))]
 #[inline]
 pub async fn validate_encode_collab(
-  object_id: &str,
+  object_id: &Uuid,
   data: &[u8],
   collab_type: &CollabType,
 ) -> Result<(), Error> {

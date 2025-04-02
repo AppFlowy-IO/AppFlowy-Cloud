@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT oid, indexed_at\n        FROM af_collab\n        WHERE (oid, partition_key) = ANY (\n            SELECT UNNEST($1::text[]), UNNEST($2::int[])\n        )\n        ",
+  "query": "\n        SELECT oid, indexed_at\n        FROM af_collab\n        WHERE oid = ANY (SELECT UNNEST($1::uuid[]))\n        ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "oid",
-        "type_info": "Text"
+        "type_info": "Uuid"
       },
       {
         "ordinal": 1,
@@ -16,8 +16,7 @@
     ],
     "parameters": {
       "Left": [
-        "TextArray",
-        "Int4Array"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -25,5 +24,5 @@
       true
     ]
   },
-  "hash": "f8c909517885cb30e3f7d573edf47138f90ea9c5fa73eb927cc5487c3d9ad0be"
+  "hash": "3865d921d76ac0d0eb16065738cddf82cb71945504116b0a04da759209b9c250"
 }

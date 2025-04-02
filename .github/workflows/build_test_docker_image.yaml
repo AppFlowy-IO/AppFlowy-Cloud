@@ -39,9 +39,8 @@ jobs:
       - name: Build and push GoTrue image
         uses: docker/build-push-action@v5
         with:
-          context: ./docker/gotrue
-          file: Dockerfile
-          platforms: ${{ github.event.inputs.archs }}
+          context: .
+          file: ./docker/gotrue/Dockerfile
           push: true
           tags: |
             appflowyinc/gotrue:${{ github.event.inputs.debug_version }}-test

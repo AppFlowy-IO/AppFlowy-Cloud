@@ -11,10 +11,11 @@ use database_entity::dto::QueryCollabResult::{Failed, Success};
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use std::sync::Arc;
 use tracing::error;
+use uuid::Uuid;
 
 pub struct TestDatabaseCollabService {
   pub api_client: client_api::Client,
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
 }
 
 #[async_trait]
@@ -28,9 +29,9 @@ impl DatabaseCollabService for TestDatabaseCollabService {
     let encoded_collab = match encoded_collab {
       None => {
         let params = QueryCollabParams {
-          workspace_id: self.workspace_id.clone(),
+          workspace_id: self.workspace_id,
           inner: QueryCollab {
-            object_id: object_id.to_string(),
+            object_id: object_id.parse()?,
             collab_type: object_type,
           },
         };
@@ -62,7 +63,10 @@ impl DatabaseCollabService for TestDatabaseCollabService {
   ) -> Result<EncodeCollabByOid, DatabaseError> {
     let params = object_ids
       .into_iter()
-      .map(|object_id| QueryCollab::new(object_id, collab_type))
+      .flat_map(|object_id| match Uuid::parse_str(&object_id) {
+        Ok(object_id) => Ok(QueryCollab::new(object_id, collab_type)),
+        Err(err) => Err(err),
+      })
       .collect();
     let results = self
       .api_client
@@ -76,7 +80,7 @@ impl DatabaseCollabService for TestDatabaseCollabService {
         .flat_map(|(object_id, result)| match result {
           Success { encode_collab_v1 } => match EncodedCollab::decode_from_bytes(&encode_collab_v1)
           {
-            Ok(encode) => Some((object_id, encode)),
+            Ok(encode) => Some((object_id.to_string(), encode)),
             Err(err) => {
               error!("Failed to decode collab: {}", err);
               None

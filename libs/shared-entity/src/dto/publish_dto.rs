@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-
 use super::workspace_dto::{ViewIcon, ViewLayout};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Copied from AppFlowy-IO/AppFlowy/frontend/rust-lib/flowy-folder-pub/src/entities.rs
 /// TODO(zack): make AppFlowy use from this crate instead
@@ -47,20 +47,20 @@ pub struct PublishDatabaseData {
 
   /// The encoded collab data for the database rows
   /// Use the row_id as the key
-  pub database_row_collabs: HashMap<String, Vec<u8>>,
+  pub database_row_collabs: HashMap<Uuid, Vec<u8>>,
 
   /// The encoded collab data for the documents inside the database rows
   /// It's not used for now
-  pub database_row_document_collabs: HashMap<String, Vec<u8>>,
+  pub database_row_document_collabs: HashMap<Uuid, Vec<u8>>,
 
   /// Visible view ids
-  pub visible_database_view_ids: Vec<String>,
+  pub visible_database_view_ids: Vec<Uuid>,
 
   /// Relation view id map
-  pub database_relations: HashMap<String, String>,
+  pub database_relations: HashMap<Uuid, Uuid>,
 }
 
 #[derive(Default, Deserialize, Serialize, Clone, Debug, Eq, PartialEq)]
 pub struct DuplicatePublishedPageResponse {
-  pub view_id: String,
+  pub view_id: Uuid,
 }

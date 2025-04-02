@@ -3,21 +3,22 @@ use collab::core::origin::CollabOrigin;
 use collab_document::{blocks::json_str_to_hashmap, document::Document};
 use collab_entity::CollabType;
 use collab_folder::{IconType, ViewIcon, ViewLayout};
+use uuid::Uuid;
 
 /// Get the document collab from the remote server
 async fn get_document_collab_from_remote(
   test_client: &mut TestClient,
-  workspace_id: String,
-  document_id: &str,
+  workspace_id: Uuid,
+  document_id: Uuid,
 ) -> Document {
   let resp = test_client
-    .get_collab(workspace_id, document_id.to_string(), CollabType::Document)
+    .get_collab(workspace_id, document_id, CollabType::Document)
     .await
     .unwrap();
   Document::open_with_options(
     CollabOrigin::Empty,
     resp.encode_collab.into(),
-    document_id,
+    &document_id.to_string(),
     vec![],
   )
   .unwrap()
@@ -41,7 +42,7 @@ async fn get_user_default_workspace_test() {
   let folder = test_client.get_user_folder().await;
 
   let workspace_id = test_client.workspace_id().await;
-  let views = folder.get_views_belong_to(&workspace_id);
+  let views = folder.get_views_belong_to(&workspace_id.to_string());
 
   // 2 spaces
   assert_eq!(views.len(), 2);
@@ -76,8 +77,8 @@ async fn get_user_default_workspace_test() {
 
     let getting_started_document = get_document_collab_from_remote(
       &mut test_client,
-      workspace_id.clone(),
-      &getting_started_view.id,
+      workspace_id,
+      getting_started_view.id.parse().unwrap(),
     )
     .await;
     let document_data = getting_started_document.get_document_data().unwrap();
@@ -98,8 +99,8 @@ async fn get_user_default_workspace_test() {
     );
     let desktop_guide_document = get_document_collab_from_remote(
       &mut test_client,
-      workspace_id.clone(),
-      &desktop_guide_view.id,
+      workspace_id,
+      desktop_guide_view.id.parse().unwrap(),
     )
     .await;
     let desktop_guide_document_data = desktop_guide_document.get_document_data().unwrap();
@@ -111,8 +112,8 @@ async fn get_user_default_workspace_test() {
     assert_eq!(mobile_guide_view.icon, None);
     let mobile_guide_document = get_document_collab_from_remote(
       &mut test_client,
-      workspace_id.clone(),
-      &mobile_guide_view.id,
+      workspace_id,
+      mobile_guide_view.id.parse().unwrap(),
     )
     .await;
     let mobile_guide_document_data = mobile_guide_document.get_document_data().unwrap();
@@ -122,9 +123,12 @@ async fn get_user_default_workspace_test() {
     assert_eq!(web_guide_view.name, "Web guide");
     assert_eq!(web_guide_view.layout, ViewLayout::Document);
     assert_eq!(web_guide_view.icon, None);
-    let web_guide_document =
-      get_document_collab_from_remote(&mut test_client, workspace_id.clone(), &web_guide_view.id)
-        .await;
+    let web_guide_document = get_document_collab_from_remote(
+      &mut test_client,
+      workspace_id,
+      web_guide_view.id.parse().unwrap(),
+    )
+    .await;
     let web_guide_document_data = web_guide_document.get_document_data().unwrap();
     assert_eq!(web_guide_document_data.blocks.len(), 31);
   }

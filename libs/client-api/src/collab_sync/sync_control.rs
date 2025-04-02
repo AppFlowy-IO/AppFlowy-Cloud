@@ -61,7 +61,6 @@ where
     collab: CollabRef,
     periodic_sync: Option<Duration>,
   ) -> Self {
-    let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);
     let (sync_state_tx, _) = broadcast::channel(10);
     debug_assert!(origin.client_user_id().is_some());
@@ -78,8 +77,6 @@ where
     tokio::spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
 
     // Create the observe collab stream.
-    let _cloned_protocol = protocol.clone();
-    let _object_id = object.object_id.clone();
     let stream = ObserveCollab::new(
       origin.clone(),
       object.clone(),
@@ -209,9 +206,9 @@ where
       sink.queue_init_sync(|msg_id| {
         let init_sync = InitSync::new(
           origin,
-          sync_object.object_id.clone(),
+          sync_object.object_id.to_string(),
           sync_object.collab_type,
-          sync_object.workspace_id.clone(),
+          sync_object.workspace_id.to_string(),
           msg_id,
           payload,
         );
@@ -228,7 +225,7 @@ where
         sink.queue_msg(|msg_id| {
           let update_sync = UpdateSync::new(
             origin.clone(),
-            sync_object.object_id.clone(),
+            sync_object.object_id.to_string(),
             update,
             msg_id,
           );
@@ -250,9 +247,9 @@ where
       sink.queue_init_sync(|msg_id| {
         let init_sync = InitSync::new(
           origin,
-          sync_object.object_id.clone(),
+          sync_object.object_id.to_string(),
           sync_object.collab_type,
-          sync_object.workspace_id.clone(),
+          sync_object.workspace_id.to_string(),
           msg_id,
           payload,
         );

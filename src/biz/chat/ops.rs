@@ -27,7 +27,7 @@ use validator::Validate;
 pub(crate) async fn create_chat(
   pg_pool: &PgPool,
   params: CreateChatParams,
-  workspace_id: &str,
+  workspace_id: &Uuid,
 ) -> Result<(), AppError> {
   params.validate()?;
   trace!("[Chat] create chat {:?}", params);

@@ -30,6 +30,7 @@ env:
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
   SQLX_OFFLINE: true
   RUST_TOOLCHAIN: "1.80"
+  APPFLOWY_AI_VERSION: "0.9.27-test"
 
 jobs:
   setup:
@@ -123,6 +124,7 @@ jobs:
           export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           export APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
           export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
+          export APPFLOWY_AI_VERSION=${{ env.APPFLOWY_AI_VERSION }}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
 

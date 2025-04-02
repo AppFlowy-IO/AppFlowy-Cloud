@@ -8,14 +8,14 @@ async fn generate_chat_message_answer_test() {
   }
   let test_client = TestClient::new_user_without_ws_conn().await;
   let workspace_id = test_client.workspace_id().await;
-  let doc_id = uuid::Uuid::new_v4().to_string();
+  let doc_id = uuid::Uuid::new_v4();
 
   let params = CompleteTextParams {
     text: "I seen the movie last night and it was amazing".to_string(),
     completion_type: Some(CompletionType::SpellingAndGrammar),
     metadata: Some(CompletionMetadata {
       object_id: doc_id,
-      workspace_id: Some(workspace_id.clone()),
+      workspace_id: Some(workspace_id),
       rag_ids: None,
       completion_history: None,
       custom_prompt: None,

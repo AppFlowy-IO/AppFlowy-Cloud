@@ -13,7 +13,7 @@ pub struct CreateChatParams {
   #[validate(custom(function = "validate_not_empty_str"))]
   pub chat_id: String,
   pub name: String,
-  pub rag_ids: Vec<String>,
+  pub rag_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]

@@ -81,7 +81,7 @@ async fn index_then_write_embedding_to_disk(
     "[Embedding] process batch {:?} embeddings",
     unindexed_collabs
       .iter()
-      .map(|v| v.object_id.clone())
+      .map(|v| v.object_id)
       .collect::<Vec<_>>()
   );
 
@@ -173,7 +173,7 @@ async fn create_embeddings(
       let indexer = indexer_provider.indexer_for(unindexed.collab_type)?;
       let collab = Collab::new_with_source(
         CollabOrigin::Empty,
-        &unindexed.object_id,
+        &unindexed.object_id.to_string(),
         DataSource::DocStateV1(unindexed.collab.doc_state.into()),
         vec![],
         false,

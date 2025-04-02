@@ -8,7 +8,7 @@ on:
         required: true
         default: "main"
       debug_version:
-        description: "Release version tag (e.g. v1.0.0)"
+        description: "Enter the release version tag (e.g. 0.9.30). The built image will be tagged as xxx:0.9.30-test."
         required: true
       archs:
         description: "Target architectures (comma separated), e.g. linux/amd64,linux/arm64"

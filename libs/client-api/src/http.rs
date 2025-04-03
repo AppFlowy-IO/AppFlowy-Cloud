@@ -11,8 +11,8 @@ use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
-use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
+use gotrue::params::{MagicLinkParams, VerifyParams, VerifyType};
 use reqwest::StatusCode;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceParam, PatchWorkspaceParam};
 use std::fmt::{Display, Formatter};
@@ -267,6 +267,28 @@ impl Client {
       )
       .await?;
     Ok(())
+  }
+
+  /// Sign in with passcode (OTP)
+  ///
+  /// User will receive an email with a passcode to sign in.
+  ///
+  /// For more information, please refer to the sign_in_with_magic_link function.
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn sign_in_with_passcode(
+    &self,
+    email: &str,
+    passcode: &str,
+  ) -> Result<GotrueTokenResponse, AppResponseError> {
+    let token = self
+      .gotrue_client
+      .verify(&VerifyParams {
+        email: email.to_owned(),
+        token: passcode.to_owned(),
+        type_: VerifyType::Recovery,
+      })
+      .await?;
+    Ok(token)
   }
 
   /// Attempts to sign in using a URL, extracting refresh_token from the URL.

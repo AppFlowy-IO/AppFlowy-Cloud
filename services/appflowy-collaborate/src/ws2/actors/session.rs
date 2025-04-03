@@ -95,7 +95,8 @@ impl WsSession {
           message,
           workspace_id: self.current_workspace,
           object_id,
-          sender: self.id(),
+          client_id: self.id(),
+          sender: self.info.collab_origin(),
         });
       },
       Err(err) => {
@@ -233,7 +234,8 @@ pub struct WsInput {
   pub message: InputMessage,
   pub workspace_id: ObjectId,
   pub object_id: ObjectId,
-  pub sender: ClientID,
+  pub sender: CollabOrigin,
+  pub client_id: ClientID,
 }
 
 pub enum InputMessage {

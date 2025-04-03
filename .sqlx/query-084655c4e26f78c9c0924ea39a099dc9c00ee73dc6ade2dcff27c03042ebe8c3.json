@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_workspace_invite_code (workspace_id, invite_code, expires_at)\n      VALUES ($1, $2, $3)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "084655c4e26f78c9c0924ea39a099dc9c00ee73dc6ade2dcff27c03042ebe8c3"
+}

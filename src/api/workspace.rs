@@ -9,6 +9,9 @@ use crate::biz::collab::utils::collab_from_doc_state;
 use crate::biz::user::user_verify::verify_token;
 use crate::biz::workspace;
 use crate::biz::workspace::duplicate::duplicate_view_tree_and_collab;
+use crate::biz::workspace::invite::{
+  generate_workspace_invite_token, join_workspace_invite_by_code,
+};
 use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
@@ -108,6 +111,11 @@ pub fn workspace_scope() -> Scope {
       web::resource("/accept-invite/{invite_id}")
         .route(web::post().to(post_accept_workspace_invite_handler)), // accept invitation to workspace
     )
+    .service(
+      web::resource("/join-by-invite-code")
+        .route(web::post().to(post_join_workspace_invite_by_code_handler)),
+    )
+
     .service(web::resource("/{workspace_id}").route(web::delete().to(delete_workspace_handler)))
     .service(
       web::resource("/{workspace_id}/settings")
@@ -355,6 +363,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::put().to(update_quick_note_handler))
         .route(web::delete().to(delete_quick_note_handler)),
     )
+    .service(
+      web::resource("/{workspace_id}/invite-code")
+        .route(web::post().to(post_workspace_invite_code_handler)),
+    )
 }
 
 pub fn collab_scope() -> Scope {
@@ -530,6 +542,27 @@ async fn post_accept_workspace_invite_handler(
   )
   .await?;
   Ok(AppResponse::Ok().into())
+}
+
+async fn post_join_workspace_invite_by_code_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  payload: Json<JoinWorkspaceByInviteCodeParams>,
+) -> Result<JsonAppResponse<InvitedWorkspace>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let invited_workspace_id =
+    join_workspace_invite_by_code(&state.pg_pool, &payload.code, uid).await?;
+  state
+    .workspace_access_control
+    .insert_role(&uid, &invited_workspace_id, AFRole::Member)
+    .await?;
+  Ok(
+    AppResponse::Ok()
+      .with_data(InvitedWorkspace {
+        workspace_id: invited_workspace_id,
+      })
+      .into(),
+  )
 }
 
 #[instrument(skip_all, err, fields(user_uuid))]
@@ -2872,4 +2905,22 @@ async fn delete_quick_note_handler(
     .await?;
   delete_quick_note(&state.pg_pool, quick_note_id).await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn post_workspace_invite_code_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<Uuid>,
+  state: Data<AppState>,
+  data: Json<WorkspaceInviteCodeParams>,
+) -> Result<JsonAppResponse<WorkspaceInviteToken>> {
+  let workspace_id = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
+    .await?;
+  let workspace_invite_link =
+    generate_workspace_invite_token(&state.pg_pool, &workspace_id, data.validity_period_hours)
+      .await?;
+  Ok(Json(AppResponse::Ok().with_data(workspace_invite_link)))
 }

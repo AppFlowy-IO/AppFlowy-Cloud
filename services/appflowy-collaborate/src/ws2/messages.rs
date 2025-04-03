@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags};
 use bytes::Bytes;
+use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use collab_stream::stream_router::{FromRedisStream, RedisMap};
 use redis::FromRedisValue;
@@ -11,7 +12,7 @@ use yrs::block::ClientID;
 #[derive(Debug, PartialEq)]
 pub struct UpdateStreamMessage {
   pub last_message_id: Rid,
-  pub sender: ClientID,
+  pub sender: CollabOrigin,
   pub object_id: ObjectId,
   pub collab_type: CollabType,
   pub update_flags: UpdateFlags,
@@ -33,7 +34,7 @@ impl FromRedisStream for UpdateStreamMessage {
     let sender = fields
       .get("sender")
       .ok_or_else(|| anyhow!("expecting field `sender`"))?;
-    let sender = ClientID::from_redis_value(sender)?;
+    let sender = CollabOrigin::from_str(&String::from_redis_value(sender)?)?;
     let update_flags = match fields.get("flags") {
       None => UpdateFlags::default(),
       Some(flags) => u8::from_redis_value(flags).unwrap_or(0).try_into()?,

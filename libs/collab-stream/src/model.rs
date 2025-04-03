@@ -4,10 +4,13 @@ use bytes::Bytes;
 use collab::core::awareness::AwarenessUpdate;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::updates::decoder::Decode;
+use collab_entity::CollabType;
+use redis::streams::StreamId;
 use redis::{FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::ops::Deref;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -91,40 +94,6 @@ impl FromRedisValue for MessageId {
       }),
       _ => Err(internal("expecting Value::Data")),
     }
-  }
-}
-
-#[derive(Debug)]
-pub struct StreamMessageByStreamKey(pub BTreeMap<String, Vec<StreamMessage>>);
-
-impl FromRedisValue for StreamMessageByStreamKey {
-  fn from_redis_value(v: &Value) -> RedisResult<Self> {
-    let mut map: BTreeMap<String, Vec<StreamMessage>> = BTreeMap::new();
-    if matches!(v, Value::Nil) {
-      return Ok(StreamMessageByStreamKey(map));
-    }
-
-    let value_by_id = bulk_from_redis_value(v)?.iter();
-    for value in value_by_id {
-      let key_values = bulk_from_redis_value(value)?;
-
-      if key_values.len() != 2 {
-        return Err(RedisError::from((
-          redis::ErrorKind::TypeError,
-          "Invalid length",
-          "Expected length of 2 for the outer bulk value".to_string(),
-        )));
-      }
-
-      let stream_key = RedisString::from_redis_value(&key_values[0])?.0;
-      let values = bulk_from_redis_value(&key_values[1])?.iter();
-      for value in values {
-        let value = StreamMessage::from_redis_value(value)?;
-        map.entry(stream_key.clone()).or_default().push(value);
-      }
-    }
-
-    Ok(StreamMessageByStreamKey(map))
   }
 }
 
@@ -314,58 +283,6 @@ impl TryFrom<CollabControlEvent> for StreamBinary {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum CollabUpdateEvent {
-  UpdateV1 { encode_update: Vec<u8> },
-}
-
-impl CollabUpdateEvent {
-  #[allow(dead_code)]
-  fn to_proto(&self) -> proto::collab::CollabUpdateEvent {
-    match self {
-      CollabUpdateEvent::UpdateV1 { encode_update } => proto::collab::CollabUpdateEvent {
-        update: Some(Update::UpdateV1(encode_update.clone())),
-      },
-    }
-  }
-
-  fn from_proto(proto: &proto::collab::CollabUpdateEvent) -> Result<Self, StreamError> {
-    match &proto.update {
-      None => Err(StreamError::UnexpectedValue(
-        "update not set for CollabUpdateEvent proto".to_string(),
-      )),
-      Some(update) => match update {
-        Update::UpdateV1(encode_update) => Ok(CollabUpdateEvent::UpdateV1 {
-          encode_update: encode_update.to_vec(),
-        }),
-      },
-    }
-  }
-
-  pub fn encode(&self) -> Vec<u8> {
-    self.to_proto().encode_to_vec()
-  }
-
-  pub fn decode(data: &[u8]) -> Result<Self, StreamError> {
-    match prost::Message::decode(data) {
-      Ok(proto) => CollabUpdateEvent::from_proto(&proto),
-      Err(_) => match bincode::deserialize(data) {
-        Ok(event) => Ok(event),
-        Err(e) => Err(StreamError::BinCodeSerde(e)),
-      },
-    }
-  }
-}
-
-impl TryFrom<CollabUpdateEvent> for StreamBinary {
-  type Error = StreamError;
-
-  fn try_from(value: CollabUpdateEvent) -> Result<Self, Self::Error> {
-    let raw_data = value.encode();
-    Ok(StreamBinary(raw_data))
-  }
-}
-
 pub struct CollabStreamUpdate {
   pub data: Vec<u8>, // yrs::Update::encode_v1
   pub sender: CollabOrigin,
@@ -509,20 +426,5 @@ impl Display for UpdateFlags {
     }
 
     Ok(())
-  }
-}
-
-#[cfg(test)]
-mod test {
-
-  #[test]
-  fn test_collab_update_event_decoding() {
-    let encoded_update = vec![1, 2, 3, 4, 5];
-    let event = super::CollabUpdateEvent::UpdateV1 {
-      encode_update: encoded_update.clone(),
-    };
-    let encoded = event.encode();
-    let decoded = super::CollabUpdateEvent::decode(&encoded).unwrap();
-    assert_eq!(event, decoded);
   }
 }

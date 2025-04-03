@@ -4,13 +4,14 @@ use anyhow::anyhow;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
 use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::model::AwarenessStreamUpdate;
 use collab_stream::stream_router::{FromRedisStream, StreamRouter};
-use database_entity::dto::QueryCollab;
+use database_entity::dto::{CollabParams, QueryCollab};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamRangeReply, StreamTrimOptions, StreamTrimmingMode};
 use redis::{cmd, AsyncCommands, Client};
@@ -76,10 +77,7 @@ impl CollabStore {
   ) -> anyhow::Result<Bytes> {
     match self
       .collab_cache
-      .get_encode_collab(
-        &workspace_id.to_string(),
-        QueryCollab::new(object_id, collab_type),
-      )
+      .get_encode_collab(&workspace_id, QueryCollab::new(object_id, collab_type))
       .await
     {
       Ok(collab) => Ok(collab.doc_state),
@@ -148,6 +146,7 @@ impl CollabStore {
     workspace_id: WorkspaceId,
     object_id: ObjectId,
     collab_type: CollabType,
+    user_id: i64,
     state_vector: &StateVector,
   ) -> anyhow::Result<CollabState> {
     let bytes = self
@@ -187,6 +186,8 @@ impl CollabStore {
         self.connection_manager.clone(),
         workspace_id,
         object_id,
+        collab_type,
+        user_id,
         rid,
         full_state,
       ));
@@ -256,7 +257,7 @@ impl CollabStore {
     &self,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
-    sender: ClientID,
+    sender: &CollabOrigin,
     update: Vec<u8>,
   ) -> anyhow::Result<Rid> {
     let key = format!("af:u:{}", workspace_id);
@@ -268,7 +269,7 @@ impl CollabStore {
       .arg("oid")
       .arg(object_id)
       .arg("sender")
-      .arg(sender)
+      .arg(sender.to_string())
       .arg("data")
       .arg(update)
       .query_async(&mut conn)
@@ -299,6 +300,8 @@ impl CollabStore {
     redis: ConnectionManager,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
+    collab_type: CollabType,
+    uid: i64,
     last_message_id: Rid,
     update: Bytes,
   ) {
@@ -308,6 +311,8 @@ impl CollabStore {
         collab_cache,
         workspace_id,
         object_id,
+        collab_type,
+        uid,
         last_message_id,
         update,
       )
@@ -324,10 +329,20 @@ impl CollabStore {
     collab_cache: Arc<CollabCache>,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
+    collab_type: CollabType,
+    uid: i64,
     last_message_id: Rid,
     update: Bytes,
   ) -> anyhow::Result<()> {
-    collab_cache.insert_encode_collab_to_disk().await?;
+    let encoded_collab = EncodedCollab::new_v1(Bytes::default(), update);
+    let params = CollabParams {
+      object_id,
+      encoded_collab_v1: encoded_collab.encode_to_bytes()?.into(),
+      collab_type: CollabType::Document,
+    };
+    collab_cache
+      .insert_encode_collab_to_disk(&workspace_id, &uid, params)
+      .await?;
     Ok(())
   }
 
@@ -362,10 +377,14 @@ impl CollabStore {
       let mut join_set = JoinSet::new();
       let mut i = 0;
       for (object_id, updates) in updates {
-        let collab_type = if updates.is_empty() {
+        let (collab_type, user_id) = if updates.is_empty() {
           continue;
         } else {
-          updates[0].collab_type
+          let update = &updates[0];
+          (
+            update.collab_type,
+            update.sender.client_user_id().unwrap_or(0),
+          )
         };
         let doc = Doc::new();
         let mut tx = doc.transact_mut();
@@ -394,6 +413,8 @@ impl CollabStore {
           self.collab_cache.clone(),
           workspace_id,
           object_id,
+          collab_type,
+          user_id,
           rid,
           full_state.into(),
         ));

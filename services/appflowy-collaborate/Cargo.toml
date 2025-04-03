@@ -11,6 +11,7 @@ appflowy-proto.workspace = true
 access-control.workspace = true
 actix.workspace = true
 actix-web-actors = { version = "4.3" }
+actix-http.workspace = true
 app-error = { workspace = true, features = [
   "sqlx_error",
   "actix_web_error",

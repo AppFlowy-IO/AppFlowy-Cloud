@@ -65,7 +65,13 @@ impl Workspace {
     match msg.message {
       InputMessage::Manifest(collab_type, rid, state_vector) => {
         match store
-          .get_latest_state(msg.workspace_id, msg.object_id, collab_type, &state_vector)
+          .get_latest_state(
+            msg.workspace_id,
+            msg.object_id,
+            collab_type,
+            sender.collab_origin.client_user_id().unwrap(),
+            &state_vector,
+          )
           .await
         {
           Ok(state) => {
@@ -100,7 +106,7 @@ impl Workspace {
           .publish_update(
             msg.workspace_id,
             msg.object_id,
-            msg.sender,
+            &msg.sender,
             update.encode_v1(),
           )
           .await
@@ -172,11 +178,11 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
           msg.object_id
         );
         self.last_message_id = msg.last_message_id.max(msg.last_message_id);
-        for (session_id, sender) in self.sessions_by_client_id.iter() {
-          if session_id == &msg.sender {
+        for session in self.sessions_by_client_id.values() {
+          if session.collab_origin == msg.sender {
             continue; // skip the sender
           }
-          sender.conn.do_send(WsOutput {
+          session.conn.do_send(WsOutput {
             message: ServerMessage::Update {
               object_id: msg.object_id,
               collab_type: msg.collab_type,
@@ -281,7 +287,7 @@ impl Handler<WsInput> for Workspace {
   type Result = AtomicResponse<Self, ()>;
   fn handle(&mut self, msg: WsInput, _: &mut Self::Context) -> Self::Result {
     let store = self.store.clone();
-    if let Some(sender) = self.sessions_by_client_id.get(&msg.sender) {
+    if let Some(sender) = self.sessions_by_client_id.get(&msg.client_id) {
       AtomicResponse::new(Box::pin(
         Self::hande_ws_input(store, sender.clone(), msg).into_actor(self),
       ))

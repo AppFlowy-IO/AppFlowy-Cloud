@@ -672,6 +672,7 @@ version = "0.1.0"
 dependencies = [
  "access-control",
  "actix",
+ "actix-http",
  "actix-web-actors",
  "anyhow",
  "app-error",

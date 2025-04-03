@@ -978,8 +978,9 @@ impl CollabPersister {
     for (message_id, update) in updates {
       i += 1;
       let update: Update = update.into_update()?;
-      tx.apply_update(update)
-        .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
+      tx.apply_update(update).map_err(|err| {
+        RTProtocolError::YrsApplyUpdate(format!("collab {} - {}", self.object_id, err))
+      })?;
       last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
       self.metrics.apply_update_count.inc();
     }
@@ -1030,10 +1031,9 @@ impl CollabPersister {
         })
       };
       let collab = collab.as_mut().unwrap();
-      collab
-        .transact_mut()
-        .apply_update(update)
-        .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
+      collab.transact_mut().apply_update(update).map_err(|err| {
+        RTProtocolError::YrsApplyUpdate(format!("collab {} - {}", self.object_id, err))
+      })?;
       last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
       self.metrics.apply_update_count.inc();
     }

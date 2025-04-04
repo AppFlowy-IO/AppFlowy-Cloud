@@ -9,6 +9,10 @@ use client_api_entity::workspace_dto::TrashSectionItems;
 use client_api_entity::workspace_dto::{FolderView, QueryWorkspaceFolder, QueryWorkspaceParam};
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
+use client_api_entity::InvitedWorkspace;
+use client_api_entity::JoinWorkspaceByInviteCodeParams;
+use client_api_entity::WorkspaceInviteCodeParams;
+use client_api_entity::WorkspaceInviteToken as WorkspaceInviteCode;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::MagicLinkParams;
@@ -773,6 +777,44 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<TrashSectionItems>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn join_workspace_by_invitation_code(
+    &self,
+    invitation_code: &str,
+  ) -> Result<InvitedWorkspace, AppResponseError> {
+    let url = format!("{}/api/workspace/join-by-invite-code", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&JoinWorkspaceByInviteCodeParams {
+        code: invitation_code.to_string(),
+      })
+      .send()
+      .await?;
+    AppResponse::<InvitedWorkspace>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn create_workspace_invitation_code(
+    &self,
+    workspace_id: &Uuid,
+    params: &WorkspaceInviteCodeParams,
+  ) -> Result<WorkspaceInviteCode, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/invite-code",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    AppResponse::<WorkspaceInviteCode>::from_response(resp)
       .await?
       .into_data()
   }

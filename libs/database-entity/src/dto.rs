@@ -1222,6 +1222,26 @@ pub struct ListQuickNotesQueryParams {
   pub limit: Option<i32>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WorkspaceInviteCodeParams {
+  pub validity_period_hours: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WorkspaceInviteToken {
+  pub code: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct InvitedWorkspace {
+  pub workspace_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JoinWorkspaceByInviteCodeParams {
+  pub code: String,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CollabParams, CollabParamsV0};

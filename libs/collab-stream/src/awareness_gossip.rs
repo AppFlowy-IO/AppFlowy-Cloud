@@ -2,7 +2,7 @@ use crate::error::StreamError;
 use crate::model::AwarenessStreamUpdate;
 use dashmap::DashMap;
 use redis::aio::MultiplexedConnection;
-use redis::{AsyncCommands, Client, RedisError};
+use redis::{AsyncCommands, Client, RedisError, Value};
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
@@ -92,7 +92,7 @@ impl AwarenessGossip {
     let json = serde_json::to_string(update)?;
     let publish_key = format!("af:awareness:{workspace_id}:{object_id}");
     let mut pubsub = self.conn.clone();
-    pubsub.publish(publish_key, json).await?;
+    let _: Value = pubsub.publish(publish_key, json).await?;
     Ok(())
   }
 
@@ -201,7 +201,7 @@ mod test {
       let workspace_id = Uuid::new_v4();
       let object_id = Uuid::new_v4();
       let sink = gossip.sink(&workspace_id, &object_id).await.unwrap();
-      let stream = gossip.awareness_stream(&object_id);
+      let stream = gossip.collab_awareness_stream(&object_id);
       collabs.push((sink, stream));
     }
 

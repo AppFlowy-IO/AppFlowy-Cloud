@@ -2,7 +2,7 @@ use crate::error::{internal, StreamError};
 use crate::stream_router::{FromRedisStream, RedisMap};
 use bytes::Bytes;
 use collab::core::awareness::AwarenessUpdate;
-use collab::core::origin::{CollabClient, CollabOrigin};
+use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab_entity::CollabType;
 use redis::streams::StreamId;

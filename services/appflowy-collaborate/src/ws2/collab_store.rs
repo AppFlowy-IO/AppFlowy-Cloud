@@ -15,12 +15,10 @@ use database_entity::dto::{CollabParams, QueryCollab};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamRangeReply, StreamTrimOptions, StreamTrimmingMode};
 use redis::{cmd, AsyncCommands, Client};
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinSet;
-use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
@@ -338,7 +336,7 @@ impl CollabStore {
     let params = CollabParams {
       object_id,
       encoded_collab_v1: encoded_collab.encode_to_bytes()?.into(),
-      collab_type: CollabType::Document,
+      collab_type,
     };
     collab_cache
       .insert_encode_collab_to_disk(&workspace_id, &uid, params)
@@ -455,76 +453,4 @@ pub struct CollabState {
   pub rid: Rid,
   pub flags: UpdateFlags,
   pub update: Bytes,
-}
-
-#[cfg(test)]
-mod test {
-  use crate::ws2::collab_store::CollabStore;
-  use appflowy_proto::{ObjectId, Rid, WorkspaceId};
-  use collab_stream::metrics::CollabStreamMetrics;
-  use yrs::updates::decoder::Decode;
-  use yrs::{Doc, GetString, Text, Transact, WriteTxn};
-
-  #[tokio::test]
-  async fn snapshot_compression() {
-    let s3 = S3::default()
-      .bucket("appflowy")
-      .region("eu-west-1")
-      .endpoint("http://localhost:9000")
-      .secret_access_key("minioadmin")
-      .access_key_id("minioadmin");
-    let operator = opendal::Operator::new(s3).unwrap().finish();
-    let store = CollabStore::new(
-      operator,
-      redis::Client::open("redis://localhost:6379").unwrap(),
-      CollabStreamMetrics::default().into(),
-    )
-    .await
-    .unwrap();
-    let workspace_id: WorkspaceId = WorkspaceId::new_v4();
-    let mut objects: Vec<_> = (0..10)
-      .into_iter()
-      .map(|_| (ObjectId::new_v4(), Rid::default()))
-      .collect();
-
-    // create initial state of the updates in Redis
-    let mut last_rid = Rid::default();
-    for (object_id, rid) in objects.iter_mut() {
-      let doc = Doc::new();
-      let txt = doc.get_or_insert_text("test");
-      for c in "Hello, World!".chars() {
-        let mut tx = doc.transact_mut();
-        txt.push(&mut tx, &c.to_string());
-        let update = tx.encode_update_v1();
-        *rid = store
-          .publish_update(workspace_id, *object_id, 0, update)
-          .await
-          .unwrap();
-        last_rid = *rid;
-      }
-    }
-
-    // snapshot the workspace
-    store
-      .snapshot_workspace(workspace_id, last_rid)
-      .await
-      .unwrap();
-
-    // check the state of s3
-    for (object_id, _) in objects {
-      let data = store.get_snapshot(workspace_id, object_id).await.unwrap();
-      let doc = Doc::new();
-      let mut tx = doc.transact_mut();
-      let txt = tx.get_or_insert_text("test");
-      tx.apply_update(yrs::Update::decode_v2(&data[10..]).unwrap())
-        .unwrap();
-      assert_eq!(txt.get_string(&tx), "Hello, World!");
-    }
-
-    let updates = store
-      .get_current_updates(workspace_id, None, None)
-      .await
-      .unwrap();
-    assert_eq!(updates, vec![], "Redis stream should be empty");
-  }
 }

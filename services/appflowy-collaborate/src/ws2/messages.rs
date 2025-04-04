@@ -5,9 +5,7 @@ use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use collab_stream::stream_router::{FromRedisStream, RedisMap};
 use redis::FromRedisValue;
-use std::fmt::Display;
 use std::str::FromStr;
-use yrs::block::ClientID;
 
 #[derive(Debug, PartialEq)]
 pub struct UpdateStreamMessage {

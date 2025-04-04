@@ -243,6 +243,24 @@ impl Client {
     self.token.read().subscribe()
   }
 
+  #[instrument(skip_all, err)]
+  pub async fn sign_in_password(
+    &self,
+    email: &str,
+    password: &str,
+  ) -> Result<GotrueTokenResponse, AppResponseError> {
+    let response = self
+      .gotrue_client
+      .token(&Grant::Password(PasswordGrant {
+        email: email.to_owned(),
+        password: password.to_owned(),
+      }))
+      .await?;
+    let _ = self.verify_token_cloud(&response.access_token).await?;
+    self.token.write().set(response.clone());
+    Ok(response)
+  }
+
   /// Sign in with magic link
   ///
   /// User will receive an email with a magic link to sign in.
@@ -280,7 +298,7 @@ impl Client {
     email: &str,
     passcode: &str,
   ) -> Result<GotrueTokenResponse, AppResponseError> {
-    let token = self
+    let response = self
       .gotrue_client
       .verify(&VerifyParams {
         email: email.to_owned(),
@@ -288,7 +306,9 @@ impl Client {
         type_: VerifyType::Recovery,
       })
       .await?;
-    Ok(token)
+    let _ = self.verify_token_cloud(&response.access_token).await?;
+    self.token.write().set(response.clone());
+    Ok(response)
   }
 
   /// Attempts to sign in using a URL, extracting refresh_token from the URL.
@@ -799,31 +819,11 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(skip_all, err)]
-  pub async fn sign_in_password(
-    &self,
-    email: &str,
-    password: &str,
-  ) -> Result<bool, AppResponseError> {
-    let access_token_resp = self
-      .gotrue_client
-      .token(&Grant::Password(PasswordGrant {
-        email: email.to_owned(),
-        password: password.to_owned(),
-      }))
-      .await?;
-    let is_new = self
-      .verify_token_cloud(&access_token_resp.access_token)
-      .await?;
-    self.token.write().set(access_token_resp);
-    Ok(is_new)
-  }
-
   #[instrument(level = "info", skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppResponseError> {
     match self.gotrue_client.sign_up(email, password, None).await? {
       Authenticated(access_token_resp) => {
-        self.token.write().set(access_token_resp);
+        self.token.write().set(access_token_resp.clone());
         Ok(())
       },
       NotAuthenticated(user) => {

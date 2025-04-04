@@ -8,7 +8,6 @@ use actix::{
 };
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
-use collab_stream::error::StreamError;
 use collab_stream::model::AwarenessStreamUpdate;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -87,7 +86,7 @@ impl Workspace {
                 collab_type,
                 flags: state.flags,
                 last_message_id: state.rid,
-                update: state.update.into(),
+                update: state.update,
               },
             });
           },
@@ -101,7 +100,7 @@ impl Workspace {
           },
         };
       },
-      InputMessage::Update(collab_type, update) => {
+      InputMessage::Update(_collab_type, update) => {
         if let Err(err) = store
           .publish_update(
             msg.workspace_id,
@@ -275,10 +274,8 @@ impl Handler<Terminate> for Workspace {
   type Result = ();
 
   fn handle(&mut self, msg: Terminate, ctx: &mut Self::Context) -> Self::Result {
-    if msg.workspace_id == self.workspace_id {
-      if self.sessions_by_client_id.is_empty() {
-        ctx.stop();
-      }
+    if msg.workspace_id == self.workspace_id && self.sessions_by_client_id.is_empty() {
+      ctx.stop();
     }
   }
 }

@@ -1,0 +1,21 @@
+services:
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  gotrue:
+    ports:
+      - "9999:9999"
+
+  appflowy_cloud:
+    ports:
+      - "8000:8000"
+
+  admin_frontend:
+    ports:
+      - "3001:3000"
+
+  appflowy_web:
+    ports:
+      - "3000:80"

@@ -1518,7 +1518,8 @@ impl TryFrom<&StreamId> for ImportTask {
   fn try_from(stream_id: &StreamId) -> Result<Self, Self::Error> {
     let task_str = match stream_id.map.get("task") {
       Some(value) => match value {
-        Value::Data(data) => String::from_utf8_lossy(data).to_string(),
+        Value::SimpleString(value) => value.to_string(),
+        Value::BulkString(data) => String::from_utf8_lossy(data).to_string(),
         _ => {
           error!("Unexpected value type for task field: {:?}", value);
           return Err(ImportError::Internal(anyhow!(

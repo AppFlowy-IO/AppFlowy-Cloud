@@ -1,6 +1,6 @@
 use crate::awareness_gossip::{AwarenessGossip, AwarenessUpdateSink};
 use crate::collab_update_sink::CollabUpdateSink;
-use crate::error::{internal, StreamError};
+use crate::error::StreamError;
 use crate::lease::{Lease, LeaseAcquisition};
 use crate::metrics::CollabStreamMetrics;
 use crate::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId};

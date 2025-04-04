@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT workspace_id\n      FROM af_workspace_invite_code\n      WHERE invite_code = $1\n        AND (expires_at IS NULL OR expires_at > NOW())\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "90a302af791eeb5c5f60c3f95145e0e73c2a1652c5b547e4118bac1d005300de"
+}

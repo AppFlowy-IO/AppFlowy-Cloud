@@ -1510,3 +1510,66 @@ pub async fn select_view_id_from_publish_name(
 
   Ok(res)
 }
+
+pub async fn select_invited_workspace_id(
+  pg_pool: &PgPool,
+  invitation_code: &str,
+) -> Result<Uuid, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT workspace_id
+      FROM af_workspace_invite_code
+      WHERE invite_code = $1
+        AND (expires_at IS NULL OR expires_at > NOW())
+    "#,
+    invitation_code
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn upsert_workspace_member_uid<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  uid: i64,
+  role: AFRole,
+) -> Result<(), AppError> {
+  let role_id = role as i32;
+  sqlx::query!(
+    r#"
+      INSERT INTO af_workspace_member (workspace_id, uid, role_id)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (workspace_id, uid) DO NOTHING
+    "#,
+    workspace_id,
+    uid,
+    role_id,
+  )
+  .execute(executor)
+  .await?;
+
+  Ok(())
+}
+
+pub async fn insert_workspace_invite_code<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  code: &str,
+  expires_at: Option<&chrono::DateTime<Utc>>,
+) -> Result<(), AppError> {
+  sqlx::query!(
+    r#"
+      INSERT INTO af_workspace_invite_code (workspace_id, invite_code, expires_at)
+      VALUES ($1, $2, $3)
+    "#,
+    workspace_id,
+    code,
+    expires_at.map(|dt| dt.naive_utc()),
+  )
+  .execute(executor)
+  .await?;
+
+  Ok(())
+}

@@ -20,7 +20,6 @@ tracing = { version = "0.1", optional = true }
 serde_repr = { version = "0.1", optional = true }
 futures = "0.3.30"
 bytes.workspace = true
-pin-project = "1.1.5"
 ureq = { version = "2.12.1", optional = true, features = ["json"] }
 uuid = { workspace = true, features = ["serde"] }
 

@@ -1,6 +1,5 @@
-use crate::http::log_request_id;
 use crate::http_chat::CompletionStream;
-use crate::Client;
+use crate::{process_response_data, Client};
 use bytes::Bytes;
 use futures_core::Stream;
 use reqwest::Method;
@@ -26,7 +25,6 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
     AppResponse::<()>::answer_response_stream(resp).await
   }
 
@@ -46,7 +44,6 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
     let stream = AppResponse::<serde_json::Value>::json_response_stream(resp).await?;
     Ok(CompletionStream::new(stream))
   }
@@ -68,10 +65,7 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<SummarizeRowResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<SummarizeRowResponse>(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
@@ -92,10 +86,7 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<TranslateRowResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TranslateRowResponse>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -114,10 +105,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<LocalAIConfig>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<LocalAIConfig>(resp).await
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -128,9 +116,6 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<ModelList>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<ModelList>(resp).await
   }
 }

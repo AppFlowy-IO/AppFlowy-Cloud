@@ -134,11 +134,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     .await
     .unwrap();
 
-  let encoded_collab_from_server = AppResponse::<EncodedCollab>::from_response(resp)
-    .await
-    .unwrap()
-    .into_data()
-    .unwrap();
+  let encoded_collab_from_server = process_response_data::<EncodedCollab>(resp).await.unwrap();
   assert_eq!(encoded_collab, encoded_collab_from_server);
 }
 

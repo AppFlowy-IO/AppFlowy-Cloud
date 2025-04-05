@@ -1,5 +1,4 @@
-use crate::http::log_request_id;
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 use client_api_entity::{
   AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceMember, QueryWorkspaceMember,
 };
@@ -7,7 +6,7 @@ use reqwest::Method;
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMembers, WorkspaceMemberChangeset, WorkspaceMemberInvitation, WorkspaceMembers,
 };
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -21,8 +20,7 @@ impl Client {
       .json(&())
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -36,10 +34,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<Vec<AFWorkspaceMember>>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Vec<AFWorkspaceMember>>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -55,9 +50,7 @@ impl Client {
       .json(&invitations)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()?;
-    Ok(())
+    process_response_error(resp).await
   }
 
   pub async fn list_workspace_invitations(
@@ -70,9 +63,7 @@ impl Client {
       builder = builder.query(&[("status", status)])
     }
     let resp = builder.send().await?;
-    log_request_id(&resp);
-    let res = AppResponse::<Vec<AFWorkspaceInvitation>>::from_response(resp).await?;
-    res.into_data()
+    process_response_data::<Vec<AFWorkspaceInvitation>>(resp).await
   }
 
   pub async fn get_workspace_invitation(
@@ -85,9 +76,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    let res: AppResponse<AFWorkspaceInvitation> = AppResponse::from_response(resp).await?;
-    res.into_data()
+    process_response_data::<AFWorkspaceInvitation>(resp).await
   }
 
   pub async fn accept_workspace_invitation(
@@ -104,9 +93,7 @@ impl Client {
       .json(&())
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()?;
-    Ok(())
+    process_response_error(resp).await
   }
 
   #[deprecated(note = "use invite_workspace_members instead")]
@@ -128,9 +115,7 @@ impl Client {
       .json(&members)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()?;
-    Ok(())
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -146,9 +131,7 @@ impl Client {
       .json(&changeset)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()?;
-    Ok(())
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -165,9 +148,7 @@ impl Client {
       .json(&payload)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()?;
-    Ok(())
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -184,9 +165,6 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<AFWorkspaceMember>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AFWorkspaceMember>(resp).await
   }
 }

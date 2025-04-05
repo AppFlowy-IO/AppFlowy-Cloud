@@ -1,5 +1,5 @@
 use crate::http::log_request_id;
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 
 use app_error::AppError;
 use bytes::Bytes;
@@ -8,7 +8,7 @@ use mime::Mime;
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{header, Method, StatusCode};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 
 use shared_entity::dto::file_dto::PutFileResponse;
 use tracing::instrument;
@@ -38,13 +38,12 @@ impl Client {
       .body(data)
       .send()
       .await?;
-    log_request_id(&resp);
     if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
       return Err(AppResponseError::from(AppError::PayloadTooLarge(
         StatusCode::PAYLOAD_TOO_LARGE.to_string(),
       )));
     }
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
@@ -68,15 +67,12 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
     if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
       return Err(AppResponseError::from(AppError::PayloadTooLarge(
         StatusCode::PAYLOAD_TOO_LARGE.to_string(),
       )));
     }
-    AppResponse::<PutFileResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<PutFileResponse>(resp).await
   }
 
   /// Only expose this method for testing
@@ -97,10 +93,7 @@ impl Client {
       .body(data.into())
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<crate::entity::AFBlobRecord>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<crate::entity::AFBlobRecord>(resp).await
   }
   pub fn get_blob_url_v1(&self, workspace_id: &Uuid, parent_dir: &str, file_id: &str) -> String {
     let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
@@ -162,8 +155,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
@@ -184,10 +176,7 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<BlobMetadata>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<BlobMetadata>(resp).await
   }
 
   /// Get the file with the given url. The url should be in the format of
@@ -244,10 +233,7 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<BlobMetadata>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<BlobMetadata>(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
@@ -257,8 +243,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn get_workspace_all_blob_metadata(
@@ -271,9 +256,6 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<RepeatedBlobMetaData>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<RepeatedBlobMetaData>(resp).await
   }
 }

@@ -1,4 +1,6 @@
 use crate::metrics::CollabStreamMetrics;
+use anyhow::anyhow;
+use futures::Stream;
 use loole::{Receiver, Sender};
 use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::Client;
@@ -8,18 +10,63 @@ use redis::RedisError;
 use redis::RedisResult;
 use redis::Value;
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 
 /// Redis stream key.
 pub type StreamKey = String;
 
+pub trait FromRedisStream {
+  type Error: Display;
+  fn from_redis_stream(msg_id: String, fields: RedisMap) -> Result<Self, Self::Error>
+  where
+    Self: Sized;
+}
+
 /// Channel returned by [StreamRouter::observe], that allows to receive messages retrieved by
 /// the router.
-pub type StreamReader = tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>;
+pub struct StreamReader<T> {
+  receiver: tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>,
+  _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> StreamReader<T> {
+  pub fn new(receiver: tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>) -> Self {
+    Self {
+      receiver,
+      _phantom: std::marker::PhantomData,
+    }
+  }
+}
+
+impl<T> Stream for StreamReader<T>
+where
+  T: FromRedisStream,
+{
+  type Item = anyhow::Result<T>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let mut pin = unsafe { self.map_unchecked_mut(|s| &mut s.receiver) };
+    let (msg_id, map) = match pin.poll_recv(cx) {
+      Poll::Ready(Some(v)) => {
+        tracing::trace!("received message {}", v.0);
+        v
+      },
+      Poll::Ready(None) => return Poll::Ready(None),
+      Poll::Pending => return Poll::Pending,
+    };
+    match T::from_redis_stream(msg_id, map) {
+      Ok(value) => Poll::Ready(Some(Ok(value))),
+      Err(err) => Poll::Ready(Some(Err(anyhow!("{}", err)))),
+    }
+  }
+}
 
 /// Redis stream router used to multiplex multiple number of Redis stream read requests over a
 /// fixed number of Redis connections.
@@ -66,13 +113,13 @@ impl StreamRouter {
     })
   }
 
-  pub fn observe(&self, stream_key: StreamKey, last_id: Option<String>) -> StreamReader {
+  pub fn observe<T>(&self, stream_key: StreamKey, last_id: Option<String>) -> StreamReader<T> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let last_id = last_id.unwrap_or_else(|| "0".to_string());
     let h = StreamHandle::new(stream_key, last_id, tx);
     self.buf.send(h).unwrap();
     self.metrics.reads_enqueued.inc();
-    rx
+    StreamReader::new(rx)
   }
 }
 
@@ -276,7 +323,7 @@ impl Worker {
   }
 }
 
-type RedisMap = HashMap<String, Value>;
+pub type RedisMap = HashMap<String, Value>;
 type StreamSender = tokio::sync::mpsc::UnboundedSender<(String, RedisMap)>;
 
 struct StreamHandle {
@@ -298,11 +345,32 @@ impl StreamHandle {
 #[cfg(test)]
 mod test {
   use crate::metrics::CollabStreamMetrics;
-  use crate::stream_router::{StreamRouter, StreamRouterOptions};
+  use crate::stream_router::{FromRedisStream, RedisMap, StreamRouter, StreamRouterOptions};
+  use futures::StreamExt;
   use rand::random;
   use redis::{Client, Commands, FromRedisValue};
   use std::sync::Arc;
   use tokio::task::JoinSet;
+
+  struct TestMessage {
+    id: String,
+    data: String,
+  }
+
+  impl FromRedisStream for TestMessage {
+    type Error = anyhow::Error;
+
+    fn from_redis_stream(id: String, fields: RedisMap) -> Result<Self, Self::Error>
+    where
+      Self: Sized,
+    {
+      let data = fields
+        .get("data")
+        .ok_or_else(|| anyhow::anyhow!("expecting field `data`"))?;
+      let data = String::from_redis_value(data)?;
+      Ok(TestMessage { id, data })
+    }
+  }
 
   #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
   async fn multi_worker_preexisting_messages() {
@@ -320,9 +388,8 @@ mod test {
       let mut observer = router.observe(key.clone(), None);
       join_set.spawn(async move {
         for i in 0..MSG_PER_ROUTE {
-          let (_msg_id, map) = observer.recv().await.unwrap();
-          let value = String::from_redis_value(&map["data"]).unwrap();
-          assert_eq!(value, format!("{}-{}", key, i));
+          let msg: TestMessage = observer.next().await.unwrap().unwrap();
+          assert_eq!(msg.data, format!("{}-{}", key, i));
         }
       });
     }
@@ -348,9 +415,8 @@ mod test {
       let key = key.clone();
       join_set.spawn(async move {
         for i in 0..MSG_PER_ROUTE {
-          let (_msg_id, map) = observer.recv().await.unwrap();
-          let value = String::from_redis_value(&map["data"]).unwrap();
-          assert_eq!(value, format!("{}-{}", key, i));
+          let msg: TestMessage = observer.next().await.unwrap().unwrap();
+          assert_eq!(msg.data, format!("{}-{}", key, i));
         }
       });
     }
@@ -371,17 +437,17 @@ mod test {
   async fn stream_reader_continue_from() {
     let mut client = Client::open("redis://127.0.0.1/").unwrap();
     let key = format!("test:{}:{}", random::<u32>(), 0);
-    let _: String = client.xadd(&key, "*", &[("data", 1)]).unwrap();
-    let m2: String = client.xadd(&key, "*", &[("data", 2)]).unwrap();
-    let m3: String = client.xadd(&key, "*", &[("data", 3)]).unwrap();
+    let _: String = client.xadd(&key, "*", &[("data", "1")]).unwrap();
+    let m2: String = client.xadd(&key, "*", &[("data", "2")]).unwrap();
+    let m3: String = client.xadd(&key, "*", &[("data", "3")]).unwrap();
     let metrics = Arc::new(CollabStreamMetrics::default());
 
     let router = StreamRouter::new(&client, metrics).unwrap();
     let mut observer = router.observe(key, Some(m2));
 
-    let (msg_id, m) = observer.recv().await.unwrap();
-    assert_eq!(msg_id, m3);
-    assert_eq!(u32::from_redis_value(&m["data"]).unwrap(), 3);
+    let msg: TestMessage = observer.next().await.unwrap().unwrap();
+    assert_eq!(msg.id, m3);
+    assert_eq!(msg.data, "3");
   }
 
   #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -408,9 +474,8 @@ mod test {
     let key = keys.pop().unwrap();
     let mut observer = router.observe(key.clone(), None);
     for i in 0..MSG_PER_ROUTE {
-      let (_msg_id, map) = observer.recv().await.unwrap();
-      let value = String::from_redis_value(&map["data"]).unwrap();
-      assert_eq!(value, format!("{}-{}", key, i));
+      let msg: TestMessage = observer.next().await.unwrap().unwrap();
+      assert_eq!(msg.data, format!("{}-{}", key, i));
     }
     // drop observer and wait for worker to release
     drop(observer);

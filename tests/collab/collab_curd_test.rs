@@ -12,8 +12,8 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::collab::util::{empty_document_editor, generate_random_string, test_encode_collab_v1};
+use client_api::process_response_data;
 use client_api_test::TestClient;
-use shared_entity::response::AppResponse;
 use uuid::Uuid;
 
 const WORKSPACE_ID: Uuid = Uuid::from_u128(70700);

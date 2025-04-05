@@ -1112,9 +1112,7 @@ impl CollabPersister {
       match self.collab_type {
         CollabType::Document => {
           let txn = collab.transact();
-          if let Some(text) = DocumentBody::from_collab(collab)
-            .and_then(|body| body.to_plain_text(txn, false, true).ok())
-          {
+          if let Some(text) = DocumentBody::from_collab(collab).map(|body| body.paragraphs(txn)) {
             self.index_collab_content(text);
           }
         },
@@ -1166,12 +1164,12 @@ impl CollabPersister {
     Ok(())
   }
 
-  fn index_collab_content(&self, text: String) {
+  fn index_collab_content(&self, paragraphs: Vec<String>) {
     let indexed_collab = UnindexedCollabTask::new(
       self.workspace_id,
       self.object_id,
       self.collab_type,
-      UnindexedData::Text(text),
+      UnindexedData::Paragraphs(paragraphs),
     );
     if let Err(err) = self
       .indexer_scheduler

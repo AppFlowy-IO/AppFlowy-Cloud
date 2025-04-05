@@ -8,12 +8,9 @@ rayon.workspace = true
 tiktoken-rs = "0.6.0"
 app-error = { workspace = true }
 appflowy-ai-client = { workspace = true, features = ["client-api"] }
-unicode-segmentation = "1.12.0"
 collab = { workspace = true }
 collab-entity = { workspace = true }
-collab-folder = { workspace = true }
 collab-document = { workspace = true }
-collab-stream = { workspace = true }
 database-entity.workspace = true
 database.workspace = true
 futures-util.workspace = true
@@ -37,3 +34,4 @@ redis = { workspace = true, features = [
 ] }
 secrecy = { workspace = true, features = ["serde"] }
 reqwest.workspace = true
+twox-hash = { version = "2.1.0", features = ["xxhash64"] }

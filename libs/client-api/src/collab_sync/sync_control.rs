@@ -8,7 +8,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{broadcast, watch};
-use tracing::{error, instrument, trace};
+use tracing::{error, info, instrument, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector};
@@ -96,16 +96,12 @@ where
   }
 
   pub fn pause(&self) {
-    if cfg!(feature = "sync_verbose_log") {
-      trace!("pause {} sync", self.object.object_id);
-    }
+    info!("pause {} sync", self.object.object_id);
     self.sink.pause();
   }
 
   pub fn resume(&self) {
-    if cfg!(feature = "sync_verbose_log") {
-      trace!("resume {} sync", self.object.object_id);
-    }
+    info!("resume {} sync", self.object.object_id);
     self.sink.resume();
   }
 

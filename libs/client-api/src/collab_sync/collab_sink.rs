@@ -21,7 +21,6 @@ pub(crate) const SEND_INTERVAL: Duration = Duration::from_secs(8);
 pub const COLLAB_SINK_DELAY_MILLIS: u64 = 500;
 
 pub struct CollabSink<Sink> {
-  #[allow(dead_code)]
   uid: i64,
   config: SinkConfig,
   object: SyncObject,
@@ -290,13 +289,10 @@ where
       ) {
         (Some(msg_queue), Some(sending_messages)) => (msg_queue, sending_messages),
         _ => {
-          // If acquire the lock failed, try later
-          if cfg!(feature = "sync_verbose_log") {
-            trace!(
-              "{}: failed to acquire the lock of the sink, retry later",
-              self.object.object_id
-            );
-          }
+          warn!(
+            "{}: failed to acquire the lock of the sink, retry later",
+            self.object.object_id
+          );
           retry_later(Arc::downgrade(&self.notifier));
           return;
         },

@@ -989,24 +989,34 @@ impl Client {
 
   /// Refreshes the access token using the stored refresh token.
   ///
-  /// This function attempts to refresh the access token by sending a request to the authentication server
+  /// attempts to refresh the access token by sending a request to the authentication server
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
+  /// Refreshes the access token using the stored refresh token.
   #[instrument(level = "debug", skip_all, err)]
   pub async fn refresh_token(&self, reason: &str) -> Result<(), AppResponseError> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.refresh_ret_txs.write().push(tx);
 
-    if !self.is_refreshing_token.load(Ordering::SeqCst) {
-      self.is_refreshing_token.store(true, Ordering::SeqCst);
-
+    // Atomically check and set the refreshing flag to prevent race conditions
+    if self
+      .is_refreshing_token
+      .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+      .is_ok()
+    {
       info!("refresh token reason:{}", reason);
       let result = self.inner_refresh_token().await;
-      let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
+
+      // Process all pending requests and reset state atomically
+      let mut txs_guard = self.refresh_ret_txs.write();
+      let txs = std::mem::take(&mut *txs_guard);
+      self.is_refreshing_token.store(false, Ordering::SeqCst);
+      drop(txs_guard);
+
+      // Send results to all waiting requests
       for tx in txs {
         let _ = tx.send(result.clone());
       }
-      self.is_refreshing_token.store(false, Ordering::SeqCst);
     } else {
       debug!("refresh token is already in progress");
     }
@@ -1014,11 +1024,10 @@ impl Client {
     // Wait for the result of the refresh token request.
     match tokio::time::timeout(Duration::from_secs(60), rx).await {
       Ok(Ok(result)) => result,
-      Ok(Err(err)) => Err(AppError::Internal(anyhow!("refresh token error: {}", err)).into()),
-      Err(_) => {
-        self.is_refreshing_token.store(false, Ordering::SeqCst);
-        Err(AppError::RequestTimeout("refresh token timeout".to_string()).into())
+      Ok(Err(err)) => {
+        Err(AppError::Internal(anyhow!("refresh token channel error: {}", err)).into())
       },
+      Err(_) => Err(AppError::RequestTimeout("refresh token timeout".to_string()).into()),
     }
   }
 

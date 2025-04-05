@@ -1,8 +1,5 @@
 use app_error::AppError;
-use collab_entity::CollabType;
-use database::index::{
-  get_collab_embedding_fragment_ids, get_collab_embedding_framgent_ids, get_collabs_indexed_at,
-};
+use database::index::{get_collab_embedding_fragment_ids, get_collabs_indexed_at};
 use indexer::collab_indexer::IndexerProvider;
 use indexer::entity::EmbeddingRecord;
 use indexer::error::IndexerError;
@@ -162,7 +159,7 @@ async fn process_upcoming_tasks(
             .unwrap_or_default();
           let mut join_set = JoinSet::new();
           for task in tasks {
-            if let Some(indexer) = indexer_provider.indexer_for(&task.collab_type) {
+            if let Some(indexer) = indexer_provider.indexer_for(task.collab_type.clone()) {
               let embedder = create_embedder(&config);
               trace!(
                 "[Background Embedding] processing task: {}, content:{:?}, collab_type: {}",

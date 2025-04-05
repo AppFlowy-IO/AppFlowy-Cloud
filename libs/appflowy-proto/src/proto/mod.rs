@@ -105,8 +105,8 @@ impl ClientMessage {
     }
   }
 
-  pub fn into_bytes(self) -> Result<Bytes, Error> {
-    Ok(messages::Message::from(self).encode_to_vec().into())
+  pub fn into_bytes(self) -> Result<Vec<u8>, Error> {
+    Ok(messages::Message::from(self).encode_to_vec())
   }
 
   pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {

@@ -29,7 +29,6 @@ chrono = "0.4"
 client-websocket = { workspace = true, features = ["native-tls"] }
 semver = "1.0.22"
 zstd = { version = "0.13.2" }
-tokio-tungstenite.workspace = true
 
 collab = { workspace = true, optional = true }
 yrs = { workspace = true, optional = true }
@@ -50,6 +49,13 @@ pin-project.workspace = true
 percent-encoding = "2.3.1"
 lazy_static = { workspace = true }
 mime_guess = "2.0.5"
+appflowy-proto = { path = "../appflowy-proto" }
+dashmap.workspace = true
+tokio-tungstenite = { workspace = true, features = ["stream"] }
+rand = "0.8.5"
+smallvec = { workspace = true, features = ["serde", "const_generics", "const_new", "write"] }
+collab-plugins = { workspace = true, features = [] }
+rocksdb = { version = "0.22.0", default-features = false, features = ["zstd"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"

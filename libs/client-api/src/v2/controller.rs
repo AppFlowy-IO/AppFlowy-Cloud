@@ -1,0 +1,840 @@
+use super::db::Db;
+use super::{ObjectId, WorkspaceId};
+use crate::entity::CollabType;
+use anyhow::bail;
+use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags};
+use arc_swap::{ArcSwap, ArcSwapOption};
+use bytes::{Bytes, BytesMut};
+use collab::preclude::Collab;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
+use futures_util::stream::{SplitSink, SplitStream};
+use futures_util::{SinkExt, StreamExt};
+use std::fmt::{Display, Formatter};
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
+use tokio::sync::{Mutex, Notify};
+use tokio::time::MissedTickBehavior;
+use tokio_stream::wrappers::WatchStream;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
+use tokio_util::sync::CancellationToken;
+use yrs::block::ClientID;
+use yrs::sync::AwarenessUpdate;
+use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
+use yrs::{merge_updates_v1, Doc, ReadTxn, StateVector, Transact, Transaction, Update};
+
+type WsConn = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+
+type ControllerSender = tokio::sync::mpsc::UnboundedSender<(ClientMessage, Option<Rid>)>;
+type ControllerReceiver = tokio::sync::mpsc::UnboundedReceiver<(ClientMessage, Option<Rid>)>;
+
+#[derive(Clone)]
+pub struct WorkspaceController {
+  inner: Arc<Inner>,
+}
+
+impl Drop for WorkspaceController {
+  fn drop(&mut self) {
+    self.inner.signal_closed();
+  }
+}
+
+impl WorkspaceController {
+  const RECONNECT_DELAY: Duration = Duration::from_secs(5);
+  const PING_INTERVAL: Duration = Duration::from_secs(4);
+
+  pub fn new(options: Options) -> anyhow::Result<Self> {
+    let (status_tx, status_rx) = tokio::sync::watch::channel(ConnectionStatus::default());
+    let shutdown = CancellationToken::new();
+    let (message_tx, message_rx) = tokio::sync::mpsc::unbounded_channel();
+    let db = Db::open(
+      options.workspace_id,
+      options.uid,
+      &options.workspace_db_path,
+    )?;
+    let last_message_id = db.last_message_id()?;
+    let inner = Arc::new(Inner {
+      options,
+      status_rx,
+      status_tx,
+      message_tx: ArcSwapOption::new(Some(Arc::new(message_tx))),
+      last_message_id: Arc::new(ArcSwap::new(last_message_id.into())),
+      cache: DashMap::new(),
+      db,
+      shutdown,
+      closed: Notify::new(),
+    });
+    tokio::spawn(Self::local_receiver_loop(
+      Arc::downgrade(&inner),
+      message_rx,
+    ));
+    tokio::spawn(Self::remote_receiver_loop(
+      Arc::downgrade(&inner),
+      inner.status_rx.clone(),
+    ));
+    Ok(Self { inner })
+  }
+
+  pub fn is_connected(&self) -> bool {
+    matches!(
+      &*self.inner.status_rx.borrow(),
+      ConnectionStatus::Connected { .. }
+    )
+  }
+
+  pub fn is_disconnected(&self) -> bool {
+    matches!(
+      &*self.inner.status_rx.borrow(),
+      ConnectionStatus::Disconnected { .. }
+    )
+  }
+
+  pub async fn connect(&self) -> anyhow::Result<()> {
+    if self.is_disconnected() {
+      self.inner.request_reconnect();
+    }
+    let mut status_rx = self.inner.status_rx.clone();
+    let status = status_rx
+      .wait_for(|status| match status {
+        ConnectionStatus::Disconnected { .. } => true,
+        ConnectionStatus::Connecting { .. } => false,
+        ConnectionStatus::Connected { .. } => true,
+      })
+      .await?;
+    match &*status {
+      ConnectionStatus::Disconnected { reason } => bail!(
+        "failed to connect: {}",
+        reason.as_deref().unwrap_or("disconnect requested")
+      ),
+      ConnectionStatus::Connecting { .. } => unreachable!(),
+      ConnectionStatus::Connected { .. } => Ok(()),
+    }
+  }
+
+  pub async fn disconnect(&self) -> anyhow::Result<()> {
+    match &*self.inner.status_rx.borrow() {
+      ConnectionStatus::Disconnected { .. } => return Ok(()),
+      ConnectionStatus::Connecting { cancel } => {
+        cancel.cancel();
+      },
+      ConnectionStatus::Connected { sink, cancel } => {
+        cancel.cancel();
+        let mut lock = sink.lock().await;
+        lock.close().await?;
+      },
+    }
+    let mut status_rx = self.inner.status_rx.clone();
+    status_rx
+      .wait_for(|status| match status {
+        ConnectionStatus::Disconnected { .. } => true,
+        ConnectionStatus::Connecting { .. } => false,
+        ConnectionStatus::Connected { .. } => false,
+      })
+      .await?;
+    Ok(())
+  }
+
+  pub async fn close(&mut self) -> anyhow::Result<()> {
+    self.inner.message_tx.swap(None); // close the message channel
+    self.inner.shutdown.cancel();
+    self.inner.closed.notified().await;
+    tracing::trace!("close signaled");
+    if let Some(conn) = self.inner.ws_sink() {
+      let mut conn = conn.lock().await;
+      conn.close().await?;
+      tracing::trace!("web socket connection closed");
+    }
+    tracing::trace!("controller closed");
+    Ok(())
+  }
+
+  pub fn client_id(&self) -> ClientID {
+    self.inner.db.client_id()
+  }
+
+  pub fn workspace_id(&self) -> WorkspaceId {
+    self.inner.options.workspace_id
+  }
+
+  pub fn last_message_id(&self) -> Rid {
+    self.inner.last_message_id()
+  }
+
+  pub fn open(&self, object_id: ObjectId, collab_type: CollabType) -> anyhow::Result<Arc<Collab>> {
+    match self.inner.cache.entry(object_id) {
+      Entry::Occupied(e) => Ok(e.get().clone()),
+      Entry::Vacant(e) => {
+        let last_message_id = self.inner.last_message_id.clone();
+        let collab = self.inner.db.collab(&object_id)?;
+        // Register callback on this collab to observe incoming updates
+        let weak_inner = Arc::downgrade(&self.inner);
+        let client_id = self.inner.db.client_id();
+        collab
+          .get_awareness()
+          .doc()
+          .observe_update_v1_with("af", move |tx, e| {
+            if let Some(inner) = weak_inner.upgrade() {
+              let rid = tx
+                .origin()
+                .map(|origin| Rid::from_bytes(origin.as_ref()).unwrap());
+              if let Some(rid) = rid {
+                last_message_id.rcu(|old| {
+                  if rid > **old {
+                    Arc::new(rid)
+                  } else {
+                    old.clone()
+                  }
+                });
+              }
+              inner.publish_update(object_id, collab_type, rid, e.update.clone());
+              tracing::trace!("[{}] update for collab {}", client_id, object_id);
+            }
+          })
+          .unwrap();
+
+        self.inner.publish_manifest(&collab);
+        let collab = Arc::new(collab);
+        e.insert(collab.clone());
+        Ok(collab)
+      },
+    }
+  }
+
+  async fn remote_receiver_loop(
+    inner: Weak<Inner>,
+    status_rx: tokio::sync::watch::Receiver<ConnectionStatus>,
+  ) {
+    let mut stream = WatchStream::new(status_rx);
+    while let Some(status) = stream.next().await {
+      tracing::trace!("status changed: {}", status);
+      let inner = match inner.upgrade() {
+        Some(inner) => inner,
+        None => {
+          tracing::debug!("connection manager has been dropped");
+          break;
+        },
+      };
+      // if status was changed to connecting, we retry creating connection
+      // otherwise skip the loop iteration and wait for the next status change until we received
+      // connecting signal
+      let cancel = if let ConnectionStatus::Connecting { cancel } = status {
+        cancel
+      } else if inner.shutdown.is_cancelled() {
+        tracing::debug!("connection manager has been closed");
+        inner.signal_closed();
+        break;
+      } else {
+        continue;
+      };
+      let client_id = inner.db.client_id();
+      // connection status changed to connecting => try to establish connection
+      let reconnect =
+        match Self::establish_connection(&inner.options, client_id, cancel.clone()).await {
+          Ok(Some(conn)) => {
+            // successfully made a connection
+            tracing::debug!("successfully connected to {}", inner.options.url);
+            let (sink, stream) = conn.split();
+            inner.set_connected(sink, cancel.clone());
+            let receive_messages_loop = tokio::spawn(Self::receive_server_messages_loop(
+              Arc::downgrade(&inner),
+              stream,
+              cancel,
+            ));
+            // wait for loop to complete, if it completed with failure it's a connection
+            // failure, and we need to reconnect
+            match receive_messages_loop.await.unwrap() {
+              Ok(()) => false, // connection closed gracefully
+              Err(err) => {
+                // error while sending messages
+                tracing::error!("failed to handle messages: {}", err);
+                true
+              },
+            }
+          },
+          Ok(None) => {
+            inner.set_disconnected(None); // connection establishing has been cancelled midway
+            false
+          },
+          Err(err) => {
+            // failed to make a connection, wait and retry
+            tracing::error!("failed to establish WebSocket v2 connection: {}", err);
+            inner.set_disconnected(Some(err.to_string()));
+            tokio::time::sleep(Self::RECONNECT_DELAY).await;
+            true
+          },
+        };
+
+      if inner.shutdown.is_cancelled() {
+        tracing::debug!("connection manager has been closed");
+        inner.signal_closed();
+        break;
+      }
+
+      if reconnect {
+        tracing::trace!("reconnecting");
+        inner.request_reconnect(); // go to the next loop iteration and retry
+      }
+    }
+    tracing::debug!("remote receiver loop finished");
+  }
+
+  async fn establish_connection(
+    options: &Options,
+    client_id: ClientID,
+    cancel: CancellationToken,
+  ) -> anyhow::Result<Option<WsConn>> {
+    let url = format!("{}/ws/v2/{}", options.url, options.workspace_id);
+    tracing::info!("establishing WebScoket connection to: {}", url);
+    let mut req = url.into_client_request()?;
+    let headers = req.headers_mut();
+    headers.insert("X-AF-DeviceID", HeaderValue::from_str(&options.device_id)?);
+    headers.insert(
+      "X-AF-ClientID",
+      HeaderValue::from_str(&client_id.to_string())?,
+    );
+    let mut config = WebSocketConfig::default();
+    config.max_frame_size = None;
+    let fut = connect_async_with_config(req, Some(config), false);
+    tokio::select! {
+      res = fut => {
+        let (stream, _resp) = res?;
+        Ok(Some(stream.into()))
+      }
+      _ = cancel.cancelled() => {
+        tracing::debug!("connection cancelled");
+        Ok(None)
+      }
+    }
+  }
+
+  /// Loop task used to handle messages received from the server.
+  async fn receive_server_messages_loop(
+    inner: Weak<Inner>,
+    mut stream: SplitStream<WsConn>,
+    cancel: CancellationToken,
+  ) -> anyhow::Result<()> {
+    let mut buf = BytesMut::new();
+    while let Some(res) = stream.next().await {
+      let msg = res?;
+      let inner = match inner.upgrade() {
+        Some(inner) => inner,
+        None => break,
+      };
+      match msg {
+        Message::Binary(bytes) => {
+          inner.handle_server_message(bytes).await?;
+        },
+        Message::Text(_) => {
+          tracing::error!("text messages are not supported")
+        },
+        Message::Ping(_) => { /* do nothing */ },
+        Message::Pong(_) => { /* do nothing */ },
+        Message::Frame(frame) => {
+          buf.extend_from_slice(frame.payload());
+          if frame.header().is_final {
+            let bytes = std::mem::take(&mut buf);
+            inner.handle_server_message(bytes.to_vec()).await?;
+          }
+        },
+        Message::Close(close) => {
+          match close {
+            None => tracing::info!("received close request from server"),
+            Some(frame) => tracing::info!(
+              "received close request from server: {} - {}",
+              frame.code,
+              frame.reason
+            ),
+          }
+          cancel.cancel();
+          break;
+        },
+      }
+    }
+    tracing::trace!("receive server messages loop stopped");
+    Ok(())
+  }
+
+  /// Loop task used to handle messages to be sent to the server.
+  async fn local_receiver_loop(inner: Weak<Inner>, mut rx: ControllerReceiver) {
+    let mut keep_alive = tokio::time::interval(Self::PING_INTERVAL);
+    keep_alive.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let cancel = match inner.upgrade() {
+      None => return,
+      Some(inner) => inner.shutdown.clone(),
+    };
+    loop {
+      tokio::select! {
+        res = rx.recv() => {
+          let inner = match inner.upgrade() {
+            Some(inner) => inner,
+            None => break, // controller dropped
+          };
+          if let Some((msg, last_message_id)) = res {
+            if let Err(err) = inner.handle_messages(&mut rx, msg, last_message_id).await {
+              tracing::error!("failed to handle message: {}", err);
+              inner.set_disconnected(Some(err.to_string()));
+            }
+            keep_alive.reset();
+          } else {
+            tracing::trace!("local input channel, closed");
+            inner.signal_closed();
+            break;
+          }
+        },
+        _ = keep_alive.tick() => {
+          // we didn't receive any message for some time, so we send a ping to keep connection alive
+          let inner = match inner.upgrade() {
+            Some(inner) => inner,
+            None => break, // controller dropped
+          };
+          if let Err(err) = inner.try_send(Message::Ping(Vec::new())).await {
+              tracing::error!("failed to send ping: {}", err);
+              inner.set_disconnected(Some(err.to_string()));
+          }
+        }
+        _ = cancel.cancelled() => {
+          if rx.is_empty() {
+              tracing::trace!("controller closing");
+              if let Some(inner) = inner.upgrade() {
+                  inner.signal_closed();
+              }
+              break;
+          }
+        }
+      }
+    }
+    tracing::debug!("local receiver loop finished");
+  }
+}
+
+struct Inner {
+  options: Options,
+  status_rx: tokio::sync::watch::Receiver<ConnectionStatus>,
+  status_tx: tokio::sync::watch::Sender<ConnectionStatus>,
+  message_tx: ArcSwapOption<ControllerSender>,
+  last_message_id: Arc<ArcSwap<Rid>>,
+  /// Cache for collabs actually existing in the memory.
+  cache: DashMap<ObjectId, Arc<Collab>>,
+  /// Persistent database handle.
+  db: Db,
+  shutdown: CancellationToken,
+  closed: Notify,
+}
+
+impl Inner {
+  async fn handle_server_message(&self, data: Vec<u8>) -> anyhow::Result<()> {
+    let msg = ServerMessage::from_bytes(&data)?;
+    match msg {
+      ServerMessage::Manifest {
+        object_id,
+        collab_type,
+        last_message_id,
+        state_vector,
+      } => {
+        tracing::trace!(
+          "received manifest message for {} (rid: {})",
+          object_id,
+          last_message_id
+        );
+        let collab = self.get_collab(object_id)?;
+        let local_message_id = self.last_message_id();
+        let sv = StateVector::decode_v1(&state_vector)?;
+        let tx = collab.get_awareness().doc().transact();
+        let update = tx.encode_state_as_update_v2(&sv);
+        let msg = ClientMessage::Update {
+          object_id,
+          collab_type,
+          flags: UpdateFlags::Lib0v2,
+          update,
+        };
+        self.send(Message::Binary(msg.into_bytes()?)).await?;
+        if let Some(msg) =
+          Self::check_missing_updates(tx, object_id, collab_type, local_message_id)?
+        {
+          self.send(Message::Binary(msg.into_bytes()?)).await?;
+        }
+      },
+      ServerMessage::Update {
+        object_id,
+        collab_type,
+        flags,
+        last_message_id,
+        update,
+      } => {
+        // we don't need to decode update for every use case, but do so anyway to confirm
+        // that it isn't malformed
+        let update = match flags {
+          UpdateFlags::Lib0v1 => Update::decode_v1(&update)?,
+          UpdateFlags::Lib0v2 => Update::decode_v2(&update)?,
+        };
+        tracing::trace!(
+          "received update for {} (rid: {})",
+          object_id,
+          last_message_id
+        );
+        self.save_update(object_id, Some(last_message_id), update)?;
+      },
+      ServerMessage::AwarenessUpdate {
+        object_id,
+        awareness,
+      } => {
+        // we don't need to decode update for every use case, but do so anyway to confirm
+        // that it isn't malformed
+        let update = AwarenessUpdate::decode_v1(&awareness)?;
+        tracing::trace!("received awareness update for {}", object_id);
+        self.save_awareness_update(object_id, update)?;
+      },
+      ServerMessage::PermissionDenied {
+        object_id,
+        collab_type,
+        reason,
+      } => {
+        tracing::warn!(
+          "received permission denied for {} - reason: {}",
+          object_id,
+          reason
+        );
+        self.remove_collab(&object_id)?;
+      },
+    }
+    Ok(())
+  }
+
+  fn check_missing_updates(
+    tx: Transaction,
+    object_id: ObjectId,
+    collab_type: CollabType,
+    local_message_id: Rid,
+  ) -> anyhow::Result<Option<ClientMessage>> {
+    let store = tx.store();
+    if store.pending_update().is_some() || store.pending_ds().is_some() {
+      let sv = tx.state_vector();
+      let reply = ClientMessage::Manifest {
+        object_id,
+        collab_type,
+        last_message_id: local_message_id,
+        state_vector: sv.encode_v1(),
+      };
+      Ok(Some(reply))
+    } else {
+      Ok(None)
+    }
+  }
+
+  fn ws_sink(&self) -> Option<Arc<Mutex<SplitSink<WsConn, Message>>>> {
+    match &*self.status_rx.borrow() {
+      ConnectionStatus::Connected { sink, .. } => Some(sink.clone()),
+      _ => None,
+    }
+  }
+
+  async fn send(&self, msg: Message) -> anyhow::Result<()> {
+    if !self.try_send(msg).await? {
+      bail!("WebSocket client not connected");
+    } else {
+      Ok(())
+    }
+  }
+
+  async fn try_send(&self, msg: Message) -> anyhow::Result<bool> {
+    if let Some(sink) = self.ws_sink() {
+      let mut sink = sink.lock().await;
+      tracing::trace!("sending message {:?}", msg);
+      sink.send(msg).await?;
+      sink.flush().await?;
+      Ok(true)
+    } else {
+      Ok(false)
+    }
+  }
+
+  async fn handle_messages(
+    &self,
+    rx: &mut ControllerReceiver,
+    msg: ClientMessage,
+    last_message_id: Option<Rid>,
+  ) -> anyhow::Result<()> {
+    if let ClientMessage::Update {
+      object_id,
+      collab_type,
+      flags: UpdateFlags::Lib0v1,
+      update,
+    } = msg
+    {
+      // try to eagerly fetch more updates if possible: this way we can merge multiple
+      // updates and send them as one bigger message
+      let (m1, m2) = Self::eager_prefetch(rx, object_id, collab_type, update)?;
+      self.persist_and_send_message(m1, last_message_id).await?;
+      if let Some(msg) = m2 {
+        self.persist_and_send_message(msg, last_message_id).await?;
+      }
+    } else {
+      self.persist_and_send_message(msg, last_message_id).await?;
+    }
+    Ok(())
+  }
+
+  /// Given initial [ClientMessage::Update] payload, try to prefetch (without blocking or awaiting) as
+  /// many bending messages from the collab stream as possible.
+  ///
+  /// This is so that we can even the difference between frequent updates coming from the user with
+  /// slower responding server by merging a lot of small updates together into a bigger one.
+  ///
+  /// Returns a compacted update message and (optionally) the first message after it which couldn't
+  /// be compacted because it's of different type or doesn't belong to the same collab.
+  fn eager_prefetch(
+    rx: &mut ControllerReceiver,
+    current_oid: ObjectId,
+    collab_type: CollabType,
+    buf: Vec<u8>,
+  ) -> anyhow::Result<(ClientMessage, Option<ClientMessage>)> {
+    const SIZE_THRESHOLD: usize = 64 * 1024;
+    let mut size_hint = buf.len();
+    let mut updates: Vec<Vec<u8>> = vec![buf];
+    let mut other = None;
+    // try to eagerly fetch more updates if they are already in the queue
+    while let Ok((msg, None)) = rx.try_recv() {
+      match msg {
+        ClientMessage::Update {
+          object_id,
+          collab_type,
+          flags: UpdateFlags::Lib0v1,
+          update,
+        } if object_id == current_oid => {
+          size_hint += update.len();
+          // we stack updates together until we reach a non-update message
+          updates.push(update);
+
+          if size_hint >= SIZE_THRESHOLD {
+            break; // potential size of the update may be over threshold, stop here and send what we have
+          }
+        },
+        _ => {
+          // other type of message, we cannot compact updates anymore,
+          // so we just prepend the update message and then add new one and send them
+          // all together
+          other = Some(msg);
+          break;
+        },
+      }
+    }
+    let compacted = if updates.len() == 1 {
+      std::mem::take(&mut updates[0])
+    } else {
+      tracing::debug!("Compacting {} updates ({} bytes)", updates.len(), size_hint);
+      merge_updates_v1(updates)? // try to compact updates together
+    };
+    let compacted = ClientMessage::Update {
+      object_id: current_oid,
+      collab_type,
+      flags: UpdateFlags::Lib0v1,
+      update: compacted,
+    };
+    Ok((compacted, other))
+  }
+
+  async fn persist_and_send_message(
+    &self,
+    msg: ClientMessage,
+    last_message_id: Option<Rid>,
+  ) -> anyhow::Result<()> {
+    if let ClientMessage::Update {
+      object_id,
+      collab_type,
+      flags,
+      update,
+    } = &msg
+    {
+      // persist
+      let update = match flags {
+        UpdateFlags::Lib0v1 => Update::decode_v1(update),
+        UpdateFlags::Lib0v2 => Update::decode_v2(update),
+      }?;
+      self.save_update(*object_id, last_message_id, update)?;
+    }
+    if last_message_id.is_none() {
+      // we only send updates generated locally
+      self.try_send(Message::Binary(msg.into_bytes()?)).await?;
+    }
+    Ok(())
+  }
+
+  fn signal_closed(&self) {
+    self.shutdown.cancel();
+    self.closed.notify_waiters();
+  }
+
+  /// Connection status change: requesting connection but not yet connected.
+  /// Note: DO NOT call it outside the given context - it doesn't cancel current connection.
+  fn request_reconnect(&self) {
+    let cancel = self.shutdown.child_token();
+    let status_tx = self.status_tx.clone();
+
+    status_tx
+      .send(ConnectionStatus::Connecting { cancel })
+      .unwrap();
+    tracing::debug!("requesting reconnection");
+  }
+
+  /// Connection status change: connected to server and ready to operate.
+  fn set_connected(&self, sink: SplitSink<WsConn, Message>, cancel: CancellationToken) {
+    let sink = Arc::new(Mutex::new(sink));
+    let status = ConnectionStatus::Connected { sink, cancel };
+    self.status_tx.send(status).unwrap();
+  }
+
+  /// Connection status change: disconnected from the server, either on demand (reason `None`) or
+  /// due to some failure (reason provided).
+  fn set_disconnected(&self, reason: Option<String>) {
+    let status = ConnectionStatus::Disconnected {
+      reason: reason.map(Into::into),
+    };
+    self.status_tx.send(status).unwrap();
+  }
+
+  fn publish_manifest(&self, collab: &Collab) {
+    let messages = self.message_tx.load();
+    if let Some(channel) = &*messages {
+      let last_message_id = self.last_message_id();
+      let doc = collab.get_awareness().doc();
+      let collab_type = collab.collab_type();
+      let object_id: ObjectId = doc.guid().parse().unwrap();
+      let state_vector = doc.transact().state_vector().encode_v1();
+      let msg = ClientMessage::Manifest {
+        object_id,
+        collab_type,
+        last_message_id,
+        state_vector,
+      };
+      // we received that update from the local client
+      let _ = channel.send((msg, None));
+    }
+  }
+
+  fn publish_update(
+    &self,
+    object_id: ObjectId,
+    collab_type: CollabType,
+    last_message_id: Option<Rid>,
+    update_v1: Vec<u8>,
+  ) {
+    let messages = self.message_tx.load();
+    if let Some(channel) = &*messages {
+      let msg = ClientMessage::Update {
+        object_id,
+        collab_type,
+        flags: UpdateFlags::Lib0v1,
+        update: update_v1,
+      };
+      // we received that update from the local client
+      let _ = channel.send((msg, last_message_id));
+    }
+  }
+
+  fn get_collab(&self, object_id: ObjectId) -> anyhow::Result<Arc<Collab>> {
+    match self.cache.get(&object_id) {
+      Some(e) => Ok(e.value().clone()),
+      None => {
+        let collab = self.db.collab(&object_id)?;
+        Ok(collab.into())
+      },
+    }
+  }
+
+  fn remove_collab(&self, object_id: &ObjectId) -> anyhow::Result<()> {
+    self.cache.remove(&object_id);
+    self.db.remove_doc(&object_id)?;
+    Ok(())
+  }
+
+  fn last_message_id(&self) -> Rid {
+    *self.last_message_id.load_full()
+  }
+
+  fn save_update(
+    &self,
+    object_id: ObjectId,
+    last_message_id: Option<Rid>,
+    update: Update,
+  ) -> anyhow::Result<()> {
+    let update_bytes = update.encode_v1();
+    if let Some(reference) = self.cache.get(&object_id) {
+      if let Some(rid) = last_message_id {
+        let mut tx = reference
+          .get_awareness()
+          .doc()
+          .transact_mut_with(rid.into_bytes().as_ref());
+        tx.apply_update(update)?;
+      }
+    }
+    tracing::trace!(
+      "persisting update for {} ({} bytes)",
+      object_id,
+      update_bytes.len()
+    );
+    self
+      .db
+      .save_update(&object_id, last_message_id, update_bytes)?;
+    Ok(())
+  }
+
+  fn save_awareness_update(
+    &self,
+    object_id: ObjectId,
+    update: AwarenessUpdate,
+  ) -> anyhow::Result<()> {
+    if let Some(reference) = self.cache.get(&object_id) {
+      let awareness = reference.get_awareness();
+      awareness.apply_update(update)?;
+    }
+    Ok(())
+  }
+}
+
+#[derive(Debug, Clone)]
+pub enum ConnectionStatus {
+  Disconnected {
+    reason: Option<Arc<str>>,
+  },
+  Connecting {
+    cancel: CancellationToken,
+  },
+  Connected {
+    sink: Arc<Mutex<SplitSink<WsConn, Message>>>,
+    cancel: CancellationToken,
+  },
+}
+
+impl Default for ConnectionStatus {
+  fn default() -> Self {
+    ConnectionStatus::Disconnected { reason: None }
+  }
+}
+
+impl Display for ConnectionStatus {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ConnectionStatus::Disconnected { reason: None } => write!(f, "disconnected"),
+      ConnectionStatus::Disconnected {
+        reason: Some(reason),
+      } => write!(f, "disconnected: {}", reason),
+      ConnectionStatus::Connecting { .. } => write!(f, "connecting"),
+      ConnectionStatus::Connected { .. } => write!(f, "connected"),
+    }
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct Options {
+  pub url: String,
+  pub workspace_id: WorkspaceId,
+  pub uid: i64,
+  pub workspace_db_path: String,
+  pub device_id: String,
+}

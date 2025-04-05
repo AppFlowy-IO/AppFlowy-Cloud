@@ -80,7 +80,7 @@ async fn load_workspace_policies(
   while let Some(Ok(member_permission)) = stream.next().await {
     let uid = member_permission.uid;
     let workspace_id = member_permission.workspace_id.to_string();
-    let object_type = ObjectType::Workspace(&workspace_id);
+    let object_type = ObjectType::Workspace(workspace_id.to_string());
     for act in member_permission.role.policy_acts() {
       let policy = vec![
         uid.to_string(),

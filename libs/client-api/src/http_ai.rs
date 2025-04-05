@@ -1,5 +1,5 @@
-use crate::http::log_request_id;
-use crate::Client;
+use crate::http_chat::CompletionStream;
+use crate::{process_response_data, Client};
 use bytes::Bytes;
 use futures_core::Stream;
 use reqwest::Method;
@@ -10,6 +10,7 @@ use shared_entity::dto::ai_dto::{
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::time::Duration;
 use tracing::instrument;
+use uuid::Uuid;
 
 impl Client {
   pub async fn stream_completion_text(
@@ -19,13 +20,32 @@ impl Client {
   ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
     let url = format!("{}/api/ai/{}/complete/stream", self.base_url, workspace_id);
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_model(Method::POST, &url, None)
       .await?
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
     AppResponse::<()>::answer_response_stream(resp).await
+  }
+
+  pub async fn stream_completion_v2(
+    &self,
+    workspace_id: &Uuid,
+    params: CompleteTextParams,
+    ai_model: Option<String>,
+  ) -> Result<CompletionStream, AppResponseError> {
+    let url = format!(
+      "{}/api/ai/{}/v2/complete/stream",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_model(Method::POST, &url, ai_model)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    let stream = AppResponse::<serde_json::Value>::json_response_stream(resp).await?;
+    Ok(CompletionStream::new(stream))
   }
 
   #[instrument(level = "info", skip_all)]
@@ -39,16 +59,13 @@ impl Client {
     );
 
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_model(Method::POST, &url, None)
       .await?
       .json(&params)
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<SummarizeRowResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<SummarizeRowResponse>(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
@@ -62,17 +79,14 @@ impl Client {
     );
 
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_model(Method::POST, &url, None)
       .await?
       .json(&params)
       .timeout(Duration::from_secs(30))
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<TranslateRowResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TranslateRowResponse>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -91,23 +105,17 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<LocalAIConfig>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<LocalAIConfig>(resp).await
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_model_list(&self, workspace_id: &str) -> Result<ModelList, AppResponseError> {
+  pub async fn get_model_list(&self, workspace_id: &Uuid) -> Result<ModelList, AppResponseError> {
     let url = format!("{}/api/ai/{workspace_id}/model/list", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<ModelList>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<ModelList>(resp).await
   }
 }

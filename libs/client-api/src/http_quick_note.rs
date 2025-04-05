@@ -2,10 +2,10 @@ use client_api_entity::{
   CreateQuickNoteParams, ListQuickNotesQueryParams, QuickNote, QuickNotes, UpdateQuickNoteParams,
 };
 use reqwest::Method;
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 
 fn quick_note_resources_url(base_url: &str, workspace_id: Uuid) -> String {
   format!("{base_url}/api/workspace/{workspace_id}/quick-note")
@@ -30,9 +30,7 @@ impl Client {
       .json(&CreateQuickNoteParams { data })
       .send()
       .await?;
-    AppResponse::<QuickNote>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<QuickNote>(resp).await
   }
 
   pub async fn list_quick_notes(
@@ -53,9 +51,7 @@ impl Client {
       })
       .send()
       .await?;
-    AppResponse::<QuickNotes>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<QuickNotes>(resp).await
   }
 
   pub async fn update_quick_note(
@@ -71,7 +67,7 @@ impl Client {
       .json(&UpdateQuickNoteParams { data })
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn delete_quick_note(
@@ -85,6 +81,6 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 }

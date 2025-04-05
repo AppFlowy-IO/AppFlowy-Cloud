@@ -1,3 +1,4 @@
+use app_error::AppError;
 use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
 use database_entity::dto::{AFRole, AFWebUser, AFWorkspaceInvitationStatus, PublishInfo};
@@ -131,7 +132,12 @@ pub struct RepeatedEmbeddedCollabQuery(pub Vec<EmbeddedCollabQuery>);
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EmbeddedCollabQuery {
   pub collab_type: CollabType,
-  pub object_id: String,
+  pub object_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CollabJsonResponse {
+  pub collab: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,17 +151,17 @@ pub struct CollabResponse {
   ///
   /// We can remove this 'serde(default)' after the 0325 version is stable.
   #[serde(default)]
-  pub object_id: String,
+  pub object_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Space {
-  pub view_id: String,
+  pub view_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Page {
-  pub view_id: String,
+  pub view_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +170,7 @@ pub struct CreateSpaceParams {
   pub name: String,
   pub space_icon: String,
   pub space_icon_color: String,
+  pub view_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,16 +183,31 @@ pub struct UpdateSpaceParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePageParams {
-  pub parent_view_id: String,
+  pub parent_view_id: Uuid,
   pub layout: ViewLayout,
   pub name: Option<String>,
+  pub page_data: Option<serde_json::Value>,
+  pub view_id: Option<Uuid>,
+  pub collab_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdatePageParams {
   pub name: String,
   pub icon: Option<ViewIcon>,
+  pub is_locked: Option<bool>,
   pub extra: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FavoritePageParams {
+  pub is_favorite: bool,
+  pub is_pinned: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppendBlockToPageParams {
+  pub blocks: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,9 +217,30 @@ pub struct MovePageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReorderFavoritePageParams {
+  pub prev_view_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddRecentPagesParams {
+  pub recent_view_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuplicatePageParams {
+  pub suffix: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePageDatabaseViewParams {
+  pub layout: ViewLayout,
+  pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageCollabData {
   pub encoded_collab: Vec<u8>,
-  pub row_data: HashMap<String, Vec<u8>>,
+  pub row_data: HashMap<Uuid, Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,8 +253,8 @@ pub struct PageCollab {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishedDuplicate {
-  pub published_view_id: String,
-  pub dest_view_id: String,
+  pub published_view_id: Uuid,
+  pub dest_view_id: Uuid,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -226,6 +269,7 @@ pub struct FavoriteFolderView {
   #[serde(flatten)]
   pub view: FolderView,
   pub favorited_at: DateTime<Utc>,
+  pub is_pinned: bool,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -252,15 +296,21 @@ pub struct TrashSectionItems {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct FolderView {
-  pub view_id: String,
+  pub view_id: Uuid,
+  pub parent_view_id: Option<Uuid>,
+  pub prev_view_id: Option<Uuid>,
   pub name: String,
   pub icon: Option<ViewIcon>,
   pub is_space: bool,
   pub is_private: bool,
   pub is_published: bool,
+  pub is_favorite: bool,
   pub layout: ViewLayout,
   pub created_at: DateTime<Utc>,
+  pub created_by: Option<i64>,
+  pub last_edited_by: Option<i64>,
   pub last_edited_time: DateTime<Utc>,
+  pub is_locked: Option<bool>,
   /// contains fields like `is_space`, and font information
   pub extra: Option<serde_json::Value>,
   pub children: Vec<FolderView>,
@@ -284,7 +334,7 @@ pub struct PublishInfoView {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PublishPageParams {
   pub publish_name: Option<String>,
-  pub visible_database_view_ids: Option<Vec<String>>,
+  pub visible_database_view_ids: Option<Vec<Uuid>>,
   pub comments_enabled: Option<bool>,
   pub duplicate_enabled: Option<bool>,
 }
@@ -373,15 +423,19 @@ impl ListDatabaseRowDetailParam {
       with_doc: Some(with_doc),
     }
   }
-  pub fn into_ids(&self) -> Vec<&str> {
-    self.ids.split(',').collect()
+  pub fn into_ids(&self) -> Result<Vec<Uuid>, AppError> {
+    let mut res = Vec::new();
+    for uuid in self.ids.split(',') {
+      res.push(Uuid::parse_str(uuid)?);
+    }
+    Ok(res)
   }
 }
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceFolder {
   pub depth: Option<u32>,
-  pub root_view_id: Option<String>,
+  pub root_view_id: Option<Uuid>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

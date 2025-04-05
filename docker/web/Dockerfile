@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM node:20.12.0 AS builder
 
 WORKDIR /app

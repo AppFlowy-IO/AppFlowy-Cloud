@@ -1,15 +1,15 @@
 use app_error::ErrorCode;
 use reqwest::Method;
 use shared_entity::dto::search_dto::SearchDocumentResponseItem;
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
+use uuid::Uuid;
 
-use crate::http::log_request_id;
-use crate::Client;
+use crate::{process_response_data, Client};
 
 impl Client {
   pub async fn search_documents(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     query: &str,
     limit: u32,
     preview_size: u32,
@@ -26,9 +26,6 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<Vec<SearchDocumentResponseItem>>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Vec<SearchDocumentResponseItem>>(resp).await
   }
 }

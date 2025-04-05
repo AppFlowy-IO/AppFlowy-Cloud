@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn query_collab_embedding_after_create_test() {
-  let object_id = Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let mut editor = empty_document_editor(&object_id);
   let contents = vec![
     "AppFlowy is an open-source project.",
@@ -25,8 +25,8 @@ async fn query_collab_embedding_after_create_test() {
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let params = CreateCollabParams {
-    workspace_id: workspace_id.clone(),
-    object_id: object_id.clone(),
+    workspace_id,
+    object_id,
     encoded_collab_v1: editor.encode_collab().encode_to_bytes().unwrap(),
     collab_type: CollabType::Document,
   };
@@ -38,14 +38,14 @@ async fn query_collab_embedding_after_create_test() {
 
 #[tokio::test]
 async fn document_full_sync_then_search_test() {
-  let object_id = Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let mut local_document = empty_document_editor(&object_id);
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let doc_state = local_document.encode_collab().encode_to_bytes().unwrap();
   let params = CreateCollabParams {
-    workspace_id: workspace_id.clone(),
-    object_id: object_id.clone(),
+    workspace_id,
+    object_id,
     encoded_collab_v1: doc_state,
     collab_type: CollabType::Document,
   };
@@ -53,7 +53,7 @@ async fn document_full_sync_then_search_test() {
   test_client
     .insert_view_to_general_space(
       &workspace_id,
-      &object_id,
+      &object_id.to_string(),
       "AppFlowy",
       collab_folder::ViewLayout::Document,
     )
@@ -88,7 +88,7 @@ async fn document_full_sync_then_search_test() {
     .unwrap();
 
   let remote_document = test_client
-    .create_document_collab(&workspace_id, &object_id)
+    .create_document_collab(workspace_id, object_id)
     .await;
   let remote_plain_text = remote_document.paragraphs().join("");
   let local_plain_text = local_document.document.paragraphs().join("");

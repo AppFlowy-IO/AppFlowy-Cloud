@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use collab_entity::CollabType;
-use tokio::time::sleep;
-
 use client_api_test::TestClient;
+use collab_entity::CollabType;
 use database_entity::dto::AFRole;
+use tokio::time::sleep;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn viewing_document_editing_users_test() {
@@ -19,7 +19,7 @@ async fn viewing_document_editing_users_test() {
     .unwrap();
 
   let object_id = owner
-    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
 
   let owner_uid = owner.uid().await;
@@ -28,7 +28,7 @@ async fn viewing_document_editing_users_test() {
   assert_eq!(clients[0], owner_uid);
 
   guest
-    .open_collab(&workspace_id, &object_id, collab_type)
+    .open_collab(workspace_id, object_id, collab_type)
     .await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();
   sleep(Duration::from_secs(1)).await;
@@ -65,7 +65,7 @@ async fn viewing_document_editing_users_test() {
 
 async fn assert_num_connected_client_within_secs(
   client: &TestClient,
-  object_id: &str,
+  object_id: &Uuid,
   expected: usize,
   secs: u64,
 ) {

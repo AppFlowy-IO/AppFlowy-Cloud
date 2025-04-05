@@ -2,18 +2,15 @@ use crate::config::config::Environment;
 use actix_web::rt::task::JoinHandle;
 use chrono::Local;
 use tracing::subscriber::set_global_default;
-use tracing_subscriber::fmt::format::Writer;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
+use tracing_subscriber::{fmt::format::Writer, EnvFilter};
 
 /// Register a subscriber as global default to process span data.
 ///
 /// It should only be called once!
-pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
-  let env_filter = EnvFilter::new(filters.join(","));
-
+pub fn init_subscriber(app_env: &Environment) {
   let builder = tracing_subscriber::fmt()
+    .with_env_filter(EnvFilter::from_default_env())
     .with_target(true)
-    .with_max_level(tracing::Level::TRACE)
     .with_thread_ids(false)
     .with_file(true)
     .with_line_number(true);
@@ -33,13 +30,12 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
           .with_target(false)
           .with_file(false)
           .pretty()
-          .finish()
-          .with(env_filter);
+          .finish();
         set_global_default(subscriber).unwrap();
       }
     },
     Environment::Production => {
-      let subscriber = builder.json().finish().with(env_filter);
+      let subscriber = builder.json().finish();
       set_global_default(subscriber).unwrap();
     },
   }

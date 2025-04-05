@@ -472,10 +472,7 @@ pub async fn delete_workspace_members(
   .unwrap_or(false);
 
   if is_owner {
-    return Err(AppError::NotEnoughPermissions {
-      user: member_email.to_string(),
-      workspace_id: workspace_id.to_string(),
-    });
+    return Err(AppError::NotEnoughPermissions);
   }
 
   sqlx::query!(
@@ -552,6 +549,29 @@ pub async fn select_workspace_member<'a, E: Executor<'a, Database = Postgres>>(
     "#,
     workspace_id,
     uid,
+  )
+  .fetch_one(executor)
+  .await?;
+  Ok(member)
+}
+
+#[inline]
+pub async fn select_workspace_member_by_uuid<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  uuid: Uuid,
+  workspace_id: Uuid,
+) -> Result<AFWorkspaceMemberRow, AppError> {
+  let member = sqlx::query_as!(
+    AFWorkspaceMemberRow,
+    r#"
+    SELECT af_user.uid, af_user.name, af_user.email, af_workspace_member.role_id AS role
+    FROM public.af_workspace_member
+      JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+    WHERE af_workspace_member.workspace_id = $1
+    AND af_user.uuid = $2
+    "#,
+    workspace_id,
+    uuid,
   )
   .fetch_one(executor)
   .await?;
@@ -748,6 +768,25 @@ pub async fn select_user_owned_workspaces_id<'a, E: Executor<'a, Database = Post
   .fetch_all(executor)
   .await?;
   Ok(workspace_ids)
+}
+
+pub async fn insert_workspace_ids_to_deleted_table<'a, E>(
+  executor: E,
+  workspace_ids: Vec<Uuid>,
+) -> Result<(), AppError>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  if workspace_ids.is_empty() {
+    return Ok(());
+  }
+
+  let query = "INSERT INTO public.af_workspace_deleted (workspace_id) SELECT unnest($1::uuid[])";
+  sqlx::query(query)
+    .bind(workspace_ids)
+    .execute(executor)
+    .await?;
+  Ok(())
 }
 
 pub async fn update_workspace_status<'a, E: Executor<'a, Database = Postgres>>(
@@ -1012,7 +1051,6 @@ pub async fn upsert_workspace_settings(
         DELETE FROM af_collab_embeddings e
         USING af_collab c
         WHERE e.oid = c.oid
-          AND e.partition_key = c.partition_key
           AND c.workspace_id = $1
       "#,
       workspace_id
@@ -1471,4 +1509,67 @@ pub async fn select_view_id_from_publish_name(
   .await?;
 
   Ok(res)
+}
+
+pub async fn select_invited_workspace_id(
+  pg_pool: &PgPool,
+  invitation_code: &str,
+) -> Result<Uuid, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT workspace_id
+      FROM af_workspace_invite_code
+      WHERE invite_code = $1
+        AND (expires_at IS NULL OR expires_at > NOW())
+    "#,
+    invitation_code
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn upsert_workspace_member_uid<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  uid: i64,
+  role: AFRole,
+) -> Result<(), AppError> {
+  let role_id = role as i32;
+  sqlx::query!(
+    r#"
+      INSERT INTO af_workspace_member (workspace_id, uid, role_id)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (workspace_id, uid) DO NOTHING
+    "#,
+    workspace_id,
+    uid,
+    role_id,
+  )
+  .execute(executor)
+  .await?;
+
+  Ok(())
+}
+
+pub async fn insert_workspace_invite_code<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  code: &str,
+  expires_at: Option<&chrono::DateTime<Utc>>,
+) -> Result<(), AppError> {
+  sqlx::query!(
+    r#"
+      INSERT INTO af_workspace_invite_code (workspace_id, invite_code, expires_at)
+      VALUES ($1, $2, $3)
+    "#,
+    workspace_id,
+    code,
+    expires_at.map(|dt| dt.naive_utc()),
+  )
+  .execute(executor)
+  .await?;
+
+  Ok(())
 }

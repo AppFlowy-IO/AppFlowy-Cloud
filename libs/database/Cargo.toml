@@ -8,8 +8,6 @@ edition = "2021"
 [dependencies]
 collab = { workspace = true }
 collab-entity = { workspace = true }
-collab-rt-entity = { workspace = true }
-validator = { workspace = true, features = ["validator_derive", "derive"] }
 database-entity.workspace = true
 shared-entity.workspace = true
 app-error = { workspace = true, features = ["sqlx_error", "validation_error"] }
@@ -20,7 +18,6 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tonic-proto.workspace = true
-zstd.workspace = true
 
 sqlx = { workspace = true, default-features = false, features = [
   "postgres",
@@ -34,21 +31,12 @@ pgvector = { workspace = true, features = ["sqlx"] }
 tracing = { version = "0.1.40" }
 uuid = { workspace = true, features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-redis = { workspace = true, features = [
-  "aio",
-  "tokio-comp",
-  "connection-manager",
-] }
 futures-util = "0.3.30"
-bytes.workspace = true
 aws-sdk-s3 = { version = "1.36.0", features = [
   "behavior-version-latest",
   "rt-tokio",
 ], optional = true }
-sha2 = "0.10.8"
-base64 = "0.21.7"
 rust_decimal = "1.36.0"
-bincode.workspace = true
 itertools = "0.12.1"
 
 [features]

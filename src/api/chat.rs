@@ -1,6 +1,6 @@
 use crate::biz::chat::ops::{
-  create_chat, create_chat_message, delete_chat, generate_chat_message_answer, get_chat_messages,
-  get_question_message, update_chat_message,
+  create_chat, create_chat_message, delete_chat, generate_chat_message_answer,
+  get_chat_messages_with_author_uuid, get_question_message, update_chat_message,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -21,9 +21,10 @@ use futures_util::stream;
 use futures_util::{FutureExt, TryStreamExt};
 use pin_project::pin_project;
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatMessage, ChatSettings, CreateAnswerMessageParams, CreateChatMessageParams,
-  CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatParams,
+  ChatAuthor, ChatMessage, ChatMessageWithAuthorUuid, ChatSettings, CreateAnswerMessageParams,
+  CreateChatMessageParams, CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams,
+  MessageCursor, RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
+  UpdateChatParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
@@ -107,7 +108,7 @@ pub fn chat_scope() -> Scope {
       )
 }
 async fn create_chat_handler(
-  path: web::Path<String>,
+  path: web::Path<Uuid>,
   state: Data<AppState>,
   payload: Json<CreateChatParams>,
 ) -> actix_web::Result<JsonAppResponse<()>> {
@@ -181,7 +182,7 @@ async fn create_question_handler(
   path: web::Path<(String, String)>,
   payload: Json<CreateChatMessageParams>,
   uuid: UserUuid,
-) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+) -> actix_web::Result<JsonAppResponse<ChatMessageWithAuthorUuid>> {
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
 
@@ -206,7 +207,7 @@ async fn create_question_handler(
   }
 
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  let resp = create_chat_message(&state.pg_pool, uid, chat_id, params).await?;
+  let resp = create_chat_message(&state.pg_pool, uid, *uuid, chat_id, params).await?;
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
@@ -346,6 +347,7 @@ async fn answer_stream_v2_handler(
       )
     },
     Err(err) => {
+      trace!("[Chat] stream answer failed: {}", err);
       state.metrics.ai_metrics.record_failed_stream_count(1);
       Ok(
         HttpResponse::ServiceUnavailable()
@@ -422,7 +424,7 @@ async fn get_chat_message_handler(
   path: web::Path<(String, String)>,
   query: web::Query<HashMap<String, String>>,
   state: Data<AppState>,
-) -> actix_web::Result<JsonAppResponse<RepeatedChatMessage>> {
+) -> actix_web::Result<JsonAppResponse<RepeatedChatMessageWithAuthorUuid>> {
   let mut params = GetChatMessageParams {
     cursor: MessageCursor::Offset(0),
     limit: query
@@ -442,7 +444,7 @@ async fn get_chat_message_handler(
 
   trace!("get chat messages: {:?}", params);
   let (_workspace_id, chat_id) = path.into_inner();
-  let messages = get_chat_messages(&state.pg_pool, params, &chat_id).await?;
+  let messages = get_chat_messages_with_author_uuid(&state.pg_pool, params, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(messages).into())
 }
 

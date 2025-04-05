@@ -10,6 +10,7 @@ use infra::env_util::get_env_var;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait Indexer: Send + Sync {
@@ -21,7 +22,7 @@ pub trait Indexer: Send + Sync {
 
   fn create_embedded_chunks_from_text(
     &self,
-    object_id: String,
+    object_id: Uuid,
     paragraphs: Vec<String>,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError>;
@@ -58,11 +59,11 @@ impl IndexerProvider {
   /// Returns indexer for a specific type of [Collab] object.
   /// If collab of given type is not supported or workspace it belongs to has indexing disabled,
   /// returns `None`.
-  pub fn indexer_for(&self, collab_type: &CollabType) -> Option<Arc<dyn Indexer>> {
-    self.indexer_cache.get(collab_type).cloned()
+  pub fn indexer_for(&self, collab_type: CollabType) -> Option<Arc<dyn Indexer>> {
+    self.indexer_cache.get(&collab_type).cloned()
   }
 
-  pub fn is_indexing_enabled(&self, collab_type: &CollabType) -> bool {
-    self.indexer_cache.contains_key(collab_type)
+  pub fn is_indexing_enabled(&self, collab_type: CollabType) -> bool {
+    self.indexer_cache.contains_key(&collab_type)
   }
 }

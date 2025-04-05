@@ -2,7 +2,9 @@ use std::collections::HashSet;
 
 use app_error::AppError;
 use chrono::DateTime;
-use collab_folder::{Folder, SectionItem, SpacePermission, ViewLayout as CollabFolderViewLayout};
+use collab_folder::{
+  Folder, SectionItem, SpacePermission, View, ViewLayout as CollabFolderViewLayout,
+};
 use shared_entity::dto::workspace_dto::{
   self, FavoriteFolderView, FolderView, FolderViewMinimal, RecentFolderView, TrashFolderView,
   ViewLayout,
@@ -10,9 +12,9 @@ use shared_entity::dto::workspace_dto::{
 use uuid::Uuid;
 
 pub struct PrivateSpaceAndTrashViews {
-  pub my_private_space_ids: HashSet<String>,
-  pub other_private_space_ids: HashSet<String>,
-  pub view_ids_in_trash: HashSet<String>,
+  pub my_private_space_ids: HashSet<Uuid>,
+  pub other_private_space_ids: HashSet<Uuid>,
+  pub view_ids_in_trash: HashSet<Uuid>,
 }
 
 pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrashViews {
@@ -22,25 +24,28 @@ pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrash
   for private_section in folder.get_my_private_sections() {
     match folder.get_view(&private_section.id) {
       Some(private_view) if check_if_view_is_space(&private_view) => {
-        my_private_space_ids.insert(private_section.id.clone());
+        let section_id = Uuid::parse_str(&private_section.id).unwrap();
+        my_private_space_ids.insert(section_id);
       },
       _ => (),
     }
   }
 
   for private_section in folder.get_all_private_sections() {
+    let private_section_id = Uuid::parse_str(&private_section.id).unwrap();
     match folder.get_view(&private_section.id) {
       Some(private_view)
         if check_if_view_is_space(&private_view)
-          && !my_private_space_ids.contains(&private_section.id) =>
+          && !my_private_space_ids.contains(&private_section_id) =>
       {
-        other_private_space_ids.insert(private_section.id.clone());
+        other_private_space_ids.insert(private_section_id);
       },
       _ => (),
     }
   }
   for trash_view in folder.get_all_trash_sections() {
-    view_ids_in_trash.insert(trash_view.id.clone());
+    let trash_view_id = Uuid::parse_str(&trash_view.id).unwrap();
+    view_ids_in_trash.insert(trash_view_id);
   }
   PrivateSpaceAndTrashViews {
     my_private_space_ids,
@@ -52,16 +57,16 @@ pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrash
 /// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
 pub fn collab_folder_to_folder_view(
   workspace_id: Uuid,
-  root_view_id: &str,
+  root_view_id: &Uuid,
   folder: &Folder,
   max_depth: u32,
-  pubished_view_ids: &HashSet<String>,
+  pubished_view_ids: &HashSet<Uuid>,
 ) -> Result<FolderView, AppError> {
   let private_space_and_trash_view_ids = private_space_and_trash_view_ids(folder);
 
   to_folder_view(
     workspace_id,
-    "",
+    None,
     root_view_id,
     folder,
     &private_space_and_trash_view_ids,
@@ -76,14 +81,34 @@ pub fn collab_folder_to_folder_view(
   )))
 }
 
+pub fn get_prev_view_id(folder: &Folder, view_id: &Uuid) -> Option<Uuid> {
+  let view_id = view_id.to_string();
+  folder
+    .get_view(&view_id.to_string())
+    .and_then(|view| folder.get_view(&view.parent_view_id))
+    .and_then(|parent_view| {
+      parent_view
+        .children
+        .iter()
+        .position(|vid| vid.id == view_id)
+        .and_then(|pos| {
+          if pos == 0 {
+            None
+          } else {
+            parent_view.children[pos - 1].id.parse().ok()
+          }
+        })
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn to_folder_view(
   workspace_id: Uuid,
-  parent_view_id: &str,
-  view_id: &str,
+  parent_view_id: Option<&Uuid>,
+  view_id: &Uuid,
   folder: &Folder,
   private_space_and_trash_views: &PrivateSpaceAndTrashViews,
-  published_view_ids: &HashSet<String>,
+  published_view_ids: &HashSet<Uuid>,
   parent_is_private: bool,
   depth: u32,
   max_depth: u32,
@@ -102,7 +127,7 @@ fn to_folder_view(
     return None;
   }
 
-  let view = match folder.get_view(view_id) {
+  let view = match folder.get_view(&view_id.to_string()) {
     Some(view) => view,
     None => {
       return None;
@@ -110,14 +135,15 @@ fn to_folder_view(
   };
 
   // There is currently a bug, in which the parent_view_id is not always set correctly
-  if !(parent_view_id.is_empty() || view.parent_view_id == parent_view_id) {
+  let view_parent = Uuid::parse_str(&view.parent_view_id).ok();
+  if parent_view_id.is_some() && view_parent.as_ref() != parent_view_id {
     return None;
   }
 
   let view_is_space = check_if_view_is_space(&view);
   // There is currently a bug, which a document that is not a space ended up as child
   // of the workspace
-  let parent_is_workspace = workspace_id.to_string() == parent_view_id;
+  let parent_is_workspace = Some(&workspace_id) == parent_view_id;
   if !view_is_space && parent_is_workspace {
     return None;
   }
@@ -133,10 +159,11 @@ fn to_folder_view(
     .children
     .iter()
     .filter_map(|child_view_id| {
+      let child_view_id = Uuid::parse_str(&child_view_id.id).ok()?;
       to_folder_view(
         workspace_id,
-        view_id,
-        &child_view_id.id,
+        Some(view_id),
+        &child_view_id,
         folder,
         private_space_and_trash_views,
         published_view_ids,
@@ -147,7 +174,9 @@ fn to_folder_view(
     })
     .collect();
   Some(FolderView {
-    view_id: view_id.to_string(),
+    view_id: *view_id,
+    parent_view_id: view.parent_view_id.parse().ok(),
+    prev_view_id: get_prev_view_id(folder, view_id),
     name: view.name.clone(),
     icon: view
       .icon
@@ -155,10 +184,14 @@ fn to_folder_view(
       .map(|icon| to_dto_view_icon(icon.clone())),
     is_space: view_is_space,
     is_private,
+    is_favorite: view.is_favorite,
     is_published: published_view_ids.contains(view_id),
     layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
+    created_by: view.created_by,
+    last_edited_by: view.last_edited_by,
     last_edited_time: DateTime::from_timestamp(view.last_edited_time, 0).unwrap_or_default(),
+    is_locked: view.is_locked,
     extra,
     children,
   })
@@ -174,22 +207,38 @@ pub fn section_items_to_favorite_folder_view(
     .filter_map(|section_item| {
       let view = folder.get_view(&section_item.id);
       view.map(|v| {
+        let extra = v.extra.as_ref().map(|e| parse_extra_field_as_json(e));
+        let is_pinned = match extra.as_ref() {
+          Some(extra) => extra
+            .get("is_pinned")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+          None => false,
+        };
+        let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
-          view_id: v.id.clone(),
+          view_id,
+          parent_view_id: v.parent_view_id.parse().ok(),
+          prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
           is_private: false,
+          is_favorite: v.is_favorite,
           is_published: published_view_ids.contains(&v.id),
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          created_by: v.created_by,
+          last_edited_by: v.last_edited_by,
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
-          extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
+          is_locked: v.is_locked,
+          extra,
           children: vec![],
         };
         FavoriteFolderView {
           view: folder_view,
           favorited_at: DateTime::from_timestamp(section_item.timestamp, 0).unwrap_or_default(),
+          is_pinned,
         }
       })
     })
@@ -206,16 +255,23 @@ pub fn section_items_to_recent_folder_view(
     .filter_map(|section_item| {
       let view = folder.get_view(&section_item.id);
       view.map(|v| {
+        let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
-          view_id: v.id.clone(),
+          view_id,
+          parent_view_id: v.parent_view_id.parse().ok(),
+          prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
           is_private: false,
+          is_favorite: v.is_favorite,
           is_published: published_view_ids.contains(&v.id),
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          created_by: v.created_by,
+          last_edited_by: v.last_edited_by,
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
+          is_locked: v.is_locked,
           extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
           children: vec![],
         };
@@ -237,16 +293,23 @@ pub fn section_items_to_trash_folder_view(
     .filter_map(|section_item| {
       let view = folder.get_view(&section_item.id);
       view.map(|v| {
+        let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
-          view_id: v.id.clone(),
+          view_id,
+          parent_view_id: v.parent_view_id.parse().ok(),
+          prev_view_id: get_prev_view_id(folder, &view_id),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
           is_private: false,
           is_published: false,
+          is_favorite: v.is_favorite,
           created_at: DateTime::from_timestamp(v.created_at, 0).unwrap_or_default(),
+          created_by: v.created_by,
+          last_edited_by: v.last_edited_by,
           last_edited_time: DateTime::from_timestamp(v.last_edited_time, 0).unwrap_or_default(),
           layout: to_dto_view_layout(&v.layout),
+          is_locked: v.is_locked,
           extra: v.extra.as_ref().map(|e| parse_extra_field_as_json(e)),
           children: vec![],
         };
@@ -257,6 +320,41 @@ pub fn section_items_to_trash_folder_view(
       })
     })
     .collect()
+}
+
+pub struct ViewTree {
+  pub view: View,
+  pub children: Vec<ViewTree>,
+}
+
+pub fn get_view_and_children(folder: &Folder, view_id: &str) -> Option<ViewTree> {
+  let private_space_and_trash_views = private_space_and_trash_view_ids(folder);
+  get_view_and_children_recursive(folder, &private_space_and_trash_views, view_id)
+}
+
+fn get_view_and_children_recursive(
+  folder: &Folder,
+  private_space_and_trash_views: &PrivateSpaceAndTrashViews,
+  view_id: &str,
+) -> Option<ViewTree> {
+  let view_uuid = Uuid::parse_str(view_id).ok()?;
+  if private_space_and_trash_views
+    .view_ids_in_trash
+    .contains(&view_uuid)
+  {
+    return None;
+  }
+
+  folder.get_view(view_id).map(|view| ViewTree {
+    view: View::clone(&view),
+    children: view
+      .children
+      .iter()
+      .filter_map(|child_view_id| {
+        get_view_and_children_recursive(folder, private_space_and_trash_views, child_view_id)
+      })
+      .collect(),
+  })
 }
 
 pub fn check_if_view_ancestors_fulfil_condition(

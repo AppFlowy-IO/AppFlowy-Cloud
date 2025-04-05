@@ -14,6 +14,7 @@ use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingC
 use serde_json::json;
 use tracing::trace;
 use twox_hash::xxhash64::Hasher;
+use uuid::Uuid;
 
 pub struct DocumentIndexer;
 
@@ -24,7 +25,7 @@ impl Indexer for DocumentIndexer {
     collab: &Collab,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
-    let object_id = collab.object_id().to_string();
+    let object_id = collab.object_id().parse()?;
     let document = DocumentBody::from_collab(collab).ok_or_else(|| {
       anyhow!(
         "Failed to get document body from collab `{}`: schema is missing required fields",
@@ -38,7 +39,7 @@ impl Indexer for DocumentIndexer {
 
   fn create_embedded_chunks_from_text(
     &self,
-    object_id: String,
+    object_id: Uuid,
     paragraphs: Vec<String>,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
@@ -97,7 +98,7 @@ impl Indexer for DocumentIndexer {
 }
 
 fn split_text_into_chunks(
-  object_id: String,
+  object_id: Uuid,
   paragraphs: Vec<String>,
   collab_type: CollabType,
   embedding_model: EmbeddingModel,

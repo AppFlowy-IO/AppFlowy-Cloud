@@ -1,6 +1,8 @@
 use crate::entity::CollabType;
 use crate::http::log_request_id;
-use crate::{blocking_brotli_compress, brotli_compress, Client};
+use crate::{
+  blocking_brotli_compress, brotli_compress, process_response_data, process_response_error, Client,
+};
 use anyhow::anyhow;
 use app_error::AppError;
 use bytes::Bytes;
@@ -24,7 +26,7 @@ use rayon::prelude::*;
 use reqwest::{Body, Method};
 use serde::Serialize;
 use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam, EmbeddedCollabQuery};
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
 use std::future::Future;
 use std::io::Cursor;
@@ -34,6 +36,7 @@ use std::time::Duration;
 use tokio_retry::strategy::ExponentialBackoff;
 use tokio_retry::{Action, Condition, RetryIf};
 use tracing::{event, instrument};
+use uuid::Uuid;
 
 impl Client {
   #[instrument(level = "info", skip_all, err)]
@@ -64,8 +67,7 @@ impl Client {
     }
 
     let resp = builder.body(compress_bytes).send().await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -80,14 +82,13 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn update_web_collab(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     params: UpdateCollabWebParams,
   ) -> Result<(), AppResponseError> {
     let url = format!(
@@ -100,15 +101,14 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   // The browser will call this API to get the collab list, because the URL length limit and browser can't send the body in GET request
   #[instrument(level = "info", skip_all, err)]
   pub async fn batch_post_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params: Vec<QueryCollab>,
   ) -> Result<BatchQueryCollabResult, AppResponseError> {
     self
@@ -119,7 +119,7 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn batch_get_collab(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params: Vec<QueryCollab>,
   ) -> Result<BatchQueryCollabResult, AppResponseError> {
     self
@@ -130,7 +130,7 @@ impl Client {
   async fn send_batch_collab_request(
     &self,
     method: Method,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params: Vec<QueryCollab>,
   ) -> Result<BatchQueryCollabResult, AppResponseError> {
     let url = format!(
@@ -144,10 +144,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<BatchQueryCollabResult>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<BatchQueryCollabResult>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -162,14 +159,13 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
   pub async fn list_databases(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<Vec<AFDatabase>, AppResponseError> {
     let url = format!("{}/api/workspace/{}/database", self.base_url, workspace_id);
     let resp = self
@@ -177,13 +173,12 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::from_response(resp).await?.into_data()
+    process_response_data::<Vec<AFDatabase>>(resp).await
   }
 
   pub async fn list_database_row_ids(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     database_id: &str,
   ) -> Result<Vec<AFDatabaseRow>, AppResponseError> {
     let url = format!(
@@ -195,13 +190,12 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::from_response(resp).await?.into_data()
+    process_response_data::<Vec<AFDatabaseRow>>(resp).await
   }
 
   pub async fn get_database_fields(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     database_id: &str,
   ) -> Result<Vec<AFDatabaseField>, AppResponseError> {
     let url = format!(
@@ -213,15 +207,14 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::from_response(resp).await?.into_data()
+    process_response_data::<Vec<AFDatabaseField>>(resp).await
   }
 
   // Adds a database field to the specified database.
   // Returns the field id of the newly created field.
   pub async fn add_database_field(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     database_id: &str,
     insert_field: &AFInsertDatabaseField,
   ) -> Result<String, AppResponseError> {
@@ -235,13 +228,12 @@ impl Client {
       .json(insert_field)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::from_response(resp).await?.into_data()
+    process_response_data::<String>(resp).await
   }
 
   pub async fn list_database_row_ids_updated(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     database_id: &str,
     after: Option<DateTime<Utc>>,
   ) -> Result<Vec<DatabaseRowUpdatedItem>, AppResponseError> {
@@ -255,13 +247,12 @@ impl Client {
       .query(&ListDatabaseRowUpdatedParam { after })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::from_response(resp).await?.into_data()
+    process_response_data::<Vec<DatabaseRowUpdatedItem>>(resp).await
   }
 
   pub async fn list_database_row_details(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     database_id: &str,
     row_ids: &[&str],
     with_doc: bool,
@@ -276,8 +267,7 @@ impl Client {
       .query(&ListDatabaseRowDetailParam::new(row_ids, with_doc))
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::from_response(resp).await?.into_data()
+    process_response_data::<Vec<AFDatabaseRowDetail>>(resp).await
   }
 
   /// Example payload:
@@ -288,7 +278,7 @@ impl Client {
   /// Upon success, returns the row id for the newly created row.
   pub async fn add_database_item(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     database_id: &str,
     cells_by_id: HashMap<String, serde_json::Value>,
     row_doc_content: Option<String>,
@@ -306,8 +296,7 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::from_response(resp).await?.into_data()
+    process_response_data::<String>(resp).await
   }
 
   /// Like [add_database_item], but use a [pre_hash] as identifier of the row
@@ -315,7 +304,7 @@ impl Client {
   /// Creates the row if now exists, else row will be modified
   pub async fn upsert_database_item(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     database_id: &str,
     pre_hash: String,
     cells_by_id: HashMap<String, serde_json::Value>,
@@ -335,8 +324,7 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::from_response(resp).await?.into_data()
+    process_response_data::<String>(resp).await
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -358,14 +346,13 @@ impl Client {
       .body(body)
       .send()
       .await?;
-    crate::http::log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "debug", skip_all, err)]
   pub async fn create_collab_list(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params_list: Vec<CollabParams>,
   ) -> Result<(), AppResponseError> {
     let url = self.batch_create_collab_url(workspace_id);
@@ -410,8 +397,7 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "debug", skip_all)]
@@ -427,7 +413,7 @@ impl Client {
 
   pub async fn publish_collabs<Metadata, Data>(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     items: Vec<PublishCollabItem<Metadata, Data>>,
   ) -> Result<(), AppResponseError>
   where
@@ -442,14 +428,13 @@ impl Client {
       .body(Body::wrap_stream(publish_collab_stream))
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn get_collab_embed_info(
     &self,
-    workspace_id: &str,
-    object_id: &str,
-    collab_type: CollabType,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<AFCollabEmbedInfo, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{workspace_id}/collab/{object_id}/embed-info",
@@ -459,18 +444,14 @@ impl Client {
       .http_client_with_auth(Method::GET, &url)
       .await?
       .header("Content-Type", "application/json")
-      .query(&CollabTypeParam { collab_type })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<AFCollabEmbedInfo>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AFCollabEmbedInfo>(resp).await
   }
 
   pub async fn batch_get_collab_embed_info(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     params: Vec<EmbeddedCollabQuery>,
   ) -> Result<Vec<AFCollabEmbedInfo>, AppResponseError> {
     let url = format!(
@@ -483,17 +464,15 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    let data = AppResponse::<RepeatedAFCollabEmbedInfo>::from_response(resp)
-      .await?
-      .into_data()?;
-    Ok(data.0)
+    process_response_data::<RepeatedAFCollabEmbedInfo>(resp)
+      .await
+      .map(|data| data.0)
   }
 
   pub async fn collab_full_sync(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     collab_type: CollabType,
     doc_state: Vec<u8>,
     state_vector: Vec<u8>,
@@ -535,7 +514,7 @@ impl Client {
       let decompressed_body = zstd::decode_all(Cursor::new(body))?;
       Ok(decompressed_body)
     } else {
-      AppResponse::from_response(resp).await?.into_data()
+      process_response_data::<Vec<u8>>(resp).await
     }
   }
 }
@@ -626,7 +605,7 @@ impl Action for GetCollabAction {
   fn run(&mut self) -> Self::Future {
     let client = self.client.clone();
     let params = self.params.clone();
-    let collab_type = self.params.collab_type.clone();
+    let collab_type = self.params.collab_type;
 
     Box::pin(async move {
       let url = format!(
@@ -639,9 +618,7 @@ impl Action for GetCollabAction {
         .query(&CollabTypeParam { collab_type })
         .send()
         .await?;
-      log_request_id(&resp);
-      let resp = AppResponse::<CollabResponse>::from_response(resp).await?;
-      resp.into_data()
+      process_response_data::<CollabResponse>(resp).await
     })
   }
 }

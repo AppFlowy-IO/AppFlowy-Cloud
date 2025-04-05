@@ -9,12 +9,17 @@ use client_api_entity::workspace_dto::TrashSectionItems;
 use client_api_entity::workspace_dto::{FolderView, QueryWorkspaceFolder, QueryWorkspaceParam};
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
+use client_api_entity::InvitedWorkspace;
+use client_api_entity::JoinWorkspaceByInviteCodeParams;
+use client_api_entity::WorkspaceInviteCodeParams;
+use client_api_entity::WorkspaceInviteToken as WorkspaceInviteCode;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use reqwest::StatusCode;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceParam, PatchWorkspaceParam};
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "enable_brotli")]
 use std::io::Read;
@@ -23,11 +28,15 @@ use parking_lot::RwLock;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 
+use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
+use crate::ws::ConnectInfo;
 use anyhow::anyhow;
+use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use client_api_entity::{
   AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
   QuerySnapshotParams, SnapshotData,
 };
+use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use semver::Version;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
@@ -40,11 +49,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
 use tracing::{debug, error, event, info, instrument, trace, warn};
 use url::Url;
-
-use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
-use crate::ws::ConnectInfo;
-use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
-use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
+use uuid::Uuid;
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
@@ -175,7 +180,7 @@ impl Client {
       );
     }
 
-    let ai_model = Arc::new(RwLock::new("gpt-4o-mini".to_string()));
+    let ai_model = Arc::new(RwLock::new("Auto".to_string()));
 
     Self {
       base_url: base_url.to_string(),
@@ -451,7 +456,8 @@ impl Client {
   async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppResponseError> {
     let url = format!("{}/api/user/verify/{}", self.base_url, access_token);
     let resp = self.cloud_client.get(&url).send().await?;
-    let sign_in_resp: SignInTokenResponse = AppResponse::from_response(resp).await?.into_data()?;
+    let sign_in_resp: SignInTokenResponse =
+      process_response_data::<SignInTokenResponse>(resp).await?;
     Ok(sign_in_resp.is_new)
   }
 
@@ -589,10 +595,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<AFUserProfile>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AFUserProfile>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -603,23 +606,18 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<AFUserWorkspaceInfo>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AFUserWorkspaceInfo>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
-  pub async fn delete_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
+  pub async fn delete_workspace(&self, workspace_id: &Uuid) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()?;
-    Ok(())
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -634,10 +632,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<AFWorkspace>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AFWorkspace>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -649,8 +644,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn get_workspaces(&self) -> Result<Vec<AFWorkspace>, AppResponseError> {
@@ -671,10 +665,7 @@ impl Client {
       .query(&param)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<Vec<AFWorkspace>>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Vec<AFWorkspace>>(resp).await
   }
 
   /// List out the views in the workspace recursively.
@@ -692,9 +683,9 @@ impl Client {
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_folder(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     depth: Option<u32>,
-    root_view_id: Option<String>,
+    root_view_id: Option<Uuid>,
   ) -> Result<FolderView, AppResponseError> {
     let url = format!("{}/api/workspace/{}/folder", self.base_url, workspace_id);
     let resp = self
@@ -706,30 +697,24 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<FolderView>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<FolderView>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
-  pub async fn open_workspace(&self, workspace_id: &str) -> Result<AFWorkspace, AppResponseError> {
+  pub async fn open_workspace(&self, workspace_id: &Uuid) -> Result<AFWorkspace, AppResponseError> {
     let url = format!("{}/api/workspace/{}/open", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<AFWorkspace>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AFWorkspace>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_favorite(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<FavoriteSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/favorite", self.base_url, workspace_id);
     let resp = self
@@ -737,16 +722,13 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<FavoriteSectionItems>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<FavoriteSectionItems>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_recent(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<RecentSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/recent", self.base_url, workspace_id);
     let resp = self
@@ -754,16 +736,13 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<RecentSectionItems>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<RecentSectionItems>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_trash(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<TrashSectionItems, AppResponseError> {
     let url = format!("{}/api/workspace/{}/trash", self.base_url, workspace_id);
     let resp = self
@@ -771,10 +750,41 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<TrashSectionItems>::from_response(resp)
+    process_response_data::<TrashSectionItems>(resp).await
+  }
+
+  pub async fn join_workspace_by_invitation_code(
+    &self,
+    invitation_code: &str,
+  ) -> Result<InvitedWorkspace, AppResponseError> {
+    let url = format!("{}/api/workspace/join-by-invite-code", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
       .await?
-      .into_data()
+      .json(&JoinWorkspaceByInviteCodeParams {
+        code: invitation_code.to_string(),
+      })
+      .send()
+      .await?;
+    process_response_data::<InvitedWorkspace>(resp).await
+  }
+
+  pub async fn create_workspace_invitation_code(
+    &self,
+    workspace_id: &Uuid,
+    params: &WorkspaceInviteCodeParams,
+  ) -> Result<WorkspaceInviteCode, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/invite-code",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    process_response_data::<WorkspaceInviteCode>(resp).await
   }
 
   #[instrument(skip_all, err)]
@@ -840,8 +850,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -871,14 +880,13 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn get_snapshot_list(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
   ) -> Result<AFSnapshotMetas, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/{}/snapshot/list",
@@ -889,16 +897,13 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<AFSnapshotMetas>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AFSnapshotMetas>(resp).await
   }
 
   pub async fn get_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     params: QuerySnapshotParams,
   ) -> Result<SnapshotData, AppResponseError> {
     let url = format!(
@@ -911,16 +916,13 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<SnapshotData>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<SnapshotData>(resp).await
   }
 
   pub async fn create_snapshot(
     &self,
-    workspace_id: &str,
-    object_id: &str,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
     collab_type: CollabType,
   ) -> Result<AFSnapshotMeta, AppResponseError> {
     let url = format!(
@@ -933,10 +935,7 @@ impl Client {
       .json(&collab_type)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<AFSnapshotMeta>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AFSnapshotMeta>(resp).await
   }
 
   pub async fn ws_connect_info(&self, auto_refresh: bool) -> Result<ConnectInfo, AppResponseError> {
@@ -959,7 +958,7 @@ impl Client {
   #[instrument(level = "info", skip_all)]
   pub async fn get_workspace_usage(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
   ) -> Result<WorkspaceSpaceUsage, AppResponseError> {
     let url = format!("{}/api/file_storage/{}/usage", self.base_url, workspace_id);
     let resp = self
@@ -967,10 +966,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<WorkspaceSpaceUsage>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<WorkspaceSpaceUsage>(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
@@ -987,32 +983,40 @@ impl Client {
         "server info not implemented",
       ))
     } else {
-      AppResponse::<ServerInfoResponseItem>::from_response(resp)
-        .await?
-        .into_data()
+      process_response_data::<ServerInfoResponseItem>(resp).await
     }
   }
 
   /// Refreshes the access token using the stored refresh token.
   ///
-  /// This function attempts to refresh the access token by sending a request to the authentication server
+  /// attempts to refresh the access token by sending a request to the authentication server
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
+  /// Refreshes the access token using the stored refresh token.
   #[instrument(level = "debug", skip_all, err)]
   pub async fn refresh_token(&self, reason: &str) -> Result<(), AppResponseError> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.refresh_ret_txs.write().push(tx);
 
-    if !self.is_refreshing_token.load(Ordering::SeqCst) {
-      self.is_refreshing_token.store(true, Ordering::SeqCst);
-
+    // Atomically check and set the refreshing flag to prevent race conditions
+    if self
+      .is_refreshing_token
+      .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+      .is_ok()
+    {
       info!("refresh token reason:{}", reason);
       let result = self.inner_refresh_token().await;
-      let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
+
+      // Process all pending requests and reset state atomically
+      let mut txs_guard = self.refresh_ret_txs.write();
+      let txs = std::mem::take(&mut *txs_guard);
+      self.is_refreshing_token.store(false, Ordering::SeqCst);
+      drop(txs_guard);
+
+      // Send results to all waiting requests
       for tx in txs {
         let _ = tx.send(result.clone());
       }
-      self.is_refreshing_token.store(false, Ordering::SeqCst);
     } else {
       debug!("refresh token is already in progress");
     }
@@ -1020,11 +1024,10 @@ impl Client {
     // Wait for the result of the refresh token request.
     match tokio::time::timeout(Duration::from_secs(60), rx).await {
       Ok(Ok(result)) => result,
-      Ok(Err(err)) => Err(AppError::Internal(anyhow!("refresh token error: {}", err)).into()),
-      Err(_) => {
-        self.is_refreshing_token.store(false, Ordering::SeqCst);
-        Err(AppError::RequestTimeout("refresh token timeout".to_string()).into())
+      Ok(Err(err)) => {
+        Err(AppError::Internal(anyhow!("refresh token channel error: {}", err)).into())
       },
+      Err(_) => Err(AppError::RequestTimeout("refresh token timeout".to_string()).into()),
     }
   }
 
@@ -1086,7 +1089,6 @@ impl Client {
       ("client-version", self.client_version.to_string()),
       ("client-timestamp", ts_now.to_string()),
       ("device-id", self.device_id.clone()),
-      ("ai-model", self.ai_model.read().clone()),
     ];
     trace!(
       "start request: {}, method: {}, headers: {:?}",
@@ -1104,6 +1106,23 @@ impl Client {
       request_builder = request_builder.header(header.0, header.1);
     }
     Ok(request_builder)
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn http_client_with_model(
+    &self,
+    method: Method,
+    url: &str,
+    ai_model: Option<String>,
+  ) -> Result<RequestBuilder, AppResponseError> {
+    let mut builder = self.http_client_with_auth(method, url).await?;
+    let effective_ai_model = match ai_model {
+      Some(model) => model,
+      None => self.ai_model.read().clone(),
+    };
+
+    builder = builder.header("ai-model", effective_ai_model);
+    Ok(builder)
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -1135,7 +1154,7 @@ impl Client {
   }
 
   #[instrument(level = "info", skip_all)]
-  pub(crate) fn batch_create_collab_url(&self, workspace_id: &str) -> String {
+  pub(crate) fn batch_create_collab_url(&self, workspace_id: &Uuid) -> String {
     format!(
       "{}/api/workspace/{}/batch/collab",
       self.base_url, workspace_id
@@ -1154,14 +1173,6 @@ impl Display for Client {
 
 fn url_missing_param(param: &str) -> AppResponseError {
   AppError::InvalidRequest(format!("Url Missing Parameter:{}", param)).into()
-}
-
-pub(crate) fn log_request_id(resp: &reqwest::Response) {
-  if let Some(request_id) = resp.headers().get("x-request-id") {
-    event!(tracing::Level::INFO, "request_id: {:?}", request_id);
-  } else {
-    event!(tracing::Level::DEBUG, "request_id: not found");
-  }
 }
 
 #[cfg(feature = "enable_brotli")]
@@ -1205,4 +1216,56 @@ pub fn brotli_compress(
   _buffer_size: usize,
 ) -> Result<Vec<u8>, AppError> {
   Ok(data)
+}
+fn attach_request_id(
+  mut err: AppResponseError,
+  request_id: impl std::fmt::Debug,
+) -> AppResponseError {
+  err.message = Cow::Owned(format!("{}. request_id: {:?}", err.message, request_id));
+  err
+}
+
+pub async fn process_response_data<T>(resp: reqwest::Response) -> Result<T, AppResponseError>
+where
+  T: serde::de::DeserializeOwned + 'static,
+{
+  let request_id = extract_request_id(&resp);
+
+  AppResponse::<T>::from_response(resp)
+    .await
+    .map_err(|err| {
+      error!(
+        "Error parsing response, request_id: {:?}, error: {}",
+        request_id, err
+      );
+      AppResponseError::from(err)
+    })
+    .and_then(|app_response| {
+      app_response
+        .into_data()
+        .map_err(|err| attach_request_id(err, &request_id))
+    })
+}
+
+pub async fn process_response_error(resp: reqwest::Response) -> Result<(), AppResponseError> {
+  let request_id = extract_request_id(&resp);
+
+  AppResponse::<()>::from_response(resp)
+    .await?
+    .into_error()
+    .map_err(|err| attach_request_id(err, &request_id))
+}
+fn extract_request_id(resp: &reqwest::Response) -> Option<String> {
+  resp
+    .headers()
+    .get("x-request-id")
+    .map(|v| v.to_str().unwrap_or("invalid").to_string())
+}
+
+pub(crate) fn log_request_id(resp: &reqwest::Response) {
+  if let Some(request_id) = resp.headers().get("x-request-id") {
+    info!("request_id: {:?}", request_id);
+  } else {
+    debug!("request_id: not found");
+  }
 }

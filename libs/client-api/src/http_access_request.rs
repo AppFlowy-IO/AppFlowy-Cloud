@@ -3,10 +3,10 @@ use client_api_entity::{
   CreateAccessRequestParams,
 };
 use reqwest::Method;
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 
 impl Client {
   pub async fn get_access_request(
@@ -19,9 +19,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<AccessRequest>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AccessRequest>(resp).await
   }
 
   pub async fn create_access_request(
@@ -35,9 +33,7 @@ impl Client {
       .json(&data)
       .send()
       .await?;
-    AppResponse::<AccessRequestMinimal>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<AccessRequestMinimal>(resp).await
   }
 
   pub async fn approve_access_request(
@@ -54,7 +50,7 @@ impl Client {
       .json(&ApproveAccessRequestParams { is_approved: true })
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn reject_access_request(
@@ -71,6 +67,6 @@ impl Client {
       .json(&ApproveAccessRequestParams { is_approved: false })
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 }

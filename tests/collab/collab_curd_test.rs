@@ -12,9 +12,11 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::collab::util::{empty_document_editor, generate_random_string, test_encode_collab_v1};
+use client_api::process_response_data;
 use client_api_test::TestClient;
-use shared_entity::response::AppResponse;
 use uuid::Uuid;
+
+const WORKSPACE_ID: Uuid = Uuid::from_u128(70700);
 
 #[tokio::test]
 async fn get_collab_response_compatible_test() {
@@ -23,11 +25,7 @@ async fn get_collab_response_compatible_test() {
 
   // after 0.3.22, we use [CollabResponse] instead of EncodedCollab as the response
   let collab_resp = test_client
-    .get_collab(
-      workspace_id.clone(),
-      workspace_id.clone(),
-      CollabType::Folder,
-    )
+    .get_collab(workspace_id, workspace_id, CollabType::Folder)
     .await
     .unwrap();
   assert_eq!(collab_resp.object_id, workspace_id);
@@ -53,16 +51,16 @@ async fn batch_insert_collab_with_empty_payload_test() {
 #[tokio::test]
 async fn create_collab_params_compatibility_serde_test() {
   // This test is to make sure that the CreateCollabParams is compatible with the old InsertCollabParams
-  let object_id = uuid::Uuid::new_v4().to_string();
-  let encoded_collab_v1 = default_document_collab_data(&object_id)
+  let object_id = uuid::Uuid::new_v4();
+  let encoded_collab_v1 = default_document_collab_data(&object_id.to_string())
     .unwrap()
     .encode_to_bytes()
     .unwrap();
 
   let old_version_value = json!(InsertCollabParams {
-    object_id: object_id.clone(),
+    object_id,
     encoded_collab_v1: encoded_collab_v1.clone(),
-    workspace_id: "workspace_id".to_string(),
+    workspace_id: WORKSPACE_ID,
     collab_type: CollabType::Document,
   });
 
@@ -77,18 +75,15 @@ async fn create_collab_params_compatibility_serde_test() {
     new_version_create_params.encoded_collab_v1,
     encoded_collab_v1
   );
-  assert_eq!(
-    new_version_create_params.workspace_id,
-    "workspace_id".to_string()
-  );
+  assert_eq!(new_version_create_params.workspace_id, WORKSPACE_ID);
   assert_eq!(new_version_create_params.collab_type, CollabType::Document);
 }
 
 #[derive(Serialize)]
 struct InsertCollabParams {
-  pub object_id: String,
+  pub object_id: Uuid,
   pub encoded_collab_v1: Vec<u8>,
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
   pub collab_type: CollabType,
 }
 
@@ -96,7 +91,7 @@ struct InsertCollabParams {
 async fn create_collab_compatibility_with_json_params_test() {
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-  let object_id = Uuid::new_v4().to_string();
+  let object_id = Uuid::new_v4();
   let api_client = &test_client.api_client;
   let url = format!(
     "{}/api/workspace/{}/collab/{}",
@@ -106,11 +101,11 @@ async fn create_collab_compatibility_with_json_params_test() {
   let encoded_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   let params = OldCreateCollabParams {
     inner: CollabParams {
-      object_id: object_id.clone(),
+      object_id,
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Unknown,
     },
-    workspace_id: workspace_id.clone(),
+    workspace_id,
   };
 
   test_client
@@ -131,7 +126,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     .json(&QueryCollabParams {
       workspace_id,
       inner: QueryCollab {
-        object_id: object_id.clone(),
+        object_id,
         collab_type: CollabType::Unknown,
       },
     })
@@ -139,11 +134,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     .await
     .unwrap();
 
-  let encoded_collab_from_server = AppResponse::<EncodedCollab>::from_response(resp)
-    .await
-    .unwrap()
-    .into_data()
-    .unwrap();
+  let encoded_collab_from_server = process_response_data::<EncodedCollab>(resp).await.unwrap();
   assert_eq!(encoded_collab, encoded_collab_from_server);
 }
 
@@ -155,7 +146,7 @@ async fn batch_insert_document_collab_test() {
   let num_collabs = 100;
   let mut list = vec![];
   for _ in 0..num_collabs {
-    let object_id = Uuid::new_v4().to_string();
+    let object_id = Uuid::new_v4();
     let mut editor = empty_document_editor(&object_id);
     let paragraphs = vec![
       generate_random_string(1),
@@ -169,7 +160,7 @@ async fn batch_insert_document_collab_test() {
   let params_list = list
     .iter()
     .map(|(object_id, encoded_collab_v1)| CollabParams {
-      object_id: object_id.clone(),
+      object_id: *object_id,
       encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Document,
     })
@@ -183,8 +174,8 @@ async fn batch_insert_document_collab_test() {
   let params = params_list
     .iter()
     .map(|params| QueryCollab {
-      object_id: params.object_id.clone(),
-      collab_type: params.collab_type.clone(),
+      object_id: params.object_id,
+      collab_type: params.collab_type,
     })
     .collect::<Vec<_>>();
 
@@ -214,5 +205,5 @@ async fn batch_insert_document_collab_test() {
 pub struct OldCreateCollabParams {
   #[serde(flatten)]
   inner: CollabParams,
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
 }

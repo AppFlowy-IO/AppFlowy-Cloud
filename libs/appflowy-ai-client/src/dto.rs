@@ -3,10 +3,14 @@ use serde_json::json;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use uuid::Uuid;
+
 pub const STREAM_METADATA_KEY: &str = "0";
 pub const STREAM_ANSWER_KEY: &str = "1";
 pub const STREAM_IMAGE_KEY: &str = "2";
 pub const STREAM_KEEP_ALIVE_KEY: &str = "3";
+pub const STREAM_COMMENT_KEY: &str = "4";
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
   pub text: String,
@@ -44,11 +48,12 @@ pub struct ResponseFormat {
 #[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum OutputLayout {
-  #[default]
   Paragraph = 0,
   BulletList = 1,
   NumberedList = 2,
   SimpleTable = 3,
+  #[default]
+  Flex = 4,
 }
 
 #[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr, Eq, PartialEq)]
@@ -147,6 +152,9 @@ pub enum CompletionType {
   MakeShorter = 3,
   MakeLonger = 4,
   ContinueWriting = 5,
+  Explain = 6,
+  UserQuestion = 7,
+  CustomPrompt = 8,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -429,12 +437,11 @@ impl Display for CreateChatContext {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomPrompt {
   pub system: String,
-  pub user: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CalculateSimilarityParams {
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
   pub input: String,
   pub expected: String,
   pub use_embedding: bool,
@@ -446,19 +453,42 @@ pub struct SimilarityResponse {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompletionMessage {
+  pub role: String, // human, ai, or system
+  pub content: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompletionMetadata {
-  pub object_id: String,
+  /// A unique identifier for the object. Object could be a document id.
+  pub object_id: Uuid,
+  /// The workspace identifier.
+  ///
+  /// This field must be provided when generating images. We use workspace ID to track image usage.
+  pub workspace_id: Option<Uuid>,
+  /// A list of relevant document IDs.
+  ///
+  /// When using completions for document-related tasks, this should include the document ID.
+  /// In some cases, `object_id` may be the same as the document ID.
   pub rag_ids: Option<Vec<String>>,
+  /// For the AI completion feature (the AI writer), pass the conversation history as input.
+  /// This history helps the AI understand the context of the conversation.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub completion_history: Option<Vec<CompletionMessage>>,
+  /// When completion type is 'CustomPrompt', this field should be provided.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub custom_prompt: Option<CustomPrompt>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompleteTextParams {
   pub text: String,
   pub completion_type: Option<CompletionType>,
-  pub custom_prompt: Option<CustomPrompt>,
   #[serde(default)]
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<CompletionMetadata>,
+  #[serde(default)]
+  pub format: ResponseFormat,
 }
 
 impl CompleteTextParams {
@@ -470,8 +500,8 @@ impl CompleteTextParams {
     Self {
       text,
       completion_type: Some(completion_type),
-      custom_prompt: None,
       metadata,
+      format: Default::default(),
     }
   }
 }

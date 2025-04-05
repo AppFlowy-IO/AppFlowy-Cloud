@@ -44,15 +44,15 @@ jobs:
           docker buildx build --platform linux/amd64,linux/arm64 -t appflowyinc/gotrue:${TAG} -t appflowyinc/gotrue:latest -f docker/gotrue/Dockerfile --push docker/gotrue
 
   appflowy_cloud_image:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.job.os }}
     env:
       IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { name: "amd64",   docker_platform: "linux/amd64" }
-          - { name: "arm64v8", docker_platform: "linux/arm64" }
+          - { os: "ubuntu-22.04", name: "amd64",   docker_platform: "linux/amd64" }
+          - { os: "ubuntu-22.04-arm", name: "arm64v8", docker_platform: "linux/arm64" }
 
     steps:
       - name: Check out the repository
@@ -143,15 +143,15 @@ jobs:
         run: docker logout
 
   admin_frontend_image:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.job.os }}
     env:
       IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { name: "amd64",   docker_platform: "linux/amd64" }
-          - { name: "arm64v8", docker_platform: "linux/arm64" }
+          - { os: "ubuntu-22.04", name: "amd64",   docker_platform: "linux/amd64" }
+          - { os: "ubuntu-22.04-arm", name: "arm64v8", docker_platform: "linux/arm64" }
 
     steps:
       - name: Check out the repository
@@ -240,15 +240,15 @@ jobs:
         run: docker logout
 
   appflowy_worker_image:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.job.os }}
     env:
       IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_worker
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { name: "amd64",   docker_platform: "linux/amd64" }
-          - { name: "arm64v8", docker_platform: "linux/arm64" }
+          - { os: "ubuntu-22.04", name: "amd64",   docker_platform: "linux/amd64" }
+          - { os: "ubuntu-22.04-arm", name: "arm64v8", docker_platform: "linux/arm64" }
 
     steps:
       - name: Check out the repository

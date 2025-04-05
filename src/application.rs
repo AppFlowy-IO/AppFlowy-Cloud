@@ -39,6 +39,7 @@ use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
+use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
@@ -126,6 +127,7 @@ pub async fn run_actix_server(
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
     state.redis_stream_router.clone(),
+    state.awareness_gossip.clone(),
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     Duration::from_secs(config.collab.group_prune_grace_period_secs),
@@ -191,6 +193,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let s3_client = AwsS3BucketClientImpl::new(
     get_aws_s3_client(&config.s3).await?,
     config.s3.bucket.clone(),
+    config.s3.minio_url.clone(),
+    config.s3.presigned_url_endpoint.clone(),
   );
   let bucket_storage = Arc::new(S3BucketStorage::from_bucket_impl(
     s3_client.clone(),
@@ -225,7 +229,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   // Redis
   info!("Connecting to Redis...");
-  let (redis_conn_manager, redis_stream_router) = get_redis_client(
+  let (redis_conn_manager, redis_stream_router, awareness_gossip) = get_redis_client(
     config.redis_uri.expose_secret(),
     config.redis_worker_count,
     metrics.collab_stream_metrics.clone(),
@@ -323,6 +327,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
     redis_stream_router,
+    awareness_gossip,
     redis_connection_manager: redis_conn_manager,
     collab_cache,
     collab_access_control_storage,
@@ -358,10 +363,18 @@ async fn get_redis_client(
   redis_uri: &str,
   worker_count: usize,
   metrics: Arc<CollabStreamMetrics>,
-) -> Result<(redis::aio::ConnectionManager, Arc<StreamRouter>), Error> {
+) -> Result<
+  (
+    redis::aio::ConnectionManager,
+    Arc<StreamRouter>,
+    Arc<AwarenessGossip>,
+  ),
+  Error,
+> {
   info!("Connecting to redis with uri: {}", redis_uri);
   let client = redis::Client::open(redis_uri).context("failed to connect to redis")?;
 
+  let awareness_gossip = AwarenessGossip::new(&client).await?;
   let router = StreamRouter::with_options(
     &client,
     metrics,
@@ -377,7 +390,7 @@ async fn get_redis_client(
     .get_connection_manager()
     .await
     .context("failed to get the connection manager")?;
-  Ok((manager, router.into()))
+  Ok((manager, router.into(), awareness_gossip.into()))
 }
 
 pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Client, Error> {

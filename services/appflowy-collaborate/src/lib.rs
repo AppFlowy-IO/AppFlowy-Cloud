@@ -1,6 +1,4 @@
 pub mod actix_ws;
-pub mod api;
-pub mod application;
 mod client;
 pub mod collab;
 pub mod command;
@@ -11,11 +9,8 @@ pub mod error;
 pub mod group;
 pub mod metrics;
 mod permission;
-mod pg_listener;
 mod rt_server;
 pub mod snapshot;
-mod state;
-pub mod telemetry;
 pub mod thread_pool_no_abort;
 mod util;
 

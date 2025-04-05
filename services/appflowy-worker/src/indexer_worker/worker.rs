@@ -1,6 +1,8 @@
 use app_error::AppError;
 use collab_entity::CollabType;
-use database::index::{get_collab_embedding_framgent_ids, get_collabs_indexed_at};
+use database::index::{
+  get_collab_embedding_fragment_ids, get_collab_embedding_framgent_ids, get_collabs_indexed_at,
+};
 use indexer::collab_indexer::IndexerProvider;
 use indexer::entity::EmbeddingRecord;
 use indexer::error::IndexerError;
@@ -133,12 +135,9 @@ async fn process_upcoming_tasks(
             .collect();
           tasks.retain(|task| !task.data.is_empty());
 
-          let collab_ids: Vec<(String, CollabType)> = tasks
-            .iter()
-            .map(|task| (task.object_id.clone(), task.collab_type.clone()))
-            .collect();
+          let collab_ids: Vec<_> = tasks.iter().map(|task| task.object_id).collect();
 
-          let indexed_collabs = get_collabs_indexed_at(&pg_pool, &collab_ids)
+          let indexed_collabs = get_collabs_indexed_at(&pg_pool, collab_ids.clone())
             .await
             .unwrap_or_default();
 
@@ -158,7 +157,7 @@ async fn process_upcoming_tasks(
 
           let start = Instant::now();
           let num_tasks = tasks.len();
-          let existing_embeddings = get_collab_embedding_framgent_ids(&pg_pool, collab_ids)
+          let existing_embeddings = get_collab_embedding_fragment_ids(&pg_pool, collab_ids)
             .await
             .unwrap_or_default();
           let mut join_set = JoinSet::new();

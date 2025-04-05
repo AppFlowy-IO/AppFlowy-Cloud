@@ -8,7 +8,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database::collab::{CollabStorage, GetCollabOrigin};
-use database::index::{get_collab_embedding_framgent_ids, stream_collabs_without_embeddings};
+use database::index::{get_collab_embedding_fragment_ids, stream_collabs_without_embeddings};
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use rayon::iter::ParallelIterator;
@@ -68,7 +68,7 @@ async fn index_then_write_embedding_to_disk(
     "[Embedding] process batch {:?} embeddings",
     unindexed_collabs
       .iter()
-      .map(|v| v.object_id.clone())
+      .map(|v| v.object_id)
       .collect::<Vec<_>>()
   );
 
@@ -76,9 +76,9 @@ async fn index_then_write_embedding_to_disk(
     let start = Instant::now();
     let object_ids = unindexed_collabs
       .iter()
-      .map(|v| (v.object_id.clone(), v.collab_type.clone()))
+      .map(|v| v.object_id.clone())
       .collect::<Vec<_>>();
-    match get_collab_embedding_framgent_ids(&scheduler.pg_pool, object_ids).await {
+    match get_collab_embedding_fragment_ids(&scheduler.pg_pool, object_ids).await {
       Ok(existing_embeddings) => {
         let embeddings = create_embeddings(
           embedder,
@@ -160,7 +160,7 @@ async fn create_embeddings(
   embedder: Embedder,
   indexer_provider: &Arc<IndexerProvider>,
   unindexed_records: Vec<UnindexedCollab>,
-  existing_embeddings: HashMap<String, Vec<String>>,
+  existing_embeddings: HashMap<Uuid, Vec<String>>,
 ) -> Vec<EmbeddingRecord> {
   // 1. use parallel iteration since computing text chunks is CPU-intensive task
   let records = compute_embedding_records(
@@ -175,7 +175,7 @@ async fn create_embeddings(
   for record in records {
     let indexer_provider = indexer_provider.clone();
     let embedder = embedder.clone();
-    if let Some(indexer) = indexer_provider.indexer_for(&record.collab_type) {
+    if let Some(indexer) = indexer_provider.indexer_for(record.collab_type.clone()) {
       join_set.spawn(async move {
         match indexer.embed(&embedder, record.contents).await {
           Ok(embeddings) => embeddings.map(|embeddings| EmbeddingRecord {
@@ -210,15 +210,15 @@ fn compute_embedding_records(
   indexer_provider: &IndexerProvider,
   model: EmbeddingModel,
   unindexed_records: Vec<UnindexedCollab>,
-  existing_embeddings: HashMap<String, Vec<String>>,
+  existing_embeddings: HashMap<Uuid, Vec<String>>,
 ) -> Vec<EmbeddingRecord> {
   unindexed_records
     .into_par_iter()
     .flat_map(|unindexed| {
-      let indexer = indexer_provider.indexer_for(&unindexed.collab_type)?;
+      let indexer = indexer_provider.indexer_for(unindexed.collab_type)?;
       let collab = Collab::new_with_source(
         CollabOrigin::Empty,
-        &unindexed.object_id,
+        &unindexed.object_id.to_string(),
         DataSource::DocStateV1(unindexed.collab.doc_state.into()),
         vec![],
         false,

@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use client_api::entity::AFRole;
+use client_api_test::{assert_client_collab_include_value, TestClient};
 use collab_entity::CollabType;
 use serde_json::{json, Value};
 use tokio::time::sleep;
-
-use client_api_test::{assert_client_collab_include_value, TestClient};
+use uuid::Uuid;
 
 #[tokio::test]
 async fn client_apply_update_find_missing_update_test() {
@@ -45,14 +45,14 @@ async fn client_ping_find_missing_update_test() {
 
 /// Create two clients and the first client makes an edit to the collaborative document.
 /// The second client did do init sync but disable receive message, so it will miss the first edit.
-async fn make_clients() -> (TestClient, TestClient, String, Value) {
+async fn make_clients() -> (TestClient, TestClient, Uuid, Value) {
   let collab_type = CollabType::Unknown;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
   // Create a collaborative document with client_1 and invite client_2 to collaborate.
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
   client_1
     .invite_and_accepted_workspace_member(&workspace_id, &client_2, AFRole::Member)
@@ -61,7 +61,7 @@ async fn make_clients() -> (TestClient, TestClient, String, Value) {
 
   // after client 2 finish init sync and then disable receive message
   client_2
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .open_collab(workspace_id, object_id, collab_type)
     .await;
   client_2
     .wait_object_sync_complete(&object_id)

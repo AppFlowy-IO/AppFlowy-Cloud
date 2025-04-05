@@ -5,10 +5,11 @@ use crate::{biz::workspace::ops::delete_workspace_for_user, config::config::Appl
 use app_error::ErrorCode;
 use authentication::jwt::Authorization;
 use database::file::s3_client_impl::S3BucketStorage;
-use database::workspace::select_user_owned_workspaces_id;
+use database::workspace::{insert_workspace_ids_to_deleted_table, select_user_owned_workspaces_id};
 use gotrue::params::AdminDeleteUserParams;
 use secrecy::{ExposeSecret, Secret};
 use shared_entity::response::AppResponseError;
+use tracing::info;
 use uuid::Uuid;
 
 #[allow(clippy::too_many_arguments)]
@@ -36,6 +37,7 @@ pub async fn delete_user(
     };
   }
 
+  info!("admin deleting user: {:?}", user_uuid);
   let admin_token = gotrue_admin.token().await?;
   gotrue_client
     .admin_delete_user(
@@ -50,6 +52,13 @@ pub async fn delete_user(
 
   // spawn tasks to delete all workspaces owned by the user
   let workspace_ids = select_user_owned_workspaces_id(pg_pool, &user_uuid).await?;
+
+  info!(
+    "saving workspaces: {:?} to deleted workspace table",
+    workspace_ids
+  );
+  insert_workspace_ids_to_deleted_table(pg_pool, workspace_ids.clone()).await?;
+
   let mut tasks = vec![];
   for workspace_id in workspace_ids {
     let cloned_pg_pool = pg_pool.clone();

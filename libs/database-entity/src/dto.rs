@@ -19,16 +19,36 @@ use tracing::error;
 use uuid::Uuid;
 use validator::Validate;
 
+mod uuid_str {
+  use serde::Deserialize;
+  use uuid::Uuid;
+
+  pub fn serialize<S>(uuid: &Uuid, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    serializer.serialize_str(&uuid.to_string())
+  }
+
+  pub fn deserialize<'de, D>(deserializer: D) -> Result<Uuid, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    let s = String::deserialize(deserializer)?;
+    Uuid::parse_str(&s).map_err(serde::de::Error::custom)
+  }
+}
+
 /// The default compression level of ZSTD-compressed collabs.
 pub const ZSTD_COMPRESSION_LEVEL: i32 = 3;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
 
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
 
   #[validate(custom(function = "validate_not_empty_payload"))]
   pub encoded_collab_v1: Vec<u8>,
@@ -36,8 +56,8 @@ pub struct CreateCollabParams {
   pub collab_type: CollabType,
 }
 
-impl From<(String, CollabParams)> for CreateCollabParams {
-  fn from((workspace_id, collab_params): (String, CollabParams)) -> Self {
+impl From<(Uuid, CollabParams)> for CreateCollabParams {
+  fn from((workspace_id, collab_params): (Uuid, CollabParams)) -> Self {
     Self {
       workspace_id,
       object_id: collab_params.object_id,
@@ -48,7 +68,7 @@ impl From<(String, CollabParams)> for CreateCollabParams {
 }
 
 impl CreateCollabParams {
-  pub fn split(self) -> (CollabParams, String) {
+  pub fn split(self) -> (CollabParams, Uuid) {
     (
       CollabParams {
         object_id: self.object_id,
@@ -70,13 +90,13 @@ impl CreateCollabParams {
 pub struct CollabIndexParams {}
 
 pub struct PendingCollabWrite {
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
   pub uid: i64,
   pub params: CollabParams,
 }
 
 impl PendingCollabWrite {
-  pub fn new(workspace_id: String, uid: i64, params: CollabParams) -> Self {
+  pub fn new(workspace_id: Uuid, uid: i64, params: CollabParams) -> Self {
     PendingCollabWrite {
       workspace_id,
       uid,
@@ -87,8 +107,8 @@ impl PendingCollabWrite {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize, PartialEq)]
 pub struct CollabParams {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
   #[validate(custom(function = "validate_not_empty_payload"))]
   pub encoded_collab_v1: Bytes,
   pub collab_type: CollabType,
@@ -107,12 +127,11 @@ impl Display for CollabParams {
 }
 
 impl CollabParams {
-  pub fn new<T: ToString, B: Into<Bytes>>(
-    object_id: T,
+  pub fn new<B: Into<Bytes>>(
+    object_id: Uuid,
     collab_type: CollabType,
     encoded_collab_v1: B,
   ) -> Self {
-    let object_id = object_id.to_string();
     Self {
       object_id,
       collab_type,
@@ -141,7 +160,7 @@ impl CollabParams {
 
   pub fn to_proto(&self) -> proto::collab::CollabParams {
     proto::collab::CollabParams {
-      object_id: self.object_id.clone(),
+      object_id: self.object_id.to_string(),
       encoded_collab: self.encoded_collab_v1.to_vec(),
       collab_type: self.collab_type.to_proto() as i32,
       embeddings: None,
@@ -167,7 +186,8 @@ impl TryFrom<proto::collab::CollabParams> for CollabParams {
     let collab_type_proto = proto::collab::CollabType::try_from(proto.collab_type).unwrap();
     let collab_type = CollabType::from_proto(&collab_type_proto);
     Ok(Self {
-      object_id: proto.object_id,
+      object_id: Uuid::from_str(&proto.object_id)
+        .map_err(|e| EntityError::DeserializationError(e.to_string()))?,
       encoded_collab_v1: Bytes::from(proto.encoded_collab),
       collab_type,
     })
@@ -176,7 +196,8 @@ impl TryFrom<proto::collab::CollabParams> for CollabParams {
 
 #[derive(Serialize, Deserialize)]
 struct CollabParamsV0 {
-  object_id: String,
+  #[serde(with = "uuid_str")]
+  object_id: Uuid,
   encoded_collab_v1: Vec<u8>,
   collab_type: CollabType,
 }
@@ -206,28 +227,30 @@ pub struct UpdateCollabWebParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct DeleteCollabParams {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
 }
 
-#[derive(Debug, Clone, Validate)]
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct InsertSnapshotParams {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
   #[validate(custom(function = "validate_not_empty_payload"))]
   pub doc_state: Bytes,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
   pub collab_type: CollabType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotData {
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
   pub encoded_collab_v1: Vec<u8>,
-  pub workspace_id: String,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -237,8 +260,8 @@ pub struct QuerySnapshotParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabParams {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
   #[validate(nested)]
   pub inner: QueryCollab,
 }
@@ -254,13 +277,7 @@ impl Display for QueryCollabParams {
 }
 
 impl QueryCollabParams {
-  pub fn new<T1: Into<String>, T2: Into<String>>(
-    object_id: T1,
-    collab_type: CollabType,
-    workspace_id: T2,
-  ) -> Self {
-    let workspace_id = workspace_id.into();
-    let object_id = object_id.into();
+  pub fn new(object_id: Uuid, collab_type: CollabType, workspace_id: Uuid) -> Self {
     let inner = QueryCollab {
       object_id,
       collab_type,
@@ -282,13 +299,11 @@ impl Deref for QueryCollabParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollab {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
+  pub object_id: Uuid,
   pub collab_type: CollabType,
 }
 impl QueryCollab {
-  pub fn new<T: ToString>(object_id: T, collab_type: CollabType) -> Self {
-    let object_id = object_id.to_string();
+  pub fn new(object_id: Uuid, collab_type: CollabType) -> Self {
     Self {
       object_id,
       collab_type,
@@ -325,7 +340,8 @@ pub struct AFSnapshotMetas(pub Vec<AFSnapshotMeta>);
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct QueryObjectSnapshotParams {
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -346,7 +362,7 @@ pub enum QueryCollabResult {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct BatchQueryCollabResult(pub HashMap<String, QueryCollabResult>);
+pub struct BatchQueryCollabResult(pub HashMap<Uuid, QueryCollabResult>);
 
 #[derive(Serialize, Deserialize)]
 pub struct WorkspaceUsage {
@@ -356,10 +372,10 @@ pub struct WorkspaceUsage {
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct InsertCollabMemberParams {
   pub uid: i64,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
   pub access_level: AFAccessLevel,
 }
 
@@ -368,10 +384,10 @@ pub type UpdateCollabMemberParams = InsertCollabMemberParams;
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct WorkspaceCollabIdentify {
   pub uid: i64,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -393,30 +409,23 @@ pub struct DefaultPublishViewInfoMeta {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabMembers {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryWorkspaceMember {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub workspace_id: String,
+  #[serde(with = "uuid_str")]
+  pub workspace_id: Uuid,
 
   pub uid: i64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AFCollabMember {
-  pub uid: i64,
-  pub oid: String,
-  pub permission: AFPermission,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AFCollabEmbedInfo {
-  pub object_id: String,
+  pub object_id: Uuid,
   /// The timestamp when the object's embeddings updated
   pub indexed_at: DateTime<Utc>,
   /// The timestamp when the object's data updated
@@ -621,9 +630,6 @@ impl Ord for AFAccessLevel {
   }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct AFCollabMembers(pub Vec<AFCollabMember>);
-
 pub type RawData = Vec<u8>;
 
 #[derive(Serialize, Deserialize)]
@@ -669,7 +675,7 @@ impl Default for AFWorkspaceSettings {
   fn default() -> Self {
     Self {
       disable_search_indexing: false,
-      ai_model: "".to_string(),
+      ai_model: "Auto".to_string(),
     }
   }
 }
@@ -753,7 +759,8 @@ impl From<i16> for AFWorkspaceInvitationStatus {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AFCollabEmbeddedChunk {
   pub fragment_id: String,
-  pub object_id: String,
+  #[serde(with = "uuid_str")]
+  pub object_id: Uuid,
   pub content_type: EmbeddingContentType,
   pub content: Option<String>,
   pub embedding: Option<Vec<f32>>,
@@ -1215,6 +1222,26 @@ pub struct ListQuickNotesQueryParams {
   pub limit: Option<i32>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WorkspaceInviteCodeParams {
+  pub validity_period_hours: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WorkspaceInviteToken {
+  pub code: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct InvitedWorkspace {
+  pub workspace_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JoinWorkspaceByInviteCodeParams {
+  pub code: String,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CollabParams, CollabParamsV0};
@@ -1227,7 +1254,7 @@ mod test {
   #[test]
   fn collab_params_serialization_from_old_format() {
     let v0 = CollabParamsV0 {
-      object_id: Uuid::new_v4().to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: vec![
         7, 0, 0, 0, 0, 0, 0, 0, 1, 209, 196, 206, 243, 15, 1, 26, 4, 0, 0, 0, 0, 0, 0, 1, 1, 209,
@@ -1295,7 +1322,7 @@ mod test {
   #[test]
   fn deserialization_using_protobuf() {
     let collab_params_with_embeddings = CollabParams {
-      object_id: "object_id".to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::default(),
     };
@@ -1308,7 +1335,7 @@ mod test {
   #[test]
   fn deserialize_collab_params_without_embeddings() {
     let collab_params = CollabParams {
-      object_id: "object_id".to_string(),
+      object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::from(vec![1, 2, 3]),
     };

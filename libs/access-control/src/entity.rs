@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SubjectType {
   User(i64),
   Group(String),
@@ -14,15 +14,15 @@ impl SubjectType {
 }
 
 /// Represents the object type that is stored in the access control policy.
-#[derive(Debug)]
-pub enum ObjectType<'id> {
+#[derive(Debug, Clone)]
+pub enum ObjectType {
   /// Stored as `workspace::<uuid>`
-  Workspace(&'id str),
+  Workspace(String),
   /// Stored as `collab::<uuid>`
-  Collab(&'id str),
+  Collab(String),
 }
 
-impl ObjectType<'_> {
+impl ObjectType {
   pub fn policy_object(&self) -> String {
     match self {
       ObjectType::Collab(s) => format!("collab::{}", s),
@@ -30,10 +30,10 @@ impl ObjectType<'_> {
     }
   }
 
-  pub fn object_id(&self) -> &str {
+  pub fn object_id(&self) -> String {
     match self {
-      ObjectType::Collab(s) => s,
-      ObjectType::Workspace(s) => s,
+      ObjectType::Collab(s) => s.clone(),
+      ObjectType::Workspace(s) => s.clone(),
     }
   }
 }

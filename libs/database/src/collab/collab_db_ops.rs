@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, AFCollabEmbedInfo, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas,
-  CollabParams, QueryCollab, QueryCollabResult, RawData, RepeatedAFCollabEmbedInfo,
+  AFCollabEmbedInfo, AFSnapshotMeta, AFSnapshotMetas, CollabParams, QueryCollab, QueryCollabResult,
+  RawData, RepeatedAFCollabEmbedInfo,
 };
 use shared_entity::dto::workspace_dto::{DatabaseRowUpdatedItem, EmbeddedCollabQuery};
 
@@ -12,11 +12,10 @@ use crate::pg_row::AFSnapshotRow;
 use app_error::AppError;
 use chrono::{DateTime, Duration, Utc};
 
-use sqlx::postgres::PgRow;
-use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
+use sqlx::{Error, Executor, PgPool, Postgres, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::{ops::DerefMut, str::FromStr};
+use std::ops::DerefMut;
 use tracing::{error, instrument};
 use uuid::Uuid;
 
@@ -47,12 +46,10 @@ use uuid::Uuid;
 pub async fn insert_into_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   uid: &i64,
-  workspace_id: &str,
+  workspace_id: &Uuid,
   params: &CollabParams,
 ) -> Result<(), AppError> {
-  let encrypt = 0;
   let partition_key = crate::collab::partition_key_from_collab_type(&params.collab_type);
-  let workspace_id = Uuid::from_str(workspace_id)?;
   tracing::trace!(
     "upsert collab:{}, len:{}",
     params.object_id,
@@ -61,15 +58,14 @@ pub async fn insert_into_af_collab(
 
   sqlx::query!(
     r#"
-      INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (oid, partition_key)
-      DO UPDATE SET blob = $2, len = $3, encrypt = $5, owner_uid = $6 WHERE excluded.workspace_id = af_collab.workspace_id;
+      INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
+      VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oid)
+      DO UPDATE SET blob = $2, len = $3, owner_uid = $5 WHERE excluded.workspace_id = af_collab.workspace_id;
     "#,
     params.object_id,
     params.encoded_collab_v1.as_ref(),
     params.encoded_collab_v1.len() as i32,
     partition_key,
-    encrypt,
     uid,
     workspace_id,
   )
@@ -143,25 +139,22 @@ pub async fn insert_into_af_collab(
 pub async fn insert_into_af_collab_bulk_for_user(
   tx: &mut Transaction<'_, Postgres>,
   uid: &i64,
-  workspace_id: &str,
+  workspace_id: Uuid,
   collab_params_list: &[CollabParams],
 ) -> Result<(), AppError> {
   if collab_params_list.is_empty() {
     return Ok(());
   }
 
-  let encrypt = 0;
-  let workspace_uuid = Uuid::from_str(workspace_id)?;
-
   // Insert values into `af_collab` tables in bulk
   let len = collab_params_list.len();
-  let mut object_ids: Vec<Uuid> = Vec::with_capacity(len);
+  let mut object_ids = Vec::with_capacity(len);
   let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(len);
   let mut lengths: Vec<i32> = Vec::with_capacity(len);
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
   let mut visited = HashSet::with_capacity(collab_params_list.len());
   for params in collab_params_list {
-    let oid = Uuid::from_str(&params.object_id)?;
+    let oid = params.object_id;
     if visited.insert(oid) {
       let partition_key = partition_key_from_collab_type(&params.collab_type);
       object_ids.push(oid);
@@ -172,20 +165,19 @@ pub async fn insert_into_af_collab_bulk_for_user(
   }
 
   let uids: Vec<i64> = vec![*uid; object_ids.len()];
-  let workspace_ids: Vec<Uuid> = vec![workspace_uuid; object_ids.len()];
+  let workspace_ids: Vec<Uuid> = vec![workspace_id; object_ids.len()];
   // Bulk insert into `af_collab` for the provided collab params
   sqlx::query!(
       r#"
-        INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)
-        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::int[], $6::bigint[], $7::uuid[])
-        ON CONFLICT (oid, partition_key)
-        DO UPDATE SET blob = excluded.blob, len = excluded.len, encrypt = excluded.encrypt where af_collab.workspace_id = excluded.workspace_id
+        INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
+        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::bigint[], $6::uuid[])
+        ON CONFLICT (oid)
+        DO UPDATE SET blob = excluded.blob, len = excluded.len where af_collab.workspace_id = excluded.workspace_id
       "#,
       &object_ids,
       &blobs,
       &lengths,
       &partition_keys,
-      &vec![encrypt; object_ids.len()],
       &uids,
       &workspace_ids
     )
@@ -206,7 +198,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
 pub async fn select_blob_from_af_collab<'a, E>(
   conn: E,
   collab_type: &CollabType,
-  object_id: &str,
+  object_id: &Uuid,
 ) -> Result<Vec<u8>, sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
@@ -228,7 +220,7 @@ where
 #[inline]
 pub async fn select_collab_meta_from_af_collab<'a, E>(
   conn: E,
-  object_id: &str,
+  object_id: &Uuid,
   collab_type: &CollabType,
 ) -> Result<Option<AFCollabRowMeta>, sqlx::Error>
 where
@@ -253,9 +245,9 @@ where
 pub async fn batch_select_collab_blob(
   pg_pool: &PgPool,
   queries: Vec<QueryCollab>,
-  results: &mut HashMap<String, QueryCollabResult>,
+  results: &mut HashMap<Uuid, QueryCollabResult>,
 ) {
-  let mut object_ids_by_collab_type: HashMap<CollabType, Vec<String>> = HashMap::new();
+  let mut object_ids_by_collab_type: HashMap<CollabType, Vec<Uuid>> = HashMap::new();
   for params in queries {
     object_ids_by_collab_type
       .entry(params.collab_type)
@@ -263,17 +255,15 @@ pub async fn batch_select_collab_blob(
       .push(params.object_id);
   }
 
-  for (collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
-    let partition_key = partition_key_from_collab_type(&collab_type);
+  for (_collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
     let par_results: Result<Vec<QueryCollabData>, sqlx::Error> = sqlx::query_as!(
       QueryCollabData,
       r#"
        SELECT oid, blob
        FROM af_collab
-       WHERE oid = ANY($1) AND partition_key = $2 AND deleted_at IS NULL;
+       WHERE oid = ANY($1) AND deleted_at IS NULL;
     "#,
-      &object_ids,
-      partition_key,
+      &object_ids
     )
     .fetch_all(pg_pool)
     .await;
@@ -307,7 +297,7 @@ pub async fn batch_select_collab_blob(
 
 #[derive(Debug, sqlx::FromRow)]
 struct QueryCollabData {
-  oid: String,
+  oid: Uuid,
   blob: RawData,
 }
 
@@ -343,7 +333,7 @@ pub async fn create_snapshot(
 ///
 #[inline]
 pub async fn latest_snapshot_time<'a, E: Executor<'a, Database = Postgres>>(
-  oid: &str,
+  oid: &Uuid,
   executor: E,
 ) -> Result<Option<chrono::DateTime<Utc>>, sqlx::Error> {
   let latest_snapshot_time: Option<chrono::DateTime<Utc>> = sqlx::query_scalar(
@@ -357,7 +347,7 @@ pub async fn latest_snapshot_time<'a, E: Executor<'a, Database = Postgres>>(
 }
 #[inline]
 pub async fn should_create_snapshot2<'a, E: Executor<'a, Database = Postgres>>(
-  oid: &str,
+  oid: &Uuid,
   executor: E,
 ) -> Result<bool, sqlx::Error> {
   let hours = Utc::now() - Duration::hours(SNAPSHOT_PER_HOUR);
@@ -380,12 +370,11 @@ pub async fn should_create_snapshot2<'a, E: Executor<'a, Database = Postgres>>(
 ///
 pub async fn create_snapshot_and_maintain_limit<'a>(
   mut transaction: Transaction<'a, Postgres>,
-  workspace_id: &str,
-  oid: &str,
+  workspace_id: &Uuid,
+  oid: &Uuid,
   encoded_collab_v1: &[u8],
   snapshot_limit: i64,
 ) -> Result<AFSnapshotMeta, AppError> {
-  let workspace_id = Uuid::from_str(workspace_id)?;
   let snapshot_meta = sqlx::query_as!(
     AFSnapshotMeta,
     r#"
@@ -393,7 +382,7 @@ pub async fn create_snapshot_and_maintain_limit<'a>(
       VALUES ($1, $2, $3, $4, $5)
       RETURNING sid AS snapshot_id, oid AS object_id, created_at
     "#,
-    oid,
+    oid.to_string(),
     encoded_collab_v1,
     encoded_collab_v1.len() as i64,
     0,
@@ -425,11 +414,10 @@ pub async fn create_snapshot_and_maintain_limit<'a>(
 #[inline]
 pub async fn select_snapshot(
   pg_pool: &PgPool,
-  workspace_id: &str,
-  object_id: &str,
+  workspace_id: &Uuid,
+  object_id: &Uuid,
   snapshot_id: &i64,
 ) -> Result<Option<AFSnapshotRow>, Error> {
-  let workspace_id = Uuid::from_str(workspace_id).map_err(|err| Error::Decode(err.into()))?;
   let row = sqlx::query_as!(
     AFSnapshotRow,
     r#"
@@ -437,7 +425,7 @@ pub async fn select_snapshot(
       WHERE sid = $1 AND oid = $2 AND workspace_id = $3 AND deleted_at IS NULL;
     "#,
     snapshot_id,
-    object_id,
+    object_id.to_string(),
     workspace_id
   )
   .fetch_optional(pg_pool)
@@ -470,7 +458,7 @@ pub async fn select_latest_snapshot(
 /// Returns list of snapshots for given object_id in descending order of creation time.
 pub async fn get_all_collab_snapshot_meta(
   pg_pool: &PgPool,
-  object_id: &str,
+  object_id: &Uuid,
 ) -> Result<AFSnapshotMetas, Error> {
   let snapshots: Vec<AFSnapshotMeta> = sqlx::query_as!(
     AFSnapshotMeta,
@@ -480,164 +468,11 @@ pub async fn get_all_collab_snapshot_meta(
     WHERE oid = $1 AND deleted_at IS NULL
     ORDER BY created_at DESC;
     "#,
-    object_id
+    object_id.to_string()
   )
   .fetch_all(pg_pool)
   .await?;
   Ok(AFSnapshotMetas(snapshots))
-}
-
-#[inline]
-#[instrument(level = "trace", skip(txn), err)]
-pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
-  uid: i64,
-  oid: T,
-  access_level: &AFAccessLevel,
-  txn: &mut Transaction<'_, sqlx::Postgres>,
-) -> Result<(), AppError> {
-  let oid = oid.as_ref();
-  let access_level: i32 = (*access_level).into();
-  let permission_id = sqlx::query_scalar!(
-    r#"
-     SELECT id
-     FROM af_permissions
-     WHERE access_level = $1
-    "#,
-    access_level
-  )
-  .fetch_one(txn.deref_mut())
-  .await
-  .context("Get permission id from access level fail")?;
-
-  sqlx::query!(
-    r#"
-    INSERT INTO af_collab_member (uid, oid, permission_id)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (uid, oid)
-    DO UPDATE
-      SET permission_id = excluded.permission_id;
-    "#,
-    uid,
-    oid,
-    permission_id
-  )
-  .execute(txn.deref_mut())
-  .await
-  .context(format!(
-    "failed to insert collab member: user:{} oid:{}",
-    uid, oid
-  ))?;
-
-  Ok(())
-}
-
-#[instrument(skip(txn), err)]
-#[inline]
-pub async fn insert_collab_member(
-  uid: i64,
-  oid: &str,
-  access_level: &AFAccessLevel,
-  txn: &mut Transaction<'_, sqlx::Postgres>,
-) -> Result<(), AppError> {
-  upsert_collab_member_with_txn(uid, oid, access_level, txn).await?;
-  Ok(())
-}
-
-pub async fn delete_collab_member(
-  uid: i64,
-  oid: &str,
-  txn: &mut Transaction<'_, sqlx::Postgres>,
-) -> Result<(), AppError> {
-  sqlx::query("DELETE FROM af_collab_member WHERE uid = $1 AND oid = $2")
-    .bind(uid)
-    .bind(oid)
-    .execute(txn.deref_mut())
-    .await?;
-  Ok(())
-}
-
-#[inline]
-pub async fn select_collab_members(
-  oid: &str,
-  pg_pool: &PgPool,
-) -> Result<Vec<AFCollabMember>, AppError> {
-  let members = sqlx::query(
-    r#"
-      SELECT af_collab_member.uid,
-        af_collab_member.oid,
-        af_permissions.id,
-        af_permissions.name,
-        af_permissions.access_level,
-        af_permissions.description
-      FROM af_collab_member
-      JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
-      WHERE af_collab_member.oid = $1
-      ORDER BY af_collab_member.created_at ASC
-    "#,
-  )
-  .bind(oid)
-  .try_map(collab_member_try_from_row)
-  .fetch_all(pg_pool)
-  .await?;
-
-  Ok(members)
-}
-
-#[inline]
-pub async fn select_collab_member<'a, E: Executor<'a, Database = Postgres>>(
-  uid: &i64,
-  oid: &str,
-  executor: E,
-) -> Result<AFCollabMember, AppError> {
-  let row = sqlx::query(
-  r#"
-    SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
-    FROM af_collab_member
-    JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
-    WHERE af_collab_member.uid = $1 AND af_collab_member.oid = $2
-  "#,
-  )
-  .bind(uid)
-  .bind(oid)
-  .fetch_one(executor)
-  .await?;
-
-  let member = collab_member_try_from_row(row)?;
-  Ok(member)
-}
-
-fn collab_member_try_from_row(row: PgRow) -> Result<AFCollabMember, sqlx::Error> {
-  let access_level = AFAccessLevel::from(row.try_get::<i32, _>(4)?);
-  let permission = AFPermission {
-    id: row.try_get(2)?,
-    name: row.try_get(3)?,
-    access_level,
-    description: row.try_get(5)?,
-  };
-
-  Ok(AFCollabMember {
-    uid: row.try_get(0)?,
-    oid: row.try_get(1)?,
-    permission,
-  })
-}
-
-#[inline]
-pub async fn is_collab_member_exists<'a, E: Executor<'a, Database = Postgres>>(
-  uid: i64,
-  oid: &str,
-  executor: E,
-) -> Result<bool, sqlx::Error> {
-  let result = sqlx::query_scalar!(
-    r#"
-      SELECT EXISTS (SELECT 1 FROM af_collab_member WHERE oid = $1 AND uid = $2 LIMIT 1)
-    "#,
-    &oid,
-    &uid,
-  )
-  .fetch_one(executor)
-  .await;
-  transform_record_not_found_error(result)
 }
 
 #[inline]
@@ -661,7 +496,7 @@ fn transform_record_not_found_error(
 /// For a more efficient lookup, especially in frequent checks, consider using the cached method [CollabCache::is_exist].
 #[inline]
 pub async fn is_collab_exists<'a, E: Executor<'a, Database = Postgres>>(
-  oid: &str,
+  oid: &Uuid,
   executor: E,
 ) -> Result<bool, sqlx::Error> {
   let result = sqlx::query_scalar!(
@@ -678,7 +513,7 @@ pub async fn is_collab_exists<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn select_workspace_database_oid<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-) -> Result<String, sqlx::Error> {
+) -> Result<Uuid, sqlx::Error> {
   let partition_key = partition_key_from_collab_type(&CollabType::WorkspaceDatabase);
   sqlx::query_scalar!(
     r#"
@@ -697,7 +532,7 @@ pub async fn select_workspace_database_oid<'a, E: Executor<'a, Database = Postgr
 pub async fn select_last_updated_database_row_ids(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  row_ids: &[String],
+  row_ids: &[Uuid],
   after: &DateTime<Utc>,
 ) -> Result<Vec<DatabaseRowUpdatedItem>, sqlx::Error> {
   let updated_row_items = sqlx::query_as!(
@@ -706,7 +541,7 @@ pub async fn select_last_updated_database_row_ids(
       SELECT
         updated_at as updated_at,
         oid as row_id
-      FROM af_collab_database_row
+      FROM af_collab
       WHERE workspace_id = $1
         AND oid = ANY($2)
         AND updated_at > $3
@@ -722,33 +557,24 @@ pub async fn select_last_updated_database_row_ids(
 
 pub async fn select_collab_embed_info<'a, E>(
   tx: E,
-  object_id: &str,
-  collab_type: CollabType,
+  object_id: &Uuid,
 ) -> Result<Option<AFCollabEmbedInfo>, sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
 {
-  tracing::info!(
-    "select_collab_embed_info: object_id: {}, collab_type: {:?}",
-    object_id,
-    collab_type
-  );
-  let partition_key = partition_key_from_collab_type(&collab_type);
+  tracing::info!("select_collab_embed_info: object_id: {}", object_id);
   let record = sqlx::query!(
     r#"
       SELECT
-          ac.oid AS object_id,
-          ac.partition_key,
+          ac.oid as object_id,
+          ace.partition_key,
           ac.indexed_at,
           ace.updated_at
       FROM af_collab_embeddings ac
-      JOIN af_collab ace
-          ON ac.oid = ace.oid
-          AND ac.partition_key = ace.partition_key
-      WHERE ac.oid = $1 AND ac.partition_key = $2
+      JOIN af_collab ace ON ac.oid = ace.oid
+      WHERE ac.oid = $1
     "#,
-    object_id,
-    partition_key
+    object_id
   )
   .fetch_optional(tx)
   .await?;
@@ -769,37 +595,24 @@ pub async fn batch_select_collab_embed<'a, E>(
 where
   E: Executor<'a, Database = Postgres>,
 {
-  let collab_types: Vec<CollabType> = embedded_collab
-    .iter()
-    .map(|query| query.collab_type.clone())
-    .collect();
-  let object_ids: Vec<String> = embedded_collab
+  let object_ids: Vec<_> = embedded_collab
     .into_iter()
     .map(|query| query.object_id)
-    .collect();
-
-  // Collect the partition keys for each collab_type
-  let partition_keys: Vec<i32> = collab_types
-    .iter()
-    .map(partition_key_from_collab_type)
     .collect();
 
   // Execute the query to fetch all matching rows
   let records = sqlx::query!(
     r#"
       SELECT
-          ac.oid AS object_id,
-          ac.partition_key,
+          ac.oid as object_id,
+          ace.partition_key,
           ac.indexed_at,
           ace.updated_at
       FROM af_collab_embeddings ac
-      JOIN af_collab ace
-          ON ac.oid = ace.oid
-          AND ac.partition_key = ace.partition_key
-      WHERE ac.oid = ANY($1) AND ac.partition_key = ANY($2)
+      JOIN af_collab ace ON ac.oid = ace.oid
+      WHERE ac.oid = ANY($1)
     "#,
-    &object_ids,
-    &partition_keys
+    &object_ids
   )
   .fetch_all(executor)
   .await?;
@@ -808,7 +621,7 @@ where
   let mut items = vec![];
   for row in records {
     let embed_info = AFCollabEmbedInfo {
-      object_id: row.object_id.clone(),
+      object_id: row.object_id,
       indexed_at: DateTime::<Utc>::from_naive_utc_and_offset(row.indexed_at, Utc),
       updated_at: row.updated_at,
     };

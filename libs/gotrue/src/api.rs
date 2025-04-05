@@ -1,7 +1,7 @@
 use super::grant::Grant;
 use crate::params::{
   AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
-  GenerateLinkResponse, InviteUserParams, MagicLinkParams,
+  GenerateLinkResponse, InviteUserParams, MagicLinkParams, RecoverParams, VerifyParams,
 };
 use anyhow::Context;
 use gotrue_entity::dto::{
@@ -79,6 +79,40 @@ impl Client {
     let url = format!("{}/token?grant_type={}", self.base_url, grant.type_as_str());
     let payload = grant.json_value();
     let resp = self.client.post(url).json(&payload).send().await?;
+    if resp.status().is_success() {
+      let token: GotrueTokenResponse = from_body(resp).await?;
+      Ok(token)
+    } else if resp.status().is_client_error() {
+      Err(from_body::<GotrueClientError>(resp).await?.into())
+    } else {
+      Err(anyhow::anyhow!("unexpected response status: {}", resp.status()).into())
+    }
+  }
+
+  #[tracing::instrument(skip_all, err)]
+  pub async fn verify(
+    &self,
+    verify_params: &VerifyParams,
+  ) -> Result<GotrueTokenResponse, GoTrueError> {
+    let url = format!("{}/verify", self.base_url);
+    let resp = self.client.post(url).json(verify_params).send().await?;
+    if resp.status().is_success() {
+      let token: GotrueTokenResponse = from_body(resp).await?;
+      Ok(token)
+    } else if resp.status().is_client_error() {
+      Err(from_body::<GotrueClientError>(resp).await?.into())
+    } else {
+      Err(anyhow::anyhow!("unexpected response status: {}", resp.status()).into())
+    }
+  }
+
+  #[tracing::instrument(skip_all, err)]
+  pub async fn recover(
+    &self,
+    recover_params: &RecoverParams,
+  ) -> Result<GotrueTokenResponse, GoTrueError> {
+    let url = format!("{}/recover", self.base_url);
+    let resp = self.client.post(url).json(recover_params).send().await?;
     if resp.status().is_success() {
       let token: GotrueTokenResponse = from_body(resp).await?;
       Ok(token)

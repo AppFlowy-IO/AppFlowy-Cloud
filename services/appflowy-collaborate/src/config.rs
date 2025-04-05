@@ -30,6 +30,7 @@ pub struct S3Setting {
   pub secret_key: Secret<String>,
   pub bucket: String,
   pub region: String,
+  pub presigned_url_endpoint: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -190,6 +191,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
       region: get_env_var("APPFLOWY_S3_REGION", ""),
+      presigned_url_endpoint: None,
     },
     gotrue: GoTrueSetting {
       jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),

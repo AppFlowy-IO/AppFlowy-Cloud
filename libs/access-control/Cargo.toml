@@ -18,7 +18,6 @@ database-entity.workspace = true
 futures-util.workspace = true
 lazy_static.workspace = true
 prometheus-client.workspace = true
-redis.workspace = true
 sqlx = { workspace = true, default-features = false, features = ["postgres"] }
 tracing.workspace = true
 tokio = { workspace = true, features = ["macros", "time"] }

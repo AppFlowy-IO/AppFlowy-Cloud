@@ -30,6 +30,7 @@ env:
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
   SQLX_OFFLINE: true
   RUST_TOOLCHAIN: "1.80"
+  APPFLOWY_AI_VERSION: "0.9.27-test"
 
 jobs:
   setup:
@@ -100,10 +101,12 @@ jobs:
           sed -i 's|APPFLOWY_MAILER_SMTP_USERNAME=.*|APPFLOWY_MAILER_SMTP_USERNAME=${{ secrets.CI_GOTRUE_SMTP_USER }}|' .env
           sed -i 's|APPFLOWY_MAILER_SMTP_PASSWORD=.*|APPFLOWY_MAILER_SMTP_PASSWORD=${{ secrets.CI_GOTRUE_SMTP_PASS }}|' .env
           sed -i 's|AI_OPENAI_API_KEY=.*|AI_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}|' .env
+          sed -i 's|AI_ANTHROPIC_API_KEY=.*|AI_ANTHROPIC_API_KEY=${{ secrets.CI_AI_ANTHROPIC_API_KEY }}|' .env
           sed -i "s|AI_AWS_ACCESS_KEY_ID=.*|AI_AWS_ACCESS_KEY_ID=${{ secrets.LOCAL_AI_AWS_ACCESS_KEY_ID }}|" .env
           sed -i "s|AI_AWS_SECRET_ACCESS_KEY=.*|AI_AWS_SECRET_ACCESS_KEY=${{ secrets.LOCAL_AI_AWS_SECRET_ACCESS_KEY }}|" .env
           sed -i 's|AI_APPFLOWY_HOST=.*|AI_APPFLOWY_HOST=http://localhost|' .env
           sed -i 's|APPFLOWY_WEB_URL=.*|APPFLOWY_WEB_URL=http://localhost:3000|' .env
+          sed -i 's|.*APPFLOWY_S3_PRESIGNED_URL_ENDPOINT=.*|APPFLOWY_S3_PRESIGNED_URL_ENDPOINT=http://localhost/minio-api|' .env
         shell: bash
 
       - name: Update Nginx Configuration
@@ -121,6 +124,7 @@ jobs:
           export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
           export APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
           export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
+          export APPFLOWY_AI_VERSION=${{ env.APPFLOWY_AI_VERSION }}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
 

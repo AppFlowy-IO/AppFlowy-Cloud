@@ -1,5 +1,5 @@
 use crate::http::log_request_id;
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 
 use app_error::AppError;
 use bytes::Bytes;
@@ -8,14 +8,15 @@ use mime::Mime;
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{header, Method, StatusCode};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 
 use shared_entity::dto::file_dto::PutFileResponse;
 use tracing::instrument;
 use url::Url;
+use uuid::Uuid;
 
 impl Client {
-  pub fn get_blob_url(&self, workspace_id: &str, file_id: &str) -> String {
+  pub fn get_blob_url(&self, workspace_id: &Uuid, file_id: &str) -> String {
     format!(
       "{}/api/file_storage/{}/blob/{}",
       self.base_url, workspace_id, file_id
@@ -37,19 +38,18 @@ impl Client {
       .body(data)
       .send()
       .await?;
-    log_request_id(&resp);
     if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
       return Err(AppResponseError::from(AppError::PayloadTooLarge(
         StatusCode::PAYLOAD_TOO_LARGE.to_string(),
       )));
     }
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
   pub async fn put_blob_v1<T: Into<Bytes>>(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     data: T,
     mime: &Mime,
@@ -67,15 +67,12 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
     if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
       return Err(AppResponseError::from(AppError::PayloadTooLarge(
         StatusCode::PAYLOAD_TOO_LARGE.to_string(),
       )));
     }
-    AppResponse::<PutFileResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<PutFileResponse>(resp).await
   }
 
   /// Only expose this method for testing
@@ -96,12 +93,9 @@ impl Client {
       .body(data.into())
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<crate::entity::AFBlobRecord>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<crate::entity::AFBlobRecord>(resp).await
   }
-  pub fn get_blob_url_v1(&self, workspace_id: &str, parent_dir: &str, file_id: &str) -> String {
+  pub fn get_blob_url_v1(&self, workspace_id: &Uuid, parent_dir: &str, file_id: &str) -> String {
     let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     format!(
       "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
@@ -110,7 +104,7 @@ impl Client {
   }
 
   /// Returns the workspace_id, parent_dir, and file_id from the given blob url.
-  pub fn parse_blob_url_v1(&self, url: &str) -> Option<(String, String, String)> {
+  pub fn parse_blob_url_v1(&self, url: &str) -> Option<(Uuid, String, String)> {
     let parsed_url = Url::parse(url).ok()?;
     let segments: Vec<&str> = parsed_url.path_segments()?.collect();
     // Check if the path has the expected number of segments
@@ -119,7 +113,7 @@ impl Client {
     }
 
     // Extract the workspace_id, parent_dir, and file_id from the segments
-    let workspace_id = segments[2].to_string();
+    let workspace_id: Uuid = segments[2].parse().ok()?;
     let encoded_parent_dir = segments[5].to_string();
     let file_id = segments[6].to_string();
 
@@ -135,7 +129,7 @@ impl Client {
   #[instrument(level = "info", skip_all)]
   pub async fn get_blob_v1(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     file_id: &str,
   ) -> Result<(Mime, Vec<u8>), AppResponseError> {
@@ -161,8 +155,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
@@ -183,10 +176,7 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<BlobMetadata>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<BlobMetadata>(resp).await
   }
 
   /// Get the file with the given url. The url should be in the format of
@@ -243,10 +233,7 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<BlobMetadata>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<BlobMetadata>(resp).await
   }
 
   #[instrument(level = "info", skip_all)]
@@ -256,8 +243,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn get_workspace_all_blob_metadata(
@@ -270,9 +256,6 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<RepeatedBlobMetaData>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<RepeatedBlobMetaData>(resp).await
   }
 }

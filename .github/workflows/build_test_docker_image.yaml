@@ -1,0 +1,151 @@
+name: Manually Build All Docker Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build from"
+        required: true
+        default: "main"
+      debug_version:
+        description: "Enter the release version tag (e.g. 0.9.30). The built image will be tagged as xxx:0.9.30-test."
+        required: true
+      archs:
+        description: "Target architectures (comma separated), e.g. linux/amd64,linux/arm64"
+        required: false
+        default: "linux/amd64"
+
+jobs:
+  gotrue:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build and push GoTrue image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/gotrue/Dockerfile
+          push: true
+          tags: |
+            appflowyinc/gotrue:${{ github.event.inputs.debug_version }}-test
+
+      - name: Logout from Docker Hub
+        if: always()
+        run: docker logout
+
+  appflowy_cloud:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build and push AppFlowy Cloud image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: ${{ github.event.inputs.archs }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ github.event.inputs.debug_version }}-test
+
+      - name: Logout from Docker Hub
+        if: always()
+        run: docker logout
+
+  admin_frontend:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build and push Admin Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./admin_frontend/Dockerfile
+          platforms: ${{ github.event.inputs.archs }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ github.event.inputs.debug_version }}-test
+
+      - name: Logout from Docker Hub
+        if: always()
+        run: docker logout
+
+  appflowy_worker:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build and push AppFlowy Worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/appflowy-worker/Dockerfile
+          platforms: ${{ github.event.inputs.archs }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_worker:${{ github.event.inputs.debug_version }}-test
+
+      - name: Logout from Docker Hub
+        if: always()
+        run: docker logout

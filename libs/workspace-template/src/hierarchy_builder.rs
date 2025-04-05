@@ -131,6 +131,7 @@ impl ViewBuilder {
           .collect(),
       ),
       last_edited_by: Some(self.uid),
+      is_locked: None,
       extra: self.extra,
     };
     ParentChildViews {

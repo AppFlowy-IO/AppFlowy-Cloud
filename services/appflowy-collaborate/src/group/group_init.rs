@@ -15,11 +15,12 @@ use collab_rt_entity::{
 use collab_rt_entity::{ClientCollabMessage, CollabMessage};
 use collab_rt_protocol::{Message, MessageReader, RTProtocolError, SyncMessage};
 use collab_stream::client::CollabRedisStream;
-use collab_stream::collab_update_sink::{AwarenessUpdateSink, CollabUpdateSink};
+use collab_stream::collab_update_sink::CollabUpdateSink;
 
 use crate::metrics::CollabRealtimeMetrics;
 use bytes::Bytes;
 use collab_document::document::DocumentBody;
+use collab_stream::awareness_gossip::AwarenessUpdateSink;
 use collab_stream::error::StreamError;
 use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
@@ -35,6 +36,7 @@ use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
+use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Update};
@@ -47,8 +49,8 @@ pub struct CollabGroup {
 /// Inner state of [CollabGroup] that's private and hidden behind Arc, so that it can be moved into
 /// tasks.
 struct CollabGroupState {
-  workspace_id: String,
-  object_id: String,
+  workspace_id: Uuid,
+  object_id: Uuid,
   collab_type: CollabType,
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
@@ -73,10 +75,10 @@ impl Drop for CollabGroup {
 
 impl CollabGroup {
   #[allow(clippy::too_many_arguments)]
-  pub fn new<S>(
+  pub async fn new<S>(
     uid: i64,
-    workspace_id: String,
-    object_id: String,
+    workspace_id: Uuid,
+    object_id: Uuid,
     collab_type: CollabType,
     metrics: Arc<CollabRealtimeMetrics>,
     storage: Arc<S>,
@@ -92,15 +94,16 @@ impl CollabGroup {
     let is_new_collab = state_vector.is_empty();
     let persister = CollabPersister::new(
       uid,
-      workspace_id.clone(),
-      object_id.clone(),
-      collab_type.clone(),
+      workspace_id,
+      object_id,
+      collab_type,
       storage,
       collab_redis_stream,
       indexer_scheduler,
       metrics.clone(),
       prune_grace_period,
-    );
+    )
+    .await?;
 
     let state = Arc::new(CollabGroupState {
       workspace_id,
@@ -157,13 +160,13 @@ impl CollabGroup {
   }
 
   #[inline]
-  pub fn workspace_id(&self) -> &str {
+  pub fn workspace_id(&self) -> &Uuid {
     &self.state.workspace_id
   }
 
   #[inline]
   #[allow(dead_code)]
-  pub fn object_id(&self) -> &str {
+  pub fn object_id(&self) -> &Uuid {
     &self.state.object_id
   }
 
@@ -182,10 +185,6 @@ impl CollabGroup {
     loop {
       tokio::select! {
         _ = state.shutdown.cancelled() => {
-          match state.persister.trim_awareness().await {
-            Ok(_) => (),
-            Err(err) => warn!("unable to trim awareness due to {}", err),
-          };
           break;
         }
         res = updates.next() => {
@@ -234,7 +233,7 @@ impl CollabGroup {
       seq_num
     );
     let payload = Message::Sync(SyncMessage::Update(update.data)).encode_v1();
-    let message = BroadcastSync::new(update.sender, state.object_id.clone(), payload, seq_num);
+    let message = BroadcastSync::new(update.sender, state.object_id.to_string(), payload, seq_num);
     for mut e in state.subscribers.iter_mut() {
       let subscription = e.value_mut();
       if message.origin == subscription.collab_origin {
@@ -256,25 +255,21 @@ impl CollabGroup {
 
   /// Task used to receive awareness updates from Redis.
   async fn inbound_awareness_task(state: Arc<CollabGroupState>) -> Result<(), RealtimeError> {
-    let updates = state.persister.collab_redis_stream.awareness_updates(
-      &state.workspace_id,
-      &state.object_id,
-      None,
-    );
+    let object_id = state.object_id;
+    let updates = state
+      .persister
+      .collab_redis_stream
+      .awareness_updates(&object_id);
     pin_mut!(updates);
     loop {
       tokio::select! {
         _ = state.shutdown.cancelled() => {
           break;
         }
-        res = updates.next() => {
+        res = updates.recv() => {
           match res {
-            Some(Ok(awareness_update)) => {
+            Some(awareness_update) => {
               Self::handle_inbound_awareness(&state, awareness_update).await;
-            },
-            Some(Err(err)) => {
-              tracing::warn!("failed to handle incoming update for collab `{}`: {}", state.object_id, err);
-              break;
             },
             None => {
               break;
@@ -288,14 +283,14 @@ impl CollabGroup {
 
   async fn handle_inbound_awareness(state: &CollabGroupState, update: AwarenessStreamUpdate) {
     tracing::trace!(
-      "broadcasting awareness update from {} ({} bytes)",
+      "broadcasting awareness update from {} (contains {} clients)",
       update.sender,
-      update.data.len()
+      update.data.clients.len()
     );
     let sender = update.sender;
     let message = AwarenessSync::new(
-      state.object_id.clone(),
-      Message::Awareness(update.data).encode_v1(),
+      state.object_id.to_string(),
+      Message::Awareness(update.data.encode_v1()).encode_v1(),
       CollabOrigin::Empty,
     );
     for mut e in state.subscribers.iter_mut() {
@@ -359,15 +354,15 @@ impl CollabGroup {
       .map_err(|e| AppError::Internal(e.into()))?;
     let collab = Collab::new_with_source(
       CollabOrigin::Server,
-      self.object_id(),
+      &self.object_id().to_string(),
       DataSource::DocStateV1(collab.doc_state.into()),
       vec![],
       false,
     )
     .map_err(|e| AppError::Internal(e.into()))?;
-    let workspace_id = &self.state.workspace_id;
-    let object_id = &self.state.object_id;
-    let collab_type = &self.state.collab_type;
+    let workspace_id = self.state.workspace_id;
+    let object_id = self.state.object_id;
+    let collab_type = self.state.collab_type;
     self
       .state
       .persister
@@ -391,7 +386,7 @@ impl CollabGroup {
     let encoded_collab = self.encode_collab().await?;
     let collab = Collab::new_with_source(
       CollabOrigin::Server,
-      self.object_id(),
+      &self.object_id().to_string(),
       DataSource::DocStateV1(encoded_collab.doc_state.into()),
       vec![],
       false,
@@ -523,8 +518,9 @@ impl CollabGroup {
   where
     Sink: SubscriptionSink + 'static,
   {
+    let object_id = state.object_id.to_string();
     for (message_object_id, messages) in msg.0 {
-      if state.object_id != message_object_id {
+      if object_id != message_object_id {
         error!(
           "Expect object id:{} but got:{}",
           state.object_id, message_object_id
@@ -788,9 +784,10 @@ impl CollabGroup {
     origin: &CollabOrigin,
     update: Vec<u8>,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+    let awareness_update = AwarenessUpdate::decode_v1(&update)?;
     state
       .persister
-      .send_awareness(origin, update)
+      .send_awareness(origin, awareness_update)
       .await
       .map_err(|err| RTProtocolError::Internal(err.into()))?;
     Ok(None)
@@ -872,8 +869,8 @@ impl Drop for Subscription {
 
 struct CollabPersister {
   uid: i64,
-  workspace_id: String,
-  object_id: String,
+  workspace_id: Uuid,
+  object_id: Uuid,
   collab_type: CollabType,
   storage: Arc<dyn CollabStorage>,
   collab_redis_stream: Arc<CollabRedisStream>,
@@ -888,20 +885,22 @@ struct CollabPersister {
 
 impl CollabPersister {
   #[allow(clippy::too_many_arguments)]
-  pub fn new(
+  pub async fn new(
     uid: i64,
-    workspace_id: String,
-    object_id: String,
+    workspace_id: Uuid,
+    object_id: Uuid,
     collab_type: CollabType,
     storage: Arc<dyn CollabStorage>,
     collab_redis_stream: Arc<CollabRedisStream>,
     indexer_scheduler: Arc<IndexerScheduler>,
     metrics: Arc<CollabRealtimeMetrics>,
     prune_grace_period: Duration,
-  ) -> Self {
+  ) -> Result<Self, StreamError> {
     let update_sink = collab_redis_stream.collab_update_sink(&workspace_id, &object_id);
-    let awareness_sink = collab_redis_stream.awareness_update_sink(&workspace_id, &object_id);
-    Self {
+    let awareness_sink = collab_redis_stream
+      .awareness_update_sink(&workspace_id, &object_id)
+      .await?;
+    Ok(Self {
       uid,
       workspace_id,
       object_id,
@@ -913,7 +912,7 @@ impl CollabPersister {
       update_sink,
       awareness_sink,
       prune_grace_period,
-    }
+    })
   }
 
   async fn send_update(
@@ -937,23 +936,15 @@ impl CollabPersister {
   async fn send_awareness(
     &self,
     sender_session: &CollabOrigin,
-    awareness_update: Vec<u8>,
-  ) -> Result<MessageId, StreamError> {
-    // send awareness updates to redis queue:
-    // QUESTION: is it needed? Maybe we could reuse update_sink?
-    let len = awareness_update.len();
+    awareness_update: AwarenessUpdate,
+  ) -> Result<(), StreamError> {
     let update = AwarenessStreamUpdate {
       data: awareness_update,
       sender: sender_session.clone(),
     };
-    let msg_id = self.awareness_sink.send(&update).await?;
-    tracing::trace!(
-      "persisted awareness from {} ({} bytes) - msg id: {}",
-      update.sender,
-      len,
-      msg_id
-    );
-    Ok(msg_id)
+    self.awareness_sink.send(&update).await?;
+    tracing::trace!("broadcasted awareness from {}", update.sender);
+    Ok(())
   }
 
   /// Loads collab without its history. Used for handling y-sync protocol messages.
@@ -963,7 +954,12 @@ impl CollabPersister {
     let start = Instant::now();
     let mut collab = match self.load_collab_full().await? {
       Some(collab) => collab,
-      None => Collab::new_with_origin(CollabOrigin::Server, self.object_id.clone(), vec![], false),
+      None => Collab::new_with_origin(
+        CollabOrigin::Server,
+        self.object_id.to_string(),
+        vec![],
+        false,
+      ),
     };
     self.metrics.load_collab_count.inc();
 
@@ -982,8 +978,9 @@ impl CollabPersister {
     for (message_id, update) in updates {
       i += 1;
       let update: Update = update.into_update()?;
-      tx.apply_update(update)
-        .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
+      tx.apply_update(update).map_err(|err| {
+        RTProtocolError::YrsApplyUpdate(format!("collab {} - {}", self.object_id, err))
+      })?;
       last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
       self.metrics.apply_update_count.inc();
     }
@@ -1025,16 +1022,18 @@ impl CollabPersister {
       if collab.is_none() {
         collab = Some(match self.load_collab_full().await? {
           Some(collab) => collab,
-          None => {
-            Collab::new_with_origin(CollabOrigin::Server, self.object_id.clone(), vec![], false)
-          },
+          None => Collab::new_with_origin(
+            CollabOrigin::Server,
+            self.object_id.to_string(),
+            vec![],
+            false,
+          ),
         })
       };
       let collab = collab.as_mut().unwrap();
-      collab
-        .transact_mut()
-        .apply_update(update)
-        .map_err(|err| RTProtocolError::YrsApplyUpdate(err.to_string()))?;
+      collab.transact_mut().apply_update(update).map_err(|err| {
+        RTProtocolError::YrsApplyUpdate(format!("collab {} - {}", self.object_id, err))
+      })?;
       last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
       self.metrics.apply_update_count.inc();
     }
@@ -1101,7 +1100,7 @@ impl CollabPersister {
     // perform snapshot at the same time, so we'll use lease to let only one of them atm.
     if let Some(mut lease) = self
       .collab_redis_stream
-      .lease(&self.workspace_id, &self.object_id)
+      .lease(&self.workspace_id.to_string(), &self.object_id.to_string())
       .await?
     {
       let doc_state_light = collab
@@ -1147,15 +1146,6 @@ impl CollabPersister {
     Ok(())
   }
 
-  async fn trim_awareness(&self) -> Result<(), RealtimeError> {
-    let stream_key = AwarenessStreamUpdate::stream_key(&self.workspace_id, &self.object_id);
-    self
-      .collab_redis_stream
-      .prune_awareness_stream(&stream_key)
-      .await?;
-    Ok(())
-  }
-
   async fn write_collab(&self, doc_state_v1: Vec<u8>) -> Result<(), RealtimeError> {
     let encoded_collab = EncodedCollab::new_v1(Default::default(), doc_state_v1)
       .encode_to_bytes()
@@ -1165,44 +1155,36 @@ impl CollabPersister {
       .metrics
       .collab_size
       .observe(encoded_collab.len() as f64);
-    let params = CollabParams::new(&self.object_id, self.collab_type.clone(), encoded_collab);
+    let params = CollabParams::new(self.object_id, self.collab_type, encoded_collab);
     self
       .storage
-      .queue_insert_or_update_collab(&self.workspace_id, &self.uid, params, true)
+      .queue_insert_or_update_collab(self.workspace_id, &self.uid, params, true)
       .await
       .map_err(|err| RealtimeError::Internal(err.into()))?;
     Ok(())
   }
 
   fn index_collab_content(&self, paragraphs: Vec<String>) {
-    if let Ok(workspace_id) = Uuid::parse_str(&self.workspace_id) {
-      let indexed_collab = UnindexedCollabTask::new(
-        workspace_id,
-        self.object_id.clone(),
-        self.collab_type.clone(),
-        UnindexedData::Paragraphs(paragraphs),
+    let indexed_collab = UnindexedCollabTask::new(
+      self.workspace_id,
+      self.object_id,
+      self.collab_type,
+      UnindexedData::Paragraphs(paragraphs),
+    );
+    if let Err(err) = self
+      .indexer_scheduler
+      .index_pending_collab_one(indexed_collab, false)
+    {
+      warn!(
+        "failed to index collab `{}/{}`: {}",
+        self.workspace_id, self.object_id, err
       );
-      if let Err(err) = self
-        .indexer_scheduler
-        .index_pending_collab_one(indexed_collab, false)
-      {
-        tracing::warn!(
-          "failed to index collab `{}/{}`: {}",
-          self.workspace_id,
-          self.object_id,
-          err
-        );
-      }
     }
   }
 
   async fn load_collab_full(&self) -> Result<Option<Collab>, RealtimeError> {
     // we didn't find a snapshot, or we want a lightweight collab version
-    let params = QueryCollabParams::new(
-      self.object_id.clone(),
-      self.collab_type.clone(),
-      self.workspace_id.clone(),
-    );
+    let params = QueryCollabParams::new(self.object_id, self.collab_type, self.workspace_id);
     let result = self
       .storage
       .get_encode_collab(GetCollabOrigin::Server, params, false)
@@ -1215,7 +1197,7 @@ impl CollabPersister {
 
     let collab: Collab = Collab::new_with_source(
       CollabOrigin::Server,
-      &self.object_id,
+      &self.object_id.to_string(),
       DataSource::DocStateV1(doc_state.into()),
       vec![],
       false,

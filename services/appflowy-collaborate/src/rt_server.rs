@@ -1,23 +1,6 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use access_control::collab::RealtimeAccessControl;
-use anyhow::{anyhow, Result};
-use app_error::AppError;
-use collab_rt_entity::user::{RealtimeUser, UserDevice};
-use collab_rt_entity::MessageByObjectId;
-use collab_stream::client::CollabRedisStream;
-use collab_stream::stream_router::StreamRouter;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
-use redis::aio::ConnectionManager;
-use tokio::sync::mpsc::Sender;
-use tokio::task::yield_now;
-use tokio::time::interval;
-use tracing::{error, info, trace, warn};
-use yrs::updates::decoder::Decode;
-use yrs::StateVector;
-
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::config::get_env_var;
@@ -26,8 +9,26 @@ use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
+use access_control::collab::RealtimeAccessControl;
+use anyhow::{anyhow, Result};
+use app_error::AppError;
+use collab_rt_entity::user::{RealtimeUser, UserDevice};
+use collab_rt_entity::MessageByObjectId;
+use collab_stream::awareness_gossip::AwarenessGossip;
+use collab_stream::client::CollabRedisStream;
+use collab_stream::stream_router::StreamRouter;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
 use database::collab::CollabStorage;
 use indexer::scheduler::IndexerScheduler;
+use redis::aio::ConnectionManager;
+use tokio::sync::mpsc::Sender;
+use tokio::task::yield_now;
+use tokio::time::interval;
+use tracing::{error, info, trace, warn};
+use uuid::Uuid;
+use yrs::updates::decoder::Decode;
+use yrs::StateVector;
 
 use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
 use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
@@ -37,7 +38,7 @@ pub struct CollaborationServer<S> {
   /// Keep track of all collab groups
   group_manager: Arc<GroupManager<S>>,
   connect_state: ConnectState,
-  group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
+  group_sender_by_object_id: Arc<DashMap<Uuid, GroupCommandSender>>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
   enable_custom_runtime: bool,
@@ -54,6 +55,7 @@ where
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
     redis_stream_router: Arc<StreamRouter>,
+    awareness_gossip: Arc<AwarenessGossip>,
     redis_connection_manager: ConnectionManager,
     group_persistence_interval: Duration,
     prune_grace_period: Duration,
@@ -70,8 +72,11 @@ where
     }
 
     let connect_state = ConnectState::new();
-    let collab_stream =
-      CollabRedisStream::new_with_connection_manager(redis_connection_manager, redis_stream_router);
+    let collab_stream = CollabRedisStream::new_with_connection_manager(
+      redis_connection_manager,
+      redis_stream_router,
+      awareness_gossip,
+    );
     let group_manager = Arc::new(
       GroupManager::new(
         storage.clone(),
@@ -84,7 +89,7 @@ where
       )
       .await?,
     );
-    let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>> =
+    let group_sender_by_object_id: Arc<DashMap<_, GroupCommandSender>> =
       Arc::new(Default::default());
 
     spawn_period_check_inactive_group(Arc::downgrade(&group_manager), &group_sender_by_object_id);
@@ -160,7 +165,8 @@ where
     message_by_oid: MessageByObjectId,
   ) -> Result<(), RealtimeError> {
     for (object_id, collab_messages) in message_by_oid.into_inner() {
-      let group_cmd_sender = self.create_group_if_not_exist(&object_id);
+      let object_id = Uuid::parse_str(&object_id)?;
+      let group_cmd_sender = self.create_group_if_not_exist(object_id);
       let cloned_user = user.clone();
       // Create a new task to send a message to the group command runner without waiting for the
       // result. This approach is used to prevent potential issues with the actor's mailbox in
@@ -206,9 +212,9 @@ where
     &self,
     message: ClientHttpUpdateMessage,
   ) -> Result<(), RealtimeError> {
-    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
+    let group_cmd_sender = self.create_group_if_not_exist(message.object_id);
     tokio::spawn(async move {
-      let object_id = message.object_id.clone();
+      let object_id = message.object_id;
       let (tx, rx) = tokio::sync::oneshot::channel();
       let result = group_cmd_sender
         .send(GroupCommand::HandleClientHttpUpdate {
@@ -255,7 +261,7 @@ where
               let (tx, rx) = tokio::sync::oneshot::channel();
               let _ = group_cmd_sender
                 .send(GroupCommand::CalculateMissingUpdate {
-                  object_id: object_id.clone(),
+                  object_id,
                   state_vector,
                   ret: tx,
                 })
@@ -312,15 +318,15 @@ where
   }
 
   #[inline]
-  fn create_group_if_not_exist(&self, object_id: &str) -> Sender<GroupCommand> {
+  fn create_group_if_not_exist(&self, object_id: Uuid) -> Sender<GroupCommand> {
     let old_sender = self
       .group_sender_by_object_id
-      .get(object_id)
+      .get(&object_id)
       .map(|entry| entry.value().clone());
 
     let sender = match old_sender {
       Some(sender) => sender,
-      None => match self.group_sender_by_object_id.entry(object_id.to_string()) {
+      None => match self.group_sender_by_object_id.entry(object_id) {
         Entry::Occupied(entry) => entry.get().clone(),
         Entry::Vacant(entry) => {
           let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
@@ -330,7 +336,7 @@ where
             recv: Some(recv),
           };
 
-          let object_id = entry.key().clone();
+          let object_id = *entry.key();
           if self.enable_custom_runtime {
             COLLAB_RUNTIME.spawn(runner.run(object_id));
           } else {
@@ -350,7 +356,7 @@ where
     &self,
     message: ClientGenerateEmbeddingMessage,
   ) -> Result<(), RealtimeError> {
-    let group_cmd_sender = self.create_group_if_not_exist(&message.object_id);
+    let group_cmd_sender = self.create_group_if_not_exist(message.object_id);
     tokio::spawn(async move {
       let result = group_cmd_sender
         .send(GroupCommand::GenerateCollabEmbedding {
@@ -383,7 +389,7 @@ where
 
 fn spawn_period_check_inactive_group<S>(
   weak_groups: Weak<GroupManager<S>>,
-  group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
+  group_sender_by_object_id: &Arc<DashMap<Uuid, GroupCommandSender>>,
 ) where
   S: CollabStorage,
 {

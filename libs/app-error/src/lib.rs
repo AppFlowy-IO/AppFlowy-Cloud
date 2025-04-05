@@ -37,6 +37,9 @@ pub enum AppError {
   #[error("Invalid password:{0}")]
   InvalidPassword(String),
 
+  #[error("Invalid page data:{0}")]
+  InvalidPageData(String),
+
   #[error("{0}")]
   OAuthError(String),
 
@@ -64,10 +67,8 @@ pub enum AppError {
   #[error("Not Logged In:{0}")]
   NotLoggedIn(String),
 
-  #[error(
-    "User:{user} does not have permissions to execute this action in workspace:{workspace_id}"
-  )]
-  NotEnoughPermissions { user: String, workspace_id: String },
+  #[error("User does not have permissions to execute this action")]
+  NotEnoughPermissions,
 
   #[error("s3 response error:{0}")]
   S3ResponseError(String),
@@ -187,6 +188,9 @@ pub enum AppError {
 
   #[error("Apply update error:{0}")]
   ApplyUpdateError(String),
+
+  #[error("{0}")]
+  InvalidBlock(String),
 }
 
 impl AppError {
@@ -239,7 +243,7 @@ impl AppError {
       AppError::UrlError(_) => ErrorCode::InvalidUrl,
       AppError::SerdeError(_) => ErrorCode::SerdeError,
       AppError::Connect(_) => ErrorCode::NetworkError,
-      AppError::RequestTimeout(_) => ErrorCode::NetworkError,
+      AppError::RequestTimeout(_) => ErrorCode::RequestTimeout,
       #[cfg(feature = "tokio_error")]
       AppError::TokioJoinError(_) => ErrorCode::Internal,
       #[cfg(feature = "bincode_error")]
@@ -253,6 +257,7 @@ impl AppError {
       AppError::InvalidContentType(_) => ErrorCode::InvalidContentType,
       AppError::InvalidPublishedOutline(_) => ErrorCode::InvalidPublishedOutline,
       AppError::InvalidFolderView(_) => ErrorCode::InvalidFolderView,
+      AppError::InvalidPageData(_) => ErrorCode::InvalidPageData,
       AppError::NotInviteeOfWorkspaceInvitation(_) => ErrorCode::NotInviteeOfWorkspaceInvitation,
       AppError::MissingView(_) => ErrorCode::MissingView,
       AppError::AccessRequestAlreadyExists { .. } => ErrorCode::AccessRequestAlreadyExists,
@@ -267,6 +272,7 @@ impl AppError {
       AppError::DecodeUpdateError(_) => ErrorCode::DecodeUpdateError,
       AppError::ApplyUpdateError(_) => ErrorCode::ApplyUpdateError,
       AppError::ActionTimeout(_) => ErrorCode::ActionTimeout,
+      AppError::InvalidBlock(_) => ErrorCode::InvalidBlock,
     }
   }
 }
@@ -280,6 +286,10 @@ impl From<reqwest::Error> for AppError {
 
     if error.is_timeout() {
       return AppError::RequestTimeout(error.to_string());
+    }
+
+    if error.is_request() {
+      return AppError::ServiceTemporaryUnavailable(error.to_string());
     }
 
     if let Some(cause) = error.source() {
@@ -308,7 +318,7 @@ impl From<reqwest::Error> for AppError {
       }
     }
 
-    AppError::Unhandled(error.to_string())
+    AppError::Internal(error.into())
   }
 }
 
@@ -434,6 +444,11 @@ pub enum ErrorCode {
   MailerError = 1059,
   LicenseError = 1060,
   AIMaxRequired = 1061,
+  InvalidPageData = 1062,
+  MemberNotFound = 1063,
+  InvalidBlock = 1064,
+  RequestTimeout = 1065,
+  AIResponseError = 1066,
 }
 
 impl ErrorCode {

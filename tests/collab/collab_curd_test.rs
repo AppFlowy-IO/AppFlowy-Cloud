@@ -12,8 +12,8 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::collab::util::{empty_document_editor, generate_random_string, test_encode_collab_v1};
+use client_api::process_response_data;
 use client_api_test::TestClient;
-use shared_entity::response::AppResponse;
 use uuid::Uuid;
 
 const WORKSPACE_ID: Uuid = Uuid::from_u128(70700);
@@ -134,11 +134,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     .await
     .unwrap();
 
-  let encoded_collab_from_server = AppResponse::<EncodedCollab>::from_response(resp)
-    .await
-    .unwrap()
-    .into_data()
-    .unwrap();
+  let encoded_collab_from_server = process_response_data::<EncodedCollab>(resp).await.unwrap();
   assert_eq!(encoded_collab, encoded_collab_from_server);
 }
 

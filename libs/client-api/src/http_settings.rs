@@ -2,11 +2,10 @@ use reqwest::Method;
 use tracing::{instrument, trace};
 
 use client_api_entity::AFWorkspaceSettings;
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 
 use crate::entity::AFWorkspaceSettingsChange;
-use crate::http::log_request_id;
-use crate::Client;
+use crate::{process_response_data, Client};
 
 impl Client {
   #[instrument(level = "info", skip_all, err)]
@@ -24,9 +23,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    let resp = AppResponse::<AFWorkspaceSettings>::from_response(resp).await?;
-    resp.into_data()
+    process_response_data::<AFWorkspaceSettings>(resp).await
   }
 
   #[instrument(level = "info", skip_all, err)]
@@ -47,8 +44,6 @@ impl Client {
       .json(&changes)
       .send()
       .await?;
-    log_request_id(&resp);
-    let resp = AppResponse::<AFWorkspaceSettings>::from_response(resp).await?;
-    resp.into_data()
+    process_response_data::<AFWorkspaceSettings>(resp).await
   }
 }

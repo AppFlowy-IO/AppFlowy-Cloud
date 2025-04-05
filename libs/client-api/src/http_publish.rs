@@ -1,4 +1,4 @@
-use crate::{log_request_id, Client};
+use crate::{process_response_data, process_response_error, Client};
 use bytes::Bytes;
 use client_api_entity::publish_dto::DuplicatePublishedPageResponse;
 use client_api_entity::workspace_dto::{PublishInfoView, PublishedView};
@@ -9,7 +9,7 @@ use client_api_entity::{
   UpdateDefaultPublishView,
 };
 use reqwest::Method;
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -30,10 +30,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<Vec<PublishInfoView>>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Vec<PublishInfoView>>(resp).await
   }
 
   /// Changes the namespace for the first non-original publish namespace
@@ -59,8 +56,7 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn get_workspace_publish_namespace(
@@ -76,10 +72,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<String>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<String>(resp).await
   }
 
   pub async fn patch_published_collabs(
@@ -94,8 +87,7 @@ impl Client {
       .json(patches)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn unpublish_collabs(
@@ -110,8 +102,7 @@ impl Client {
       .json(view_ids)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn create_comment_on_published_view(
@@ -133,8 +124,7 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn delete_comment_on_published_view(
@@ -154,8 +144,7 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn create_reaction_on_comment(
@@ -177,8 +166,7 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn delete_reaction_on_comment(
@@ -200,8 +188,7 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn set_default_publish_view(
@@ -219,8 +206,7 @@ impl Client {
       .json(&UpdateDefaultPublishView { view_id })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn delete_default_publish_view(
@@ -236,8 +222,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn get_default_publish_view_info(
@@ -253,10 +238,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<PublishInfo>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<PublishInfo>(resp).await
   }
 }
 
@@ -277,10 +259,7 @@ impl Client {
     };
 
     let resp = client.send().await?;
-    log_request_id(&resp);
-    AppResponse::<GlobalComments>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<GlobalComments>(resp).await
   }
 }
 
@@ -297,9 +276,7 @@ impl Client {
     );
 
     let resp = self.cloud_client.get(&url).send().await?;
-    AppResponse::<PublishInfo>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<PublishInfo>(resp).await
   }
 
   #[instrument(level = "debug", skip_all)]
@@ -319,10 +296,7 @@ impl Client {
       .await?
       .error_for_status()?;
 
-    log_request_id(&resp);
-    AppResponse::<PublishedView>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<PublishedView>(resp).await
   }
 
   #[instrument(level = "debug", skip_all)]
@@ -345,10 +319,7 @@ impl Client {
       .await?
       .error_for_status()?;
 
-    log_request_id(&resp);
-    AppResponse::<PublishInfoMeta<T>>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<PublishInfoMeta<T>>(resp).await
   }
 
   #[instrument(level = "debug", skip_all)]
@@ -376,9 +347,8 @@ impl Client {
       .send()
       .await?
       .error_for_status()?;
-    log_request_id(&resp);
 
-    AppResponse::<T>::from_response(resp).await?.into_data()
+    process_response_data::<T>(resp).await
   }
 
   #[instrument(level = "debug", skip_all)]
@@ -397,7 +367,6 @@ impl Client {
       self.base_url, publish_namespace, publish_name
     );
     let resp = self.cloud_client.get(&url).send().await?;
-    log_request_id(&resp);
     let bytes = resp.error_for_status()?.bytes().await?;
 
     if let Ok(app_err) = serde_json::from_slice::<AppResponseError>(&bytes) {
@@ -422,10 +391,7 @@ impl Client {
       .json(publish_duplicate)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<DuplicatePublishedPageResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<DuplicatePublishedPageResponse>(resp).await
   }
 
   pub async fn get_published_view_reactions(
@@ -445,9 +411,6 @@ impl Client {
       })
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<Reactions>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Reactions>(resp).await
   }
 }

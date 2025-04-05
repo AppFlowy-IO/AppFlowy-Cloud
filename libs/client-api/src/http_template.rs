@@ -6,10 +6,10 @@ use client_api_entity::{
   UpdateTemplateCreatorParams, UpdateTemplateParams,
 };
 use reqwest::Method;
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 
 fn template_api_prefix(base_url: &str) -> String {
   format!("{}/api/template-center", base_url)
@@ -56,9 +56,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<TemplateCategory>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateCategory>(resp).await
   }
 
   pub async fn get_template_categories(
@@ -76,9 +74,7 @@ impl Client {
       })
       .send()
       .await?;
-    AppResponse::<TemplateCategories>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateCategories>(resp).await
   }
 
   pub async fn get_template_category(
@@ -91,9 +87,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<TemplateCategory>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateCategory>(resp).await
   }
 
   pub async fn delete_template_category(&self, category_id: Uuid) -> Result<(), AppResponseError> {
@@ -103,7 +97,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn update_template_category(
@@ -119,9 +113,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<TemplateCategory>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateCategory>(resp).await
   }
 
   pub async fn create_template_creator(
@@ -142,9 +134,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<TemplateCreator>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateCreator>(resp).await
   }
 
   pub async fn get_template_creators(
@@ -160,9 +150,7 @@ impl Client {
       })
       .send()
       .await?;
-    AppResponse::<TemplateCreators>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateCreators>(resp).await
   }
 
   pub async fn get_template_creator(
@@ -175,9 +163,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<TemplateCreator>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateCreator>(resp).await
   }
 
   pub async fn delete_template_creator(&self, creator_id: Uuid) -> Result<(), AppResponseError> {
@@ -187,7 +173,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn update_template_creator(
@@ -209,9 +195,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<TemplateCreator>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateCreator>(resp).await
   }
 
   pub async fn create_template(
@@ -226,9 +210,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<Template>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Template>(resp).await
   }
 
   pub async fn get_template(
@@ -242,9 +224,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<TemplateWithPublishInfo>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<TemplateWithPublishInfo>(resp).await
   }
 
   pub async fn get_templates(
@@ -267,9 +247,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<Templates>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Templates>(resp).await
   }
 
   pub async fn update_template(
@@ -285,9 +263,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<Template>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Template>(resp).await
   }
 
   pub async fn delete_template(&self, view_id: Uuid) -> Result<(), AppResponseError> {
@@ -298,6 +274,6 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 }

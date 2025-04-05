@@ -1,6 +1,5 @@
-use crate::http::log_request_id;
 use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 
 use app_error::AppError;
 use async_trait::async_trait;
@@ -13,7 +12,7 @@ use client_api_entity::{CreateImportTask, CreateImportTaskResponse};
 
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{multipart, Body, Method};
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 use std::path::Path;
 
 use base64::engine::general_purpose::STANDARD;
@@ -42,10 +41,7 @@ impl Client {
       .json(&req)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<CreateUploadResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<CreateUploadResponse>(resp).await
   }
 
   /// Upload a part of a file. The part number should be 1-based.
@@ -79,10 +75,7 @@ impl Client {
       .body(body)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<UploadPartResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<UploadPartResponse>(resp).await
   }
 
   pub async fn complete_upload(
@@ -100,8 +93,7 @@ impl Client {
       .json(&req)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   /// Sends a POST request to import a file to the server.
@@ -163,7 +155,7 @@ impl Client {
       .header("X-Content-Length", metadata.len());
     let resp = builder.send().await?;
 
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   /// Creates an import task for a file and returns the import task response.
@@ -198,10 +190,7 @@ impl Client {
       .send()
       .await?;
 
-    log_request_id(&resp);
-    AppResponse::<CreateImportTaskResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<CreateImportTaskResponse>(resp).await
   }
 
   /// Uploads a file to a specified presigned URL obtained from the import task response.
@@ -249,9 +238,7 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<UserImportTask>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<UserImportTask>(resp).await
   }
 }
 

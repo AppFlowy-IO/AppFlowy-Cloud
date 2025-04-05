@@ -562,7 +562,6 @@ dependencies = [
  "bytes",
  "futures",
  "infra",
- "pin-project",
  "reqwest",
  "serde",
  "serde_json",

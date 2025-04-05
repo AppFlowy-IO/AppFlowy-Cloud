@@ -5,10 +5,10 @@ use client_api_entity::workspace_dto::{
 };
 use reqwest::Method;
 use serde_json::json;
-use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 
 impl Client {
   pub async fn create_workspace_page_view(
@@ -23,7 +23,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<Page>::from_response(resp).await?.into_data()
+    process_response_data::<Page>(resp).await
   }
 
   pub async fn favorite_page_view(
@@ -42,7 +42,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn move_workspace_page_view(
@@ -61,7 +61,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn move_workspace_page_view_to_trash(
@@ -79,7 +79,7 @@ impl Client {
       .json(&json!({}))
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn restore_workspace_page_view_from_trash(
@@ -97,7 +97,7 @@ impl Client {
       .json(&json!({}))
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn restore_all_workspace_page_views_from_trash(
@@ -114,7 +114,7 @@ impl Client {
       .json(&json!({}))
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn add_recent_pages(
@@ -132,7 +132,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn delete_workspace_page_view_from_trash(
@@ -149,7 +149,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn delete_all_workspace_page_views_from_trash(
@@ -166,7 +166,7 @@ impl Client {
       .json(&json!({}))
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn update_workspace_page_view(
@@ -185,7 +185,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn get_workspace_page_view(
@@ -202,9 +202,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<PageCollab>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<PageCollab>(resp).await
   }
 
   pub async fn publish_page(
@@ -223,7 +221,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn unpublish_page(
@@ -241,7 +239,7 @@ impl Client {
       .json(&json!({}))
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn create_space(
@@ -256,7 +254,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<Space>::from_response(resp).await?.into_data()
+    process_response_data::<Space>(resp).await
   }
 
   pub async fn update_space(
@@ -275,7 +273,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn append_block_to_page(
@@ -294,7 +292,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn create_database_view(
@@ -313,7 +311,7 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn duplicate_view_and_children(
@@ -332,6 +330,6 @@ impl Client {
       .json(params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 }

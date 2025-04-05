@@ -1,5 +1,5 @@
 use crate::http::log_request_id;
-use crate::Client;
+use crate::{process_response_data, process_response_error, Client};
 
 use app_error::AppError;
 use client_api_entity::chat_dto::{
@@ -37,8 +37,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   pub async fn update_chat_settings(
@@ -57,8 +56,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
   pub async fn get_chat_settings(
     &self,
@@ -74,10 +72,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatSettings>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<ChatSettings>(resp).await
   }
 
   /// Delete a chat for given chat_id
@@ -92,8 +87,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   /// Save a question message to a chat
@@ -113,10 +107,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatMessage>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<ChatMessage>(resp).await
   }
 
   /// save an answer message to a chat
@@ -136,10 +127,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatMessage>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<ChatMessage>(resp).await
   }
 
   pub async fn stream_answer_v2(
@@ -210,10 +198,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatMessage>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<ChatMessage>(resp).await
   }
 
   /// Update chat message content. It will override the content of the message.
@@ -234,8 +219,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    process_response_error(resp).await
   }
 
   /// Get related question for a chat message. The message_d should be the question's id
@@ -254,10 +238,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<RepeatedRelatedQuestion>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<RepeatedRelatedQuestion>(resp).await
   }
 
   /// Deprecated since v0.9.24. Return list of chat messages for a chat
@@ -292,9 +273,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<RepeatedChatMessage>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<RepeatedChatMessage>(resp).await
   }
 
   /// Return list of chat messages for a chat. Each message will have author_uuid as
@@ -330,9 +309,7 @@ impl Client {
       .await?
       .send()
       .await?;
-    AppResponse::<RepeatedChatMessageWithAuthorUuid>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<RepeatedChatMessageWithAuthorUuid>(resp).await
   }
 
   pub async fn get_question_message_from_answer_id(
@@ -352,9 +329,7 @@ impl Client {
       .query(&[("answer_message_id", answer_message_id)])
       .send()
       .await?;
-    AppResponse::<Option<ChatMessage>>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<Option<ChatMessage>>(resp).await
   }
 
   pub async fn calculate_similarity(
@@ -371,10 +346,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<SimilarityResponse>::from_response(resp)
-      .await?
-      .into_data()
+    process_response_data::<SimilarityResponse>(resp).await
   }
 }
 

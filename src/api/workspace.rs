@@ -856,12 +856,12 @@ async fn create_collab_handler(
     .can_index_workspace(&workspace_id)
     .await?
   {
-    if let Ok(text) = Document::open(collab).and_then(|doc| doc.to_plain_text(false, true)) {
+    if let Ok(paragraphs) = Document::open(collab).map(|doc| doc.paragraphs()) {
       let pending = UnindexedCollabTask::new(
         workspace_id,
         params.object_id,
         params.collab_type,
-        UnindexedData::Text(text),
+        UnindexedData::Paragraphs(paragraphs),
       );
       state
         .indexer_scheduler
@@ -958,8 +958,7 @@ async fn batch_create_collab_handler(
                 Ok(_) => {
                   match params.collab_type {
                     CollabType::Document => {
-                      let index_text =
-                        Document::open(collab).and_then(|doc| doc.to_plain_text(false, true));
+                      let index_text = Document::open(collab).map(|doc| doc.paragraphs());
                       Some((Some(index_text), params))
                     },
                     _ => {
@@ -1010,12 +1009,12 @@ async fn batch_create_collab_handler(
       .flat_map(|value| match std::mem::take(&mut value.0) {
         None => None,
         Some(text) => text
-          .map(|text| {
+          .map(|paragraphs| {
             UnindexedCollabTask::new(
               workspace_id,
               value.1.object_id,
               value.1.collab_type,
-              UnindexedData::Text(text),
+              UnindexedData::Paragraphs(paragraphs),
             )
           })
           .ok(),
@@ -1826,16 +1825,18 @@ async fn update_collab_handler(
             ))
           })?;
 
-        if let Ok(text) = Document::open(collab).and_then(|doc| doc.to_plain_text(false, true)) {
-          let pending = UnindexedCollabTask::new(
-            workspace_id,
-            params.object_id,
-            params.collab_type,
-            UnindexedData::Text(text),
-          );
-          state
-            .indexer_scheduler
-            .index_pending_collab_one(pending, true)?;
+        if let Ok(paragraphs) = Document::open(collab).map(|doc| doc.paragraphs()) {
+          if !paragraphs.is_empty() {
+            let pending = UnindexedCollabTask::new(
+              workspace_id,
+              params.object_id,
+              params.collab_type,
+              UnindexedData::Paragraphs(paragraphs),
+            );
+            state
+              .indexer_scheduler
+              .index_pending_collab_one(pending, true)?;
+          }
         }
       },
       _ => {

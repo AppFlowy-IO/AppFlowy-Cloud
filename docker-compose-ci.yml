@@ -35,7 +35,7 @@ services:
 
   postgres:
     restart: on-failure
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg15
     ports:
       - "5432:5432"
     healthcheck:

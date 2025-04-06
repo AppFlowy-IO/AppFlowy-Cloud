@@ -64,7 +64,7 @@ WHERE w.workspace_id = $1"#,
 struct Fragment {
   fragment_id: String,
   content_type: i32,
-  contents: String,
+  contents: Option<String>,
   embedding: Option<Vector>,
   metadata: serde_json::Value,
   fragment_index: i32,
@@ -100,9 +100,13 @@ pub async fn upsert_collab_embeddings(
 ) -> Result<(), sqlx::Error> {
   let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
   tracing::trace!(
-    "[Embedding] upsert {} {} fragments",
+    "[Embedding] upsert {} {} fragments, fragment ids: {:?}",
     object_id,
-    fragments.len()
+    fragments.len(),
+    fragments
+      .iter()
+      .map(|v| v.fragment_id.clone())
+      .collect::<Vec<_>>()
   );
   sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4::af_fragment_v3[])"#)
     .bind(*workspace_id)
@@ -112,6 +116,35 @@ pub async fn upsert_collab_embeddings(
     .execute(transaction.deref_mut())
     .await?;
   Ok(())
+}
+
+pub async fn get_collab_embedding_fragment_ids<'a, E>(
+  tx: E,
+  collab_ids: Vec<Uuid>,
+) -> Result<HashMap<Uuid, Vec<String>>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let records = sqlx::query!(
+    r#"
+        SELECT oid, fragment_id
+        FROM af_collab_embeddings
+        WHERE oid = ANY($1::uuid[])
+        "#,
+    &collab_ids,
+  )
+  .fetch_all(tx)
+  .await?;
+
+  let mut fragment_ids_by_oid = HashMap::new();
+  for record in records {
+    // If your record.oid is not a String, convert it as needed.
+    fragment_ids_by_oid
+      .entry(record.oid)
+      .or_insert_with(Vec::new)
+      .push(record.fragment_id);
+  }
+  Ok(fragment_ids_by_oid)
 }
 
 pub async fn stream_collabs_without_embeddings(

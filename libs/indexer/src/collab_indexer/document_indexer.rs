@@ -1,11 +1,10 @@
 use crate::collab_indexer::Indexer;
-use crate::vector::embedder::Embedder;
+use crate::vector::embedder::AFEmbedder;
 use crate::vector::open_ai::group_paragraphs_by_max_content_len;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_ai_client::dto::{
-  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
-};
+use appflowy_ai_client::dto::EmbeddingModel;
+use async_openai::types::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFormat};
 use async_trait::async_trait;
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
@@ -48,7 +47,7 @@ impl Indexer for DocumentIndexer {
 
   async fn embed(
     &self,
-    embedder: &Embedder,
+    embedder: &AFEmbedder,
     mut content: Vec<AFCollabEmbeddedChunk>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
     if content.is_empty() {
@@ -59,14 +58,16 @@ impl Indexer for DocumentIndexer {
       .iter()
       .map(|fragment| fragment.content.clone().unwrap_or_default())
       .collect();
-    let resp = embedder
-      .async_embed(EmbeddingRequest {
-        input: EmbeddingInput::StringArray(contents),
-        model: embedder.model().name().to_string(),
-        encoding_format: EmbeddingEncodingFormat::Float,
-        dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
-      })
-      .await?;
+
+    let request = CreateEmbeddingRequestArgs::default()
+      .model(embedder.model().name())
+      .input(EmbeddingInput::StringArray(contents))
+      .encoding_format(EncodingFormat::Float)
+      .dimensions(EmbeddingModel::TextEmbedding3Small.default_dimensions())
+      .build()
+      .map_err(|err| AppError::Unhandled(err.to_string()))?;
+
+    let resp = embedder.async_embed(request).await?;
 
     trace!(
       "[Embedding] request {} embeddings, received {} embeddings",
@@ -77,21 +78,12 @@ impl Indexer for DocumentIndexer {
     for embedding in resp.data {
       let param = &mut content[embedding.index as usize];
       if param.content.is_some() {
-        // we only set the embedding if the content was not marked as unchanged
-        let embedding: Vec<f32> = match embedding.embedding {
-          EmbeddingOutput::Float(embedding) => embedding.into_iter().map(|f| f as f32).collect(),
-          EmbeddingOutput::Base64(_) => {
-            return Err(AppError::OpenError(
-              "Unexpected base64 encoding".to_string(),
-            ))
-          },
-        };
-        param.embedding = Some(embedding);
+        param.embedding = Some(embedding.embedding);
       }
     }
 
     Ok(Some(AFCollabEmbeddings {
-      tokens_consumed: resp.usage.total_tokens as u32,
+      tokens_consumed: resp.usage.total_tokens,
       params: content,
     }))
   }

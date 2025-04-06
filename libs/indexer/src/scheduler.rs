@@ -2,10 +2,11 @@ use crate::collab_indexer::IndexerProvider;
 use crate::entity::EmbeddingRecord;
 use crate::metrics::EmbeddingMetrics;
 use crate::queue::add_background_embed_task;
-use crate::vector::embedder::Embedder;
+use crate::vector::embedder::AFEmbedder;
 use crate::vector::open_ai;
 use app_error::AppError;
-use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
+use async_openai::config::{AzureConfig, OpenAIConfig};
+use async_openai::types::{CreateEmbeddingRequest, CreateEmbeddingResponse};
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
@@ -16,7 +17,6 @@ use database::index::{
 use database::workspace::select_workspace_settings;
 use infra::env_util::get_env_var;
 use redis::aio::ConnectionManager;
-use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::cmp::max;
@@ -48,7 +48,8 @@ pub struct IndexerScheduler {
 #[derive(Debug)]
 pub struct IndexerConfiguration {
   pub enable: bool,
-  pub openai_api_key: Secret<String>,
+  pub open_ai_config: Option<OpenAIConfig>,
+  pub azure_ai_config: Option<AzureConfig>,
   /// High watermark for the number of embeddings that can be buffered before being written to the database.
   pub embedding_buffer_size: usize,
 }
@@ -114,39 +115,36 @@ impl IndexerScheduler {
   }
 
   fn index_enabled(&self) -> bool {
-    // if indexing is disabled, return false
-    if !self.config.enable {
-      return false;
-    }
-
-    // if openai api key is empty, return false
-    if self.config.openai_api_key.expose_secret().is_empty() {
-      return false;
-    }
-
-    true
+    self.config.enable
+      && (self.config.open_ai_config.is_some() || self.config.azure_ai_config.is_some())
   }
 
   pub fn is_indexing_enabled(&self, collab_type: CollabType) -> bool {
     self.indexer_provider.is_indexing_enabled(collab_type)
   }
 
-  pub(crate) fn create_embedder(&self) -> Result<Embedder, AppError> {
-    if self.config.openai_api_key.expose_secret().is_empty() {
-      return Err(AppError::AIServiceUnavailable(
-        "OpenAI API key is empty".to_string(),
-      ));
+  pub(crate) fn create_embedder(&self) -> Result<AFEmbedder, AppError> {
+    if let Some(config) = &self.config.azure_ai_config {
+      return Ok(AFEmbedder::AzureOpenAI(open_ai::AzureOpenAIEmbedder::new(
+        config.clone(),
+      )));
     }
 
-    Ok(Embedder::OpenAI(open_ai::Embedder::new(
-      self.config.openai_api_key.expose_secret().clone(),
-    )))
+    if let Some(config) = &self.config.open_ai_config {
+      return Ok(AFEmbedder::OpenAI(open_ai::OpenAIEmbedder::new(
+        config.clone(),
+      )));
+    }
+
+    Err(AppError::AIServiceUnavailable(
+      "No embedder available".to_string(),
+    ))
   }
 
   pub async fn create_search_embeddings(
     &self,
-    request: EmbeddingRequest,
-  ) -> Result<OpenAIEmbeddingResponse, AppError> {
+    request: CreateEmbeddingRequest,
+  ) -> Result<CreateEmbeddingResponse, AppError> {
     let embedder = self.create_embedder()?;
     let embeddings = embedder.async_embed(request).await?;
     Ok(embeddings)
@@ -327,14 +325,12 @@ async fn generate_embeddings_loop(
     match embedder {
       Ok(embedder) => {
         let params: Vec<_> = records.iter().map(|r| r.object_id).collect();
-        let existing_embeddings =
-          match get_collab_embedding_fragment_ids(&scheduler.pg_pool, params).await {
-            Ok(existing_embeddings) => existing_embeddings,
-            Err(err) => {
-              error!("[Embedding] failed to get existing embeddings: {}", err);
-              Default::default()
-            },
-          };
+        let existing_embeddings = get_collab_embedding_fragment_ids(&scheduler.pg_pool, params)
+          .await
+          .unwrap_or_else(|err| {
+            error!("[Embedding] failed to get existing embeddings: {}", err);
+            Default::default()
+          });
         let mut join_set = JoinSet::new();
         for record in records {
           if let Some(indexer) = indexer_provider.indexer_for(record.collab_type) {

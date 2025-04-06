@@ -10,10 +10,9 @@ use indexer::queue::{
 };
 use indexer::scheduler::{spawn_pg_write_embeddings, UnindexedCollabTask, UnindexedData};
 use indexer::thread_pool::ThreadPoolNoAbort;
-use indexer::vector::embedder::Embedder;
+use indexer::vector::embedder::{AFEmbedder, AzureConfig, OpenAIConfig};
 use indexer::vector::open_ai;
 use redis::aio::ConnectionManager;
-use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -25,7 +24,8 @@ use tracing::{error, info, trace, warn};
 
 pub struct BackgroundIndexerConfig {
   pub enable: bool,
-  pub open_api_key: Secret<String>,
+  pub open_ai_config: Option<OpenAIConfig>,
+  pub azure_ai_config: Option<AzureConfig>,
   pub tick_interval_secs: u64,
 }
 
@@ -41,7 +41,7 @@ pub async fn run_background_indexer(
     return;
   }
 
-  if config.open_api_key.expose_secret().is_empty() {
+  if config.open_ai_config.is_none() && config.azure_ai_config.is_none() {
     error!("OpenAI API key is not set. Stop background indexer");
     return;
   }
@@ -160,50 +160,51 @@ async fn process_upcoming_tasks(
           let mut join_set = JoinSet::new();
           for task in tasks {
             if let Some(indexer) = indexer_provider.indexer_for(task.collab_type) {
-              let embedder = create_embedder(&config);
-              trace!(
-                "[Background Embedding] processing task: {}, content:{:?}, collab_type: {}",
-                task.object_id,
-                task.data,
-                task.collab_type
-              );
-              let paragraphs = match task.data {
-                UnindexedData::Paragraphs(paragraphs) => paragraphs,
-                UnindexedData::Text(text) => text.split('\n').map(|s| s.to_string()).collect(),
-              };
-              let mut chunks = match indexer.create_embedded_chunks_from_text(
-                task.object_id,
-                paragraphs,
-                embedder.model(),
-              ) {
-                Ok(chunks) => chunks,
-                Err(err) => {
-                  warn!(
+              if let Ok(embedder) = create_embedder(&config) {
+                trace!(
+                  "[Background Embedding] processing task: {}, content:{:?}, collab_type: {}",
+                  task.object_id,
+                  task.data,
+                  task.collab_type
+                );
+                let paragraphs = match task.data {
+                  UnindexedData::Paragraphs(paragraphs) => paragraphs,
+                  UnindexedData::Text(text) => text.split('\n').map(|s| s.to_string()).collect(),
+                };
+                let mut chunks = match indexer.create_embedded_chunks_from_text(
+                  task.object_id,
+                  paragraphs,
+                  embedder.model(),
+                ) {
+                  Ok(chunks) => chunks,
+                  Err(err) => {
+                    warn!(
                     "[Background Embedding] failed to create embedded chunks for task: {}, error: {:?}",
                     task.object_id,
                     err
                   );
-                  continue;
-                },
-              };
-              if let Some(existing_chunks) = existing_embeddings.get(&task.object_id) {
-                for chunk in chunks.iter_mut() {
-                  if existing_chunks.contains(&chunk.fragment_id) {
-                    chunk.content = None; // Clear content to mark unchanged chunk
-                    chunk.embedding = None;
+                    continue;
+                  },
+                };
+                if let Some(existing_chunks) = existing_embeddings.get(&task.object_id) {
+                  for chunk in chunks.iter_mut() {
+                    if existing_chunks.contains(&chunk.fragment_id) {
+                      chunk.content = None; // Clear content to mark unchanged chunk
+                      chunk.embedding = None;
+                    }
                   }
                 }
+                join_set.spawn(async move {
+                  let embeddings = indexer.embed(&embedder, chunks).await.ok()?;
+                  embeddings.map(|embeddings| EmbeddingRecord {
+                    workspace_id: task.workspace_id,
+                    object_id: task.object_id,
+                    collab_type: task.collab_type,
+                    tokens_used: embeddings.tokens_consumed,
+                    contents: embeddings.params,
+                  })
+                });
               }
-              join_set.spawn(async move {
-                let embeddings = indexer.embed(&embedder, chunks).await.ok()?;
-                embeddings.map(|embeddings| EmbeddingRecord {
-                  workspace_id: task.workspace_id,
-                  object_id: task.object_id,
-                  collab_type: task.collab_type,
-                  tokens_used: embeddings.tokens_consumed,
-                  contents: embeddings.params,
-                })
-              });
             }
           }
 
@@ -254,8 +255,20 @@ async fn process_upcoming_tasks(
   }
 }
 
-fn create_embedder(config: &BackgroundIndexerConfig) -> Embedder {
-  Embedder::OpenAI(open_ai::Embedder::new(
-    config.open_api_key.expose_secret().clone(),
+fn create_embedder(config: &BackgroundIndexerConfig) -> Result<AFEmbedder, AppError> {
+  if let Some(config) = &config.azure_ai_config {
+    return Ok(AFEmbedder::AzureOpenAI(open_ai::AzureOpenAIEmbedder::new(
+      config.clone(),
+    )));
+  }
+
+  if let Some(config) = &config.open_ai_config {
+    return Ok(AFEmbedder::OpenAI(open_ai::OpenAIEmbedder::new(
+      config.clone(),
+    )));
+  }
+
+  Err(AppError::AIServiceUnavailable(
+    "No embedder available".to_string(),
   ))
 }

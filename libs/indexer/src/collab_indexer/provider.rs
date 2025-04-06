@@ -1,5 +1,5 @@
 use crate::collab_indexer::DocumentIndexer;
-use crate::vector::embedder::Embedder;
+use crate::vector::embedder::AFEmbedder;
 use app_error::AppError;
 use appflowy_ai_client::dto::EmbeddingModel;
 use async_trait::async_trait;
@@ -29,7 +29,7 @@ pub trait Indexer: Send + Sync {
 
   async fn embed(
     &self,
-    embedder: &Embedder,
+    embedder: &AFEmbedder,
     content: Vec<AFCollabEmbeddedChunk>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError>;
 }

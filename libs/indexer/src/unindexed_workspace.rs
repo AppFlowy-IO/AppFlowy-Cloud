@@ -1,7 +1,7 @@
 use crate::collab_indexer::IndexerProvider;
 use crate::entity::{EmbeddingRecord, UnindexedCollab};
 use crate::scheduler::{batch_insert_records, IndexerScheduler};
-use crate::vector::embedder::Embedder;
+use crate::vector::embedder::AFEmbedder;
 use appflowy_ai_client::dto::EmbeddingModel;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
@@ -157,7 +157,7 @@ async fn stream_unindexed_collabs(
     .boxed()
 }
 async fn create_embeddings(
-  embedder: Embedder,
+  embedder: AFEmbedder,
   indexer_provider: &Arc<IndexerProvider>,
   unindexed_records: Vec<UnindexedCollab>,
   existing_embeddings: HashMap<Uuid, Vec<String>>,

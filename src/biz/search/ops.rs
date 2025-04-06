@@ -4,9 +4,7 @@ use crate::{
   api::metrics::RequestMetrics, biz::collab::folder_view::private_space_and_trash_view_ids,
 };
 use app_error::AppError;
-use appflowy_ai_client::dto::{
-  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingModel, EmbeddingOutput, EmbeddingRequest,
-};
+use appflowy_ai_client::dto::EmbeddingModel;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab_folder::{Folder, View};
 use database::collab::GetCollabOrigin;
@@ -20,6 +18,7 @@ use shared_entity::dto::search_dto::{
 use sqlx::PgPool;
 
 use indexer::scheduler::IndexerScheduler;
+use indexer::vector::embedder::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFormat};
 use uuid::Uuid;
 
 static MAX_SEARCH_DEPTH: i32 = 10;
@@ -80,15 +79,18 @@ pub async fn search_document(
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppError> {
-  let embeddings = indexer_scheduler
-    .create_search_embeddings(EmbeddingRequest {
-      input: EmbeddingInput::String(request.query.clone()),
-      model: EmbeddingModel::TextEmbedding3Small.to_string(),
-      encoding_format: EmbeddingEncodingFormat::Float,
-      dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
-    })
+  let embeddings_request = CreateEmbeddingRequestArgs::default()
+    .model(EmbeddingModel::TextEmbedding3Small.to_string())
+    .input(EmbeddingInput::String(request.query.clone()))
+    .encoding_format(EncodingFormat::Float)
+    .dimensions(EmbeddingModel::TextEmbedding3Small.default_dimensions())
+    .build()
+    .map_err(|err| AppError::Unhandled(err.to_string()))?;
+
+  let mut embeddings_resp = indexer_scheduler
+    .create_search_embeddings(embeddings_request)
     .await?;
-  let total_tokens = embeddings.usage.total_tokens as u32;
+  let total_tokens = embeddings_resp.usage.total_tokens;
   metrics.record_search_tokens_used(&workspace_uuid, total_tokens);
   tracing::info!(
     "workspace {} OpenAI API search tokens used: {}",
@@ -96,18 +98,10 @@ pub async fn search_document(
     total_tokens
   );
 
-  let embedding = embeddings
+  let embedding = embeddings_resp
     .data
-    .first()
+    .pop()
     .ok_or_else(|| AppError::Internal(anyhow::anyhow!("OpenAI returned no embeddings")))?;
-  let embedding = match &embedding.embedding {
-    EmbeddingOutput::Float(vector) => vector.iter().map(|&v| v as f32).collect(),
-    EmbeddingOutput::Base64(_) => {
-      return Err(AppError::Internal(anyhow::anyhow!(
-        "OpenAI returned embeddings in unsupported format"
-      )))
-    },
-  };
 
   let folder = get_latest_collab_folder(
     collab_storage,
@@ -133,7 +127,7 @@ pub async fn search_document(
       workspace_id: workspace_uuid,
       limit: request.limit.unwrap_or(10) as i32,
       preview: request.preview_size.unwrap_or(500) as i32,
-      embedding,
+      embedding: embedding.embedding,
       searchable_view_ids: searchable_view_ids.into_iter().collect(),
     },
     total_tokens,

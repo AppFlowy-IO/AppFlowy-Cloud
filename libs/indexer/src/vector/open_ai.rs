@@ -1,9 +1,7 @@
-use crate::vector::rest::check_ureq_response;
-use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_ai_client::dto::{EmbeddingRequest, OpenAIEmbeddingResponse};
-use serde::de::DeserializeOwned;
-use std::time::Duration;
+use async_openai::config::{AzureConfig, Config, OpenAIConfig};
+use async_openai::types::{CreateEmbeddingRequest, CreateEmbeddingResponse};
+use async_openai::Client;
 use tiktoken_rs::CoreBPE;
 
 pub const OPENAI_EMBEDDINGS_URL: &str = "https://api.openai.com/v1/embeddings";
@@ -11,98 +9,42 @@ pub const OPENAI_EMBEDDINGS_URL: &str = "https://api.openai.com/v1/embeddings";
 pub const REQUEST_PARALLELISM: usize = 40;
 
 #[derive(Debug, Clone)]
-pub struct Embedder {
-  bearer: String,
-  sync_client: ureq::Agent,
-  async_client: reqwest::Client,
+pub struct OpenAIEmbedder {
+  pub(crate) client: Client<OpenAIConfig>,
 }
 
-impl Embedder {
-  pub fn new(api_key: String) -> Self {
-    let bearer = format!("Bearer {api_key}");
-    let sync_client = ureq::AgentBuilder::new()
-      .max_idle_connections(REQUEST_PARALLELISM * 2)
-      .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
-      .build();
+impl OpenAIEmbedder {
+  pub fn new(config: OpenAIConfig) -> Self {
+    let client = Client::with_config(config);
 
-    let async_client = reqwest::Client::builder().build().unwrap();
-
-    Self {
-      bearer,
-      sync_client,
-      async_client,
-    }
-  }
-
-  pub fn embed(&self, params: EmbeddingRequest) -> Result<OpenAIEmbeddingResponse, AppError> {
-    for attempt in 0..3 {
-      let request = self
-        .sync_client
-        .post(OPENAI_EMBEDDINGS_URL)
-        .set("Authorization", &self.bearer)
-        .set("Content-Type", "application/json");
-
-      let result = check_ureq_response(request.send_json(&params));
-      let retry_duration = match result {
-        Ok(response) => {
-          let data = from_ureq_response::<OpenAIEmbeddingResponse>(response)?;
-          return Ok(data);
-        },
-        Err(retry) => retry.into_duration(attempt),
-      }
-      .map_err(|err| AppError::Internal(err.into()))?;
-      let retry_duration = retry_duration.min(Duration::from_secs(10));
-      std::thread::sleep(retry_duration);
-    }
-
-    Err(AppError::Internal(anyhow!(
-      "Failed to generate embeddings after 3 attempts"
-    )))
-  }
-
-  pub async fn async_embed(
-    &self,
-    params: EmbeddingRequest,
-  ) -> Result<OpenAIEmbeddingResponse, AppError> {
-    let request = self
-      .async_client
-      .post(OPENAI_EMBEDDINGS_URL)
-      .header("Authorization", &self.bearer)
-      .header("Content-Type", "application/json");
-
-    let result = request.json(&params).send().await?;
-    let response = from_response::<OpenAIEmbeddingResponse>(result).await?;
-    Ok(response)
+    Self { client }
   }
 }
 
-pub fn from_ureq_response<T>(resp: ureq::Response) -> Result<T, anyhow::Error>
-where
-  T: DeserializeOwned,
-{
-  let status_code = resp.status();
-  if status_code != 200 {
-    let body = resp.into_string()?;
-    anyhow::bail!("error code: {}, {}", status_code, body)
-  }
-
-  let resp = resp.into_json()?;
-  Ok(resp)
+#[derive(Debug, Clone)]
+pub struct AzureOpenAIEmbedder {
+  pub(crate) client: Client<AzureConfig>,
 }
 
-pub async fn from_response<T>(resp: reqwest::Response) -> Result<T, anyhow::Error>
-where
-  T: DeserializeOwned,
-{
-  let status_code = resp.status();
-  if status_code != 200 {
-    let body = resp.text().await?;
-    anyhow::bail!("error code: {}, {}", status_code, body)
+impl AzureOpenAIEmbedder {
+  pub fn new(config: AzureConfig) -> Self {
+    let client = Client::with_config(config);
+    Self { client }
   }
-
-  let resp = resp.json().await?;
-  Ok(resp)
 }
+
+pub async fn async_embed<C: Config>(
+  client: &Client<C>,
+  request: CreateEmbeddingRequest,
+) -> Result<CreateEmbeddingResponse, AppError> {
+  let response = client
+    .embeddings()
+    .create(request)
+    .await
+    .map_err(|err| AppError::Unhandled(err.to_string()))?;
+  Ok(response)
+}
+
 /// ## Execution Time Comparison Results
 ///
 /// The following results were observed when running `execution_time_comparison_tests`:

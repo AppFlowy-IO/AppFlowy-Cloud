@@ -220,69 +220,6 @@ pub struct TranslateRowResponse {
   pub items: Vec<HashMap<String, String>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(untagged)]
-pub enum EmbeddingInput {
-  /// The string that will be turned into an embedding.
-  String(String),
-  /// The array of strings that will be turned into an embedding.
-  StringArray(Vec<String>),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(untagged)]
-pub enum EmbeddingOutput {
-  Float(Vec<f64>),
-  Base64(String),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Embedding {
-  /// An integer representing the index of the embedding in the list of embeddings.
-  pub index: i32,
-  /// The embedding value, which is an instance of `EmbeddingOutput`.
-  pub embedding: EmbeddingOutput,
-}
-
-/// https://platform.openai.com/docs/api-reference/embeddings
-#[derive(Serialize, Deserialize, Debug)]
-pub struct OpenAIEmbeddingResponse {
-  /// A string that is always set to "embedding".
-  pub object: String,
-  /// A list of `Embedding` objects.
-  pub data: Vec<Embedding>,
-  /// A string representing the model used to generate the embeddings.
-  pub model: String,
-  /// An integer representing the total number of tokens used.
-  pub usage: EmbeddingUsage,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct EmbeddingUsage {
-  #[serde(default)]
-  pub prompt_tokens: i32,
-  pub total_tokens: i32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum EmbeddingEncodingFormat {
-  Float,
-  Base64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct EmbeddingRequest {
-  /// An instance of `EmbeddingInput` containing the data to be embedded.
-  pub input: EmbeddingInput,
-  /// A string representing the model to use for generating embeddings.
-  pub model: String,
-  /// An instance of `EmbeddingEncodingFormat` representing the format of the embedding.
-  pub encoding_format: EmbeddingEncodingFormat,
-  /// An integer representing the number of dimensions for the embedding.
-  pub dimensions: i32,
-}
-
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum EmbeddingModel {
   #[serde(rename = "text-embedding-3-small")]
@@ -310,7 +247,7 @@ impl EmbeddingModel {
     }
   }
 
-  pub fn default_dimensions(&self) -> i32 {
+  pub fn default_dimensions(&self) -> u32 {
     match self {
       EmbeddingModel::TextEmbeddingAda002 => 1536,
       EmbeddingModel::TextEmbedding3Large => 3072,

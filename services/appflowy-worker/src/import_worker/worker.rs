@@ -1003,7 +1003,7 @@ async fn process_unzip_file(
       Ok(bytes) => {
         if let Err(err) = redis_client
           .set_ex::<String, Vec<u8>, Value>(
-            encode_collab_key(&w_database_id.to_string()),
+            encode_collab_key(w_database_id.to_string()),
             bytes,
             2592000, // WorkspaceDatabase => 1 month
           )
@@ -1186,7 +1186,7 @@ async fn process_unzip_file(
   });
 
   if result.is_err() {
-    let _: RedisResult<Value> = redis_client.del(encode_collab_key(&w_database_id)).await;
+    let _: RedisResult<Value> = redis_client.del(encode_collab_key(w_database_id)).await;
     let _: RedisResult<Value> = redis_client
       .del(encode_collab_key(&import_task.workspace_id))
       .await;

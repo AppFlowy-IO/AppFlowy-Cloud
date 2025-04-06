@@ -128,7 +128,7 @@ fn split_text_into_chunks(
     if seen.insert(fragment_id.clone()) {
       chunks.push(AFCollabEmbeddedChunk {
         fragment_id,
-        object_id: object_id.clone(),
+        object_id,
         content_type: EmbeddingContentType::PlainText,
         content: Some(content),
         embedding: None,

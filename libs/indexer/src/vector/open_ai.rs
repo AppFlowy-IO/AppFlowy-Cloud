@@ -270,7 +270,7 @@ mod tests {
     let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
     assert_eq!(params.len(), 0);
 
-    let params = group_paragraphs_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let params = group_paragraphs_by_max_content_len(params, max_tokens);
     assert_eq!(params.len(), 0);
   }
 
@@ -286,7 +286,7 @@ mod tests {
       assert_eq!(param, emoji);
     }
 
-    let params = group_paragraphs_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let params = group_paragraphs_by_max_content_len(params, max_tokens);
     for (param, emoji) in params.iter().zip(emojis.iter()) {
       assert_eq!(param, emoji);
     }
@@ -304,7 +304,7 @@ mod tests {
     let reconstructed_content = params.join("");
     assert_eq!(reconstructed_content, content);
 
-    let params = group_paragraphs_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let params = group_paragraphs_by_max_content_len(params, max_tokens);
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
   }
@@ -334,7 +334,7 @@ mod tests {
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
 
-    let params = group_paragraphs_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let params = group_paragraphs_by_max_content_len(params, max_tokens);
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
   }
@@ -352,7 +352,7 @@ mod tests {
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
 
-    let params = group_paragraphs_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let params = group_paragraphs_by_max_content_len(params, max_tokens);
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
   }
@@ -366,7 +366,7 @@ mod tests {
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
 
-    let params = group_paragraphs_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let params = group_paragraphs_by_max_content_len(params, max_tokens);
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
   }
@@ -380,7 +380,7 @@ mod tests {
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
 
-    let params = group_paragraphs_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let params = group_paragraphs_by_max_content_len(params, max_tokens);
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
   }

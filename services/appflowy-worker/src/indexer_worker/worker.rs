@@ -159,7 +159,7 @@ async fn process_upcoming_tasks(
             .unwrap_or_default();
           let mut join_set = JoinSet::new();
           for task in tasks {
-            if let Some(indexer) = indexer_provider.indexer_for(task.collab_type.clone()) {
+            if let Some(indexer) = indexer_provider.indexer_for(task.collab_type) {
               let embedder = create_embedder(&config);
               trace!(
                 "[Background Embedding] processing task: {}, content:{:?}, collab_type: {}",
@@ -172,7 +172,7 @@ async fn process_upcoming_tasks(
                 UnindexedData::Text(text) => text.split('\n').map(|s| s.to_string()).collect(),
               };
               let mut chunks = match indexer.create_embedded_chunks_from_text(
-                task.object_id.clone(),
+                task.object_id,
                 paragraphs,
                 embedder.model(),
               ) {

@@ -326,7 +326,7 @@ async fn generate_embeddings_loop(
     let embedder = scheduler.create_embedder();
     match embedder {
       Ok(embedder) => {
-        let params: Vec<_> = records.iter().map(|r| r.object_id.clone()).collect();
+        let params: Vec<_> = records.iter().map(|r| r.object_id).collect();
         let existing_embeddings =
           match get_collab_embedding_fragment_ids(&scheduler.pg_pool, params).await {
             Ok(existing_embeddings) => existing_embeddings,
@@ -345,7 +345,7 @@ async fn generate_embeddings_loop(
             };
             let embedder = embedder.clone();
             match indexer.create_embedded_chunks_from_text(
-              record.object_id.clone(),
+              record.object_id,
               paragraphs,
               embedder.model(),
             ) {

@@ -76,7 +76,7 @@ async fn index_then_write_embedding_to_disk(
     let start = Instant::now();
     let object_ids = unindexed_collabs
       .iter()
-      .map(|v| v.object_id.clone())
+      .map(|v| v.object_id)
       .collect::<Vec<_>>();
     match get_collab_embedding_fragment_ids(&scheduler.pg_pool, object_ids).await {
       Ok(existing_embeddings) => {
@@ -175,7 +175,7 @@ async fn create_embeddings(
   for record in records {
     let indexer_provider = indexer_provider.clone();
     let embedder = embedder.clone();
-    if let Some(indexer) = indexer_provider.indexer_for(record.collab_type.clone()) {
+    if let Some(indexer) = indexer_provider.indexer_for(record.collab_type) {
       join_set.spawn(async move {
         match indexer.embed(&embedder, record.contents).await {
           Ok(embeddings) => embeddings.map(|embeddings| EmbeddingRecord {

@@ -1888,7 +1888,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=80d1c6147d1139289c2eaadab40557cc86c0f4b6#80d1c6147d1139289c2eaadab40557cc86c0f4b6"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b#3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1913,7 +1913,7 @@ dependencies = [
 [[package]]
 name = "collab-database"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=80d1c6147d1139289c2eaadab40557cc86c0f4b6#80d1c6147d1139289c2eaadab40557cc86c0f4b6"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b#3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1953,7 +1953,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=80d1c6147d1139289c2eaadab40557cc86c0f4b6#80d1c6147d1139289c2eaadab40557cc86c0f4b6"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b#3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1974,7 +1974,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=80d1c6147d1139289c2eaadab40557cc86c0f4b6#80d1c6147d1139289c2eaadab40557cc86c0f4b6"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b#3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1994,7 +1994,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=80d1c6147d1139289c2eaadab40557cc86c0f4b6#80d1c6147d1139289c2eaadab40557cc86c0f4b6"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b#3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2016,7 +2016,7 @@ dependencies = [
 [[package]]
 name = "collab-importer"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=80d1c6147d1139289c2eaadab40557cc86c0f4b6#80d1c6147d1139289c2eaadab40557cc86c0f4b6"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b#3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -2124,7 +2124,7 @@ dependencies = [
 [[package]]
 name = "collab-user"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=80d1c6147d1139289c2eaadab40557cc86c0f4b6#80d1c6147d1139289c2eaadab40557cc86c0f4b6"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b#3b1deca704cc1d8ae4fdc9cb053d7da824d0b85b"
 dependencies = [
  "anyhow",
  "collab",
@@ -3828,8 +3828,6 @@ dependencies = [
  "collab",
  "collab-document",
  "collab-entity",
- "collab-folder",
- "collab-stream",
  "database",
  "database-entity",
  "futures-util",
@@ -3846,7 +3844,7 @@ dependencies = [
  "tiktoken-rs",
  "tokio",
  "tracing",
- "unicode-segmentation",
+ "twox-hash",
  "ureq",
  "uuid",
 ]
@@ -7410,6 +7408,15 @@ dependencies = [
  "sha1",
  "thiserror 2.0.9",
  "utf-8",
+]
+
+[[package]]
+name = "twox-hash"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7b17f197b3050ba473acf9181f7b1d3b66d1cf7356c6cc57886662276e65908"
+dependencies = [
+ "rand 0.8.5",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 use crate::collab_indexer::Indexer;
 use crate::vector::embedder::Embedder;
-use crate::vector::open_ai::split_text_by_max_content_len;
+use crate::vector::open_ai::group_paragraphs_by_max_content_len;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::{
@@ -9,11 +9,11 @@ use appflowy_ai_client::dto::{
 use async_trait::async_trait;
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
-use collab_document::error::DocumentError;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
 use serde_json::json;
-use tracing::trace;
+use tracing::{debug, trace};
+use twox_hash::xxhash64::Hasher;
 use uuid::Uuid;
 
 pub struct DocumentIndexer;
@@ -23,7 +23,7 @@ impl Indexer for DocumentIndexer {
   fn create_embedded_chunks_from_collab(
     &self,
     collab: &Collab,
-    embedding_model: EmbeddingModel,
+    model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
     let object_id = collab.object_id().parse()?;
     let document = DocumentBody::from_collab(collab).ok_or_else(|| {
@@ -33,29 +33,20 @@ impl Indexer for DocumentIndexer {
       )
     })?;
 
-    let result = document.to_plain_text(collab.transact(), false, true);
-    match result {
-      Ok(content) => self.create_embedded_chunks_from_text(object_id, content, embedding_model),
-      Err(err) => {
-        if matches!(err, DocumentError::NoRequiredData) {
-          Ok(vec![])
-        } else {
-          Err(AppError::Internal(err.into()))
-        }
-      },
-    }
+    let paragraphs = document.paragraphs(collab.transact());
+    self.create_embedded_chunks_from_text(object_id, paragraphs, model)
   }
 
   fn create_embedded_chunks_from_text(
     &self,
     object_id: Uuid,
-    text: String,
+    paragraphs: Vec<String>,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
-    split_text_into_chunks(object_id, text, CollabType::Document, &model)
+    split_text_into_chunks(object_id, paragraphs, CollabType::Document, model)
   }
 
-  fn embed(
+  async fn embed(
     &self,
     embedder: &Embedder,
     mut content: Vec<AFCollabEmbeddedChunk>,
@@ -66,14 +57,16 @@ impl Indexer for DocumentIndexer {
 
     let contents: Vec<_> = content
       .iter()
-      .map(|fragment| fragment.content.clone())
+      .map(|fragment| fragment.content.clone().unwrap_or_default())
       .collect();
-    let resp = embedder.embed(EmbeddingRequest {
-      input: EmbeddingInput::StringArray(contents),
-      model: embedder.model().name().to_string(),
-      encoding_format: EmbeddingEncodingFormat::Float,
-      dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
-    })?;
+    let resp = embedder
+      .async_embed(EmbeddingRequest {
+        input: EmbeddingInput::StringArray(contents),
+        model: embedder.model().name().to_string(),
+        encoding_format: EmbeddingEncodingFormat::Float,
+        dimensions: EmbeddingModel::TextEmbedding3Small.default_dimensions(),
+      })
+      .await?;
 
     trace!(
       "[Embedding] request {} embeddings, received {} embeddings",
@@ -83,15 +76,18 @@ impl Indexer for DocumentIndexer {
 
     for embedding in resp.data {
       let param = &mut content[embedding.index as usize];
-      let embedding: Vec<f32> = match embedding.embedding {
-        EmbeddingOutput::Float(embedding) => embedding.into_iter().map(|f| f as f32).collect(),
-        EmbeddingOutput::Base64(_) => {
-          return Err(AppError::OpenError(
-            "Unexpected base64 encoding".to_string(),
-          ))
-        },
-      };
-      param.embedding = Some(embedding);
+      if param.content.is_some() {
+        // we only set the embedding if the content was not marked as unchanged
+        let embedding: Vec<f32> = match embedding.embedding {
+          EmbeddingOutput::Float(embedding) => embedding.into_iter().map(|f| f as f32).collect(),
+          EmbeddingOutput::Base64(_) => {
+            return Err(AppError::OpenError(
+              "Unexpected base64 encoding".to_string(),
+            ))
+          },
+        };
+        param.embedding = Some(embedding);
+      }
     }
 
     Ok(Some(AFCollabEmbeddings {
@@ -100,39 +96,52 @@ impl Indexer for DocumentIndexer {
     }))
   }
 }
-
 fn split_text_into_chunks(
   object_id: Uuid,
-  content: String,
+  paragraphs: Vec<String>,
   collab_type: CollabType,
-  embedding_model: &EmbeddingModel,
+  embedding_model: EmbeddingModel,
 ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
   debug_assert!(matches!(
     embedding_model,
     EmbeddingModel::TextEmbedding3Small
   ));
 
-  if content.is_empty() {
+  if paragraphs.is_empty() {
     return Ok(vec![]);
   }
-  // We assume that every token is ~4 bytes. We're going to split document content into fragments
-  // of ~2000 tokens each.
-  let split_contents = split_text_by_max_content_len(content, 8000)?;
-  let metadata = json!({"id": object_id.to_string(), "source": "appflowy", "name": "document", "collab_type": collab_type });
-  Ok(
-    split_contents
-      .into_iter()
-      .enumerate()
-      .map(|(index, content)| AFCollabEmbeddedChunk {
-        fragment_id: Uuid::new_v4().to_string(),
+  // Group paragraphs into chunks of roughly 8000 characters.
+  let split_contents = group_paragraphs_by_max_content_len(paragraphs, 8000);
+  let metadata = json!({
+      "id": object_id,
+      "source": "appflowy",
+      "name": "document",
+      "collab_type": collab_type
+  });
+
+  let mut seen = std::collections::HashSet::new();
+  let mut chunks = Vec::new();
+
+  for (index, content) in split_contents.into_iter().enumerate() {
+    let consistent_hash = Hasher::oneshot(0, content.as_bytes());
+    let fragment_id = format!("{:x}", consistent_hash);
+    if seen.insert(fragment_id.clone()) {
+      chunks.push(AFCollabEmbeddedChunk {
+        fragment_id,
         object_id,
         content_type: EmbeddingContentType::PlainText,
-        content,
+        content: Some(content),
         embedding: None,
         metadata: metadata.clone(),
         fragment_index: index as i32,
         embedded_type: 0,
-      })
-      .collect(),
-  )
+      });
+    } else {
+      debug!(
+        "[Embedding] Duplicate fragment_id detected: {}. This fragment will not be added.",
+        fragment_id
+      );
+    }
+  }
+  Ok(chunks)
 }

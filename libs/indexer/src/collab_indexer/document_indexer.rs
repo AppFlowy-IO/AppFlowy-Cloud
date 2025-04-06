@@ -12,7 +12,7 @@ use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
 use serde_json::json;
-use tracing::trace;
+use tracing::{debug, trace};
 use twox_hash::xxhash64::Hasher;
 use uuid::Uuid;
 
@@ -96,7 +96,6 @@ impl Indexer for DocumentIndexer {
     }))
   }
 }
-
 fn split_text_into_chunks(
   object_id: Uuid,
   paragraphs: Vec<String>,
@@ -111,28 +110,38 @@ fn split_text_into_chunks(
   if paragraphs.is_empty() {
     return Ok(vec![]);
   }
-  // We assume that every token is ~4 bytes. We're going to split document content into fragments
-  // of ~2000 tokens each.
+  // Group paragraphs into chunks of roughly 8000 characters.
   let split_contents = group_paragraphs_by_max_content_len(paragraphs, 8000);
-  let metadata =
-    json!({"id": object_id, "source": "appflowy", "name": "document", "collab_type": collab_type });
-  Ok(
-    split_contents
-      .into_iter()
-      .enumerate()
-      .map(|(index, content)| {
-        let consistent_hash = Hasher::oneshot(0, content.as_bytes());
-        AFCollabEmbeddedChunk {
-          fragment_id: format!("{:x}", consistent_hash),
-          object_id: object_id.clone(),
-          content_type: EmbeddingContentType::PlainText,
-          content: Some(content),
-          embedding: None,
-          metadata: metadata.clone(),
-          fragment_index: index as i32,
-          embedded_type: 0,
-        }
-      })
-      .collect(),
-  )
+  let metadata = json!({
+      "id": object_id,
+      "source": "appflowy",
+      "name": "document",
+      "collab_type": collab_type
+  });
+
+  let mut seen = std::collections::HashSet::new();
+  let mut chunks = Vec::new();
+
+  for (index, content) in split_contents.into_iter().enumerate() {
+    let consistent_hash = Hasher::oneshot(0, content.as_bytes());
+    let fragment_id = format!("{:x}", consistent_hash);
+    if seen.insert(fragment_id.clone()) {
+      chunks.push(AFCollabEmbeddedChunk {
+        fragment_id,
+        object_id: object_id.clone(),
+        content_type: EmbeddingContentType::PlainText,
+        content: Some(content),
+        embedding: None,
+        metadata: metadata.clone(),
+        fragment_index: index as i32,
+        embedded_type: 0,
+      });
+    } else {
+      debug!(
+        "[Embedding] Duplicate fragment_id detected: {}. This fragment will not be added.",
+        fragment_id
+      );
+    }
+  }
+  Ok(chunks)
 }

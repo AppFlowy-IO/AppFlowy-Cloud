@@ -1081,8 +1081,6 @@ impl CollabPersister {
         // persisted one in the database
         self.save_attempt(&mut snapshot.collab, message_id).await?;
       }
-    } else {
-      tracing::trace!("collab {} state has not changed", self.object_id);
     }
     Ok(())
   }

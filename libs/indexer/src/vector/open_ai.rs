@@ -233,7 +233,7 @@ mod tests {
       assert!(content.is_char_boundary(content.len()));
     }
 
-    let params = group_paragraphs_by_max_content_len(content.clone(), max_tokens).unwrap();
+    let params = group_paragraphs_by_max_content_len(vec![content], max_tokens);
     for content in params {
       assert!(content.is_char_boundary(0));
       assert!(content.is_char_boundary(content.len()));

@@ -437,7 +437,7 @@ pub async fn spawn_pg_write_embeddings(
     let start = Instant::now();
     let records = buf.drain(..n).collect::<Vec<_>>();
     for record in records.iter() {
-      info!(
+      debug!(
         "[Embedding] generate collab:{} embeddings, tokens used: {}",
         record.object_id, record.tokens_used
       );

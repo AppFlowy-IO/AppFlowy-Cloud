@@ -100,9 +100,13 @@ pub async fn upsert_collab_embeddings(
 ) -> Result<(), sqlx::Error> {
   let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
   tracing::trace!(
-    "[Embedding] upsert {} {} fragments",
+    "[Embedding] upsert {} {} fragments, fragment ids: {:?}",
     object_id,
-    fragments.len()
+    fragments.len(),
+    fragments
+      .iter()
+      .map(|v| v.fragment_id.clone())
+      .collect::<Vec<_>>()
   );
   sqlx::query(r#"CALL af_collab_embeddings_upsert($1, $2, $3, $4::af_fragment_v3[])"#)
     .bind(*workspace_id)

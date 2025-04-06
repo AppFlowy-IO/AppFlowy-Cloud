@@ -98,5 +98,5 @@ async fn document_full_sync_then_search_test() {
     .wait_unit_get_search_result(&workspace_id, "workflows", 1)
     .await;
   assert_eq!(search_result.len(), 1);
-  assert_eq!(search_result[0].preview, Some("AppFlowy is an open-source project. It is an alternative to tools like Notion. AppFlowy provides full control of your data. The project is built using Flutter for the frontend. Rust powers AppFlowy's ".to_string()));
+  assert_eq!(search_result[0].preview, Some("AppFlowy is an open-source project.It is an alternative to tools like Notion.AppFlowy provides full control of your data.The project is built using Flutter for the frontend.Rust powers AppFlowy's back".to_string()));
 }

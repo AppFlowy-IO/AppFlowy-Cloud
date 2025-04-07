@@ -56,6 +56,7 @@ impl WorkspaceController {
     let db = Db::open(
       options.workspace_id,
       options.uid,
+      options.device_id.clone(),
       &options.workspace_db_path,
     )?;
     let last_message_id = db.last_message_id()?;
@@ -198,7 +199,7 @@ impl WorkspaceController {
           })
           .unwrap();
 
-        self.inner.publish_manifest(&collab);
+        self.inner.publish_manifest(&collab, collab_type);
         let collab = Arc::new(collab);
         e.insert(collab.clone());
         Ok(collab)
@@ -698,12 +699,11 @@ impl Inner {
     self.status_tx.send(status).unwrap();
   }
 
-  fn publish_manifest(&self, collab: &Collab) {
+  fn publish_manifest(&self, collab: &Collab, collab_type: CollabType) {
     let messages = self.message_tx.load();
     if let Some(channel) = &*messages {
       let last_message_id = self.last_message_id();
       let doc = collab.get_awareness().doc();
-      let collab_type = collab.collab_type();
       let object_id: ObjectId = doc.guid().parse().unwrap();
       let state_vector = doc.transact().state_vector().encode_v1();
       let msg = ClientMessage::Manifest {

@@ -8,6 +8,7 @@ pub use async_openai::types::{
   EncodingFormat,
 };
 use infra::env_util::get_env_var_opt;
+use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
 pub enum AFEmbedder {
@@ -31,11 +32,27 @@ impl AFEmbedder {
   }
 }
 
-pub fn open_ai_config() -> Option<OpenAIConfig> {
+pub fn get_open_ai_config() -> (Option<OpenAIConfig>, Option<AzureConfig>) {
+  let open_ai_config = open_ai_config();
+  let azure_ai_config = azure_open_ai_config();
+
+  if open_ai_config.is_some() {
+    info!("Using official OpenAI API");
+    if azure_ai_config.is_some() {
+      warn!("Both OpenAI and Azure OpenAI API keys are set. Using OpenAI API.");
+    }
+    return (open_ai_config, None);
+  }
+
+  info!("Using Azure OpenAI API");
+  (None, azure_ai_config)
+}
+
+fn open_ai_config() -> Option<OpenAIConfig> {
   get_env_var_opt("AI_OPENAI_API_KEY").map(|v| OpenAIConfig::default().with_api_key(v))
 }
 
-pub fn azure_open_ai_config() -> Option<AzureConfig> {
+fn azure_open_ai_config() -> Option<AzureConfig> {
   let azure_open_ai_api_key = get_env_var_opt("AI_AZURE_OPENAI_API_KEY")?;
   let azure_open_ai_api_base = get_env_var_opt("AI_AZURE_OPENAI_API_BASE")?;
   let azure_open_ai_api_version = get_env_var_opt("AI_AZURE_OPENAI_API_VERSION")?;

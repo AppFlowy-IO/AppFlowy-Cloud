@@ -61,7 +61,7 @@ you have the option to run the AppFlowy-Cloud server independently
 1. Run the dependency servers
 
 ```bash
-docker compose --file docker-compose-dev.yml up -d
+docker compose --file compose.dev.yaml up -d
 ```
 
 2. Install sqlx-cli

@@ -89,6 +89,7 @@ impl Workspace {
                 update: state.update,
               },
             });
+            //TODO: fetch all documents that have been updated since `rid` and send their manifests to the client
           },
           Err(err) => {
             tracing::error!(
@@ -282,7 +283,7 @@ impl Handler<Terminate> for Workspace {
 
 impl Handler<WsInput> for Workspace {
   type Result = AtomicResponse<Self, ()>;
-  fn handle(&mut self, msg: WsInput, _: &mut Self::Context) -> Self::Result {
+  fn handle(&mut self, msg: WsInput, ctx: &mut Self::Context) -> Self::Result {
     let store = self.store.clone();
     if let Some(sender) = self.sessions_by_client_id.get(&msg.client_id) {
       AtomicResponse::new(Box::pin(

@@ -73,7 +73,7 @@ impl EmbeddingMetrics {
   }
 
   pub fn record_gen_embedding_time(&self, num: u32, millis: u128) {
-    tracing::info!("[Embedding]: index {} collabs cost: {}ms", num, millis);
+    tracing::trace!("[Embedding]: index {} collabs cost: {}ms", num, millis);
     self.gen_embeddings_time_histogram.observe(millis as f64);
   }
 }

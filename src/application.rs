@@ -45,7 +45,7 @@ use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use indexer::collab_indexer::IndexerProvider;
 use indexer::scheduler::{IndexerConfiguration, IndexerScheduler};
-use indexer::vector::embedder::{azure_open_ai_config, open_ai_config};
+use indexer::vector::embedder::get_open_ai_config;
 use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
 use snowflake::Snowflake;
@@ -299,8 +299,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let mailer = get_mailer(&config.mailer).await?;
 
   info!("Setting up Indexer scheduler...");
-  let open_ai_config = open_ai_config();
-  let azure_ai_config = azure_open_ai_config();
+  let (open_ai_config, azure_ai_config) = get_open_ai_config();
   let embedder_config = IndexerConfiguration {
     enable: get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()

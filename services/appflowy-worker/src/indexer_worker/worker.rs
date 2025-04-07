@@ -8,7 +8,9 @@ use indexer::queue::{
   ack_task, default_indexer_group_option, ensure_indexer_consumer_group,
   read_background_embed_tasks,
 };
-use indexer::scheduler::{spawn_pg_write_embeddings, UnindexedCollabTask, UnindexedData};
+use indexer::scheduler::{
+  is_collab_embedded_chunks_empty, spawn_pg_write_embeddings, UnindexedCollabTask, UnindexedData,
+};
 use indexer::thread_pool::ThreadPoolNoAbort;
 use indexer::vector::embedder::{AFEmbedder, AzureConfig, OpenAIConfig};
 use indexer::vector::open_ai;
@@ -195,14 +197,18 @@ async fn process_upcoming_tasks(
                   }
                 }
                 join_set.spawn(async move {
-                  let embeddings = indexer.embed(&embedder, chunks).await.ok()?;
-                  embeddings.map(|embeddings| EmbeddingRecord {
+                  if is_collab_embedded_chunks_empty(&chunks) {
+                    return Ok::<_, AppError>(None);
+                  }
+
+                  let embeddings = indexer.embed(&embedder, chunks).await?;
+                  Ok(embeddings.map(|embeddings| EmbeddingRecord {
                     workspace_id: task.workspace_id,
                     object_id: task.object_id,
                     collab_type: task.collab_type,
                     tokens_used: embeddings.tokens_consumed,
                     contents: embeddings.params,
-                  })
+                  }))
                 });
               }
             }
@@ -210,8 +216,11 @@ async fn process_upcoming_tasks(
 
           while let Some(Ok(result)) = join_set.join_next().await {
             match result {
-              None => metrics.record_failed_embed_count(1),
-              Some(record) => {
+              Err(_) => {
+                metrics.record_failed_embed_count(1);
+              },
+              Ok(None) => {},
+              Ok(Some(record)) => {
                 metrics.record_embed_count(1);
                 trace!(
                   "[Background Embedding] send {} embedding record to write task",

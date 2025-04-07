@@ -11,7 +11,7 @@ use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
 use serde_json::json;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 use twox_hash::xxhash64::Hasher;
 use uuid::Uuid;
 
@@ -42,6 +42,14 @@ impl Indexer for DocumentIndexer {
     paragraphs: Vec<String>,
     model: EmbeddingModel,
   ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
+    if paragraphs.is_empty() {
+      warn!(
+        "[Embedding] No paragraphs found in document `{}`. Skipping embedding.",
+        object_id
+      );
+
+      return Ok(vec![]);
+    }
     split_text_into_chunks(object_id, paragraphs, CollabType::Document, model)
   }
 
@@ -63,7 +71,7 @@ impl Indexer for DocumentIndexer {
       .model(embedder.model().name())
       .input(EmbeddingInput::StringArray(contents))
       .encoding_format(EncodingFormat::Float)
-      .dimensions(EmbeddingModel::TextEmbedding3Small.default_dimensions())
+      .dimensions(EmbeddingModel::default_model().default_dimensions())
       .build()
       .map_err(|err| AppError::Unhandled(err.to_string()))?;
 

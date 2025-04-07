@@ -80,10 +80,10 @@ pub async fn search_document(
   metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppError> {
   let embeddings_request = CreateEmbeddingRequestArgs::default()
-    .model(EmbeddingModel::TextEmbedding3Small.to_string())
+    .model(EmbeddingModel::default_model().to_string())
     .input(EmbeddingInput::String(request.query.clone()))
     .encoding_format(EncodingFormat::Float)
-    .dimensions(EmbeddingModel::TextEmbedding3Small.default_dimensions())
+    .dimensions(EmbeddingModel::default_model().default_dimensions())
     .build()
     .map_err(|err| AppError::Unhandled(err.to_string()))?;
 

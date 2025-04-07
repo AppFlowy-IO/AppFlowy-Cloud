@@ -27,7 +27,7 @@ impl AFEmbedder {
   }
 
   pub fn model(&self) -> EmbeddingModel {
-    EmbeddingModel::TextEmbedding3Small
+    EmbeddingModel::default_model()
   }
 }
 

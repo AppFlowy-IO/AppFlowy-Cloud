@@ -29,8 +29,8 @@ use std::sync::{Arc, Once};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::task::LocalSet;
-use tracing::info;
 use tracing::subscriber::set_global_default;
+use tracing::{info, warn};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 
@@ -134,6 +134,17 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
 
   let open_ai_config = open_ai_config();
   let azure_ai_config = azure_open_ai_config();
+  if open_ai_config.is_some() {
+    info!("Using official OpenAI API");
+  }
+
+  if azure_ai_config.is_some() {
+    info!("Using Azure OpenAI API");
+  }
+
+  if open_ai_config.is_some() && azure_ai_config.is_some() {
+    warn!("Both OpenAI and Azure OpenAI API keys are set. Using OpenAI API.");
+  }
 
   let indexer_config = BackgroundIndexerConfig {
     enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")

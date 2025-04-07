@@ -15,6 +15,7 @@ use database::index::{
   get_collab_embedding_fragment_ids, update_collab_indexed_at, upsert_collab_embeddings,
 };
 use database::workspace::select_workspace_settings;
+use database_entity::dto::AFCollabEmbeddedChunk;
 use infra::env_util::get_env_var;
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
@@ -355,8 +356,9 @@ async fn generate_embeddings_loop(
                     }
                   }
                 }
+
                 join_set.spawn(async move {
-                  if chunks.is_empty() {
+                  if is_collab_embedded_chunks_empty(&chunks) {
                     return Ok(None);
                   }
 
@@ -398,7 +400,9 @@ async fn generate_embeddings_loop(
                 error!("Failed to send embedding record: {}", err);
               }
             },
-            Ok(None) => debug!("No embedding for collab"),
+            Ok(None) => trace!(
+              "[Embedding] Did found existing embeddings. Skip generate embedding for collab"
+            ),
             Err(err) => {
               metrics.record_failed_embed_count(1);
               warn!(
@@ -429,7 +433,7 @@ pub async fn spawn_pg_write_embeddings(
       break;
     }
 
-    trace!("[Embedding] received {} embeddings to write", n);
+    trace!("[Embedding] pg received {} embeddings to write", n);
     let start = Instant::now();
     let records = buf.drain(..n).collect::<Vec<_>>();
     for record in records.iter() {
@@ -540,4 +544,10 @@ impl UnindexedData {
       UnindexedData::Paragraphs(text) => text.is_empty(),
     }
   }
+}
+
+#[inline]
+/// All chunks are empty if all of them have no content
+pub fn is_collab_embedded_chunks_empty(chunks: &[AFCollabEmbeddedChunk]) -> bool {
+  chunks.iter().all(|chunk| chunk.content.is_none())
 }

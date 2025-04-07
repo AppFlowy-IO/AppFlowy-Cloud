@@ -231,6 +231,15 @@ pub enum EmbeddingModel {
 }
 
 impl EmbeddingModel {
+  /// Returns the default embedding model used in this system.
+  ///
+  /// This model is hardcoded and used to generate embeddings whose dimensions are
+  /// reflected in the PostgreSQL database schema. Changing the default model may
+  /// require a migration to create a new table with the appropriate dimensions.
+  pub fn default_model() -> Self {
+    EmbeddingModel::TextEmbedding3Small
+  }
+
   pub fn supported_models() -> &'static [&'static str] {
     &[
       "text-embedding-ada-002",

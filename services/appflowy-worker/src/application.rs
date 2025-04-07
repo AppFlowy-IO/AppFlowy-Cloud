@@ -21,7 +21,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use indexer::metrics::EmbeddingMetrics;
 use indexer::thread_pool::ThreadPoolNoAbortBuilder;
-use indexer::vector::embedder::{azure_open_ai_config, open_ai_config};
+use indexer::vector::embedder::get_open_ai_config;
 use infra::env_util::get_env_var;
 use mailer::sender::Mailer;
 use secrecy::ExposeSecret;
@@ -132,9 +132,7 @@ pub async fn create_app(listener: TcpListener, config: Config) -> Result<(), Err
       .unwrap(),
   );
 
-  let open_ai_config = open_ai_config();
-  let azure_ai_config = azure_open_ai_config();
-
+  let (open_ai_config, azure_ai_config) = get_open_ai_config();
   let indexer_config = BackgroundIndexerConfig {
     enable: appflowy_collaborate::config::get_env_var("APPFLOWY_INDEXER_ENABLED", "true")
       .parse::<bool>()

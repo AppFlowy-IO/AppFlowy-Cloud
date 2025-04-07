@@ -9,5 +9,6 @@ edition = "2021"
 serde.workspace = true
 serde_json.workspace = true
 lazy_static = "1.4.0"
+# can not upgrade to 9.3.1, it's not campatible with gotrue token
 jsonwebtoken = "8.3.0"
 app-error = { workspace = true, features = ["gotrue_error"] }

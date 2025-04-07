@@ -1,8 +1,10 @@
 use app_error::AppError;
+use appflowy_ai_client::dto::EmbeddingModel;
 use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::types::{CreateEmbeddingRequest, CreateEmbeddingResponse};
 use async_openai::Client;
 use tiktoken_rs::CoreBPE;
+use tracing::trace;
 
 pub const OPENAI_EMBEDDINGS_URL: &str = "https://api.openai.com/v1/embeddings";
 
@@ -27,7 +29,9 @@ pub struct AzureOpenAIEmbedder {
 }
 
 impl AzureOpenAIEmbedder {
-  pub fn new(config: AzureConfig) -> Self {
+  pub fn new(mut config: AzureConfig) -> Self {
+    // Make sure your Azure AI service support the model
+    config = config.with_deployment_id(EmbeddingModel::default_model().to_string());
     let client = Client::with_config(config);
     Self { client }
   }
@@ -37,6 +41,12 @@ pub async fn async_embed<C: Config>(
   client: &Client<C>,
   request: CreateEmbeddingRequest,
 ) -> Result<CreateEmbeddingResponse, AppError> {
+  trace!(
+    "async embed with request: model:{:?}, dimension:{:?}, api_base:{}",
+    request.model,
+    request.dimensions,
+    client.config().api_base()
+  );
   let response = client
     .embeddings()
     .create(request)

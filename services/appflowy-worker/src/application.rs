@@ -29,8 +29,8 @@ use std::sync::{Arc, Once};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::task::LocalSet;
+use tracing::info;
 use tracing::subscriber::set_global_default;
-use tracing::info, warn};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 

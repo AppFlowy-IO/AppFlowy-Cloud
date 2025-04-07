@@ -14,12 +14,18 @@ use yrs::{Doc, Options, StateVector, Transact, Update};
 pub(crate) struct Db {
   client_id: ClientID,
   uid: i64,
+  device_id: String,
   workspace_id: Uuid,
   inner: TransactionDB,
 }
 
 impl Db {
-  pub fn open(workspace_id: Uuid, uid: i64, path: &str) -> Result<Self, PersistenceError> {
+  pub fn open(
+    workspace_id: Uuid,
+    uid: i64,
+    device_id: String,
+    path: &str,
+  ) -> Result<Self, PersistenceError> {
     let inner = TransactionDB::open_default(path)?;
     let tx = inner.transaction();
     let ops = RocksdbKVStoreImpl::new(tx);
@@ -29,6 +35,7 @@ impl Db {
     Ok(Self {
       client_id,
       uid,
+      device_id,
       workspace_id,
       inner,
     })
@@ -55,7 +62,7 @@ impl Db {
     let mut txn = doc.transact_mut();
     ops.load_doc_with_txn(self.uid, &self.workspace_id, object_id, &mut txn)?;
     drop(txn);
-    let origin = CollabOrigin::Client(CollabClient::new(self.uid, device_id));
+    let origin = CollabOrigin::Client(CollabClient::new(self.uid, self.device_id.clone()));
     let collab = Collab::from_doc(doc, origin);
     Ok(collab)
   }

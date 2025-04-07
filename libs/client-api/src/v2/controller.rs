@@ -4,14 +4,15 @@ use crate::entity::CollabType;
 use anyhow::bail;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags};
 use arc_swap::{ArcSwap, ArcSwapOption};
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use collab::preclude::Collab;
+use collab_rt_protocol::{CollabRef, WeakCollabRef};
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use std::fmt::{Display, Formatter};
-use std::sync::atomic::AtomicU64;
+use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{Mutex, Notify};
@@ -167,44 +168,44 @@ impl WorkspaceController {
     self.inner.last_message_id()
   }
 
-  pub fn open(&self, object_id: ObjectId, collab_type: CollabType) -> anyhow::Result<Arc<Collab>> {
-    match self.inner.cache.entry(object_id) {
-      Entry::Occupied(e) => Ok(e.get().clone()),
-      Entry::Vacant(e) => {
-        let last_message_id = self.inner.last_message_id.clone();
-        let collab = self.inner.db.collab(&object_id)?;
-        // Register callback on this collab to observe incoming updates
-        let weak_inner = Arc::downgrade(&self.inner);
-        let client_id = self.inner.db.client_id();
-        collab
-          .get_awareness()
-          .doc()
-          .observe_update_v1_with("af", move |tx, e| {
-            if let Some(inner) = weak_inner.upgrade() {
-              let rid = tx
-                .origin()
-                .map(|origin| Rid::from_bytes(origin.as_ref()).unwrap());
-              if let Some(rid) = rid {
-                last_message_id.rcu(|old| {
-                  if rid > **old {
-                    Arc::new(rid)
-                  } else {
-                    old.clone()
-                  }
-                });
+  pub async fn bind(&self, collab_ref: &CollabRef, collab_type: CollabType) -> anyhow::Result<()> {
+    let mut collab = collab_ref.write().await;
+    let collab = collab.borrow_mut();
+    let object_id: ObjectId = collab.object_id().parse()?;
+    let last_message_id = self.inner.last_message_id.clone();
+    self.inner.db.load(collab)?;
+    // Register callback on this collab to observe incoming updates
+    let weak_inner = Arc::downgrade(&self.inner);
+    let client_id = self.inner.db.client_id();
+    collab
+      .get_awareness()
+      .doc()
+      .observe_update_v1_with("af", move |tx, e| {
+        if let Some(inner) = weak_inner.upgrade() {
+          let rid = tx
+            .origin()
+            .map(|origin| Rid::from_bytes(origin.as_ref()).unwrap());
+          if let Some(rid) = rid {
+            last_message_id.rcu(|old| {
+              if rid > **old {
+                Arc::new(rid)
+              } else {
+                old.clone()
               }
-              inner.publish_update(object_id, collab_type, rid, e.update.clone());
-              tracing::trace!("[{}] update for collab {}", client_id, object_id);
-            }
-          })
-          .unwrap();
+            });
+          }
+          inner.publish_update(object_id, collab_type, rid, e.update.clone());
+          tracing::trace!("[{}] update for collab {}", client_id, object_id);
+        }
+      })
+      .unwrap();
 
-        self.inner.publish_manifest(&collab, collab_type);
-        let collab = Arc::new(collab);
-        e.insert(collab.clone());
-        Ok(collab)
-      },
-    }
+    self.inner.publish_manifest(&collab, collab_type);
+    self
+      .inner
+      .cache
+      .insert(object_id, Arc::downgrade(collab_ref));
+    Ok(())
   }
 
   async fn remote_receiver_loop(
@@ -421,7 +422,7 @@ struct Inner {
   message_tx: ArcSwapOption<ControllerSender>,
   last_message_id: Arc<ArcSwap<Rid>>,
   /// Cache for collabs actually existing in the memory.
-  cache: DashMap<ObjectId, Arc<Collab>>,
+  cache: DashMap<ObjectId, WeakCollabRef>,
   /// Persistent database handle.
   db: Db,
   shutdown: CancellationToken,
@@ -443,22 +444,37 @@ impl Inner {
           object_id,
           last_message_id
         );
-        let collab = self.get_collab(object_id)?;
-        let local_message_id = self.last_message_id();
         let sv = StateVector::decode_v1(&state_vector)?;
-        let tx = collab.get_awareness().doc().transact();
-        let update = tx.encode_state_as_update_v2(&sv);
-        let msg = ClientMessage::Update {
-          object_id,
-          collab_type,
-          flags: UpdateFlags::Lib0v2,
-          update,
-        };
-        self.send(Message::Binary(msg.into_bytes()?)).await?;
-        if let Some(msg) =
-          Self::check_missing_updates(tx, object_id, collab_type, local_message_id)?
-        {
+        let local_message_id = self.last_message_id();
+        if let Some(collab_ref) = self.get_collab(object_id) {
+          let (msg, missing) = {
+            let lock = collab_ref.read().await;
+            let collab = lock.borrow();
+            let tx = collab.get_awareness().doc().transact();
+            let update = tx.encode_state_as_update_v2(&sv);
+            let msg = ClientMessage::Update {
+              object_id,
+              collab_type,
+              flags: UpdateFlags::Lib0v2,
+              update,
+            };
+            let missing =
+              Self::check_missing_updates(tx, object_id, collab_type, local_message_id)?;
+            (msg, missing)
+          };
           self.send(Message::Binary(msg.into_bytes()?)).await?;
+          if let Some(msg) = missing {
+            self.send(Message::Binary(msg.into_bytes()?)).await?;
+          }
+        } else if !state_vector.is_empty() {
+          // we haven't seen this collab yet, so we need to send manifest ourselves
+          let reply = ClientMessage::Manifest {
+            object_id,
+            collab_type,
+            last_message_id: local_message_id.clone(),
+            state_vector: StateVector::default().encode_v1(),
+          };
+          self.send(Message::Binary(reply.into_bytes()?)).await?;
         }
       },
       ServerMessage::Update {
@@ -479,7 +495,9 @@ impl Inner {
           object_id,
           last_message_id
         );
-        self.save_update(object_id, Some(last_message_id), update)?;
+        self
+          .save_update(object_id, Some(last_message_id), update)
+          .await?;
       },
       ServerMessage::AwarenessUpdate {
         object_id,
@@ -489,7 +507,7 @@ impl Inner {
         // that it isn't malformed
         let update = AwarenessUpdate::decode_v1(&awareness)?;
         tracing::trace!("received awareness update for {}", object_id);
-        self.save_awareness_update(object_id, update)?;
+        self.save_awareness_update(object_id, update).await?;
       },
       ServerMessage::PermissionDenied {
         object_id,
@@ -657,7 +675,9 @@ impl Inner {
         UpdateFlags::Lib0v1 => Update::decode_v1(update),
         UpdateFlags::Lib0v2 => Update::decode_v2(update),
       }?;
-      self.save_update(*object_id, last_message_id, update)?;
+      self
+        .save_update(*object_id, last_message_id, update)
+        .await?;
     }
     if last_message_id.is_none() {
       // we only send updates generated locally
@@ -737,14 +757,8 @@ impl Inner {
     }
   }
 
-  fn get_collab(&self, object_id: ObjectId) -> anyhow::Result<Arc<Collab>> {
-    match self.cache.get(&object_id) {
-      Some(e) => Ok(e.value().clone()),
-      None => {
-        let collab = self.db.collab(&object_id)?;
-        Ok(collab.into())
-      },
-    }
+  fn get_collab(&self, object_id: ObjectId) -> Option<CollabRef> {
+    self.cache.get(&object_id)?.upgrade()
   }
 
   fn remove_collab(&self, object_id: &ObjectId) -> anyhow::Result<()> {
@@ -757,20 +771,22 @@ impl Inner {
     *self.last_message_id.load_full()
   }
 
-  fn save_update(
+  async fn save_update(
     &self,
     object_id: ObjectId,
     last_message_id: Option<Rid>,
     update: Update,
   ) -> anyhow::Result<()> {
     let update_bytes = update.encode_v1();
-    if let Some(reference) = self.cache.get(&object_id) {
-      if let Some(rid) = last_message_id {
-        let mut tx = reference
+    if let Some(rid) = last_message_id {
+      if let Some(collab_ref) = self.get_collab(object_id) {
+        let mut lock = collab_ref.write().await;
+        let collab = lock.borrow_mut();
+        collab
           .get_awareness()
           .doc()
-          .transact_mut_with(rid.into_bytes().as_ref());
-        tx.apply_update(update)?;
+          .transact_mut_with(rid.into_bytes().as_ref())
+          .apply_update(update)?;
       }
     }
     tracing::trace!(
@@ -784,14 +800,18 @@ impl Inner {
     Ok(())
   }
 
-  fn save_awareness_update(
+  async fn save_awareness_update(
     &self,
     object_id: ObjectId,
     update: AwarenessUpdate,
   ) -> anyhow::Result<()> {
-    if let Some(reference) = self.cache.get(&object_id) {
-      let awareness = reference.get_awareness();
-      awareness.apply_update(update)?;
+    if let Some(collab_ref) = self.get_collab(object_id) {
+      collab_ref
+        .write()
+        .await
+        .borrow_mut()
+        .get_awareness()
+        .apply_update(update)?;
     }
     Ok(())
   }

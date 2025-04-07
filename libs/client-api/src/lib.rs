@@ -23,7 +23,7 @@ mod http_settings;
 pub mod notify;
 mod ping;
 mod retry;
-mod v2;
+pub mod v2;
 pub mod ws;
 
 pub mod error {

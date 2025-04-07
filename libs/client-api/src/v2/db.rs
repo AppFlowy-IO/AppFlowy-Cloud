@@ -7,6 +7,7 @@ use collab_plugins::local_storage::kv::{KVStore, PersistenceError};
 use collab_plugins::local_storage::rocksdb::kv_impl::RocksdbKVStoreImpl;
 use rand::random;
 use rocksdb::TransactionDB;
+use std::str::FromStr;
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::{Doc, Options, StateVector, Transact, Update};
@@ -51,20 +52,14 @@ impl Db {
     Ok(message_id)
   }
 
-  pub fn collab(&self, object_id: &ObjectId) -> Result<Collab, PersistenceError> {
+  pub fn load(&self, collab: &mut Collab) -> Result<(), PersistenceError> {
     let ops = RocksdbKVStoreImpl::new(self.inner.transaction());
-    let doc = Doc::with_options(Options {
-      client_id: self.client_id(),
-      guid: object_id.to_string().into(),
-      collection_id: Some(self.workspace_id.to_string().into()),
-      ..Default::default()
-    });
-    let mut txn = doc.transact_mut();
-    ops.load_doc_with_txn(self.uid, &self.workspace_id, object_id, &mut txn)?;
+    let object_id = ObjectId::from_str(collab.object_id())
+      .map_err(|err| PersistenceError::InvalidData(err.to_string()))?;
+    let mut txn = collab.transact_mut();
+    ops.load_doc_with_txn(self.uid, &self.workspace_id, &object_id, &mut txn)?;
     drop(txn);
-    let origin = CollabOrigin::Client(CollabClient::new(self.uid, self.device_id.clone()));
-    let collab = Collab::from_doc(doc, origin);
-    Ok(collab)
+    Ok(())
   }
 
   pub fn remove_doc(&self, object_id: &Uuid) -> Result<(), PersistenceError> {

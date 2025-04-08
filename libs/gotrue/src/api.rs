@@ -75,7 +75,7 @@ impl Client {
 
   #[tracing::instrument(skip_all, err)]
   pub async fn token(&self, grant: &Grant) -> Result<GotrueTokenResponse, GoTrueError> {
-    // https://github.com/supabase/gotrue/blob/master/internal/api/verify.go#L219
+    // https://github.com/supabase/auth/blob/master/internal/api/verify.go#L219
     let url = format!("{}/token?grant_type={}", self.base_url, grant.type_as_str());
     let payload = grant.json_value();
     let resp = self.client.post(url).json(&payload).send().await?;

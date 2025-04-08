@@ -24,6 +24,7 @@ use mime::Mime;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use shared_entity::dto::publish_dto::PublishViewMetaData;
+use tempfile::TempDir;
 use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing::trace;
@@ -54,7 +55,7 @@ use shared_entity::response::AppResponseError;
 
 use crate::database_util::TestDatabaseCollabService;
 use crate::user::{generate_unique_registered_user, User};
-use crate::{load_env, localhost_client_with_device_id, setup_log};
+use crate::{load_env, localhost_client_with_device_id, setup_log, LOCALHOST_WS_V2};
 
 pub type CollabRef = Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
 
@@ -64,6 +65,7 @@ pub struct TestClient {
   pub api_client: client_api::Client,
   pub collabs: HashMap<Uuid, TestCollab>,
   pub device_id: String,
+  temp_dir: TempDir,
 }
 
 impl TestClient {
@@ -86,19 +88,28 @@ impl TestClient {
     start_ws_conn: bool,
   ) -> Self {
     setup_log();
+    let temp_dir = TempDir::new().unwrap();
     let api_client = localhost_client_with_device_id(device_id);
     api_client
       .sign_in_password(&registered_user.email, &registered_user.password)
       .await
       .unwrap();
+    let uid = api_client.get_profile().await.unwrap().uid;
+    let workspace_id = api_client
+      .get_workspaces()
+      .await
+      .unwrap()
+      .first()
+      .unwrap()
+      .workspace_id;
     let device_id = api_client.device_id.clone();
 
     // Connect to server via websocket
     let workspace = WorkspaceController::new(WorkspaceControllerOptions {
-      url: "".to_string(),
-      workspace_id: Default::default(),
-      uid: 0,
-      workspace_db_path: "".to_string(),
+      url: LOCALHOST_WS_V2.to_string(),
+      workspace_id,
+      uid,
+      workspace_db_path: temp_dir.path().to_str().unwrap().to_owned(),
       device_id: device_id.clone(),
     })
     .unwrap();
@@ -111,6 +122,7 @@ impl TestClient {
       api_client,
       collabs: Default::default(),
       device_id,
+      temp_dir,
     }
   }
 

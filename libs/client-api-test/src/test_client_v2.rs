@@ -30,15 +30,12 @@ use tokio_stream::StreamExt;
 use tracing::trace;
 use uuid::Uuid;
 
-#[cfg(feature = "collab-sync")]
-use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::entity::id::user_awareness_object_id;
 use client_api::entity::{
   CompletionStream, CompletionStreamValue, PublishCollabItem, PublishCollabMetadata,
   QueryWorkspaceMember, QuestionStream, QuestionStreamValue, UpdateCollabWebParams,
 };
 use client_api::v2::{WorkspaceController, WorkspaceControllerOptions};
-use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
   AFCollabEmbedInfo, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
   AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
@@ -65,7 +62,7 @@ pub struct TestClient {
   pub api_client: client_api::Client,
   pub collabs: HashMap<Uuid, TestCollab>,
   pub device_id: String,
-  temp_dir: TempDir,
+  _temp_dir: TempDir,
 }
 
 impl TestClient {
@@ -122,7 +119,7 @@ impl TestClient {
       api_client,
       collabs: Default::default(),
       device_id,
-      temp_dir,
+      _temp_dir: temp_dir,
     }
   }
 

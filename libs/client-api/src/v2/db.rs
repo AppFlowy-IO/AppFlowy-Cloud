@@ -1,6 +1,5 @@
 use super::{ObjectId, WorkspaceId};
 use appflowy_proto::Rid;
-use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_plugins::local_storage::kv::doc::CollabKVAction;
 use collab_plugins::local_storage::kv::{KVStore, PersistenceError};
@@ -10,23 +9,16 @@ use rocksdb::TransactionDB;
 use std::str::FromStr;
 use uuid::Uuid;
 use yrs::block::ClientID;
-use yrs::{Doc, Options, StateVector, Transact, Update};
 
 pub(crate) struct Db {
   client_id: ClientID,
   uid: i64,
-  device_id: String,
   workspace_id: Uuid,
   inner: TransactionDB,
 }
 
 impl Db {
-  pub fn open(
-    workspace_id: Uuid,
-    uid: i64,
-    device_id: String,
-    path: &str,
-  ) -> Result<Self, PersistenceError> {
+  pub fn open(workspace_id: Uuid, uid: i64, path: &str) -> Result<Self, PersistenceError> {
     let inner = TransactionDB::open_default(path)?;
     let tx = inner.transaction();
     let ops = RocksdbKVStoreImpl::new(tx);
@@ -36,7 +28,6 @@ impl Db {
     Ok(Self {
       client_id,
       uid,
-      device_id,
       workspace_id,
       inner,
     })
@@ -108,7 +99,7 @@ where
       client_id,
       workspace_id
     );
-    self.insert(key, &client_id.to_le_bytes())?;
+    self.insert(key, client_id.to_le_bytes())?;
     Ok(client_id)
   }
 
@@ -132,7 +123,7 @@ where
     let old_message_id = self.last_message_id(workspace_id)?;
     let message_id = old_message_id.max(message_id);
     let key = keys::make_last_message_id_key(workspace_id);
-    self.insert(key, &message_id.into_bytes())?;
+    self.insert(key, message_id.into_bytes())?;
     tracing::trace!(
       "updated last message id for workspace {} to {}",
       workspace_id,

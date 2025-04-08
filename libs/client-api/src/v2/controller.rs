@@ -5,7 +5,6 @@ use anyhow::bail;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags};
 use arc_swap::{ArcSwap, ArcSwapOption};
 use bytes::BytesMut;
-use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_rt_protocol::{CollabRef, WeakCollabRef};
 use dashmap::DashMap;
@@ -58,7 +57,6 @@ impl WorkspaceController {
     let db = Db::open(
       options.workspace_id,
       options.uid,
-      options.device_id.clone(),
       &options.workspace_db_path,
     )?;
     let last_message_id = db.last_message_id()?;
@@ -173,7 +171,7 @@ impl WorkspaceController {
 
   pub async fn bind(&self, collab_ref: &CollabRef, collab_type: CollabType) -> anyhow::Result<()> {
     let mut collab = collab_ref.write().await;
-    let collab = (&mut *collab).borrow_mut();
+    let collab = (*collab).borrow_mut();
     let object_id: ObjectId = collab.object_id().parse()?;
     let last_message_id = self.inner.last_message_id.clone();
     self.inner.db.load(collab)?;
@@ -203,7 +201,7 @@ impl WorkspaceController {
       })
       .unwrap();
 
-    self.inner.publish_manifest(&collab, collab_type);
+    self.inner.publish_manifest(collab, collab_type);
     self
       .inner
       .cache
@@ -303,13 +301,15 @@ impl WorkspaceController {
       "X-AF-ClientID",
       HeaderValue::from_str(&client_id.to_string())?,
     );
-    let mut config = WebSocketConfig::default();
-    config.max_frame_size = None;
+    let config = WebSocketConfig {
+      max_frame_size: None,
+      ..WebSocketConfig::default()
+    };
     let fut = connect_async_with_config(req, Some(config), false);
     tokio::select! {
       res = fut => {
         let (stream, _resp) = res?;
-        Ok(Some(stream.into()))
+        Ok(Some(stream))
       }
       _ = cancel.cancelled() => {
         tracing::debug!("connection cancelled");
@@ -487,7 +487,7 @@ impl Inner {
           let reply = ClientMessage::Manifest {
             object_id,
             collab_type,
-            last_message_id: local_message_id.clone(),
+            last_message_id: local_message_id,
             state_vector: StateVector::default().encode_v1(),
           };
           self.send(Message::Binary(reply.into_bytes()?)).await?;
@@ -495,10 +495,10 @@ impl Inner {
       },
       ServerMessage::Update {
         object_id,
-        collab_type,
         flags,
         last_message_id,
         update,
+        ..
       } => {
         // we don't need to decode update for every use case, but do so anyway to confirm
         // that it isn't malformed
@@ -526,9 +526,7 @@ impl Inner {
         self.save_awareness_update(object_id, update).await?;
       },
       ServerMessage::PermissionDenied {
-        object_id,
-        collab_type,
-        reason,
+        object_id, reason, ..
       } => {
         tracing::warn!(
           "received permission denied for {} - reason: {}",
@@ -638,9 +636,9 @@ impl Inner {
       match msg {
         ClientMessage::Update {
           object_id,
-          collab_type,
           flags: UpdateFlags::Lib0v1,
           update,
+          ..
         } if object_id == current_oid => {
           size_hint += update.len();
           // we stack updates together until we reach a non-update message
@@ -681,9 +679,9 @@ impl Inner {
   ) -> anyhow::Result<()> {
     if let ClientMessage::Update {
       object_id,
-      collab_type,
       flags,
       update,
+      ..
     } = &msg
     {
       // persist
@@ -778,8 +776,8 @@ impl Inner {
   }
 
   fn remove_collab(&self, object_id: &ObjectId) -> anyhow::Result<()> {
-    self.cache.remove(&object_id);
-    self.db.remove_doc(&object_id)?;
+    self.cache.remove(object_id);
+    self.db.remove_doc(object_id)?;
     Ok(())
   }
 
@@ -797,7 +795,7 @@ impl Inner {
     if let Some(rid) = last_message_id {
       if let Some(collab_ref) = self.get_collab(object_id) {
         let mut lock = collab_ref.write().await;
-        let collab = (&mut *lock).borrow_mut();
+        let collab = (*lock).borrow_mut();
         collab
           .get_awareness()
           .doc()
@@ -823,7 +821,7 @@ impl Inner {
   ) -> anyhow::Result<()> {
     if let Some(collab_ref) = self.get_collab(object_id) {
       let mut lock = collab_ref.write().await;
-      let collab = (&mut *lock).borrow_mut();
+      let collab = (*lock).borrow_mut();
       collab.borrow_mut().get_awareness().apply_update(update)?;
     }
     Ok(())

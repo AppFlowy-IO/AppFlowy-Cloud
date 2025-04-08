@@ -150,16 +150,13 @@ impl Handler<WsOutput> for WsSession {
   type Result = ();
 
   fn handle(&mut self, msg: WsOutput, ctx: &mut Self::Context) {
-    match msg.message.into_bytes() {
-      Ok(bytes) => {
-        tracing::trace!(
-          "sending message through session `{}`: {} bytes",
-          self.id(),
-          bytes.len()
-        );
-        ctx.binary(bytes);
-      },
-      Err(_) => {},
+    if let Ok(bytes) = msg.message.into_bytes() {
+      tracing::trace!(
+        "sending message through session `{}`: {} bytes",
+        self.id(),
+        bytes.len()
+      );
+      ctx.binary(bytes);
     };
   }
 }

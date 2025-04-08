@@ -13,6 +13,7 @@ use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use std::borrow::BorrowMut;
 use std::fmt::{Display, Formatter};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{Mutex, Notify};
@@ -71,6 +72,8 @@ impl WorkspaceController {
       db,
       shutdown,
       closed: Notify::new(),
+      #[cfg(debug_assertions)]
+      skip_realtime_message: AtomicBool::new(false),
     });
     tokio::spawn(Self::local_receiver_loop(
       Arc::downgrade(&inner),
@@ -328,6 +331,16 @@ impl WorkspaceController {
         Some(inner) => inner,
         None => break,
       };
+      #[cfg(debug_assertions)]
+      {
+        if inner
+          .skip_realtime_message
+          .load(std::sync::atomic::Ordering::SeqCst)
+        {
+          tracing::trace!("skipping realtime message");
+          continue;
+        }
+      }
       match msg {
         Message::Binary(bytes) => {
           inner.handle_server_message(bytes).await?;
@@ -427,6 +440,9 @@ struct Inner {
   db: Db,
   shutdown: CancellationToken,
   closed: Notify,
+
+  #[cfg(debug_assertions)]
+  skip_realtime_message: AtomicBool,
 }
 
 impl Inner {
@@ -854,4 +870,21 @@ pub struct Options {
   pub uid: i64,
   pub workspace_db_path: String,
   pub device_id: String,
+}
+
+#[cfg(debug_assertions)]
+impl WorkspaceController {
+  pub fn enable_receive_message(&self) {
+    self
+      .inner
+      .skip_realtime_message
+      .store(false, std::sync::atomic::Ordering::SeqCst);
+  }
+
+  pub fn disable_receive_message(&self) {
+    self
+      .inner
+      .skip_realtime_message
+      .store(true, std::sync::atomic::Ordering::SeqCst);
+  }
 }

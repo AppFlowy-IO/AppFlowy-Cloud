@@ -139,6 +139,14 @@ impl TestClient {
     Self::new(registered_user, false).await
   }
 
+  pub fn disable_receive_message(&mut self) {
+    self.workspace.disable_receive_message();
+  }
+
+  pub fn enable_receive_message(&mut self) {
+    self.workspace.enable_receive_message();
+  }
+
   pub async fn insert_view_to_general_space(
     &self,
     workspace_id: &Uuid,
@@ -1057,4 +1065,216 @@ impl TestCollab {
       .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
       .unwrap()
   }
+}
+
+pub async fn assert_server_snapshot(
+  client: &client_api::Client,
+  workspace_id: &Uuid,
+  object_id: &Uuid,
+  snapshot_id: &i64,
+  expected: Value,
+) {
+  let mut retry_count = 0;
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(10)) => {
+         panic!("Query snapshot timeout");
+       },
+       result = client.get_snapshot(workspace_id, object_id, QuerySnapshotParams {snapshot_id: *snapshot_id },
+        ) => {
+        retry_count += 1;
+        match &result {
+          Ok(snapshot_data) => {
+          let encoded_collab_v1 =
+            EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
+          let json = Collab::new_with_source(
+            CollabOrigin::Empty,
+            &object_id.to_string(),
+            DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()),
+            vec![],
+            false,
+          )
+          .unwrap()
+          .to_json_value();
+            if retry_count > 10 {
+              assert_json_eq!(json, expected);
+              break;
+            }
+
+            if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
+              break;
+            }
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+          },
+          Err(e) => {
+            if retry_count > 10 {
+              panic!("Query snapshot failed: {}", e);
+            }
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+          }
+        }
+       },
+    }
+  }
+}
+
+pub async fn assert_server_collab(
+  workspace_id: Uuid,
+  client: &mut client_api::Client,
+  object_id: Uuid,
+  collab_type: &CollabType,
+  timeout_secs: u64,
+  expected: Value,
+) -> Result<(), Error> {
+  let duration = Duration::from_secs(timeout_secs);
+  let collab_type = *collab_type;
+  let final_json = Arc::new(Mutex::from(json!({})));
+
+  // Use tokio::time::timeout to apply a timeout to the entire operation
+  let cloned_final_json = final_json.clone();
+  let operation = async {
+    loop {
+      let result = client
+        .get_collab(QueryCollabParams::new(object_id, collab_type, workspace_id))
+        .await;
+
+      match &result {
+        Ok(data) => {
+          let json = Collab::new_with_source(
+            CollabOrigin::Empty,
+            &object_id.to_string(),
+            DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
+            vec![],
+            false,
+          )
+          .unwrap()
+          .to_json_value();
+
+          *cloned_final_json.lock().await = json.clone();
+          if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive))
+            .is_ok()
+          {
+            return;
+          }
+        },
+        Err(e) => {
+          // Instead of panicking immediately, log or handle the error and continue the loop
+          // until the timeout is reached.
+          eprintln!("Query collab failed: {}", e);
+        },
+      }
+
+      // Sleep before retrying. Adjust the sleep duration as needed.
+      tokio::time::sleep(Duration::from_millis(1000)).await;
+    }
+  };
+
+  if timeout(duration, operation).await.is_err() {
+    eprintln!("json:{}\nexpected:{}", final_json.lock().await, expected);
+    return Err(anyhow!("time out for the action"));
+  }
+  Ok(())
+}
+
+pub async fn assert_client_collab_within_secs(
+  client: &mut TestClient,
+  object_id: &Uuid,
+  key: &str,
+  expected: Value,
+  secs: u64,
+) {
+  let mut retry_count = 0;
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
+         panic!("timeout");
+       },
+       json = async {
+        let lock = client
+          .collabs
+          .get_mut(object_id)
+          .unwrap()
+          .collab
+          .read()
+          .await;
+        lock.to_json_value()
+      } => {
+        retry_count += 1;
+        if retry_count > 60 {
+            assert_eq!(json[key], expected[key], "object_id: {}", object_id);
+            break;
+          }
+        if json[key] == expected[key] {
+          break;
+        }
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+      }
+    }
+  }
+}
+
+pub async fn assert_client_collab_include_value(
+  client: &mut TestClient,
+  object_id: &Uuid,
+  expected: Value,
+) -> Result<(), Error> {
+  let secs = 60;
+  let mut retry_count = 0;
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
+        return Err(anyhow!("timeout"));
+       },
+       json = async {
+        let lock = client
+          .collabs
+          .get_mut(object_id)
+          .unwrap()
+          .collab
+          .read()
+          .await;
+        lock.to_json_value()
+      } => {
+        retry_count += 1;
+        if retry_count > 30 {
+          assert_json_include!(actual: json, expected: expected);
+          return Ok(());
+          }
+        if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
+          return Ok(());
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+      }
+    }
+  }
+}
+
+pub async fn collect_answer(mut stream: QuestionStream) -> String {
+  let mut answer = String::new();
+  while let Some(value) = stream.next().await {
+    match value.unwrap() {
+      QuestionStreamValue::Answer { value } => {
+        answer.push_str(&value);
+      },
+      QuestionStreamValue::Metadata { .. } => {},
+      QuestionStreamValue::KeepAlive => {},
+    }
+  }
+  answer
+}
+
+pub async fn collect_completion_v2(mut stream: CompletionStream) -> (String, String) {
+  let mut answer = String::new();
+  let mut comment = String::new();
+  while let Some(value) = stream.next().await {
+    match value.unwrap() {
+      CompletionStreamValue::Answer { value } => {
+        answer.push_str(&value);
+      },
+      CompletionStreamValue::Comment { value } => {
+        comment.push_str(&value);
+      },
+    }
+  }
+  (answer, comment)
 }

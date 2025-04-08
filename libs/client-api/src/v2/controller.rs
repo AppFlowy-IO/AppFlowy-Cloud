@@ -5,14 +5,14 @@ use anyhow::bail;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags};
 use arc_swap::{ArcSwap, ArcSwapOption};
 use bytes::BytesMut;
+use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_rt_protocol::{CollabRef, WeakCollabRef};
-use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
+use std::borrow::BorrowMut;
 use std::fmt::{Display, Formatter};
-use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{Mutex, Notify};
@@ -28,7 +28,7 @@ use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
-use yrs::{merge_updates_v1, Doc, ReadTxn, StateVector, Transact, Transaction, Update};
+use yrs::{merge_updates_v1, ReadTxn, StateVector, Transact, Transaction, Update};
 
 type WsConn = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
@@ -170,7 +170,7 @@ impl WorkspaceController {
 
   pub async fn bind(&self, collab_ref: &CollabRef, collab_type: CollabType) -> anyhow::Result<()> {
     let mut collab = collab_ref.write().await;
-    let collab = collab.borrow_mut();
+    let collab = (&mut *collab).borrow_mut();
     let object_id: ObjectId = collab.object_id().parse()?;
     let last_message_id = self.inner.last_message_id.clone();
     self.inner.db.load(collab)?;
@@ -781,7 +781,7 @@ impl Inner {
     if let Some(rid) = last_message_id {
       if let Some(collab_ref) = self.get_collab(object_id) {
         let mut lock = collab_ref.write().await;
-        let collab = lock.borrow_mut();
+        let collab = (&mut *lock).borrow_mut();
         collab
           .get_awareness()
           .doc()
@@ -806,12 +806,9 @@ impl Inner {
     update: AwarenessUpdate,
   ) -> anyhow::Result<()> {
     if let Some(collab_ref) = self.get_collab(object_id) {
-      collab_ref
-        .write()
-        .await
-        .borrow_mut()
-        .get_awareness()
-        .apply_update(update)?;
+      let mut lock = collab_ref.write().await;
+      let collab = (&mut *lock).borrow_mut();
+      collab.borrow_mut().get_awareness().apply_update(update)?;
     }
     Ok(())
   }

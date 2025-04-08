@@ -853,26 +853,7 @@ impl TestClient {
     let collab_ref = collab.clone() as CollabRef;
     #[cfg(feature = "collab-sync")]
     {
-      let handler = self
-        .ws_client
-        .subscribe_collab(object_id.to_string())
-        .unwrap();
-      let (sink, stream) = (handler.sink(), handler.stream());
-      let ws_connect_state = self.ws_client.subscribe_connect_state();
-      let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);
-      let sync_plugin = SyncPlugin::new(
-        origin.clone(),
-        object,
-        Arc::downgrade(&collab_ref),
-        sink,
-        SinkConfig::default(),
-        stream,
-        Some(handler),
-        ws_connect_state,
-        Some(Duration::from_secs(10)),
-      );
-      let lock = collab.read().await;
-      lock.add_plugin(Box::new(sync_plugin));
+      self.workspace.bind(&collab_ref, collab_type).await.unwrap();
     }
     {
       let mut lock = collab.write().await;
@@ -926,27 +907,7 @@ impl TestClient {
 
     #[cfg(feature = "collab-sync")]
     {
-      let handler = self
-        .ws_client
-        .subscribe_collab(object_id.to_string())
-        .unwrap();
-      let (sink, stream) = (handler.sink(), handler.stream());
-      let ws_connect_state = self.ws_client.subscribe_connect_state();
-      let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);
-      let sync_plugin = SyncPlugin::new(
-        origin.clone(),
-        object,
-        Arc::downgrade(&collab_ref),
-        sink,
-        SinkConfig::default(),
-        stream,
-        Some(handler),
-        ws_connect_state,
-        Some(Duration::from_secs(10)),
-      );
-
-      let lock = collab.read().await;
-      lock.add_plugin(Box::new(sync_plugin));
+      self.workspace.bind(&collab_ref, collab_type).await.unwrap();
     }
     {
       let mut lock = collab.write().await;

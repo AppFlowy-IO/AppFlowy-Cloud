@@ -128,7 +128,7 @@ impl CollabStore {
       let mut tx = doc.transact_mut();
       tx.apply_update(Update::decode_v2(update)?)?;
     }
-    let update = doc.transact().encode_state_as_update_v2(&state_vector);
+    let update = doc.transact().encode_state_as_update_v2(state_vector);
     tracing::trace!("returning snapshot state (rid: {})", rid);
 
     Ok(CollabState {
@@ -166,7 +166,7 @@ impl CollabStore {
     }
     let update: Bytes = doc
       .transact()
-      .encode_state_as_update_v2(&state_vector)
+      .encode_state_as_update_v2(state_vector)
       .into();
 
     if rid > snapshot_rid {
@@ -293,6 +293,7 @@ impl CollabStore {
     Ok(())
   }
 
+  #[allow(clippy::too_many_arguments)]
   async fn save_snapshot_task(
     collab_cache: Arc<CollabCache>,
     redis: ConnectionManager,
@@ -329,7 +330,7 @@ impl CollabStore {
     object_id: ObjectId,
     collab_type: CollabType,
     uid: i64,
-    last_message_id: Rid,
+    _last_message_id: Rid,
     update: Bytes,
   ) -> anyhow::Result<()> {
     let encoded_collab = EncodedCollab::new_v1(Bytes::default(), update);
@@ -392,7 +393,7 @@ impl CollabStore {
           .await?;
         let (rid_bytes, update) = bytes.split_at(10);
         rid = Rid::from_bytes(rid_bytes)?;
-        tx.apply_update(Update::decode_v2(&update)?)?;
+        tx.apply_update(Update::decode_v2(update)?)?;
 
         for update in updates {
           rid = rid.max(update.last_message_id);
@@ -443,7 +444,7 @@ impl CollabStore {
     let key = format!("af:u:{}", workspace_id);
     let mut conn = self.connection_manager.clone();
     let options = StreamTrimOptions::minid(StreamTrimmingMode::Exact, up_to.to_string());
-    conn.xtrim_options(key, &options).await?;
+    let _: redis::Value = conn.xtrim_options(key, &options).await?;
     tracing::info!("pruned updates from workspace {}", workspace_id);
     Ok(())
   }

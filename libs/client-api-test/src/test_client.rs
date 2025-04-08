@@ -141,6 +141,14 @@ impl TestClient {
     Self::new(registered_user, false).await
   }
 
+  pub fn disable_receive_message(&mut self) {
+    self.ws_client.disable_receive_message();
+  }
+
+  pub fn enable_receive_message(&mut self) {
+    self.ws_client.enable_receive_message();
+  }
+
   pub async fn insert_view_to_general_space(
     &self,
     workspace_id: &Uuid,

@@ -25,8 +25,8 @@ use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
 
 pub struct CollabStore {
   collab_cache: Arc<CollabCache>,
-  update_streams: StreamRouter,
-  awareness_broadcast: AwarenessGossip,
+  update_streams: Arc<StreamRouter>,
+  awareness_broadcast: Arc<AwarenessGossip>,
   connection_manager: ConnectionManager,
 }
 
@@ -43,20 +43,18 @@ impl CollabStore {
   /// Maximum number of concurrent snapshots that can be sent to S3 at the same time.
   const MAX_CONCURRENT_SNAPSHOTS: usize = 200;
 
-  pub async fn new(
+  pub fn new(
     collab_cache: Arc<CollabCache>,
-    client: Client,
-    metrics: Arc<CollabStreamMetrics>,
-  ) -> anyhow::Result<Arc<Self>> {
-    let connection_manager = ConnectionManager::new(client.clone()).await?;
-    let update_streams = StreamRouter::new(&client, metrics.clone())?;
-    let awareness_broadcast = AwarenessGossip::new(&client).await?;
-    Ok(Arc::new(Self {
+    connection_manager: ConnectionManager,
+    update_streams: Arc<StreamRouter>,
+    awareness_broadcast: Arc<AwarenessGossip>,
+  ) -> Arc<Self> {
+    Arc::new(Self {
       collab_cache,
       update_streams,
       awareness_broadcast,
       connection_manager,
-    }))
+    })
   }
 
   pub fn updates(&self) -> &StreamRouter {

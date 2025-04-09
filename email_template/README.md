@@ -7,9 +7,13 @@ AppFlowy Cloud services.
 Run this command and follow the prompts
 
 ```bash
-npm install
+# install pnpm@8.5.0
 
-npm run dev
+npm install -g pnpm@8.5.0
+
+pnpm i
+
+pnpm run dev
 ```
 
 ## Build
@@ -18,5 +22,6 @@ Run this command to build the project to generate the final output in the assets
 folder
 
 ```bash
-npm run build
+   pnpm run build
 ```
+

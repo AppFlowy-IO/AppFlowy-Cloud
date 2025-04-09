@@ -127,7 +127,6 @@ collab-rt-entity.workspace = true
 collab-stream.workspace = true
 yrs.workspace = true
 
-tonic-build = "0.12.3"
 pin-project.workspace = true
 byteorder = "1.5.0"
 sha2 = "0.10.8"
@@ -140,14 +139,13 @@ console-subscriber = { version = "0.4.1", optional = true }
 base64.workspace = true
 md5.workspace = true
 nanoid = "0.4.0"
-http.workspace = true
 indexer.workspace = true
+llm-client.workspace = true
+async-openai.workspace = true
 
 [dev-dependencies]
 flate2 = "1.0"
-tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
-scraper = "0.17.1"
 client-api-test = { path = "libs/client-api-test", features = ["collab-sync"] }
 client-api = { path = "libs/client-api", features = [
   "collab-sync",
@@ -156,11 +154,9 @@ client-api = { path = "libs/client-api", features = [
   "test_fast_sync",
   "enable_brotli",
 ] }
-opener = "0.6.1"
-image = "0.23.14"
 collab-rt-entity = { path = "libs/collab-rt-entity" }
 hex = "0.4.3"
-unicode-normalization = "0.1.24"
+async-openai.workspace = true
 
 [[bin]]
 name = "appflowy_cloud"
@@ -204,7 +200,7 @@ members = [
   "xtask",
   "libs/tonic-proto",
   "libs/mailer",
-  "libs/indexer",
+  "libs/indexer", "libs/llm-client",
 ]
 
 [workspace.dependencies]
@@ -217,6 +213,7 @@ shared-entity = { path = "libs/shared-entity" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 authentication = { path = "libs/authentication" }
 access-control = { path = "libs/access-control" }
+llm-client = { path = "libs/llm-client" }
 mailer = { path = "libs/mailer" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
@@ -284,6 +281,7 @@ collab-document = { version = "0.2.0" }
 collab-database = { version = "0.2.0" }
 collab-user = { version = "0.2.0" }
 collab-importer = { version = "0.1.0" }
+async-openai = "0.28.0"
 
 [profile.release]
 lto = true

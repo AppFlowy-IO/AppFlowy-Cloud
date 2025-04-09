@@ -3,13 +3,13 @@ pub mod gotrue;
 
 #[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
-use std::error::Error;
-use std::string::FromUtf8Error;
-
 #[cfg(feature = "appflowy_ai_error")]
 use appflowy_ai_client::error::AIError;
+use async_openai::error::OpenAIError;
 use reqwest::StatusCode;
 use serde::Serialize;
+use std::error::Error;
+use std::string::FromUtf8Error;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -493,6 +493,18 @@ impl From<AIError> for AppError {
       AIError::InvalidRequest(err) => AppError::InvalidRequest(err),
       AIError::SerdeError(err) => AppError::SerdeError(err),
       AIError::ServiceUnavailable(err) => AppError::AIServiceUnavailable(err),
+    }
+  }
+}
+
+#[cfg(feature = "appflowy_ai_error")]
+impl From<async_openai::error::OpenAIError> for AppError {
+  fn from(err: async_openai::error::OpenAIError) -> Self {
+    match &err {
+      OpenAIError::Reqwest(e) => AppError::InvalidRequest(e.to_string()),
+      OpenAIError::ApiError(e) => AppError::InvalidRequest(e.to_string()),
+      OpenAIError::InvalidArgument(e) => AppError::InvalidRequest(e.to_string()),
+      _ => AppError::Internal(err.into()),
     }
   }
 }

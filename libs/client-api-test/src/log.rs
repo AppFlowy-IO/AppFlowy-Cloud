@@ -1,4 +1,3 @@
-use tracing::trace;
 #[cfg(not(target_arch = "wasm32"))]
 use {
   std::sync::Once,
@@ -26,20 +25,14 @@ pub fn load_env() {
 }
 
 pub fn ai_test_enabled() -> bool {
+  return true;
   // In appflowy GitHub CI, we enable 'ai-test-enabled' feature by default, so even if the env var is not set,
   // we still enable the local ai test.
   if cfg!(feature = "ai-test-enabled") {
     return true;
   }
 
-  load_env();
-
-  // local ai test is disable by default
-  let enabled = get_bool_from_env_var("LOCAL_AI_TEST_ENABLED");
-  if enabled {
-    trace!("Local AI test is enabled");
-  }
-  enabled
+  false
 }
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -20,7 +20,7 @@ impl Client {
       ("preview_size", &preview_size.to_string()),
     ])
     .map_err(|err| AppResponseError::new(ErrorCode::InvalidRequest, err.to_string()))?;
-    let url = format!("{}/api/search/{workspace_id}?{query}", self.base_url);
+    let url = format!("{}/api/v2/search/{workspace_id}?{query}", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?

@@ -15,6 +15,27 @@ pub struct SearchDocumentRequest {
   /// Maximum length of the content string preview to return. Default: 180.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub preview_size: Option<u32>,
+
+  #[serde(default = "default_only_context")]
+  pub only_context: bool,
+}
+
+fn default_only_context() -> bool {
+  true
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Summary {
+  pub content: String,
+  pub metadata: serde_json::Value,
+}
+
+/// Response array element for the collab vector search query.
+/// See: [SearchDocumentRequest].
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+  pub summary: Vec<Summary>,
+  pub items: Vec<SearchDocumentResponseItem>,
 }
 
 /// Response array element for the collab vector search query.

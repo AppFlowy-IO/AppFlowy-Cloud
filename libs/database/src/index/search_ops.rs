@@ -14,8 +14,8 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   params: SearchDocumentParams,
   tokens_used: u32,
-) -> Result<Vec<SearchDocumentItem>, sqlx::Error> {
-  let query = sqlx::query_as::<_, SearchDocumentItem>(
+) -> Result<Vec<SearchDocumentResult>, sqlx::Error> {
+  let query = sqlx::query_as::<_, SearchDocumentResult>(
     r#"
     WITH workspace AS (
       INSERT INTO af_workspace_ai_usage(created_at, workspace_id, search_requests, search_tokens_consumed, index_tokens_consumed)
@@ -30,6 +30,7 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
       collab.workspace_id,
       collab.partition_key AS collab_type,
       em.content_type,
+      em.content AS content,
       LEFT(em.content, $4) AS content_preview,
       u.name AS created_by,
       collab.created_at AS created_at,
@@ -49,8 +50,8 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   .bind(params.limit)
   .bind(tokens_used as i64)
   .bind(params.searchable_view_ids);
-  let rows = query.fetch_all(executor).await?;
-  Ok(rows)
+  let results = query.fetch_all(executor).await?;
+  Ok(results)
 }
 
 #[derive(Debug, Clone)]
@@ -70,7 +71,7 @@ pub struct SearchDocumentParams {
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct SearchDocumentItem {
+pub struct SearchDocumentResult {
   /// Document identifier.
   pub object_id: Uuid,
   /// Workspace identifier, given document belongs to.
@@ -79,8 +80,8 @@ pub struct SearchDocumentItem {
   pub collab_type: i32,
   /// Type of the content to be presented. Maps directly onto [database_entity::dto::EmbeddingContentType].
   pub content_type: i32,
-  /// First N character of the indexed content.
-  pub content_preview: Option<String>,
+  /// Content of the document.
+  pub content: String,
   /// Name of the user who's an owner of the document.
   pub created_by: String,
   /// When the document was created.

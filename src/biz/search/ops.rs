@@ -8,17 +8,18 @@ use appflowy_ai_client::dto::EmbeddingModel;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab_folder::{Folder, View};
 use database::collab::GetCollabOrigin;
-use std::collections::HashSet;
-use std::sync::Arc;
-
 use database::index::{search_documents, SearchDocumentParams};
-use shared_entity::dto::search_dto::{
-  SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem,
-};
-use sqlx::PgPool;
-
 use indexer::scheduler::IndexerScheduler;
 use indexer::vector::embedder::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFormat};
+use llm_client::chat::{AIChat, LLMDocument};
+use serde_json::json;
+use shared_entity::dto::search_dto::{
+  SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem, SearchResult, Summary,
+};
+use sqlx::PgPool;
+use std::collections::HashSet;
+use std::sync::Arc;
+use tracing::error;
 use uuid::Uuid;
 
 static MAX_SEARCH_DEPTH: i32 = 10;
@@ -70,6 +71,7 @@ fn populate_searchable_view_ids(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn search_document(
   pg_pool: &PgPool,
   collab_storage: &CollabAccessControlStorage,
@@ -78,7 +80,8 @@ pub async fn search_document(
   workspace_uuid: Uuid,
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
-) -> Result<Vec<SearchDocumentResponseItem>, AppError> {
+  ai_chat: Option<AIChat>,
+) -> Result<SearchResult, AppError> {
   let embeddings_request = CreateEmbeddingRequestArgs::default()
     .model(EmbeddingModel::default_model().to_string())
     .input(EmbeddingInput::String(request.query.clone()))
@@ -120,13 +123,14 @@ pub async fn search_document(
     0,
     MAX_SEARCH_DEPTH,
   );
+  let preview = request.preview_size.unwrap_or(500) as i32;
   let results = search_documents(
     pg_pool,
     SearchDocumentParams {
       user_id: uid,
       workspace_id: workspace_uuid,
       limit: request.limit.unwrap_or(10) as i32,
-      preview: request.preview_size.unwrap_or(500) as i32,
+      preview,
       embedding: embedding.embedding,
       searchable_view_ids: searchable_view_ids.into_iter().collect(),
     },
@@ -141,18 +145,63 @@ pub async fn search_document(
     request.query
   );
 
-  Ok(
-    results
+  let mut summary = vec![];
+  if let Some(ai_chat) = ai_chat {
+    let model_name = "gpt-4o-mini";
+    match ai_chat
+      .chat_with_documents(
+        &request.query,
+        model_name,
+        &results
+          .iter()
+          .map(|result| {
+            let metadata = json!({
+                "id": result.object_id,
+                "source": "appflowy",
+                "name": "document",
+                "collab_type":result.collab_type,
+            });
+            LLMDocument::new(result.content.clone(), metadata)
+          })
+          .collect::<Vec<_>>(),
+        request.only_context,
+      )
+      .await
+    {
+      Ok(resp) => {
+        if let Ok(score) = resp.score.parse::<f32>() {
+          if score > 0.5 {
+            summary = resp
+              .answers
+              .into_iter()
+              .map(|answer| Summary {
+                content: answer,
+                metadata: json!({}),
+              })
+              .collect::<Vec<_>>();
+          }
+        }
+        // summary = Some(resp.answer);
+      },
+      Err(err) => {
+        error!("AI summary search document failed, error: {:?}", err);
+      },
+    }
+  }
+
+  Ok(SearchResult {
+    summary,
+    items: results
       .into_iter()
       .map(|item| SearchDocumentResponseItem {
         object_id: item.object_id,
         workspace_id: item.workspace_id,
         score: item.score,
         content_type: SearchContentType::from_record(item.content_type),
-        preview: item.content_preview,
+        preview: Some(item.content.chars().take(preview as usize).collect()),
         created_by: item.created_by,
         created_at: item.created_at,
       })
       .collect(),
-  )
+  })
 }

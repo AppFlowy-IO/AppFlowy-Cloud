@@ -55,7 +55,6 @@ tokio-tungstenite = { workspace = true, features = ["stream"] }
 rand = "0.8.5"
 smallvec = { workspace = true, features = ["serde", "const_generics", "const_new", "write"] }
 collab-plugins = { workspace = true, features = [] }
-rocksdb = { version = "0.22.0", default-features = false, features = ["zstd"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"

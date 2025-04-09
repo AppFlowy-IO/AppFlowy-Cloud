@@ -12,7 +12,7 @@ use access_control::noops::collab::{
 };
 use access_control::noops::workspace::WorkspaceAccessControlImpl as NoOpsWorkspaceAccessControlImpl;
 use access_control::workspace::WorkspaceAccessControl;
-use actix::Supervisor;
+use actix::{Actor, Supervisor};
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -38,6 +38,7 @@ use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::snapshot::SnapshotControl;
+use appflowy_collaborate::ws2::{CollabStore, WsServer};
 use appflowy_collaborate::CollaborationServer;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
@@ -299,6 +300,13 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     snapshot_control,
     rt_cmd_tx,
   ));
+  let collab_store = CollabStore::new(
+    collab_cache.clone().into(),
+    redis_conn_manager.clone(),
+    redis_stream_router.clone(),
+    awareness_gossip.clone(),
+  );
+  let ws_server = WsServer::new(collab_store).start();
 
   let mailer = get_mailer(&config.mailer).await?;
 
@@ -350,6 +358,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     mailer,
     ai_client: appflowy_ai_client,
     indexer_scheduler,
+    ws_server,
   })
 }
 

@@ -350,18 +350,12 @@ async fn generate_embeddings_loop(
                 if let Some(fragment_ids) = existing_embeddings.get(&record.object_id) {
                   for chunk in chunks.iter_mut() {
                     if fragment_ids.contains(&chunk.fragment_id) {
-                      // we already had an embedding for this chunk
-                      chunk.content = None;
-                      chunk.embedding = None;
+                      chunk.mark_as_duplicate();
                     }
                   }
                 }
 
                 join_set.spawn(async move {
-                  if is_collab_embedded_chunks_empty(&chunks) {
-                    return Ok(None);
-                  }
-
                   let result = indexer.embed(&embedder, chunks).await;
                   match result {
                     Ok(Some(embeddings)) => {
@@ -370,7 +364,7 @@ async fn generate_embeddings_loop(
                         object_id: record.object_id,
                         collab_type: record.collab_type,
                         tokens_used: embeddings.tokens_consumed,
-                        contents: embeddings.params,
+                        contents: embeddings.chunks,
                       };
                       Ok(Some(record))
                     },
@@ -544,10 +538,4 @@ impl UnindexedData {
       UnindexedData::Paragraphs(text) => text.is_empty(),
     }
   }
-}
-
-#[inline]
-/// All chunks are empty if all of them have no content
-pub fn is_collab_embedded_chunks_empty(chunks: &[AFCollabEmbeddedChunk]) -> bool {
-  chunks.iter().all(|chunk| chunk.content.is_none())
 }

@@ -56,15 +56,29 @@ impl Indexer for DocumentIndexer {
   async fn embed(
     &self,
     embedder: &AFEmbedder,
-    mut content: Vec<AFCollabEmbeddedChunk>,
+    mut chunks: Vec<AFCollabEmbeddedChunk>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    if content.is_empty() {
+    // Filter chunks to keep only those with non-empty content, preserving the original index.
+    let chunks_with_content: Vec<(usize, &String)> = chunks
+      .iter()
+      .enumerate()
+      .filter_map(|(idx, fragment)| {
+        fragment
+          .content
+          .as_ref()
+          .filter(|s| !s.is_empty())
+          .map(|s| (idx, s))
+      })
+      .collect();
+
+    if chunks_with_content.is_empty() {
       return Ok(None);
     }
 
-    let contents: Vec<_> = content
+    // Build the list of contents for the embedding request.
+    let contents: Vec<String> = chunks_with_content
       .iter()
-      .map(|fragment| fragment.content.clone().unwrap_or_default())
+      .map(|(_, content)| content.clone())
       .collect();
 
     let request = CreateEmbeddingRequestArgs::default()
@@ -78,24 +92,34 @@ impl Indexer for DocumentIndexer {
     let resp = embedder.async_embed(request).await?;
 
     trace!(
-      "[Embedding] request {} embeddings, received {} embeddings",
-      content.len(),
+      "[Embedding] requested {} embeddings, received {} embeddings",
+      chunks_with_content.len(),
       resp.data.len()
     );
 
+    // We assume that the number of embeddings returned matches the number of chunks requested.
+    if resp.data.len() != chunks_with_content.len() {
+      return Err(AppError::Unhandled(format!(
+        "Mismatch in number of embeddings requested and received: {} vs {}",
+        chunks_with_content.len(),
+        resp.data.len()
+      )));
+    }
+
+    // Map each generated embedding back to the original chunk index.
     for embedding in resp.data {
-      let param = &mut content[embedding.index as usize];
-      if param.content.is_some() {
-        param.embedding = Some(embedding.embedding);
-      }
+      let (chunk_idx, _) = chunks_with_content[embedding.index as usize];
+      let chunk = &mut chunks[chunk_idx];
+      chunk.embedding = Some(embedding.embedding);
     }
 
     Ok(Some(AFCollabEmbeddings {
       tokens_consumed: resp.usage.total_tokens,
-      params: content,
+      chunks,
     }))
   }
 }
+
 fn split_text_into_chunks(
   object_id: Uuid,
   paragraphs: Vec<String>,
@@ -116,7 +140,6 @@ fn split_text_into_chunks(
       "id": object_id,
       "source": "appflowy",
       "name": "document",
-      "collab_type": collab_type
   });
 
   let mut seen = std::collections::HashSet::new();

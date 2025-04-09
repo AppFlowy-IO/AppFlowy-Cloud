@@ -101,16 +101,21 @@ impl TestClient {
       .workspace_id;
     let device_id = api_client.device_id.clone();
 
-    // Connect to server via websocket
+    let db_path = temp_dir.path().to_str().unwrap();
+    let db_path = format!("{}/{}", db_path, device_id);
+    tokio::fs::create_dir_all(&db_path).await.unwrap();
+
     let workspace = WorkspaceController::new(WorkspaceControllerOptions {
       url: LOCALHOST_WS_V2.to_string(),
       workspace_id,
       uid,
-      workspace_db_path: temp_dir.path().to_str().unwrap().to_owned(),
+      workspace_db_path: db_path,
       device_id: device_id.clone(),
     })
     .unwrap();
+
     if start_ws_conn {
+      // Connect to server via websocket
       workspace.connect().await.unwrap();
     }
     Self {

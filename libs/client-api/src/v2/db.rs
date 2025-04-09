@@ -2,26 +2,27 @@ use super::{ObjectId, WorkspaceId};
 use appflowy_proto::Rid;
 use collab::preclude::Collab;
 use collab_plugins::local_storage::kv::doc::CollabKVAction;
-use collab_plugins::local_storage::kv::{KVStore, PersistenceError};
-use collab_plugins::local_storage::rocksdb::kv_impl::RocksdbKVStoreImpl;
+use collab_plugins::local_storage::kv::{KVStore, KVTransactionDB, PersistenceError};
+use collab_plugins::local_storage::rocksdb::kv_impl::{
+  KVTransactionDBRocksdbImpl, RocksdbKVStoreImpl,
+};
 use rand::random;
-use rocksdb::TransactionDB;
 use std::str::FromStr;
 use uuid::Uuid;
 use yrs::block::ClientID;
 
+#[derive(Clone)]
 pub(crate) struct Db {
   client_id: ClientID,
   uid: i64,
   workspace_id: Uuid,
-  inner: TransactionDB,
+  inner: KVTransactionDBRocksdbImpl,
 }
 
 impl Db {
   pub fn open(workspace_id: Uuid, uid: i64, path: &str) -> Result<Self, PersistenceError> {
-    let inner = TransactionDB::open_default(path)?;
-    let tx = inner.transaction();
-    let ops = RocksdbKVStoreImpl::new(tx);
+    let inner = KVTransactionDBRocksdbImpl::open(path)?;
+    let ops = inner.write_txn();
     let client_id = ops.client_id(&workspace_id)?;
     ops.commit_transaction()?;
     tracing::debug!("opened db for client {} - path: {}", client_id, path);
@@ -38,13 +39,13 @@ impl Db {
   }
 
   pub fn last_message_id(&self) -> Result<Rid, PersistenceError> {
-    let ops = RocksdbKVStoreImpl::new(self.inner.transaction());
+    let ops = self.inner.write_txn();
     let message_id = ops.last_message_id(&self.workspace_id)?;
     Ok(message_id)
   }
 
   pub fn load(&self, collab: &mut Collab) -> Result<(), PersistenceError> {
-    let ops = RocksdbKVStoreImpl::new(self.inner.transaction());
+    let ops = self.inner.write_txn();
     let object_id = ObjectId::from_str(collab.object_id())
       .map_err(|err| PersistenceError::InvalidData(err.to_string()))?;
     let mut txn = collab.transact_mut();
@@ -54,8 +55,7 @@ impl Db {
   }
 
   pub fn remove_doc(&self, object_id: &Uuid) -> Result<(), PersistenceError> {
-    let tx = self.inner.transaction();
-    let ops = RocksdbKVStoreImpl::new(tx);
+    let ops = self.inner.write_txn();
     ops.delete_doc(self.uid, &self.workspace_id, object_id)?;
     ops.commit_transaction()?;
     Ok(())
@@ -67,8 +67,7 @@ impl Db {
     message_id: Option<Rid>,
     update_v1: Vec<u8>,
   ) -> Result<(), PersistenceError> {
-    let tx = self.inner.transaction();
-    let ops = RocksdbKVStoreImpl::new(tx);
+    let ops = self.inner.write_txn();
     if let Some(message_id) = message_id {
       ops.update_last_message_id(&self.workspace_id, message_id)?;
     }

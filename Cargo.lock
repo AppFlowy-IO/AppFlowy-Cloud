@@ -1968,7 +1968,6 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "reqwest",
- "rocksdb",
  "scraper",
  "semver",
  "serde",

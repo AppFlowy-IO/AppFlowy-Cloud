@@ -292,7 +292,7 @@ impl WorkspaceController {
     client_id: ClientID,
     cancel: CancellationToken,
   ) -> anyhow::Result<Option<WsConn>> {
-    let url = format!("{}/ws/v2/{}", options.url, options.workspace_id);
+    let url = format!("{}/{}", options.url, options.workspace_id);
     tracing::info!("establishing WebScoket connection to: {}", url);
     let mut req = url.into_client_request()?;
     let headers = req.headers_mut();

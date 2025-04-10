@@ -303,7 +303,7 @@ impl WorkspaceController {
     );
     headers.insert(
       "Authorization",
-      HeaderValue::from_str(&format!("Bearer {}", options.access_token))?,
+      HeaderValue::from_str(&options.access_token)?,
     );
     let config = WebSocketConfig {
       max_frame_size: None,
@@ -742,13 +742,19 @@ impl Inner {
     if let Some(channel) = &*messages {
       let last_message_id = self.last_message_id();
       let doc = collab.get_awareness().doc();
-      let object_id: ObjectId = doc.guid().parse().unwrap();
-      let state_vector = doc.transact().state_vector().encode_v1();
-      let msg = ClientMessage::Manifest {
+      let object_id = doc.guid();
+      let state_vector = doc.transact().state_vector();
+      tracing::trace!(
+        "publishing manifest for {} (last msg id: {}): {:?}",
         object_id,
+        last_message_id,
+        state_vector
+      );
+      let msg = ClientMessage::Manifest {
+        object_id: object_id.parse().unwrap(),
         collab_type,
         last_message_id,
-        state_vector,
+        state_vector: state_vector.encode_v1(),
       };
       // we received that update from the local client
       let _ = channel.send((msg, None));

@@ -5,9 +5,14 @@
     "build": "maizzle build production"
   },
   "dependencies": {
-    "@maizzle/framework": "latest",
+    "@maizzle/framework": "4.4.6",
     "tailwindcss-box-shadow": "^2.0.0",
     "tailwindcss-email-variants": "^2.0.0",
-    "tailwindcss-mso": "^1.4.1"
+    "tailwindcss-mso": "^1.4.1",
+    "tailwindcss": "^3.3.0"
+  },
+  "engines": {
+    "pnpm": ">=8.0.0 <9.0.0",
+    "node": ">=14.0.0"
   }
 }

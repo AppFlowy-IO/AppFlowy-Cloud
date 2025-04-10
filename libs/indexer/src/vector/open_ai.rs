@@ -135,26 +135,89 @@ pub fn split_text_by_max_tokens(
   Ok(chunks)
 }
 
+/// Groups a list of paragraphs into chunks that fit within a specified maximum content length.
+///
+/// This function takes a vector of paragraph strings and combines them into larger chunks,
+/// ensuring that each chunk's total byte length does not exceed the given `context_size`.
+/// Paragraphs are concatenated directly without additional separators. If a single paragraph
+/// exceeds the `context_size`, it is included as its own chunk without truncation.
+///
+/// # Arguments
+/// * `paragraphs` - A vector of strings, where each string represents a paragraph.
+/// * `context_size` - The maximum byte length allowed for each chunk.
+///
+/// # Returns
+/// A vector of strings, where each string is a chunk of concatenated paragraphs that fits
+/// within the `context_size`. If the input is empty, returns an empty vector.
+///
+/// # Examples
+///
+/// Basic grouping of paragraphs:
+/// ```
+/// use indexer::vector::open_ai::group_paragraphs_by_max_content_len;
+/// let paragraphs = vec![
+///     "First short text.".to_string(),
+///     "Second short text.".to_string(),
+///     "A longer paragraph here.".to_string(),
+/// ];
+/// let chunks = group_paragraphs_by_max_content_len(paragraphs, 40);
+/// assert_eq!(
+///     chunks,
+///     vec![
+///         "First short text.Second short text.".to_string(),
+///         "A longer paragraph here.".to_string(),
+///     ]
+/// );
+/// ```
+///
+/// Handling a paragraph larger than the context size:
+/// ```
+/// use indexer::vector::open_ai::group_paragraphs_by_max_content_len;
+/// let paragraphs = vec![
+///     "This text is short.".to_string(),
+///     "This paragraph is intentionally very long to exceed the limit.".to_string(),
+/// ];
+/// let chunks = group_paragraphs_by_max_content_len(paragraphs, 30);
+/// assert_eq!(
+///     chunks,
+///     vec![
+///         "This text is short.".to_string(),
+///         "This paragraph is intentionally very long to exceed the limit.".to_string(),
+///     ]
+/// );
+/// ```
+///
+/// Empty input:
+/// ```
+/// use indexer::vector::open_ai::group_paragraphs_by_max_content_len;
+/// let paragraphs: Vec<String> = vec![];
+/// let chunks = group_paragraphs_by_max_content_len(paragraphs, 50);
+/// assert_eq!(chunks, vec![]);
+/// ```
 pub fn group_paragraphs_by_max_content_len(
   paragraphs: Vec<String>,
-  max_content_len: usize,
+  context_size: usize,
 ) -> Vec<String> {
   if paragraphs.is_empty() {
     return vec![];
   }
 
   let mut result = Vec::new();
-  let mut current = String::new();
+  let mut current = String::with_capacity(context_size.min(4096));
+
   for paragraph in paragraphs {
-    if paragraph.len() + current.len() > max_content_len {
-      // if we add the paragraph to the current content, it will exceed the limit
-      // so we push the current content to the result set and start a new chunk
-      let accumulated = std::mem::replace(&mut current, paragraph);
-      if !accumulated.is_empty() {
-        result.push(accumulated);
+    if current.len() + paragraph.len() > context_size {
+      // Current chunk would exceed limit with this paragraph
+      if !current.is_empty() {
+        result.push(std::mem::take(&mut current));
+      }
+      if paragraph.len() > context_size {
+        result.push(paragraph);
+      } else {
+        current.push_str(&paragraph);
       }
     } else {
-      // add the paragraph to the current chunk
+      // Add paragraph to current chunk
       current.push_str(&paragraph);
     }
   }

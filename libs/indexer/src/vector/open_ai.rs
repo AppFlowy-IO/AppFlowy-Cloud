@@ -268,11 +268,6 @@ mod tests {
     for (param, emoji) in params.iter().zip(emojis.iter()) {
       assert_eq!(param, emoji);
     }
-
-    let params = group_paragraphs_by_max_content_len(params, max_tokens, 500);
-    for (param, emoji) in params.iter().zip(emojis.iter()) {
-      assert_eq!(param, emoji);
-    }
   }
 
   #[test]

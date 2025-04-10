@@ -1,4 +1,4 @@
-use crate::sql_test::util::{setup_db, test_create_user};
+use crate::sql_test::util::{create_test_user, setup_db};
 use collab_entity::CollabType;
 use database::history::ops::{
   get_latest_snapshot, get_latest_snapshot_state, get_snapshot_meta_list, insert_history,
@@ -14,7 +14,7 @@ async fn insert_snapshot_test(pool: PgPool) {
   let user_uuid = Uuid::new_v4();
   let name = user_uuid.to_string();
   let email = format!("{}@appflowy.io", name);
-  let user = test_create_user(&pool, user_uuid, &email, &name)
+  let user = create_test_user(&pool, user_uuid, &email, &name)
     .await
     .unwrap();
 

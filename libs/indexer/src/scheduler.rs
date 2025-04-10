@@ -15,7 +15,6 @@ use database::index::{
   get_collab_embedding_fragment_ids, update_collab_indexed_at, upsert_collab_embeddings,
 };
 use database::workspace::select_workspace_settings;
-use database_entity::dto::AFCollabEmbeddedChunk;
 use infra::env_util::get_env_var;
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
@@ -350,18 +349,12 @@ async fn generate_embeddings_loop(
                 if let Some(fragment_ids) = existing_embeddings.get(&record.object_id) {
                   for chunk in chunks.iter_mut() {
                     if fragment_ids.contains(&chunk.fragment_id) {
-                      // we already had an embedding for this chunk
-                      chunk.content = None;
-                      chunk.embedding = None;
+                      chunk.mark_as_duplicate();
                     }
                   }
                 }
 
                 join_set.spawn(async move {
-                  if is_collab_embedded_chunks_empty(&chunks) {
-                    return Ok(None);
-                  }
-
                   let result = indexer.embed(&embedder, chunks).await;
                   match result {
                     Ok(Some(embeddings)) => {
@@ -370,7 +363,7 @@ async fn generate_embeddings_loop(
                         object_id: record.object_id,
                         collab_type: record.collab_type,
                         tokens_used: embeddings.tokens_consumed,
-                        contents: embeddings.params,
+                        chunks: embeddings.chunks,
                       };
                       Ok(Some(record))
                     },
@@ -493,7 +486,7 @@ pub(crate) async fn batch_insert_records(
       &record.workspace_id,
       &record.object_id,
       record.tokens_used,
-      record.contents,
+      record.chunks,
     )
     .await?;
   }
@@ -544,10 +537,4 @@ impl UnindexedData {
       UnindexedData::Paragraphs(text) => text.is_empty(),
     }
   }
-}
-
-#[inline]
-/// All chunks are empty if all of them have no content
-pub fn is_collab_embedded_chunks_empty(chunks: &[AFCollabEmbeddedChunk]) -> bool {
-  chunks.iter().all(|chunk| chunk.content.is_none())
 }

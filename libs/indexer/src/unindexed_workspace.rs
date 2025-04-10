@@ -22,6 +22,14 @@ use tokio::task::JoinSet;
 use tracing::{error, info, trace};
 use uuid::Uuid;
 
+/// # index given workspace
+///
+/// Continuously processes and creates embeddings for unindexed collabs in a specified workspace.
+///
+/// This function runs in an infinite loop until a connection to the database cannot be established
+/// for an extended period. It streams unindexed collabs from the database in batches, processes them
+/// to create embeddings, and writes those embeddings back to the database.
+///
 #[allow(dead_code)]
 pub(crate) async fn index_workspace(scheduler: Arc<IndexerScheduler>, workspace_id: Uuid) {
   let mut retry_delay = Duration::from_secs(2);
@@ -51,16 +59,16 @@ pub(crate) async fn index_workspace(scheduler: Arc<IndexerScheduler>, workspace_
         continue;
       }
 
-      index_then_write_embedding_to_disk(&scheduler, std::mem::take(&mut unindexed_collabs)).await;
+      _index_then_write_embedding_to_disk(&scheduler, std::mem::take(&mut unindexed_collabs)).await;
     }
 
     if !unindexed_collabs.is_empty() {
-      index_then_write_embedding_to_disk(&scheduler, unindexed_collabs).await;
+      _index_then_write_embedding_to_disk(&scheduler, unindexed_collabs).await;
     }
   }
 }
 
-async fn index_then_write_embedding_to_disk(
+async fn _index_then_write_embedding_to_disk(
   scheduler: &Arc<IndexerScheduler>,
   unindexed_collabs: Vec<UnindexedCollab>,
 ) {
@@ -80,7 +88,7 @@ async fn index_then_write_embedding_to_disk(
       .collect::<Vec<_>>();
     match get_collab_embedding_fragment_ids(&scheduler.pg_pool, object_ids).await {
       Ok(existing_embeddings) => {
-        let embeddings = create_embeddings(
+        let embeddings = _create_embeddings(
           embedder,
           &scheduler.indexer_provider,
           unindexed_collabs,
@@ -156,7 +164,7 @@ async fn stream_unindexed_collabs(
     })
     .boxed()
 }
-async fn create_embeddings(
+async fn _create_embeddings(
   embedder: AFEmbedder,
   indexer_provider: &Arc<IndexerProvider>,
   unindexed_records: Vec<UnindexedCollab>,
@@ -177,13 +185,13 @@ async fn create_embeddings(
     let embedder = embedder.clone();
     if let Some(indexer) = indexer_provider.indexer_for(record.collab_type) {
       join_set.spawn(async move {
-        match indexer.embed(&embedder, record.contents).await {
+        match indexer.embed(&embedder, record.chunks).await {
           Ok(embeddings) => embeddings.map(|embeddings| EmbeddingRecord {
             workspace_id: record.workspace_id,
             object_id: record.object_id,
             collab_type: record.collab_type,
             tokens_used: embeddings.tokens_consumed,
-            contents: embeddings.params,
+            chunks: embeddings.chunks,
           }),
           Err(err) => {
             error!("Failed to embed collab: {}", err);
@@ -242,8 +250,7 @@ fn compute_embedding_records(
       if let Some(existing_embeddings) = existing_embeddings.get(&unindexed.object_id) {
         for chunk in chunks.iter_mut() {
           if existing_embeddings.contains(&chunk.fragment_id) {
-            chunk.content = None; // mark as already embedded
-            chunk.embedding = None;
+            chunk.mark_as_duplicate();
           }
         }
       }
@@ -252,7 +259,7 @@ fn compute_embedding_records(
         object_id: unindexed.object_id,
         collab_type: unindexed.collab_type,
         tokens_used: 0,
-        contents: chunks,
+        chunks,
       })
     })
     .collect()

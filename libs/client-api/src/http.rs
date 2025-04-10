@@ -38,8 +38,8 @@ use client_api_entity::{
 };
 use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use semver::Version;
-use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
+use shared_entity::dto::auth_dto::{SignInPasswordResponse, SignInTokenResponse};
 use shared_entity::dto::workspace_dto::WorkspaceSpaceUsage;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -253,7 +253,7 @@ impl Client {
     &self,
     email: &str,
     password: &str,
-  ) -> Result<GotrueTokenResponse, AppResponseError> {
+  ) -> Result<SignInPasswordResponse, AppResponseError> {
     let response = self
       .gotrue_client
       .token(&Grant::Password(PasswordGrant {
@@ -261,9 +261,12 @@ impl Client {
         password: password.to_owned(),
       }))
       .await?;
-    let _ = self.verify_token_cloud(&response.access_token).await?;
+    let is_new = self.verify_token_cloud(&response.access_token).await?;
     self.token.write().set(response.clone());
-    Ok(response)
+    Ok(SignInPasswordResponse {
+      gotrue_response: response,
+      is_new,
+    })
   }
 
   /// Sign in with magic link

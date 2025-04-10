@@ -763,16 +763,26 @@ pub struct AFCollabEmbeddedChunk {
   pub object_id: Uuid,
   pub content_type: EmbeddingContentType,
   pub content: Option<String>,
+  /// The semantic embedding vector for the content.
+  /// - Defaults to `None`.
+  /// - Will remain `None` if `content` is missing.
   pub embedding: Option<Vec<f32>>,
   pub metadata: serde_json::Value,
   pub fragment_index: i32,
   pub embedded_type: i16,
 }
 
+impl AFCollabEmbeddedChunk {
+  pub fn mark_as_duplicate(&mut self) {
+    self.embedding = None;
+    self.content = None;
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AFCollabEmbeddings {
   pub tokens_consumed: u32,
-  pub params: Vec<AFCollabEmbeddedChunk>,
+  pub chunks: Vec<AFCollabEmbeddedChunk>,
 }
 
 /// Type of content stored by the embedding.

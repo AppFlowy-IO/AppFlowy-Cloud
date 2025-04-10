@@ -72,16 +72,15 @@ async fn test_embedding_when_create_document() {
     .await;
 
   let search_resp = test_client
-    .api_client
-    .search_documents(&workspace_id, "Kathryn", 5, 100)
-    .await
-    .unwrap();
+    .wait_unit_get_search_result(&workspace_id, "Kathryn", 5, 100)
+    .await;
   // The number of returned documents affected by the max token size when splitting the document
   // into chunks.
-  assert_eq!(search_resp.len(), 2);
+  assert_eq!(search_resp.items.len(), 2);
 
   if ai_test_enabled() {
     let previews = search_resp
+      .items
       .iter()
       .map(|item| item.preview.clone().unwrap())
       .collect::<Vec<String>>()
@@ -206,8 +205,8 @@ async fn test_document_indexing_and_search() {
     .search_documents(&workspace_id, "Appflowy", 1, 20)
     .await
     .unwrap();
-  assert_eq!(search_resp.len(), 1);
-  let item = &search_resp[0];
+  assert_eq!(search_resp.items.len(), 1);
+  let item = &search_resp.items[0];
   assert_eq!(item.object_id, object_id);
 
   let preview = item.preview.clone().unwrap();

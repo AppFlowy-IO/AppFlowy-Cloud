@@ -169,19 +169,15 @@ pub async fn search_document(
       .await
     {
       Ok(resp) => {
-        if let Ok(score) = resp.score.parse::<f32>() {
-          if score > 0.5 {
-            summary = resp
-              .answers
-              .into_iter()
-              .map(|answer| Summary {
-                content: answer,
-                metadata: json!({}),
-              })
-              .collect::<Vec<_>>();
-          }
-        }
-        // summary = Some(resp.answer);
+        summary = resp
+          .summaries
+          .into_iter()
+          .map(|summary| Summary {
+            content: summary.content,
+            metadata: summary.metadata,
+            score: summary.score,
+          })
+          .collect::<Vec<_>>();
       },
       Err(err) => {
         error!("AI summary search document failed, error: {:?}", err);

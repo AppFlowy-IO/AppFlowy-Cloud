@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use uuid::Uuid;
 
@@ -27,7 +28,8 @@ fn default_only_context() -> bool {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Summary {
   pub content: String,
-  pub metadata: serde_json::Value,
+  pub metadata: Value,
+  pub score: String,
 }
 
 /// Response array element for the collab vector search query.

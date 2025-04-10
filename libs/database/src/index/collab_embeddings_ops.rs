@@ -5,6 +5,7 @@ use database_entity::dto::{AFCollabEmbeddedChunk, IndexingStatus, QueryCollab, Q
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use pgvector::Vector;
+use serde_json::json;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
 use sqlx::{Error, Executor, Postgres, Transaction};
@@ -61,14 +62,14 @@ WHERE w.workspace_id = $1"#,
 
 #[derive(sqlx::Type)]
 #[sqlx(type_name = "af_fragment_v3", no_pg_array)]
-struct Fragment {
-  fragment_id: String,
-  content_type: i32,
-  contents: Option<String>,
-  embedding: Option<Vector>,
-  metadata: serde_json::Value,
-  fragment_index: i32,
-  embedded_type: i16,
+pub struct Fragment {
+  pub fragment_id: String,
+  pub content_type: i32,
+  pub contents: Option<String>,
+  pub embedding: Option<Vector>,
+  pub metadata: serde_json::Value,
+  pub fragment_index: i32,
+  pub embedded_type: i16,
 }
 
 impl From<AFCollabEmbeddedChunk> for Fragment {
@@ -96,9 +97,9 @@ pub async fn upsert_collab_embeddings(
   workspace_id: &Uuid,
   object_id: &Uuid,
   tokens_used: u32,
-  records: Vec<AFCollabEmbeddedChunk>,
+  chunks: Vec<AFCollabEmbeddedChunk>,
 ) -> Result<(), sqlx::Error> {
-  let fragments = records.into_iter().map(Fragment::from).collect::<Vec<_>>();
+  let fragments = chunks.into_iter().map(Fragment::from).collect::<Vec<_>>();
   tracing::trace!(
     "[Embedding] upsert {} {} fragments, fragment ids: {:?}",
     object_id,
@@ -116,6 +117,48 @@ pub async fn upsert_collab_embeddings(
     .execute(transaction.deref_mut())
     .await?;
   Ok(())
+}
+
+pub async fn get_collab_embedding_fragment<'a, E>(
+  tx: E,
+  object_id: &Uuid,
+) -> Result<Vec<Fragment>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let rows = sqlx::query!(
+    r#"
+    SELECT
+      fragment_id,
+      content_type,
+      content,
+      embedding as "embedding!: Option<Vector>",
+      metadata,
+      fragment_index,
+      embedder_type
+    FROM af_collab_embeddings
+    WHERE oid = $1
+    ORDER BY fragment_index
+    "#,
+    object_id
+  )
+  .fetch_all(tx)
+  .await?;
+
+  let fragments = rows
+    .into_iter()
+    .map(|row| Fragment {
+      fragment_id: row.fragment_id,
+      content_type: row.content_type,
+      contents: row.content,
+      embedding: row.embedding,
+      metadata: row.metadata.unwrap_or_else(|| json!({})),
+      fragment_index: row.fragment_index.unwrap_or(0),
+      embedded_type: row.embedder_type.unwrap_or(0),
+    })
+    .collect();
+
+  Ok(fragments)
 }
 
 pub async fn get_collab_embedding_fragment_ids<'a, E>(

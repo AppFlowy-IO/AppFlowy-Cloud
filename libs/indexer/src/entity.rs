@@ -15,7 +15,7 @@ pub struct EmbeddingRecord {
   pub object_id: Uuid,
   pub collab_type: CollabType,
   pub tokens_used: u32,
-  pub contents: Vec<AFCollabEmbeddedChunk>,
+  pub chunks: Vec<AFCollabEmbeddedChunk>,
 }
 
 impl EmbeddingRecord {
@@ -25,7 +25,7 @@ impl EmbeddingRecord {
       object_id,
       collab_type,
       tokens_used: 0,
-      contents: vec![],
+      chunks: vec![],
     }
   }
 }

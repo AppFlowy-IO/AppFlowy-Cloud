@@ -15,7 +15,6 @@ use database::index::{
   get_collab_embedding_fragment_ids, update_collab_indexed_at, upsert_collab_embeddings,
 };
 use database::workspace::select_workspace_settings;
-use database_entity::dto::AFCollabEmbeddedChunk;
 use infra::env_util::get_env_var;
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
@@ -364,7 +363,7 @@ async fn generate_embeddings_loop(
                         object_id: record.object_id,
                         collab_type: record.collab_type,
                         tokens_used: embeddings.tokens_consumed,
-                        contents: embeddings.chunks,
+                        chunks: embeddings.chunks,
                       };
                       Ok(Some(record))
                     },
@@ -487,7 +486,7 @@ pub(crate) async fn batch_insert_records(
       &record.workspace_id,
       &record.object_id,
       record.tokens_used,
-      record.contents,
+      record.chunks,
     )
     .await?;
   }

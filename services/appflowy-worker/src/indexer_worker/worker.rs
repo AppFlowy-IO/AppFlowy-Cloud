@@ -196,12 +196,12 @@ async fn process_upcoming_tasks(
                 }
                 join_set.spawn(async move {
                   let embeddings = indexer.embed(&embedder, chunks).await?;
-                  Ok(embeddings.map(|embeddings| EmbeddingRecord {
+                  Ok::<_, AppError>(embeddings.map(|embeddings| EmbeddingRecord {
                     workspace_id: task.workspace_id,
                     object_id: task.object_id,
                     collab_type: task.collab_type,
                     tokens_used: embeddings.tokens_consumed,
-                    contents: embeddings.chunks,
+                    chunks: embeddings.chunks,
                   }))
                 });
               }

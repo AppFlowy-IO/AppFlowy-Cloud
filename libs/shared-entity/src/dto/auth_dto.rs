@@ -55,9 +55,9 @@ impl UpdateUserParams {
   }
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct SignInPasswordResponse {
-  pub access_token_resp: GotrueTokenResponse,
+  pub gotrue_response: GotrueTokenResponse,
   pub is_new: bool,
 }
 

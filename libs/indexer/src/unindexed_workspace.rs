@@ -185,13 +185,13 @@ async fn _create_embeddings(
     let embedder = embedder.clone();
     if let Some(indexer) = indexer_provider.indexer_for(record.collab_type) {
       join_set.spawn(async move {
-        match indexer.embed(&embedder, record.contents).await {
+        match indexer.embed(&embedder, record.chunks).await {
           Ok(embeddings) => embeddings.map(|embeddings| EmbeddingRecord {
             workspace_id: record.workspace_id,
             object_id: record.object_id,
             collab_type: record.collab_type,
             tokens_used: embeddings.tokens_consumed,
-            contents: embeddings.chunks,
+            chunks: embeddings.chunks,
           }),
           Err(err) => {
             error!("Failed to embed collab: {}", err);
@@ -259,7 +259,7 @@ fn compute_embedding_records(
         object_id: unindexed.object_id,
         collab_type: unindexed.collab_type,
         tokens_used: 0,
-        contents: chunks,
+        chunks,
       })
     })
     .collect()

@@ -8,8 +8,8 @@ use async_openai::types::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFo
 use async_trait::async_trait;
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
-use collab_entity::CollabType;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
+use infra::env_util::get_env_var;
 use serde_json::json;
 use tracing::{debug, trace, warn};
 use twox_hash::xxhash64::Hasher;
@@ -50,7 +50,15 @@ impl Indexer for DocumentIndexer {
 
       return Ok(vec![]);
     }
-    split_text_into_chunks(object_id, paragraphs, CollabType::Document, model)
+    // Group paragraphs into chunks of roughly 8000 characters.
+    split_text_into_chunks(
+      object_id,
+      paragraphs,
+      model,
+      get_env_var("APPFLOWY_EMBEDDING_CHUNK_SIZE", "8000")
+        .parse::<usize>()
+        .unwrap_or(8000),
+    )
   }
 
   async fn embed(
@@ -58,28 +66,23 @@ impl Indexer for DocumentIndexer {
     embedder: &AFEmbedder,
     mut chunks: Vec<AFCollabEmbeddedChunk>,
   ) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    // Filter chunks to keep only those with non-empty content, preserving the original index.
-    let chunks_with_content: Vec<(usize, &String)> = chunks
-      .iter()
-      .enumerate()
-      .filter_map(|(idx, fragment)| {
-        fragment
-          .content
-          .as_ref()
-          .filter(|s| !s.is_empty())
-          .map(|s| (idx, s))
-      })
-      .collect();
+    let mut valid_indices = Vec::new();
+    for (i, chunk) in chunks.iter().enumerate() {
+      if let Some(ref content) = chunk.content {
+        if !content.is_empty() {
+          valid_indices.push(i);
+        }
+      }
+    }
 
-    if chunks_with_content.is_empty() {
+    if valid_indices.is_empty() {
       return Ok(None);
     }
 
-    // Build the list of contents for the embedding request.
-    let contents: Vec<String> = chunks_with_content
-      .iter()
-      .map(|(_, content)| content.clone())
-      .collect();
+    let mut contents = Vec::with_capacity(valid_indices.len());
+    for &i in &valid_indices {
+      contents.push(chunks[i].content.as_ref().unwrap().to_owned());
+    }
 
     let request = CreateEmbeddingRequestArgs::default()
       .model(embedder.model().name())
@@ -93,24 +96,21 @@ impl Indexer for DocumentIndexer {
 
     trace!(
       "[Embedding] requested {} embeddings, received {} embeddings",
-      chunks_with_content.len(),
+      valid_indices.len(),
       resp.data.len()
     );
 
-    // We assume that the number of embeddings returned matches the number of chunks requested.
-    if resp.data.len() != chunks_with_content.len() {
+    if resp.data.len() != valid_indices.len() {
       return Err(AppError::Unhandled(format!(
         "Mismatch in number of embeddings requested and received: {} vs {}",
-        chunks_with_content.len(),
+        valid_indices.len(),
         resp.data.len()
       )));
     }
 
-    // Map each generated embedding back to the original chunk index.
     for embedding in resp.data {
-      let (chunk_idx, _) = chunks_with_content[embedding.index as usize];
-      let chunk = &mut chunks[chunk_idx];
-      chunk.embedding = Some(embedding.embedding);
+      let chunk_idx = valid_indices[embedding.index as usize];
+      chunks[chunk_idx].embedding = Some(embedding.embedding);
     }
 
     Ok(Some(AFCollabEmbeddings {
@@ -120,12 +120,13 @@ impl Indexer for DocumentIndexer {
   }
 }
 
-fn split_text_into_chunks(
+pub fn split_text_into_chunks(
   object_id: Uuid,
   paragraphs: Vec<String>,
-  collab_type: CollabType,
   embedding_model: EmbeddingModel,
+  chunk_size: usize,
 ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
+  // we only support text embedding 3 small for now
   debug_assert!(matches!(
     embedding_model,
     EmbeddingModel::TextEmbedding3Small
@@ -134,8 +135,7 @@ fn split_text_into_chunks(
   if paragraphs.is_empty() {
     return Ok(vec![]);
   }
-  // Group paragraphs into chunks of roughly 8000 characters.
-  let split_contents = group_paragraphs_by_max_content_len(paragraphs, 8000);
+  let split_contents = group_paragraphs_by_max_content_len(paragraphs, chunk_size);
   let metadata = json!({
       "id": object_id,
       "source": "appflowy",

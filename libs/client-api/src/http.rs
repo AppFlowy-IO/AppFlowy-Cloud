@@ -248,12 +248,16 @@ impl Client {
     self.token.read().subscribe()
   }
 
+  /// Sign in with password
+  ///
+  /// # Returns
+  /// - `(bool, GotrueTokenResponse)`: A tuple containing a boolean indicating if the user is new and the token response.
   #[instrument(skip_all, err)]
   pub async fn sign_in_password(
     &self,
     email: &str,
     password: &str,
-  ) -> Result<GotrueTokenResponse, AppResponseError> {
+  ) -> Result<(bool, GotrueTokenResponse), AppResponseError> {
     let response = self
       .gotrue_client
       .token(&Grant::Password(PasswordGrant {
@@ -261,9 +265,9 @@ impl Client {
         password: password.to_owned(),
       }))
       .await?;
-    let _ = self.verify_token_cloud(&response.access_token).await?;
+    let is_new = self.verify_token_cloud(&response.access_token).await?;
     self.token.write().set(response.clone());
-    Ok(response)
+    Ok((is_new, response))
   }
 
   /// Sign in with magic link

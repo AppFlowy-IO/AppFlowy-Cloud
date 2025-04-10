@@ -48,7 +48,7 @@ async fn sign_in_success() {
   {
     // First Time
     let c = localhost_client();
-    let is_new = c
+    let (is_new, _) = c
       .sign_in_password(&registered_user.email, &registered_user.password)
       .await
       .unwrap();
@@ -70,7 +70,7 @@ async fn sign_in_success() {
   {
     // Subsequent Times
     let c = localhost_client();
-    let is_new = c
+    let (is_new, _) = c
       .sign_in_password(&registered_user.email, &registered_user.password)
       .await
       .unwrap();

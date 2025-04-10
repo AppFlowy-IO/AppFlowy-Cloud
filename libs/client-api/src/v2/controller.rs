@@ -301,6 +301,10 @@ impl WorkspaceController {
       "X-AF-ClientID",
       HeaderValue::from_str(&client_id.to_string())?,
     );
+    headers.insert(
+      "Authorization",
+      HeaderValue::from_str(&format!("Bearer {}", options.access_token))?,
+    );
     let config = WebSocketConfig {
       max_frame_size: None,
       ..WebSocketConfig::default()
@@ -868,6 +872,7 @@ pub struct Options {
   pub uid: i64,
   pub workspace_db_path: String,
   pub device_id: String,
+  pub access_token: String,
 }
 
 #[cfg(debug_assertions)]

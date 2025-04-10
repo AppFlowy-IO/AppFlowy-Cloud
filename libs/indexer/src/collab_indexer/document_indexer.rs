@@ -58,6 +58,9 @@ impl Indexer for DocumentIndexer {
       get_env_var("APPFLOWY_EMBEDDING_CHUNK_SIZE", "8000")
         .parse::<usize>()
         .unwrap_or(8000),
+      get_env_var("APPFLOWY_EMBEDDING_CHUNK_OVERLAP", "500")
+        .parse::<usize>()
+        .unwrap_or(500),
     )
   }
 
@@ -125,6 +128,7 @@ pub fn split_text_into_chunks(
   paragraphs: Vec<String>,
   embedding_model: EmbeddingModel,
   chunk_size: usize,
+  overlap: usize,
 ) -> Result<Vec<AFCollabEmbeddedChunk>, AppError> {
   // we only support text embedding 3 small for now
   debug_assert!(matches!(
@@ -135,7 +139,7 @@ pub fn split_text_into_chunks(
   if paragraphs.is_empty() {
     return Ok(vec![]);
   }
-  let split_contents = group_paragraphs_by_max_content_len(paragraphs, chunk_size);
+  let split_contents = group_paragraphs_by_max_content_len(paragraphs, chunk_size, overlap);
   let metadata = json!({
       "id": object_id,
       "source": "appflowy",

@@ -98,15 +98,15 @@ For processing multiple unindexed documents at once, typically used for initial 
 ```mermaid
 sequenceDiagram
     participant System as System Process
-    participant IndexProccess as index_workspace
+    participant IndexProcess as index_workspace
     participant Storage as CollabStorage
     participant Indexer as DocumentIndexer
     participant DB as Database
-    System ->> IndexProccess: index_workspace(scheduler, workspace_id)
-    IndexProccess ->> DB: stream_unindexed_collabs
-    IndexProccess ->> Storage: get_encode_collab
-    IndexProccess ->> IndexProccess: index_then_write_embedding_to_disk
-    IndexProccess ->> Indexer: create_embeddings(embedder, provider, collabs)
+    System ->> IndexProcess: index_workspace(scheduler, workspace_id)
+    IndexProcess ->> DB: stream_unindexed_collabs
+    IndexProcess ->> Storage: get_encode_collab
+    IndexProcess ->> IndexProcess: index_then_write_embedding_to_disk
+    IndexProcess ->> Indexer: create_embeddings(embedder, provider, collabs)
     Indexer ->> DB: batch_insert_records
 ```
 

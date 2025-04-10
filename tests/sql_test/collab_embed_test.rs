@@ -80,3 +80,47 @@ async fn insert_collab_embedding_fragment_test(pool: PgPool) {
   assert_ne!(chunks_2[1].fragment_id, chunks_3[1].fragment_id);
   assert_eq!(chunks_3.len(), 3);
 }
+
+#[sqlx::test(migrations = false)]
+async fn test_embed_over_context_size(pool: PgPool) {
+  setup_db(&pool).await.unwrap();
+
+  let user_uuid = uuid::Uuid::new_v4();
+  let name = user_uuid.to_string();
+  let email = format!("{}@appflowy.io", name);
+  let user = create_test_user(&pool, user_uuid, &email, &name)
+    .await
+    .unwrap();
+
+  let doc_id = uuid::Uuid::new_v4();
+  let workspace_id = user.workspace_id;
+  create_test_collab_document(&pool, &user.uid, &workspace_id, &doc_id).await;
+  let content= "The Five Dysfunctions of a Team Part I: Underachievement - Introduces Kathryn Petersen, the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup with a dysfunctional executive team. Part II: Lighting the Fire - Kathryn organizes an offsite meeting to build trust and introduce constructive conflict, encouraging open discussion about disagreements. Part IV: Traction - The team experiences benefits of improved trust and open conflict, with accountability becoming routine and meetings increasingly productive. The Model identifies five key dysfunctions: Absence of Trust, Fear of Conflict, Lack of Commitment, Avoidance of Accountability, and Inattention to Results. The book provides practical strategies for building trust, encouraging conflict, ensuring commitment, embracing accountability, and focusing on collective results.";
+  let chunks = split_text_into_chunks(
+    doc_id,
+    vec![content.to_string()],
+    EmbeddingModel::TextEmbedding3Small,
+    300,
+    100,
+  )
+  .unwrap();
+
+  assert_eq!(chunks.len(), 5);
+  upsert_test_chunks(&pool, &workspace_id, &doc_id, chunks.clone()).await;
+  let fragments = select_all_fragments(&pool, &doc_id).await;
+  assert_eq!(chunks.len(), fragments.len());
+
+  // Replace the content with a new one. It will cause all existing fragments to be deleted.
+  let content = "Hello world!";
+  let chunks = split_text_into_chunks(
+    doc_id,
+    vec![content.to_string()],
+    EmbeddingModel::TextEmbedding3Small,
+    300,
+    100,
+  )
+  .unwrap();
+  upsert_test_chunks(&pool, &workspace_id, &doc_id, chunks.clone()).await;
+  let fragments = select_all_fragments(&pool, &doc_id).await;
+  assert_eq!(fragments.len(), 1);
+}

@@ -22,8 +22,7 @@ async fn wasm_sign_in_success() {
   assert!(res.is_ok());
 
   let val = res.unwrap();
-
-  assert!(val);
+  assert!(val.is_new);
 }
 
 #[wasm_bindgen_test]

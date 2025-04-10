@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT\n      fragment_id,\n      content_type,\n      content,\n      embedding as \"embedding!: Option<Vector>\",\n      metadata,\n      fragment_index,\n      embedder_type\n    FROM af_collab_embeddings\n    WHERE oid = $1\n    ORDER BY fragment_index\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fragment_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "content_type",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "content",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "embedding!: Option<Vector>",
+        "type_info": {
+          "Custom": {
+            "name": "vector",
+            "kind": "Simple"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "fragment_index",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "embedder_type",
+        "type_info": "Int2"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "865fe86df6d04f8abb6d477af13f8a2392a742f4027d99c290f0f156df48be07"
+}

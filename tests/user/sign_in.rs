@@ -51,7 +51,8 @@ async fn sign_in_success() {
     let is_new = c
       .sign_in_password(&registered_user.email, &registered_user.password)
       .await
-      .unwrap();
+      .unwrap()
+      .is_new;
     assert!(is_new);
     assert!(c
       .token()
@@ -73,7 +74,8 @@ async fn sign_in_success() {
     let is_new = c
       .sign_in_password(&registered_user.email, &registered_user.password)
       .await
-      .unwrap();
+      .unwrap()
+      .is_new;
     assert!(!is_new);
 
     // workspaces should be the same

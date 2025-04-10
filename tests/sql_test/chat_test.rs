@@ -1,4 +1,4 @@
-use crate::sql_test::util::{setup_db, test_create_user};
+use crate::sql_test::util::{create_test_user, setup_db};
 use database::chat::chat_ops::{
   delete_chat, get_all_chat_messages, insert_chat, insert_question_message, select_chat,
   select_chat_messages, select_chat_settings, update_chat_settings,
@@ -19,7 +19,7 @@ async fn chat_crud_test(pool: PgPool) {
   let user_uuid = uuid::Uuid::new_v4();
   let name = user_uuid.to_string();
   let email = format!("{}@appflowy.io", name);
-  let user = test_create_user(&pool, user_uuid, &email, &name)
+  let user = create_test_user(&pool, user_uuid, &email, &name)
     .await
     .unwrap();
 
@@ -72,7 +72,7 @@ async fn chat_message_crud_test(pool: PgPool) {
   let user_uuid = uuid::Uuid::new_v4();
   let name = user_uuid.to_string();
   let email = format!("{}@appflowy.io", name);
-  let user = test_create_user(&pool, user_uuid, &email, &name)
+  let user = create_test_user(&pool, user_uuid, &email, &name)
     .await
     .unwrap();
 
@@ -195,7 +195,7 @@ async fn chat_setting_test(pool: PgPool) {
   let user_uuid = uuid::Uuid::new_v4();
   let name = user_uuid.to_string();
   let email = format!("{}@appflowy.io", name);
-  let user = test_create_user(&pool, user_uuid, &email, &name)
+  let user = create_test_user(&pool, user_uuid, &email, &name)
     .await
     .unwrap();
   let workspace_id = user.workspace_id;

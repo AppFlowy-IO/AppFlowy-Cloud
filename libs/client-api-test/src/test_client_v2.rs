@@ -111,6 +111,7 @@ impl TestClient {
       uid,
       workspace_db_path: db_path,
       device_id: device_id.clone(),
+      access_token: api_client.access_token().unwrap(),
     })
     .unwrap();
 

@@ -49,9 +49,14 @@ impl Db {
     let object_id = ObjectId::from_str(collab.object_id())
       .map_err(|err| PersistenceError::InvalidData(err.to_string()))?;
     let mut txn = collab.transact_mut();
-    ops.load_doc_with_txn(self.uid, &self.workspace_id, &object_id, &mut txn)?;
-    drop(txn);
-    Ok(())
+    match ops.load_doc_with_txn(self.uid, &self.workspace_id, &object_id, &mut txn) {
+      Ok(_updates_applied) => Ok(()),
+      Err(PersistenceError::RecordNotFound(_)) => {
+        tracing::debug!("collab {} not found in local db", object_id);
+        Ok(())
+      },
+      Err(err) => Err(err),
+    }
   }
 
   pub fn remove_doc(&self, object_id: &Uuid) -> Result<(), PersistenceError> {

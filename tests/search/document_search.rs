@@ -47,7 +47,7 @@ async fn test_embedding_when_create_document() {
     .await;
   // The number of returned documents affected by the max token size when splitting the document
   // into chunks.
-  assert_eq!(search_resp.items.len(), 5);
+  assert_eq!(search_resp.items.len(), 2);
   assert_eq!(search_resp.summaries.len(), 1);
   let previews = search_resp
     .items

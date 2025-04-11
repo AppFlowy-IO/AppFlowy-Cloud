@@ -153,18 +153,20 @@ pub async fn search_document(
   // Perform document search.
   let results = search_documents(pg_pool, params, total_tokens).await?;
   trace!(
-    "[Search] user {} search request in workspace {} returned {} results for query: `{}`",
-    uid,
+    "[Search] query:{} in workspace:{:?}, got {} results",
+    request.query,
     workspace_uuid,
     results.len(),
-    request.query
   );
 
   let mut summaries = Vec::new();
   if !results.is_empty() {
     if let Some(ai_chat) = ai_tool {
       if let Some(model_name) = get_env_var_opt("AI_OPENAI_API_SUMMARY_MODEL") {
-        trace!("using {} model to summarize search results", model_name);
+        trace!(
+          "[Search] use {} model to summarize search results",
+          model_name
+        );
         let llm_docs: Vec<LLMDocument> = results
           .iter()
           .map(|result| {

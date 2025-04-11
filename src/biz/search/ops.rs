@@ -19,7 +19,7 @@ use shared_entity::dto::search_dto::{
 use sqlx::PgPool;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing::error;
+use tracing::{error, trace};
 use uuid::Uuid;
 
 static MAX_SEARCH_DEPTH: i32 = 10;
@@ -133,13 +133,13 @@ pub async fn search_document(
       preview,
       embedding: embedding.embedding,
       searchable_view_ids: searchable_view_ids.into_iter().collect(),
-      score: request.score_limit,
+      score: request.score,
     },
     total_tokens,
   )
   .await?;
 
-  tracing::trace!(
+  trace!(
     "user {} search request in workspace {} returned {} results for query: `{}`",
     uid,
     workspace_uuid,
@@ -148,42 +148,45 @@ pub async fn search_document(
   );
 
   let mut summary = vec![];
-  if let Some(ai_chat) = ai_tool {
-    let model_name = "gpt-4o-mini";
-    match ai_chat
-      .summary_documents(
-        &request.query,
-        model_name,
-        &results
-          .iter()
-          .map(|result| {
-            let metadata = json!({
-                "id": result.object_id,
-                "source": "appflowy",
-                "name": "document",
-                "collab_type":result.collab_type,
-            });
-            LLMDocument::new(result.content.clone(), metadata)
-          })
-          .collect::<Vec<_>>(),
-        request.only_context,
-      )
-      .await
-    {
-      Ok(resp) => {
-        summary = resp
-          .summaries
-          .into_iter()
-          .map(|summary| Summary {
-            content: summary.content,
-            metadata: summary.metadata,
-            score: summary.score,
-          })
-          .collect::<Vec<_>>();
-      },
-      Err(err) => {
-        error!("AI summary search document failed, error: {:?}", err);
-      },
+  if !results.is_empty() {
+    if let Some(ai_chat) = ai_tool {
+      let model_name = "gpt-4o-mini";
+      trace!("using {} model to summarize search results", model_name);
+      match ai_chat
+        .summary_documents(
+          &request.query,
+          model_name,
+          &results
+            .iter()
+            .map(|result| {
+              let metadata = json!({
+                  "id": result.object_id,
+                  "source": "appflowy",
+                  "name": "document",
+              });
+              LLMDocument::new(result.content.clone(), metadata)
+            })
+            .collect::<Vec<_>>(),
+          request.only_context,
+        )
+        .await
+      {
+        Ok(resp) => {
+          trace!("AI summary search document response: {:?}", resp);
+          summary = resp
+            .summaries
+            .into_iter()
+            .map(|summary| Summary {
+              content: summary.content,
+              metadata: summary.metadata,
+              score: summary.score,
+            })
+            .collect::<Vec<_>>();
+        },
+        Err(err) => {
+          error!("AI summary search document failed, error: {:?}", err);
+        },
+      }
     }
   }
 

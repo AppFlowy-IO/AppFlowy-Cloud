@@ -60,9 +60,21 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   .bind(tokens_used as i64)
   .bind(params.searchable_view_ids);
   let rows = query.fetch_all(executor).await?;
-  let results = rows
-    .into_iter()
-    .map(|result| SearchDocumentResult {
+  trace!(
+    "search document result: found {} results, distances: {:?}",
+    rows.len(),
+    rows.iter().map(|r| r.distance).collect::<Vec<_>>()
+  );
+
+  let mut results = Vec::with_capacity(rows.len());
+  // Process results
+  for result in rows {
+    let score = _cosine_relevance_score_fn(result.distance);
+    if score <= params.score {
+      continue;
+    }
+
+    results.push(SearchDocumentResult {
       object_id: result.object_id,
       workspace_id: result.workspace_id,
       collab_type: result.collab_type,
@@ -70,26 +82,37 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
       content: result.content,
       created_by: result.created_by,
       created_at: result.created_at,
-      score: _cosine_relevance_score_fn(result.distance),
-    })
-    .collect::<Vec<_>>();
+      score,
+    });
+  }
 
   trace!(
-    "search documents: found {} results, scores: {:?}",
+    "search document: found {} relevant results, scores: {:?}",
     results.len(),
     results.iter().map(|r| r.score).collect::<Vec<_>>()
   );
 
-  let filter_result = results
-    .into_iter()
-    .filter(|result| result.score > params.score)
-    .collect::<Vec<_>>();
-
-  Ok(filter_result)
+  Ok(results)
 }
 
+/// Converts cosine distance to a relevance score.
+/// Distance:
+///   Represents the raw vector distance between the query embedding and the document embedding
+///   Uses the PG vector operator <=> (cosine distance)
+///   Lower values indicate higher similarity (0 means identical vectors)
+/// Score:
+///   From user perspective, higher scores are better.
+///   Higher values indicate higher similarity (1 means identical vectors)
+///
 fn _cosine_relevance_score_fn(distance: f64) -> f64 {
-  1.0 - distance
+  // Ensure distance is in valid range (0 to 2 for cosine distance)
+  if distance < 0.0 {
+    1.0 // Maximum similarity for invalid negative distances
+  } else if distance > 2.0 {
+    0.0 // Minimum similarity for invalid large distances
+  } else {
+    1.0 - distance
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -126,26 +149,18 @@ pub struct SearchDocumentRow {
   pub created_by: String,
   /// When the document was created.
   pub created_at: DateTime<Utc>,
-  /// Similarity score to an original query. Lower is better.
+  /// Similarity distance to an original query. Lower is better.
   pub distance: f64,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone)]
 pub struct SearchDocumentResult {
-  /// Document identifier.
   pub object_id: Uuid,
-  /// Workspace identifier, given document belongs to.
   pub workspace_id: Uuid,
-  /// Partition key, which maps directly onto [collab_entity::CollabType].
   pub collab_type: i32,
-  /// Type of the content to be presented. Maps directly onto [database_entity::dto::EmbeddingContentType].
   pub content_type: i32,
-  /// Content of the document.
   pub content: String,
-  /// Name of the user who's an owner of the document.
   pub created_by: String,
-  /// When the document was created.
   pub created_at: DateTime<Utc>,
-  /// Similarity score to an original query. Higher is better.
   pub score: f64,
 }

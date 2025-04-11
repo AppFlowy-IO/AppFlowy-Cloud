@@ -21,14 +21,12 @@ pub struct SearchDocumentRequest {
   pub only_context: bool,
 
   #[serde(default = "default_search_score_limit")]
-  pub score_limit: f32,
+  pub score: f64,
 }
 
-fn default_search_score_limit() -> f32 {
-  // The limit of what the score should be for results, used to
-  // filter out irrelevant results.
-  // https://community.openai.com/t/rule-of-thumb-cosine-similarity-thresholds/693670/5
-  0.3
+fn default_search_score_limit() -> f64 {
+  // Higher score means better match.
+  0.4
 }
 
 fn default_only_context() -> bool {

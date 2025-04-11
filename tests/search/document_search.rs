@@ -41,30 +41,21 @@ async fn test_embedding_when_create_document() {
   )
   .await;
 
+  // Test Search
   let search_resp = test_client
-    .wait_unit_get_search_result(&workspace_id, "Kathryn", 5, 100, Some(0.7))
+    .wait_unit_get_search_result(&workspace_id, "Kathryn tennis", 5, 100, Some(0.4))
     .await;
   // The number of returned documents affected by the max token size when splitting the document
   // into chunks.
-  assert_eq!(search_resp.items.len(), 2);
-
+  assert_eq!(search_resp.items.len(), 1);
+  assert_eq!(search_resp.summaries.len(), 1);
   let previews = search_resp
     .items
     .iter()
     .map(|item| item.preview.clone().unwrap())
     .collect::<Vec<String>>()
     .join("\n");
-
-  let expected = r#"
-      "Kathryn's Journey to Becoming a Tennis Player Kathryn's love for tennis began on a warm summer day w
-yn decided to pursue tennis seriously. She joined a competitive training academy, where the
-practice
-mwork. Part III: Heavy Lifting With initial trust in place, Kathryn shifts her focus to accountabili
-'s ideas without fear of
-reprisal. Lack of Commitment Without clarity and buy-in, team decisions bec
-The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a Team by Patrick Lenci"
-    "#;
-
+  let expected = "Kathryn’s Journey to Becoming a Tennis PlayerKathryn’s love for tennis began on a warm summer day wh";
   calculate_similarity_and_assert(
     &mut test_client,
     workspace_id,
@@ -75,13 +66,22 @@ The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a T
   )
   .await;
 
-  // Replace the chat creation and question asking with the function call
+  // Test irrelevant search
+  let search_resp = test_client
+    .api_client
+    .search_documents_v2(&workspace_id, "Hello world", 5, 100, Some(0.4))
+    .await
+    .unwrap();
+  assert!(search_resp.items.is_empty());
+  assert!(search_resp.summaries.is_empty());
+
+  // Simulate when user click search result to open the document and then chat with it.
   let answer = create_chat_and_ask_question(
     &mut test_client,
     &workspace_id,
     object_id_1,
     "chat with the five dysfunctions of a team",
-    "Tell me what Kathryn concisely?",
+    "Kathryn CEO of DecisionTech",
   )
   .await;
 
@@ -246,10 +246,12 @@ async fn calculate_similarity_and_assert(
 
   assert!(
     score > threshold,
-    "{} should greater than {}, but got: {}",
+    "{} should greater than {}, but got: {}. input:{}, expected: {}",
     error_message,
     threshold,
-    score
+    score,
+    input,
+    expected
   );
 
   score

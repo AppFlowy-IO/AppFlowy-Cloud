@@ -29,21 +29,22 @@ impl Client {
     process_response_data::<Vec<SearchDocumentResponseItem>>(resp).await
   }
 
+  /// High score means more relevant
   pub async fn search_documents_v2<T: Into<Option<f32>>>(
     &self,
     workspace_id: &Uuid,
     query: &str,
     limit: u32,
     preview_size: u32,
-    score_limit: T,
+    score: T,
   ) -> Result<SearchResult, AppResponseError> {
     let mut raw_query = Vec::with_capacity(4);
     raw_query.push(("query", query.to_string()));
     raw_query.push(("limit", limit.to_string()));
     raw_query.push(("preview_size", preview_size.to_string()));
 
-    if let Some(score_limit) = score_limit.into() {
-      raw_query.push(("score_limit", score_limit.to_string()));
+    if let Some(score_limit) = score.into() {
+      raw_query.push(("score", score_limit.to_string()));
     }
 
     let query = serde_urlencoded::to_string(raw_query)

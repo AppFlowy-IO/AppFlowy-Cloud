@@ -101,11 +101,12 @@ impl Workspace {
           },
         };
       },
-      InputMessage::Update(_collab_type, update) => {
+      InputMessage::Update(collab_type, update) => {
         if let Err(err) = store
           .publish_update(
             msg.workspace_id,
             msg.object_id,
+            collab_type,
             &msg.sender,
             update.encode_v1(),
           )

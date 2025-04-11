@@ -9,7 +9,6 @@ async fn chat_with_search_result_simple() {
   if !ai_test_enabled() {
     return;
   }
-  load_env();
   let (open_ai_config, azure_config) = get_open_ai_config();
   let ai_chat = create_ai_tool(&azure_config, &open_ai_config).unwrap();
   let model_name = "gpt-4o-mini";

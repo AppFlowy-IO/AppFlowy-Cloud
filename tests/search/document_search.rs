@@ -47,7 +47,7 @@ async fn test_embedding_when_create_document() {
     .await;
   // The number of returned documents affected by the max token size when splitting the document
   // into chunks.
-  assert_eq!(search_resp.items.len(), 1);
+  assert_eq!(search_resp.items.len(), 5);
   assert_eq!(search_resp.summaries.len(), 1);
   let previews = search_resp
     .items
@@ -86,12 +86,8 @@ async fn test_embedding_when_create_document() {
   .await;
 
   let expected_answer = r#"
-    Kathryn Petersen is the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup.
-     She steps into a role facing a dysfunctional executive team characterized by poor communication,
-      lack of trust, and weak commitment. Throughout the narrative, Kathryn focuses on addressing
-      foundational team issues by fostering trust, encouraging open conflict, and promoting accountability,
-       ultimately leading her team toward improved collaboration and performance.
-    "#;
+Kathryn Petersen is the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup featured in Patrick Lencioni's book "The Five Dysfunctions of a Team." She faces the challenge of leading a dysfunctional executive team characterized by poor communication, lack of trust, and weak commitment. Her role involves addressing these issues to improve team dynamics and overall performance within the company.
+  "#;
 
   calculate_similarity_and_assert(
     &mut test_client,

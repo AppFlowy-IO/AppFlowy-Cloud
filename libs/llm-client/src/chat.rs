@@ -10,13 +10,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::trace;
 
-pub enum AIChat {
+pub enum AITool {
   OpenAI(OpenAIChat),
   AzureOpenAI(AzureOpenAIChat),
 }
 
-impl AIChat {
-  pub async fn chat_with_documents(
+impl AITool {
+  pub async fn summary_documents(
     &self,
     question: &str,
     model_name: &str,
@@ -31,7 +31,7 @@ impl AIChat {
       only_context
     );
     match self {
-      AIChat::OpenAI(client) => {
+      AITool::OpenAI(client) => {
         chat_with_documents(
           &client.client,
           question,
@@ -41,7 +41,7 @@ impl AIChat {
         )
         .await
       },
-      AIChat::AzureOpenAI(client) => {
+      AITool::AzureOpenAI(client) => {
         chat_with_documents(
           &client.client,
           question,

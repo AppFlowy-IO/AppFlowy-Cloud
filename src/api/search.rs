@@ -3,7 +3,7 @@ use actix_web::web::{Data, Query};
 use actix_web::{web, Scope};
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use authentication::jwt::Authorization;
-use llm_client::chat::{AIChat, AzureOpenAIChat, OpenAIChat};
+use llm_client::chat::{AITool, AzureOpenAIChat, OpenAIChat};
 use shared_entity::dto::search_dto::{
   SearchDocumentRequest, SearchDocumentResponseItem, SearchResult,
 };
@@ -65,7 +65,7 @@ async fn document_search_v2(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let metrics = &*state.metrics.request_metrics;
-  let ai_chat = create_ai_chat_client(&state.config.azure_ai_config, &state.config.open_ai_config);
+  let ai_tool = create_ai_tool(&state.config.azure_ai_config, &state.config.open_ai_config);
   let resp = search_document(
     &state.pg_pool,
     &state.collab_access_control_storage,
@@ -74,22 +74,22 @@ async fn document_search_v2(
     workspace_id,
     request,
     metrics,
-    ai_chat,
+    ai_tool,
   )
   .await?;
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
-pub fn create_ai_chat_client(
+pub fn create_ai_tool(
   azure_ai_config: &Option<AzureConfig>,
   open_ai_config: &Option<OpenAIConfig>,
-) -> Option<AIChat> {
+) -> Option<AITool> {
   if let Some(config) = &azure_ai_config {
-    return Some(AIChat::AzureOpenAI(AzureOpenAIChat::new(config.clone())));
+    return Some(AITool::AzureOpenAI(AzureOpenAIChat::new(config.clone())));
   }
 
   if let Some(config) = &open_ai_config {
-    return Some(AIChat::OpenAI(OpenAIChat::new(config.clone())));
+    return Some(AITool::OpenAI(OpenAIChat::new(config.clone())));
   }
   None
 }

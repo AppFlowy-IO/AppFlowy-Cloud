@@ -1,4 +1,4 @@
-use appflowy_cloud::api::search::create_ai_chat_client;
+use appflowy_cloud::api::search::create_ai_tool;
 use client_api_test::{ai_test_enabled, load_env};
 use indexer::vector::embedder::get_open_ai_config;
 use llm_client::chat::LLMDocument;
@@ -11,7 +11,7 @@ async fn chat_with_search_result_simple() {
   }
   load_env();
   let (open_ai_config, azure_config) = get_open_ai_config();
-  let ai_chat = create_ai_chat_client(&azure_config, &open_ai_config).unwrap();
+  let ai_chat = create_ai_tool(&azure_config, &open_ai_config).unwrap();
   let model_name = "gpt-4o-mini";
   let docs = vec![
     "“GPT-4o-mini” is typically used to suggest a streamlined version of the GPT-4 family. The idea is to create a model that maintains the core language capabilities of GPT-4 while reducing computational requirements",
@@ -23,7 +23,7 @@ async fn chat_with_search_result_simple() {
   }))).collect::<Vec<_>>();
 
   let resp = ai_chat
-    .chat_with_documents("gpt-4o", model_name, &docs, true)
+    .summary_documents("gpt-4o", model_name, &docs, true)
     .await
     .unwrap();
   dbg!(&resp);
@@ -39,7 +39,7 @@ async fn chat_with_search_result_simple() {
   );
 
   let resp = ai_chat
-    .chat_with_documents("deepseek-r1", model_name, &docs, true)
+    .summary_documents("deepseek-r1", model_name, &docs, true)
     .await
     .unwrap();
   dbg!(&resp);
@@ -47,7 +47,7 @@ async fn chat_with_search_result_simple() {
 
   // When only_context is false, the llm knowledge base is used to answer the question.
   let resp = ai_chat
-    .chat_with_documents("deepseek-r1 llm model", model_name, &docs, false)
+    .summary_documents("deepseek-r1 llm model", model_name, &docs, false)
     .await
     .unwrap();
   dbg!(&resp);
@@ -63,7 +63,7 @@ async fn summary_search_result() {
   }
   load_env();
   let (open_ai_config, azure_config) = get_open_ai_config();
-  let ai_chat = create_ai_chat_client(&azure_config, &open_ai_config).unwrap();
+  let ai_chat = create_ai_tool(&azure_config, &open_ai_config).unwrap();
   let model_name = "gpt-4o-mini";
   let docs = vec![
     ("Rust is a multiplayer survival game developed by Facepunch Studios, first released in early access in December 2013 and fully launched in February 2018. It has since become one of the most popular games in the survival genre, known for its harsh environment, intricate crafting system, and player-driven dynamics. The game is available on Windows, macOS, and PlayStation, with a community-driven approach to updates and content additions.", json!({"id": 1, "source": "test"})),
@@ -72,14 +72,14 @@ async fn summary_search_result() {
   ].into_iter().map(|(content, metadata)| LLMDocument::new(content.to_string(), metadata)).collect::<Vec<_>>();
 
   let resp = ai_chat
-    .chat_with_documents("Rust", model_name, &docs, true)
+    .summary_documents("Rust", model_name, &docs, true)
     .await
     .unwrap();
   dbg!(&resp);
   assert_eq!(resp.summaries.len(), 3);
 
   let resp = ai_chat
-    .chat_with_documents("Play Rust over time", model_name, &docs, true)
+    .summary_documents("Play Rust over time", model_name, &docs, true)
     .await
     .unwrap();
   dbg!(&resp);

@@ -19,6 +19,16 @@ pub struct SearchDocumentRequest {
 
   #[serde(default = "default_only_context")]
   pub only_context: bool,
+
+  #[serde(default = "default_search_score_limit")]
+  pub score_limit: f32,
+}
+
+fn default_search_score_limit() -> f32 {
+  // The limit of what the score should be for results, used to
+  // filter out irrelevant results.
+  // https://community.openai.com/t/rule-of-thumb-cosine-similarity-thresholds/693670/5
+  0.3
 }
 
 fn default_only_context() -> bool {
@@ -36,7 +46,7 @@ pub struct Summary {
 /// See: [SearchDocumentRequest].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchResult {
-  pub summary: Vec<Summary>,
+  pub summaries: Vec<Summary>,
   pub items: Vec<SearchDocumentResponseItem>,
 }
 

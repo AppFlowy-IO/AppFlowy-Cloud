@@ -11,7 +11,7 @@ use database::collab::GetCollabOrigin;
 use database::index::{search_documents, SearchDocumentParams};
 use indexer::scheduler::IndexerScheduler;
 use indexer::vector::embedder::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFormat};
-use llm_client::chat::{AIChat, LLMDocument};
+use llm_client::chat::{AITool, LLMDocument};
 use serde_json::json;
 use shared_entity::dto::search_dto::{
   SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem, SearchResult, Summary,
@@ -80,7 +80,7 @@ pub async fn search_document(
   workspace_uuid: Uuid,
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
-  ai_chat: Option<AIChat>,
+  ai_tool: Option<AITool>,
 ) -> Result<SearchResult, AppError> {
   let embeddings_request = CreateEmbeddingRequestArgs::default()
     .model(EmbeddingModel::default_model().to_string())
@@ -133,10 +133,12 @@ pub async fn search_document(
       preview,
       embedding: embedding.embedding,
       searchable_view_ids: searchable_view_ids.into_iter().collect(),
+      score: request.score_limit,
     },
     total_tokens,
   )
   .await?;
+
   tracing::trace!(
     "user {} search request in workspace {} returned {} results for query: `{}`",
     uid,
@@ -146,10 +148,10 @@ pub async fn search_document(
   );
 
   let mut summary = vec![];
-  if let Some(ai_chat) = ai_chat {
+  if let Some(ai_chat) = ai_tool {
     let model_name = "gpt-4o-mini";
     match ai_chat
-      .chat_with_documents(
+      .summary_documents(
         &request.query,
         model_name,
         &results
@@ -186,7 +188,7 @@ pub async fn search_document(
   }
 
   Ok(SearchResult {
-    summary,
+    summaries: summary,
     items: results
       .into_iter()
       .map(|item| SearchDocumentResponseItem {

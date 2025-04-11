@@ -642,12 +642,13 @@ impl TestClient {
     query: &str,
     limit: u32,
     preview: u32,
+    score_limit: Option<f32>,
   ) -> SearchResult {
     timeout(Duration::from_secs(30), async {
       loop {
         let response = self
           .api_client
-          .search_documents(workspace_id, query, limit, preview)
+          .search_documents_v2(workspace_id, query, limit, preview, score_limit)
           .await
           .unwrap();
 

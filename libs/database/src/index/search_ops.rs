@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use pgvector::Vector;
 use sqlx::{Executor, Postgres};
+use tracing::trace;
 use uuid::Uuid;
 
 /// Logs each search request to track usage by workspace. It either inserts a new record or updates
@@ -15,7 +16,15 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   params: SearchDocumentParams,
   tokens_used: u32,
 ) -> Result<Vec<SearchDocumentResult>, sqlx::Error> {
-  let query = sqlx::query_as::<_, SearchDocumentResult>(
+  trace!(
+    "search documents: user_id: {}, workspace_id: {}, limit: {}, score limit: {:?}",
+    params.user_id,
+    params.workspace_id,
+    params.limit,
+    params.score,
+  );
+
+  let query = sqlx::query_as::<_, SearchDocumentRow>(
     r#"
     WITH workspace AS (
       INSERT INTO af_workspace_ai_usage(created_at, workspace_id, search_requests, search_tokens_consumed, index_tokens_consumed)
@@ -34,7 +43,7 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
       LEFT(em.content, $4) AS content_preview,
       u.name AS created_by,
       collab.created_at AS created_at,
-      em.embedding <=> $3 AS score
+      em.embedding <=> $3 AS distance
     FROM af_collab_embeddings em
     JOIN af_collab collab ON em.oid = collab.oid
     JOIN af_user u ON collab.owner_uid = u.uid
@@ -50,8 +59,37 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   .bind(params.limit)
   .bind(tokens_used as i64)
   .bind(params.searchable_view_ids);
-  let results = query.fetch_all(executor).await?;
-  Ok(results)
+  let rows = query.fetch_all(executor).await?;
+  let results = rows
+    .into_iter()
+    .map(|result| SearchDocumentResult {
+      object_id: result.object_id,
+      workspace_id: result.workspace_id,
+      collab_type: result.collab_type,
+      content_type: result.content_type,
+      content: result.content,
+      created_by: result.created_by,
+      created_at: result.created_at,
+      score: _cosine_relevance_score_fn(result.distance),
+    })
+    .collect::<Vec<_>>();
+
+  trace!(
+    "search documents: found {} results, scores: {:?}",
+    results.len(),
+    results.iter().map(|r| r.score).collect::<Vec<_>>()
+  );
+
+  let filter_result = results
+    .into_iter()
+    .filter(|result| result.score > params.score)
+    .collect::<Vec<_>>();
+
+  Ok(filter_result)
+}
+
+fn _cosine_relevance_score_fn(distance: f64) -> f64 {
+  1.0 - distance
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +106,28 @@ pub struct SearchDocumentParams {
   pub embedding: Vec<f32>,
   /// List of view ids which is not supposed to be returned in the search results.
   pub searchable_view_ids: Vec<Uuid>,
+  /// similarity score limit for the search results. The higher, the better.
+  pub score: f64,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SearchDocumentRow {
+  /// Document identifier.
+  pub object_id: Uuid,
+  /// Workspace identifier, given document belongs to.
+  pub workspace_id: Uuid,
+  /// Partition key, which maps directly onto [collab_entity::CollabType].
+  pub collab_type: i32,
+  /// Type of the content to be presented. Maps directly onto [database_entity::dto::EmbeddingContentType].
+  pub content_type: i32,
+  /// Content of the document.
+  pub content: String,
+  /// Name of the user who's an owner of the document.
+  pub created_by: String,
+  /// When the document was created.
+  pub created_at: DateTime<Utc>,
+  /// Similarity score to an original query. Lower is better.
+  pub distance: f64,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -86,6 +146,6 @@ pub struct SearchDocumentResult {
   pub created_by: String,
   /// When the document was created.
   pub created_at: DateTime<Utc>,
-  /// Similarity score to an original query. Lower is better.
+  /// Similarity score to an original query. Higher is better.
   pub score: f64,
 }

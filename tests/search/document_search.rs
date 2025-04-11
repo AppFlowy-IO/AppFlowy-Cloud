@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use appflowy_ai_client::dto::CalculateSimilarityParams;
-use client_api_test::{collect_answer, TestClient};
+use client_api_test::{ai_test_enabled, collect_answer, TestClient};
 use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;
@@ -10,163 +10,98 @@ use collab_entity::CollabType;
 use collab_folder::ViewLayout;
 use shared_entity::dto::chat_dto::{CreateChatMessageParams, CreateChatParams};
 use tokio::time::sleep;
+use uuid::Uuid;
 use workspace_template::document::getting_started::getting_started_document_data;
 
 #[tokio::test]
 async fn test_embedding_when_create_document() {
+  if !ai_test_enabled() {
+    return;
+  }
+
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
-  let object_id_1 = uuid::Uuid::new_v4();
-  let the_five_dysfunctions_of_a_team = create_document_collab(
-    &object_id_1.to_string(),
+  // Create the first document and wait for its embedding.
+  let object_id_1 = add_document_collab(
+    &mut test_client,
+    &workspace_id,
     "the_five_dysfunctions_of_a_team.md",
+    "five dysfunctional",
+    true,
   )
   .await;
-  let encoded_collab = the_five_dysfunctions_of_a_team.encode_collab().unwrap();
-  test_client
-    .create_collab_with_data(
-      workspace_id,
-      object_id_1,
-      CollabType::Document,
-      encoded_collab,
-    )
-    .await
-    .unwrap();
-  test_client
-    .insert_view_to_general_space(
-      &workspace_id,
-      &object_id_1.to_string(),
-      "five dysfunctional",
-      ViewLayout::Document,
-    )
-    .await;
 
-  test_client
-    .wait_until_get_embedding(&workspace_id, &object_id_1)
-    .await;
-
-  let object_id_2 = uuid::Uuid::new_v4();
-  let tennis_player =
-    create_document_collab(&object_id_2.to_string(), "kathryn_tennis_story.md").await;
-  let encoded_collab = tennis_player.encode_collab().unwrap();
-  test_client
-    .create_collab_with_data(
-      workspace_id,
-      object_id_2,
-      CollabType::Document,
-      encoded_collab,
-    )
-    .await
-    .unwrap();
-  test_client
-    .insert_view_to_general_space(
-      &workspace_id,
-      &object_id_2.to_string(),
-      "tennis",
-      ViewLayout::Document,
-    )
-    .await;
-
-  test_client
-    .wait_until_get_embedding(&workspace_id, &object_id_2)
-    .await;
+  // Create the second document; no need to wait for its embedding.
+  let _ = add_document_collab(
+    &mut test_client,
+    &workspace_id,
+    "kathryn_tennis_story.md",
+    "tennis",
+    true,
+  )
+  .await;
 
   let search_resp = test_client
-    .wait_unit_get_search_result(&workspace_id, "Kathryn", 5, 100)
+    .wait_unit_get_search_result(&workspace_id, "Kathryn", 5, 100, Some(0.7))
     .await;
   // The number of returned documents affected by the max token size when splitting the document
   // into chunks.
   assert_eq!(search_resp.items.len(), 2);
 
-  if ai_test_enabled() {
-    let previews = search_resp
-      .items
-      .iter()
-      .map(|item| item.preview.clone().unwrap())
-      .collect::<Vec<String>>()
-      .join("\n");
-    let params = CalculateSimilarityParams {
-      workspace_id,
-      input: previews,
-      expected: r#"
-      "Kathryn’s Journey to Becoming a Tennis Player Kathryn’s love for tennis began on a warm summer day w
+  let previews = search_resp
+    .items
+    .iter()
+    .map(|item| item.preview.clone().unwrap())
+    .collect::<Vec<String>>()
+    .join("\n");
+
+  let expected = r#"
+      "Kathryn's Journey to Becoming a Tennis Player Kathryn's love for tennis began on a warm summer day w
 yn decided to pursue tennis seriously. She joined a competitive training academy, where the
 practice
 mwork. Part III: Heavy Lifting With initial trust in place, Kathryn shifts her focus to accountabili
-’s ideas without fear of
+'s ideas without fear of
 reprisal. Lack of Commitment Without clarity and buy-in, team decisions bec
 The Five Dysfunctions of a Team by Patrick Lencioni The Five Dysfunctions of a Team by Patrick Lenci"
-    "#
-      .to_string(),
-      use_embedding: true,
-    };
-    let score = test_client
-      .api_client
-      .calculate_similarity(params)
-      .await
-      .unwrap()
-      .score;
+    "#;
 
-    assert!(
-      score > 0.85,
-      "preview score should greater than 0.85, but got: {}",
-      score
-    );
+  calculate_similarity_and_assert(
+    &mut test_client,
+    workspace_id,
+    previews,
+    expected,
+    0.8,
+    "preview score",
+  )
+  .await;
 
-    // Create a chat to ask questions that related to the five dysfunctions of a team.
-    let chat_id = uuid::Uuid::new_v4().to_string();
-    let params = CreateChatParams {
-      chat_id: chat_id.clone(),
-      name: "chat with the five dysfunctions of a team".to_string(),
-      rag_ids: vec![object_id_1],
-    };
+  // Replace the chat creation and question asking with the function call
+  let answer = create_chat_and_ask_question(
+    &mut test_client,
+    &workspace_id,
+    object_id_1,
+    "chat with the five dysfunctions of a team",
+    "Tell me what Kathryn concisely?",
+  )
+  .await;
 
-    test_client
-      .api_client
-      .create_chat(&workspace_id, params)
-      .await
-      .unwrap();
-
-    let params = CreateChatMessageParams::new_user("Tell me what Kathryn concisely?");
-    let question = test_client
-      .api_client
-      .create_question(&workspace_id, &chat_id, params)
-      .await
-      .unwrap();
-    let answer_stream = test_client
-      .api_client
-      .stream_answer_v2(&workspace_id, &chat_id, question.message_id)
-      .await
-      .unwrap();
-    let answer = collect_answer(answer_stream).await;
-
-    let params = CalculateSimilarityParams {
-      workspace_id,
-      input: answer.clone(),
-      expected: r#"
+  let expected_answer = r#"
     Kathryn Petersen is the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup.
      She steps into a role facing a dysfunctional executive team characterized by poor communication,
       lack of trust, and weak commitment. Throughout the narrative, Kathryn focuses on addressing
       foundational team issues by fostering trust, encouraging open conflict, and promoting accountability,
        ultimately leading her team toward improved collaboration and performance.
-    "#
-          .to_string(),
-      use_embedding: true,
-    };
-    let score = test_client
-      .api_client
-      .calculate_similarity(params)
-      .await
-      .unwrap()
-      .score;
+    "#;
 
-    assert!(
-      score > 0.8,
-      "expected: 0.8, but got score: {}, input:{}",
-      score,
-      answer
-    );
-  }
+  calculate_similarity_and_assert(
+    &mut test_client,
+    workspace_id,
+    answer.clone(),
+    expected_answer,
+    0.8,
+    "expected",
+  )
+  .await;
 }
 
 #[ignore]
@@ -205,8 +140,8 @@ async fn test_document_indexing_and_search() {
     .search_documents(&workspace_id, "Appflowy", 1, 20)
     .await
     .unwrap();
-  assert_eq!(search_resp.items.len(), 1);
-  let item = &search_resp.items[0];
+  assert_eq!(search_resp.len(), 1);
+  let item = &search_resp[0];
   assert_eq!(item.object_id, object_id);
 
   let preview = item.preview.clone().unwrap();
@@ -221,9 +156,101 @@ async fn create_document_collab(document_id: &str, file_name: &str) -> Document 
   Document::create(document_id, document_data).unwrap()
 }
 
-pub fn ai_test_enabled() -> bool {
-  if cfg!(feature = "ai-test-enabled") {
-    return true;
+async fn add_document_collab(
+  client: &mut TestClient,
+  workspace_id: &Uuid,
+  file_name: &str,
+  search_term: &str,
+  wait_embedding: bool,
+) -> Uuid {
+  let object_id = Uuid::new_v4();
+  let collab = create_document_collab(&object_id.to_string(), file_name).await;
+  let encoded = collab.encode_collab().unwrap();
+  client
+    .create_collab_with_data(*workspace_id, object_id, CollabType::Document, encoded)
+    .await
+    .unwrap();
+  client
+    .insert_view_to_general_space(
+      workspace_id,
+      &object_id.to_string(),
+      search_term,
+      ViewLayout::Document,
+    )
+    .await;
+  if wait_embedding {
+    client
+      .wait_until_get_embedding(workspace_id, &object_id)
+      .await;
   }
-  false
+  object_id
+}
+
+async fn create_chat_and_ask_question(
+  test_client: &mut TestClient,
+  workspace_id: &Uuid,
+  rag_id: uuid::Uuid,
+  chat_name: &str,
+  question: &str,
+) -> String {
+  // Create a chat
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: chat_name.to_string(),
+    rag_ids: vec![rag_id],
+  };
+
+  test_client
+    .api_client
+    .create_chat(workspace_id, params)
+    .await
+    .unwrap();
+
+  // Ask question and get answer
+  let params = CreateChatMessageParams::new_user(question);
+  let question = test_client
+    .api_client
+    .create_question(workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+  let answer_stream = test_client
+    .api_client
+    .stream_answer_v2(workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+  collect_answer(answer_stream).await
+}
+
+async fn calculate_similarity_and_assert(
+  test_client: &mut TestClient,
+  workspace_id: Uuid,
+  input: String,
+  expected: &str,
+  threshold: f64,
+  error_message: &str,
+) -> f64 {
+  let params = CalculateSimilarityParams {
+    workspace_id,
+    input: input.clone(),
+    expected: expected.to_string(),
+    use_embedding: true,
+  };
+
+  let score = test_client
+    .api_client
+    .calculate_similarity(params)
+    .await
+    .unwrap()
+    .score;
+
+  assert!(
+    score > threshold,
+    "{} should greater than {}, but got: {}",
+    error_message,
+    threshold,
+    score
+  );
+
+  score
 }

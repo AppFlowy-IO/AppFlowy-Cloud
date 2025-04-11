@@ -31,6 +31,7 @@ pub fn ai_test_enabled() -> bool {
     return true;
   }
 
+  load_env();
   get_bool_from_env_var("AI_TEST_ENABLED")
 }
 

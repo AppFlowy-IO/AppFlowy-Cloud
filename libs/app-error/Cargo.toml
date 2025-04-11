@@ -25,6 +25,7 @@ serde_json.workspace = true
 tokio = { workspace = true, optional = true }
 bincode = { version = "1.3.3", optional = true }
 appflowy-ai-client = { workspace = true, optional = true, features = ["dto"] }
+async-openai = { workspace = true, optional = true }
 
 [features]
 default = []
@@ -34,7 +35,7 @@ actix_web_error = ["actix-web"]
 tokio_error = ["tokio"]
 gotrue_error = []
 bincode_error = ["bincode"]
-appflowy_ai_error = ["appflowy-ai-client"]
+appflowy_ai_error = ["appflowy-ai-client", "async-openai"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }

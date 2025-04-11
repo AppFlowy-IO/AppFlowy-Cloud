@@ -44,7 +44,7 @@ use database_entity::dto::{
   SnapshotData,
 };
 use shared_entity::dto::ai_dto::CalculateSimilarityParams;
-use shared_entity::dto::search_dto::SearchDocumentResponseItem;
+use shared_entity::dto::search_dto::SearchResult;
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CollabResponse, EmbeddedCollabQuery, PublishedDuplicate, WorkspaceMemberChangeset,
   WorkspaceMemberInvitation, WorkspaceSpaceUsage,
@@ -641,16 +641,18 @@ impl TestClient {
     workspace_id: &Uuid,
     query: &str,
     limit: u32,
-  ) -> Vec<SearchDocumentResponseItem> {
+    preview: u32,
+    score_limit: Option<f32>,
+  ) -> SearchResult {
     timeout(Duration::from_secs(30), async {
       loop {
         let response = self
           .api_client
-          .search_documents(workspace_id, query, limit, 200)
+          .search_documents_v2(workspace_id, query, limit, preview, score_limit)
           .await
           .unwrap();
 
-        if response.is_empty() {
+        if response.items.is_empty() {
           tokio::time::sleep(Duration::from_millis(1500)).await;
           continue;
         } else {

@@ -25,15 +25,12 @@ anyhow.workspace = true
 infra.workspace = true
 prometheus-client = "0.22.3"
 chrono = "0.4.39"
-ureq = "2.12.1"
 serde.workspace = true
 redis = { workspace = true, features = [
   "aio",
   "tokio-comp",
   "connection-manager",
 ] }
-secrecy = { workspace = true, features = ["serde"] }
-reqwest.workspace = true
 twox-hash = { version = "2.1.0", features = ["xxhash64"] }
-async-openai = "0.28.0"
 text-splitter = { version = "0.25.1" }
+async-openai.workspace = true

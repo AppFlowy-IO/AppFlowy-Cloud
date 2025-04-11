@@ -32,7 +32,7 @@ impl AITool {
     );
     match self {
       AITool::OpenAI(client) => {
-        chat_with_documents(
+        summarize_documents(
           &client.client,
           question,
           model_name,
@@ -42,7 +42,7 @@ impl AITool {
         .await
       },
       AITool::AzureOpenAI(client) => {
-        chat_with_documents(
+        summarize_documents(
           &client.client,
           question,
           model_name,
@@ -136,7 +136,7 @@ fn convert_documents_to_text(documents: &[LLMDocument]) -> String {
     .join("\n")
 }
 
-pub async fn chat_with_documents<C: Config>(
+pub async fn summarize_documents<C: Config>(
   client: &Client<C>,
   question: &str,
   model_name: &str,
@@ -179,12 +179,20 @@ pub async fn chat_with_documents<C: Config>(
     .response_format(response_format)
     .build()?;
 
-  let response = client.chat().create(request).await?;
-
-  response
+  let mut response = client
+    .chat()
+    .create(request)
+    .await?
     .choices
     .first()
     .and_then(|choice| choice.message.content.clone())
     .and_then(|content| serde_json::from_str::<SummarySearchResponse>(&content).ok())
-    .ok_or_else(|| AppError::Unhandled("No response from OpenAI".to_string()))
+    .ok_or_else(|| AppError::Unhandled("No response from OpenAI".to_string()))?;
+
+  // Remove empty summaries
+  response
+    .summaries
+    .retain(|summary| !summary.content.is_empty());
+
+  Ok(response)
 }

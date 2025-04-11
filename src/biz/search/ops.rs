@@ -124,23 +124,28 @@ pub async fn search_document(
     MAX_SEARCH_DEPTH,
   );
   let preview = request.preview_size.unwrap_or(500) as i32;
-  let results = search_documents(
-    pg_pool,
-    SearchDocumentParams {
-      user_id: uid,
-      workspace_id: workspace_uuid,
-      limit: request.limit.unwrap_or(10) as i32,
-      preview,
-      embedding: embedding.embedding,
-      searchable_view_ids: searchable_view_ids.into_iter().collect(),
-      score: request.score,
-    },
-    total_tokens,
-  )
-  .await?;
+
+  let params = SearchDocumentParams {
+    user_id: uid,
+    workspace_id: workspace_uuid,
+    limit: request.limit.unwrap_or(10) as i32,
+    preview,
+    embedding: embedding.embedding,
+    searchable_view_ids: searchable_view_ids.into_iter().collect(),
+    score: request.score,
+  };
+  trace!(
+    "[Search] user_id: {}, workspace_id: {}, limit: {}, score: {:?}, keyword:{}",
+    params.user_id,
+    params.workspace_id,
+    params.limit,
+    params.score,
+    request.query,
+  );
+  let results = search_documents(pg_pool, params, total_tokens).await?;
 
   trace!(
-    "user {} search request in workspace {} returned {} results for query: `{}`",
+    "[Search] user {} search request in workspace {} returned {} results for query: `{}`",
     uid,
     workspace_uuid,
     results.len(),

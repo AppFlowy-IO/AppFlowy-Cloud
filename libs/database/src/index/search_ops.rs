@@ -16,14 +16,6 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   params: SearchDocumentParams,
   tokens_used: u32,
 ) -> Result<Vec<SearchDocumentResult>, sqlx::Error> {
-  trace!(
-    "search documents: user_id: {}, workspace_id: {}, limit: {}, score limit: {:?}",
-    params.user_id,
-    params.workspace_id,
-    params.limit,
-    params.score,
-  );
-
   let query = sqlx::query_as::<_, SearchDocumentRow>(
     r#"
     WITH workspace AS (
@@ -60,8 +52,9 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   .bind(tokens_used as i64)
   .bind(params.searchable_view_ids);
   let rows = query.fetch_all(executor).await?;
+  let has_rows = !rows.is_empty();
   trace!(
-    "search document result: found {} results, distances: {:?}",
+    "[Search] found {} results, distances: {:?}",
     rows.len(),
     rows.iter().map(|r| r.distance).collect::<Vec<_>>()
   );
@@ -86,11 +79,13 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
     });
   }
 
-  trace!(
-    "search document: found {} relevant results, scores: {:?}",
-    results.len(),
-    results.iter().map(|r| r.score).collect::<Vec<_>>()
-  );
+  if has_rows {
+    trace!(
+      "[Search] found {} relevant results, scores: {:?}",
+      results.len(),
+      results.iter().map(|r| r.score).collect::<Vec<_>>()
+    );
+  }
 
   Ok(results)
 }

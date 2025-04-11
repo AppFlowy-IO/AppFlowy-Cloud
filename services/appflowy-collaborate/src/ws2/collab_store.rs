@@ -1,6 +1,7 @@
 use crate::collab::cache::CollabCache;
 use crate::ws2::messages::UpdateStreamMessage;
 use anyhow::anyhow;
+use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
@@ -70,13 +71,14 @@ impl CollabStore {
     workspace_id: WorkspaceId,
     object_id: ObjectId,
     collab_type: CollabType,
-  ) -> anyhow::Result<Bytes> {
+  ) -> anyhow::Result<(Rid, Bytes)> {
     match self
       .collab_cache
       .get_encode_collab(&workspace_id, QueryCollab::new(object_id, collab_type))
       .await
     {
-      Ok(collab) => Ok(collab.doc_state),
+      Ok((rid, collab)) => Ok((rid, collab.doc_state)),
+      Err(AppError::RecordNotFound(_)) => Ok((Rid::default(), Bytes::from_static(&[0, 0]))),
       Err(err) => Err(err.into()),
     }
   }
@@ -91,11 +93,9 @@ impl CollabStore {
     state_vector: &StateVector,
     rid: Rid,
   ) -> anyhow::Result<CollabState> {
-    let bytes = self
+    let (snapshot_rid, update) = self
       .get_snapshot(workspace_id, object_id, collab_type)
       .await?;
-    let (rid_bytes, update) = bytes.split_at(10);
-    let snapshot_rid = Rid::from_bytes(rid_bytes)?;
 
     // If the requested snapshot is newer than the current state, return an empty update.
     if snapshot_rid <= rid {
@@ -117,14 +117,14 @@ impl CollabStore {
       return Ok(CollabState {
         rid: snapshot_rid,
         flags: UpdateFlags::Lib0v2,
-        update: Bytes::copy_from_slice(update),
+        update,
       });
     }
 
     let doc = Doc::new();
     {
       let mut tx = doc.transact_mut();
-      tx.apply_update(Update::decode_v2(update)?)?;
+      tx.apply_update(Update::decode_v2(&update)?)?;
     }
     let update = doc.transact().encode_state_as_update_v2(state_vector);
     tracing::trace!("returning snapshot state (rid: {})", rid);
@@ -145,18 +145,15 @@ impl CollabStore {
     user_id: i64,
     state_vector: &StateVector,
   ) -> anyhow::Result<CollabState> {
-    let bytes = self
+    let (snapshot_rid, update) = self
       .get_snapshot(workspace_id, object_id, collab_type)
       .await?;
-    let (rid_bytes, update) = bytes.split_at(10);
-    let snapshot_rid = Rid::from_bytes(rid_bytes)?;
     let mut rid = snapshot_rid;
 
     let doc = Doc::new();
     {
       let mut tx = doc.transact_mut();
-      tx.apply_update(Update::decode_v2(update)?)?;
-      drop(bytes);
+      tx.apply_update(Update::decode_v2(&update)?)?;
 
       rid = self
         .replay_updates(&mut tx, workspace_id, object_id, rid)
@@ -253,6 +250,7 @@ impl CollabStore {
     &self,
     workspace_id: WorkspaceId,
     object_id: ObjectId,
+    collab_type: CollabType,
     sender: &CollabOrigin,
     update: Vec<u8>,
   ) -> anyhow::Result<Rid> {
@@ -264,6 +262,8 @@ impl CollabStore {
       .arg("*")
       .arg("oid")
       .arg(object_id)
+      .arg("ct")
+      .arg(collab_type as i32)
       .arg("sender")
       .arg(sender.to_string())
       .arg("data")
@@ -386,12 +386,11 @@ impl CollabStore {
         let doc = Doc::new();
         let mut tx = doc.transact_mut();
         let mut rid = Rid::default();
-        let bytes = self
+        let (curr_rid, update) = self
           .get_snapshot(workspace_id, object_id, collab_type)
           .await?;
-        let (rid_bytes, update) = bytes.split_at(10);
-        rid = Rid::from_bytes(rid_bytes)?;
-        tx.apply_update(Update::decode_v2(update)?)?;
+        rid = curr_rid;
+        tx.apply_update(Update::decode_v2(&update)?)?;
 
         for update in updates {
           rid = rid.max(update.last_message_id);

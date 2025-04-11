@@ -23,7 +23,7 @@ impl FromRedisStream for UpdateStreamMessage {
     let last_message_id = Rid::from_str(&msg_id).map_err(|err| anyhow!("{}", err))?;
     let object_id = fields
       .get("oid")
-      .ok_or_else(|| anyhow!("expecting field `object_id`"))?;
+      .ok_or_else(|| anyhow!("expecting field `oid`"))?;
     let object_id = ObjectId::from_redis_value(object_id).map_err(|err| anyhow!("{}", err))?;
     let collab_type = fields
       .get("ct")

@@ -81,7 +81,7 @@ impl Display for GoTrueErrorSerde {
 }
 
 /// The gotrue error definition:
-/// https://github.com/supabase/gotrue/blob/cc07b4aa2ace75d9c8e46ae5107dbabadf944e87/internal/models/errors.go#L65
+/// https://github.com/supabase/auth/blob/cc07b4aa2ace75d9c8e46ae5107dbabadf944e87/internal/models/errors.go#L65
 /// Used to deserialize the response from the gotrue server
 #[derive(Serialize, Deserialize, Debug, Error)]
 pub struct GotrueClientError {

@@ -75,7 +75,7 @@ services:
       retries: 12
     environment:
       # There are a lot of options to configure GoTrue. You can reference the example config:
-      # https://github.com/supabase/gotrue/blob/master/example.env
+      # https://github.com/supabase/auth/blob/master/example.env
       - GOTRUE_ADMIN_EMAIL=${GOTRUE_ADMIN_EMAIL}
       - GOTRUE_ADMIN_PASSWORD=${GOTRUE_ADMIN_PASSWORD}
       - GOTRUE_DISABLE_SIGNUP=${GOTRUE_DISABLE_SIGNUP:-false}

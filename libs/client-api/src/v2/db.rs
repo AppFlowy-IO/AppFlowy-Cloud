@@ -44,6 +44,31 @@ impl Db {
     Ok(message_id)
   }
 
+  pub fn init_collab(&self, collab: &Collab) -> Result<bool, PersistenceError> {
+    //NOTE: this shouldn't be needed, however the way how existing persistence is written,
+    // it's necessary
+    let collab_id: Uuid = collab.object_id().parse().unwrap();
+    tracing::trace!(
+      "initializing collab {}/{} in local db by {}",
+      &self.workspace_id,
+      collab_id,
+      self.uid
+    );
+    let tx = collab.transact();
+    let ops = self.inner.write_txn();
+    match ops.create_new_doc(self.uid, &self.workspace_id, &collab_id, &tx) {
+      Ok(_) => {
+        ops.commit_transaction()?;
+        Ok(true)
+      },
+      Err(PersistenceError::DocumentAlreadyExist) => {
+        tracing::warn!("collab {} already exists in local db", collab_id);
+        Ok(false)
+      },
+      Err(err) => Err(err),
+    }
+  }
+
   pub fn load(&self, collab: &mut Collab) -> Result<(), PersistenceError> {
     let ops = self.inner.write_txn();
     let object_id = ObjectId::from_str(collab.object_id())
@@ -73,12 +98,17 @@ impl Db {
     update_v1: Vec<u8>,
   ) -> Result<(), PersistenceError> {
     let ops = self.inner.write_txn();
+    tracing::trace!(
+      "persisting update for {}/{} by {}",
+      self.workspace_id,
+      object_id,
+      self.uid
+    );
+    ops.push_update(self.uid, &self.workspace_id, object_id, &update_v1)?;
     if let Some(message_id) = message_id {
       ops.update_last_message_id(&self.workspace_id, message_id)?;
     }
-    ops.push_update(self.uid, &self.workspace_id, object_id, &update_v1)?;
     ops.commit_transaction()?;
-    tracing::trace!("persisted update for {}", object_id);
     Ok(())
   }
 }

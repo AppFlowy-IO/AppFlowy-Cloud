@@ -1,4 +1,5 @@
 use std::borrow::BorrowMut;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -35,7 +36,7 @@ use client_api::entity::{
   CompletionStream, CompletionStreamValue, PublishCollabItem, PublishCollabMetadata,
   QueryWorkspaceMember, QuestionStream, QuestionStreamValue, UpdateCollabWebParams,
 };
-use client_api::v2::{WorkspaceController, WorkspaceControllerOptions};
+use client_api::v2::{WorkspaceController, WorkspaceControllerOptions, WorkspaceId};
 use database_entity::dto::{
   AFCollabEmbedInfo, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
   AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
@@ -58,11 +59,11 @@ pub type CollabRef = Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
 
 pub struct TestClient {
   pub user: User,
-  pub workspace: WorkspaceController,
+  pub workspaces: HashMap<WorkspaceId, WorkspaceController>,
   pub api_client: client_api::Client,
   pub collabs: HashMap<Uuid, TestCollab>,
   pub device_id: String,
-  _temp_dir: TempDir,
+  temp_dir: TempDir,
 }
 
 impl TestClient {
@@ -102,7 +103,7 @@ impl TestClient {
     let device_id = api_client.device_id.clone();
 
     let db_path = temp_dir.path().to_str().unwrap();
-    let db_path = format!("{}/{}", db_path, device_id);
+    let db_path = format!("{}/{}/{}", db_path, device_id, workspace_id);
     tokio::fs::create_dir_all(&db_path).await.unwrap();
 
     let workspace = WorkspaceController::new(WorkspaceControllerOptions {
@@ -121,11 +122,11 @@ impl TestClient {
     }
     Self {
       user: registered_user,
-      workspace,
+      workspaces: HashMap::from_iter([(workspace_id, workspace)]),
       api_client,
       collabs: Default::default(),
       device_id,
-      _temp_dir: temp_dir,
+      temp_dir,
     }
   }
 
@@ -143,11 +144,15 @@ impl TestClient {
   }
 
   pub fn disable_receive_message(&mut self) {
-    self.workspace.disable_receive_message();
+    for (_, workspace) in self.workspaces.iter_mut() {
+      workspace.disable_receive_message();
+    }
   }
 
   pub fn enable_receive_message(&mut self) {
-    self.workspace.enable_receive_message();
+    for (_, workspace) in self.workspaces.iter_mut() {
+      workspace.enable_receive_message();
+    }
   }
 
   pub async fn insert_view_to_general_space(
@@ -832,6 +837,30 @@ impl TestClient {
     object_id
   }
 
+  pub async fn workspace_for(&mut self, workspace_id: Uuid) -> &WorkspaceController {
+    match self.workspaces.entry(workspace_id) {
+      Entry::Occupied(e) => e.into_mut(),
+      Entry::Vacant(e) => {
+        let db_path = self.temp_dir.path().to_str().unwrap();
+        let db_path = format!("{}/{}/{}", db_path, self.device_id, workspace_id);
+        tokio::fs::create_dir_all(&db_path).await.unwrap();
+        let uid = self.api_client.get_profile().await.unwrap().uid;
+
+        let workspace = WorkspaceController::new(WorkspaceControllerOptions {
+          url: LOCALHOST_WS_V2.to_string(),
+          workspace_id,
+          uid,
+          workspace_db_path: db_path,
+          device_id: self.device_id.clone(),
+          access_token: self.api_client.access_token().unwrap(),
+        })
+        .unwrap();
+        workspace.connect().await.unwrap();
+        e.insert(workspace)
+      },
+    }
+  }
+
   #[allow(unused_variables)]
   pub async fn create_and_edit_collab_with_data(
     &mut self,
@@ -876,7 +905,8 @@ impl TestClient {
     let collab_ref = collab.clone() as CollabRef;
     #[cfg(feature = "collab-sync")]
     {
-      self.workspace.bind(&collab_ref, collab_type).await.unwrap();
+      let workspace = self.workspace_for(workspace_id).await;
+      workspace.bind(&collab_ref, collab_type).await.unwrap();
     }
     {
       let mut lock = collab.write().await;
@@ -930,7 +960,8 @@ impl TestClient {
 
     #[cfg(feature = "collab-sync")]
     {
-      self.workspace.bind(&collab_ref, collab_type).await.unwrap();
+      let workspace = self.workspace_for(workspace_id).await;
+      workspace.bind(&collab_ref, collab_type).await.unwrap();
     }
     {
       let mut lock = collab.write().await;
@@ -987,11 +1018,15 @@ impl TestClient {
   }
 
   pub async fn disconnect(&self) {
-    self.workspace.disconnect().await.unwrap();
+    for (_, workspace) in self.workspaces.iter() {
+      workspace.disconnect().await.unwrap();
+    }
   }
 
   pub async fn reconnect(&self) {
-    self.workspace.connect().await.unwrap();
+    for (_, workspace) in self.workspaces.iter() {
+      workspace.connect().await.unwrap();
+    }
   }
 
   pub async fn get_edit_collab_json(&self, object_id: &Uuid) -> Value {

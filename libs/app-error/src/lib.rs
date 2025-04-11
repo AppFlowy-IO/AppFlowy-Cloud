@@ -5,7 +5,6 @@ pub mod gotrue;
 use crate::gotrue::GoTrueError;
 #[cfg(feature = "appflowy_ai_error")]
 use appflowy_ai_client::error::AIError;
-use async_openai::error::OpenAIError;
 use reqwest::StatusCode;
 use serde::Serialize;
 use std::error::Error;
@@ -501,9 +500,11 @@ impl From<AIError> for AppError {
 impl From<async_openai::error::OpenAIError> for AppError {
   fn from(err: async_openai::error::OpenAIError) -> Self {
     match &err {
-      OpenAIError::Reqwest(e) => AppError::InvalidRequest(e.to_string()),
-      OpenAIError::ApiError(e) => AppError::InvalidRequest(e.to_string()),
-      OpenAIError::InvalidArgument(e) => AppError::InvalidRequest(e.to_string()),
+      async_openai::error::OpenAIError::Reqwest(e) => AppError::InvalidRequest(e.to_string()),
+      async_openai::error::OpenAIError::ApiError(e) => AppError::InvalidRequest(e.to_string()),
+      async_openai::error::OpenAIError::InvalidArgument(e) => {
+        AppError::InvalidRequest(e.to_string())
+      },
       _ => AppError::Internal(err.into()),
     }
   }

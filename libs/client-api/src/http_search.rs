@@ -1,6 +1,6 @@
 use app_error::ErrorCode;
 use reqwest::Method;
-use shared_entity::dto::search_dto::{SearchDocumentResponseItem, SearchResult};
+use shared_entity::dto::search_dto::SearchResult;
 use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 

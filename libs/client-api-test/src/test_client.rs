@@ -44,7 +44,7 @@ use database_entity::dto::{
   SnapshotData,
 };
 use shared_entity::dto::ai_dto::CalculateSimilarityParams;
-use shared_entity::dto::search_dto::{SearchDocumentResponseItem, SearchResult};
+use shared_entity::dto::search_dto::SearchResult;
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CollabResponse, EmbeddedCollabQuery, PublishedDuplicate, WorkspaceMemberChangeset,
   WorkspaceMemberInvitation, WorkspaceSpaceUsage,

@@ -2,13 +2,14 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use anyhow::Context;
+use async_openai::config::{AzureConfig, OpenAIConfig};
+use indexer::vector::embedder::get_open_ai_config;
+use infra::env_util::{get_env_var, get_env_var_opt};
+use mailer::config::MailerSetting;
 use secrecy::{ExposeSecret, Secret};
 use semver::Version;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
-
-use infra::env_util::{get_env_var, get_env_var_opt};
-use mailer::config::MailerSetting;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -28,6 +29,8 @@ pub struct Config {
   pub apple_oauth: AppleOAuthSetting,
   pub appflowy_web_url: Option<String>,
   pub admin_frontend_path_prefix: String,
+  pub open_ai_config: Option<OpenAIConfig>,
+  pub azure_ai_config: Option<AzureConfig>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -169,6 +172,7 @@ impl TryFrom<&str> for PublishedCollabStorageBackend {
 
 // Default values favor local development.
 pub fn get_configuration() -> Result<Config, anyhow::Error> {
+  let (open_ai_config, azure_ai_config) = get_open_ai_config();
   let config = Config {
     app_env: get_env_var("APPFLOWY_ENVIRONMENT", "local")
       .parse()
@@ -266,6 +270,8 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     appflowy_web_url: get_env_var_opt("APPFLOWY_WEB_URL"),
     admin_frontend_path_prefix: get_env_var("APPFLOWY_ADMIN_FRONTEND_PATH_PREFIX", ""),
+    open_ai_config,
+    azure_ai_config,
   };
   Ok(config)
 }

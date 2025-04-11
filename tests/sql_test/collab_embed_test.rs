@@ -1,7 +1,6 @@
 use crate::sql_test::util::{
   create_test_collab_document, create_test_user, select_all_fragments, setup_db, upsert_test_chunks,
 };
-
 use appflowy_ai_client::dto::EmbeddingModel;
 use indexer::collab_indexer::split_text_into_chunks;
 use sqlx::PgPool;

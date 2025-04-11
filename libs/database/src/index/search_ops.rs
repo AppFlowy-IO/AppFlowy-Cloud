@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use pgvector::Vector;
 use sqlx::{Executor, Postgres};
+use tracing::trace;
 use uuid::Uuid;
 
 /// Logs each search request to track usage by workspace. It either inserts a new record or updates
@@ -14,8 +15,8 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   params: SearchDocumentParams,
   tokens_used: u32,
-) -> Result<Vec<SearchDocumentItem>, sqlx::Error> {
-  let query = sqlx::query_as::<_, SearchDocumentItem>(
+) -> Result<Vec<SearchDocumentResult>, sqlx::Error> {
+  let query = sqlx::query_as::<_, SearchDocumentRow>(
     r#"
     WITH workspace AS (
       INSERT INTO af_workspace_ai_usage(created_at, workspace_id, search_requests, search_tokens_consumed, index_tokens_consumed)
@@ -30,10 +31,11 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
       collab.workspace_id,
       collab.partition_key AS collab_type,
       em.content_type,
+      em.content AS content,
       LEFT(em.content, $4) AS content_preview,
       u.name AS created_by,
       collab.created_at AS created_at,
-      em.embedding <=> $3 AS score
+      em.embedding <=> $3 AS distance
     FROM af_collab_embeddings em
     JOIN af_collab collab ON em.oid = collab.oid
     JOIN af_user u ON collab.owner_uid = u.uid
@@ -50,7 +52,62 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
   .bind(tokens_used as i64)
   .bind(params.searchable_view_ids);
   let rows = query.fetch_all(executor).await?;
-  Ok(rows)
+  let has_rows = !rows.is_empty();
+  trace!(
+    "[Search] found {} results, distances: {:?}",
+    rows.len(),
+    rows.iter().map(|r| r.distance).collect::<Vec<_>>()
+  );
+
+  let mut results = Vec::with_capacity(rows.len());
+  // Process results
+  for result in rows {
+    let score = _cosine_relevance_score_fn(result.distance);
+    if score <= params.score {
+      continue;
+    }
+
+    results.push(SearchDocumentResult {
+      object_id: result.object_id,
+      workspace_id: result.workspace_id,
+      collab_type: result.collab_type,
+      content_type: result.content_type,
+      content: result.content,
+      created_by: result.created_by,
+      created_at: result.created_at,
+      score,
+    });
+  }
+
+  if has_rows {
+    trace!(
+      "[Search] found {} relevant results, scores: {:?}",
+      results.len(),
+      results.iter().map(|r| r.score).collect::<Vec<_>>()
+    );
+  }
+
+  Ok(results)
+}
+
+/// Converts cosine distance to a relevance score.
+/// Distance:
+///   Represents the raw vector distance between the query embedding and the document embedding
+///   Uses the PG vector operator <=> (cosine distance)
+///   Lower values indicate higher similarity (0 means identical vectors)
+/// Score:
+///   From user perspective, higher scores are better.
+///   Higher values indicate higher similarity (1 means identical vectors)
+///
+fn _cosine_relevance_score_fn(distance: f64) -> f64 {
+  // Ensure distance is in valid range (0 to 2 for cosine distance)
+  if distance < 0.0 {
+    1.0 // Maximum similarity for invalid negative distances
+  } else if distance > 2.0 {
+    0.0 // Minimum similarity for invalid large distances
+  } else {
+    1.0 - distance
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -67,10 +124,12 @@ pub struct SearchDocumentParams {
   pub embedding: Vec<f32>,
   /// List of view ids which is not supposed to be returned in the search results.
   pub searchable_view_ids: Vec<Uuid>,
+  /// similarity score limit for the search results. The higher, the better.
+  pub score: f64,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct SearchDocumentItem {
+pub struct SearchDocumentRow {
   /// Document identifier.
   pub object_id: Uuid,
   /// Workspace identifier, given document belongs to.
@@ -79,12 +138,24 @@ pub struct SearchDocumentItem {
   pub collab_type: i32,
   /// Type of the content to be presented. Maps directly onto [database_entity::dto::EmbeddingContentType].
   pub content_type: i32,
-  /// First N character of the indexed content.
-  pub content_preview: Option<String>,
+  /// Content of the document.
+  pub content: String,
   /// Name of the user who's an owner of the document.
   pub created_by: String,
   /// When the document was created.
   pub created_at: DateTime<Utc>,
-  /// Similarity score to an original query. Lower is better.
+  /// Similarity distance to an original query. Lower is better.
+  pub distance: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct SearchDocumentResult {
+  pub object_id: Uuid,
+  pub workspace_id: Uuid,
+  pub collab_type: i32,
+  pub content_type: i32,
+  pub content: String,
+  pub created_by: String,
+  pub created_at: DateTime<Utc>,
   pub score: f64,
 }

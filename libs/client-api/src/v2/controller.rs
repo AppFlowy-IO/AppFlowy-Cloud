@@ -174,7 +174,10 @@ impl WorkspaceController {
     let collab = (*collab).borrow_mut();
     let object_id: ObjectId = collab.object_id().parse()?;
     let last_message_id = self.inner.last_message_id.clone();
-    self.inner.db.load(collab)?;
+    if !self.inner.db.init_collab(collab)? {
+      tracing::debug!("loading collab {} from local db", object_id);
+      self.inner.db.load(collab)?;
+    }
     // Register callback on this collab to observe incoming updates
     let weak_inner = Arc::downgrade(&self.inner);
     let client_id = self.inner.db.client_id();
@@ -185,7 +188,7 @@ impl WorkspaceController {
         if let Some(inner) = weak_inner.upgrade() {
           let rid = tx
             .origin()
-            .map(|origin| Rid::from_bytes(origin.as_ref()).unwrap());
+            .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok());
           if let Some(rid) = rid {
             last_message_id.rcu(|old| {
               if rid > **old {
@@ -741,10 +744,10 @@ impl Inner {
     let messages = self.message_tx.load();
     if let Some(channel) = &*messages {
       let last_message_id = self.last_message_id();
+      let object_id = collab.object_id();
       let doc = collab.get_awareness().doc();
-      let object_id = doc.guid();
       let state_vector = doc.transact().state_vector();
-      tracing::trace!(
+      tracing::debug!(
         "publishing manifest for {} (last msg id: {}): {:?}",
         object_id,
         last_message_id,

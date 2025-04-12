@@ -1,5 +1,4 @@
 use crate::entity::CollabType;
-use crate::http::log_request_id;
 use crate::{
   blocking_brotli_compress, brotli_compress, process_response_data, process_response_error, Client,
 };
@@ -508,7 +507,6 @@ impl Client {
       .body(Bytes::from(encoded_payload))
       .send()
       .await?;
-    log_request_id(&resp);
     if resp.status().is_success() {
       let body = resp.bytes().await?;
       let decompressed_body = zstd::decode_all(Cursor::new(body))?;

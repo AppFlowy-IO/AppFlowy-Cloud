@@ -142,20 +142,18 @@ pub async fn search_document(
   };
 
   trace!(
-    "[Search] user_id: {}, workspace_id: {}, limit: {}, score: {:?}, keyword: {}",
-    params.user_id,
-    params.workspace_id,
+    "[Search] query: {}, limit: {}, score: {:?}, workspace: {}",
+    request.query,
     params.limit,
     params.score,
-    request.query,
+    params.workspace_id,
   );
 
   // Perform document search.
   let results = search_documents(pg_pool, params, total_tokens).await?;
   trace!(
-    "[Search] query:{} in workspace:{:?}, got {} results",
+    "[Search] query:{}, got {} results",
     request.query,
-    workspace_uuid,
     results.len(),
   );
 

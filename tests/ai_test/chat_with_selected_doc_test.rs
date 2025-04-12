@@ -2,7 +2,7 @@ use crate::collab::util::{
   alex_banker_story, alex_software_engineer_story, empty_document_editor,
   snowboarding_in_japan_plan, TestDocumentEditor,
 };
-use client_api_test::{ai_test_enabled, collect_answer, TestClient};
+use client_api_test::{ai_test_enabled, collect_answer, setup_log, TestClient};
 use collab_entity::CollabType;
 use database_entity::dto::CreateCollabParams;
 use futures_util::future::join_all;

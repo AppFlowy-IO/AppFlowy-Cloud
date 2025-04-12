@@ -1286,11 +1286,3 @@ fn extract_request_id(resp: &reqwest::Response) -> Option<String> {
     .get("x-request-id")
     .map(|v| v.to_str().unwrap_or("invalid").to_string())
 }
-
-pub(crate) fn log_request_id(resp: &reqwest::Response) {
-  if let Some(request_id) = resp.headers().get("x-request-id") {
-    info!("request_id: {:?}", request_id);
-  } else {
-    debug!("request_id: not found");
-  }
-}

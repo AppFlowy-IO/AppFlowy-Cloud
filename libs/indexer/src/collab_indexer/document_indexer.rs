@@ -11,7 +11,7 @@ use collab_document::document::DocumentBody;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
 use infra::env_util::get_env_var;
 use serde_json::json;
-use tracing::{debug, trace, warn};
+use tracing::{debug, error, trace, warn};
 use twox_hash::xxhash64::Hasher;
 use uuid::Uuid;
 
@@ -96,14 +96,12 @@ impl Indexer for DocumentIndexer {
       .map_err(|err| AppError::Unhandled(err.to_string()))?;
 
     let resp = embedder.async_embed(request).await?;
-
-    trace!(
-      "[Embedding] requested {} embeddings, received {} embeddings",
-      valid_indices.len(),
-      resp.data.len()
-    );
-
     if resp.data.len() != valid_indices.len() {
+      error!(
+        "[Embedding] requested {} embeddings, received {} embeddings",
+        valid_indices.len(),
+        resp.data.len()
+      );
       return Err(AppError::Unhandled(format!(
         "Mismatch in number of embeddings requested and received: {} vs {}",
         valid_indices.len(),

@@ -116,7 +116,7 @@ Your response must include:
 Do not reference or use any information beyond what is provided in the context.
 "#;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LLMDocument {
   pub content: String,
   pub metadata: Value,

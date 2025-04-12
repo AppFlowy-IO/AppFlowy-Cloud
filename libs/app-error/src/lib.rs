@@ -190,6 +190,9 @@ pub enum AppError {
 
   #[error("{0}")]
   InvalidBlock(String),
+
+  #[error("{0}")]
+  FeatureNotAvailable(String),
 }
 
 impl AppError {
@@ -272,6 +275,7 @@ impl AppError {
       AppError::ApplyUpdateError(_) => ErrorCode::ApplyUpdateError,
       AppError::ActionTimeout(_) => ErrorCode::ActionTimeout,
       AppError::InvalidBlock(_) => ErrorCode::InvalidBlock,
+      AppError::FeatureNotAvailable(_) => ErrorCode::FeatureNotAvailable,
     }
   }
 }
@@ -448,6 +452,7 @@ pub enum ErrorCode {
   InvalidBlock = 1064,
   RequestTimeout = 1065,
   AIResponseError = 1066,
+  FeatureNotAvailable = 1067,
 }
 
 impl ErrorCode {

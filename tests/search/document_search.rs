@@ -9,6 +9,7 @@ use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_folder::ViewLayout;
 use shared_entity::dto::chat_dto::{CreateChatMessageParams, CreateChatParams};
+use shared_entity::dto::search_dto::SearchResult;
 use tokio::time::sleep;
 use uuid::Uuid;
 use workspace_template::document::getting_started::getting_started_document_data;
@@ -42,15 +43,28 @@ async fn test_embedding_when_create_document() {
   .await;
 
   // Test Search
-  let search_resp = test_client
-    .wait_unit_get_search_result(&workspace_id, "Kathryn tennis", 5, 100, Some(0.4))
+  let query = "Kathryn tennis";
+  let items = test_client
+    .wait_unit_get_search_result(&workspace_id, query, 5, 100, Some(0.4))
     .await;
   // The number of returned documents affected by the max token size when splitting the document
   // into chunks.
-  assert_eq!(search_resp.items.len(), 2);
+  assert_eq!(items.len(), 2);
 
-  let previews = search_resp
-    .items
+  // Test search summary
+  let result = test_client
+    .api_client
+    .generate_search_summary(
+      &workspace_id,
+      query,
+      items.iter().map(SearchResult::from).collect(),
+    )
+    .await
+    .unwrap();
+  dbg!("search summary: {}", &result);
+  assert!(!result.summaries.is_empty());
+
+  let previews = items
     .iter()
     .map(|item| item.preview.clone().unwrap())
     .collect::<Vec<String>>()
@@ -67,13 +81,24 @@ async fn test_embedding_when_create_document() {
   .await;
 
   // Test irrelevant search
-  let search_resp = test_client
+  let query = "Hello world";
+  let items = test_client
     .api_client
-    .search_documents_v2(&workspace_id, "Hello world", 5, 100, Some(0.4))
+    .search_documents(&workspace_id, query, 5, 100, Some(0.4))
     .await
     .unwrap();
-  assert!(search_resp.items.is_empty());
-  assert!(search_resp.summaries.is_empty());
+  assert!(items.is_empty());
+
+  let result = test_client
+    .api_client
+    .generate_search_summary(
+      &workspace_id,
+      query,
+      items.into_iter().map(|v| SearchResult::from(&v)).collect(),
+    )
+    .await
+    .unwrap();
+  assert!(result.summaries.is_empty());
 
   // Simulate when user click search result to open the document and then chat with it.
   let answer = create_chat_and_ask_question(
@@ -133,7 +158,7 @@ async fn test_document_indexing_and_search() {
   // document should get automatically indexed after opening if it wasn't indexed before
   let search_resp = test_client
     .api_client
-    .search_documents(&workspace_id, "Appflowy", 1, 20)
+    .search_documents(&workspace_id, "Appflowy", 1, 20, None)
     .await
     .unwrap();
   assert_eq!(search_resp.len(), 1);

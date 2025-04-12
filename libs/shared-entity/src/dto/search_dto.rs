@@ -17,20 +17,37 @@ pub struct SearchDocumentRequest {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub preview_size: Option<u32>,
 
-  #[serde(default = "default_only_context")]
-  pub only_context: bool,
-
   #[serde(default = "default_search_score_limit")]
   pub score: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SearchResult {
+  pub object_id: Uuid,
+  pub content: String,
+}
+
+impl From<&SearchDocumentResponseItem> for SearchResult {
+  fn from(value: &SearchDocumentResponseItem) -> Self {
+    Self {
+      object_id: value.object_id,
+      content: value.content.clone(),
+    }
+  }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SummarySearchResultRequest {
+  pub query: String,
+
+  pub search_results: Vec<SearchResult>,
+
+  pub only_context: bool,
 }
 
 fn default_search_score_limit() -> f64 {
   // Higher score means better match.
   0.4
-}
-
-fn default_only_context() -> bool {
-  true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -43,9 +60,8 @@ pub struct Summary {
 /// Response array element for the collab vector search query.
 /// See: [SearchDocumentRequest].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SearchResult {
+pub struct SearchSummaryResult {
   pub summaries: Vec<Summary>,
-  pub items: Vec<SearchDocumentResponseItem>,
 }
 
 /// Response array element for the collab vector search query.
@@ -63,6 +79,9 @@ pub struct SearchDocumentResponseItem {
   /// Type of the content to be presented in preview field. This is a hint what
   /// kind of content was used to match the user query ie. document plain text, pdf attachment etc.
   pub content_type: Option<SearchContentType>,
+  /// Content of the document. This is a full content of the document, not just a preview.
+  #[serde(default)]
+  pub content: String,
   /// First N characters of the indexed content matching the user query. It doesn't have to contain
   /// the user query itself.
   pub preview: Option<String>,

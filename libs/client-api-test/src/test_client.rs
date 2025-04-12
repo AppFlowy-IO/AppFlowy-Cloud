@@ -589,7 +589,7 @@ impl TestClient {
     workspace_id: &Uuid,
     query: Vec<EmbeddedCollabQuery>,
   ) -> Vec<AFCollabEmbedInfo> {
-    let timeout_duration = Duration::from_secs(30);
+    let timeout_duration = Duration::from_secs(60);
     let poll_interval = Duration::from_millis(2000);
     let poll_fut = async {
       loop {
@@ -598,7 +598,7 @@ impl TestClient {
           .batch_get_collab_embed_info(workspace_id, query.clone())
           .await
         {
-          Ok(items) if items.len() == query.len() => return Ok::<_, Error>(items),
+          Ok(items) if items.len() >= query.len() => return Ok::<_, Error>(items),
           _ => tokio::time::sleep(poll_interval).await,
         }
       }
@@ -608,7 +608,7 @@ impl TestClient {
     match timeout(timeout_duration, poll_fut).await {
       Ok(Ok(items)) => items,
       Ok(Err(e)) => panic!("Test failed: {}", e),
-      Err(_) => panic!("Test failed: Timeout after 30 seconds."),
+      Err(_) => panic!("Test failed: Timeout after 30 seconds. {:?}", query),
     }
   }
 

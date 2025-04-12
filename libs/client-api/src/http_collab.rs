@@ -468,6 +468,23 @@ impl Client {
       .map(|data| data.0)
   }
 
+  pub async fn force_generate_collab_embeddings(
+    &self,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{workspace_id}/collab/{object_id}/generate-embedding",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .send()
+      .await?;
+    process_response_error(resp).await
+  }
+
   pub async fn collab_full_sync(
     &self,
     workspace_id: &Uuid,

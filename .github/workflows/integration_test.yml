@@ -90,7 +90,7 @@ jobs:
       - name: Replace values in .env
         run: |
           # log level
-          sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
+          sed -i 's|RUST_LOG=.*|RUST_LOG='appflowy_cloud=trace,appflowy_worker=trace,database=trace,indexer=trace'|' .env
           sed -i 's|GOTRUE_SMTP_USER=.*|GOTRUE_SMTP_USER=${{ secrets.CI_GOTRUE_SMTP_USER }}|' .env
           sed -i 's|GOTRUE_SMTP_PASS=.*|GOTRUE_SMTP_PASS=${{ secrets.CI_GOTRUE_SMTP_PASS }}|' .env
           sed -i 's|GOTRUE_SMTP_ADMIN_EMAIL=.*|GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.CI_GOTRUE_SMTP_ADMIN_EMAIL }}|' .env

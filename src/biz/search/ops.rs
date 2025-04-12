@@ -15,7 +15,8 @@ use infra::env_util::get_env_var;
 use llm_client::chat::{AITool, LLMDocument};
 use serde_json::json;
 use shared_entity::dto::search_dto::{
-  SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem, SearchResult, Summary,
+  SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem, SearchSummaryResult,
+  Summary, SummarySearchResultRequest,
 };
 use sqlx::PgPool;
 use std::collections::HashSet;
@@ -71,6 +72,7 @@ fn populate_searchable_view_ids(
     );
   }
 }
+
 #[allow(clippy::too_many_arguments)]
 pub async fn search_document(
   pg_pool: &PgPool,
@@ -80,8 +82,7 @@ pub async fn search_document(
   workspace_uuid: Uuid,
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
-  ai_tool: Option<AITool>,
-) -> Result<SearchResult, AppError> {
+) -> Result<Vec<SearchDocumentResponseItem>, AppError> {
   // Set up the embedding model and create an embedding request.
   let default_model = EmbeddingModel::default_model();
   let embeddings_request = CreateEmbeddingRequestArgs::default()
@@ -142,62 +143,20 @@ pub async fn search_document(
   };
 
   trace!(
-    "[Search] user_id: {}, workspace_id: {}, limit: {}, score: {:?}, keyword: {}",
-    params.user_id,
-    params.workspace_id,
+    "[Search] query: {}, limit: {}, score: {:?}, workspace: {}",
+    request.query,
     params.limit,
     params.score,
-    request.query,
+    params.workspace_id,
   );
 
   // Perform document search.
   let results = search_documents(pg_pool, params, total_tokens).await?;
   trace!(
-    "[Search] user {} search request in workspace {} returned {} results for query: `{}`",
-    uid,
-    workspace_uuid,
+    "[Search] query:{}, got {} results",
+    request.query,
     results.len(),
-    request.query
   );
-
-  let mut summaries = Vec::new();
-  if !results.is_empty() {
-    if let Some(ai_chat) = ai_tool {
-      let model_name = get_env_var("AI_OPENAI_API_SUMMARY_MODEL", "gpt-4o-mini");
-      trace!("using {} model to summarize search results", model_name);
-      let llm_docs: Vec<LLMDocument> = results
-        .iter()
-        .map(|result| {
-          LLMDocument::new(
-            result.content.clone(),
-            json!({
-                "id": result.object_id,
-                "source": "appflowy",
-                "name": "document",
-            }),
-          )
-        })
-        .collect();
-      match ai_chat
-        .summary_documents(&request.query, &model_name, &llm_docs, request.only_context)
-        .await
-      {
-        Ok(resp) => {
-          trace!("AI summary search document response: {:?}", resp);
-          summaries = resp
-            .summaries
-            .into_iter()
-            .map(|s| Summary {
-              content: s.content,
-              metadata: s.metadata,
-              score: s.score,
-            })
-            .collect();
-        },
-        Err(err) => error!("AI summary search document failed, error: {:?}", err),
-      }
-    }
-  }
 
   // Build and return the search result, mapping each document to its response item.
   let items = results
@@ -210,8 +169,72 @@ pub async fn search_document(
       preview: Some(item.content.chars().take(preview_size as usize).collect()),
       created_by: item.created_by,
       created_at: item.created_at,
+      content: item.content,
     })
     .collect();
 
-  Ok(SearchResult { summaries, items })
+  Ok(items)
+}
+
+pub async fn summary_search_results(
+  ai_tool: Option<AITool>,
+  request: SummarySearchResultRequest,
+) -> Result<SearchSummaryResult, AppError> {
+  if request.search_results.is_empty() {
+    return Ok(SearchSummaryResult { summaries: vec![] });
+  }
+
+  if ai_tool.is_none() {
+    return Err(AppError::FeatureNotAvailable(
+      "AI tool is not available".to_string(),
+    ));
+  }
+
+  let ai_tool = ai_tool.unwrap();
+  let model_name = get_env_var("AI_OPENAI_API_SUMMARY_MODEL", "gpt-4o-mini");
+
+  let mut summaries = Vec::new();
+  trace!(
+    "[Search] use {} model to summarize search results",
+    model_name
+  );
+  let SummarySearchResultRequest {
+    query,
+    search_results,
+    only_context,
+  } = request;
+
+  let llm_docs: Vec<LLMDocument> = search_results
+    .into_iter()
+    .map(|result| {
+      LLMDocument::new(
+        result.content,
+        json!({
+            "id": result.object_id,
+            "source": "appflowy",
+            "name": "document",
+        }),
+      )
+    })
+    .collect();
+  match ai_tool
+    .summary_documents(&query, &model_name, &llm_docs, only_context)
+    .await
+  {
+    Ok(resp) => {
+      trace!("AI summary search document response: {:?}", resp);
+      summaries = resp
+        .summaries
+        .into_iter()
+        .map(|s| Summary {
+          content: s.content,
+          metadata: s.metadata,
+          score: s.score,
+        })
+        .collect();
+    },
+    Err(err) => error!("AI summary search document failed, error: {:?}", err),
+  }
+
+  Ok(SearchSummaryResult { summaries })
 }

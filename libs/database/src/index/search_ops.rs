@@ -26,22 +26,31 @@ pub async fn search_documents<'a, E: Executor<'a, Database = Postgres>>(
           search_tokens_consumed = af_workspace_ai_usage.search_tokens_consumed + $6
       RETURNING workspace_id
     )
-    SELECT
-      em.oid AS object_id,
-      collab.workspace_id,
-      collab.partition_key AS collab_type,
-      em.content_type,
-      em.content AS content,
-      LEFT(em.content, $4) AS content_preview,
-      u.name AS created_by,
-      collab.created_at AS created_at,
-      em.embedding <=> $3 AS distance
-    FROM af_collab_embeddings em
-    JOIN af_collab collab ON em.oid = collab.oid
+   SELECT
+    collab.oid AS object_id,
+    collab.workspace_id,
+    collab.partition_key AS collab_type,
+    em.content_type,
+    em.content,
+    LEFT(em.content, $4) AS content_preview,
+    u.name AS created_by,
+    collab.created_at AS created_at,
+    em.embedding <=> $3 AS distance
+    FROM af_collab collab
+    JOIN LATERAL (
+      -- Fetch the most relevant embedding per collab.oid
+      SELECT *
+      FROM af_collab_embeddings
+      WHERE oid = collab.oid
+      ORDER BY embedding <=> $3  -- Use vector index for sorting
+      LIMIT 1  -- Only keep the top result
+    ) em ON true
     JOIN af_user u ON collab.owner_uid = u.uid
-    WHERE collab.workspace_id = $2 AND (collab.oid = ANY($7::uuid[]))
-    ORDER BY em.embedding <=> $3
-    LIMIT $5
+    WHERE
+      collab.workspace_id = $2
+      AND collab.oid = ANY($7::uuid[])
+    ORDER BY distance
+    LIMIT $5;
   "#,
   )
   .bind(params.user_id)

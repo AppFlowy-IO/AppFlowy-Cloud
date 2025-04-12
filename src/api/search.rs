@@ -1,26 +1,28 @@
+use crate::biz::search::{search_document, summary_search_results};
+use crate::state::AppState;
 use access_control::act::Action;
-use actix_web::web::{Data, Query};
+use actix_web::web::{Data, Json, Query};
 use actix_web::{web, Scope};
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use authentication::jwt::Authorization;
 use llm_client::chat::{AITool, AzureOpenAIChat, OpenAIChat};
 use shared_entity::dto::search_dto::{
-  SearchDocumentRequest, SearchDocumentResponseItem, SearchResult,
+  SearchDocumentRequest, SearchDocumentResponseItem, SearchSummaryResult,
+  SummarySearchResultRequest,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use uuid::Uuid;
 
-use crate::biz::search::search_document;
-use crate::state::AppState;
-
 pub fn search_scope() -> Scope {
   web::scope("/api/search")
-    .service(web::resource("{workspace_id}").route(web::get().to(document_search)))
-    .service(web::resource("/v2/{workspace_id}").route(web::get().to(document_search_v2)))
+    .service(web::resource("{workspace_id}").route(web::get().to(document_search_handler)))
+    .service(
+      web::resource("/{workspace_id}/summary").route(web::get().to(summary_search_results_handler)),
+    )
 }
 
 #[tracing::instrument(skip(state, auth, payload), err)]
-async fn document_search(
+async fn document_search_handler(
   auth: Authorization,
   path: web::Path<Uuid>,
   payload: Query<SearchDocumentRequest>,
@@ -43,19 +45,18 @@ async fn document_search(
     workspace_id,
     request,
     metrics,
-    None,
   )
   .await?;
-  Ok(AppResponse::Ok().with_data(resp.items).into())
+  Ok(AppResponse::Ok().with_data(resp).into())
 }
 
 #[tracing::instrument(skip(state, auth, payload), err)]
-async fn document_search_v2(
+async fn summary_search_results_handler(
   auth: Authorization,
   path: web::Path<Uuid>,
-  payload: Query<SearchDocumentRequest>,
+  payload: Json<SummarySearchResultRequest>,
   state: Data<AppState>,
-) -> actix_web::Result<JsonAppResponse<SearchResult>> {
+) -> actix_web::Result<JsonAppResponse<SearchSummaryResult>> {
   let workspace_id = path.into_inner();
   let request = payload.into_inner();
   let user_uuid = auth.uuid()?;
@@ -64,20 +65,10 @@ async fn document_search_v2(
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
-  let metrics = &*state.metrics.request_metrics;
+
   let ai_tool = create_ai_tool(&state.config.azure_ai_config, &state.config.open_ai_config);
-  let resp = search_document(
-    &state.pg_pool,
-    &state.collab_access_control_storage,
-    &state.indexer_scheduler,
-    uid,
-    workspace_id,
-    request,
-    metrics,
-    ai_tool,
-  )
-  .await?;
-  Ok(AppResponse::Ok().with_data(resp).into())
+  let result = summary_search_results(ai_tool, request).await?;
+  Ok(AppResponse::Ok().with_data(result).into())
 }
 
 pub fn create_ai_tool(

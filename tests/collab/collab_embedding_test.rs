@@ -94,9 +94,9 @@ async fn document_full_sync_then_search_test() {
   let local_plain_text = local_document.document.paragraphs().join("");
   assert_eq!(local_plain_text, remote_plain_text);
 
-  let search_result = test_client
+  let items = test_client
     .wait_unit_get_search_result(&workspace_id, "workflows", 1, 200, Some(0.3))
     .await;
-  assert_eq!(search_result.items.len(), 1);
-  assert_eq!(search_result.items[0].preview, Some("AppFlowy is an open-source project.It is an alternative to tools like Notion.AppFlowy provides full control of your data.The project is built using Flutter for the frontend.Rust powers AppFlowy's back".to_string()));
+  assert_eq!(items.len(), 1);
+  assert_eq!(items[0].preview, Some("AppFlowy is an open-source project.It is an alternative to tools like Notion.AppFlowy provides full control of your data.The project is built using Flutter for the frontend.Rust powers AppFlowy's back".to_string()));
 }

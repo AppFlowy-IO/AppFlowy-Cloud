@@ -11,7 +11,7 @@ use collab_document::document::DocumentBody;
 use database_entity::dto::{AFCollabEmbeddedChunk, AFCollabEmbeddings, EmbeddingContentType};
 use infra::env_util::get_env_var;
 use serde_json::json;
-use tracing::{debug, trace, warn};
+use tracing::{debug, error, trace, warn};
 use twox_hash::xxhash64::Hasher;
 use uuid::Uuid;
 
@@ -55,12 +55,12 @@ impl Indexer for DocumentIndexer {
       object_id,
       paragraphs,
       model,
-      get_env_var("APPFLOWY_EMBEDDING_CHUNK_SIZE", "8000")
+      get_env_var("APPFLOWY_EMBEDDING_CHUNK_SIZE", "1000")
         .parse::<usize>()
-        .unwrap_or(8000),
-      get_env_var("APPFLOWY_EMBEDDING_CHUNK_OVERLAP", "500")
+        .unwrap_or(1000),
+      get_env_var("APPFLOWY_EMBEDDING_CHUNK_OVERLAP", "200")
         .parse::<usize>()
-        .unwrap_or(500),
+        .unwrap_or(200),
     )
   }
 
@@ -96,14 +96,12 @@ impl Indexer for DocumentIndexer {
       .map_err(|err| AppError::Unhandled(err.to_string()))?;
 
     let resp = embedder.async_embed(request).await?;
-
-    trace!(
-      "[Embedding] requested {} embeddings, received {} embeddings",
-      valid_indices.len(),
-      resp.data.len()
-    );
-
     if resp.data.len() != valid_indices.len() {
+      error!(
+        "[Embedding] requested {} embeddings, received {} embeddings",
+        valid_indices.len(),
+        resp.data.len()
+      );
       return Err(AppError::Unhandled(format!(
         "Mismatch in number of embeddings requested and received: {} vs {}",
         valid_indices.len(),
@@ -123,6 +121,13 @@ impl Indexer for DocumentIndexer {
   }
 }
 
+/// chunk_size:
+/// Small Chunks (50–256 tokens): Best for precision-focused tasks (e.g., Q&A, technical docs) where specific details matter.
+/// Medium Chunks (256–1,024 tokens): Ideal for balanced tasks like RAG or contextual search, providing enough context without noise.
+/// Large Chunks (1,024–2,048 tokens): Suited for analysis or thematic tasks where broad understanding is key.
+///
+/// overlap:
+/// Add 10–20% overlap for larger chunks (e.g., 50–100 tokens for 512-token chunks) to preserve context across boundaries.
 pub fn split_text_into_chunks(
   object_id: Uuid,
   paragraphs: Vec<String>,
@@ -170,5 +175,13 @@ pub fn split_text_into_chunks(
       );
     }
   }
+
+  trace!(
+    "[Embedding] Created {} chunks for object_id `{}`, chunk_size: {}, overlap: {}",
+    chunks.len(),
+    object_id,
+    chunk_size,
+    overlap
+  );
   Ok(chunks)
 }

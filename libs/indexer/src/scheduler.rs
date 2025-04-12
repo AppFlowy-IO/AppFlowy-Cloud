@@ -426,12 +426,11 @@ pub async fn spawn_pg_write_embeddings(
       break;
     }
 
-    trace!("[Embedding] pg received {} embeddings to write", n);
     let start = Instant::now();
     let records = buf.drain(..n).collect::<Vec<_>>();
     for record in records.iter() {
       debug!(
-        "[Embedding] generate collab:{} embeddings, tokens used: {}",
+        "[Embedding] pg write collab:{} embeddings, tokens used: {}",
         record.object_id, record.tokens_used
       );
     }
@@ -449,7 +448,6 @@ pub async fn spawn_pg_write_embeddings(
 
     match result {
       Ok(_) => {
-        trace!("[Embedding] save {} embeddings to disk", n);
         metrics.record_write_embedding_time(start.elapsed().as_millis());
       },
       Err(err) => {

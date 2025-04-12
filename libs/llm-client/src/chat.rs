@@ -95,7 +95,7 @@ const SYSTEM_PROMPT: &str = r#"
 You are a strict, context-based question answering assistant.
 Provide an answer with appropriate metadata in JSON format.
 For each answer, include:
-1. The answer text
+1. The answer text. It must be concise summaries and highly precise.
 2. Metadata with empty JSON map
 3. A numeric relevance score (0.0 to 1.0):
    - 1.0: Completely relevant.
@@ -106,7 +106,7 @@ const ONLY_CONTEXT_SYSTEM_PROMPT: &str = r#"
 You are a strict, context-bound question answering assistant. Answer solely based on the text provided below. If the context lacks sufficient information for a confident response, reply with an empty answer.
 
 Your response must include:
-1. The answer text.
+1. The answer text. It must be concise summaries and highly precise.
 2. Metadata extracted from the context. (If the answer is not relevant, return an empty JSON Map.)
 3. A numeric score (0.0 to 1.0) indicating the answer's relevance to the user's question:
    - 1.0: Completely relevant.
@@ -116,7 +116,7 @@ Your response must include:
 Do not reference or use any information beyond what is provided in the context.
 "#;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LLMDocument {
   pub content: String,
   pub metadata: Value,
@@ -158,7 +158,7 @@ pub async fn summarize_documents<C: Config>(
   let response_format = ResponseFormat::JsonSchema {
     json_schema: ResponseFormatJsonSchema {
       description: Some("A response containing a list of answers, each with the answer text, metadata extracted from context, and relevance score".to_string()),
-      name: "ChatResponse".into(),
+      name: "SummarySearchResponse".into(),
       schema: Some(schema_value),
       strict: Some(true),
     },

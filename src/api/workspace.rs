@@ -37,7 +37,9 @@ use actix_web::{web, HttpResponse, ResponseError, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::{AppError, ErrorCode};
-use appflowy_collaborate::actix_ws::entities::{ClientHttpStreamMessage, ClientHttpUpdateMessage};
+use appflowy_collaborate::actix_ws::entities::{
+  ClientGenerateEmbeddingMessage, ClientHttpStreamMessage, ClientHttpUpdateMessage,
+};
 use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
@@ -168,6 +170,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/collab/{object_id}/embed-info")
         .route(web::get().to(get_collab_embed_info_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/collab/{object_id}/generate-embedding")
+          .route(web::get().to(force_generate_collab_embedding_handler)),
     )
     .service(
       web::resource("/{workspace_id}/collab/embed-info/list")
@@ -2712,6 +2718,20 @@ async fn get_collab_embed_info_handler(
   Ok(Json(AppResponse::Ok().with_data(info)))
 }
 
+async fn force_generate_collab_embedding_handler(
+  path: web::Path<(Uuid, Uuid)>,
+  server: Data<RealtimeServerAddr>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, object_id) = path.into_inner();
+  let request = ClientGenerateEmbeddingMessage {
+    workspace_id,
+    object_id,
+    return_tx: None,
+  };
+  let _ = server.try_send(request);
+  Ok(Json(AppResponse::Ok()))
+}
+
 #[instrument(level = "debug", skip_all)]
 async fn batch_get_collab_embed_info_handler(
   state: Data<AppState>,
@@ -2824,6 +2844,7 @@ async fn collab_full_sync_handler(
       let encoded = tokio::task::spawn_blocking(move || zstd::encode_all(Cursor::new(data), 3))
         .await
         .map_err(|err| AppError::Internal(anyhow!("Failed to compress data: {}", err)))??;
+
       Ok(HttpResponse::Ok().body(encoded))
     },
     Ok(None) => Ok(HttpResponse::InternalServerError().finish()),

@@ -1,5 +1,4 @@
 use crate::entity::CollabType;
-use crate::http::log_request_id;
 use crate::{
   blocking_brotli_compress, brotli_compress, process_response_data, process_response_error, Client,
 };
@@ -469,6 +468,23 @@ impl Client {
       .map(|data| data.0)
   }
 
+  pub async fn force_generate_collab_embeddings(
+    &self,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{workspace_id}/collab/{object_id}/generate-embedding",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .send()
+      .await?;
+    process_response_error(resp).await
+  }
+
   pub async fn collab_full_sync(
     &self,
     workspace_id: &Uuid,
@@ -508,7 +524,6 @@ impl Client {
       .body(Bytes::from(encoded_payload))
       .send()
       .await?;
-    log_request_id(&resp);
     if resp.status().is_success() {
       let body = resp.bytes().await?;
       let decompressed_body = zstd::decode_all(Cursor::new(body))?;

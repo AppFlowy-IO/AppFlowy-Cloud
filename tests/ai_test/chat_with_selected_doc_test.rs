@@ -76,7 +76,7 @@ async fn chat_with_multiple_selected_source_test() {
     .await;
 
   // create chat
-  let chat_id = uuid::Uuid::new_v4().to_string();
+  let chat_id = Uuid::new_v4().to_string();
   let params = CreateChatParams {
     chat_id: chat_id.clone(),
     name: "my first chat".to_string(),

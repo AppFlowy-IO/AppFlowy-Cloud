@@ -1,4 +1,3 @@
-use crate::http::log_request_id;
 use crate::{process_response_data, process_response_error, Client};
 
 use app_error::AppError;
@@ -188,7 +187,6 @@ impl Client {
       .await?
       .send()
       .await?;
-    log_request_id(&resp);
 
     match resp.status() {
       StatusCode::OK => {

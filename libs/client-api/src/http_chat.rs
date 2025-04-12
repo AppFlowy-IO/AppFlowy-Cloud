@@ -1,4 +1,3 @@
-use crate::http::log_request_id;
 use crate::{process_response_data, process_response_error, Client};
 
 use app_error::AppError;
@@ -156,7 +155,6 @@ impl Client {
           app_err
         }
       })?;
-    log_request_id(&resp);
     let stream = AppResponse::<serde_json::Value>::json_response_stream(resp).await?;
     Ok(QuestionStream::new(stream))
   }
@@ -178,7 +176,6 @@ impl Client {
       .json(&query)
       .send()
       .await?;
-    log_request_id(&resp);
     let stream = AppResponse::<serde_json::Value>::json_response_stream(resp).await?;
     Ok(QuestionStream::new(stream))
   }

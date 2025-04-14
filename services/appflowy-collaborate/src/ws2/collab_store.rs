@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
@@ -328,14 +329,16 @@ impl CollabStore {
     object_id: ObjectId,
     collab_type: CollabType,
     uid: i64,
-    _last_message_id: Rid,
+    last_message_id: Rid,
     update: Bytes,
   ) -> anyhow::Result<()> {
     let encoded_collab = EncodedCollab::new_v1(Bytes::default(), update);
+    let updated_at = DateTime::<Utc>::from_timestamp_millis(last_message_id.timestamp as i64);
     let params = CollabParams {
       object_id,
       encoded_collab_v1: encoded_collab.encode_to_bytes()?.into(),
       collab_type,
+      updated_at,
     };
     collab_cache
       .insert_encode_collab_to_disk(&workspace_id, &uid, params)
@@ -385,11 +388,9 @@ impl CollabStore {
         };
         let doc = Doc::new();
         let mut tx = doc.transact_mut();
-        let mut rid = Rid::default();
-        let (curr_rid, update) = self
+        let (mut rid, update) = self
           .get_snapshot(workspace_id, object_id, collab_type)
           .await?;
-        rid = curr_rid;
         tx.apply_update(Update::decode_v2(&update)?)?;
 
         for update in updates {

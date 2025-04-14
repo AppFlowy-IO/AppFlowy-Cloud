@@ -164,6 +164,7 @@ async fn batch_insert_document_collab_test() {
       object_id: *object_id,
       encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Document,
+      updated_at: None,
     })
     .collect::<Vec<_>>();
 

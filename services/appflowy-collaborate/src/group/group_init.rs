@@ -1157,6 +1157,7 @@ impl CollabPersister {
       object_id: self.object_id,
       encoded_collab_v1: encoded_collab,
       collab_type: self.collab_type,
+      updated_at: None,
     };
     self
       .storage

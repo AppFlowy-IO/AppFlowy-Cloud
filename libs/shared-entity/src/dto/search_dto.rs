@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use uuid::Uuid;
 
@@ -53,8 +52,7 @@ fn default_search_score_limit() -> f64 {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Summary {
   pub content: String,
-  pub metadata: Value,
-  pub score: String,
+  pub sources: Vec<Uuid>,
 }
 
 /// Response array element for the collab vector search query.

@@ -13,7 +13,6 @@ use indexer::scheduler::IndexerScheduler;
 use indexer::vector::embedder::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFormat};
 use infra::env_util::get_env_var;
 use llm_client::chat::{AITool, LLMDocument};
-use serde_json::json;
 use shared_entity::dto::search_dto::{
   SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem, SearchSummaryResult,
   Summary, SummarySearchResultRequest,
@@ -176,7 +175,7 @@ pub async fn search_document(
   Ok(items)
 }
 
-pub async fn summary_search_results(
+pub async fn summarize_search_results(
   ai_tool: Option<AITool>,
   request: SummarySearchResultRequest,
 ) -> Result<SearchSummaryResult, AppError> {
@@ -206,19 +205,10 @@ pub async fn summary_search_results(
 
   let llm_docs: Vec<LLMDocument> = search_results
     .into_iter()
-    .map(|result| {
-      LLMDocument::new(
-        result.content,
-        json!({
-            "id": result.object_id,
-            "source": "appflowy",
-            "name": "document",
-        }),
-      )
-    })
+    .map(|result| LLMDocument::new(result.content, result.object_id))
     .collect();
   match ai_tool
-    .summary_documents(&query, &model_name, &llm_docs, only_context)
+    .summarize_documents(&query, &model_name, llm_docs, only_context)
     .await
   {
     Ok(resp) => {
@@ -228,8 +218,7 @@ pub async fn summary_search_results(
         .into_iter()
         .map(|s| Summary {
           content: s.content,
-          metadata: s.metadata,
-          score: s.score,
+          sources: s.sources,
         })
         .collect();
     },

@@ -4,7 +4,8 @@ use collab::entity::EncodedCollab;
 use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
+  CollabParams, CreateCollabData, CreateCollabParams, QueryCollab, QueryCollabParams,
+  QueryCollabResult,
 };
 
 use reqwest::Method;
@@ -100,7 +101,7 @@ async fn create_collab_compatibility_with_json_params_test() {
 
   let encoded_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   let params = OldCreateCollabParams {
-    inner: CollabParams {
+    inner: CreateCollabData {
       object_id,
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Unknown,
@@ -204,6 +205,6 @@ async fn batch_insert_document_collab_test() {
 #[derive(Debug, Clone, Serialize)]
 pub struct OldCreateCollabParams {
   #[serde(flatten)]
-  inner: CollabParams,
+  inner: CreateCollabData,
   pub workspace_id: Uuid,
 }

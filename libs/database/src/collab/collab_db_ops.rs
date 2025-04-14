@@ -199,14 +199,14 @@ pub async fn select_blob_from_af_collab<'a, E>(
   conn: E,
   collab_type: &CollabType,
   object_id: &Uuid,
-) -> Result<Vec<u8>, sqlx::Error>
+) -> Result<(DateTime<Utc>, Vec<u8>), sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
 {
   let partition_key = partition_key_from_collab_type(collab_type);
-  sqlx::query_scalar!(
+  let record = sqlx::query!(
     r#"
-        SELECT blob
+        SELECT updated_at, blob
         FROM af_collab
         WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;
         "#,
@@ -214,7 +214,8 @@ where
     partition_key,
   )
   .fetch_one(conn)
-  .await
+  .await?;
+  Ok((record.updated_at, record.blob))
 }
 
 #[inline]

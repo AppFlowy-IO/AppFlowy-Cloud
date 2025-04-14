@@ -1373,7 +1373,7 @@ async fn get_encode_collab_from_bytes(
     },
     Err(WorkerError::RecordNotFound(_)) => {
       // fallback to postgres
-      let bytes = select_blob_from_af_collab(pg_pool, collab_type, object_id)
+      let (_, bytes) = select_blob_from_af_collab(pg_pool, collab_type, object_id)
         .await
         .map_err(|err| ImportError::Internal(err.into()))?;
 

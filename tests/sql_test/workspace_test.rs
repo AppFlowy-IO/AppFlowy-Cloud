@@ -109,7 +109,7 @@ async fn insert_bulk_collab_sql_test(pool: PgPool) {
 
   // Validate inserted data
   for (i, object_id) in object_ids.iter().enumerate() {
-    let inserted_data = select_blob_from_af_collab(&pool, &CollabType::Unknown, object_id)
+    let (_, inserted_data) = select_blob_from_af_collab(&pool, &CollabType::Unknown, object_id)
       .await
       .unwrap();
 
@@ -183,7 +183,7 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
   txn.commit().await.unwrap();
 
   // Validate the data was updated, not duplicated
-  let data = select_blob_from_af_collab(&pool, &CollabType::Unknown, &object_id)
+  let (_, data) = select_blob_from_af_collab(&pool, &CollabType::Unknown, &object_id)
     .await
     .unwrap();
   assert_eq!(data, encoded_collab_v1); // should equal the data that insert first time

@@ -219,14 +219,13 @@ pub async fn summarize_documents<C: Config>(
     },
   };
 
-  if only_context {
-    if score < 0.4 {
-      info!(
-        "[Search] AI summary score is too low: {}. Returning empty result.",
-        score
-      );
-      return Ok(SummarySearchResponse { summaries: vec![] });
-    }
+  // If only_context is true, we need to ensure the score is above a certain threshold.
+  if only_context && score < 0.4 {
+    info!(
+      "[Search] AI summary score is too low: {}. Returning empty result.",
+      score
+    );
+    return Ok(SummarySearchResponse { summaries: vec![] });
   }
 
   let summary = SearchSummary {

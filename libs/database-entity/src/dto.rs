@@ -74,6 +74,7 @@ impl CreateCollabParams {
         object_id: self.object_id,
         encoded_collab_v1: Bytes::from(self.encoded_collab_v1),
         collab_type: self.collab_type,
+        updated_at: None,
       },
       self.workspace_id,
     )
@@ -111,6 +112,7 @@ pub struct CollabParams {
   pub collab_type: CollabType,
   #[validate(length(min = 2))]
   pub encoded_collab_v1: Bytes,
+  pub updated_at: Option<DateTime<Utc>>,
 }
 
 impl Display for CollabParams {
@@ -189,6 +191,7 @@ impl From<CreateCollabData> for CollabParams {
       object_id: value.object_id,
       encoded_collab_v1: value.encoded_collab_v1,
       collab_type: value.collab_type,
+      updated_at: None,
     }
   }
 }

@@ -4185,6 +4185,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

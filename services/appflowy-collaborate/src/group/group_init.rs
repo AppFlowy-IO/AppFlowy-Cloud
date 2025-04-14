@@ -1153,7 +1153,11 @@ impl CollabPersister {
       .metrics
       .collab_size
       .observe(encoded_collab.len() as f64);
-    let params = CollabParams::new(self.object_id, self.collab_type, encoded_collab);
+    let params = CollabParams {
+      object_id: self.object_id,
+      encoded_collab_v1: encoded_collab,
+      collab_type: self.collab_type,
+    };
     self
       .storage
       .queue_insert_or_update_collab(self.workspace_id, &self.uid, params, true)

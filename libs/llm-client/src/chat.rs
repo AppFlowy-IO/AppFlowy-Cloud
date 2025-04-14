@@ -7,8 +7,9 @@ use async_openai::types::{
 use async_openai::Client;
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tracing::trace;
+use serde_json::json;
+use tracing::{error, info, trace};
+use uuid::Uuid;
 
 pub enum AITool {
   OpenAI(OpenAIChat),
@@ -16,11 +17,11 @@ pub enum AITool {
 }
 
 impl AITool {
-  pub async fn summary_documents(
+  pub async fn summarize_documents(
     &self,
     question: &str,
     model_name: &str,
-    documents: &[LLMDocument],
+    documents: Vec<LLMDocument>,
     only_context: bool,
   ) -> Result<SummarySearchResponse, AppError> {
     trace!(
@@ -77,60 +78,72 @@ impl AzureOpenAIChat {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SearchSummary {
   pub content: String,
-  pub metadata: Value,
-  pub score: String,
+  pub sources: Vec<Uuid>,
+  pub score: f32,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SummarySearchResponse {
   pub summaries: Vec<SearchSummary>,
 }
 
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SummarySearchSchema {
+  pub answer: String,
+  pub score: String,
+  pub sources: Vec<String>,
+}
+
 const SYSTEM_PROMPT: &str = r#"
-You are a strict, context-based question answering assistant.
-Provide an answer with appropriate metadata in JSON format.
-For each answer, include:
-1. The answer text. It must be concise summaries and highly precise.
-2. Metadata with empty JSON map
-3. A numeric relevance score (0.0 to 1.0):
-   - 1.0: Completely relevant.
-   - 0.0: Not relevant.
-   - Intermediate values indicate partial relevance.
+You are a concise, intelligent question-answering assistant.
+
+Instructions:
+- Use the provided context as the **primary basis** for your answer.
+- You **may incorporate relevant knowledge** only if it supports or enhances the context meaningfully.
+- The answer must be a **clear and concise**.
+
+Output must include:
+- `answer`: a concise summary.
+- `score`: relevance score (0.0–1.0), where:
+  - 1.0 = fully supported by context,
+  - 0.0 = unsupported,
+  - values in between reflect partial support.
+- `sources`: array of source IDs used for the answer.
 "#;
+
 const ONLY_CONTEXT_SYSTEM_PROMPT: &str = r#"
 You are a strict, context-bound question answering assistant. Answer solely based on the text provided below. If the context lacks sufficient information for a confident response, reply with an empty answer.
 
-Your response must include:
-1. The answer text. It must be concise summaries and highly precise.
-2. Metadata extracted from the context. (If the answer is not relevant, return an empty JSON Map.)
-3. A numeric score (0.0 to 1.0) indicating the answer's relevance to the user's question:
-   - 1.0: Completely relevant.
-   - 0.0: Not relevant at all.
-   - Intermediate values indicate partial relevance.
+Output must include:
+- `answer`: a concise answer.
+- `score`: relevance score (0.0–1.0), where:
+  - 1.0 = fully supported by context,
+  - 0.0 = unsupported,
+  - values in between reflect partial support.
+- `sources`: array of source IDs used for the answer.
 
 Do not reference or use any information beyond what is provided in the context.
 "#;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LLMDocument {
   pub content: String,
-  pub metadata: Value,
+  pub object_id: Uuid,
 }
 
 impl LLMDocument {
-  pub fn new(content: String, metadata: Value) -> Self {
-    Self { content, metadata }
+  pub fn new(content: String, object_id: Uuid) -> Self {
+    Self { content, object_id }
   }
 }
 
-fn convert_documents_to_text(documents: &[LLMDocument]) -> String {
+fn convert_documents_to_text(documents: Vec<LLMDocument>) -> String {
   documents
-    .iter()
+    .into_iter()
     .map(|doc| json!(doc).to_string())
     .collect::<Vec<String>>()
     .join("\n")
@@ -140,7 +153,7 @@ pub async fn summarize_documents<C: Config>(
   client: &Client<C>,
   question: &str,
   model_name: &str,
-  documents: &[LLMDocument],
+  documents: Vec<LLMDocument>,
   only_context: bool,
 ) -> Result<SummarySearchResponse, AppError> {
   let documents_text = convert_documents_to_text(documents);
@@ -153,12 +166,14 @@ pub async fn summarize_documents<C: Config>(
     SYSTEM_PROMPT.to_string()
   };
 
-  let schema = schema_for!(SummarySearchResponse);
+  let schema = schema_for!(SummarySearchSchema);
   let schema_value = serde_json::to_value(&schema)?;
   let response_format = ResponseFormat::JsonSchema {
     json_schema: ResponseFormatJsonSchema {
-      description: Some("A response containing a list of answers, each with the answer text, metadata extracted from context, and relevance score".to_string()),
-      name: "SummarySearchResponse".into(),
+      description: Some(
+        "A response containing a final answer, score and relevance sources".to_string(),
+      ),
+      name: "SummarySearchSchema".into(),
       schema: Some(schema_value),
       strict: Some(true),
     },
@@ -179,20 +194,51 @@ pub async fn summarize_documents<C: Config>(
     .response_format(response_format)
     .build()?;
 
-  let mut response = client
+  let response = client
     .chat()
     .create(request)
     .await?
     .choices
     .first()
     .and_then(|choice| choice.message.content.clone())
-    .and_then(|content| serde_json::from_str::<SummarySearchResponse>(&content).ok())
+    .and_then(|content| serde_json::from_str::<SummarySearchSchema>(&content).ok())
     .ok_or_else(|| AppError::Unhandled("No response from OpenAI".to_string()))?;
 
-  // Remove empty summaries
-  response
-    .summaries
-    .retain(|summary| !summary.content.is_empty());
+  if response.answer.is_empty() {
+    return Ok(SummarySearchResponse { summaries: vec![] });
+  }
 
-  Ok(response)
+  let score = match response.score.parse::<f32>() {
+    Ok(score) => score,
+    Err(err) => {
+      error!(
+        "[Search] Failed to parse AI summary score: {}. Error: {}",
+        response.score, err
+      );
+      0.0
+    },
+  };
+
+  // If only_context is true, we need to ensure the score is above a certain threshold.
+  if only_context && score < 0.4 {
+    info!(
+      "[Search] AI summary score is too low: {}. Returning empty result.",
+      score
+    );
+    return Ok(SummarySearchResponse { summaries: vec![] });
+  }
+
+  let summary = SearchSummary {
+    content: response.answer,
+    sources: response
+      .sources
+      .into_iter()
+      .flat_map(|s| Uuid::parse_str(&s).ok())
+      .collect(),
+    score,
+  };
+
+  Ok(SummarySearchResponse {
+    summaries: vec![summary],
+  })
 }

@@ -1,4 +1,4 @@
-use crate::biz::search::{search_document, summary_search_results};
+use crate::biz::search::{search_document, summarize_search_results};
 use crate::state::AppState;
 use access_control::act::Action;
 use actix_web::web::{Data, Json, Query};
@@ -67,7 +67,7 @@ async fn summary_search_results_handler(
     .await?;
 
   let ai_tool = create_ai_tool(&state.config.azure_ai_config, &state.config.open_ai_config);
-  let result = summary_search_results(ai_tool, request).await?;
+  let result = summarize_search_results(ai_tool, request).await?;
   Ok(AppResponse::Ok().with_data(result).into())
 }
 

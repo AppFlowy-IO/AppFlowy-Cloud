@@ -105,13 +105,12 @@ impl PendingCollabWrite {
   }
 }
 
-#[derive(Debug, Clone, Validate, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Validate)]
 pub struct CollabParams {
-  #[serde(with = "uuid_str")]
   pub object_id: Uuid,
-  #[validate(custom(function = "validate_not_empty_payload"))]
-  pub encoded_collab_v1: Bytes,
   pub collab_type: CollabType,
+  #[validate(length(min = 2))]
+  pub encoded_collab_v1: Bytes,
 }
 
 impl Display for CollabParams {
@@ -126,19 +125,14 @@ impl Display for CollabParams {
   }
 }
 
-impl CollabParams {
-  pub fn new<B: Into<Bytes>>(
-    object_id: Uuid,
-    collab_type: CollabType,
-    encoded_collab_v1: B,
-  ) -> Self {
-    Self {
-      object_id,
-      collab_type,
-      encoded_collab_v1: encoded_collab_v1.into(),
-    }
-  }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateCollabData {
+  pub object_id: Uuid,
+  pub encoded_collab_v1: Bytes,
+  pub collab_type: CollabType,
+}
 
+impl CreateCollabData {
   pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
     bincode::serialize(self)
   }
@@ -148,7 +142,7 @@ impl CollabParams {
       Ok(value) => Ok(value),
       Err(_) => {
         // fallback to deserialize into older version
-        let old: CollabParamsV0 = bincode::deserialize(bytes)?;
+        let old: CreateCollabDataV0 = bincode::deserialize(bytes)?;
         Ok(Self {
           object_id: old.object_id,
           encoded_collab_v1: old.encoded_collab_v1.into(),
@@ -179,7 +173,27 @@ impl CollabParams {
   }
 }
 
-impl TryFrom<proto::collab::CollabParams> for CollabParams {
+impl From<CollabParams> for CreateCollabData {
+  fn from(value: CollabParams) -> Self {
+    Self {
+      object_id: value.object_id,
+      encoded_collab_v1: value.encoded_collab_v1,
+      collab_type: value.collab_type,
+    }
+  }
+}
+
+impl From<CreateCollabData> for CollabParams {
+  fn from(value: CreateCollabData) -> Self {
+    Self {
+      object_id: value.object_id,
+      encoded_collab_v1: value.encoded_collab_v1,
+      collab_type: value.collab_type,
+    }
+  }
+}
+
+impl TryFrom<proto::collab::CollabParams> for CreateCollabData {
   type Error = EntityError;
 
   fn try_from(proto: proto::collab::CollabParams) -> Result<Self, Self::Error> {
@@ -195,7 +209,7 @@ impl TryFrom<proto::collab::CollabParams> for CollabParams {
 }
 
 #[derive(Serialize, Deserialize)]
-struct CollabParamsV0 {
+struct CreateCollabDataV0 {
   #[serde(with = "uuid_str")]
   object_id: Uuid,
   encoded_collab_v1: Vec<u8>,
@@ -206,7 +220,7 @@ struct CollabParamsV0 {
 pub struct BatchCreateCollabParams {
   #[validate(custom(function = "validate_not_empty_str"))]
   pub workspace_id: String,
-  pub params_list: Vec<CollabParams>,
+  pub params_list: Vec<CreateCollabData>,
 }
 
 impl BatchCreateCollabParams {
@@ -1278,7 +1292,7 @@ pub struct JoinWorkspaceByInviteCodeParams {
 
 #[cfg(test)]
 mod test {
-  use crate::dto::{CollabParams, CollabParamsV0};
+  use crate::dto::{CreateCollabData, CreateCollabDataV0};
 
   use bytes::Bytes;
   use collab_entity::CollabType;
@@ -1287,7 +1301,7 @@ mod test {
 
   #[test]
   fn collab_params_serialization_from_old_format() {
-    let v0 = CollabParamsV0 {
+    let v0 = CreateCollabDataV0 {
       object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: vec![
@@ -1347,7 +1361,7 @@ mod test {
       ],
     };
     let data = bincode::serialize(&v0).unwrap();
-    let collab_params = CollabParams::from_bytes(&data).unwrap();
+    let collab_params = CreateCollabData::from_bytes(&data).unwrap();
     assert_eq!(collab_params.object_id, v0.object_id);
     assert_eq!(collab_params.collab_type, v0.collab_type);
     assert_eq!(collab_params.encoded_collab_v1, v0.encoded_collab_v1);
@@ -1355,27 +1369,27 @@ mod test {
 
   #[test]
   fn deserialization_using_protobuf() {
-    let collab_params_with_embeddings = CollabParams {
+    let collab_params_with_embeddings = CreateCollabData {
       object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::default(),
     };
 
     let protobuf_encoded = collab_params_with_embeddings.to_protobuf_bytes();
-    let collab_params_decoded = CollabParams::from_protobuf_bytes(&protobuf_encoded).unwrap();
+    let collab_params_decoded = CreateCollabData::from_protobuf_bytes(&protobuf_encoded).unwrap();
     assert_eq!(collab_params_with_embeddings, collab_params_decoded);
   }
 
   #[test]
   fn deserialize_collab_params_without_embeddings() {
-    let collab_params = CollabParams {
+    let collab_params = CreateCollabData {
       object_id: Uuid::new_v4(),
       collab_type: CollabType::Document,
       encoded_collab_v1: Bytes::from(vec![1, 2, 3]),
     };
 
     let protobuf_encoded = collab_params.to_protobuf_bytes();
-    let collab_params_decoded = CollabParams::from_protobuf_bytes(&protobuf_encoded).unwrap();
+    let collab_params_decoded = CreateCollabData::from_protobuf_bytes(&protobuf_encoded).unwrap();
     assert_eq!(collab_params, collab_params_decoded);
   }
 }

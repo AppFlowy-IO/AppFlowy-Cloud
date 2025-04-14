@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id, updated_at)\n        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::bigint[], $6::uuid[], $7::timestamp with time zone[])\n        ON CONFLICT (oid)\n        DO UPDATE SET blob = excluded.blob, len = excluded.len, updated_at = excluded.updated_at where af_collab.workspace_id = excluded.workspace_id\n      ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "ByteaArray",
+        "Int4Array",
+        "Int4Array",
+        "Int8Array",
+        "UuidArray",
+        "TimestamptzArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "06096ba1131e78d3da5df25a4b0a1193f11c9782abaf91faf263a116f90e51af"
+}

@@ -58,9 +58,9 @@ pub async fn insert_into_af_collab(
 
   sqlx::query!(
     r#"
-      INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
-      VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oid)
-      DO UPDATE SET blob = $2, len = $3, owner_uid = $5 WHERE excluded.workspace_id = af_collab.workspace_id;
+      INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) ON CONFLICT (oid)
+      DO UPDATE SET blob = $2, len = $3, owner_uid = $5, updated_at = COALESCE($7, NOW()) WHERE excluded.workspace_id = af_collab.workspace_id;
     "#,
     params.object_id,
     params.encoded_collab_v1.as_ref(),
@@ -68,6 +68,7 @@ pub async fn insert_into_af_collab(
     partition_key,
     uid,
     workspace_id,
+    params.updated_at
   )
   .execute(tx.deref_mut())
   .await.map_err(|err| {
@@ -152,8 +153,9 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(len);
   let mut lengths: Vec<i32> = Vec::with_capacity(len);
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
-  let mut visited = HashSet::with_capacity(collab_params_list.len());
-  for params in collab_params_list {
+  let mut visited = HashSet::with_capacity(len);
+  let mut updated_at = vec![Utc::now(); len];
+  for (i, params) in collab_params_list.into_iter().enumerate() {
     let oid = params.object_id;
     if visited.insert(oid) {
       let partition_key = partition_key_from_collab_type(&params.collab_type);
@@ -162,6 +164,9 @@ pub async fn insert_into_af_collab_bulk_for_user(
       lengths.push(params.encoded_collab_v1.len() as i32);
       partition_keys.push(partition_key);
     }
+    if let Some(timestamp) = params.updated_at {
+      updated_at[i] = timestamp;
+    }
   }
 
   let uids: Vec<i64> = vec![*uid; object_ids.len()];
@@ -169,17 +174,18 @@ pub async fn insert_into_af_collab_bulk_for_user(
   // Bulk insert into `af_collab` for the provided collab params
   sqlx::query!(
       r#"
-        INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
-        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::bigint[], $6::uuid[])
+        INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id, updated_at)
+        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::bigint[], $6::uuid[], $7::timestamp with time zone[])
         ON CONFLICT (oid)
-        DO UPDATE SET blob = excluded.blob, len = excluded.len where af_collab.workspace_id = excluded.workspace_id
+        DO UPDATE SET blob = excluded.blob, len = excluded.len, updated_at = excluded.updated_at where af_collab.workspace_id = excluded.workspace_id
       "#,
       &object_ids,
       &blobs,
       &lengths,
       &partition_keys,
       &uids,
-      &workspace_ids
+      &workspace_ids,
+      &updated_at
     )
       .execute(tx.deref_mut())
       .await
@@ -231,7 +237,7 @@ where
   sqlx::query_as!(
     AFCollabRowMeta,
     r#"
-        SELECT oid,workspace_id,deleted_at,created_at
+        SELECT oid,workspace_id,deleted_at,created_at,updated_at
         FROM af_collab
         WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;
         "#,

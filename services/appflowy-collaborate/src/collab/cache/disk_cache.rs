@@ -2,6 +2,7 @@ use crate::collab::cache::encode_collab_from_bytes;
 use crate::CollabMetrics;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
+use appflowy_proto::Rid;
 use bytes::Bytes;
 use collab::entity::{EncodedCollab, EncoderVersion};
 use database::collab::{
@@ -135,7 +136,7 @@ impl CollabDiskCache {
     &self,
     workspace_id: &Uuid,
     query: QueryCollab,
-  ) -> Result<EncodedCollab, AppError> {
+  ) -> Result<(Rid, EncodedCollab), AppError> {
     tracing::debug!("try get {}:{} from s3", query.collab_type, query.object_id);
     let key = collab_key(workspace_id, &query.object_id);
     match self.s3.get_blob(&key).await {
@@ -150,11 +151,13 @@ impl CollabDiskCache {
           decompressed.len(),
           now.elapsed()
         );
-        return Ok(EncodedCollab {
+        let encoded_collab = EncodedCollab {
           state_vector: Default::default(),
           doc_state: decompressed.into(),
           version: EncoderVersion::V1,
-        });
+        };
+        let rid = Rid::default(); //TODO: we need to store it somewhere
+        return Ok((rid, encoded_collab));
       },
       Err(AppError::RecordNotFound(_)) => {
         tracing::debug!(
@@ -176,9 +179,11 @@ impl CollabDiskCache {
         select_blob_from_af_collab(&self.pg_pool, &query.collab_type, &query.object_id).await;
 
       match result {
-        Ok(data) => {
+        Ok((updated_at, data)) => {
           self.metrics.pg_read_collab_count.inc();
-          return encode_collab_from_bytes(data).await;
+          let rid = Rid::new(updated_at.timestamp_millis() as u64, 0);
+          let encoded_collab = encode_collab_from_bytes(data).await?;
+          return Ok((rid, encoded_collab));
         },
         Err(e) => {
           match e {

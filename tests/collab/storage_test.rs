@@ -247,7 +247,7 @@ async fn collab_mem_cache_read_write_test() {
     .await
     .unwrap();
 
-  let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
+  let (_, encode_collab_from_cache) = mem_cache.get_encode_collab(&object_id).await.unwrap();
   assert_eq!(encode_collab_from_cache.state_vector, vec![1, 2, 3]);
   assert_eq!(encode_collab_from_cache.doc_state, vec![4, 5, 6]);
 }
@@ -285,7 +285,7 @@ async fn collab_mem_cache_insert_override_test() {
     .unwrap();
 
   // check that the previous insert is still in the cache
-  let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
+  let (_, encode_collab_from_cache) = mem_cache.get_encode_collab(&object_id).await.unwrap();
   assert_eq!(encode_collab_from_cache.doc_state, encode_collab.doc_state);
   assert_eq!(encode_collab_from_cache.state_vector, vec![1, 2, 3]);
   assert_eq!(encode_collab_from_cache.doc_state, vec![4, 5, 6]);
@@ -305,7 +305,7 @@ async fn collab_mem_cache_insert_override_test() {
     .unwrap();
 
   // check that the previous insert is overridden
-  let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
+  let (_, encode_collab_from_cache) = mem_cache.get_encode_collab(&object_id).await.unwrap();
   assert_eq!(encode_collab_from_cache.doc_state, vec![15, 16, 17]);
   assert_eq!(encode_collab_from_cache.state_vector, vec![12, 13, 14]);
 }

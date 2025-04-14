@@ -430,7 +430,7 @@ where
       }
     }
 
-    let encode_collab = self
+    let (_, encode_collab) = self
       .cache
       .get_encode_collab(&params.workspace_id, params.inner)
       .await?;

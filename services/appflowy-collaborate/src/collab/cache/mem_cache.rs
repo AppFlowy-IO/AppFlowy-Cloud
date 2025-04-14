@@ -2,6 +2,8 @@ use crate::collab::cache::encode_collab_from_bytes;
 use crate::CollabMetrics;
 use anyhow::anyhow;
 use app_error::AppError;
+use appflowy_proto::Rid;
+use chrono::{DateTime, Utc};
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use database::collab::CollabMetadata;
@@ -92,26 +94,17 @@ impl CollabMemCache {
       })
   }
 
-  pub async fn get_encode_collab_data(&self, object_id: &Uuid) -> Option<Vec<u8>> {
+  #[instrument(level = "trace", skip_all)]
+  pub async fn get_encode_collab(&self, object_id: &Uuid) -> Option<(Rid, EncodedCollab)> {
     match self.get_data_with_timestamp(object_id).await {
+      Ok(Some((timestamp, bytes))) => {
+        let encoded_collab = encode_collab_from_bytes(bytes).await.ok()?;
+        let rid = Rid::new(timestamp, 0);
+        Some((rid, encoded_collab))
+      },
       Ok(None) => None,
-      Ok(Some((_, bytes))) => Some(bytes),
       Err(err) => {
         error!("Failed to get encoded collab from redis: {:?}", err);
-        None
-      },
-    }
-  }
-
-  #[instrument(level = "trace", skip_all)]
-  pub async fn get_encode_collab(&self, object_id: &Uuid) -> Option<EncodedCollab> {
-    match self.get_encode_collab_data(object_id).await {
-      Some(bytes) => encode_collab_from_bytes(bytes).await.ok(),
-      None => {
-        trace!(
-          "No encoded collab found in cache for object_id: {}",
-          object_id
-        );
         None
       },
     }
@@ -122,7 +115,7 @@ impl CollabMemCache {
     &self,
     object_id: &Uuid,
     encoded_collab: EncodedCollab,
-    timestamp: i64,
+    timestamp: u64,
     expiration_seconds: u64,
   ) {
     trace!("Inserting encode collab into cache: {}", object_id);
@@ -130,7 +123,12 @@ impl CollabMemCache {
     match result {
       Ok(Ok(bytes)) => {
         if let Err(err) = self
-          .insert_data_with_timestamp(object_id, &bytes, timestamp, Some(expiration_seconds))
+          .insert_data_with_timestamp(
+            object_id,
+            &bytes,
+            timestamp as i64,
+            Some(expiration_seconds),
+          )
           .await
         {
           error!("Failed to cache encoded collab: {:?}", err);
@@ -253,10 +251,10 @@ impl CollabMemCache {
   /// - `Vec<u8>` is the binary data.
   ///
   /// The function returns `Ok(None)` if no data is found for the given `object_id`.
-  async fn get_data_with_timestamp(
+  pub async fn get_data_with_timestamp(
     &self,
     object_id: &Uuid,
-  ) -> redis::RedisResult<Option<(i64, Vec<u8>)>> {
+  ) -> redis::RedisResult<Option<(u64, Vec<u8>)>> {
     let cache_object_id = encode_collab_key(object_id);
     let mut conn = self.connection_manager.clone();
     // Attempt to retrieve the data from Redis
@@ -274,7 +272,7 @@ impl CollabMemCache {
             self.metrics.redis_read_collab_count.inc();
             let timestamp = i64::from_be_bytes(ts_bytes);
             let payload = data[8..].to_vec();
-            Ok(Some((timestamp, payload)))
+            Ok(Some((timestamp as u64, payload)))
           },
           Err(_) => Err(redis::RedisError::from((
             redis::ErrorKind::TypeError,

@@ -931,6 +931,7 @@ async fn process_unzip_file(
 
   // 3. Collect all collabs and resources
   let mut stream = imported.into_collab_stream().await;
+  let updated_at = Utc::now();
   while let Some(imported_collab_info) = stream.next().await {
     trace!(
       "[Import]: {} imported collab: {}",
@@ -946,6 +947,7 @@ async fn process_unzip_file(
           object_id: imported_collab.object_id.parse().unwrap(),
           collab_type: imported_collab.collab_type,
           encoded_collab_v1: Bytes::from(imported_collab.encoded_collab.encode_to_bytes().unwrap()),
+          updated_at: Some(updated_at),
         })
         .collect::<Vec<_>>(),
     );
@@ -1029,6 +1031,7 @@ async fn process_unzip_file(
       object_id: w_database_id,
       collab_type: CollabType::WorkspaceDatabase,
       encoded_collab_v1: Bytes::from(w_database_collab.encode_to_bytes().unwrap()),
+      updated_at: Some(updated_at),
     };
     collab_params_list.push(w_database_collab_params);
   }
@@ -1069,6 +1072,7 @@ async fn process_unzip_file(
     object_id: workspace_id,
     collab_type: CollabType::Folder,
     encoded_collab_v1: Bytes::from(folder_collab.encode_to_bytes().unwrap()),
+    updated_at: Some(updated_at),
   };
   trace!(
     "[Import]: {} did encode folder collab",

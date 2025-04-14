@@ -260,6 +260,7 @@ async fn duplicate_database(
         .encode_to_bytes()?
         .into(),
       collab_type: CollabType::Database,
+      updated_at: None,
     });
     for row in encoded_database.encoded_row_collabs {
       let row_id = Uuid::parse_str(&row.object_id.clone())?;
@@ -267,6 +268,7 @@ async fn duplicate_database(
         object_id: row_id,
         encoded_collab_v1: row.encoded_collab.encode_to_bytes()?.into(),
         collab_type: CollabType::DatabaseRow,
+        updated_at: None,
       });
     }
     collab_storage
@@ -448,5 +450,6 @@ fn duplicate_document_encoded_collab(
     object_id: new_object_id,
     encoded_collab_v1: encoded_collab.encode_to_bytes()?.into(),
     collab_type: CollabType::Document,
+    updated_at: None,
   })
 }

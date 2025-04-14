@@ -306,6 +306,7 @@ pub struct AFCollabRowMeta {
 
   pub deleted_at: Option<DateTime<Utc>>,
   pub created_at: Option<DateTime<Utc>>,
+  pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]

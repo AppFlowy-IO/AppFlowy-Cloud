@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT oid,workspace_id,deleted_at,created_at\n        FROM af_collab\n        WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;\n        ",
+  "query": "\n        SELECT oid,workspace_id,deleted_at,created_at,updated_at\n        FROM af_collab\n        WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;\n        ",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "ordinal": 3,
         "name": "created_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
@@ -34,8 +39,9 @@
       false,
       false,
       true,
-      true
+      true,
+      false
     ]
   },
-  "hash": "f225b36befe4b05d88ce37ce0fc1e8e31c4aa7fbf701cfe1cb76c23b13449bf0"
+  "hash": "7cf981763c361bd1d3bd3a04488419820baca4e44b81753cf632ec6a55ee26d8"
 }

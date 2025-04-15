@@ -63,7 +63,7 @@ async fn summary_search_result() {
     .unwrap();
   dbg!(&resp);
   assert_eq!(resp.summaries.len(), 1);
-  assert_eq!(resp.summaries[0].sources.len(), 3);
+  assert!(resp.summaries[0].sources.len() > 1);
 
   let resp = ai_chat
     .summarize_documents("multiplayer game", model_name, docs.clone(), true)

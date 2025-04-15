@@ -52,6 +52,8 @@ fn default_search_score_limit() -> f64 {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Summary {
   pub content: String,
+  #[serde(default)]
+  pub highlights: String,
   pub sources: Vec<Uuid>,
 }
 

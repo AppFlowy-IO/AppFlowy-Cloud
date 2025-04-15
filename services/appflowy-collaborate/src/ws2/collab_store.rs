@@ -150,11 +150,18 @@ impl CollabStore {
       .get_snapshot(workspace_id, object_id, collab_type)
       .await?;
     let mut rid = snapshot_rid;
+    tracing::trace!(
+      "received snapshot for {}/{} (last message id: {})",
+      workspace_id,
+      object_id,
+      rid
+    );
 
     let doc = Doc::new();
     {
       let mut tx = doc.transact_mut();
-      tx.apply_update(Update::decode_v2(&update)?)?;
+      let update = Update::decode_v2(&update).or_else(|_| Update::decode_v1(&update))?;
+      tx.apply_update(update)?;
 
       rid = self
         .replay_updates(&mut tx, workspace_id, object_id, rid)

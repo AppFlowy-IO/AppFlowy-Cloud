@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
-  Reaction,
+  InvitationCodeInfo, Reaction,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -1528,6 +1528,48 @@ pub async fn select_invited_workspace_id(
   .await?;
 
   Ok(res)
+}
+
+pub async fn select_invitation_code_info<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  invite_code: &str,
+  uid: i64,
+) -> Result<Vec<InvitationCodeInfo>, AppError> {
+  let info_list = sqlx::query_as!(
+    InvitationCodeInfo,
+    r#"
+      WITH invited_workspace_member AS (
+        SELECT
+          invite_code,
+          COUNT(*) AS member_count,
+          COUNT(CASE WHEN uid = $2 THEN uid END) > 0 AS is_member
+        FROM af_workspace_invite_code
+        JOIN af_workspace_member USING (workspace_id)
+        WHERE invite_code = $1
+        AND (expires_at IS NULL OR expires_at < NOW())
+        GROUP BY invite_code
+      )
+      SELECT
+      workspace_id,
+      owner_profile.name AS "owner_name!",
+      owner_profile.metadata ->> 'icon_url' AS owner_avatar,
+      af_workspace.workspace_name AS "workspace_name!",
+      af_workspace.icon AS workspace_icon_url,
+      invited_workspace_member.member_count AS "member_count!",
+      invited_workspace_member.is_member AS "is_member!"
+      FROM af_workspace_invite_code
+      JOIN af_workspace USING (workspace_id)
+      JOIN af_user AS owner_profile ON af_workspace.owner_uid = owner_profile.uid
+      JOIN invited_workspace_member USING (invite_code)
+      WHERE invite_code = $1
+    "#,
+    invite_code,
+    uid
+  )
+  .fetch_all(executor)
+  .await?;
+
+  Ok(info_list)
 }
 
 pub async fn upsert_workspace_member_uid<'a, E: Executor<'a, Database = Postgres>>(

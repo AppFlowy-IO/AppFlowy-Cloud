@@ -219,6 +219,7 @@ pub async fn summarize_search_results(
         .map(|s| Summary {
           content: s.content,
           sources: s.sources,
+          highlights: s.highlights,
         })
         .collect();
     },

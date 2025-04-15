@@ -78,14 +78,15 @@ impl AzureOpenAIChat {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct SearchSummary {
   pub content: String,
+  pub highlights: String,
   pub sources: Vec<Uuid>,
   pub score: f32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct SummarySearchResponse {
   pub summaries: Vec<SearchSummary>,
 }
@@ -94,6 +95,7 @@ pub struct SummarySearchResponse {
 #[serde(deny_unknown_fields)]
 struct SummarySearchSchema {
   pub answer: String,
+  pub highlights: String,
   pub score: String,
   pub sources: Vec<String>,
 }
@@ -108,6 +110,7 @@ Instructions:
 
 Output must include:
 - `answer`: a concise summary.
+- `highlights`:A markdown bullet list that highlights key themes and important details (e.g., date, time, location, etc.).
 - `score`: relevance score (0.0–1.0), where:
   - 1.0 = fully supported by context,
   - 0.0 = unsupported,
@@ -120,6 +123,7 @@ You are a strict, context-bound question answering assistant. Answer solely base
 
 Output must include:
 - `answer`: a concise answer.
+- `highlights`:A markdown bullet list that highlights key themes and important details (e.g., date, time, location, etc.).
 - `score`: relevance score (0.0–1.0), where:
   - 1.0 = fully supported by context,
   - 0.0 = unsupported,
@@ -171,7 +175,7 @@ pub async fn summarize_documents<C: Config>(
   let response_format = ResponseFormat::JsonSchema {
     json_schema: ResponseFormatJsonSchema {
       description: Some(
-        "A response containing a final answer, score and relevance sources".to_string(),
+        "A response containing a final answer, highlight, score and relevance sources".to_string(),
       ),
       name: "SummarySearchSchema".into(),
       schema: Some(schema_value),
@@ -230,6 +234,7 @@ pub async fn summarize_documents<C: Config>(
 
   let summary = SearchSummary {
     content: response.answer,
+    highlights: response.highlights,
     sources: response
       .sources
       .into_iter()

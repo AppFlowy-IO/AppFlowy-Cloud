@@ -125,17 +125,17 @@ jobs:
           echo "GIT_TAG=$T" >> $GITHUB_ENV
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
-        uses: Noelware/docker-manifest-action@master
+        uses: Noelware/docker-manifest-action@0.4.3
         with:
           inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
           push: true
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:latest
-        uses: Noelware/docker-manifest-action@master
+        uses: Noelware/docker-manifest-action@0.4.3
         with:
           inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
           push: true
 
       - name: Logout from Docker Hub
@@ -222,17 +222,17 @@ jobs:
           echo "GIT_TAG=$T" >> $GITHUB_ENV
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
-        uses: Noelware/docker-manifest-action@master
+        uses: Noelware/docker-manifest-action@0.4.3
         with:
           inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
           push: true
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:latest
-        uses: Noelware/docker-manifest-action@master
+        uses: Noelware/docker-manifest-action@0.4.3
         with:
           inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
           push: true
 
       - name: Logout from Docker Hub
@@ -319,17 +319,17 @@ jobs:
           echo "GIT_TAG=$T" >> $GITHUB_ENV
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
-        uses: Noelware/docker-manifest-action@master
+        uses: Noelware/docker-manifest-action@0.4.3
         with:
           inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
           push: true
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:latest
-        uses: Noelware/docker-manifest-action@master
+        uses: Noelware/docker-manifest-action@0.4.3
         with:
           inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
           push: true
 
       - name: Logout from Docker Hub

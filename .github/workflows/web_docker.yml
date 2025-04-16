@@ -75,15 +75,15 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Create and push manifest
-        uses: Noelware/docker-manifest-action@master
+        uses: Noelware/docker-manifest-action@0.4.3
         with:
           inputs: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-linux-amd64,${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-linux-arm64
+          images: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-linux-amd64,${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-linux-arm64
           push: true
 
       - name: Create and push manifest
-        uses: Noelware/docker-manifest-action@master
+        uses: Noelware/docker-manifest-action@0.4.3
         with:
           inputs: ${{ env.IMAGE_NAME }}:latest
-          tags: ${{ env.IMAGE_NAME }}:latest-linux-amd64,${{ env.IMAGE_NAME }}:latest-linux-arm64
+          images: ${{ env.IMAGE_NAME }}:latest-linux-amd64,${{ env.IMAGE_NAME }}:latest-linux-arm64
           push: true

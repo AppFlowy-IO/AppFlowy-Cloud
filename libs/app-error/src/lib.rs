@@ -193,6 +193,9 @@ pub enum AppError {
 
   #[error("{0}")]
   FeatureNotAvailable(String),
+
+  #[error("unable to find invitation code")]
+  InvalidInvitationCode,
 }
 
 impl AppError {
@@ -276,6 +279,7 @@ impl AppError {
       AppError::ActionTimeout(_) => ErrorCode::ActionTimeout,
       AppError::InvalidBlock(_) => ErrorCode::InvalidBlock,
       AppError::FeatureNotAvailable(_) => ErrorCode::FeatureNotAvailable,
+      AppError::InvalidInvitationCode => ErrorCode::InvalidInvitationCode,
     }
   }
 }
@@ -453,6 +457,7 @@ pub enum ErrorCode {
   RequestTimeout = 1065,
   AIResponseError = 1066,
   FeatureNotAvailable = 1067,
+  InvalidInvitationCode = 1068,
 }
 
 impl ErrorCode {

@@ -1248,6 +1248,22 @@ pub struct InvitedWorkspace {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct GetInvitationCodeInfoQuery {
+  pub code: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct InvitationCodeInfo {
+  pub workspace_id: Uuid,
+  pub workspace_name: String,
+  pub owner_avatar: Option<String>,
+  pub owner_name: String,
+  pub workspace_icon_url: Option<String>,
+  pub is_member: Option<bool>,
+  pub member_count: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct JoinWorkspaceByInviteCodeParams {
   pub code: String,
 }

@@ -1,12 +1,13 @@
 use app_error::AppError;
 use database::workspace::{
-  insert_workspace_invite_code, select_invited_workspace_id, upsert_workspace_member_uid,
+  insert_workspace_invite_code, select_invitation_code_info, select_invited_workspace_id,
+  upsert_workspace_member_uid,
 };
 use rand::{distributions::Alphanumeric, Rng};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use database_entity::dto::{AFRole, WorkspaceInviteToken};
+use database_entity::dto::{AFRole, InvitationCodeInfo, WorkspaceInviteToken};
 
 const INVITE_LINK_CODE_LENGTH: usize = 16;
 
@@ -39,4 +40,16 @@ pub async fn join_workspace_invite_by_code(
   let invited_workspace_id = select_invited_workspace_id(pg_pool, invitation_code).await?;
   upsert_workspace_member_uid(pg_pool, &invited_workspace_id, uid, AFRole::Member).await?;
   Ok(invited_workspace_id)
+}
+
+pub async fn get_invitation_code_info(
+  pg_pool: &PgPool,
+  invitation_code: &str,
+  uid: i64,
+) -> Result<InvitationCodeInfo, AppError> {
+  let info_list = select_invitation_code_info(pg_pool, invitation_code, uid).await?;
+  info_list
+    .into_iter()
+    .next()
+    .ok_or(AppError::InvalidInvitationCode)
 }

@@ -1,5 +1,4 @@
 use crate::collab::cache::CollabCache;
-use crate::ws2::messages::UpdateStreamMessage;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
@@ -10,8 +9,7 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
-use collab_stream::metrics::CollabStreamMetrics;
-use collab_stream::model::AwarenessStreamUpdate;
+use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use collab_stream::stream_router::{FromRedisStream, StreamRouter};
 use database_entity::dto::{CollabParams, QueryCollab};
 use redis::aio::ConnectionManager;
@@ -237,7 +235,7 @@ impl CollabStore {
     from: Option<Rid>,
     to: Option<Rid>,
   ) -> anyhow::Result<Vec<UpdateStreamMessage>> {
-    let key = format!("af:u:{}", workspace_id);
+    let key = UpdateStreamMessage::stream_key(&workspace_id);
     let from = from
       .map(|rid| rid.to_string())
       .unwrap_or_else(|| "-".into());
@@ -262,22 +260,13 @@ impl CollabStore {
     sender: &CollabOrigin,
     update: Vec<u8>,
   ) -> anyhow::Result<Rid> {
-    let key = format!("af:u:{}", workspace_id);
+    let key = UpdateStreamMessage::stream_key(&workspace_id);
     tracing::trace!("publishing update to {} - object id: {}", key, object_id);
     let mut conn = self.connection_manager.clone();
-    let items: String = cmd("XADD")
-      .arg(&key)
-      .arg("*")
-      .arg("oid")
-      .arg(object_id)
-      .arg("ct")
-      .arg(collab_type as i32)
-      .arg("sender")
-      .arg(sender.to_string())
-      .arg("data")
-      .arg(update)
-      .query_async(&mut conn)
-      .await?;
+    let items: String =
+      UpdateStreamMessage::prepare_command(&key, &object_id, collab_type, sender, update)
+        .query_async(&mut conn)
+        .await?;
     Rid::from_str(&items).map_err(|err| anyhow!("failed to parse rid: {}", err))
   }
 
@@ -446,7 +435,7 @@ impl CollabStore {
   }
 
   pub async fn prune_updates(&self, workspace_id: WorkspaceId, up_to: Rid) -> anyhow::Result<()> {
-    let key = format!("af:u:{}", workspace_id);
+    let key = UpdateStreamMessage::stream_key(&workspace_id);
     let mut conn = self.connection_manager.clone();
     let options = StreamTrimOptions::minid(StreamTrimmingMode::Exact, up_to.to_string());
     let _: redis::Value = conn.xtrim_options(key, &options).await?;

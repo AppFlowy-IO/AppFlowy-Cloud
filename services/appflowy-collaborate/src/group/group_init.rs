@@ -22,7 +22,9 @@ use bytes::Bytes;
 use collab_document::document::DocumentBody;
 use collab_stream::awareness_gossip::AwarenessUpdateSink;
 use collab_stream::error::StreamError;
-use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
+use collab_stream::model::{
+  AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags, UpdateStreamMessage,
+};
 use dashmap::DashMap;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::{CollabParams, QueryCollabParams};
@@ -896,7 +898,8 @@ impl CollabPersister {
     metrics: Arc<CollabRealtimeMetrics>,
     prune_grace_period: Duration,
   ) -> Result<Self, StreamError> {
-    let update_sink = collab_redis_stream.collab_update_sink(&workspace_id, &object_id);
+    let update_sink =
+      collab_redis_stream.collab_update_sink(&workspace_id, &object_id, collab_type);
     let awareness_sink = collab_redis_stream
       .awareness_update_sink(&workspace_id, &object_id)
       .await?;
@@ -964,7 +967,7 @@ impl CollabPersister {
     self.metrics.load_collab_count.inc();
 
     // 2. consume all Redis updates on top of it (keep redis msg id)
-    let mut last_message_id = None;
+    let mut applied_messages = Vec::new();
     let mut tx = collab.transact_mut();
     let updates = self
       .collab_redis_stream
@@ -981,7 +984,7 @@ impl CollabPersister {
       tx.apply_update(update).map_err(|err| {
         RTProtocolError::YrsApplyUpdate(format!("collab {} - {}", self.object_id, err))
       })?;
-      last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
+      applied_messages.push(message_id); //TODO: shouldn't this happen before decoding?
       self.metrics.apply_update_count.inc();
     }
     drop(tx);
@@ -998,7 +1001,7 @@ impl CollabPersister {
     // now we have the most recent version of the document
     let snapshot = CollabSnapshot {
       collab,
-      last_message_id,
+      applied_messages,
     };
     Ok(snapshot)
   }
@@ -1015,7 +1018,7 @@ impl CollabPersister {
     let start = Instant::now();
     let mut i = 0;
     let mut collab = None;
-    let mut last_message_id = None;
+    let mut applied_messages = Vec::new();
     for (message_id, update) in updates {
       i += 1;
       let update: Update = update.into_update()?;
@@ -1034,7 +1037,7 @@ impl CollabPersister {
       collab.transact_mut().apply_update(update).map_err(|err| {
         RTProtocolError::YrsApplyUpdate(format!("collab {} - {}", self.object_id, err))
       })?;
-      last_message_id = Some(message_id); //TODO: shouldn't this happen before decoding?
+      applied_messages.push(message_id); //TODO: shouldn't this happen before decoding?
       self.metrics.apply_update_count.inc();
     }
 
@@ -1064,7 +1067,7 @@ impl CollabPersister {
         }
         Ok(Some(CollabSnapshot {
           collab,
-          last_message_id,
+          applied_messages,
         }))
       },
       None => Ok(None),
@@ -1075,11 +1078,11 @@ impl CollabPersister {
     // load collab but only if there were pending updates in Redis
     if let Some(mut snapshot) = self.load_if_changed().await? {
       tracing::debug!("requesting save for collab {}", self.object_id);
-      if let Some(message_id) = snapshot.last_message_id {
+      if !snapshot.applied_messages.is_empty() {
         // non-nil message_id means that we had to update the most recent collab state snapshot
         // with new updates from Redis. This means that our snapshot state is newer than the last
         // persisted one in the database
-        self.save_attempt(&mut snapshot.collab, message_id).await?;
+        self.save_attempt(snapshot).await?;
       }
     }
     Ok(())
@@ -1089,18 +1092,20 @@ impl CollabPersister {
   /// first it will try to save it as a historical snapshot (will all updates available), then it
   /// will generate another (compact) snapshot variant that will be used as main one for loading
   /// for the sake of y-sync protocol.
-  async fn save_attempt(
-    &self,
-    collab: &mut Collab,
-    message_id: MessageId,
-  ) -> Result<(), RealtimeError> {
+  async fn save_attempt(&self, snapshot: CollabSnapshot) -> Result<(), RealtimeError> {
     // try to acquire snapshot lease - it's possible that multiple web services will try to
     // perform snapshot at the same time, so we'll use lease to let only one of them atm.
+    let last_message_id = snapshot.applied_messages.last().cloned().ok_or_else(|| {
+      RealtimeError::CreateSnapshotFailed(
+        "only save snapshot after some updates were applied".into(),
+      )
+    })?;
     if let Some(mut lease) = self
       .collab_redis_stream
       .lease(&self.workspace_id.to_string(), &self.object_id.to_string())
       .await?
     {
+      let collab = snapshot.collab;
       let doc_state_light = collab
         .transact()
         .encode_state_as_update_v1(&StateVector::default());
@@ -1122,20 +1127,15 @@ impl CollabPersister {
       tracing::debug!(
         "persisted collab {} snapshot at {}: {} bytes",
         self.object_id,
-        message_id,
+        last_message_id,
         light_len
       );
 
       // 3. finally we can drop Redis messages
-      let now = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis();
-      let msg_id = MessageId {
-        timestamp_ms: (now - self.prune_grace_period.as_millis()) as u64,
-        sequence_number: 0,
-      };
-      let stream_key = CollabStreamUpdate::stream_key(&self.workspace_id, &self.object_id);
+      let stream_key = UpdateStreamMessage::stream_key(&self.workspace_id);
       self
         .collab_redis_stream
-        .prune_update_stream(&stream_key, msg_id)
+        .delete_stream_messages(&stream_key, &snapshot.applied_messages)
         .await?;
 
       let _ = lease.release().await;
@@ -1211,5 +1211,5 @@ impl CollabPersister {
 
 pub struct CollabSnapshot {
   pub collab: Collab,
-  pub last_message_id: Option<MessageId>,
+  pub applied_messages: Vec<MessageId>,
 }

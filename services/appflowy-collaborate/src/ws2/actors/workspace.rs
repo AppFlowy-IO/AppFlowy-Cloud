@@ -1,14 +1,13 @@
 use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
 use crate::ws2::collab_store::CollabStore;
-use crate::ws2::messages::UpdateStreamMessage;
 use actix::{
   fut, Actor, ActorContext, Addr, AsyncContext, AtomicResponse, Handler, Recipient,
   ResponseActFuture, Running, SpawnHandle, StreamHandler, WrapFuture,
 };
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
-use collab_stream::model::AwarenessStreamUpdate;
+use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use std::collections::HashMap;
 use std::sync::Arc;
 use yrs::block::ClientID;
@@ -137,7 +136,7 @@ impl Actor for Workspace {
 
   fn started(&mut self, ctx: &mut Self::Context) {
     tracing::info!("initializing workspace: {}", self.workspace_id);
-    let update_streams_key = format!("af:u:{}", self.workspace_id);
+    let update_streams_key = UpdateStreamMessage::stream_key(&self.workspace_id);
     let stream = self
       .store
       .updates()

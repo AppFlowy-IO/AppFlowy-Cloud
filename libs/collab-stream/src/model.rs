@@ -1,12 +1,14 @@
 use crate::error::{internal, StreamError};
 use crate::stream_router::{FromRedisStream, RedisMap};
+use anyhow::anyhow;
+use appflowy_proto::Rid;
 use bytes::Bytes;
 use collab::core::awareness::AwarenessUpdate;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab_entity::CollabType;
 use redis::streams::StreamId;
-use redis::{FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
+use redis::{cmd, Cmd, FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -41,6 +43,15 @@ impl MessageId {
 impl Display for MessageId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}-{}", self.timestamp_ms, self.sequence_number)
+  }
+}
+
+impl From<Rid> for MessageId {
+  fn from(rid: Rid) -> Self {
+    MessageId {
+      timestamp_ms: rid.timestamp,
+      sequence_number: rid.seq_no,
+    }
   }
 }
 
@@ -94,6 +105,15 @@ impl FromRedisValue for MessageId {
       }),
       _ => Err(internal("expecting Value::Data")),
     }
+  }
+}
+
+impl ToRedisArgs for MessageId {
+  fn write_redis_args<W>(&self, out: &mut W)
+  where
+    W: ?Sized + RedisWrite,
+  {
+    out.write_arg_fmt(self)
   }
 }
 
@@ -302,12 +322,6 @@ impl CollabStreamUpdate {
     }
   }
 
-  /// Returns Redis stream key, that's storing entries mapped to/from [CollabStreamUpdate].
-  pub fn stream_key(workspace_id: &Uuid, object_id: &Uuid) -> String {
-    // use `:` separator as it adheres to Redis naming conventions
-    format!("af:{}:{}:updates", workspace_id, object_id)
-  }
-
   pub fn into_update(self) -> Result<collab::preclude::Update, StreamError> {
     let bytes = if self.flags.is_compressed() {
       zstd::decode_all(std::io::Cursor::new(self.data))?
@@ -320,6 +334,16 @@ impl CollabStreamUpdate {
       collab::preclude::Update::decode_v2(&bytes)?
     };
     Ok(update)
+  }
+}
+
+impl From<UpdateStreamMessage> for CollabStreamUpdate {
+  fn from(value: UpdateStreamMessage) -> Self {
+    CollabStreamUpdate {
+      data: value.update.to_vec(),
+      sender: value.sender,
+      flags: value.update_flags.into(),
+    }
   }
 }
 
@@ -374,6 +398,15 @@ pub struct AwarenessStreamUpdate {
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub struct UpdateFlags(u8);
 
+impl From<appflowy_proto::UpdateFlags> for UpdateFlags {
+  fn from(flags: appflowy_proto::UpdateFlags) -> Self {
+    match flags {
+      appflowy_proto::UpdateFlags::Lib0v1 => UpdateFlags(0),
+      appflowy_proto::UpdateFlags::Lib0v2 => UpdateFlags(Self::IS_V2_ENCODED),
+    }
+  }
+}
+
 impl UpdateFlags {
   /// Flag bit to mark if update is encoded using [EncoderV2] (if set) or [EncoderV1] (if clear).
   pub const IS_V2_ENCODED: u8 = 0b0000_0001;
@@ -426,5 +459,78 @@ impl Display for UpdateFlags {
     }
 
     Ok(())
+  }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct UpdateStreamMessage {
+  pub last_message_id: Rid,
+  pub sender: CollabOrigin,
+  pub object_id: Uuid,
+  pub collab_type: CollabType,
+  pub update_flags: appflowy_proto::UpdateFlags,
+  pub update: Bytes,
+}
+
+impl UpdateStreamMessage {
+  pub fn stream_key(workspace_id: &Uuid) -> String {
+    format!("af:u:{}", workspace_id)
+  }
+
+  pub fn prepare_command(
+    stream_key: &str,
+    object_id: &Uuid,
+    collab_type: CollabType,
+    sender: &CollabOrigin,
+    update: Vec<u8>,
+  ) -> Cmd {
+    let mut cmd = cmd("XADD");
+    cmd
+      .arg(&stream_key)
+      .arg("*")
+      .arg("oid")
+      .arg(object_id)
+      .arg("ct")
+      .arg(collab_type as i32)
+      .arg("sender")
+      .arg(sender.to_string())
+      .arg("data")
+      .arg(update.to_vec());
+    cmd
+  }
+}
+
+impl FromRedisStream for UpdateStreamMessage {
+  type Error = anyhow::Error;
+  fn from_redis_stream(msg_id: String, fields: RedisMap) -> Result<Self, Self::Error> {
+    let last_message_id = Rid::from_str(&msg_id).map_err(|err| anyhow!("{}", err))?;
+    let object_id = fields
+      .get("oid")
+      .ok_or_else(|| anyhow!("expecting field `oid`"))?;
+    let object_id = Uuid::from_redis_value(object_id).map_err(|err| anyhow!("{}", err))?;
+    let collab_type = fields
+      .get("ct")
+      .ok_or_else(|| anyhow!("expecting field `ct`"))?;
+    let collab_type = CollabType::from(i32::from_redis_value(collab_type)?);
+    let sender = fields
+      .get("sender")
+      .ok_or_else(|| anyhow!("expecting field `sender`"))?;
+    let sender = CollabOrigin::from_str(&String::from_redis_value(sender)?)?;
+    let update_flags = match fields.get("flags") {
+      None => appflowy_proto::UpdateFlags::default(),
+      Some(flags) => u8::from_redis_value(flags).unwrap_or(0).try_into()?,
+    };
+    let update = fields
+      .get("data")
+      .ok_or_else(|| anyhow!("expecting field `data`"))?;
+    let update: Bytes = FromRedisValue::from_redis_value(update)?;
+    Ok(UpdateStreamMessage {
+      last_message_id,
+      sender,
+      object_id,
+      collab_type,
+      update_flags,
+      update,
+    })
   }
 }

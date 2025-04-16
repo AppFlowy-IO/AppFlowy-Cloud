@@ -17,6 +17,16 @@ async fn join_workspace_by_invite_code() {
     .await
     .unwrap()
     .code;
+  let invitation_code_info = invitee_client
+    .get_invitation_code_info(&invitation_code)
+    .await
+    .unwrap();
+  assert_eq!(invitation_code_info.is_member, Some(false));
+  assert_eq!(invitation_code_info.member_count, 1);
+  assert_eq!(
+    invitation_code_info.workspace_name,
+    workspaces[0].workspace_name
+  );
   let invited_workspace_id = invitee_client
     .join_workspace_by_invitation_code(&invitation_code)
     .await

@@ -85,5 +85,5 @@ jobs:
         uses: Noelware/docker-manifest-action@master
         with:
           inputs: ${{ env.IMAGE_NAME }}:latest
-          images: ${{ env.IMAGE_NAME }}:latest-linux-amd64,${{ env.IMAGE_NAME }}:latest-linux-arm64
+          tags: ${{ env.IMAGE_NAME }}:latest-linux-amd64,${{ env.IMAGE_NAME }}:latest-linux-arm64
           push: true

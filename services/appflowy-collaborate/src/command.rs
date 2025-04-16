@@ -62,6 +62,7 @@ pub(crate) fn spawn_collaboration_command<S>(
               }
             },
             None => {
+              tracing::trace!("no active collab group for {} has been found", object_id);
               let _ = ret.send(None);
             },
           }

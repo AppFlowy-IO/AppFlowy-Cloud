@@ -216,9 +216,6 @@ services:
     image: appflowyinc/appflowy_web:${APPFLOWY_WEB_VERSION:-latest}
     depends_on:
       - appflowy_cloud
-    environment:
-      - AF_BASE_URL=${APPFLOWY_BASE_URL:?err}
-      - AF_GOTRUE_URL=${API_EXTERNAL_URL}
 volumes:
   postgres_data:
   minio_data:

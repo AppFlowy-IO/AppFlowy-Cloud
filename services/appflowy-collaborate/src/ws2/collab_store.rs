@@ -21,6 +21,7 @@ use std::time::Duration;
 use tokio::task::JoinSet;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
 
 pub struct CollabStore {
@@ -82,59 +83,6 @@ impl CollabStore {
     }
   }
 
-  /// Get the difference between the current state and the state at the given state vector.
-  /// This WILL NOT include the updates that are not yet stored in the database.
-  pub async fn get_snapshot_diff(
-    &self,
-    workspace_id: WorkspaceId,
-    object_id: ObjectId,
-    collab_type: CollabType,
-    state_vector: &StateVector,
-    rid: Rid,
-  ) -> anyhow::Result<CollabState> {
-    let (snapshot_rid, update) = self
-      .get_snapshot(workspace_id, object_id, collab_type)
-      .await?;
-
-    // If the requested snapshot is newer than the current state, return an empty update.
-    if snapshot_rid <= rid {
-      tracing::trace!("the requested snapshot has no new data, returning an empty update");
-      return Ok(CollabState {
-        rid: snapshot_rid,
-        flags: UpdateFlags::Lib0v1,
-        update: Bytes::copy_from_slice(&[0, 0]), // empty lib0 v1 update
-      });
-    }
-
-    // If state is fairly small, it's cheaper to return it as is instead of computing diff.
-    if update.len() < Self::UPDATE_DIFF_THRESHOLD {
-      tracing::trace!(
-        "returning snapshot state as is (rid: {}, len: {})",
-        snapshot_rid,
-        update.len()
-      );
-      return Ok(CollabState {
-        rid: snapshot_rid,
-        flags: UpdateFlags::Lib0v2,
-        update,
-      });
-    }
-
-    let doc = Doc::new();
-    {
-      let mut tx = doc.transact_mut();
-      tx.apply_update(Update::decode_v2(&update)?)?;
-    }
-    let update = doc.transact().encode_state_as_update_v2(state_vector);
-    tracing::trace!("returning snapshot state (rid: {})", rid);
-
-    Ok(CollabState {
-      rid,
-      flags: UpdateFlags::Lib0v2,
-      update: update.into(),
-    })
-  }
-
   /// Returns the latest full state of an object (including all updates).
   pub async fn get_latest_state(
     &self,
@@ -165,10 +113,14 @@ impl CollabStore {
         .replay_updates(&mut tx, workspace_id, object_id, rid)
         .await?;
     }
-    let update: Bytes = doc
-      .transact()
-      .encode_state_as_update_v2(state_vector)
-      .into();
+    let tx = doc.transact();
+    let update: Bytes = tx.encode_state_as_update_v2(state_vector).into();
+    let server_sv = if Self::has_missing_updates(&tx) {
+      let sv = tx.state_vector().encode_v1();
+      Some(sv)
+    } else {
+      None
+    };
 
     if rid > snapshot_rid {
       tracing::trace!("document changed while replaying updates, saving it back");
@@ -196,7 +148,13 @@ impl CollabStore {
       rid,
       flags: UpdateFlags::Lib0v2,
       update,
+      state_vector: server_sv,
     })
+  }
+
+  fn has_missing_updates<T: ReadTxn>(tx: &T) -> bool {
+    let store = tx.store();
+    store.pending_update().is_some() || store.pending_ds().is_some()
   }
 
   async fn replay_updates(
@@ -446,4 +404,5 @@ pub struct CollabState {
   pub rid: Rid,
   pub flags: UpdateFlags,
   pub update: Bytes,
+  pub state_vector: Option<Vec<u8>>,
 }

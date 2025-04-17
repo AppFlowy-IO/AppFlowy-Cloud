@@ -3,9 +3,9 @@ use app_error::AppError;
 use chrono::{DateTime, Utc};
 
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWorkspace, AFWorkspaceInvitationStatus,
-  AccessRequestMinimal, AccessRequestStatus, AccessRequestWithViewId, AccessRequesterInfo,
-  AccountLink, GlobalComment, QuickNote, Reaction, Template, TemplateCategory,
+  AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWebUserWithObfuscatedName, AFWorkspace,
+  AFWorkspaceInvitationStatus, AccessRequestMinimal, AccessRequestStatus, AccessRequestWithViewId,
+  AccessRequesterInfo, AccountLink, GlobalComment, QuickNote, Reaction, Template, TemplateCategory,
   TemplateCategoryMinimal, TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal,
   TemplateGroup, TemplateMinimal,
 };
@@ -330,8 +330,40 @@ impl From<AFWebUserColumn> for AFWebUser {
   }
 }
 
+#[derive(sqlx::Type, Serialize, Debug)]
+pub struct AFWebUserWithEmailColumn {
+  uuid: Uuid,
+  name: String,
+  email: String,
+  avatar_url: Option<String>,
+}
+
+fn mask_web_user_email(email: &str) -> String {
+  email
+    .split('@')
+    .next()
+    .map(|part| part.chars().take(6).collect())
+    .unwrap_or_default()
+}
+
+impl From<AFWebUserWithEmailColumn> for AFWebUserWithObfuscatedName {
+  fn from(val: AFWebUserWithEmailColumn) -> Self {
+    let obfuscated_name = if val.name == val.email {
+      mask_web_user_email(&val.email)
+    } else {
+      val.name.clone()
+    };
+
+    AFWebUserWithObfuscatedName {
+      uuid: val.uuid,
+      name: obfuscated_name,
+      avatar_url: val.avatar_url,
+    }
+  }
+}
+
 pub struct AFGlobalCommentRow {
-  pub user: Option<AFWebUserColumn>,
+  pub user: Option<AFWebUserWithEmailColumn>,
   pub created_at: DateTime<Utc>,
   pub last_updated_at: DateTime<Utc>,
   pub content: String,
@@ -358,7 +390,7 @@ impl From<AFGlobalCommentRow> for GlobalComment {
 
 pub struct AFReactionRow {
   pub reaction_type: String,
-  pub react_users: Vec<AFWebUserColumn>,
+  pub react_users: Vec<AFWebUserWithEmailColumn>,
   pub comment_id: Uuid,
 }
 
@@ -719,4 +751,24 @@ pub struct AFPublishViewWithPublishInfo {
   pub publish_timestamp: DateTime<Utc>,
   pub comments_enabled: bool,
   pub duplicate_enabled: bool,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_mask_web_user_email() {
+    let name = "";
+    let masked = mask_web_user_email(name);
+    assert_eq!(masked, "");
+
+    let name = "john@domain.com";
+    let masked = mask_web_user_email(name);
+    assert_eq!(masked, "john");
+
+    let name = "jonathan@domain.com";
+    let masked = mask_web_user_email(name);
+    assert_eq!(masked, "jonath");
+  }
 }

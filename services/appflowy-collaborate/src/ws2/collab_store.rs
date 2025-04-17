@@ -114,6 +114,13 @@ impl CollabStore {
         .await?;
     }
     let tx = doc.transact();
+    tracing::trace!(
+      "replayed updates for {}/{} (last message id: {}) - final state: {:#?}",
+      workspace_id,
+      object_id,
+      rid,
+      tx
+    );
     let update: Bytes = tx.encode_state_as_update_v2(state_vector).into();
     let server_sv = if Self::has_missing_updates(&tx) {
       let sv = tx.state_vector().encode_v1();

@@ -1,10 +1,17 @@
 #![allow(unused_imports)]
 
+use crate::collab::access_control::CollabStorageAccessControlImpl;
+use crate::collab::cache::CollabCache;
+use crate::collab::validator::CollabValidator;
 use crate::command::{CLCommandSender, CollaborationCommand};
+use crate::metrics::CollabMetrics;
+use crate::snapshot::SnapshotControl;
+use crate::ws2::CollabStore;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
+use appflowy_proto::UpdateFlags;
 use async_trait::async_trait;
-use collab::entity::EncodedCollab;
+use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use database::collab::{
@@ -28,13 +35,7 @@ use tracing::warn;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
-use yrs::Update;
-
-use crate::collab::access_control::CollabStorageAccessControlImpl;
-use crate::collab::cache::CollabCache;
-use crate::collab::validator::CollabValidator;
-use crate::metrics::CollabMetrics;
-use crate::snapshot::SnapshotControl;
+use yrs::{StateVector, Update};
 
 pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessControlImpl>;
 
@@ -42,6 +43,7 @@ pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessContr
 #[derive(Clone)]
 pub struct CollabStorageImpl<AC> {
   cache: CollabCache,
+  collab_store: Arc<CollabStore>, //FIXME: duplication of responsibilities
   /// access control for collab object. Including read/write
   access_control: AC,
   snapshot_control: SnapshotControl,
@@ -58,6 +60,7 @@ where
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: CLCommandSender,
+    collab_store: Arc<CollabStore>,
   ) -> Self {
     let (queue, reader) = channel(1000);
     tokio::spawn(Self::periodic_write_task(cache.clone(), reader));
@@ -67,6 +70,7 @@ where
       snapshot_control,
       rt_cmd_sender,
       queue,
+      collab_store,
     }
   }
 
@@ -407,16 +411,17 @@ where
     from_editing_collab: bool,
   ) -> AppResult<EncodedCollab> {
     params.validate()?;
-    match origin {
+    let uid = match origin {
       GetCollabOrigin::User { uid } => {
         // Check if the user has enough permissions to access the collab
         self
           .access_control
           .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)
           .await?;
+        uid
       },
-      GetCollabOrigin::Server => {},
-    }
+      GetCollabOrigin::Server => 0,
+    };
 
     // Early return if editing collab is initialized, as it indicates no need to query further.
     if from_editing_collab {
@@ -429,12 +434,26 @@ where
         return Ok(value);
       }
     }
-
-    let (_, encode_collab) = self
-      .cache
-      .get_encode_collab(&params.workspace_id, params.inner)
+    let state = self
+      .collab_store
+      .get_latest_state(
+        params.workspace_id,
+        params.object_id,
+        params.collab_type,
+        uid,
+        &StateVector::default(),
+      )
       .await?;
-    Ok(encode_collab)
+    let encoded_collab = EncodedCollab {
+      state_vector: state.state_vector.unwrap_or_default().into(),
+      doc_state: state.update,
+      version: match state.flags {
+        UpdateFlags::Lib0v1 => EncoderVersion::V1,
+        UpdateFlags::Lib0v2 => EncoderVersion::V2,
+      },
+    };
+
+    Ok(encoded_collab)
   }
 
   async fn batch_get_collab(

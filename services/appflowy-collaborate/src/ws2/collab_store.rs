@@ -244,9 +244,7 @@ impl CollabStore {
     let updates: StreamRangeReply = conn.xrange(key, from, to).await?;
     let mut result = Vec::with_capacity(updates.ids.len());
     for stream_id in updates.ids {
-      let map = stream_id.map;
-      let id = stream_id.id;
-      let message = UpdateStreamMessage::from_redis_stream(id, map)?;
+      let message = UpdateStreamMessage::from_redis_stream(&stream_id.id, &stream_id.map)?;
       result.push(message);
     }
     Ok(result)

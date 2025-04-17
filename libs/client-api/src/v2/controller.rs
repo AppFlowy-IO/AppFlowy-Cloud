@@ -5,6 +5,7 @@ use anyhow::bail;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags};
 use arc_swap::{ArcSwap, ArcSwapOption};
 use bytes::BytesMut;
+use collab::core::collab_state::{InitState, SyncState};
 use collab::preclude::Collab;
 use collab_rt_protocol::{CollabRef, WeakCollabRef};
 use dashmap::DashMap;
@@ -173,11 +174,14 @@ impl WorkspaceController {
     let mut collab = collab_ref.write().await;
     let collab = (*collab).borrow_mut();
     let object_id: ObjectId = collab.object_id().parse()?;
+    let sync_state = collab.get_state().clone();
     let last_message_id = self.inner.last_message_id.clone();
+    sync_state.set_init_state(InitState::Loading);
     if !self.inner.db.init_collab(collab)? {
       tracing::debug!("loading collab {} from local db", object_id);
       self.inner.db.load(collab)?;
     }
+    sync_state.set_init_state(InitState::Initialized);
     // Register callback on this collab to observe incoming updates
     let weak_inner = Arc::downgrade(&self.inner);
     let client_id = self.inner.db.client_id();
@@ -190,6 +194,7 @@ impl WorkspaceController {
             .origin()
             .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok());
           if let Some(rid) = rid {
+            tracing::trace!("[{}] {} received collab from remote", client_id, object_id);
             last_message_id.rcu(|old| {
               if rid > **old {
                 Arc::new(rid)
@@ -199,12 +204,12 @@ impl WorkspaceController {
             });
           }
           inner.publish_update(object_id, collab_type, rid, e.update.clone());
-          tracing::trace!("[{}] update for collab {}", client_id, object_id);
         }
       })
       .unwrap();
 
     self.inner.publish_manifest(collab, collab_type);
+    sync_state.set_sync_state(SyncState::InitSyncBegin);
     self
       .inner
       .cache
@@ -483,14 +488,18 @@ impl Inner {
             };
             let missing =
               Self::check_missing_updates(tx, object_id, collab_type, local_message_id)?;
+            if missing.is_some() {
+              collab.set_sync_state(SyncState::Syncing);
+            }
             (msg, missing)
           };
           self.send(Message::Binary(msg.into_bytes()?)).await?;
           if let Some(msg) = missing {
             self.send(Message::Binary(msg.into_bytes()?)).await?;
           }
-        } else if !state_vector.is_empty() {
+        } else if !sv.is_empty() {
           // we haven't seen this collab yet, so we need to send manifest ourselves
+          tracing::trace!("sending manifest for {}", object_id);
           let reply = ClientMessage::Manifest {
             object_id,
             collab_type,
@@ -505,7 +514,7 @@ impl Inner {
         flags,
         last_message_id,
         update,
-        ..
+        collab_type,
       } => {
         // we don't need to decode update for every use case, but do so anyway to confirm
         // that it isn't malformed
@@ -519,7 +528,7 @@ impl Inner {
           last_message_id
         );
         self
-          .save_update(object_id, Some(last_message_id), update)
+          .save_update(object_id, Some(last_message_id), update, collab_type)
           .await?;
       },
       ServerMessage::AwarenessUpdate {
@@ -552,8 +561,7 @@ impl Inner {
     collab_type: CollabType,
     local_message_id: Rid,
   ) -> anyhow::Result<Option<ClientMessage>> {
-    let store = tx.store();
-    if store.pending_update().is_some() || store.pending_ds().is_some() {
+    if Self::has_missing_updates(&tx) {
       let sv = tx.state_vector();
       let reply = ClientMessage::Manifest {
         object_id,
@@ -688,7 +696,7 @@ impl Inner {
       object_id,
       flags,
       update,
-      ..
+      collab_type,
     } = &msg
     {
       // persist
@@ -697,7 +705,7 @@ impl Inner {
         UpdateFlags::Lib0v2 => Update::decode_v2(update),
       }?;
       self
-        .save_update(*object_id, last_message_id, update)
+        .save_update(*object_id, last_message_id, update, *collab_type)
         .await?;
     }
     if last_message_id.is_none() {
@@ -803,17 +811,25 @@ impl Inner {
     object_id: ObjectId,
     last_message_id: Option<Rid>,
     update: Update,
+    collab_type: CollabType,
   ) -> anyhow::Result<()> {
     let update_bytes = update.encode_v1();
     if let Some(rid) = last_message_id {
       if let Some(collab_ref) = self.get_collab(object_id) {
         let mut lock = collab_ref.write().await;
         let collab = (*lock).borrow_mut();
-        collab
-          .get_awareness()
-          .doc()
-          .transact_mut_with(rid.into_bytes().as_ref())
-          .apply_update(update)?;
+        let doc = collab.get_awareness().doc();
+        let mut tx = doc.transact_mut_with(rid.into_bytes().as_ref());
+        tx.apply_update(update)?;
+        if Self::has_missing_updates(&tx) {
+          drop(tx);
+          tracing::trace!("found missing updates for {} - sending manifest", object_id);
+          self.publish_manifest(collab, collab_type);
+          collab.set_sync_state(SyncState::Syncing);
+        } else {
+          drop(tx);
+          collab.set_sync_state(SyncState::SyncFinished);
+        }
       }
     }
     tracing::trace!(
@@ -825,6 +841,11 @@ impl Inner {
       .db
       .save_update(&object_id, last_message_id, update_bytes)?;
     Ok(())
+  }
+
+  fn has_missing_updates<T: ReadTxn>(tx: &T) -> bool {
+    let store = tx.store();
+    store.pending_update().is_some() || store.pending_ds().is_some()
   }
 
   async fn save_awareness_update(

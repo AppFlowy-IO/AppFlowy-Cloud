@@ -854,9 +854,16 @@ pub struct AFWebUser {
   pub avatar_url: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AFWebUserWithObfuscatedName {
+  pub uuid: Uuid,
+  pub name: String,
+  pub avatar_url: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalComment {
-  pub user: Option<AFWebUser>,
+  pub user: Option<AFWebUserWithObfuscatedName>,
   pub created_at: DateTime<Utc>,
   pub last_updated_at: DateTime<Utc>,
   pub content: String,
@@ -885,7 +892,7 @@ pub struct Reactions {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Reaction {
   pub reaction_type: String,
-  pub react_users: Vec<AFWebUser>,
+  pub react_users: Vec<AFWebUserWithObfuscatedName>,
   pub comment_id: Uuid,
 }
 

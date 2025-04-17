@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        avr.reaction_type,\n        ARRAY_AGG((au.uuid, au.name, au.email, au.metadata ->> 'icon_url')) AS \"react_users!: Vec<AFWebUserWithEmailColumn>\",\n        avr.comment_id\n      FROM af_published_view_reaction avr\n      INNER JOIN af_user au ON avr.created_by = au.uid\n      WHERE comment_id = $1\n      GROUP BY comment_id, reaction_type\n      ORDER BY MIN(avr.created_at)\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reaction_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "react_users!: Vec<AFWebUserWithEmailColumn>",
+        "type_info": "RecordArray"
+      },
+      {
+        "ordinal": 2,
+        "name": "comment_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "63f0871525ed70bd980223de574d241c0b738cfb7b0ea1fc808f02c0e05b9a2f"
+}

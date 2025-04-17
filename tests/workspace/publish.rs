@@ -18,6 +18,7 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, UserId};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::publish_dto::PublishDatabaseData;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -471,11 +472,20 @@ async fn test_publish_doc() {
 
 #[tokio::test]
 async fn test_publish_comments() {
-  let (page_owner_client, page_owner) = generate_unique_registered_user_client().await;
+  let (page_owner_client, _) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace(&page_owner_client).await;
   let published_view_namespace = Uuid::new_v4().to_string();
   page_owner_client
     .set_workspace_publish_namespace(&workspace_id, published_view_namespace)
+    .await
+    .unwrap();
+  page_owner_client
+    .update_user(UpdateUserParams {
+      name: Some("PageOwner".to_string()),
+      password: None,
+      email: None,
+      metadata: None,
+    })
     .await
     .unwrap();
 
@@ -516,12 +526,21 @@ async fn test_publish_comments() {
     assert_eq!(comments[0].content, page_owner_comment_content);
   }
 
-  let (first_user_client, first_user) = generate_unique_registered_user_client().await;
+  let (first_user_client, _) = generate_unique_registered_user_client().await;
   let first_user_comment_content = "comment from first authenticated user";
   // This is to ensure that the second comment creation timestamp is later than the first one
   sleep(Duration::from_millis(1));
   first_user_client
     .create_comment_on_published_view(&view_id, first_user_comment_content, &None)
+    .await
+    .unwrap();
+  first_user_client
+    .update_user(UpdateUserParams {
+      name: Some("User1".to_string()),
+      password: None,
+      email: None,
+      metadata: None,
+    })
     .await
     .unwrap();
   let guest_client = localhost_client();
@@ -571,10 +590,7 @@ async fn test_publish_comments() {
         .unwrap_or("".to_string())
     })
     .collect_vec();
-  assert_eq!(
-    comment_creators,
-    vec![first_user.email.clone(), page_owner.email.clone()]
-  );
+  assert_eq!(comment_creators, vec!["User1", "PageOwner"]);
   let comment_content = published_view_comments
     .iter()
     .map(|c| c.content.clone())
@@ -586,7 +602,16 @@ async fn test_publish_comments() {
 
   // Test if it's possible to reply to another user's comment
   let second_user_comment_content = "comment from second authenticated user";
-  let (second_user_client, second_user) = generate_unique_registered_user_client().await;
+  let (second_user_client, _) = generate_unique_registered_user_client().await;
+  second_user_client
+    .update_user(UpdateUserParams {
+      name: Some("User2".to_string()),
+      password: None,
+      email: None,
+      metadata: None,
+    })
+    .await
+    .unwrap();
   {
     let published_view_comments: Vec<GlobalComment> = guest_client
       .get_published_view_comments(&view_id)
@@ -626,14 +651,7 @@ async fn test_publish_comments() {
         .unwrap_or("".to_string())
     })
     .collect_vec();
-  assert_eq!(
-    comment_creators,
-    vec![
-      second_user.email.clone(),
-      first_user.email.clone(),
-      page_owner.email.clone()
-    ]
-  );
+  assert_eq!(comment_creators, vec!["User2", "User1", "PageOwner"]);
   assert_eq!(
     published_view_comments[0].reply_comment_id,
     Some(published_view_comments[1].comment_id)

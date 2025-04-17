@@ -272,6 +272,8 @@ pub struct ChatMessage {
   pub created_at: DateTime<Utc>,
   #[serde(rename = "meta_data")]
   pub metadata: serde_json::Value,
+  /// When current message is a question, then reply_message_id is None
+  /// When current message is an answer, then reply_message_id is the question message id
   pub reply_message_id: Option<i64>,
 }
 

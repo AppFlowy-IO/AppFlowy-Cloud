@@ -294,18 +294,19 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     metrics.collab_metrics.clone(),
   )
   .await;
-  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
-    collab_cache.clone(),
-    collab_storage_access_control,
-    snapshot_control,
-    rt_cmd_tx,
-  ));
   let collab_store = CollabStore::new(
     collab_cache.clone().into(),
     redis_conn_manager.clone(),
     redis_stream_router.clone(),
     awareness_gossip.clone(),
   );
+  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
+    collab_cache.clone(),
+    collab_storage_access_control,
+    snapshot_control,
+    rt_cmd_tx,
+    collab_store.clone(),
+  ));
   let ws_server = WsServer::new(collab_store).start();
 
   let mailer = get_mailer(&config.mailer).await?;

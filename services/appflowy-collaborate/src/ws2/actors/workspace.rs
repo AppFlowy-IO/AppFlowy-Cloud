@@ -88,6 +88,17 @@ impl Workspace {
                 update: state.update,
               },
             });
+            if let Some(server_sv) = state.state_vector {
+              tracing::trace!("sending manifest for {}", msg.object_id);
+              sender.conn.do_send(WsOutput {
+                message: ServerMessage::Manifest {
+                  object_id: msg.object_id,
+                  collab_type,
+                  last_message_id: Rid::default(),
+                  state_vector: server_sv,
+                },
+              });
+            }
             //TODO: fetch all documents that have been updated since `rid` and send their manifests to the client
           },
           Err(err) => {

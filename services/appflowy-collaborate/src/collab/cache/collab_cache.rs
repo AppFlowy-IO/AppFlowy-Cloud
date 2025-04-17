@@ -92,10 +92,10 @@ impl CollabCache {
   ) -> Result<(Rid, EncodedCollab), AppError> {
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
-      event!(
-        Level::DEBUG,
-        "Did get encode collab:{} from cache",
-        query.object_id
+      tracing::debug!(
+        "Did get encode collab: {} from cache at {}",
+        query.object_id,
+        encoded_collab.0
       );
       return Ok(encoded_collab);
     }
@@ -180,6 +180,10 @@ impl CollabCache {
     let object_id = params.object_id;
     let encode_collab_data = params.encoded_collab_v1.clone();
     let s3 = self.disk_cache.s3_client();
+    let timestamp = params
+      .updated_at
+      .unwrap_or_else(chrono::Utc::now)
+      .timestamp_millis();
     CollabDiskCache::upsert_collab_with_transaction(
       workspace_id,
       uid,
@@ -193,18 +197,24 @@ impl CollabCache {
 
     // when the data is written to the disk cache but fails to be written to the memory cache
     // we log the error and continue.
-    self.cache_collab(object_id, collab_type, encode_collab_data);
+    self.cache_collab(object_id, collab_type, encode_collab_data, timestamp);
     Ok(())
   }
 
-  fn cache_collab(&self, object_id: Uuid, collab_type: CollabType, encode_collab_data: Bytes) {
+  fn cache_collab(
+    &self,
+    object_id: Uuid,
+    collab_type: CollabType,
+    encode_collab_data: Bytes,
+    timestamp: i64,
+  ) {
     let mem_cache = self.mem_cache.clone();
     tokio::spawn(async move {
       if let Err(err) = mem_cache
         .insert_encode_collab_data(
           &object_id,
           &encode_collab_data,
-          chrono::Utc::now().timestamp(),
+          timestamp,
           Some(cache_exp_secs_from_collab_type(&collab_type)),
         )
         .await
@@ -228,7 +238,11 @@ impl CollabCache {
       .disk_cache
       .upsert_collab(workspace_id, uid, params)
       .await?;
-    self.cache_collab(p.object_id, p.collab_type, p.encoded_collab_v1);
+    let timestamp = p
+      .updated_at
+      .unwrap_or_else(chrono::Utc::now)
+      .timestamp_millis();
+    self.cache_collab(p.object_id, p.collab_type, p.encoded_collab_v1, timestamp);
     Ok(())
   }
 

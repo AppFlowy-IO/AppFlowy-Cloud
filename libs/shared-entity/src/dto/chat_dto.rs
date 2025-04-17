@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use infra::validate::validate_not_empty_str;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use serde_json::json;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -32,21 +33,6 @@ pub struct CreateChatMessageParams {
   #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
   pub message_type: ChatMessageType,
-  #[serde(deserialize_with = "deserialize_metadata")]
-  #[serde(default)]
-  #[serde(skip_serializing_if = "Vec::is_empty")]
-  pub metadata: Vec<ChatMessageMetadata>,
-}
-
-#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct CreateChatMessageParamsV2 {
-  #[validate(custom(function = "validate_not_empty_str"))]
-  pub content: String,
-  pub message_type: ChatMessageType,
-  #[serde(deserialize_with = "deserialize_metadata")]
-  #[serde(default)]
-  #[serde(skip_serializing_if = "Vec::is_empty")]
-  pub metadata: Vec<ChatMessageMetadata>,
 }
 
 fn deserialize_metadata<'de, D>(deserializer: D) -> Result<Vec<ChatMessageMetadata>, D::Error>
@@ -225,7 +211,6 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::System,
-      metadata: vec![],
     }
   }
 
@@ -233,13 +218,7 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::User,
-      metadata: vec![],
     }
-  }
-
-  pub fn with_metadata(mut self, metadata: ChatMessageMetadata) -> Self {
-    self.metadata.push(metadata);
-    self
   }
 }
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -291,8 +270,44 @@ pub struct ChatMessage {
   pub message_id: i64,
   pub content: String,
   pub created_at: DateTime<Utc>,
-  pub meta_data: serde_json::Value,
+  #[serde(rename = "meta_data")]
+  pub metadata: serde_json::Value,
   pub reply_message_id: Option<i64>,
+}
+
+impl ChatMessage {
+  pub fn new_human(message_id: i64, content: String, reply_message_id: Option<i64>) -> Self {
+    Self {
+      author: ChatAuthor::new(message_id, ChatAuthorType::Human),
+      message_id,
+      content,
+      created_at: Utc::now(),
+      metadata: json!({}),
+      reply_message_id,
+    }
+  }
+
+  pub fn new_ai(message_id: i64, content: String, reply_message_id: Option<i64>) -> Self {
+    Self {
+      author: ChatAuthor::new(message_id, ChatAuthorType::AI),
+      message_id,
+      content,
+      created_at: Utc::now(),
+      metadata: json!({}),
+      reply_message_id,
+    }
+  }
+
+  pub fn new_system(message_id: i64, content: String) -> Self {
+    Self {
+      author: ChatAuthor::new(message_id, ChatAuthorType::System),
+      message_id,
+      content,
+      created_at: Utc::now(),
+      metadata: json!({}),
+      reply_message_id: None,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -301,7 +316,6 @@ pub struct ChatMessageWithAuthorUuid {
   pub message_id: i64,
   pub content: String,
   pub created_at: DateTime<Utc>,
-  pub meta_data: serde_json::Value,
   pub reply_message_id: Option<i64>,
 }
 

@@ -151,7 +151,6 @@ impl AppFlowyAIClient {
     question_id: i64,
     content: &str,
     model: &str,
-    metadata: Option<Value>,
   ) -> Result<ChatAnswer, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),

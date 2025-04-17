@@ -250,7 +250,7 @@ pub async fn insert_answer_message_with_transaction(
       message_id: row.message_id,
       content: row.content,
       created_at: row.created_at,
-      meta_data: row.meta_data,
+      metadata: row.meta_data,
       reply_message_id: Some(question_message_id),
     };
 
@@ -291,7 +291,7 @@ pub async fn insert_answer_message_with_transaction(
       message_id: row.message_id,
       content,
       created_at: row.created_at,
-      meta_data: metadata,
+      metadata,
       reply_message_id: None,
     };
 
@@ -331,20 +331,17 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   author: ChatAuthorWithUuid,
   chat_id: &str,
   content: String,
-  metadata: Vec<ChatMessageMetadata>,
 ) -> Result<ChatMessageWithAuthorUuid, AppError> {
-  let metadata = json!(metadata);
   let chat_id = Uuid::from_str(chat_id)?;
   let row = sqlx::query!(
     r#"
-        INSERT INTO af_chat_messages (chat_id, author, content, meta_data)
+        INSERT INTO af_chat_messages (chat_id, author, content)
         VALUES ($1, $2, $3, $4)
         RETURNING message_id, created_at
         "#,
     chat_id,
     json!(author),
     &content,
-    &metadata,
   )
   .fetch_one(executor)
   .await
@@ -355,7 +352,6 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
     message_id: row.message_id,
     content,
     created_at: row.created_at,
-    meta_data: metadata,
     reply_message_id: None,
   };
   Ok(chat_message)
@@ -468,7 +464,7 @@ pub async fn select_chat_messages(
             message_id,
             content,
             created_at,
-            meta_data,
+            metadata: meta_data,
             reply_message_id,
           }),
           Err(err) => {
@@ -547,7 +543,6 @@ pub async fn select_chat_messages_with_author_uuid(
           cm.created_at,
           cm.author,
           af_user.uuid AS author_uuid,
-          cm.meta_data,
           cm.reply_message_id
         FROM af_chat_messages AS cm
         LEFT OUTER JOIN af_user ON (cm.author->>'author_id')::BIGINT = af_user.uid
@@ -642,7 +637,7 @@ pub async fn select_chat_messages_with_author_uuid(
   let messages = rows
     .into_iter()
     .flat_map(
-      |(message_id, content, created_at, author, author_uuid, meta_data, reply_message_id)| {
+      |(message_id, content, created_at, author, author_uuid, reply_message_id)| {
         match serde_json::from_value::<ChatAuthor>(author) {
           Ok(author) => Some(ChatMessageWithAuthorUuid {
             author: ChatAuthorWithUuid {
@@ -654,7 +649,6 @@ pub async fn select_chat_messages_with_author_uuid(
             message_id,
             content,
             created_at,
-            meta_data,
             reply_message_id,
           }),
           Err(err) => {
@@ -747,7 +741,7 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
           message_id: row.message_id,
           content: row.content,
           created_at: row.created_at,
-          meta_data: row.meta_data,
+          metadata: row.meta_data,
           reply_message_id: row.reply_message_id,
         }),
         Err(err) => {
@@ -882,7 +876,7 @@ pub async fn select_chat_message_matching_reply_message_id(
       message_id: row.message_id,
       content: row.content,
       created_at: row.created_at,
-      meta_data: row.meta_data,
+      metadata: row.meta_data,
       reply_message_id: row.reply_message_id,
     }),
     Err(err) => {

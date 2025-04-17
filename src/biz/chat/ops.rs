@@ -143,7 +143,6 @@ pub async fn create_chat_message(
     ChatAuthorWithUuid::new(uid, user_uuid, ChatAuthorType::Human),
     &chat_id,
     params.content,
-    params.metadata,
   )
   .await?;
   Ok(question)
@@ -171,7 +170,6 @@ pub async fn create_chat_message_stream(
           ChatAuthorWithUuid::new(uid, user_uuid, ChatAuthorType::Human),
           &chat_id,
           params.content.clone(),
-          params.metadata.clone(),
       ).await {
           Ok(question) => question,
           Err(err) => {
@@ -197,7 +195,7 @@ pub async fn create_chat_message_stream(
       match params.message_type {
           ChatMessageType::System => {}
           ChatMessageType::User => {
-              let answer = match ai_client.send_question(&workspace_id, &chat_id,question_id, &params.content, &ai_model, Some(json!(params.metadata))).await {
+              let answer = match ai_client.send_question(&workspace_id, &chat_id,question_id, &params.content, &ai_model).await {
                   Ok(response) => response,
                   Err(err) => {
                       error!("Failed to send question to AI: {}", err);

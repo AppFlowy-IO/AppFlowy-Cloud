@@ -22,9 +22,8 @@ use futures_util::{FutureExt, TryStreamExt};
 use pin_project::pin_project;
 use shared_entity::dto::chat_dto::{
   ChatAuthor, ChatMessage, ChatMessageWithAuthorUuid, ChatSettings, CreateAnswerMessageParams,
-  CreateChatMessageParams, CreateChatMessageParamsV2, CreateChatParams, GetChatMessageParams,
-  MessageCursor, RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
-  UpdateChatParams,
+  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
+  RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams, UpdateChatParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
@@ -65,10 +64,6 @@ pub fn chat_scope() -> Scope {
       .service(
         web::resource("/{chat_id}/message/question")
             .route(web::post().to(create_question_handler))
-      )
-      .service(
-        web::resource("/{chat_id}/v2/message/question")
-            .route(web::post().to(create_question_handler_v2))
       )
       .service(
         web::resource("/{chat_id}/message/answer")
@@ -186,39 +181,9 @@ async fn create_question_handler(
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
 
-  // When create a question, we will extract the metadata from the question content.
-  // metadata might include user mention file,page,or user. For example, @Get started.
-  for metadata in params.metadata.clone() {
-    let (data, desc) = metadata.split_data();
-    if let Err(err) = data.validate() {
-      error!("Failed to validate metadata: {}", err);
-      continue;
-    }
-
-    let context =
-      CreateChatContext::new(chat_id.clone(), data.content_type.to_string(), data.content)
-        .with_metadata(desc);
-    trace!("create context for question: {}", context);
-    state
-      .ai_client
-      .create_chat_text_context(context)
-      .await
-      .map_err(AppError::from)?;
-  }
-
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let resp = create_chat_message(&state.pg_pool, uid, *uuid, chat_id, params).await?;
   Ok(AppResponse::Ok().with_data(resp).into())
-}
-
-#[instrument(level = "debug", skip_all, err)]
-async fn create_question_handler_v2(
-  _state: Data<AppState>,
-  _path: web::Path<(String, String)>,
-  _payload: Json<CreateChatMessageParamsV2>,
-  _uuid: UserUuid,
-) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
-  todo!()
 }
 
 async fn save_answer_handler(

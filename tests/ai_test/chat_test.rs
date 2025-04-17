@@ -233,7 +233,7 @@ async fn chat_qa_test() {
       }
   });
   assert_json_include!(
-      actual: json!(question.meta_data[0]),
+      actual: json!(question.metadata[0]),
       expected: expected
   );
 

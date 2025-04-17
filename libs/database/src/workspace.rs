@@ -11,8 +11,8 @@ use uuid::Uuid;
 
 use crate::pg_row::{
   AFGlobalCommentRow, AFImportTask, AFPermissionRow, AFReactionRow, AFUserProfileRow,
-  AFWebUserColumn, AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow, AFWorkspaceMemberRow,
-  AFWorkspaceRow,
+  AFWebUserWithEmailColumn, AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow,
+  AFWorkspaceMemberRow, AFWorkspaceRow,
 };
 use crate::user::select_uid_from_email;
 use app_error::AppError;
@@ -1102,7 +1102,7 @@ pub async fn select_comments_for_published_view_ordered_by_recency<
         avc.content,
         avc.reply_comment_id,
         avc.is_deleted,
-        (au.uuid, au.name, au.metadata ->> 'icon_url') AS "user: AFWebUserColumn",
+        (au.uuid, au.name, au.email, au.metadata ->> 'icon_url') AS "user: AFWebUserWithEmailColumn",
         (NOT avc.is_deleted AND ($2 OR au.uuid = $3)) AS "can_be_deleted!"
       FROM af_published_view_comment avc
       LEFT OUTER JOIN af_user au ON avc.created_by = au.uid
@@ -1188,7 +1188,7 @@ pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creati
       SELECT
         avr.comment_id,
         avr.reaction_type,
-        ARRAY_AGG((au.uuid, au.name, au.metadata ->> 'icon_url')) AS "react_users!: Vec<AFWebUserColumn>"
+        ARRAY_AGG((au.uuid, au.name, au.email, au.metadata ->> 'icon_url')) AS "react_users!: Vec<AFWebUserWithEmailColumn>"
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE view_id = $1
@@ -1216,7 +1216,7 @@ pub async fn select_reactions_for_comment_ordered_by_reaction_type_creation_time
     r#"
       SELECT
         avr.reaction_type,
-        ARRAY_AGG((au.uuid, au.name, au.metadata ->> 'icon_url')) AS "react_users!: Vec<AFWebUserColumn>",
+        ARRAY_AGG((au.uuid, au.name, au.email, au.metadata ->> 'icon_url')) AS "react_users!: Vec<AFWebUserWithEmailColumn>",
         avr.comment_id
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid

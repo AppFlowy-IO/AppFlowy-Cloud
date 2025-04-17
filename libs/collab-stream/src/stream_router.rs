@@ -1,6 +1,8 @@
 use crate::metrics::CollabStreamMetrics;
 use anyhow::anyhow;
-use futures::Stream;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
+use futures::{Stream, StreamExt};
 use loole::{Receiver, Sender};
 use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::Client;
@@ -18,13 +20,14 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
+use tokio_stream::wrappers::BroadcastStream;
 
 /// Redis stream key.
 pub type StreamKey = String;
 
 pub trait FromRedisStream {
   type Error: Display;
-  fn from_redis_stream(msg_id: String, fields: RedisMap) -> Result<Self, Self::Error>
+  fn from_redis_stream(msg_id: &str, fields: &RedisMap) -> Result<Self, Self::Error>
   where
     Self: Sized;
 }
@@ -32,14 +35,14 @@ pub trait FromRedisStream {
 /// Channel returned by [StreamRouter::observe], that allows to receive messages retrieved by
 /// the router.
 pub struct StreamReader<T> {
-  receiver: tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>,
+  receiver: BroadcastStream<Arc<(String, RedisMap)>>,
   _phantom: std::marker::PhantomData<T>,
 }
 
 impl<T> StreamReader<T> {
-  pub fn new(receiver: tokio::sync::mpsc::UnboundedReceiver<(String, RedisMap)>) -> Self {
+  pub fn new(receiver: StreamReceiver) -> Self {
     Self {
-      receiver,
+      receiver: BroadcastStream::new(receiver),
       _phantom: std::marker::PhantomData,
     }
   }
@@ -49,21 +52,21 @@ impl<T> Stream for StreamReader<T>
 where
   T: FromRedisStream,
 {
-  type Item = anyhow::Result<T>;
+  type Item = Result<T, T::Error>;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    let mut pin = unsafe { self.map_unchecked_mut(|s| &mut s.receiver) };
-    let (msg_id, map) = match pin.poll_recv(cx) {
-      Poll::Ready(Some(v)) => {
-        tracing::trace!("received message {}", v.0);
-        v
+    let pin = unsafe { self.map_unchecked_mut(|v| &mut v.receiver) };
+    match pin.poll_next(cx) {
+      Poll::Ready(Some(Ok(msg))) => {
+        let result = T::from_redis_stream(&msg.0, &msg.1);
+        Poll::Ready(Some(result))
       },
-      Poll::Ready(None) => return Poll::Ready(None),
-      Poll::Pending => return Poll::Pending,
-    };
-    match T::from_redis_stream(msg_id, map) {
-      Ok(value) => Poll::Ready(Some(Ok(value))),
-      Err(err) => Poll::Ready(Some(Err(anyhow!("{}", err)))),
+      Poll::Ready(Some(Err(err))) => {
+        tracing::error!("failed to receive message: {}", err);
+        Poll::Ready(None)
+      },
+      Poll::Ready(None) => Poll::Ready(None),
+      Poll::Pending => Poll::Pending,
     }
   }
 }
@@ -76,6 +79,8 @@ pub struct StreamRouter {
   #[allow(dead_code)]
   workers: Vec<Worker>,
   metrics: Arc<CollabStreamMetrics>,
+  channels: DashMap<StreamKey, StreamSender>,
+  buffer_capacity: usize,
 }
 
 impl StreamRouter {
@@ -110,15 +115,32 @@ impl StreamRouter {
       workers,
       alive,
       metrics,
+      channels: DashMap::new(),
+      buffer_capacity: options.xread_count.unwrap_or(10_000),
     })
   }
 
-  pub fn observe<T>(&self, stream_key: StreamKey, last_id: Option<String>) -> StreamReader<T> {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    let last_id = last_id.unwrap_or_else(|| "0".to_string());
-    let h = StreamHandle::new(stream_key, last_id, tx);
-    self.buf.send(h).unwrap();
-    self.metrics.reads_enqueued.inc();
+  pub fn observe<T: FromRedisStream>(
+    &self,
+    stream_key: StreamKey,
+    last_id: Option<String>,
+  ) -> StreamReader<T> {
+    let rx = match self.channels.entry(stream_key.clone()) {
+      Entry::Vacant(e) => {
+        tracing::trace!("creating new stream channel for {}", e.key());
+        let (tx, rx) = tokio::sync::broadcast::channel(self.buffer_capacity);
+        let last_id = last_id.unwrap_or_else(|| "0".to_string());
+        let h = StreamHandle::new(stream_key.clone(), last_id, tx.clone());
+        self.buf.send(h).unwrap();
+        self.metrics.reads_enqueued.inc();
+        e.insert(tx);
+        rx
+      },
+      Entry::Occupied(e) => {
+        tracing::trace!("reusing existing stream channel for {}", e.key());
+        e.get().subscribe()
+      },
+    };
     StreamReader::new(rx)
   }
 }
@@ -230,7 +252,7 @@ impl Worker {
             let value = id.map;
             message_ids[*idx].clone_from(&message_id); //TODO: optimize
             msgs += 1;
-            if let Err(err) = sender.send((message_id, value)) {
+            if let Err(err) = sender.send(Arc::new((message_id, value))) {
               tracing::debug!("failed to send: {}", err);
               remove_sender = true;
             }
@@ -267,7 +289,7 @@ impl Worker {
     for key in keys {
       if let Some(last_id) = ids.next() {
         if let Some((sender, _)) = senders.remove(key.as_str()) {
-          if sender.is_closed() {
+          if sender.receiver_count() == 0 {
             continue; // sender is already closed
           }
           let h = StreamHandle::new(key, last_id, sender);
@@ -324,7 +346,8 @@ impl Worker {
 }
 
 pub type RedisMap = HashMap<String, Value>;
-type StreamSender = tokio::sync::mpsc::UnboundedSender<(String, RedisMap)>;
+type StreamSender = tokio::sync::broadcast::Sender<Arc<(String, RedisMap)>>;
+type StreamReceiver = tokio::sync::broadcast::Receiver<Arc<(String, RedisMap)>>;
 
 struct StreamHandle {
   key: StreamKey,
@@ -360,7 +383,7 @@ mod test {
   impl FromRedisStream for TestMessage {
     type Error = anyhow::Error;
 
-    fn from_redis_stream(id: String, fields: RedisMap) -> Result<Self, Self::Error>
+    fn from_redis_stream(id: &str, fields: &RedisMap) -> Result<Self, Self::Error>
     where
       Self: Sized,
     {
@@ -368,7 +391,10 @@ mod test {
         .get("data")
         .ok_or_else(|| anyhow::anyhow!("expecting field `data`"))?;
       let data = String::from_redis_value(data)?;
-      Ok(TestMessage { id, data })
+      Ok(TestMessage {
+        id: id.to_owned(),
+        data,
+      })
     }
   }
 

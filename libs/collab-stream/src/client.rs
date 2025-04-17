@@ -4,7 +4,7 @@ use crate::error::StreamError;
 use crate::lease::{Lease, LeaseAcquisition};
 use crate::metrics::CollabStreamMetrics;
 use crate::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateStreamMessage};
-use crate::stream_router::{StreamKey, StreamRouter, StreamRouterOptions};
+use crate::stream_router::{FromRedisStream, StreamKey, StreamRouter, StreamRouterOptions};
 use collab_entity::CollabType;
 use futures::{Stream, StreamExt};
 use redis::aio::ConnectionManager;
@@ -109,11 +109,27 @@ impl CollabRedisStream {
     let mut conn = self.connection_manager.clone();
     let mut result = Vec::new();
     let mut reply: StreamReadReply = conn.xread(&[&stream_key], &[&since]).await?;
+    let oid = object_id.to_string();
     if let Some(key) = reply.keys.pop() {
       if key.key == stream_key {
         for stream_id in key.ids {
-          let message_id = MessageId::try_from(stream_id.id)?;
-          let stream_update = CollabStreamUpdate::try_from(stream_id.map)?;
+          let msg_oid = stream_id
+            .map
+            .get("oid")
+            .and_then(|v| String::from_redis_value(v).ok())
+            .unwrap_or_default();
+          if msg_oid != oid {
+            continue; // this is not the object we are looking for
+          }
+          let message = UpdateStreamMessage::from_redis_stream(&stream_id.id, &stream_id.map)
+            .map_err(StreamError::Internal)?;
+          let message_id = MessageId::from(message.last_message_id);
+          let stream_update = CollabStreamUpdate::from(message);
+          tracing::trace!(
+            "replaying current collab update `{}` for {}",
+            message_id,
+            oid
+          );
           result.push((message_id, stream_update));
         }
       }

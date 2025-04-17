@@ -347,10 +347,10 @@ impl From<UpdateStreamMessage> for CollabStreamUpdate {
   }
 }
 
-impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
+impl<'a> TryFrom<&'a HashMap<String, redis::Value>> for CollabStreamUpdate {
   type Error = StreamError;
 
-  fn try_from(fields: HashMap<String, Value>) -> Result<Self, Self::Error> {
+  fn try_from(fields: &'a HashMap<String, Value>) -> Result<Self, Self::Error> {
     let sender = match fields.get("sender") {
       None => CollabOrigin::Empty,
       Some(sender) => {
@@ -378,7 +378,7 @@ impl TryFrom<HashMap<String, redis::Value>> for CollabStreamUpdate {
 impl FromRedisStream for (MessageId, CollabStreamUpdate) {
   type Error = StreamError;
 
-  fn from_redis_stream(msg_id: String, fields: RedisMap) -> Result<Self, Self::Error>
+  fn from_redis_stream(msg_id: &str, fields: &RedisMap) -> Result<Self, Self::Error>
   where
     Self: Sized,
   {
@@ -502,7 +502,7 @@ impl UpdateStreamMessage {
 
 impl FromRedisStream for UpdateStreamMessage {
   type Error = anyhow::Error;
-  fn from_redis_stream(msg_id: String, fields: RedisMap) -> Result<Self, Self::Error> {
+  fn from_redis_stream(msg_id: &str, fields: &RedisMap) -> Result<Self, Self::Error> {
     let last_message_id = Rid::from_str(&msg_id).map_err(|err| anyhow!("{}", err))?;
     let object_id = fields
       .get("oid")

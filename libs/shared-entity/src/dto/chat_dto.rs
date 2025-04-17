@@ -289,7 +289,7 @@ impl ChatMessage {
 
   pub fn new_ai(message_id: i64, content: String, reply_message_id: Option<i64>) -> Self {
     Self {
-      author: ChatAuthor::new(message_id, ChatAuthorType::AI),
+      author: ChatAuthor::ai(),
       message_id,
       content,
       created_at: Utc::now(),

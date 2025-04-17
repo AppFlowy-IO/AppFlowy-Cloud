@@ -11,7 +11,7 @@ use bytes::Bytes;
 use collab::core::collab::DataSource;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
-use collab::entity::EncodedCollab;
+use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::lock::{Mutex, RwLock};
 use collab::preclude::{Collab, Prelim};
 use collab_database::database::{Database, DatabaseContext};
@@ -1178,15 +1178,19 @@ pub async fn assert_server_collab(
 
       match &result {
         Ok(data) => {
-          let json = Collab::new_with_source(
+          let source = match data.encode_collab.version {
+            EncoderVersion::V1 => DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
+            EncoderVersion::V2 => DataSource::DocStateV2(data.encode_collab.doc_state.to_vec()),
+          };
+          let collab = Collab::new_with_source(
             CollabOrigin::Empty,
             &object_id.to_string(),
-            DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
+            source,
             vec![],
             false,
           )
-          .unwrap()
-          .to_json_value();
+          .unwrap();
+          let json = collab.to_json_value();
 
           *cloned_final_json.lock().await = json.clone();
           if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive))

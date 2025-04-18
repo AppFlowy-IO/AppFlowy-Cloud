@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      DELETE FROM af_workspace_invite_code\n      WHERE workspace_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c81848346ed2ff85f1d5fb8041fba648137a927762b385b97054552c00793a50"
+}

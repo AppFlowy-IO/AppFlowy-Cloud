@@ -1,9 +1,7 @@
-use actix_web::web::Bytes;
 use anyhow::anyhow;
 
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
-use async_stream::stream;
 use database::chat;
 use database::chat::chat_ops::{
   delete_answer_message_by_question_message_id, insert_answer_message,
@@ -11,15 +9,13 @@ use database::chat::chat_ops::{
   select_chat_message_matching_reply_message_id, select_chat_messages,
   select_chat_messages_with_author_uuid,
 };
-use futures::stream::Stream;
-use serde_json::json;
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatAuthorType, ChatAuthorWithUuid, ChatMessage, ChatMessageType,
-  ChatMessageWithAuthorUuid, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
-  RepeatedChatMessage, RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
+  ChatAuthor, ChatAuthorType, ChatAuthorWithUuid, ChatMessage, ChatMessageWithAuthorUuid,
+  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
+  RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
 };
 use sqlx::PgPool;
-use tracing::{error, info, trace};
+use tracing::{info, trace};
 
 use uuid::Uuid;
 use validator::Validate;
@@ -143,93 +139,9 @@ pub async fn create_chat_message(
     ChatAuthorWithUuid::new(uid, user_uuid, ChatAuthorType::Human),
     &chat_id,
     params.content,
-    params.metadata,
   )
   .await?;
   Ok(question)
-}
-
-#[allow(clippy::too_many_arguments)]
-pub async fn create_chat_message_stream(
-  pg_pool: &PgPool,
-  uid: i64,
-  user_uuid: Uuid,
-  workspace_id: String,
-  chat_id: String,
-  params: CreateChatMessageParams,
-  ai_client: AppFlowyAIClient,
-  ai_model: &str,
-) -> impl Stream<Item = Result<Bytes, AppError>> {
-  let ai_model = ai_model.to_string();
-  let params = params.clone();
-  let chat_id = chat_id.clone();
-  let pg_pool = pg_pool.clone();
-  let stream = stream! {
-      // Insert question message
-      let question = match insert_question_message(
-          &pg_pool,
-          ChatAuthorWithUuid::new(uid, user_uuid, ChatAuthorType::Human),
-          &chat_id,
-          params.content.clone(),
-          params.metadata.clone(),
-      ).await {
-          Ok(question) => question,
-          Err(err) => {
-              error!("Failed to insert question message: {}", err);
-              yield Err(err);
-              return;
-          }
-      };
-
-      let question_id = question.message_id;
-      let question_bytes = match serde_json::to_vec(&question) {
-          Ok(s) => Bytes::from(s),
-          Err(err) => {
-              error!("Failed to serialize question message: {}", err);
-              yield Err(AppError::from(err));
-              return;
-          }
-      };
-
-      yield Ok::<Bytes, AppError>(question_bytes);
-
-      // Insert answer message
-      match params.message_type {
-          ChatMessageType::System => {}
-          ChatMessageType::User => {
-              let answer = match ai_client.send_question(&workspace_id, &chat_id,question_id, &params.content, &ai_model, Some(json!(params.metadata))).await {
-                  Ok(response) => response,
-                  Err(err) => {
-                      error!("Failed to send question to AI: {}", err);
-                      yield Err(AppError::from(err));
-                      return;
-                  }
-              };
-
-              let answer = match insert_answer_message(&pg_pool, ChatAuthor::ai(), &chat_id, answer.content, answer.metadata,question_id).await {
-                  Ok(answer) => answer,
-                  Err(err) => {
-                      error!("Failed to insert answer message: {}", err);
-                      yield Err(err);
-                      return;
-                  }
-              };
-
-              let answer_bytes = match serde_json::to_vec(&answer) {
-                  Ok(s) => Bytes::from(s),
-                  Err(err) => {
-                      error!("Failed to serialize answer message: {}", err);
-                      yield Err(AppError::from(err));
-                      return;
-                  }
-              };
-
-              yield Ok::<Bytes, AppError>(answer_bytes);
-          }
-      }
-  };
-
-  stream
 }
 
 // Deprecated since v0.9.24

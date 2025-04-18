@@ -2,6 +2,7 @@ use fancy_regex::Regex;
 use std::fs::File;
 use std::io::Read;
 
+#[allow(dead_code)]
 pub(crate) fn read_text_from_asset(file_name: &str) -> String {
   let mut file = File::open(format!("./tests/ai_test/asset/{}", file_name)).unwrap();
   let mut buffer = Vec::new();

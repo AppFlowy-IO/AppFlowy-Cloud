@@ -95,17 +95,17 @@ docker ps -a
 
 ### 4. Optional Services
 
-We have provided optional services in the file `docker-compose-extra.yml`.
+We have provided optional services in the file `compose.extra.yaml`.
 You do not need them for a fully functional installation of AppFlowy Cloud, but they could be helpful for various
 admin/debug tasks.
-We include all services in the file `docker-compose.yml`. It is easier to start all services and remove orphan containers warning message.
+We include all services in the file `compose.yaml`. It is easier to start all services and remove orphan containers warning message.
 
 - `pgadmin` (Web UI to visualize the provided postgres database)
 - `portainer`/`portainer_init` (Web UI to provide some monitoring and ease of container management)
 - `tunnel` (Cloudflare tunnel to provide a secure way to connect AppFlowy to Cloudflare without a publicly routable IP
   address)
 ```
-docker compose --file docker-compose-extras.yml up -d
+docker compose --file compose.extras.yaml up -d
 ```
 
 
@@ -225,7 +225,7 @@ Sign in via magic link will not be possible. Inviting users to workspace and acc
 performed via the admin portal as opposed to links provided in emails.
 
 ### I already have an Nginx server running on my host server. How do I configure it to work with AppFlowy-Cloud?
-- First, remove the `nginx` service from the `docker-compose.yml` file.
+- First, remove the `nginx` service from the `compose.yaml` file.
 - Update the docker compose file such that the ports for `appflowy_cloud`, `gotrue`, and `admin_frontend` are mapped
   to different ports on the host server. If possible, use firewall to make sure that these ports are not accessible
   from the internet.

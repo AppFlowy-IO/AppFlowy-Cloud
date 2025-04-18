@@ -850,6 +850,38 @@ impl Client {
     process_response_data::<WorkspaceInviteCode>(resp).await
   }
 
+  pub async fn get_workspace_invitation_code(
+    &self,
+    workspace_id: &Uuid,
+  ) -> Result<WorkspaceInviteCode, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/invite-code",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    process_response_data::<WorkspaceInviteCode>(resp).await
+  }
+
+  pub async fn delete_workspace_invitation_code(
+    &self,
+    workspace_id: &Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/invite-code",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    process_response_error(resp).await
+  }
+
   #[instrument(level = "info", skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppResponseError> {
     match self.gotrue_client.sign_up(email, password, None).await? {

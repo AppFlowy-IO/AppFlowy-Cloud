@@ -1595,6 +1595,41 @@ pub async fn upsert_workspace_member_uid<'a, E: Executor<'a, Database = Postgres
   Ok(())
 }
 
+pub async fn select_invite_code_for_workspace_id<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Option<String>, AppError> {
+  let code = sqlx::query_scalar!(
+    r#"
+      SELECT invite_code
+      FROM af_workspace_invite_code
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .fetch_optional(executor)
+  .await?;
+
+  Ok(code)
+}
+
+pub async fn delete_all_invite_code_for_workspace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  sqlx::query!(
+    r#"
+      DELETE FROM af_workspace_invite_code
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .execute(executor)
+  .await?;
+
+  Ok(())
+}
+
 pub async fn insert_workspace_invite_code<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,

@@ -1246,7 +1246,7 @@ pub struct WorkspaceInviteCodeParams {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WorkspaceInviteToken {
-  pub code: String,
+  pub code: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

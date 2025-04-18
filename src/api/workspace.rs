@@ -10,7 +10,8 @@ use crate::biz::user::user_verify::verify_token;
 use crate::biz::workspace;
 use crate::biz::workspace::duplicate::duplicate_view_tree_and_collab;
 use crate::biz::workspace::invite::{
-  generate_workspace_invite_token, join_workspace_invite_by_code,
+  delete_workspace_invite_code, generate_workspace_invite_token, get_invite_code_for_workspace,
+  join_workspace_invite_by_code,
 };
 use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
@@ -371,6 +372,8 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/{workspace_id}/invite-code")
+        .route(web::get().to(get_workspace_invite_code_handler))
+        .route(web::delete().to(delete_workspace_invite_code_handler))
         .route(web::post().to(post_workspace_invite_code_handler)),
     )
 }
@@ -2927,6 +2930,38 @@ async fn delete_quick_note_handler(
     .await?;
   delete_quick_note(&state.pg_pool, quick_note_id).await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_workspace_invite_code_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  let workspace_id = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id, AFRole::Owner)
+    .await?;
+  delete_workspace_invite_code(&state.pg_pool, &workspace_id).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_workspace_invite_code_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<WorkspaceInviteToken>> {
+  let workspace_id = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role(&uid, &workspace_id, AFRole::Member)
+    .await?;
+  let code = get_invite_code_for_workspace(&state.pg_pool, &workspace_id).await?;
+  Ok(Json(
+    AppResponse::Ok().with_data(WorkspaceInviteToken { code }),
+  ))
 }
 
 async fn post_workspace_invite_code_handler(

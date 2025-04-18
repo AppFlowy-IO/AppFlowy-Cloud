@@ -1,17 +1,16 @@
-use crate::ai_test::util::{extract_image_url, read_text_from_asset};
+use crate::ai_test::util::extract_image_url;
 use std::time::Duration;
 
 use appflowy_ai_client::dto::{
   ChatQuestionQuery, OutputContent, OutputContentMetadata, OutputLayout, ResponseFormat,
 };
-use assert_json_diff::assert_json_include;
 use client_api::entity::{QuestionStream, QuestionStreamValue};
 use client_api_test::{ai_test_enabled, TestClient};
 use futures_util::StreamExt;
 use serde_json::json;
 use shared_entity::dto::chat_dto::{
-  ChatMessageMetadata, ChatRAGData, CreateAnswerMessageParams, CreateChatMessageParams,
-  CreateChatParams, MessageCursor, UpdateChatParams,
+  CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
+  UpdateChatParams,
 };
 use uuid::Uuid;
 
@@ -187,63 +186,6 @@ async fn create_chat_and_create_messages_test() {
     .unwrap();
   assert!(!next_back.has_more);
   assert_eq!(next_back.messages.len(), 10);
-}
-
-#[tokio::test]
-async fn chat_qa_test() {
-  if !ai_test_enabled() {
-    return;
-  }
-  let test_client = TestClient::new_user_without_ws_conn().await;
-  let workspace_id = test_client.workspace_id().await;
-  let chat_id = uuid::Uuid::new_v4().to_string();
-  let params = CreateChatParams {
-    chat_id: chat_id.clone(),
-    name: "new chat".to_string(),
-    rag_ids: vec![],
-  };
-
-  test_client
-    .api_client
-    .create_chat(&workspace_id, params)
-    .await
-    .unwrap();
-
-  let content = read_text_from_asset("my_profile.txt");
-  let metadata = ChatMessageMetadata {
-    data: ChatRAGData::new_text(content),
-    id: "123".to_string(),
-    name: "test context".to_string(),
-    source: "user added".to_string(),
-    extra: Some(json!({"created_at": 123})),
-  };
-
-  let params = CreateChatMessageParams::new_user("Where lucas live?").with_metadata(metadata);
-  let question = test_client
-    .api_client
-    .create_question(&workspace_id, &chat_id, params)
-    .await
-    .unwrap();
-  let expected = json!({
-      "id": "123",
-      "name": "test context",
-      "source": "user added",
-      "extra": {
-          "created_at": 123
-      }
-  });
-  assert_json_include!(
-      actual: json!(question.meta_data[0]),
-      expected: expected
-  );
-
-  let related_questions = test_client
-    .api_client
-    .get_chat_related_question(&workspace_id, &chat_id, question.message_id)
-    .await
-    .unwrap();
-  assert_eq!(related_questions.items.len(), 3);
-  println!("related questions: {:?}", related_questions.items);
 }
 
 #[tokio::test]

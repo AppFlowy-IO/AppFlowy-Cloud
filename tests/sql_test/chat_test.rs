@@ -103,7 +103,6 @@ async fn chat_message_crud_test(pool: PgPool) {
       ChatAuthorWithUuid::new(uid, user_uuid, ChatAuthorType::System),
       &chat_id,
       format!("message {}", i),
-      vec![],
     )
     .await
     .unwrap();

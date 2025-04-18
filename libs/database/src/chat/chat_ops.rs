@@ -3,8 +3,8 @@ use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
 use shared_entity::dto::chat_dto::{
-  ChatAuthor, ChatAuthorWithUuid, ChatMessage, ChatMessageMetadata, ChatMessageWithAuthorUuid,
-  ChatSettings, CreateChatParams, GetChatMessageParams, MessageCursor, RepeatedChatMessage,
+  ChatAuthor, ChatAuthorWithUuid, ChatMessage, ChatMessageWithAuthorUuid, ChatSettings,
+  CreateChatParams, GetChatMessageParams, MessageCursor, RepeatedChatMessage,
   RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams, UpdateChatMessageMetaParams,
   UpdateChatParams,
 };
@@ -337,7 +337,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   let row = sqlx::query!(
     r#"
         INSERT INTO af_chat_messages (chat_id, author, content)
-        VALUES ($1, $2, $3, $4)
+        VALUES ($1, $2, $3)
         RETURNING message_id, created_at
         "#,
     chat_id,
@@ -629,7 +629,6 @@ pub async fn select_chat_messages_with_author_uuid(
     DateTime<Utc>,
     serde_json::Value,
     Option<Uuid>,
-    serde_json::Value,
     Option<i64>,
   )> = sqlx::query_as_with(&query, args)
     .fetch_all(txn.deref_mut())

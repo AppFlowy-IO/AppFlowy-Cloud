@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use infra::validate::validate_not_empty_str;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use serde_json::json;
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -33,51 +33,6 @@ pub struct CreateChatMessageParams {
   #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
   pub message_type: ChatMessageType,
-}
-
-fn deserialize_metadata<'de, D>(deserializer: D) -> Result<Vec<ChatMessageMetadata>, D::Error>
-where
-  D: Deserializer<'de>,
-{
-  let raw_value = Option::<serde_json::Value>::deserialize(deserializer)?;
-  match raw_value {
-    Some(serde_json::Value::Array(arr)) => {
-      serde_json::from_value(serde_json::Value::Array(arr)).map_err(serde::de::Error::custom)
-    },
-    Some(_) => Err(serde::de::Error::custom(
-      "Expected metadata to be an array of ChatMessageMetadata.",
-    )),
-    None => Ok(vec![]),
-  }
-}
-
-/// [ChatMessageMetadata] is used when creating a new question message.
-/// All the properties of [ChatMessageMetadata] except [ChatRAGData] will be stored as a
-/// metadata for specific [ChatMessage]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessageMetadata {
-  pub data: ChatRAGData,
-  /// The id for the metadata. It can be a file_id, view_id
-  pub id: String,
-  /// The name for the metadata. For example, @xxx, @xx.txt
-  pub name: String,
-  pub source: String,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub extra: Option<serde_json::Value>,
-}
-
-impl ChatMessageMetadata {
-  pub fn split_data(self) -> (ChatRAGData, ChatMetadataDescription) {
-    (
-      self.data,
-      ChatMetadataDescription {
-        id: self.id,
-        name: self.name,
-        source: self.source,
-        extra: self.extra,
-      },
-    )
-  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

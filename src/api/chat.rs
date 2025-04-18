@@ -31,7 +31,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
 use tokio::task;
-use tracing::{error, instrument, trace};
+use tracing::{instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
 pub fn chat_scope() -> Scope {
@@ -67,7 +67,7 @@ pub fn chat_scope() -> Scope {
       )
       .service(
         web::resource("/{chat_id}/message/answer")
-            .route(web::post().to(save_answer_handler))
+            .route(web::post().to(create_answer_handler))
       )
       .service(
         web::resource("/{chat_id}/message/find_question")
@@ -186,7 +186,7 @@ async fn create_question_handler(
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
-async fn save_answer_handler(
+async fn create_answer_handler(
   path: web::Path<(String, String)>,
   payload: Json<CreateAnswerMessageParams>,
   state: Data<AppState>,

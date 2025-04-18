@@ -24,6 +24,7 @@ use database::file::ResponseBlob;
 use database::publish::select_published_data_for_view_id;
 use database::publish::select_published_metadata_for_view_id;
 use database_entity::dto::CollabParams;
+use shared_entity::dto::publish_dto::PublishDatabaseDataWithNonUuidRelations;
 use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, PublishViewMetaData};
 use shared_entity::dto::workspace_dto::ViewLayout;
 use sqlx::PgPool;
@@ -111,6 +112,20 @@ pub struct PublishCollabDuplicator {
   dest_workspace_id: Uuid,
   /// view of workspace to duplicate into
   dest_view_id: Uuid,
+}
+
+fn deserialize_publish_database_data(
+  published_blob: &[u8],
+) -> Result<PublishDatabaseData, AppError> {
+  match serde_json::from_slice::<PublishDatabaseData>(published_blob) {
+    Ok(payload) => Ok(payload),
+    Err(_) => {
+      match serde_json::from_slice::<PublishDatabaseDataWithNonUuidRelations>(published_blob) {
+        Ok(payload) => Ok(payload.into()),
+        Err(err) => Err(AppError::from(err)),
+      }
+    },
+  }
 }
 
 impl PublishCollabDuplicator {
@@ -421,7 +436,7 @@ impl PublishCollabDuplicator {
       },
       ViewLayout::Grid | ViewLayout::Board | ViewLayout::Calendar => {
         let pub_view_id: Uuid = metadata.view.view_id.parse()?;
-        let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
+        let db_payload = deserialize_publish_database_data(&published_blob)?;
         let new_db_view = self
           .deep_copy_database_view(new_view_id, db_payload, &metadata, &pub_view_id)
           .await?;
@@ -648,7 +663,7 @@ impl PublishCollabDuplicator {
       },
     };
 
-    let published_db = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
+    let published_db = deserialize_publish_database_data(&published_blob)?;
     let mut parent_view = self
       .deep_copy_database_view(gen_view_id(), published_db, &metadata, &view_id)
       .await?;

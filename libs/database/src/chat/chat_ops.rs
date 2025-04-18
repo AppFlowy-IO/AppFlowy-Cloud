@@ -352,6 +352,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
     author,
     message_id: row.message_id,
     content,
+    metadata: json!([]),
     created_at: row.created_at,
     reply_message_id: None,
   };
@@ -648,6 +649,7 @@ pub async fn select_chat_messages_with_author_uuid(
             },
             message_id,
             content,
+            metadata: json!([]),
             created_at,
             reply_message_id,
           }),

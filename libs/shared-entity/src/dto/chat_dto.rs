@@ -272,6 +272,8 @@ pub struct ChatMessageWithAuthorUuid {
   pub author: ChatAuthorWithUuid,
   pub message_id: i64,
   pub content: String,
+  #[serde(rename = "meta_data")]
+  pub metadata: serde_json::Value,
   pub created_at: DateTime<Utc>,
   pub reply_message_id: Option<i64>,
 }

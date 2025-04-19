@@ -171,12 +171,23 @@ services:
 
   ai:
     restart: on-failure
-    image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
+    image: appflowyinc/appflowy_ai_premium:${APPFLOWY_AI_VERSION:-latest}
     environment:
       - OPENAI_API_KEY=${AI_OPENAI_API_KEY}
-      - APPFLOWY_AI_SERVER_PORT=${AI_SERVER_PORT}
-      - APPFLOWY_AI_DATABASE_URL=${AI_DATABASE_URL}
-      - APPFLOWY_AI_REDIS_URL=${AI_REDIS_URL}
+      - ANTHROPIC_API_KEY=${AI_ANTHROPIC_API_KEY}
+      - AI_AWS_ACCESS_KEY_ID=${APPFLOWY_S3_ACCESS_KEY}
+      - AI_AWS_SECRET_ACCESS_KEY=${APPFLOWY_S3_SECRET_KEY}
+      - AI_APPFLOWY_BUCKET_NAME=${AI_APPFLOWY_BUCKET_NAME}
+      - AI_SERVER_PORT=${AI_SERVER_PORT}
+      - AI_DATABASE_URL=${AI_DATABASE_URL}
+      - AI_REDIS_URL=${AI_REDIS_URL}
+      - AI_USE_MINIO=${APPFLOWY_S3_USE_MINIO}
+      - AI_MINIO_URL=${AI_MINIO_URL}
+      - AI_APPFLOWY_HOST=${AI_APPFLOWY_HOST}
+      - SUPPORT_OPENAI_V3_IMAGE_MODEL=false
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION}
     depends_on:
       postgres:
         condition: service_healthy

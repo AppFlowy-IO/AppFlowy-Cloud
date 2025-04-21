@@ -1,7 +1,7 @@
 use app_error::AppError;
 use database::workspace::{
-  insert_workspace_invite_code, select_invitation_code_info, select_invited_workspace_id,
-  upsert_workspace_member_uid,
+  delete_all_invite_code_for_workspace, insert_workspace_invite_code, select_invitation_code_info,
+  select_invite_code_for_workspace_id, select_invited_workspace_id, upsert_workspace_member_uid,
 };
 use rand::{distributions::Alphanumeric, Rng};
 use sqlx::PgPool;
@@ -16,11 +16,12 @@ pub async fn generate_workspace_invite_token(
   workspace_id: &Uuid,
   validity_period_hours: Option<i64>,
 ) -> Result<WorkspaceInviteToken, AppError> {
+  delete_all_invite_code_for_workspace(pg_pool, workspace_id).await?;
   let code = generate_workspace_invite_code();
   let expires_at = validity_period_hours.map(|v| chrono::Utc::now() + chrono::Duration::hours(v));
   insert_workspace_invite_code(pg_pool, workspace_id, &code, expires_at.as_ref()).await?;
 
-  Ok(WorkspaceInviteToken { code })
+  Ok(WorkspaceInviteToken { code: Some(code) })
 }
 
 fn generate_workspace_invite_code() -> String {
@@ -40,6 +41,22 @@ pub async fn join_workspace_invite_by_code(
   let invited_workspace_id = select_invited_workspace_id(pg_pool, invitation_code).await?;
   upsert_workspace_member_uid(pg_pool, &invited_workspace_id, uid, AFRole::Member).await?;
   Ok(invited_workspace_id)
+}
+
+pub async fn delete_workspace_invite_code(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  delete_all_invite_code_for_workspace(pg_pool, workspace_id).await?;
+  Ok(())
+}
+
+pub async fn get_invite_code_for_workspace(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Option<String>, AppError> {
+  let code = select_invite_code_for_workspace_id(pg_pool, workspace_id).await?;
+  Ok(code)
 }
 
 pub async fn get_invitation_code_info(

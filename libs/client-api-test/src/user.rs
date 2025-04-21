@@ -41,32 +41,41 @@ pub async fn admin_user_client() -> Client {
   admin_client
 }
 
-pub async fn generate_unique_registered_user() -> User {
+pub async fn generate_unique_registered_user_with_email(email: &str) -> User {
   let admin_client = admin_user_client().await;
-
   // create new user
-  let email = generate_unique_email();
   let password = "Hello123!";
   admin_client
-    .create_email_verified_user(&email, password)
+    .create_email_verified_user(email, password)
     .await
     .unwrap();
 
   User {
-    email,
+    email: email.to_string(),
     password: password.to_string(),
   }
 }
 
-pub async fn generate_unique_registered_user_client() -> (Client, User) {
+pub async fn generate_unique_registered_user_client_with_email(email: &str) -> (Client, User) {
   setup_log();
-  let registered_user = generate_unique_registered_user().await;
+  let registered_user = generate_unique_registered_user_with_email(email).await;
   let registered_user_client = localhost_client();
   registered_user_client
     .sign_in_password(&registered_user.email, &registered_user.password)
     .await
     .unwrap();
   (registered_user_client, registered_user)
+}
+
+pub async fn generate_unique_registered_user() -> User {
+  let email = generate_unique_email();
+  generate_unique_registered_user_with_email(&email).await
+}
+
+pub async fn generate_unique_registered_user_client() -> (Client, User) {
+  setup_log();
+  let email = generate_unique_email();
+  generate_unique_registered_user_client_with_email(&email).await
 }
 
 pub async fn generate_sign_in_action_link(email: &str) -> String {

@@ -1,4 +1,3 @@
-use anyhow::Context;
 use app_error::AppError;
 use database::workspace::{select_all_user_workspaces, select_user_profile, select_workspace};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
@@ -6,7 +5,6 @@ use serde_json::json;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
-use std::ops::DerefMut;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -27,37 +25,39 @@ pub async fn get_user_workspace_info(
   pg_pool: &PgPool,
   uuid: &Uuid,
 ) -> anyhow::Result<AFUserWorkspaceInfo, AppError> {
-  let mut txn = pg_pool
-    .begin()
-    .await
-    .context("failed to acquire the transaction to query the user workspace info")?;
-  let row = select_user_profile(txn.deref_mut(), uuid)
+  let row = select_user_profile(pg_pool, uuid)
     .await?
     .ok_or(AppError::RecordNotFound(format!(
       "Can't find the user profile for {}",
       uuid
     )))?;
 
-  // Get the latest workspace that the user has visited recently
-  // TODO(nathan): the visiting_workspace might be None if the user get deleted from the workspace
-  let visiting_workspace = AFWorkspace::try_from(
-    select_workspace(txn.deref_mut(), &row.latest_workspace_id.unwrap()).await?,
-  )?;
+  let latest_workspace_id = row.latest_workspace_id;
 
   // Get the user profile
   let user_profile = AFUserProfile::try_from(row)?;
 
   // Get all workspaces that the user can access to
-  let workspaces = select_all_user_workspaces(txn.deref_mut(), uuid)
+  let workspaces = select_all_user_workspaces(pg_pool, uuid)
     .await?
     .into_iter()
     .flat_map(|row| AFWorkspace::try_from(row).ok())
     .collect::<Vec<AFWorkspace>>();
 
-  txn
-    .commit()
-    .await
-    .context("failed to commit the transaction to get user workspace info")?;
+  if workspaces.is_empty() {
+    return Err(AppError::RecordNotFound(format!(
+      "Can't find any workspace for user: {}",
+      uuid
+    )));
+  }
+
+  // safety: safe to unwrap since workspaces is not empty
+  let first_workspace = workspaces.first().cloned().unwrap();
+
+  let visiting_workspace = match latest_workspace_id {
+    Some(workspace_id) => AFWorkspace::try_from(select_workspace(pg_pool, &workspace_id).await?)?,
+    None => first_workspace,
+  };
 
   Ok(AFUserWorkspaceInfo {
     user_profile,

@@ -574,7 +574,7 @@ async fn post_join_workspace_invite_by_code_handler(
   )
 }
 
-#[instrument(skip_all, err, fields(user_uuid))]
+#[instrument(level = "trace", skip_all, err, fields(user_uuid))]
 async fn get_workspace_settings_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,

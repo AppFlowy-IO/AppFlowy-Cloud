@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      WITH invited_workspace_member AS (\n        SELECT\n          invite_code,\n          COUNT(*) AS member_count,\n          COUNT(CASE WHEN uid = $2 THEN uid END) > 0 AS is_member\n        FROM af_workspace_invite_code\n        JOIN af_workspace_member USING (workspace_id)\n        WHERE invite_code = $1\n        AND (expires_at IS NULL OR expires_at > NOW())\n        GROUP BY invite_code\n      )\n      SELECT\n      workspace_id,\n      owner_profile.name AS \"owner_name!\",\n      owner_profile.metadata ->> 'icon_url' AS owner_avatar,\n      af_workspace.workspace_name AS \"workspace_name!\",\n      af_workspace.icon AS workspace_icon_url,\n      invited_workspace_member.member_count AS \"member_count!\",\n      invited_workspace_member.is_member AS \"is_member!\"\n      FROM af_workspace_invite_code\n      JOIN af_workspace USING (workspace_id)\n      JOIN af_user AS owner_profile ON af_workspace.owner_uid = owner_profile.uid\n      JOIN invited_workspace_member USING (invite_code)\n      WHERE invite_code = $1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "owner_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner_avatar",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "workspace_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "workspace_icon_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "member_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_member!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "4123fa8796e8b56225155f79c2ee4c4dacda5ef51e858ce7dcb9877c7d55bd53"
+}

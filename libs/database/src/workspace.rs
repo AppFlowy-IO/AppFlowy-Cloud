@@ -1546,7 +1546,7 @@ pub async fn select_invitation_code_info<'a, E: Executor<'a, Database = Postgres
         FROM af_workspace_invite_code
         JOIN af_workspace_member USING (workspace_id)
         WHERE invite_code = $1
-        AND (expires_at IS NULL OR expires_at < NOW())
+        AND (expires_at IS NULL OR expires_at > NOW())
         GROUP BY invite_code
       )
       SELECT

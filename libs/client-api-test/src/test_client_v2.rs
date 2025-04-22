@@ -531,11 +531,16 @@ impl TestClient {
     object_id: &Uuid,
     secs: u64,
   ) -> Result<(), Error> {
-    let mut sync_state = {
+    let (current_sync_state, mut sync_state) = {
       let lock = self.collabs.get(object_id).unwrap().collab.read().await;
-      lock.subscribe_sync_state()
+      let changes = lock.subscribe_sync_state();
+      let current_state = lock.get_state().sync_state();
+      (current_state, changes)
     };
-
+    if current_sync_state == SyncState::SyncFinished {
+      // we don't need to wait - the sync has already finished
+      return Ok(());
+    }
     let duration = Duration::from_secs(secs);
     while let Ok(Some(state)) = timeout(duration, sync_state.next()).await {
       if state == SyncState::SyncFinished {

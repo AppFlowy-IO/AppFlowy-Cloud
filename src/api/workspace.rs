@@ -629,7 +629,8 @@ async fn get_workspace_members_handler(
       name: member.name,
       email: member.email,
       role: member.role,
-      avatar_url: None,
+      avatar_url: member.avatar_url,
+      joined_at: member.created_at,
     })
     .collect();
 
@@ -695,7 +696,8 @@ async fn get_workspace_member_handler(
     name: member_row.name,
     email: member_row.email,
     role: member_row.role,
-    avatar_url: None,
+    avatar_url: member_row.avatar_url,
+    joined_at: member_row.created_at,
   };
 
   Ok(AppResponse::Ok().with_data(member).into())
@@ -731,7 +733,8 @@ async fn get_workspace_member_v1_handler(
     name: member_row.name,
     email: member_row.email,
     role: member_row.role,
-    avatar_url: None,
+    avatar_url: member_row.avatar_url,
+    joined_at: member_row.created_at,
   };
 
   Ok(AppResponse::Ok().with_data(member).into())

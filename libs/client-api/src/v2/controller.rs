@@ -185,6 +185,7 @@ impl WorkspaceController {
     // Register callback on this collab to observe incoming updates
     let weak_inner = Arc::downgrade(&self.inner);
     let client_id = self.inner.db.client_id();
+    sync_state.set_sync_state(SyncState::InitSyncBegin);
     collab
       .get_awareness()
       .doc()
@@ -203,13 +204,13 @@ impl WorkspaceController {
               }
             });
           }
+          sync_state.set_sync_state(SyncState::Syncing);
           inner.publish_update(object_id, collab_type, rid, e.update.clone());
         }
       })
       .unwrap();
 
     self.inner.publish_manifest(collab, collab_type);
-    sync_state.set_sync_state(SyncState::InitSyncBegin);
     self
       .inner
       .cache
@@ -710,7 +711,13 @@ impl Inner {
     }
     if last_message_id.is_none() {
       // we only send updates generated locally
+      let object_id = *msg.object_id();
       self.try_send(Message::Binary(msg.into_bytes()?)).await?;
+      // set sync state of the corresponding collab to finished
+      if let Some(collab) = self.get_collab(object_id) {
+        let lock = collab.read().await;
+        lock.borrow().set_sync_state(SyncState::SyncFinished);
+      }
     }
     Ok(())
   }

@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT\n      af_user.uid,\n      af_user.name,\n      af_user.email,\n      af_user.metadata ->> 'icon_url' AS avatar_url,\n      af_workspace_member.role_id AS role,\n      af_workspace_member.created_at\n    FROM public.af_workspace_member\n      JOIN public.af_user ON af_workspace_member.uid = af_user.uid\n    WHERE af_workspace_member.workspace_id = $1\n    AND af_user.uuid = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "role",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      true
+    ]
+  },
+  "hash": "d366aca6b187f086e5a8281081adec190bbb3cd5256c5a77ed321b99cd34bbbc"
+}

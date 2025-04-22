@@ -718,6 +718,7 @@ pub struct AFWorkspaceMember {
   pub email: String,
   pub role: AFRole,
   pub avatar_url: Option<String>,
+  pub joined_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

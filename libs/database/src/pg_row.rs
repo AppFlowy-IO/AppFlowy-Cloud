@@ -181,7 +181,9 @@ pub struct AFWorkspaceMemberRow {
   pub uid: i64,
   pub name: String,
   pub email: String,
+  pub avatar_url: Option<String>,
   pub role: AFRole,
+  pub created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(FromRow)]

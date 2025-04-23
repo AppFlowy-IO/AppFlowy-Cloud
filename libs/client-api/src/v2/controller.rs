@@ -486,11 +486,11 @@ impl Inner {
             let lock = collab_ref.read().await;
             let collab = lock.borrow();
             let tx = collab.get_awareness().doc().transact();
-            let update = tx.encode_state_as_update_v2(&sv);
+            let update = tx.encode_state_as_update_v1(&sv);
             let msg = ClientMessage::Update {
               object_id,
               collab_type,
-              flags: UpdateFlags::Lib0v2,
+              flags: UpdateFlags::Lib0v1,
               update,
             };
             let missing =

@@ -122,7 +122,7 @@ impl CollabStore {
       state_vector,
       tx
     );
-    let update: Bytes = tx.encode_state_as_update_v2(state_vector).into();
+    let update: Bytes = tx.encode_state_as_update_v1(state_vector).into();
     let server_sv = tx.state_vector().encode_v1();
 
     if rid > snapshot_rid {
@@ -132,7 +132,7 @@ impl CollabStore {
       } else {
         doc
           .transact()
-          .encode_state_as_update_v2(&StateVector::default())
+          .encode_state_as_update_v1(&StateVector::default())
           .into()
       };
       tokio::spawn(Self::save_snapshot_task(
@@ -149,7 +149,7 @@ impl CollabStore {
 
     Ok(CollabState {
       rid,
-      flags: UpdateFlags::Lib0v2,
+      flags: UpdateFlags::Lib0v1,
       update,
       state_vector: server_sv,
     })
@@ -359,7 +359,7 @@ impl CollabStore {
         drop(tx); // commit the transaction
         let full_state = doc
           .transact()
-          .encode_state_as_update_v2(&StateVector::default());
+          .encode_state_as_update_v1(&StateVector::default());
 
         join_set.spawn(Self::save_snapshot(
           self.collab_cache.clone(),

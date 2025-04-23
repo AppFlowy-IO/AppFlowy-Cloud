@@ -740,6 +740,7 @@ name = "appflowy-proto"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "collab",
  "collab-entity",
  "prost 0.13.5",
  "prost-build 0.13.5",

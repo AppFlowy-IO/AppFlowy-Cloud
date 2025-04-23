@@ -115,19 +115,15 @@ impl CollabStore {
     }
     let tx = doc.transact();
     tracing::trace!(
-      "replayed updates for {}/{} (last message id: {}) - final state: {:#?}",
+      "replayed updates for {}/{} (last message id: {}, state vector: {:?}) - final state: {:#?}",
       workspace_id,
       object_id,
       rid,
+      state_vector,
       tx
     );
     let update: Bytes = tx.encode_state_as_update_v2(state_vector).into();
-    let server_sv = if Self::has_missing_updates(&tx) {
-      let sv = tx.state_vector().encode_v1();
-      Some(sv)
-    } else {
-      None
-    };
+    let server_sv = tx.state_vector().encode_v1();
 
     if rid > snapshot_rid {
       tracing::trace!("document changed while replaying updates, saving it back");
@@ -411,5 +407,5 @@ pub struct CollabState {
   pub rid: Rid,
   pub flags: UpdateFlags,
   pub update: Bytes,
-  pub state_vector: Option<Vec<u8>>,
+  pub state_vector: Vec<u8>,
 }

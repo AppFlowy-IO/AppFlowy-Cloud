@@ -3,9 +3,12 @@ pub mod messages {
 }
 
 use bytes::Bytes;
+use collab::preclude::sync::AwarenessUpdate;
+use collab::preclude::updates::decoder::Decode;
+use collab::preclude::{StateVector, Update};
 use collab_entity::CollabType;
 use prost::Message;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -68,7 +71,7 @@ impl FromStr for Rid {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ClientMessage {
   Manifest {
     object_id: ObjectId,
@@ -86,6 +89,56 @@ pub enum ClientMessage {
     object_id: ObjectId,
     awareness: Vec<u8>,
   },
+}
+
+impl Debug for ClientMessage {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ClientMessage::Manifest {
+        object_id,
+        collab_type,
+        last_message_id,
+        state_vector,
+      } => {
+        let state_vector = StateVector::decode_v1(state_vector).map_err(|_| std::fmt::Error)?;
+        f.debug_struct("Manifest")
+          .field("object_id", &object_id)
+          .field("collab_type", &collab_type)
+          .field("last_message_id", &last_message_id)
+          .field("state_vector", &state_vector)
+          .finish()
+      },
+      ClientMessage::Update {
+        object_id,
+        collab_type,
+        flags,
+        update,
+      } => {
+        let update = match flags {
+          UpdateFlags::Lib0v1 => Update::decode_v1(update),
+          UpdateFlags::Lib0v2 => Update::decode_v2(update),
+        }
+        .map_err(|_| std::fmt::Error)?;
+
+        f.debug_struct("Update")
+          .field("object_id", &object_id)
+          .field("collab_type", &collab_type)
+          .field("flags", &flags)
+          .field("update", &update)
+          .finish()
+      },
+      ClientMessage::AwarenessUpdate {
+        object_id,
+        awareness,
+      } => {
+        let awareness = AwarenessUpdate::decode_v1(awareness).map_err(|_| std::fmt::Error)?;
+        f.debug_struct("AwarenessUpdate")
+          .field("object_id", &object_id)
+          .field("awareness", &awareness)
+          .finish()
+      },
+    }
+  }
 }
 
 impl ClientMessage {

@@ -101,6 +101,7 @@ impl WorkspaceController {
 
   pub async fn connect(&self) -> anyhow::Result<()> {
     if self.is_disconnected() {
+      tracing::trace!("requesting connection");
       self.inner.request_reconnect();
     }
     let mut status_rx = self.inner.status_rx.clone();
@@ -125,9 +126,11 @@ impl WorkspaceController {
     match &*self.inner.status_rx.borrow() {
       ConnectionStatus::Disconnected { .. } => return Ok(()),
       ConnectionStatus::Connecting { cancel } => {
+        tracing::trace!("cancelling connection on request");
         cancel.cancel();
       },
       ConnectionStatus::Connected { sink, cancel } => {
+        tracing::trace!("disconnecting on request");
         cancel.cancel();
         let mut lock = sink.lock().await;
         lock.close().await?;
@@ -174,6 +177,9 @@ impl WorkspaceController {
     let mut collab = collab_ref.write().await;
     let collab = (*collab).borrow_mut();
     let object_id: ObjectId = collab.object_id().parse()?;
+
+    tracing::trace!("binding collab {}/{}", self.workspace_id(), object_id);
+
     let sync_state = collab.get_state().clone();
     let last_message_id = self.inner.last_message_id.clone();
     sync_state.set_init_state(InitState::Loading);
@@ -494,9 +500,9 @@ impl Inner {
             }
             (msg, missing)
           };
-          self.send(Message::Binary(msg.into_bytes()?)).await?;
+          self.send_message(msg).await?;
           if let Some(msg) = missing {
-            self.send(Message::Binary(msg.into_bytes()?)).await?;
+            self.send_message(msg).await?;
           }
         } else if !sv.is_empty() {
           // we haven't seen this collab yet, so we need to send manifest ourselves
@@ -507,7 +513,7 @@ impl Inner {
             last_message_id: local_message_id,
             state_vector: StateVector::default().encode_v1(),
           };
-          self.send(Message::Binary(reply.into_bytes()?)).await?;
+          self.send_message(reply).await?;
         }
       },
       ServerMessage::Update {
@@ -583,18 +589,29 @@ impl Inner {
     }
   }
 
-  async fn send(&self, msg: Message) -> anyhow::Result<()> {
-    if !self.try_send(msg).await? {
+  async fn send_message(&self, msg: ClientMessage) -> anyhow::Result<()> {
+    tracing::trace!("sending message: {:?}", msg);
+    let sync_state = match &msg {
+      ClientMessage::Manifest { object_id, .. } => Some((*object_id, SyncState::InitSyncBegin)),
+      ClientMessage::Update { object_id, .. } => Some((*object_id, SyncState::SyncFinished)),
+      ClientMessage::AwarenessUpdate { .. } => None,
+    };
+    let bytes = msg.into_bytes()?;
+    if !self.try_send(Message::Binary(bytes)).await? {
       bail!("WebSocket client not connected");
-    } else {
-      Ok(())
+    } else if let Some((object_id, sync_state)) = sync_state {
+      if let Some(collab_ref) = self.get_collab(object_id) {
+        let lock = collab_ref.read().await;
+        let collab = lock.borrow();
+        collab.set_sync_state(sync_state);
+      }
     }
+    Ok(())
   }
 
   async fn try_send(&self, msg: Message) -> anyhow::Result<bool> {
     if let Some(sink) = self.ws_sink() {
       let mut sink = sink.lock().await;
-      tracing::trace!("sending message {:?}", msg);
       sink.send(msg).await?;
       sink.flush().await?;
       Ok(true)
@@ -711,13 +728,7 @@ impl Inner {
     }
     if last_message_id.is_none() {
       // we only send updates generated locally
-      let object_id = *msg.object_id();
-      self.try_send(Message::Binary(msg.into_bytes()?)).await?;
-      // set sync state of the corresponding collab to finished
-      if let Some(collab) = self.get_collab(object_id) {
-        let lock = collab.read().await;
-        lock.borrow().set_sync_state(SyncState::SyncFinished);
-      }
+      self.send_message(msg).await?;
     }
     Ok(())
   }
@@ -825,6 +836,7 @@ impl Inner {
       if let Some(collab_ref) = self.get_collab(object_id) {
         let mut lock = collab_ref.write().await;
         let collab = (*lock).borrow_mut();
+        let sync_state = collab.get_state().sync_state();
         let doc = collab.get_awareness().doc();
         let mut tx = doc.transact_mut_with(rid.into_bytes().as_ref());
         tx.apply_update(update)?;
@@ -832,10 +844,9 @@ impl Inner {
           drop(tx);
           tracing::trace!("found missing updates for {} - sending manifest", object_id);
           self.publish_manifest(collab, collab_type);
-          collab.set_sync_state(SyncState::Syncing);
-        } else {
+        } else if sync_state == SyncState::InitSyncBegin {
           drop(tx);
-          collab.set_sync_state(SyncState::SyncFinished);
+          collab.set_sync_state(SyncState::InitSyncEnd);
         }
       }
     }

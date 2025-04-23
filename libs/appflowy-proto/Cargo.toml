@@ -8,6 +8,7 @@ uuid.workspace = true
 bytes.workspace = true
 thiserror.workspace = true
 collab-entity.workspace = true
+collab.workspace = true
 prost = { version = "0.13.4", features = ["derive"] }
 
 [build-dependencies]

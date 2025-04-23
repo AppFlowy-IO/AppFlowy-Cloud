@@ -424,16 +424,21 @@ where
     };
 
     // Early return if editing collab is initialized, as it indicates no need to query further.
-    if from_editing_collab {
-      // Attempt to retrieve encoded collab from the editing collab
-      if let Some(value) = self.get_encode_collab_from_editing(params.object_id).await {
-        trace!(
-          "Did get encode collab {} from editing collab",
-          params.object_id
-        );
-        return Ok(value);
-      }
-    }
+    //if from_editing_collab {
+    //  // Attempt to retrieve encoded collab from the editing collab
+    //  if let Some(encoded_collab) = self.get_encode_collab_from_editing(params.object_id).await {
+    //    tracing::debug!(
+    //      "Returning encode collab from editing for {} {:?}: {:#?}",
+    //      params.object_id,
+    //      StateVector::decode_v1(&encoded_collab.state_vector).unwrap(),
+    //      match encoded_collab.version {
+    //        EncoderVersion::V1 => yrs::Update::decode_v1(&encoded_collab.doc_state).unwrap(),
+    //        EncoderVersion::V2 => yrs::Update::decode_v2(&encoded_collab.doc_state).unwrap(),
+    //      }
+    //    );
+    //    return Ok(encoded_collab);
+    //  }
+    //}
     let state = self
       .collab_store
       .get_latest_state(
@@ -445,7 +450,7 @@ where
       )
       .await?;
     let encoded_collab = EncodedCollab {
-      state_vector: state.state_vector.unwrap_or_default().into(),
+      state_vector: state.state_vector.into(),
       doc_state: state.update,
       version: match state.flags {
         UpdateFlags::Lib0v1 => EncoderVersion::V1,

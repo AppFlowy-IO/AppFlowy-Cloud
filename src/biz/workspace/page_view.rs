@@ -160,6 +160,42 @@ pub async fn create_space(
   Ok(Space { view_id })
 }
 
+// Different from create page as this function does not create an associated collab
+#[allow(clippy::too_many_arguments)]
+pub async fn create_folder_view(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  parent_view_id: &Uuid,
+  view_layout: ViewLayout,
+  name: Option<&str>,
+  view_id: Option<Uuid>,
+) -> Result<Page, AppError> {
+  let view_id = view_id.unwrap_or_else(Uuid::new_v4);
+  let collab_origin = GetCollabOrigin::User { uid: user.uid };
+  let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
+  let folder_update = add_new_view_to_folder(
+    user.uid,
+    parent_view_id,
+    &view_id,
+    &mut folder,
+    name,
+    to_folder_view_layout(view_layout),
+  )
+  .await?;
+  update_workspace_folder_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    folder_update,
+  )
+  .await?;
+  Ok(Page { view_id })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn create_page(
   appflowy_web_metrics: &AppFlowyWebMetrics,

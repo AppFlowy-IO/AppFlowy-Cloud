@@ -1,0 +1,16 @@
+{
+  "type": "page",
+  "children": [
+    {
+      "type": "heading",
+      "data": {
+        "level": 2,
+        "delta": [
+          {
+            "insert": "Welcome to AppFlowy Vault"
+          }
+        ]
+      }
+    }
+  ]
+}

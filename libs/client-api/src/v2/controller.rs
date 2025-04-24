@@ -101,7 +101,6 @@ impl WorkspaceController {
 
   pub async fn connect(&self) -> anyhow::Result<()> {
     if self.is_disconnected() {
-      tracing::trace!("requesting connection");
       self.inner.request_reconnect();
     }
     let mut status_rx = self.inner.status_rx.clone();
@@ -267,7 +266,11 @@ impl WorkspaceController {
             // wait for loop to complete, if it completed with failure it's a connection
             // failure, and we need to reconnect
             match receive_messages_loop.await.unwrap() {
-              Ok(()) => false, // connection closed gracefully
+              Ok(()) => {
+                tracing::trace!("connection closed gracefully");
+                inner.set_disconnected(None);
+                false
+              },
               Err(err) => {
                 // error while sending messages
                 tracing::error!("failed to handle messages: {}", err);
@@ -295,7 +298,6 @@ impl WorkspaceController {
       }
 
       if reconnect {
-        tracing::trace!("reconnecting");
         inner.request_reconnect(); // go to the next loop iteration and retry
       }
     }

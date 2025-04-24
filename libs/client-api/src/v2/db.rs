@@ -56,7 +56,12 @@ impl Db {
     );
     let tx = collab.transact();
     let ops = self.inner.write_txn();
-    match ops.create_new_doc(self.uid, &self.workspace_id, &collab_id, &tx) {
+    match ops.create_new_doc(
+      self.uid,
+      &self.workspace_id.to_string(),
+      &collab_id.to_string(),
+      &tx,
+    ) {
       Ok(_) => {
         ops.commit_transaction()?;
         Ok(true)
@@ -74,7 +79,12 @@ impl Db {
     let object_id = ObjectId::from_str(collab.object_id())
       .map_err(|err| PersistenceError::InvalidData(err.to_string()))?;
     let mut txn = collab.transact_mut();
-    match ops.load_doc_with_txn(self.uid, &self.workspace_id, &object_id, &mut txn) {
+    match ops.load_doc_with_txn(
+      self.uid,
+      &self.workspace_id.to_string(),
+      &object_id.to_string(),
+      &mut txn,
+    ) {
       Ok(_updates_applied) => Ok(()),
       Err(PersistenceError::RecordNotFound(_)) => {
         tracing::debug!("collab {} not found in local db", object_id);
@@ -86,7 +96,11 @@ impl Db {
 
   pub fn remove_doc(&self, object_id: &Uuid) -> Result<(), PersistenceError> {
     let ops = self.inner.write_txn();
-    ops.delete_doc(self.uid, &self.workspace_id, object_id)?;
+    ops.delete_doc(
+      self.uid,
+      &self.workspace_id.to_string(),
+      &object_id.to_string(),
+    )?;
     ops.commit_transaction()?;
     Ok(())
   }
@@ -104,7 +118,12 @@ impl Db {
       object_id,
       self.uid
     );
-    ops.push_update(self.uid, &self.workspace_id, object_id, &update_v1)?;
+    ops.push_update(
+      self.uid,
+      &self.workspace_id.to_string(),
+      &object_id.to_string(),
+      &update_v1,
+    )?;
     if let Some(message_id) = message_id {
       ops.update_last_message_id(&self.workspace_id, message_id)?;
     }

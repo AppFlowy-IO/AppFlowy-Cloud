@@ -1,0 +1,56 @@
+{
+  "type": "page",
+  "children": [
+    {
+      "type": "heading",
+      "data": {
+        "level": 2,
+        "delta": [
+          {
+            "insert": "Features"
+          }
+        ]
+      }
+    },
+    {
+      "type": "numbered_list",
+      "data": {
+        "delta": [
+          {
+            "insert": "Local AI Power"
+          }
+        ]
+      }
+    },
+    {
+      "type": "numbered_list",
+      "data": {
+        "delta": [
+          {
+            "insert": "Data Privacy"
+          }
+        ]
+      }
+    },
+    {
+      "type": "numbered_list",
+      "data": {
+        "delta": [
+          {
+            "insert": "Offline Operation"
+          }
+        ]
+      }
+    },
+    {
+      "type": "numbered_list",
+      "data": {
+        "delta": [
+          {
+            "insert": "Custom Model Integration"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -14,9 +14,9 @@ use crate::{hierarchy_builder::WorkspaceViewBuilder, WorkspaceTemplate};
 
 #[cfg(test)]
 mod tests {
-  use collab_database::database::gen_database_view_id;
-
   use super::*;
+  use crate::document::util::{create_database_from_params, create_document_from_json};
+  use collab_database::database::gen_database_view_id;
 
   #[tokio::test]
   async fn create_document_from_desktop_guide_json_test() {
@@ -45,11 +45,8 @@ mod tests {
   }
 
   async fn test_document_json(json_str: &str) {
-    let template = GettingStartedTemplate;
     let object_id = uuid_v4().to_string();
-    let result = template
-      .create_document_from_json(object_id.clone(), json_str)
-      .await;
+    let result = create_document_from_json(object_id.clone(), json_str).await;
     let template_data = result.unwrap();
 
     match template_data.template_id {
@@ -65,16 +62,13 @@ mod tests {
   }
 
   async fn test_database_json(json_str: &str) -> Vec<TemplateData> {
-    let template = GettingStartedTemplate;
     let object_id = gen_database_view_id().to_string();
     let database_data = serde_json::from_str::<DatabaseData>(json_str).unwrap();
 
     let database_view_id = database_data.views[0].id.clone();
     let create_database_params =
       CreateDatabaseParams::from_database_data(database_data, &database_view_id, &object_id);
-    let result = template
-      .create_database_from_params(object_id.clone(), create_database_params)
-      .await;
+    let result = create_database_from_params(object_id.clone(), create_database_params).await;
     let template_data = result.unwrap();
 
     for (i, data) in template_data.iter().enumerate() {

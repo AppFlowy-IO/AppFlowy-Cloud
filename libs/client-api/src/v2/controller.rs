@@ -86,17 +86,11 @@ impl WorkspaceController {
   }
 
   pub fn is_connected(&self) -> bool {
-    matches!(
-      &*self.inner.status_rx.borrow(),
-      ConnectionStatus::Connected { .. }
-    )
+    self.inner.is_connected()
   }
 
   pub fn is_disconnected(&self) -> bool {
-    matches!(
-      &*self.inner.status_rx.borrow(),
-      ConnectionStatus::Disconnected { .. }
-    )
+    self.inner.is_disconnected()
   }
 
   pub async fn connect(&self) -> anyhow::Result<()> {
@@ -212,8 +206,7 @@ impl WorkspaceController {
           sync_state.set_sync_state(SyncState::Syncing);
           inner.publish_update(object_id, collab_type, rid, e.update.clone());
         }
-      })
-      .unwrap();
+      })?;
 
     self.inner.publish_manifest(collab, collab_type);
     self
@@ -258,6 +251,11 @@ impl WorkspaceController {
             tracing::debug!("successfully connected to {}", inner.options.url);
             let (sink, stream) = conn.split();
             inner.set_connected(sink, cancel.clone());
+            if let Err(err) = inner.publish_pending_collabs().await {
+              tracing::error!("failed to publish active collabs: {}", err);
+              inner.set_disconnected(Some(err.to_string()));
+              continue;
+            }
             let receive_messages_loop = tokio::spawn(Self::receive_server_messages_loop(
               Arc::downgrade(&inner),
               stream,
@@ -564,6 +562,28 @@ impl Inner {
     Ok(())
   }
 
+  async fn publish_pending_collabs(&self) -> anyhow::Result<()> {
+    if let Some(sender) = self.message_tx.load_full() {
+      let last_message_id = self.last_message_id();
+      let pending: Vec<_> = self.cache.iter().map(|e| *e.key()).collect();
+      for object_id in pending {
+        if let Some(collab_ref) = self.get_collab(object_id) {
+          let state_vector = collab_ref.read().await.borrow().transact().state_vector();
+          let manifest = ClientMessage::Manifest {
+            object_id,
+            collab_type: CollabType::Unknown,
+            last_message_id,
+            state_vector: state_vector.encode_v1(),
+          };
+          sender.send((manifest, None))?;
+        }
+      }
+      Ok(())
+    } else {
+      bail!("cannot publish pending collabs - send queue not initialised")
+    }
+  }
+
   fn check_missing_updates(
     tx: Transaction,
     object_id: ObjectId,
@@ -729,10 +749,31 @@ impl Inner {
         .await?;
     }
     if last_message_id.is_none() {
-      // we only send updates generated locally
-      self.send_message(msg).await?;
+      if self.is_connected() {
+        // we only send updates generated locally
+        self.send_message(msg).await?;
+      } else {
+        tracing::debug!(
+          "couldn't send update for {} - not connected",
+          msg.object_id()
+        );
+      }
     }
     Ok(())
+  }
+
+  fn is_connected(&self) -> bool {
+    matches!(
+      &*self.status_rx.borrow(),
+      ConnectionStatus::Connected { .. }
+    )
+  }
+
+  fn is_disconnected(&self) -> bool {
+    matches!(
+      &*self.status_rx.borrow(),
+      ConnectionStatus::Disconnected { .. }
+    )
   }
 
   fn signal_closed(&self) {

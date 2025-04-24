@@ -17,7 +17,7 @@ use uuid::Uuid;
 pub mod database;
 pub mod document;
 
-mod hierarchy_builder;
+pub mod hierarchy_builder;
 #[cfg(test)]
 mod tests;
 

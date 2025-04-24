@@ -13,8 +13,8 @@ use collab_entity::CollabType;
 use collab_folder::ViewLayout;
 use serde_json::Value;
 
-use crate::database::database_collab::create_database_collab;
 use crate::document::parser::JsonToDocumentParser;
+use crate::document::util::{create_database_from_params, create_document_from_json};
 use crate::hierarchy_builder::{ViewBuilder, WorkspaceViewBuilder};
 use crate::{gen_view_id, TemplateData, TemplateObjectId, WorkspaceTemplate};
 
@@ -32,74 +32,10 @@ pub struct GettingStartedTemplate;
 
 impl GettingStartedTemplate {
   /// Create a document template data from the given JSON string
-  pub async fn create_document_from_json(
-    &self,
-    object_id: String,
-    json_str: &str,
-  ) -> anyhow::Result<TemplateData> {
-    // 1. read the getting started document from the assets
-    let document_data = JsonToDocumentParser::json_str_to_document(json_str)?;
-
-    // 2. create a new document with the getting started data
-    let data = tokio::task::spawn_blocking(move || {
-      let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
-      let document = Document::create_with_data(collab, document_data)?;
-      let encoded_collab = document.encode_collab()?;
-
-      Ok::<_, anyhow::Error>(TemplateData {
-        template_id: TemplateObjectId::Document(object_id),
-        collab_type: CollabType::Document,
-        encoded_collab,
-      })
-    })
-    .await??;
-
-    Ok(data)
-  }
 
   /// Create a series of database templates from the given JSON String
   ///
   /// Notes: The output contains DatabaseCollab, DatabaseRowCollab
-  pub async fn create_database_from_params(
-    &self,
-    object_id: String,
-    create_database_params: CreateDatabaseParams,
-  ) -> anyhow::Result<Vec<TemplateData>> {
-    let database_id = create_database_params.database_id.clone();
-    let encoded_database = create_database_collab(create_database_params).await?;
-
-    let encoded_database_collab = encoded_database
-      .encoded_database_collab
-      .encoded_collab
-      .clone();
-
-    // 1. create the new database collab
-    let database_template_data = TemplateData {
-      template_id: TemplateObjectId::Database {
-        object_id,
-        database_id: database_id.clone(),
-      },
-      collab_type: CollabType::Database,
-      encoded_collab: encoded_database_collab,
-    };
-
-    // 2. create the new database row collabs
-    let database_row_template_data =
-      encoded_database
-        .encoded_row_collabs
-        .into_iter()
-        .map(|encoded_row_collab| TemplateData {
-          template_id: TemplateObjectId::DatabaseRow(encoded_row_collab.object_id),
-          collab_type: CollabType::DatabaseRow,
-          encoded_collab: encoded_row_collab.encoded_collab,
-        });
-
-    let mut template_data = vec![database_template_data];
-    template_data.extend(database_row_template_data);
-
-    Ok(template_data)
-  }
-
   #[allow(clippy::too_many_arguments)]
   async fn create_document_and_database_data(
     &self,
@@ -120,13 +56,11 @@ impl GettingStartedTemplate {
     Vec<TemplateData>,
   )> {
     let default_space_json = include_str!("../../assets/default_space.json");
-    let general_data = self
-      .create_document_from_json(general_view_uuid.clone(), default_space_json)
-      .await?;
+    let general_data =
+      create_document_from_json(general_view_uuid.clone(), default_space_json).await?;
 
-    let shared_data = self
-      .create_document_from_json(shared_view_uuid.clone(), default_space_json)
-      .await?;
+    let shared_data =
+      create_document_from_json(shared_view_uuid.clone(), default_space_json).await?;
 
     let getting_started_json = include_str!("../../assets/getting_started.json");
     let mut getting_started_json: Value = serde_json::from_str(getting_started_json).unwrap();
@@ -142,36 +76,31 @@ impl GettingStartedTemplate {
     replacements.insert("web_guide_id".to_string(), web_guide_view_uuid.clone());
     replacements.insert("todos_id".to_string(), todos_view_uuid.clone());
     replace_json_placeholders(&mut getting_started_json, &replacements);
-    let getting_started_data = self
-      .create_document_from_json(
-        getting_started_view_uuid.clone(),
-        &getting_started_json.to_string(),
-      )
-      .await?;
+    let getting_started_data = create_document_from_json(
+      getting_started_view_uuid.clone(),
+      &getting_started_json.to_string(),
+    )
+    .await?;
 
     let desktop_guide_json = include_str!("../../assets/desktop_guide.json");
-    let desktop_guide_data = self
-      .create_document_from_json(desktop_guide_view_uuid.clone(), desktop_guide_json)
-      .await?;
+    let desktop_guide_data =
+      create_document_from_json(desktop_guide_view_uuid.clone(), desktop_guide_json).await?;
 
     let mobile_guide_json = include_str!("../../assets/mobile_guide.json");
-    let mobile_guide_data = self
-      .create_document_from_json(mobile_guide_view_uuid.clone(), mobile_guide_json)
-      .await?;
+    let mobile_guide_data =
+      create_document_from_json(mobile_guide_view_uuid.clone(), mobile_guide_json).await?;
 
     let web_guide_json = include_str!("../../assets/web_guide.json");
-    let web_guide_data = self
-      .create_document_from_json(web_guide_view_uuid.clone(), web_guide_json)
-      .await?;
+    let web_guide_data =
+      create_document_from_json(web_guide_view_uuid.clone(), web_guide_json).await?;
 
     let todos_json = include_str!("../../assets/to-dos.json");
     let database_data = serde_json::from_str::<DatabaseData>(todos_json)?;
     let database_view_id = database_data.views[0].id.clone();
     let create_database_params =
       CreateDatabaseParams::from_database_data(database_data, &database_view_id, &todos_view_uuid);
-    let todos_data = self
-      .create_database_from_params(todos_view_uuid.clone(), create_database_params.clone())
-      .await?;
+    let todos_data =
+      create_database_from_params(todos_view_uuid.clone(), create_database_params.clone()).await?;
 
     Ok((
       general_data,

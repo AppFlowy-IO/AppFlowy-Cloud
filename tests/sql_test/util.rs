@@ -79,6 +79,7 @@ pub async fn create_test_collab_document(
     object_id: *doc_id,
     encoded_collab_v1: Bytes::from(document.encode_to_bytes().unwrap()),
     collab_type: CollabType::Document,
+    updated_at: None,
   };
 
   let mut txn = pg_pool.begin().await.unwrap();

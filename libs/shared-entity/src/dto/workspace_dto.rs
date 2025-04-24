@@ -154,6 +154,15 @@ pub struct CollabResponse {
   pub object_id: Uuid,
 }
 
+/// Create a view in the folder, without an associated collab
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateFolderViewParams {
+  pub parent_view_id: Uuid,
+  pub layout: ViewLayout,
+  pub name: Option<String>,
+  pub view_id: Option<Uuid>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Space {
   pub view_id: Uuid,

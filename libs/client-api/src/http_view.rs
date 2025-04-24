@@ -1,7 +1,8 @@
 use client_api_entity::workspace_dto::{
-  AddRecentPagesParams, AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams,
-  CreateSpaceParams, DuplicatePageParams, FavoritePageParams, MovePageParams, Page, PageCollab,
-  PublishPageParams, Space, UpdatePageParams, UpdateSpaceParams,
+  AddRecentPagesParams, AppendBlockToPageParams, CreateFolderViewParams,
+  CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams, DuplicatePageParams,
+  FavoritePageParams, MovePageParams, Page, PageCollab, PublishPageParams, Space, UpdatePageParams,
+  UpdateSpaceParams,
 };
 use reqwest::Method;
 use serde_json::json;
@@ -11,6 +12,24 @@ use uuid::Uuid;
 use crate::{process_response_data, process_response_error, Client};
 
 impl Client {
+  pub async fn create_folder_view(
+    &self,
+    workspace_id: Uuid,
+    params: &CreateFolderViewParams,
+  ) -> Result<Page, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/folder-view",
+      self.base_url, workspace_id,
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    process_response_data::<Page>(resp).await
+  }
+
   pub async fn create_workspace_page_view(
     &self,
     workspace_id: Uuid,

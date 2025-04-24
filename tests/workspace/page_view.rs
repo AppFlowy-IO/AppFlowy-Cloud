@@ -9,9 +9,10 @@ use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  AddRecentPagesParams, AppendBlockToPageParams, CreatePageDatabaseViewParams, CreatePageParams,
-  CreateSpaceParams, DuplicatePageParams, FavoritePageParams, IconType, MovePageParams,
-  PublishPageParams, SpacePermission, UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
+  AddRecentPagesParams, AppendBlockToPageParams, CreateFolderViewParams,
+  CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams, DuplicatePageParams,
+  FavoritePageParams, IconType, MovePageParams, PublishPageParams, SpacePermission,
+  UpdatePageParams, UpdateSpaceParams, ViewIcon, ViewLayout,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -155,6 +156,51 @@ async fn create_new_page_with_database() {
       .await
       .unwrap();
   }
+}
+
+#[tokio::test]
+async fn create_new_folder_view() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspaces = c.get_workspaces().await.unwrap();
+  assert_eq!(workspaces.len(), 1);
+  let workspace_id = workspaces[0].workspace_id;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let page = c
+    .create_folder_view(
+      workspace_id,
+      &CreateFolderViewParams {
+        parent_view_id: general_space.view_id,
+        layout: ViewLayout::Document,
+        name: Some("New document".to_string()),
+        view_id: None,
+      },
+    )
+    .await
+    .unwrap();
+  sleep(Duration::from_secs(1)).await;
+  let folder_view = c
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let view = general_space
+    .children
+    .iter()
+    .find(|v| v.view_id == page.view_id)
+    .unwrap();
+  assert_eq!(view.name, "New document");
 }
 
 #[tokio::test]

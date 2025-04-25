@@ -18,10 +18,11 @@ use crate::biz::workspace::ops::{
   get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
-  add_recent_pages, append_block_at_the_end_of_page, create_database_view, create_page,
-  create_space, delete_all_pages_from_trash, delete_trash, favorite_page, get_page_view_collab,
-  move_page, move_page_to_trash, publish_page, reorder_favorite_page, restore_all_pages_from_trash,
-  restore_page_from_trash, unpublish_page, update_page, update_page_collab_data, update_space,
+  add_recent_pages, append_block_at_the_end_of_page, create_database_view, create_folder_view,
+  create_page, create_space, delete_all_pages_from_trash, delete_trash, favorite_page,
+  get_page_view_collab, move_page, move_page_to_trash, publish_page, reorder_favorite_page,
+  restore_all_pages_from_trash, restore_page_from_trash, unpublish_page, update_page,
+  update_page_collab_data, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::biz::workspace::quick_note::{
@@ -183,6 +184,9 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("/{workspace_id}/space").route(web::post().to(post_space_handler)))
     .service(
       web::resource("/{workspace_id}/space/{view_id}").route(web::patch().to(update_space_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/folder-view").route(web::post().to(post_folder_view_handler)),
     )
     .service(
       web::resource("/{workspace_id}/page-view").route(web::post().to(post_page_view_handler)),
@@ -1251,6 +1255,32 @@ async fn update_space_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn post_folder_view_handler(
+  user_uuid: UserUuid,
+  path: web::Path<Uuid>,
+  payload: Json<CreateFolderViewParams>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<Page>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_uuid = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  let page = create_folder_view(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    &payload.parent_view_id,
+    payload.layout.clone(),
+    payload.name.as_deref(),
+    payload.view_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(page)))
 }
 
 async fn post_page_view_handler(

@@ -185,30 +185,45 @@ impl WorkspaceController {
     let weak_inner = Arc::downgrade(&self.inner);
     let client_id = self.inner.db.client_id();
     sync_state.set_sync_state(SyncState::InitSyncBegin);
-    collab
-      .get_awareness()
-      .doc()
-      .observe_update_v1_with("af", move |tx, e| {
-        if let Some(inner) = weak_inner.upgrade() {
-          let rid = tx
-            .origin()
-            .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok());
-          if let Some(rid) = rid {
-            tracing::trace!("[{}] {} received collab from remote", client_id, object_id);
-            last_message_id.rcu(|old| {
-              if rid > **old {
-                Arc::new(rid)
-              } else {
-                old.clone()
-              }
-            });
-          }
-          sync_state.set_sync_state(SyncState::Syncing);
-          inner.publish_update(object_id, collab_type, rid, e.update.clone());
+    let awareness = collab.get_awareness();
+    awareness.doc().observe_update_v1_with("af", move |tx, e| {
+      if let Some(inner) = weak_inner.upgrade() {
+        let rid = tx
+          .origin()
+          .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok());
+        if let Some(rid) = rid {
+          tracing::trace!("[{}] {} received collab from remote", client_id, object_id);
+          last_message_id.rcu(|old| {
+            if rid > **old {
+              Arc::new(rid)
+            } else {
+              old.clone()
+            }
+          });
         }
-      })?;
+        sync_state.set_sync_state(SyncState::Syncing);
+        inner.publish_update(object_id, collab_type, rid, e.update.clone());
+      }
+    })?;
+    let weak_inner = Arc::downgrade(&self.inner);
+    awareness.on_change_with("af", move |awareness, e, origin| {
+      if let Some(inner) = weak_inner.upgrade() {
+        if origin.map(|o| o.as_ref()) != Some(Inner::REMOTE_ORIGIN.as_bytes()) {
+          match awareness.update_with_clients(e.all_changes()) {
+            Ok(update) => inner.publish_awareness(object_id, update),
+            Err(err) => tracing::error!(
+              "[{}] failed to prepare awareness update for {}: {}",
+              client_id,
+              object_id,
+              err
+            ),
+          }
+        }
+      }
+    });
 
     self.inner.publish_manifest(collab, collab_type);
+    self.inner.publish_awareness(object_id, awareness.update()?);
     self
       .inner
       .cache
@@ -814,7 +829,8 @@ impl Inner {
     if let Some(channel) = &*messages {
       let last_message_id = self.last_message_id();
       let object_id = collab.object_id();
-      let doc = collab.get_awareness().doc();
+      let awareness = collab.get_awareness();
+      let doc = awareness.doc();
       let state_vector = doc.transact().state_vector();
       tracing::debug!(
         "publishing manifest for {} (last msg id: {}): {:?}",
@@ -850,6 +866,19 @@ impl Inner {
       };
       // we received that update from the local client
       let _ = channel.send((msg, last_message_id));
+    }
+  }
+
+  fn publish_awareness(&self, object_id: ObjectId, update: AwarenessUpdate) {
+    let messages = self.message_tx.load();
+    if let Some(channel) = &*messages {
+      let awareness = update.encode_v1();
+      let msg = ClientMessage::AwarenessUpdate {
+        object_id,
+        awareness,
+      };
+      // we received that update from the local client
+      let _ = channel.send((msg, None));
     }
   }
 
@@ -909,6 +938,8 @@ impl Inner {
     store.pending_update().is_some() || store.pending_ds().is_some()
   }
 
+  const REMOTE_ORIGIN: &'static str = "af";
+
   async fn save_awareness_update(
     &self,
     object_id: ObjectId,
@@ -917,7 +948,10 @@ impl Inner {
     if let Some(collab_ref) = self.get_collab(object_id) {
       let mut lock = collab_ref.write().await;
       let collab = (*lock).borrow_mut();
-      collab.borrow_mut().get_awareness().apply_update(update)?;
+      collab
+        .borrow_mut()
+        .get_awareness()
+        .apply_update_with(update, Self::REMOTE_ORIGIN)?;
     }
     Ok(())
   }

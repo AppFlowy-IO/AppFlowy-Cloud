@@ -154,12 +154,12 @@ impl Handler<WsOutput> for WsSession {
   type Result = ();
 
   fn handle(&mut self, msg: WsOutput, ctx: &mut Self::Context) {
+    tracing::trace!(
+      "sending message through session `{}`: {:#?}",
+      self.id(),
+      msg.message
+    );
     if let Ok(bytes) = msg.message.into_bytes() {
-      tracing::trace!(
-        "sending message through session `{}`: {} bytes",
-        self.id(),
-        bytes.len()
-      );
       ctx.binary(bytes);
     };
   }

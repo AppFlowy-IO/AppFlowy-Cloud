@@ -5,6 +5,7 @@ use actix::{
   fut, Actor, ActorContext, Addr, AsyncContext, AtomicResponse, Handler, Recipient,
   ResponseActFuture, Running, SpawnHandle, StreamHandler, WrapFuture,
 };
+use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
 use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use yrs::block::ClientID;
 use yrs::updates::encoder::Encode;
+use yrs::StateVector;
 
 #[derive(Clone)]
 struct SessionHandle {
@@ -99,6 +101,17 @@ impl Workspace {
             });
 
             //TODO: fetch all documents that have been updated since `rid` and send their manifests to the client
+          },
+          Err(AppError::RecordNotFound(_)) => {
+            tracing::trace!("sending manifest for new collab {}", msg.object_id);
+            sender.conn.do_send(WsOutput {
+              message: ServerMessage::Manifest {
+                object_id: msg.object_id,
+                collab_type,
+                last_message_id: Rid::default(),
+                state_vector: StateVector::default().encode_v1(),
+              },
+            });
           },
           Err(err) => {
             tracing::error!(

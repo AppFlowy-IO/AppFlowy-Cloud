@@ -83,9 +83,13 @@ impl WsSession {
   }
 
   fn handle_protocol(&mut self, bytes: Bytes, ctx: &mut ws::WebsocketContext<Self>) {
-    tracing::trace!("session `{}` broadcasting {} bytes", self.id(), bytes.len());
     match ClientMessage::from_bytes(&bytes) {
       Ok(message) => {
+        tracing::trace!(
+          "received message from session `{}`: {:?}",
+          self.id(),
+          message
+        );
         let object_id = *message.object_id();
         let message = match InputMessage::try_from(message) {
           Ok(msg) => msg,

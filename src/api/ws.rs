@@ -134,7 +134,7 @@ pub async fn establish_ws_connection_v2(
     &request,
     payload,
   )
-  .frame_size(MAX_FRAME_SIZE * 2)
+  .frame_size(10 * 1024 * 1024)
   .start()
 }
 

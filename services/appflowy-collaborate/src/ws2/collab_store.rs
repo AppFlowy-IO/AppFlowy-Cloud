@@ -357,7 +357,7 @@ impl CollabStore {
         let (mut rid, update) = self
           .get_snapshot(workspace_id, object_id, collab_type)
           .await?;
-        tx.apply_update(Update::decode_v2(&update)?)?;
+        tx.apply_update(decode_update(&update)?)?;
 
         for update in updates {
           rid = rid.max(update.last_message_id);

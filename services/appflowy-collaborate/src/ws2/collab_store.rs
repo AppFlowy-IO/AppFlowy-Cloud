@@ -11,6 +11,7 @@ use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
 use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use collab_stream::stream_router::{FromRedisStream, StreamRouter};
+use database::collab::AppResult;
 use database_entity::dto::{CollabParams, QueryCollab};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamRangeReply, StreamTrimOptions, StreamTrimmingMode};
@@ -71,7 +72,7 @@ impl CollabStore {
     workspace_id: WorkspaceId,
     object_id: ObjectId,
     collab_type: CollabType,
-  ) -> anyhow::Result<(Rid, Bytes)> {
+  ) -> AppResult<(Rid, Bytes)> {
     match self
       .collab_cache
       .get_encode_collab(&workspace_id, QueryCollab::new(object_id, collab_type))
@@ -79,7 +80,7 @@ impl CollabStore {
     {
       Ok((rid, collab)) => Ok((rid, collab.doc_state)),
       Err(AppError::RecordNotFound(_)) => Ok((Rid::default(), Bytes::from_static(&[0, 0]))),
-      Err(err) => Err(err.into()),
+      Err(err) => Err(err),
     }
   }
 
@@ -91,7 +92,7 @@ impl CollabStore {
     collab_type: CollabType,
     user_id: i64,
     state_vector: &StateVector,
-  ) -> anyhow::Result<CollabState> {
+  ) -> AppResult<CollabState> {
     let (snapshot_rid, update) = self
       .get_snapshot(workspace_id, object_id, collab_type)
       .await?;
@@ -106,13 +107,23 @@ impl CollabStore {
     let doc = Doc::new();
     {
       let mut tx = doc.transact_mut();
-      let update = Update::decode_v2(&update).or_else(|_| Update::decode_v1(&update))?;
-      tx.apply_update(update)?;
+      let update = decode_update(&update)?;
+      tx.apply_update(update)
+        .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
 
       rid = self
         .replay_updates(&mut tx, workspace_id, object_id, rid)
         .await?;
     }
+
+    if rid == Rid::default() {
+      tracing::trace!("no updates found for {}/{}", workspace_id, object_id);
+      return Err(AppError::RecordNotFound(format!(
+        "no data for collab {}/{} has been found",
+        workspace_id, object_id
+      )));
+    }
+
     let tx = doc.transact();
     tracing::trace!(
       "replayed updates for {}/{} (last message id: {}, state vector: {:?}) - final state: {:#?}",
@@ -408,4 +419,24 @@ pub struct CollabState {
   pub flags: UpdateFlags,
   pub update: Bytes,
   pub state_vector: Vec<u8>,
+}
+
+fn decode_update(update: &[u8]) -> AppResult<Update> {
+  if update.len() < 2 {
+    return Err(AppError::DecodeUpdateError("invalid update".to_string()));
+  }
+  let encoding_hint = update[0];
+  let res = match encoding_hint {
+    // lib0 v2 update always starts with 0 (but v1 can too on delete-only updates)
+    0 => Update::decode_v2(update),
+    _ => Update::decode_v1(update),
+  };
+  match res {
+    Ok(res) => Ok(res),
+    Err(_) if encoding_hint == 0 => {
+      // we assumed that this was v2 encoded update, but it was not
+      Update::decode_v1(update).map_err(|e| AppError::DecodeUpdateError(e.to_string()))
+    },
+    Err(e) => Err(AppError::DecodeUpdateError(e.to_string())),
+  }
 }

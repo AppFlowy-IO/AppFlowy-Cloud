@@ -40,7 +40,7 @@ pub struct IndexerScheduler {
   #[allow(dead_code)]
   pub(crate) metrics: Arc<EmbeddingMetrics>,
   write_embedding_tx: UnboundedSender<EmbeddingRecord>,
-  gen_embedding_tx: mpsc::Sender<UnindexedCollabTask>,
+  generate_embedding_tx: mpsc::Sender<UnindexedCollabTask>,
   config: IndexerConfiguration,
   redis_client: ConnectionManager,
 }
@@ -65,7 +65,7 @@ impl IndexerScheduler {
   ) -> Arc<Self> {
     // Since threads often block while waiting for I/O, you can use more threads than CPU cores to improve concurrency.
     // A good rule of thumb is 2x to 10x the number of CPU cores
-    let num_thread = max(
+    let buffer_size = max(
       get_env_var("APPFLOWY_INDEXER_SCHEDULER_NUM_THREAD", "50")
         .parse::<usize>()
         .unwrap_or(50),
@@ -74,7 +74,7 @@ impl IndexerScheduler {
 
     info!("Indexer scheduler config: {:?}", config);
     let (write_embedding_tx, write_embedding_rx) = unbounded_channel::<EmbeddingRecord>();
-    let (gen_embedding_tx, gen_embedding_rx) =
+    let (generate_embedding_tx, generate_embedding_rx) =
       mpsc::channel::<UnindexedCollabTask>(config.embedding_buffer_size);
 
     let this = Arc::new(Self {
@@ -83,23 +83,19 @@ impl IndexerScheduler {
       storage,
       metrics,
       write_embedding_tx,
-      gen_embedding_tx,
+      generate_embedding_tx,
       config,
       redis_client,
     });
 
-    info!(
-      "Indexer scheduler is enabled: {}, num threads: {}",
-      this.index_enabled(),
-      num_thread
-    );
+    info!("Indexer scheduler is enabled: {}", this.index_enabled(),);
 
     let latest_write_embedding_err = Arc::new(TokioRwLock::new(None));
     if this.index_enabled() {
       tokio::spawn(generate_embeddings_loop(
-        gen_embedding_rx,
+        generate_embedding_rx,
         Arc::downgrade(&this),
-        num_thread,
+        buffer_size,
         latest_write_embedding_err.clone(),
       ));
 
@@ -167,7 +163,7 @@ impl IndexerScheduler {
     if !self.index_enabled() {
       return Ok(());
     }
-    if let Err(err) = self.gen_embedding_tx.try_send(pending_collab) {
+    if let Err(err) = self.generate_embedding_tx.try_send(pending_collab) {
       match err {
         TrySendError::Full(pending) => {
           warn!("[Embedding] Embedding queue is full, embedding in background");

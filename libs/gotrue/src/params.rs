@@ -126,6 +126,7 @@ pub struct CreateSSOProviderParams {
 #[serde(rename_all = "lowercase")]
 pub enum VerifyType {
   Recovery,
+  MagicLink,
 }
 
 #[derive(Deserialize, Serialize)]

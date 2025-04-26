@@ -9,7 +9,6 @@ use indexer::queue::{
   read_background_embed_tasks,
 };
 use indexer::scheduler::{spawn_pg_write_embeddings, UnindexedCollabTask, UnindexedData};
-use indexer::thread_pool::ThreadPoolNoAbort;
 use indexer::vector::embedder::{AFEmbedder, AzureConfig, OpenAIConfig};
 use indexer::vector::open_ai;
 use redis::aio::ConnectionManager;
@@ -33,7 +32,6 @@ pub async fn run_background_indexer(
   pg_pool: PgPool,
   mut redis_client: ConnectionManager,
   embed_metrics: Arc<EmbeddingMetrics>,
-  threads: Arc<ThreadPoolNoAbort>,
   config: BackgroundIndexerConfig,
 ) {
   if !config.enable {
@@ -66,7 +64,6 @@ pub async fn run_background_indexer(
     &mut redis_client,
     embed_metrics,
     indexer_provider,
-    threads,
     config,
     write_embedding_tx,
     latest_write_embedding_err,
@@ -88,12 +85,11 @@ async fn process_upcoming_tasks(
   redis_client: &mut ConnectionManager,
   metrics: Arc<EmbeddingMetrics>,
   indexer_provider: Arc<IndexerProvider>,
-  threads: Arc<ThreadPoolNoAbort>,
   config: BackgroundIndexerConfig,
   sender: UnboundedSender<EmbeddingRecord>,
   latest_write_embedding_err: Arc<RwLock<Option<AppError>>>,
 ) {
-  let options = default_indexer_group_option(threads.current_num_threads());
+  let options = default_indexer_group_option(50);
   let mut interval = interval(Duration::from_secs(config.tick_interval_secs));
   interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
   interval.tick().await;

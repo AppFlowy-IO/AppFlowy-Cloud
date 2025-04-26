@@ -1417,8 +1417,7 @@ async fn duplicate_page_handler(
     view_id,
     &suffix,
   )
-  .await
-  .unwrap();
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

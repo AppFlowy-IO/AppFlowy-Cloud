@@ -1,0 +1,207 @@
+---
+title: "AppFlowy Password Recovery"
+bodyClass: #EEEEFC
+---
+
+<x-main>
+  <div style="display: none">
+    To reset your password, enter the code below in the app:
+  </div>
+
+  <table
+    width="100%"
+    border="0"
+    cellpadding="0"
+    cellspacing="0"
+    bgcolor="#EEEEFC"
+    style="
+      font-family:
+        Google Sans,
+        Robot,
+        Arial,
+        sans-serif;
+      padding: 24px;
+      color: #000000;
+    "
+  >
+    <tr>
+      <td align="center" valign="top">
+        <table
+          width="600"
+          border="0"
+          cellpadding="0"
+          cellspacing="0"
+          bgcolor="#ffffff"
+          style="border-radius: 12px; padding: 32px; margin: 0 auto"
+        >
+          <tr>
+            <td align="center" style="padding-bottom: 24px">
+              <img
+                src="{{ cdnBaseUrl }}images/appflowy.png"
+                width="32"
+                height="32"
+                style="border: 0; display: block; margin: 0 auto"
+              />
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-bottom: 8px">
+              <h1
+                style="
+                  font-size: 24px;
+                  font-weight: bold;
+                  margin: 0;
+                  color: #000000;
+                "
+              >
+                Reset your password
+              </h1>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-bottom: 24px">
+              <p style="font-size: 16px; line-height: 1.5; margin: 0">
+                Someone recently requested a password reset for your AppFlowy
+                account. If this was you, use the following verification code.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding-bottom: 24px">
+              <span
+                style="
+                  background-color: #e4e8f5;
+                  padding: 8px;
+                  border-radius: 6px;
+                  font-weight: 600;
+                  font-size: 16px;
+                  display: inline-block;
+                "
+                >@{{ .Token }}</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding-bottom: 24px">
+              <p style="font-size: 12px; color: #6f748c; margin: 0">
+                This code will expire in 5 minutes for security reasons.
+              </p>
+              <p style="font-size: 12px; color: #6f748c; margin: 0">
+                If you didn't initiate this recovery, you can safely ignore this
+                email. No action is needed.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center">
+              <p
+                style="
+                  border-top: 1px solid #e4e8f5;
+                  padding-top: 24px;
+                  font-size: 12px;
+                  color: #6f748c;
+                  margin: 0 0 15px 0;
+                "
+              >
+                Bring projects, knowledge, and teams together with the power of
+                AI.
+              </p>
+
+              <p style="margin: 0 0 15px 0">
+                <a
+                  href="https://discord.gg/9Q2xaN37tV"
+                  style="
+                    text-decoration: none;
+                    display: inline-block;
+                    margin: 0 10px 0 0;
+                  "
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/discord.png"
+                    width="20"
+                    height="20"
+                    alt="Discord"
+                    style="border: 0"
+                  />
+                </a>
+                <a
+                  href="https://github.com/AppFlowy-IO/AppFlowy"
+                  style="
+                    text-decoration: none;
+                    display: inline-block;
+                    margin: 0 10px 0 0;
+                  "
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/github.png"
+                    width="20"
+                    height="20"
+                    alt="GitHub"
+                    style="border: 0"
+                  />
+                </a>
+                <a
+                  href="https://www.reddit.com/r/AppFlowy"
+                  style="
+                    text-decoration: none;
+                    display: inline-block;
+                    margin: 0 10px 0 0;
+                  "
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/reddit.png"
+                    width="20"
+                    height="20"
+                    alt="Reddit"
+                    style="border: 0"
+                  />
+                </a>
+                <a
+                  href="https://twitter.com/appflowy"
+                  style="
+                    text-decoration: none;
+                    display: inline-block;
+                    margin: 0 10px 0 0;
+                  "
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/twitter.png"
+                    width="20"
+                    height="20"
+                    alt="Twitter"
+                    style="border: 0"
+                  />
+                </a>
+                <a
+                  href="https://www.youtube.com/@AppFlowyHQ"
+                  style="text-decoration: none; display: inline-block"
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/youtube.png"
+                    width="20"
+                    height="20"
+                    alt="Youtube"
+                    style="border: 0"
+                  />
+                </a>
+              </p>
+
+              <p style="font-size: 12px; color: #6f748c; margin: 0 0 10px 0">
+                Copyright © 2025, AppFlowy Inc.
+              </p>
+              <p style="font-size: 12px; color: #6f748c; margin: 0">
+                Need Help?
+                <a href="mailto:support@appflowy.io" style="color: #6f748c"
+                  >support@appflowy.io</a
+                >
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</x-main>

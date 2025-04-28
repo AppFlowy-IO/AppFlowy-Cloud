@@ -51,133 +51,37 @@
                   margin: 0;
                   color: #000000;
                 ">
-                  Login for AppFlowy
+                  Reset your password
                 </h1>
               </td>
             </tr>
             <tr>
               <td align="center" style="padding-bottom: 24px">
                 <p style="font-size: 16px; line-height: 1.5; margin: 0">
-                  We received a request to log in to your AppFlowy account.
+                  Someone recently requested a password reset for your AppFlowy
+                  account. If this was you, use the following verification code.
                 </p>
-                <p style="font-size: 16px; line-height: 1.5; margin: 2px 0 0">
-                  You can log in using either of the following options:
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td align="center" style="padding-bottom: 12px">
-                <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f8faff" style="border-radius: 20px; padding: 24px 20px" role="presentation">
-                  <tr>
-                    <td align="center" style="padding-bottom: 16px">
-                      <h2 style="
-                        font-size: 16px;
-                        font-weight: bold;
-                        margin: 0;
-                        color: #000000;
-                      ">
-                        Option 1: Magic Link (Fast &amp; Easy)
-                      </h2>
-                      <p style="
-                        font-size: 14px;
-                        color: #6f748c;
-                        margin: 10px 0 0;
-                      ">
-                        Click the button or link below to log in instantly
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td align="center" style="padding-bottom: 16px">
-                      <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto" role="presentation">
-                        <tr>
-                          <td align="center" bgcolor="#9327ff" style="border-radius: 10px; padding: 10px 16px">
-                            <a href="{{ .ConfirmationURL }}" style="
-                              color: #ffffff;
-                              font-weight: 600;
-                              font-size: 14px;
-                              text-decoration: none;
-                              display: inline-block;
-                            ">Login to AppFlowy</a>
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td align="center">
-                      <p style="
-                        padding-bottom: 16px;
-                        font-size: 12px;
-                        color: #6f748c;
-                        margin: 0;
-                      ">
-                        Or paste this into your browser:
-                      </p>
-                      <p style="max-width: 384px; margin: 0">
-                        <a href="{{ .ConfirmationURL }}" style="
-                          font-size: 12px;
-                          text-decoration: none;
-                          text-align: center;
-                          color: #6f748c;
-                          font-weight: bold;
-                          margin: 0;
-                          word-break: break-all;
-                        ">
-                          {{ .ConfirmationURL }}
-                        </a>
-                      </p>
-                    </td>
-                  </tr>
-                </table>
               </td>
             </tr>
             <tr>
               <td align="center" style="padding-bottom: 24px">
-                <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f8faff" style="border-radius: 20px; padding: 24px 20px" role="presentation">
-                  <tr>
-                    <td align="center" style="padding-bottom: 16px">
-                      <h2 style="
-                        font-size: 16px;
-                        font-weight: bold;
-                        margin: 0;
-                        color: #000000;
-                      ">
-                        Option 2: One-Time Password (OTP)
-                      </h2>
-                      <p style="
-                        font-size: 14px;
-                        color: #6f748c;
-                        margin: 10px 0 0;
-                      ">
-                        Prefer to enter a code instead? Use the one-time code
-                        below
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td align="center">
-                      <span style="
-                        background-color: #ffffff;
-                        padding: 8px;
-                        border-radius: 6px;
-                        font-weight: 600;
-                        font-size: 16px;
-                        display: inline-block;
-                      ">{{ .Token }}</span>
-                    </td>
-                  </tr>
-                </table>
+                <span style="
+                  background-color: #e4e8f5;
+                  padding: 8px;
+                  border-radius: 6px;
+                  font-weight: 600;
+                  font-size: 16px;
+                  display: inline-block;
+                ">{{ .Token }}</span>
               </td>
             </tr>
             <tr>
               <td align="center" style="padding-bottom: 24px">
                 <p style="font-size: 12px; color: #6f748c; margin: 0">
-                  This code and magic link will expire in 5 minutes for security
-                  reasons.
+                  This code will expire in 5 minutes for security reasons.
                 </p>
                 <p style="font-size: 12px; color: #6f748c; margin: 0">
-                  If you didn't initiate this login, you can safely ignore this
+                  If you didn't initiate this recovery, you can safely ignore this
                   email. No action is needed.
                 </p>
               </td>

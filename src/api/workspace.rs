@@ -1273,11 +1273,13 @@ async fn post_folder_view_handler(
     server,
     user,
     &state.collab_access_control_storage,
+    &state.pg_pool,
     workspace_uuid,
     &payload.parent_view_id,
     payload.layout.clone(),
     payload.name.as_deref(),
     payload.view_id,
+    payload.database_id,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))

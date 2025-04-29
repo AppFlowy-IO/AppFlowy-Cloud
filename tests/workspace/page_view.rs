@@ -181,6 +181,7 @@ async fn create_new_folder_view() {
         layout: ViewLayout::Document,
         name: Some("New document".to_string()),
         view_id: None,
+        database_id: None,
       },
     )
     .await

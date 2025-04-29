@@ -161,6 +161,8 @@ pub struct CreateFolderViewParams {
   pub layout: ViewLayout,
   pub name: Option<String>,
   pub view_id: Option<Uuid>,
+  // If database id is provided, then the view will be added to the workspace database collab
+  pub database_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

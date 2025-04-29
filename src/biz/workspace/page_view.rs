@@ -167,15 +167,18 @@ pub async fn create_folder_view(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   collab_storage: &CollabAccessControlStorage,
+  pg_pool: &PgPool,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
   view_layout: ViewLayout,
   name: Option<&str>,
   view_id: Option<Uuid>,
+  database_id: Option<Uuid>,
 ) -> Result<Page, AppError> {
   let view_id = view_id.unwrap_or_else(Uuid::new_v4);
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
+  let mut folder =
+    get_latest_collab_folder(collab_storage, collab_origin.clone(), workspace_id).await?;
   let folder_update = add_new_view_to_folder(
     user.uid,
     parent_view_id,
@@ -185,14 +188,42 @@ pub async fn create_folder_view(
     to_folder_view_layout(view_layout),
   )
   .await?;
+  let (workspace_database_id, workspace_database_update) = if let Some(database_id) = database_id {
+    let (workspace_database_id, mut workspace_database) =
+      get_latest_workspace_database(collab_storage, pg_pool, collab_origin, workspace_id).await?;
+    let workspace_database_update = add_new_database_view_for_workspace_database(
+      &mut workspace_database,
+      &database_id.to_string(),
+      &view_id,
+    )
+    .await?;
+    (Some(workspace_database_id), Some(workspace_database_update))
+  } else {
+    (None, None)
+  };
+
   update_workspace_folder_data(
     appflowy_web_metrics,
-    server,
-    user,
+    server.clone(),
+    user.clone(),
     workspace_id,
     folder_update,
   )
   .await?;
+
+  if let (Some(workspace_database_id), Some(workspace_database_update)) =
+    (workspace_database_id, workspace_database_update)
+  {
+    update_workspace_database_data(
+      appflowy_web_metrics,
+      server,
+      user,
+      workspace_id,
+      workspace_database_id,
+      workspace_database_update,
+    )
+    .await?;
+  }
   Ok(Page { view_id })
 }
 

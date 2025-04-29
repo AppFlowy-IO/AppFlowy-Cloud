@@ -211,6 +211,21 @@ pub struct UpdatePageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePageNameParams {
+  pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePageIconParams {
+  pub icon: ViewIcon,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePageExtraParams {
+  pub extra: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FavoritePageParams {
   pub is_favorite: bool,
   pub is_pinned: bool,

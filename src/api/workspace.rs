@@ -21,7 +21,7 @@ use crate::biz::workspace::page_view::{
   create_page, create_space, delete_all_pages_from_trash, delete_trash, favorite_page,
   get_page_view_collab, move_page, move_page_to_trash, publish_page, reorder_favorite_page,
   restore_all_pages_from_trash, restore_page_from_trash, unpublish_page, update_page,
-  update_page_collab_data, update_space,
+  update_page_collab_data, update_page_extra, update_page_icon, update_page_name, update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::biz::workspace::quick_note::{
@@ -194,6 +194,22 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/page-view/{view_id}")
         .route(web::get().to(get_page_view_handler))
         .route(web::patch().to(update_page_view_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/update-name")
+        .route(web::post().to(update_page_name_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/update-icon")
+        .route(web::post().to(update_page_icon_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/update-extra")
+        .route(web::post().to(update_page_extra_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/remove-icon")
+        .route(web::post().to(remove_page_icon_handler)),
     )
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/favorite")
@@ -1684,6 +1700,102 @@ async fn update_page_view_handler(
     icon,
     is_locked,
     extra.as_ref(),
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn update_page_name_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<UpdatePageNameParams>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  update_page_name(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    &view_id,
+    &payload.name,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn update_page_icon_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<UpdatePageIconParams>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  let icon = &payload.icon;
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  update_page_icon(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    &view_id,
+    Some(icon),
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn update_page_extra_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  payload: Json<UpdatePageExtraParams>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  update_page_extra(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    &view_id,
+    &payload.extra,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn remove_page_icon_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  state: Data<AppState>,
+  server: Data<RealtimeServerAddr>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let (workspace_uuid, view_id) = path.into_inner();
+  let user = realtime_user_for_web_request(req.headers(), uid)?;
+  update_page_icon(
+    &state.metrics.appflowy_web_metrics,
+    server,
+    user,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    &view_id,
+    None,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

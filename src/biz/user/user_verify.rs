@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use authentication::jwt::Authorization;
 use sqlx::types::uuid;
 use std::ops::DerefMut;
 use std::time::Instant;
@@ -12,6 +13,70 @@ use workspace_template::document::getting_started::GettingStartedTemplate;
 
 use crate::biz::user::user_init::initialize_workspace_for_user;
 use crate::state::AppState;
+
+/// Verify JWT claim and create the user if it is a new user
+/// Return true if the user is a new user
+///
+#[instrument(skip_all, err)]
+pub async fn verify_claim(
+  authorization: &Authorization,
+  state: &AppState,
+) -> Result<bool, AppError> {
+  let user_uuid = authorization
+    .uuid()
+    .map_err(|err| AppError::OAuthError(err.to_string()))?;
+  // Create new user if it doesn't exist
+  let mut txn = state
+    .pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to verify token")?;
+
+  let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
+
+  if is_new {
+    let access_token = &authorization.token;
+    let user = state.gotrue_client.user_info(access_token).await?;
+    let name = name_from_user_metadata(&user.user_metadata);
+    let new_uid = state.id_gen.write().await.next_id();
+    event!(tracing::Level::INFO, "create new user:{}", new_uid);
+    let workspace_id =
+      create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
+    let workspace_row = select_workspace(txn.deref_mut(), &workspace_id).await?;
+
+    // It's essential to cache the user's role because subsequent actions will rely on this cached information.
+    state
+      .workspace_access_control
+      .insert_role(&new_uid, &workspace_id, AFRole::Owner)
+      .await?;
+    // Need to commit the transaction for the record in `af_user` to be inserted
+    // so that `initialize_workspace_for_user` will be able to find the user
+    txn
+      .commit()
+      .await
+      .context("fail to commit transaction to verify token")?;
+
+    // Create a workspace with the GetStarted template
+    let mut txn2 = state.pg_pool.begin().await?;
+    let start = Instant::now();
+    initialize_workspace_for_user(
+      new_uid,
+      &user_uuid,
+      &workspace_row,
+      &mut txn2,
+      vec![GettingStartedTemplate],
+      &state.collab_access_control_storage,
+    )
+    .await?;
+    txn2
+      .commit()
+      .await
+      .context("fail to commit transaction to initialize workspace")?;
+    state.metrics.collab_metrics.observe_pg_tx(start.elapsed());
+  }
+
+  Ok(is_new)
+}
 
 /// Verify the token from the gotrue server and create the user if it is a new user
 /// Return true if the user is a new user

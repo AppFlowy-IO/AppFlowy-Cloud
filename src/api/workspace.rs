@@ -6,7 +6,7 @@ use crate::biz::collab::ops::{
   get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
 };
 use crate::biz::collab::utils::collab_from_doc_state;
-use crate::biz::user::user_verify::verify_token;
+use crate::biz::user::user_verify::verify_claim;
 use crate::biz::workspace;
 use crate::biz::workspace::duplicate::duplicate_view_tree_and_collab;
 use crate::biz::workspace::invite::{
@@ -542,7 +542,7 @@ async fn post_accept_workspace_invite_handler(
   invite_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
-  let _is_new = verify_token(&auth.token, state.as_ref()).await?;
+  let _is_new = verify_claim(&auth, state.as_ref()).await?;
   let user_uuid = auth.uuid()?;
   let user_uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let invite_id = invite_id.into_inner();

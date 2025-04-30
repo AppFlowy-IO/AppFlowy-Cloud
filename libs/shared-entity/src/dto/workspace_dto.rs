@@ -358,6 +358,17 @@ pub enum IconType {
   Icon = 2,
 }
 
+impl From<u8> for IconType {
+  fn from(value: u8) -> Self {
+    match value {
+      0 => IconType::Emoji,
+      1 => IconType::Url,
+      2 => IconType::Icon,
+      _ => IconType::Emoji,
+    }
+  }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct ViewIcon {
   pub ty: IconType,

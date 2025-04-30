@@ -6,8 +6,11 @@ use appflowy_proto::Rid;
 use chrono::{DateTime, Utc};
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use collab_stream::model::UpdateStreamMessage;
+use collab_stream::stream_router::FromRedisStream;
 use database::collab::CollabMetadata;
-use redis::{pipe, AsyncCommands};
+use redis::streams::StreamRangeReply;
+use redis::{pipe, AsyncCommands, FromRedisValue};
 use std::sync::Arc;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
@@ -39,9 +42,7 @@ impl CollabMemCache {
       .clone()
       .set_ex(key, value, ONE_MONTH)
       .await
-      .map_err(|err| {
-        AppError::Internal(anyhow!("Failed to save collab meta to redis: {:?}", err))
-      })?;
+      .map_err(|err| AppError::Internal(anyhow!("Failed to save collab meta to redis: {}", err)))?;
     Ok(())
   }
 
@@ -53,7 +54,7 @@ impl CollabMemCache {
       .get(key)
       .await
       .map_err(|err| {
-        AppError::Internal(anyhow!("Failed to get collab meta from redis: {:?}", err))
+        AppError::Internal(anyhow!("Failed to get collab meta from redis: {}", err))
       })?;
     match value {
       Some(value) => {
@@ -88,7 +89,7 @@ impl CollabMemCache {
       .await
       .map_err(|err| {
         AppError::Internal(anyhow!(
-          "Failed to remove encoded collab from redis: {:?}",
+          "Failed to remove encoded collab from redis: {}",
           err
         ))
       })
@@ -104,10 +105,46 @@ impl CollabMemCache {
       },
       Ok(None) => None,
       Err(err) => {
-        error!("Failed to get encoded collab from redis: {:?}", err);
+        error!("Failed to get encoded collab from redis: {}", err);
         None
       },
     }
+  }
+
+  /// Retrieves a range of updates from the Redis stream for a given workspace ID.
+  pub async fn get_workspace_updates(
+    &self,
+    workspace_id: &Uuid,
+    object_id: Option<&Uuid>,
+    from: Option<Rid>,
+    to: Option<Rid>,
+  ) -> Result<Vec<UpdateStreamMessage>, AppError> {
+    let key = UpdateStreamMessage::stream_key(&workspace_id);
+    let from = from
+      .map(|rid| rid.to_string())
+      .unwrap_or_else(|| "-".into());
+    let to = to.map(|rid| rid.to_string()).unwrap_or_else(|| "+".into());
+    let mut conn = self.connection_manager.clone();
+    let updates: StreamRangeReply = conn
+      .xrange(key, from, to)
+      .await
+      .map_err(|err| AppError::Internal(err.into()))?;
+    let mut result = Vec::with_capacity(updates.ids.len());
+    for stream_id in updates.ids {
+      if let Some(object_id) = object_id {
+        let msg_oid = stream_id
+          .map
+          .get("oid")
+          .and_then(|v| Uuid::from_redis_value(v).ok())
+          .unwrap_or_default();
+        if &msg_oid != object_id {
+          continue; // this is not the object we are looking for
+        }
+      }
+      let message = UpdateStreamMessage::from_redis_stream(&stream_id.id, &stream_id.map)?;
+      result.push(message);
+    }
+    Ok(result)
   }
 
   #[instrument(level = "trace", skip_all, fields(object_id=%object_id))]
@@ -131,14 +168,14 @@ impl CollabMemCache {
           )
           .await
         {
-          error!("Failed to cache encoded collab: {:?}", err);
+          error!("Failed to cache encoded collab: {}", err);
         }
       },
       Ok(Err(err)) => {
-        error!("Failed to encode collab to bytes: {:?}", err);
+        error!("Failed to encode collab to bytes: {}", err);
       },
       Err(e) => {
-        error!("Failed to encode collab to bytes: {:?}", e);
+        error!("Failed to encode collab to bytes: {}", e);
       },
     }
   }

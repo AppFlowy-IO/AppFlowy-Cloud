@@ -43,7 +43,6 @@ pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessContr
 #[derive(Clone)]
 pub struct CollabStorageImpl<AC> {
   cache: CollabCache,
-  collab_store: Arc<CollabStore>, //FIXME: duplication of responsibilities
   /// access control for collab object. Including read/write
   access_control: AC,
   snapshot_control: SnapshotControl,
@@ -60,7 +59,6 @@ where
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: CLCommandSender,
-    collab_store: Arc<CollabStore>,
   ) -> Self {
     let (queue, reader) = channel(1000);
     tokio::spawn(Self::periodic_write_task(cache.clone(), reader));
@@ -70,7 +68,6 @@ where
       snapshot_control,
       rt_cmd_sender,
       queue,
-      collab_store,
     }
   }
 
@@ -423,40 +420,15 @@ where
       GetCollabOrigin::Server => 0,
     };
 
-    // Early return if editing collab is initialized, as it indicates no need to query further.
-    //if from_editing_collab {
-    //  // Attempt to retrieve encoded collab from the editing collab
-    //  if let Some(encoded_collab) = self.get_encode_collab_from_editing(params.object_id).await {
-    //    tracing::debug!(
-    //      "Returning encode collab from editing for {} {:?}: {:#?}",
-    //      params.object_id,
-    //      StateVector::decode_v1(&encoded_collab.state_vector).unwrap(),
-    //      match encoded_collab.version {
-    //        EncoderVersion::V1 => yrs::Update::decode_v1(&encoded_collab.doc_state).unwrap(),
-    //        EncoderVersion::V2 => yrs::Update::decode_v2(&encoded_collab.doc_state).unwrap(),
-    //      }
-    //    );
-    //    return Ok(encoded_collab);
-    //  }
-    //}
-    let state = self
-      .collab_store
-      .get_latest_state(
-        params.workspace_id,
-        params.object_id,
-        params.collab_type,
-        uid,
+    let (_, encoded_collab) = self
+      .cache
+      .get_full_collab(
+        &params.workspace_id.clone(),
+        QueryCollab::new(params.object_id, params.collab_type),
         &StateVector::default(),
+        EncoderVersion::V1,
       )
       .await?;
-    let encoded_collab = EncodedCollab {
-      state_vector: state.state_vector.into(),
-      doc_state: state.update,
-      version: match state.flags {
-        UpdateFlags::Lib0v1 => EncoderVersion::V1,
-        UpdateFlags::Lib0v2 => EncoderVersion::V2,
-      },
-    };
 
     Ok(encoded_collab)
   }

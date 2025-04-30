@@ -2,10 +2,14 @@ use super::disk_cache::CollabDiskCache;
 use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use crate::CollabMetrics;
 use app_error::AppError;
-use appflowy_proto::Rid;
+use appflowy_proto::{Rid, UpdateFlags};
 use bytes::Bytes;
-use collab::entity::EncodedCollab;
+use collab::core::collab::DataSource;
+use collab::core::origin::CollabOrigin;
+use collab::entity::{EncodedCollab, EncoderVersion};
+use collab::preclude::Collab;
 use collab_entity::CollabType;
+use collab_stream::model::UpdateStreamMessage;
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
 use futures_util::{stream, StreamExt};
@@ -15,6 +19,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{error, event, Level};
 use uuid::Uuid;
+use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
+use yrs::{ReadTxn, StateVector, Update};
 
 #[derive(Clone)]
 pub struct CollabCache {
@@ -124,6 +131,87 @@ impl CollabCache {
     Ok((rid, encode_collab))
   }
 
+  pub async fn get_full_collab(
+    &self,
+    workspace_id: &Uuid,
+    query: QueryCollab,
+    from: &StateVector,
+    encoding: EncoderVersion,
+  ) -> Result<(Rid, EncodedCollab), AppError> {
+    let object_id = query.object_id;
+    let (rid, mut encoded_collab) = match self.get_encode_collab(workspace_id, query).await {
+      Ok((rid, encoded_collab)) => (rid, Some(encoded_collab)),
+      Err(AppError::RecordNotFound(_)) => (Rid::default(), None),
+      Err(err) => return Err(err),
+    };
+    let updates = self
+      .get_workspace_updates(workspace_id, Some(&object_id), Some(rid), None)
+      .await?;
+    tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
+    if !updates.is_empty() {
+      let mut collab = match encoded_collab {
+        Some(encoded_collab) => Collab::new_with_source(
+          CollabOrigin::Server,
+          &object_id.to_string(),
+          match encoded_collab.version {
+            EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
+            EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
+          },
+          vec![],
+          false,
+        )
+        .map_err(|err| AppError::Internal(err.into()))?,
+        None => {
+          Collab::new_with_origin(CollabOrigin::Server, &object_id.to_string(), vec![], false)
+        },
+      };
+      {
+        let mut tx = collab.transact_mut();
+        for msg in updates {
+          if msg.object_id == object_id {
+            let update = match msg.update_flags {
+              UpdateFlags::Lib0v1 => Update::decode_v1(&msg.update),
+              UpdateFlags::Lib0v2 => Update::decode_v2(&msg.update),
+            }
+            .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
+            tx.apply_update(update)
+              .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
+          }
+        }
+      }
+      let tx = collab.transact();
+      let state_vector = tx.state_vector().encode_v1();
+      encoded_collab = Some(match encoding {
+        EncoderVersion::V1 => {
+          EncodedCollab::new_v1(state_vector, tx.encode_state_as_update_v1(from))
+        },
+        EncoderVersion::V2 => {
+          EncodedCollab::new_v2(state_vector, tx.encode_state_as_update_v2(from))
+        },
+      });
+    }
+    match encoded_collab {
+      Some(encoded_collab) => Ok((rid, encoded_collab)),
+      None => Err(AppError::RecordNotFound(format!(
+        "Collab not found for object_id: {}",
+        object_id
+      ))),
+    }
+  }
+
+  pub async fn get_workspace_updates(
+    &self,
+    workspace_id: &Uuid,
+    object_id: Option<&Uuid>,
+    from: Option<Rid>,
+    to: Option<Rid>,
+  ) -> Result<Vec<UpdateStreamMessage>, AppError> {
+    self
+      .mem_cache
+      .get_workspace_updates(workspace_id, object_id, from, to)
+      .await
+  }
+
   /// Batch get the encoded collab data from the cache.
   /// returns a hashmap of the object_id to the encoded collab data.
   pub async fn batch_get_encode_collab<T: Into<QueryCollab>>(
@@ -219,10 +307,7 @@ impl CollabCache {
         )
         .await
       {
-        error!(
-          "Failed to insert encode collab into memory cache: {:?}",
-          err
-        );
+        error!("Failed to insert encode collab into memory cache: {}", err);
       }
     });
   }

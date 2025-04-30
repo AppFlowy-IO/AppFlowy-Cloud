@@ -13,7 +13,7 @@ use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
 use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use collab_stream::stream_router::{FromRedisStream, StreamRouter};
-use database::collab::AppResult;
+use database::collab::{AppResult, CollabStorageAccessControl};
 use database_entity::dto::{CollabParams, QueryCollab};
 use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
 use redis::aio::ConnectionManager;
@@ -31,6 +31,7 @@ use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
 
 pub struct CollabStore {
   collab_cache: Arc<CollabCache>,
+  access_control: Arc<dyn CollabStorageAccessControl + Send + Sync + 'static>,
   update_streams: Arc<StreamRouter>,
   awareness_broadcast: Arc<AwarenessGossip>,
   connection_manager: ConnectionManager,
@@ -50,7 +51,8 @@ impl CollabStore {
   /// Maximum number of concurrent snapshots that can be sent to S3 at the same time.
   const MAX_CONCURRENT_SNAPSHOTS: usize = 200;
 
-  pub fn new(
+  pub fn new<AC: CollabStorageAccessControl + Send + Sync + 'static>(
+    access_control: AC,
     collab_cache: Arc<CollabCache>,
     connection_manager: ConnectionManager,
     update_streams: Arc<StreamRouter>,
@@ -58,6 +60,7 @@ impl CollabStore {
     indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Arc<Self> {
     Arc::new(Self {
+      access_control: Arc::new(access_control),
       collab_cache,
       update_streams,
       awareness_broadcast,
@@ -101,6 +104,11 @@ impl CollabStore {
     state_vector: &StateVector,
   ) -> AppResult<CollabState> {
     let params = QueryCollab::new(object_id, collab_type);
+    self
+      .access_control
+      .enforce_read_collab(&workspace_id, &user_id, &object_id)
+      .await?;
+
     let (rid, encoded_collab) = self
       .collab_cache
       .get_full_collab(&workspace_id, params, state_vector, EncoderVersion::V1)
@@ -158,6 +166,12 @@ impl CollabStore {
     sender: &CollabOrigin,
     update: Vec<u8>,
   ) -> anyhow::Result<Rid> {
+    let uid = sender.client_user_id().unwrap_or(0);
+    self
+      .access_control
+      .enforce_write_collab(&workspace_id, &uid, &object_id)
+      .await?;
+
     let key = UpdateStreamMessage::stream_key(&workspace_id);
     tracing::trace!("publishing update to '{}' (object id: {})", key, object_id);
     let mut conn = self.connection_manager.clone();

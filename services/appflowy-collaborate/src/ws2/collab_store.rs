@@ -5,7 +5,9 @@ use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use collab::core::origin::CollabOrigin;
-use collab::entity::EncodedCollab;
+use collab::entity::{EncodedCollab, EncoderVersion};
+use collab::preclude::Collab;
+use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
@@ -13,6 +15,7 @@ use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use collab_stream::stream_router::{FromRedisStream, StreamRouter};
 use database::collab::AppResult;
 use database_entity::dto::{CollabParams, QueryCollab};
+use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamRangeReply, StreamTrimOptions, StreamTrimmingMode};
 use redis::{cmd, AsyncCommands, Client};
@@ -20,6 +23,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinSet;
+use tracing::warn;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -30,6 +34,7 @@ pub struct CollabStore {
   update_streams: Arc<StreamRouter>,
   awareness_broadcast: Arc<AwarenessGossip>,
   connection_manager: ConnectionManager,
+  indexer_scheduler: Arc<IndexerScheduler>,
 }
 
 impl CollabStore {
@@ -50,12 +55,14 @@ impl CollabStore {
     connection_manager: ConnectionManager,
     update_streams: Arc<StreamRouter>,
     awareness_broadcast: Arc<AwarenessGossip>,
+    indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Arc<Self> {
     Arc::new(Self {
       collab_cache,
       update_streams,
       awareness_broadcast,
       connection_manager,
+      indexer_scheduler,
     })
   }
 
@@ -93,76 +100,17 @@ impl CollabStore {
     user_id: i64,
     state_vector: &StateVector,
   ) -> AppResult<CollabState> {
-    let (snapshot_rid, update) = self
-      .get_snapshot(workspace_id, object_id, collab_type)
+    let params = QueryCollab::new(object_id, collab_type);
+    let (rid, encoded_collab) = self
+      .collab_cache
+      .get_full_collab(&workspace_id, params, state_vector, EncoderVersion::V1)
       .await?;
-    let mut rid = snapshot_rid;
-    tracing::trace!(
-      "received snapshot for {}/{} (last message id: {})",
-      workspace_id,
-      object_id,
-      rid
-    );
-
-    let doc = Doc::new();
-    {
-      let mut tx = doc.transact_mut();
-      let update = decode_update(&update)?;
-      tx.apply_update(update)
-        .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
-
-      rid = self
-        .replay_updates(&mut tx, workspace_id, object_id, rid)
-        .await?;
-    }
-
-    if rid == Rid::default() {
-      tracing::trace!("no updates found for {}/{}", workspace_id, object_id);
-      return Err(AppError::RecordNotFound(format!(
-        "no data for collab {}/{} has been found",
-        workspace_id, object_id
-      )));
-    }
-
-    let tx = doc.transact();
-    tracing::trace!(
-      "replayed updates for {}/{} (last message id: {}, state vector: {:?}) - final state: {:#?}",
-      workspace_id,
-      object_id,
-      rid,
-      state_vector,
-      tx
-    );
-    let update: Bytes = tx.encode_state_as_update_v1(state_vector).into();
-    let server_sv = tx.state_vector().encode_v1();
-
-    if rid > snapshot_rid {
-      tracing::trace!("document changed while replaying updates, saving it back");
-      let full_state = if state_vector == &StateVector::default() {
-        update.clone()
-      } else {
-        doc
-          .transact()
-          .encode_state_as_update_v1(&StateVector::default())
-          .into()
-      };
-      tokio::spawn(Self::save_snapshot_task(
-        self.collab_cache.clone(),
-        self.connection_manager.clone(),
-        workspace_id,
-        object_id,
-        collab_type,
-        user_id,
-        rid,
-        full_state,
-      ));
-    }
 
     Ok(CollabState {
       rid,
       flags: UpdateFlags::Lib0v1,
-      update,
-      state_vector: server_sv,
+      update: encoded_collab.doc_state,
+      state_vector: encoded_collab.state_vector.into(),
     })
   }
 
@@ -179,7 +127,8 @@ impl CollabStore {
     snapshot_rid: Rid,
   ) -> anyhow::Result<Rid> {
     let updates = self
-      .get_current_updates(workspace_id, Some(snapshot_rid), None)
+      .collab_cache
+      .get_workspace_updates(&workspace_id, None, Some(snapshot_rid), None)
       .await?;
     let mut last_rid = snapshot_rid;
     let mut i = 0;
@@ -201,27 +150,6 @@ impl CollabStore {
     Ok(last_rid)
   }
 
-  async fn get_current_updates(
-    &self,
-    workspace_id: WorkspaceId,
-    from: Option<Rid>,
-    to: Option<Rid>,
-  ) -> anyhow::Result<Vec<UpdateStreamMessage>> {
-    let key = UpdateStreamMessage::stream_key(&workspace_id);
-    let from = from
-      .map(|rid| rid.to_string())
-      .unwrap_or_else(|| "-".into());
-    let to = to.map(|rid| rid.to_string()).unwrap_or_else(|| "+".into());
-    let mut conn = self.connection_manager.clone();
-    let updates: StreamRangeReply = conn.xrange(key, from, to).await?;
-    let mut result = Vec::with_capacity(updates.ids.len());
-    for stream_id in updates.ids {
-      let message = UpdateStreamMessage::from_redis_stream(&stream_id.id, &stream_id.map)?;
-      result.push(message);
-    }
-    Ok(result)
-  }
-
   pub async fn publish_update(
     &self,
     workspace_id: WorkspaceId,
@@ -231,7 +159,7 @@ impl CollabStore {
     update: Vec<u8>,
   ) -> anyhow::Result<Rid> {
     let key = UpdateStreamMessage::stream_key(&workspace_id);
-    tracing::trace!("publishing update to {} - object id: {}", key, object_id);
+    tracing::trace!("publishing update to '{}' (object id: {})", key, object_id);
     let mut conn = self.connection_manager.clone();
     let items: String =
       UpdateStreamMessage::prepare_command(&key, &object_id, collab_type, sender, update)
@@ -256,37 +184,6 @@ impl CollabStore {
       .send(&workspace_id.to_string(), &object_id.to_string(), &msg)
       .await?;
     Ok(())
-  }
-
-  #[allow(clippy::too_many_arguments)]
-  async fn save_snapshot_task(
-    collab_cache: Arc<CollabCache>,
-    redis: ConnectionManager,
-    workspace_id: WorkspaceId,
-    object_id: ObjectId,
-    collab_type: CollabType,
-    uid: i64,
-    last_message_id: Rid,
-    update: Bytes,
-  ) {
-    let key = format!("af:lease:{}", workspace_id);
-    if let Ok(Some(_lease)) = redis.lease(key, Duration::from_secs(60)).await {
-      if let Err(err) = Self::save_snapshot(
-        collab_cache,
-        workspace_id,
-        object_id,
-        collab_type,
-        uid,
-        last_message_id,
-        update,
-      )
-      .await
-      {
-        tracing::error!("failed to save snapshot: {}", err);
-      }
-    } else {
-      tracing::info!("failed to acquire lease for {}", workspace_id);
-    }
   }
 
   async fn save_snapshot(
@@ -319,7 +216,8 @@ impl CollabStore {
   ) -> anyhow::Result<()> {
     use itertools::Itertools;
     let updates = self
-      .get_current_updates(workspace_id, None, Some(up_to))
+      .collab_cache
+      .get_workspace_updates(&workspace_id, None, None, Some(up_to))
       .await?
       .into_iter()
       .into_group_map_by(|msg| msg.object_id);
@@ -352,25 +250,42 @@ impl CollabStore {
             update.sender.client_user_id().unwrap_or(0),
           )
         };
-        let doc = Doc::new();
-        let mut tx = doc.transact_mut();
-        let (mut rid, update) = self
-          .get_snapshot(workspace_id, object_id, collab_type)
-          .await?;
-        tx.apply_update(decode_update(&update)?)?;
+        let mut collab = Collab::new(0, object_id.to_string(), "device", vec![], false);
+        // apply all known updates
+        let rid = {
+          let mut tx = collab.transact_mut();
 
-        for update in updates {
-          rid = rid.max(update.last_message_id);
-          let update = match update.update_flags {
-            UpdateFlags::Lib0v1 => Update::decode_v1(&update.update),
-            UpdateFlags::Lib0v2 => Update::decode_v2(&update.update),
-          }?;
-          tx.apply_update(update)?;
-        }
-        drop(tx); // commit the transaction
-        let full_state = doc
+          // apply latest snapshot
+          let (mut rid, update) = self
+            .get_snapshot(workspace_id, object_id, collab_type)
+            .await?;
+          tx.apply_update(decode_update(&update)?)?;
+
+          // apply updates from redis stream targeting this collab
+          tracing::trace!("snapshotting {} updates for {}", updates.len(), object_id);
+          for update in updates {
+            if update.object_id == object_id {
+              rid = rid.max(update.last_message_id);
+              let update = match update.update_flags {
+                UpdateFlags::Lib0v1 => Update::decode_v1(&update.update),
+                UpdateFlags::Lib0v2 => Update::decode_v2(&update.update),
+              }?;
+              tx.apply_update(update)?;
+            }
+          }
+          rid
+        }; // commit the transaction
+        let full_state = collab
           .transact()
           .encode_state_as_update_v1(&StateVector::default());
+        let paragraphs = if collab_type == CollabType::Document {
+          let tx = collab.transact();
+          DocumentBody::from_collab(&collab)
+            .map(|body| body.paragraphs(tx))
+            .unwrap_or_default()
+        } else {
+          vec![]
+        };
 
         join_set.spawn(Self::save_snapshot(
           self.collab_cache.clone(),
@@ -381,6 +296,10 @@ impl CollabStore {
           rid,
           full_state.into(),
         ));
+
+        if !paragraphs.is_empty() {
+          self.index_collab_content(workspace_id, object_id, collab_type, paragraphs);
+        }
 
         i += 1;
         if i >= Self::MAX_CONCURRENT_SNAPSHOTS {
@@ -402,6 +321,31 @@ impl CollabStore {
       self.prune_updates(workspace_id, up_to).await?;
     }
     Ok(())
+  }
+
+  fn index_collab_content(
+    &self,
+    workspace_id: WorkspaceId,
+    object_id: ObjectId,
+    collab_type: CollabType,
+    paragraphs: Vec<String>,
+  ) {
+    tracing::debug!("scheduling {} {} for text indexing", collab_type, object_id);
+    let indexed_collab = UnindexedCollabTask::new(
+      workspace_id,
+      object_id,
+      collab_type,
+      UnindexedData::Paragraphs(paragraphs),
+    );
+    if let Err(err) = self
+      .indexer_scheduler
+      .index_pending_collab_one(indexed_collab, false)
+    {
+      warn!(
+        "failed to index collab `{}/{}`: {}",
+        workspace_id, object_id, err
+      );
+    }
   }
 
   pub async fn prune_updates(&self, workspace_id: WorkspaceId, up_to: Rid) -> anyhow::Result<()> {

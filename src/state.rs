@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
 use access_control::workspace::WorkspaceAccessControl;
+use anyhow::anyhow;
 use dashmap::DashMap;
+use gotrue_entity::gotrue_jwt::GoTrueServiceRoleClaims;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -21,7 +23,6 @@ use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::StreamRouter;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
-use gotrue::grant::{Grant, PasswordGrant};
 use indexer::metrics::EmbeddingMetrics;
 use indexer::scheduler::IndexerScheduler;
 use snowflake::Snowflake;
@@ -169,27 +170,25 @@ impl AppMetrics {
 #[derive(Debug, Clone)]
 pub struct GoTrueAdmin {
   pub gotrue_client: gotrue::api::Client,
-  pub admin_email: String,
-  pub password: Secret<String>,
+  pub jwt_secret: Secret<String>,
+  pub service_role: String,
 }
 
 impl GoTrueAdmin {
-  pub fn new(admin_email: String, password: String, gotrue_client: gotrue::api::Client) -> Self {
+  pub fn new(jwt_secret: String, service_role: String, gotrue_client: gotrue::api::Client) -> Self {
     Self {
-      admin_email,
-      password: password.into(),
+      jwt_secret: jwt_secret.into(),
       gotrue_client,
+      service_role,
     }
   }
 
   pub async fn token(&self) -> Result<String, AppError> {
-    let token = self
-      .gotrue_client
-      .token(&Grant::Password(PasswordGrant {
-        email: self.admin_email.clone(),
-        password: self.password.expose_secret().clone(),
-      }))
-      .await?;
-    Ok(token.access_token)
+    let claims = GoTrueServiceRoleClaims {
+      role: self.service_role.clone(),
+    };
+    claims
+      .encode(self.jwt_secret.expose_secret().as_bytes())
+      .map_err(|err| AppError::Internal(anyhow!(err.to_string())))
   }
 }

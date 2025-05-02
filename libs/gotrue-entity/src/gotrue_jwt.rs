@@ -2,6 +2,21 @@ use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
+#[derive(Debug, Serialize)]
+pub struct GoTrueServiceRoleClaims {
+  pub role: String,
+}
+
+impl GoTrueServiceRoleClaims {
+  pub fn encode(&self, jwt_secret: &[u8]) -> Result<String, jsonwebtoken::errors::Error> {
+    jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &self,
+      &jsonwebtoken::EncodingKey::from_secret(jwt_secret),
+    )
+  }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GoTrueJWTClaims {
   // JWT standard claims

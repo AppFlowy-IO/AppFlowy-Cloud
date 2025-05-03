@@ -144,7 +144,7 @@ pub struct CompleteTextResponse {
   pub text: String,
 }
 
-#[derive(Clone, Debug, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Debug, Serialize_repr, Deserialize_repr, Eq, PartialEq, Hash)]
 #[repr(u8)]
 pub enum CompletionType {
   ImproveWriting = 1,
@@ -153,7 +153,7 @@ pub enum CompletionType {
   MakeLonger = 4,
   ContinueWriting = 5,
   Explain = 6,
-  UserQuestion = 7,
+  AskAI = 7,
   CustomPrompt = 8,
 }
 

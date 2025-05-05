@@ -3,9 +3,7 @@ use appflowy_proto::Rid;
 use collab::preclude::Collab;
 use collab_plugins::local_storage::kv::doc::CollabKVAction;
 use collab_plugins::local_storage::kv::{KVStore, KVTransactionDB, PersistenceError};
-use collab_plugins::local_storage::rocksdb::kv_impl::{
-  KVTransactionDBRocksdbImpl, RocksdbKVStoreImpl,
-};
+use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use rand::random;
 use std::str::FromStr;
 use uuid::Uuid;

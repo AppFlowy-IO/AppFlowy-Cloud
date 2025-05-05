@@ -486,7 +486,7 @@ impl UpdateStreamMessage {
   ) -> Cmd {
     let mut cmd = cmd("XADD");
     cmd
-      .arg(&stream_key)
+      .arg(stream_key)
       .arg("*")
       .arg("oid")
       .arg(object_id)
@@ -503,7 +503,7 @@ impl UpdateStreamMessage {
 impl FromRedisStream for UpdateStreamMessage {
   type Error = anyhow::Error;
   fn from_redis_stream(msg_id: &str, fields: &RedisMap) -> Result<Self, Self::Error> {
-    let last_message_id = Rid::from_str(&msg_id).map_err(|err| anyhow!("{}", err))?;
+    let last_message_id = Rid::from_str(msg_id).map_err(|err| anyhow!("{}", err))?;
     let object_id = fields
       .get("oid")
       .ok_or_else(|| anyhow!("expecting field `oid`"))?;

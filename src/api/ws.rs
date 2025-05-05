@@ -11,7 +11,7 @@ use app_error::AppError;
 use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::ws2::{SessionInfo, WsServer, WsSession};
+use appflowy_collaborate::ws2::{SessionInfo, WsSession};
 use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;

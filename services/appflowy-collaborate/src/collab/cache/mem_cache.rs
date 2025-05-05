@@ -3,7 +3,6 @@ use crate::CollabMetrics;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::Rid;
-use chrono::{DateTime, Utc};
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_stream::model::UpdateStreamMessage;
@@ -119,7 +118,7 @@ impl CollabMemCache {
     from: Option<Rid>,
     to: Option<Rid>,
   ) -> Result<Vec<UpdateStreamMessage>, AppError> {
-    let key = UpdateStreamMessage::stream_key(&workspace_id);
+    let key = UpdateStreamMessage::stream_key(workspace_id);
     let from = from
       .map(|rid| rid.to_string())
       .unwrap_or_else(|| "-".into());
@@ -258,7 +257,7 @@ impl CollabMemCache {
       // Perform update only if the new timestamp is greater than the existing one
       if current_value
         .as_ref()
-        .map_or(true, |(ts, _)| timestamp >= *ts)
+        .is_none_or(|(ts, _)| timestamp >= *ts)
       {
         let mut pipeline = pipe();
         let data = [timestamp.to_be_bytes().as_ref(), data].concat();

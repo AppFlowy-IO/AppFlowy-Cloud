@@ -165,7 +165,7 @@ pub struct CloseFrame<'t> {
   pub reason: std::borrow::Cow<'t, str>,
 }
 
-impl<'t> CloseFrame<'t> {
+impl CloseFrame<'_> {
   /// Convert into a owned string.
   pub fn into_owned(self) -> CloseFrame<'static> {
     CloseFrame {
@@ -175,7 +175,7 @@ impl<'t> CloseFrame<'t> {
   }
 }
 
-impl<'t> std::fmt::Display for CloseFrame<'t> {
+impl std::fmt::Display for CloseFrame<'_> {
   fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
     write!(f, "{} ({})", self.reason, self.code)
   }

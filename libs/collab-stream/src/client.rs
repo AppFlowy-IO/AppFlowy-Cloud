@@ -4,7 +4,7 @@ use crate::error::StreamError;
 use crate::lease::{Lease, LeaseAcquisition};
 use crate::metrics::CollabStreamMetrics;
 use crate::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateStreamMessage};
-use crate::stream_router::{FromRedisStream, StreamKey, StreamRouter, StreamRouterOptions};
+use crate::stream_router::{FromRedisStream, StreamRouter, StreamRouterOptions};
 use collab_entity::CollabType;
 use futures::{Stream, StreamExt};
 use redis::aio::ConnectionManager;

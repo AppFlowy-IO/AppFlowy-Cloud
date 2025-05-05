@@ -1,4 +1,4 @@
-use crate::sql_test::util::{generate_random_bytes, setup_db, create_test_user};
+use crate::sql_test::util::{create_test_user, generate_random_bytes, setup_db};
 use chrono::Utc;
 
 use collab_entity::CollabType;
@@ -58,7 +58,10 @@ async fn insert_collab_sql_test(pool: PgPool) {
 
     assert_eq!(meta.oid, object_id.to_string());
     assert_eq!(meta.workspace_id, user.workspace_id);
-    assert_eq!(meta.updated_at, updated_at);
+    assert_eq!(
+      meta.updated_at.timestamp_millis(),
+      updated_at.timestamp_millis()
+    );
     assert!(meta.created_at.is_some());
     assert!(meta.deleted_at.is_none());
   }

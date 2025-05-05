@@ -154,7 +154,8 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let mut lengths: Vec<i32> = Vec::with_capacity(len);
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
   let mut visited = HashSet::with_capacity(len);
-  let mut updated_at = vec![Utc::now(); len];
+  let mut updated_at = Vec::with_capacity(len);
+  let now = Utc::now();
   for (i, params) in collab_params_list.into_iter().enumerate() {
     let oid = params.object_id;
     if visited.insert(oid) {
@@ -163,9 +164,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
       blobs.push(params.encoded_collab_v1.to_vec());
       lengths.push(params.encoded_collab_v1.len() as i32);
       partition_keys.push(partition_key);
-    }
-    if let Some(timestamp) = params.updated_at {
-      updated_at[i] = timestamp;
+      updated_at.push(params.updated_at.unwrap_or(now));
     }
   }
 

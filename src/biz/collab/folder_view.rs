@@ -150,10 +150,14 @@ fn to_folder_view(
 
   let is_private = parent_is_private || is_my_private_space;
   let extra = view.extra.as_deref().map(|extra| {
-    serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
-      tracing::warn!("failed to parse extra field({}): {}", extra, e);
+    if extra.is_empty() {
       serde_json::Value::Null
-    })
+    } else {
+      serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
+        tracing::warn!("failed to parse extra field({}): {}", extra, e);
+        serde_json::Value::Null
+      })
+    }
   });
   let children: Vec<FolderView> = view
     .children

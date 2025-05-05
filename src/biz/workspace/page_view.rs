@@ -820,6 +820,55 @@ async fn update_view_properties(
   Ok(encoded_update)
 }
 
+async fn update_view_name(
+  view_id: &str,
+  folder: &mut Folder,
+  name: &str,
+) -> Result<Vec<u8>, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    folder
+      .body
+      .views
+      .update_view(&mut txn, view_id, |update| update.set_name(name).done());
+    txn.encode_update_v1()
+  };
+  Ok(encoded_update)
+}
+
+async fn update_view_icon(
+  view_id: &str,
+  folder: &mut Folder,
+  icon: Option<&ViewIcon>,
+) -> Result<Vec<u8>, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    let icon = icon.map(|icon| to_folder_view_icon(icon.clone()));
+    folder
+      .body
+      .views
+      .update_view(&mut txn, view_id, |update| update.set_icon(icon).done());
+    txn.encode_update_v1()
+  };
+  Ok(encoded_update)
+}
+
+async fn update_view_extra(
+  view_id: &str,
+  folder: &mut Folder,
+  extra: &str,
+) -> Result<Vec<u8>, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    folder
+      .body
+      .views
+      .update_view(&mut txn, view_id, |update| update.set_extra(extra).done());
+    txn.encode_update_v1()
+  };
+  Ok(encoded_update)
+}
+
 async fn move_view(
   view_id: &str,
   new_parent_view_id: &str,
@@ -1457,6 +1506,78 @@ pub async fn update_page(
   let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
   let folder_update =
     update_view_properties(view_id, &mut folder, name, icon, is_locked, extra).await?;
+  update_workspace_folder_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    folder_update,
+  )
+  .await?;
+
+  Ok(())
+}
+
+pub async fn update_page_name(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  view_id: &str,
+  name: &str,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid: user.uid };
+  let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
+  let folder_update = update_view_name(view_id, &mut folder, name).await?;
+  update_workspace_folder_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    folder_update,
+  )
+  .await?;
+
+  Ok(())
+}
+
+pub async fn update_page_icon(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  view_id: &str,
+  icon: Option<&ViewIcon>,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid: user.uid };
+  let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
+  let folder_update = update_view_icon(view_id, &mut folder, icon).await?;
+  update_workspace_folder_data(
+    appflowy_web_metrics,
+    server,
+    user,
+    workspace_id,
+    folder_update,
+  )
+  .await?;
+
+  Ok(())
+}
+
+pub async fn update_page_extra(
+  appflowy_web_metrics: &AppFlowyWebMetrics,
+  server: Data<RealtimeServerAddr>,
+  user: RealtimeUser,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  view_id: &str,
+  extra: &str,
+) -> Result<(), AppError> {
+  let collab_origin = GetCollabOrigin::User { uid: user.uid };
+  let mut folder = get_latest_collab_folder(collab_storage, collab_origin, workspace_id).await?;
+  let folder_update = update_view_extra(view_id, &mut folder, extra).await?;
   update_workspace_folder_data(
     appflowy_web_metrics,
     server,

@@ -1,7 +1,8 @@
 use client_api_entity::workspace_dto::{
   AddRecentPagesParams, AppendBlockToPageParams, CreateFolderViewParams,
   CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams, DuplicatePageParams,
-  FavoritePageParams, MovePageParams, Page, PageCollab, PublishPageParams, Space, UpdatePageParams,
+  FavoritePageParams, MovePageParams, Page, PageCollab, PublishPageParams, Space,
+  UpdatePageExtraParams, UpdatePageIconParams, UpdatePageNameParams, UpdatePageParams,
   UpdateSpaceParams,
 };
 use reqwest::Method;
@@ -290,6 +291,81 @@ impl Client {
       .http_client_with_auth(Method::PATCH, &url)
       .await?
       .json(params)
+      .send()
+      .await?;
+    process_response_error(resp).await
+  }
+
+  pub async fn update_page_name(
+    &self,
+    workspace_id: Uuid,
+    view_id: &Uuid,
+    params: &UpdatePageNameParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/update-name",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    process_response_error(resp).await
+  }
+
+  pub async fn update_page_icon(
+    &self,
+    workspace_id: Uuid,
+    view_id: &Uuid,
+    params: &UpdatePageIconParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/update-icon",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    process_response_error(resp).await
+  }
+
+  pub async fn update_page_extra(
+    &self,
+    workspace_id: Uuid,
+    view_id: &Uuid,
+    params: &UpdatePageExtraParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/update-extra",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(params)
+      .send()
+      .await?;
+    process_response_error(resp).await
+  }
+
+  pub async fn remove_page_icon(
+    &self,
+    workspace_id: Uuid,
+    view_id: &Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/remove-icon",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&json!({}))
       .send()
       .await?;
     process_response_error(resp).await

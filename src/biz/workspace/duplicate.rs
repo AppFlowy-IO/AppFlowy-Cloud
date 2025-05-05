@@ -204,6 +204,8 @@ async fn duplicate_database(
     workspace_id,
     collab_storage: collab_storage.clone(),
   });
+  let mut database_id_list: HashSet<String> = HashSet::new();
+
   for database_view_id in &duplicate_context.database_view_ids {
     let database_id = workspace_database
       .get_database_meta_with_view_id(&database_view_id.to_string())
@@ -212,11 +214,15 @@ async fn duplicate_database(
       })?
       .database_id
       .clone();
+    database_id_list.insert(database_id);
+  }
+
+  for database_id in &database_id_list {
     let database_context = DatabaseContext {
       collab_service: collab_service.clone(),
       notifier: Default::default(),
     };
-    let database = Database::open(&database_id, database_context)
+    let database = Database::open(database_id, database_context)
       .await
       .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to open database: {}", err)))?;
     let database_data = database.get_database_data().await;

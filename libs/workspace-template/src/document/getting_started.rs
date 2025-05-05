@@ -32,7 +32,7 @@ pub struct GettingStartedTemplate;
 
 impl GettingStartedTemplate {
   /// Create a document template data from the given JSON string
-
+  ///
   /// Create a series of database templates from the given JSON String
   ///
   /// Notes: The output contains DatabaseCollab, DatabaseRowCollab

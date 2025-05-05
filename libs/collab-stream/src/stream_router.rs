@@ -1,5 +1,4 @@
 use crate::metrics::CollabStreamMetrics;
-use anyhow::anyhow;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use futures::{Stream, StreamExt};

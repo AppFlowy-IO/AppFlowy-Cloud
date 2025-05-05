@@ -209,7 +209,7 @@ pub enum AppError {
 
 impl AppError {
   pub fn is_not_enough_permissions(&self) -> bool {
-    matches!(self, AppError::NotEnoughPermissions { .. })
+    matches!(self, AppError::NotEnoughPermissions)
   }
 
   pub fn is_record_not_found(&self) -> bool {
@@ -241,7 +241,7 @@ impl AppError {
       AppError::InvalidOAuthProvider(_) => ErrorCode::InvalidOAuthProvider,
       AppError::InvalidRequest(_) => ErrorCode::InvalidRequest,
       AppError::NotLoggedIn(_) => ErrorCode::NotLoggedIn,
-      AppError::NotEnoughPermissions { .. } => ErrorCode::NotEnoughPermissions,
+      AppError::NotEnoughPermissions => ErrorCode::NotEnoughPermissions,
       AppError::StorageSpaceNotEnough => ErrorCode::StorageSpaceNotEnough,
       AppError::PayloadTooLarge(_) => ErrorCode::PayloadTooLarge,
       AppError::Internal(_) => ErrorCode::Internal,

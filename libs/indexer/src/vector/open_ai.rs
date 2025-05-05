@@ -230,7 +230,7 @@ mod tests {
     let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
     let total_tokens = tokenizer.encode_ordinary(&content).len();
-    let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
+    let expected_fragments = total_tokens.div_ceil(max_tokens);
     assert_eq!(params.len(), expected_fragments);
   }
 
@@ -295,7 +295,7 @@ mod tests {
     let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
     let total_tokens = tokenizer.encode_ordinary(&content).len();
-    let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
+    let expected_fragments = total_tokens.div_ceil(max_tokens);
     assert_eq!(params.len(), expected_fragments);
   }
 
@@ -307,7 +307,7 @@ mod tests {
     let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
     let total_tokens = tokenizer.encode_ordinary(&content).len();
-    let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
+    let expected_fragments = total_tokens.div_ceil(max_tokens);
     assert_eq!(params.len(), expected_fragments);
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);
@@ -325,7 +325,7 @@ mod tests {
     let params = split_text_by_max_tokens(content.clone(), max_tokens, &tokenizer).unwrap();
 
     let total_tokens = tokenizer.encode_ordinary(&content).len();
-    let expected_fragments = (total_tokens + max_tokens - 1) / max_tokens;
+    let expected_fragments = total_tokens.div_ceil(max_tokens);
     assert_eq!(params.len(), expected_fragments);
     let reconstructed_content: String = params.concat();
     assert_eq!(reconstructed_content, content);

@@ -516,8 +516,8 @@ impl PublishCollabDuplicator {
           .flat_map(|js_val| js_val.get_mut("attributes"))
           .flat_map(|attributes| attributes.get_mut("mention"))
           .filter(|mention| {
-            mention.get("type").map_or(false, |type_| {
-              type_.as_str().map_or(false, |type_| type_ == "page")
+            mention.get("type").is_some_and(|type_| {
+              type_.as_str() == Some("page")
             })
           })
           .flat_map(|mention| mention.get_mut("page_id"));

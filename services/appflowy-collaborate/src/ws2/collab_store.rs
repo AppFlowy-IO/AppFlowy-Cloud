@@ -26,7 +26,7 @@ use tokio::task::JoinSet;
 use tracing::warn;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
-use yrs::{ReadTxn, StateVector, Transact, TransactionMut, Update};
+use yrs::{ReadTxn, StateVector, Update};
 
 pub struct CollabStore {
   collab_cache: Arc<CollabCache>,
@@ -38,15 +38,6 @@ pub struct CollabStore {
 }
 
 impl CollabStore {
-  /// IF updates are smaller than this threshold, we will not compute the diff from state vectors.
-  /// Instead, we will return the updates as is.
-  const UPDATE_DIFF_THRESHOLD: usize = 16 * 1024;
-
-  const EMPTY_SNAPSHOT: &'static [u8] = &[
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 10 bytes of Rid (Redis Stream ID)
-    0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, // empty lib0 v2 update
-  ];
-
   /// Maximum number of concurrent snapshots that can be sent to S3 at the same time.
   const MAX_CONCURRENT_SNAPSHOTS: usize = 200;
 
@@ -119,42 +110,6 @@ impl CollabStore {
       update: encoded_collab.doc_state,
       state_vector: encoded_collab.state_vector.into(),
     })
-  }
-
-  fn has_missing_updates<T: ReadTxn>(tx: &T) -> bool {
-    let store = tx.store();
-    store.pending_update().is_some() || store.pending_ds().is_some()
-  }
-
-  async fn replay_updates(
-    &self,
-    tx: &mut TransactionMut<'_>,
-    workspace_id: WorkspaceId,
-    object_id: ObjectId,
-    snapshot_rid: Rid,
-  ) -> anyhow::Result<Rid> {
-    let updates = self
-      .collab_cache
-      .get_workspace_updates(&workspace_id, None, Some(snapshot_rid), None)
-      .await?;
-    let mut last_rid = snapshot_rid;
-    let mut i = 0;
-    for message in updates.iter() {
-      if message.object_id == object_id {
-        let update = Update::decode_v1(&message.update)?;
-        tx.apply_update(update)?;
-        last_rid = message.last_message_id;
-        i += 1;
-      }
-    }
-    tracing::debug!(
-      "replayed {} updates (out of {} total) for {}/{}",
-      i,
-      updates.len(),
-      workspace_id,
-      object_id
-    );
-    Ok(last_rid)
   }
 
   pub async fn publish_update(

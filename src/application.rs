@@ -355,11 +355,9 @@ fn get_admin_client(
   gotrue_client: gotrue::api::Client,
   gotrue_setting: &GoTrueSetting,
 ) -> GoTrueAdmin {
-  let admin_email = gotrue_setting.admin_email.as_str();
-  let password = gotrue_setting.admin_password.expose_secret();
   GoTrueAdmin::new(
-    admin_email.to_owned(),
-    password.to_owned(),
+    gotrue_setting.jwt_secret.expose_secret().to_owned(),
+    gotrue_setting.service_role.clone(),
     gotrue_client.clone(),
   )
 }

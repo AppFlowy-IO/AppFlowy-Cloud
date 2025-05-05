@@ -45,6 +45,12 @@ pub struct ResponseFormat {
   pub output_content_metadata: Option<OutputContentMetadata>,
 }
 
+impl ResponseFormat {
+  pub fn new() -> Self {
+    Self::default()
+  }
+}
+
 #[derive(Clone, Debug, Default, Serialize_repr, Deserialize_repr, Eq, PartialEq)]
 #[repr(u8)]
 pub enum OutputLayout {

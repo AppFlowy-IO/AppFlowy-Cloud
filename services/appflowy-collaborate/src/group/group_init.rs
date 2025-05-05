@@ -86,7 +86,6 @@ impl CollabGroup {
     storage: Arc<S>,
     collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
-    prune_grace_period: Duration,
     state_vector: StateVector,
     indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, StreamError>
@@ -103,7 +102,6 @@ impl CollabGroup {
       collab_redis_stream,
       indexer_scheduler,
       metrics.clone(),
-      prune_grace_period,
     )
     .await?;
 
@@ -880,9 +878,6 @@ struct CollabPersister {
   metrics: Arc<CollabRealtimeMetrics>,
   update_sink: CollabUpdateSink,
   awareness_sink: AwarenessUpdateSink,
-  /// A grace period for prunning Redis collab updates. Instead of deleting all messages we
-  /// read right away, we give 1min for other potential client to catch up.
-  prune_grace_period: Duration,
 }
 
 impl CollabPersister {
@@ -896,7 +891,6 @@ impl CollabPersister {
     collab_redis_stream: Arc<CollabRedisStream>,
     indexer_scheduler: Arc<IndexerScheduler>,
     metrics: Arc<CollabRealtimeMetrics>,
-    prune_grace_period: Duration,
   ) -> Result<Self, StreamError> {
     let update_sink =
       collab_redis_stream.collab_update_sink(&workspace_id, &object_id, collab_type);
@@ -914,7 +908,6 @@ impl CollabPersister {
       metrics,
       update_sink,
       awareness_sink,
-      prune_grace_period,
     })
   }
 

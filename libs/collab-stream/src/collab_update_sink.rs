@@ -1,9 +1,8 @@
 use crate::error::StreamError;
 use crate::model::{CollabStreamUpdate, MessageId, UpdateStreamMessage};
-use appflowy_proto::{ObjectId, Rid};
+use appflowy_proto::ObjectId;
 use collab_entity::CollabType;
 use redis::aio::ConnectionManager;
-use redis::cmd;
 use tokio::sync::Mutex;
 
 pub struct CollabUpdateSink {

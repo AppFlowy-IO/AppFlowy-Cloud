@@ -156,7 +156,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let mut visited = HashSet::with_capacity(len);
   let mut updated_at = Vec::with_capacity(len);
   let now = Utc::now();
-  for (i, params) in collab_params_list.into_iter().enumerate() {
+  for (i, params) in collab_params_list.iter().enumerate() {
     let oid = params.object_id;
     if visited.insert(oid) {
       let partition_key = partition_key_from_collab_type(&params.collab_type);

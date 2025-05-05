@@ -33,7 +33,7 @@ use futures_util::{SinkExt, StreamExt};
 use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, trace, warn};
@@ -1076,7 +1076,7 @@ impl CollabPersister {
 
   async fn save(&self) -> Result<(), RealtimeError> {
     // load collab but only if there were pending updates in Redis
-    if let Some(mut snapshot) = self.load_if_changed().await? {
+    if let Some(snapshot) = self.load_if_changed().await? {
       tracing::debug!("requesting save for collab {}", self.object_id);
       if !snapshot.applied_messages.is_empty() {
         // non-nil message_id means that we had to update the most recent collab state snapshot

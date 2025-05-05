@@ -12,13 +12,13 @@ use collab_entity::CollabType;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
 use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
-use collab_stream::stream_router::{FromRedisStream, StreamRouter};
+use collab_stream::stream_router::StreamRouter;
 use database::collab::{AppResult, CollabStorageAccessControl};
 use database_entity::dto::{CollabParams, QueryCollab};
 use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
 use redis::aio::ConnectionManager;
-use redis::streams::{StreamRangeReply, StreamTrimOptions, StreamTrimmingMode};
-use redis::{cmd, AsyncCommands, Client};
+use redis::streams::{StreamTrimOptions, StreamTrimmingMode};
+use redis::AsyncCommands;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,8 +26,7 @@ use tokio::task::JoinSet;
 use tracing::warn;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
-use yrs::updates::encoder::Encode;
-use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
+use yrs::{ReadTxn, StateVector, Transact, TransactionMut, Update};
 
 pub struct CollabStore {
   collab_cache: Arc<CollabCache>,

@@ -17,7 +17,7 @@ use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{error, event, Level};
+use tracing::error;
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -162,7 +162,7 @@ impl CollabCache {
         )
         .map_err(|err| AppError::Internal(err.into()))?,
         None => {
-          Collab::new_with_origin(CollabOrigin::Server, &object_id.to_string(), vec![], false)
+          Collab::new_with_origin(CollabOrigin::Server, object_id.to_string(), vec![], false)
         },
       };
       {

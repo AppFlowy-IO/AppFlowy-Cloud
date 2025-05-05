@@ -499,14 +499,11 @@ async fn post_workspace_invite_handler(
   let invitations = payload.into_inner();
   workspace::ops::invite_workspace_members(
     &state.mailer,
-    &state.gotrue_admin,
     &state.pg_pool,
-    &state.gotrue_client,
     &user_uuid,
     &workspace_id,
     invitations,
-    state.config.appflowy_web_url.as_deref(),
-    &state.config.admin_frontend_path_prefix,
+    &state.config.appflowy_web_url,
   )
   .await?;
   Ok(AppResponse::Ok().into())

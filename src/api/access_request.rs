@@ -2,8 +2,7 @@ use actix_web::{
   web::{self, Data, Json},
   Result, Scope,
 };
-use anyhow::anyhow;
-use app_error::AppError;
+
 use authentication::jwt::UserUuid;
 use database_entity::dto::{
   AccessRequestMinimal, ApproveAccessRequestParams, CreateAccessRequestParams,
@@ -56,17 +55,10 @@ async fn post_access_request_handler(
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let workspace_id = create_access_request_params.workspace_id;
   let view_id = create_access_request_params.view_id;
-  let appflowy_web_url = state
-    .config
-    .appflowy_web_url
-    .clone()
-    .ok_or(AppError::Internal(anyhow!(
-      "AppFlowy web url has not been set"
-    )))?;
   let request_id = create_access_request(
     &state.pg_pool,
     state.mailer.clone(),
-    &appflowy_web_url,
+    &state.config.appflowy_web_url,
     workspace_id,
     view_id,
     uid,
@@ -90,18 +82,11 @@ async fn post_approve_access_request_handler(
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let access_request_id = access_request_id.into_inner();
   let is_approved = approve_access_request_params.is_approved;
-  let appflowy_web_url = state
-    .config
-    .appflowy_web_url
-    .clone()
-    .ok_or(AppError::Internal(anyhow!(
-      "AppFlowy web url has not been set"
-    )))?;
   approve_or_reject_access_request(
     &state.pg_pool,
     state.workspace_access_control.clone(),
     state.mailer.clone(),
-    &appflowy_web_url,
+    &state.config.appflowy_web_url,
     access_request_id,
     uid,
     is_approved,

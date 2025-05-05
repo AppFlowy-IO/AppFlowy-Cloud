@@ -156,7 +156,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let mut visited = HashSet::with_capacity(len);
   let mut updated_at = Vec::with_capacity(len);
   let now = Utc::now();
-  for (i, params) in collab_params_list.iter().enumerate() {
+  for params in collab_params_list.iter() {
     let oid = params.object_id;
     if visited.insert(oid) {
       let partition_key = partition_key_from_collab_type(&params.collab_type);
@@ -374,8 +374,8 @@ pub async fn should_create_snapshot2<'a, E: Executor<'a, Database = Postgres>>(
 /// of snapshots stored for the specified `oid` does not exceed the provided `snapshot_limit`. If the limit
 /// is exceeded, the oldest snapshots are deleted to maintain the limit.
 ///
-pub async fn create_snapshot_and_maintain_limit<'a>(
-  mut transaction: Transaction<'a, Postgres>,
+pub async fn create_snapshot_and_maintain_limit(
+  mut transaction: Transaction<'_, Postgres>,
   workspace_id: &Uuid,
   oid: &Uuid,
   encoded_collab_v1: &[u8],

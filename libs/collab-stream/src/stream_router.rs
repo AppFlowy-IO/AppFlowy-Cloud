@@ -1,7 +1,7 @@
 use crate::metrics::CollabStreamMetrics;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use loole::{Receiver, Sender};
 use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::Client;

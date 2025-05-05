@@ -132,46 +132,6 @@ where
       .await?;
     Ok(())
   }
-  async fn get_encode_collab_from_editing(&self, object_id: Uuid) -> Option<EncodedCollab> {
-    let (ret, rx) = tokio::sync::oneshot::channel();
-    let timeout_duration = Duration::from_secs(5);
-
-    // Attempt to send the command to the realtime server
-    if let Err(err) = self
-      .rt_cmd_sender
-      .send(CollaborationCommand::GetEncodeCollab { object_id, ret })
-      .await
-    {
-      error!(
-        "Failed to send get encode collab command to realtime server: {}",
-        err
-      );
-      return None;
-    }
-
-    // Await the response from the realtime server with a timeout
-    match timeout(timeout_duration, rx).await {
-      Ok(Ok(Some(encode_collab))) => Some(encode_collab),
-      Ok(Ok(None)) => {
-        trace!("Editing collab not found: `{}`", object_id);
-        None
-      },
-      Ok(Err(err)) => {
-        error!(
-          "Failed to get collab from realtime server `{}`: {}",
-          object_id, err
-        );
-        None
-      },
-      Err(_) => {
-        error!(
-          "Timeout trying to read collab `{}` from realtime server",
-          object_id
-        );
-        None
-      },
-    }
-  }
 
   async fn batch_get_encode_collab_from_editing(
     &self,
@@ -400,25 +360,21 @@ where
     }
   }
 
-  #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, from_editing_collab = %from_editing_collab))]
+  #[instrument(level = "trace", skip_all, fields(oid = %params.object_id))]
   async fn get_encode_collab(
     &self,
     origin: GetCollabOrigin,
     params: QueryCollabParams,
-    from_editing_collab: bool,
+    _from_editing_collab: bool,
   ) -> AppResult<EncodedCollab> {
     params.validate()?;
-    let uid = match origin {
-      GetCollabOrigin::User { uid } => {
-        // Check if the user has enough permissions to access the collab
-        self
-          .access_control
-          .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)
-          .await?;
-        uid
-      },
-      GetCollabOrigin::Server => 0,
-    };
+    if let GetCollabOrigin::User { uid } = origin {
+      // Check if the user has enough permissions to access the collab
+      self
+        .access_control
+        .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)
+        .await?;
+    }
 
     let (_, encoded_collab) = self
       .cache

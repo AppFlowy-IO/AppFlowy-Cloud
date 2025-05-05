@@ -452,7 +452,7 @@ impl PublishCollabDuplicator {
     }
   }
 
-  async fn deep_copy_doc<'a>(
+  async fn deep_copy_doc(
     &mut self,
     pub_view_id: Uuid,
     dup_view_id: Uuid,
@@ -516,9 +516,9 @@ impl PublishCollabDuplicator {
           .flat_map(|js_val| js_val.get_mut("attributes"))
           .flat_map(|attributes| attributes.get_mut("mention"))
           .filter(|mention| {
-            mention.get("type").is_some_and(|type_| {
-              type_.as_str() == Some("page")
-            })
+            mention
+              .get("type")
+              .is_some_and(|type_| type_.as_str() == Some("page"))
           })
           .flat_map(|mention| mention.get_mut("page_id"));
 
@@ -653,7 +653,7 @@ impl PublishCollabDuplicator {
   /// deep copy inline database for doc
   /// returns new view_id
   /// parent_view_id is assumed to be doc itself
-  async fn deep_copy_inline_database_in_doc<'a>(
+  async fn deep_copy_inline_database_in_doc(
     &mut self,
     view_id: Uuid,
     doc_view_id: &str,
@@ -681,7 +681,7 @@ impl PublishCollabDuplicator {
 
   /// deep copy referenced database for doc
   /// returns new (view_id, parent_id)
-  async fn deep_copy_ref_database_in_doc<'a>(
+  async fn deep_copy_ref_database_in_doc(
     &mut self,
     view_id: Uuid,
     parent_id: Uuid,
@@ -729,7 +729,7 @@ impl PublishCollabDuplicator {
   /// attempts to use `new_view_id` for `published_view_id` if not already published
   /// stores all view_id references in `duplicated_refs`
   /// returns (published_db_id, new_db_id, is_already_duplicated)
-  async fn deep_copy_database<'a>(
+  async fn deep_copy_database(
     &mut self,
     published_db: &PublishDatabaseData,
     pub_view_id: &Uuid,
@@ -1010,7 +1010,7 @@ impl PublishCollabDuplicator {
   /// Deep copy a published database to the destination workspace.
   /// Returns the Folder view for main view (`new_view_id`) and map from old to new view_id.
   /// If the database is already duplicated before, does not return the view with `new_view_id`
-  async fn deep_copy_database_view<'a>(
+  async fn deep_copy_database_view(
     &mut self,
     new_view_id: Uuid,
     published_db: PublishDatabaseData,

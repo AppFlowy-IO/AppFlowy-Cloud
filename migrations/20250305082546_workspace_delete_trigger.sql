@@ -1,9 +1,9 @@
+-- Edited on 2025-05-04 so that supabase_auth_admin role is not mandatory
+
 CREATE TABLE IF NOT EXISTS af_workspace_deleted (
     workspace_id uuid PRIMARY KEY NOT NULL,
     deleted_at timestamp with time zone DEFAULT now()
 );
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.af_workspace_deleted TO supabase_auth_admin;
 
 -- Workspace delete trigger
 CREATE OR REPLACE FUNCTION workspace_deleted_trigger_function()
@@ -23,7 +23,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER on_workspace_delete
+CREATE OR REPLACE TRIGGER on_workspace_delete
 AFTER DELETE ON public.af_workspace
 FOR EACH ROW
 EXECUTE FUNCTION workspace_deleted_trigger_function();
@@ -43,7 +43,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER user_deletion_trigger
+CREATE OR REPLACE TRIGGER user_deletion_trigger
 AFTER DELETE ON public.af_user
 FOR EACH ROW
 EXECUTE FUNCTION notify_user_deletion();

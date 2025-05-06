@@ -31,7 +31,6 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - ./migrations/before:/docker-entrypoint-initdb.d
       # comment out the following line if you want to persist data when restarting docker
       #- postgres_data:/var/lib/postgresql/data
 

@@ -445,6 +445,7 @@ impl CompletionStream {
   }
 }
 
+#[derive(Debug, Clone)]
 pub enum CompletionStreamValue {
   Answer { value: String },
   Comment { value: String },

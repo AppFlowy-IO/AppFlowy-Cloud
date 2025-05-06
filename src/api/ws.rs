@@ -15,6 +15,7 @@ use appflowy_collaborate::ws2::{SessionInfo, WsSession};
 use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
+use collab_stream::model::MessageId;
 use secrecy::Secret;
 use semver::Version;
 use shared_entity::response::AppResponseError;
@@ -114,15 +115,19 @@ pub async fn establish_ws_connection_v2(
   let workspace_id = path.into_inner();
   let ws_server = state.ws_server.clone();
   let access_token = request.extract_param(AUTHORIZATION.as_str())?;
-  let device_id = request.extract_param("X-AF-DeviceID")?;
+  let device_id = request.extract_param("X-AF-Device-ID")?;
   let client_id: u64 = request
-    .extract_param("X-AF-ClientID")?
+    .extract_param("X-AF-Client-ID")?
     .parse()
     .map_err(|_| AppError::InvalidRequest("client-id header missing or invalid".into()))?;
+  let last_message_id = request.extract_param("X-AF-Last-Message-ID")?;
+  let last_message_id = MessageId::try_from(last_message_id).map_err(|_| {
+    AppError::InvalidRequest("Couldn't parse 'X-AF-Last-Message-ID' head value".into())
+  })?;
   let auth = authorization_from_token(access_token.as_str(), &jwt_secret)?;
   let user_uuid = UserUuid::from_auth(auth)?;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let info = SessionInfo::new(client_id, uid, device_id);
+  let info = SessionInfo::new(client_id, uid, device_id, last_message_id);
   tracing::debug!(
     "accepting new session {} (client id: {}) for workspace: {}",
     info.collab_origin(),

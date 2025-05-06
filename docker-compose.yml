@@ -32,14 +32,12 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - SUPABASE_PASSWORD=${SUPABASE_PASSWORD:-root}
     healthcheck:
       test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
       retries: 12
     volumes:
-      - ./migrations/before:/docker-entrypoint-initdb.d
       - postgres_data:/var/lib/postgresql/data
 
   redis:
@@ -63,7 +61,10 @@ services:
     environment:
       # There are a lot of options to configure GoTrue. You can reference the example config:
       # https://github.com/supabase/auth/blob/master/example.env
+      # The initial GoTrue Admin user to create, if not already exists.
       - GOTRUE_ADMIN_EMAIL=${GOTRUE_ADMIN_EMAIL}
+      # The initial GoTrue Admin user password to create, if not already exists.
+      # If the user already exists, the update will be skipped.
       - GOTRUE_ADMIN_PASSWORD=${GOTRUE_ADMIN_PASSWORD}
       - GOTRUE_DISABLE_SIGNUP=${GOTRUE_DISABLE_SIGNUP:-false}
       - GOTRUE_SITE_URL=appflowy-flutter://                           # redirected to AppFlowy application

@@ -8,6 +8,7 @@ use actix::{
 use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
+use collab_entity::CollabType;
 use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -243,6 +244,7 @@ impl StreamHandler<(ObjectId, AwarenessStreamUpdate)> for Workspace {
       sender.conn.do_send(WsOutput {
         message: ServerMessage::AwarenessUpdate {
           object_id,
+          collab_type: CollabType::Unknown,
           awareness: msg.data.encode_v1().into(),
         },
       });

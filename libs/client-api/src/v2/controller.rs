@@ -261,50 +261,56 @@ impl WorkspaceController {
       };
       let client_id = inner.db.client_id();
       // connection status changed to connecting => try to establish connection
-      let reconnect =
-        match Self::establish_connection(&inner.options, client_id, cancel.clone()).await {
-          Ok(Some(conn)) => {
-            // successfully made a connection
-            tracing::debug!("successfully connected to {}", inner.options.url);
-            let (sink, stream) = conn.split();
-            inner.set_connected(sink, cancel.clone());
-            if let Err(err) = inner.publish_pending_collabs().await {
-              tracing::error!("failed to publish active collabs: {}", err);
-              inner.set_disconnected(Some(err.to_string()));
-              continue;
-            }
-            let receive_messages_loop = tokio::spawn(Self::receive_server_messages_loop(
-              Arc::downgrade(&inner),
-              stream,
-              cancel,
-            ));
-            // wait for loop to complete, if it completed with failure it's a connection
-            // failure, and we need to reconnect
-            match receive_messages_loop.await.unwrap() {
-              Ok(()) => {
-                tracing::trace!("connection closed gracefully");
-                inner.set_disconnected(None);
-                false
-              },
-              Err(err) => {
-                // error while sending messages
-                tracing::error!("failed to handle messages: {}", err);
-                true
-              },
-            }
-          },
-          Ok(None) => {
-            inner.set_disconnected(None); // connection establishing has been cancelled midway
-            false
-          },
-          Err(err) => {
-            // failed to make a connection, wait and retry
-            tracing::error!("failed to establish WebSocket v2 connection: {}", err);
+      let reconnect = match Self::establish_connection(
+        &inner.options,
+        client_id,
+        &inner.last_message_id(),
+        cancel.clone(),
+      )
+      .await
+      {
+        Ok(Some(conn)) => {
+          // successfully made a connection
+          tracing::debug!("successfully connected to {}", inner.options.url);
+          let (sink, stream) = conn.split();
+          inner.set_connected(sink, cancel.clone());
+          if let Err(err) = inner.publish_pending_collabs().await {
+            tracing::error!("failed to publish active collabs: {}", err);
             inner.set_disconnected(Some(err.to_string()));
-            tokio::time::sleep(Self::RECONNECT_DELAY).await;
-            true
-          },
-        };
+            continue;
+          }
+          let receive_messages_loop = tokio::spawn(Self::receive_server_messages_loop(
+            Arc::downgrade(&inner),
+            stream,
+            cancel,
+          ));
+          // wait for loop to complete, if it completed with failure it's a connection
+          // failure, and we need to reconnect
+          match receive_messages_loop.await.unwrap() {
+            Ok(()) => {
+              tracing::trace!("connection closed gracefully");
+              inner.set_disconnected(None);
+              false
+            },
+            Err(err) => {
+              // error while sending messages
+              tracing::error!("failed to handle messages: {}", err);
+              true
+            },
+          }
+        },
+        Ok(None) => {
+          inner.set_disconnected(None); // connection establishing has been cancelled midway
+          false
+        },
+        Err(err) => {
+          // failed to make a connection, wait and retry
+          tracing::error!("failed to establish WebSocket v2 connection: {}", err);
+          inner.set_disconnected(Some(err.to_string()));
+          tokio::time::sleep(Self::RECONNECT_DELAY).await;
+          true
+        },
+      };
 
       if inner.shutdown.is_cancelled() {
         tracing::debug!("connection manager has been closed");
@@ -322,16 +328,21 @@ impl WorkspaceController {
   async fn establish_connection(
     options: &Options,
     client_id: ClientID,
+    last_message_id: &Rid,
     cancel: CancellationToken,
   ) -> anyhow::Result<Option<WsConn>> {
     let url = format!("{}/{}", options.url, options.workspace_id);
     tracing::info!("establishing WebScoket connection to: {}", url);
     let mut req = url.into_client_request()?;
     let headers = req.headers_mut();
-    headers.insert("X-AF-DeviceID", HeaderValue::from_str(&options.device_id)?);
+    headers.insert("X-AF-Device-ID", HeaderValue::from_str(&options.device_id)?);
     headers.insert(
-      "X-AF-ClientID",
+      "X-AF-Client-ID",
       HeaderValue::from_str(&client_id.to_string())?,
+    );
+    headers.insert(
+      "X-AF-Last-Message-ID",
+      HeaderValue::from_str(&last_message_id.to_string())?,
     );
     headers.insert(
       "Authorization",

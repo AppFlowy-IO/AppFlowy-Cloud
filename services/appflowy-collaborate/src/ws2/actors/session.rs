@@ -9,6 +9,7 @@ use appflowy_proto::{ClientMessage, ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::{Bytes, BytesMut};
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab_entity::CollabType;
+use collab_stream::model::MessageId;
 use std::time::{Duration, Instant};
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -23,14 +24,21 @@ pub struct SessionInfo {
   pub client_id: ClientID,
   pub user_id: i64,
   pub device_id: String,
+  pub last_message_id: MessageId,
 }
 
 impl SessionInfo {
-  pub fn new(client_id: ClientID, user_id: i64, device_id: String) -> Self {
+  pub fn new(
+    client_id: ClientID,
+    user_id: i64,
+    device_id: String,
+    last_message_id: MessageId,
+  ) -> Self {
     Self {
       client_id,
       user_id,
       device_id,
+      last_message_id,
     }
   }
 

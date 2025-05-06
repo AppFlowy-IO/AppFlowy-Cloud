@@ -161,9 +161,7 @@ impl CollabCache {
           false,
         )
         .map_err(|err| AppError::Internal(err.into()))?,
-        None => {
-          Collab::new_with_origin(CollabOrigin::Server, object_id.to_string(), vec![], false)
-        },
+        None => Collab::new_with_origin(CollabOrigin::Server, object_id.to_string(), vec![], false),
       };
       {
         let mut tx = collab.transact_mut();

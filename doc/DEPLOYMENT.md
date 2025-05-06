@@ -153,8 +153,6 @@ docker logs <NAME>
   proxy_pass_request_headers on;
   underscores_in_headers on;
   ```
-- You can also deploy AppFlowy Web on another domain, using tools such as Vercel, instead of using the existing docker compose setup.
-  You can follow the guide [here](https://appflowy.com/docs/self-host-appflowy-web-install-vercel).
 - If AppFlowy Web is served on a separate domain, you will need to modify the nginx conf to prevent CORS issues.
   By default, we allow requests from `localhost:3000`, using, the configuration below:
   ```
@@ -195,7 +193,7 @@ docker logs <NAME>
 
 ### How do I use a different `postgres`?
   The default url is using the postgres in docker compose, in service `appflowy_cloud` and `gotrue` respectively.
-  However it is possible to use an external postgres, as long as it is accessible by the services.
+  However it is possible to use an external postgres, as long as it is accessible by the services. pgvector extension must also be installed.
 
 - You need to change the following settings:
 ```
@@ -205,9 +203,6 @@ POSTGRES_PASSWORD=password
 POSTGRES_PORT=5432
 POSTGRES_DB=postgres
 ```
-
-- You would need to run the `supabase_auth.sh` from `migrations/before` in your hosted postgres. Make sure that the
-environmental variables referenced by the script (eg. $SUPABASE_PASSWORD) have been exported before running the script.
 
 ### How do I disable signups?
 
@@ -226,11 +221,12 @@ performed via the admin portal as opposed to links provided in emails.
 
 ### I already have an Nginx server running on my host server. How do I configure it to work with AppFlowy-Cloud?
 - First, remove the `nginx` service from the `docker-compose.yml` file.
-- Update the docker compose file such that the ports for `appflowy_cloud`, `gotrue`, and `admin_frontend` are mapped
-  to different ports on the host server. If possible, use firewall to make sure that these ports are not accessible
+- Update the docker compose file such that the ports for `appflowy_cloud`, `gotrue`, and `admin_frontend` are mapped to the different ports on the host server. If possible, use firewall to make sure that these ports are not accessible
   from the internet.
-- Update `proxy_pass` in `nginx/nginx.conf` to point to the above ports. Then adapt this configuration for your
-  existing Nginx configuration.
+- An example site configuration for Nginx has been provided in `external_proxy_config/nginx/appflowy.site.conf`. You can use this as a starting point for your own configuration, and include this in nginx.conf of your external Nginx server.
+
+### I am using Nginx Proxy Manager (or similar UI based proxy manager), and i am not able to replicate the configuration in external_proxy_config/nginx/appflowy.site.conf easily.
+- Another alternative, is to keep the `nginx` service in the `docker-compose.yml` file, then pass all the requests from the proxy manager to the `nginx` service. You have to turn on `Websockets Support`, or any equivalent options that adds a connection upgrade header.
 
 ### AppFlowy Web keeps redirecting to the desktop application after login.
 - Refer to the AppFlowy Web section in the deployment steps. Make sure that the necessary headers are present.

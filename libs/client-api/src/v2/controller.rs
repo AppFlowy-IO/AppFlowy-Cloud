@@ -210,7 +210,7 @@ impl WorkspaceController {
       if let Some(inner) = weak_inner.upgrade() {
         if origin.map(|o| o.as_ref()) != Some(Inner::REMOTE_ORIGIN.as_bytes()) {
           match awareness.update_with_clients(e.all_changes()) {
-            Ok(update) => inner.publish_awareness(object_id, update),
+            Ok(update) => inner.publish_awareness(object_id, collab_type, update),
             Err(err) => tracing::error!(
               "[{}] failed to prepare awareness update for {}: {}",
               client_id,
@@ -223,7 +223,9 @@ impl WorkspaceController {
     });
 
     self.inner.publish_manifest(collab, collab_type);
-    self.inner.publish_awareness(object_id, awareness.update()?);
+    self
+      .inner
+      .publish_awareness(object_id, collab_type, awareness.update()?);
     self
       .inner
       .cache
@@ -556,6 +558,7 @@ impl Inner {
       ServerMessage::AwarenessUpdate {
         object_id,
         awareness,
+        ..
       } => {
         // we don't need to decode update for every use case, but do so anyway to confirm
         // that it isn't malformed
@@ -563,7 +566,7 @@ impl Inner {
         tracing::trace!("received awareness update for {}", object_id);
         self.save_awareness_update(object_id, update).await?;
       },
-      ServerMessage::PermissionDenied {
+      ServerMessage::AccessChanges {
         object_id, reason, ..
       } => {
         tracing::warn!(
@@ -869,12 +872,18 @@ impl Inner {
     }
   }
 
-  fn publish_awareness(&self, object_id: ObjectId, update: AwarenessUpdate) {
+  fn publish_awareness(
+    &self,
+    object_id: ObjectId,
+    collab_type: CollabType,
+    update: AwarenessUpdate,
+  ) {
     let messages = self.message_tx.load();
     if let Some(channel) = &*messages {
       let awareness = update.encode_v1();
       let msg = ClientMessage::AwarenessUpdate {
         object_id,
+        collab_type,
         awareness,
       };
       // we received that update from the local client

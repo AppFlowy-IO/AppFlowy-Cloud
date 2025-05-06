@@ -2,6 +2,8 @@ pub mod messages {
   include!(concat!(env!("OUT_DIR"), "/af_proto.messages.rs"));
 }
 
+use crate::messages::message::Data;
+use crate::messages::SyncRequest;
 use bytes::Bytes;
 use collab::preclude::sync::AwarenessUpdate;
 use collab::preclude::updates::decoder::Decode;
@@ -87,6 +89,7 @@ pub enum ClientMessage {
   },
   AwarenessUpdate {
     object_id: ObjectId,
+    collab_type: CollabType,
     awareness: Vec<u8>,
   },
 }
@@ -129,11 +132,13 @@ impl Debug for ClientMessage {
       },
       ClientMessage::AwarenessUpdate {
         object_id,
+        collab_type,
         awareness,
       } => {
         let awareness = AwarenessUpdate::decode_v1(awareness).map_err(|_| std::fmt::Error)?;
         f.debug_struct("AwarenessUpdate")
           .field("object_id", &object_id)
+          .field("collab_type", &collab_type)
           .field("awareness", &awareness)
           .finish()
       },
@@ -170,22 +175,21 @@ impl ClientMessage {
 
 impl From<ClientMessage> for messages::Message {
   fn from(value: ClientMessage) -> Self {
-    use messages::message::Message as ProtoMessage;
     match value {
       ClientMessage::Manifest {
         object_id,
         collab_type,
         last_message_id,
         state_vector,
-      } => crate::proto::messages::Message {
-        message: Some(ProtoMessage::Manifest(messages::Manifest {
-          object_id: object_id.as_bytes().to_vec(),
-          collab_type: collab_type as i32,
+      } => messages::Message {
+        object_id: object_id.to_string(),
+        collab_type: collab_type as i32,
+        data: Some(Data::SyncRequest(SyncRequest {
           last_message_id: Some(messages::Rid {
             timestamp: last_message_id.timestamp,
             counter: last_message_id.seq_no as u32,
           }),
-          state_vector: state_vector.clone(),
+          state_vector,
         })),
       },
       ClientMessage::Update {
@@ -194,20 +198,22 @@ impl From<ClientMessage> for messages::Message {
         flags,
         update,
       } => messages::Message {
-        message: Some(ProtoMessage::Update(messages::Update {
-          object_id: object_id.as_bytes().to_vec(),
-          collab_type: collab_type as i32,
-          flags: flags as u8 as u32,
+        object_id: object_id.to_string(),
+        collab_type: collab_type as i32,
+        data: Some(Data::Update(messages::Update {
           message_id: None,
+          flags: flags as u8 as u32,
           payload: update,
         })),
       },
       ClientMessage::AwarenessUpdate {
         object_id,
+        collab_type,
         awareness,
       } => messages::Message {
-        message: Some(ProtoMessage::AwarenessUpdate(messages::AwarenessUpdate {
-          object_id: object_id.as_bytes().to_vec(),
+        object_id: object_id.to_string(),
+        collab_type: collab_type as i32,
+        data: Some(Data::AwarenessUpdate(messages::AwarenessUpdate {
           payload: awareness,
         })),
       },
@@ -219,11 +225,13 @@ impl TryFrom<messages::Message> for ClientMessage {
   type Error = Error;
 
   fn try_from(value: messages::Message) -> Result<Self, Self::Error> {
-    use messages::message::Message as ProtoMessage;
-    match value.message {
-      Some(ProtoMessage::Manifest(proto)) => Ok(ClientMessage::Manifest {
-        object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
-        collab_type: CollabType::from(proto.collab_type),
+    let object_id = Uuid::parse_str(&value.object_id)?;
+    let collab_type = CollabType::try_from(value.collab_type).unwrap_or(CollabType::Unknown);
+
+    match value.data {
+      Some(Data::SyncRequest(proto)) => Ok(ClientMessage::Manifest {
+        object_id,
+        collab_type,
         last_message_id: Rid {
           timestamp: proto
             .last_message_id
@@ -238,14 +246,15 @@ impl TryFrom<messages::Message> for ClientMessage {
         },
         state_vector: proto.state_vector,
       }),
-      Some(ProtoMessage::Update(proto)) => Ok(ClientMessage::Update {
-        object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
-        collab_type: CollabType::from(proto.collab_type),
+      Some(Data::Update(proto)) => Ok(ClientMessage::Update {
+        object_id,
+        collab_type,
         flags: UpdateFlags::try_from(proto.flags as u8)?,
         update: proto.payload,
       }),
-      Some(ProtoMessage::AwarenessUpdate(proto)) => Ok(ClientMessage::AwarenessUpdate {
-        object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+      Some(Data::AwarenessUpdate(proto)) => Ok(ClientMessage::AwarenessUpdate {
+        object_id,
+        collab_type,
         awareness: proto.payload,
       }),
       _ => Err(Error::MissingFields),
@@ -270,11 +279,14 @@ pub enum ServerMessage {
   },
   AwarenessUpdate {
     object_id: ObjectId,
+    collab_type: CollabType,
     awareness: Bytes,
   },
-  PermissionDenied {
+  AccessChanges {
     object_id: ObjectId,
     collab_type: CollabType,
+    can_read: bool,
+    can_write: bool,
     reason: String,
   },
 }
@@ -285,7 +297,7 @@ impl ServerMessage {
       ServerMessage::Manifest { object_id, .. } => object_id,
       ServerMessage::Update { object_id, .. } => object_id,
       ServerMessage::AwarenessUpdate { object_id, .. } => object_id,
-      ServerMessage::PermissionDenied { object_id, .. } => object_id,
+      ServerMessage::AccessChanges { object_id, .. } => object_id,
     }
   }
 
@@ -339,22 +351,28 @@ impl Debug for ServerMessage {
       },
       ServerMessage::AwarenessUpdate {
         object_id,
+        collab_type,
         awareness,
       } => {
         let awareness = AwarenessUpdate::decode_v1(awareness).map_err(|_| std::fmt::Error)?;
         f.debug_struct("AwarenessUpdate")
           .field("object_id", &object_id)
+          .field("collab_type", &collab_type)
           .field("awareness", &awareness)
           .finish()
       },
-      ServerMessage::PermissionDenied {
+      ServerMessage::AccessChanges {
         object_id,
         collab_type,
+        can_read,
+        can_write,
         reason,
       } => f
         .debug_struct("PermissionDenied")
         .field("object_id", &object_id)
         .field("collab_type", &collab_type)
+        .field("can_read", &can_read)
+        .field("can_write", &can_write)
         .field("reason", &reason)
         .finish(),
     }
@@ -363,7 +381,6 @@ impl Debug for ServerMessage {
 
 impl From<ServerMessage> for messages::Message {
   fn from(value: ServerMessage) -> Self {
-    use messages::message::Message as ProtoMessage;
     match value {
       ServerMessage::Manifest {
         object_id,
@@ -371,9 +388,9 @@ impl From<ServerMessage> for messages::Message {
         last_message_id,
         state_vector,
       } => messages::Message {
-        message: Some(ProtoMessage::Manifest(messages::Manifest {
-          object_id: object_id.as_bytes().to_vec(),
-          collab_type: collab_type as i32,
+        object_id: object_id.to_string(),
+        collab_type: collab_type as i32,
+        data: Some(Data::SyncRequest(messages::SyncRequest {
           last_message_id: Some(messages::Rid {
             timestamp: last_message_id.timestamp,
             counter: last_message_id.seq_no as u32,
@@ -388,9 +405,9 @@ impl From<ServerMessage> for messages::Message {
         last_message_id,
         update,
       } => messages::Message {
-        message: Some(ProtoMessage::Update(messages::Update {
-          object_id: object_id.as_bytes().to_vec(),
-          collab_type: collab_type as i32,
+        object_id: object_id.to_string(),
+        collab_type: collab_type as i32,
+        data: Some(Data::Update(messages::Update {
           flags: flags as u8 as u32,
           message_id: Some(messages::Rid {
             timestamp: last_message_id.timestamp,
@@ -401,25 +418,29 @@ impl From<ServerMessage> for messages::Message {
       },
       ServerMessage::AwarenessUpdate {
         object_id,
+        collab_type,
         awareness,
       } => messages::Message {
-        message: Some(ProtoMessage::AwarenessUpdate(messages::AwarenessUpdate {
-          object_id: object_id.as_bytes().to_vec(),
+        object_id: object_id.to_string(),
+        collab_type: collab_type as i32,
+        data: Some(Data::AwarenessUpdate(messages::AwarenessUpdate {
           payload: awareness.into(),
         })),
       },
-      ServerMessage::PermissionDenied {
+      ServerMessage::AccessChanges {
         object_id,
         collab_type,
+        can_read,
+        can_write,
         reason,
       } => messages::Message {
-        message: Some(ProtoMessage::PermissionRevoked(
-          messages::PermissionRevoked {
-            object_id: object_id.as_bytes().to_vec(),
-            collab_type: collab_type as i32,
-            reason,
-          },
-        )),
+        object_id: object_id.to_string(),
+        collab_type: collab_type as i32,
+        data: Some(Data::AccessChanged(messages::AccessChanged {
+          can_read,
+          can_write,
+          reason,
+        })),
       },
     }
   }
@@ -429,13 +450,14 @@ impl TryFrom<messages::Message> for ServerMessage {
   type Error = Error;
 
   fn try_from(value: messages::Message) -> Result<Self, Self::Error> {
-    use messages::message::Message as ProtoMessage;
-    match value.message {
-      Some(ProtoMessage::Manifest(proto)) => {
+    let object_id = Uuid::parse_str(&value.object_id)?;
+    let collab_type = CollabType::try_from(value.collab_type).unwrap_or(CollabType::Unknown);
+    match value.data {
+      Some(Data::SyncRequest(proto)) => {
         let rid = proto.last_message_id.ok_or(Error::MissingFields)?;
         Ok(ServerMessage::Manifest {
-          object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
-          collab_type: CollabType::from(proto.collab_type),
+          object_id,
+          collab_type,
           last_message_id: Rid {
             timestamp: rid.timestamp,
             seq_no: rid.counter as u16,
@@ -443,11 +465,11 @@ impl TryFrom<messages::Message> for ServerMessage {
           state_vector: proto.state_vector,
         })
       },
-      Some(ProtoMessage::Update(proto)) => {
+      Some(Data::Update(proto)) => {
         let rid = proto.message_id.ok_or(Error::MissingFields)?;
         Ok(ServerMessage::Update {
-          object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
-          collab_type: CollabType::from(proto.collab_type),
+          object_id,
+          collab_type,
           flags: UpdateFlags::try_from(proto.flags as u8).map_err(|_| Error::MissingFields)?,
           last_message_id: Rid {
             timestamp: rid.timestamp,
@@ -456,13 +478,16 @@ impl TryFrom<messages::Message> for ServerMessage {
           update: proto.payload.into(),
         })
       },
-      Some(ProtoMessage::AwarenessUpdate(proto)) => Ok(ServerMessage::AwarenessUpdate {
-        object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
+      Some(Data::AwarenessUpdate(proto)) => Ok(ServerMessage::AwarenessUpdate {
+        object_id,
+        collab_type,
         awareness: proto.payload.into(),
       }),
-      Some(ProtoMessage::PermissionRevoked(proto)) => Ok(ServerMessage::PermissionDenied {
-        object_id: Uuid::from_slice(&proto.object_id).map_err(Error::InvalidObjectId)?,
-        collab_type: CollabType::from(proto.collab_type),
+      Some(Data::AccessChanged(proto)) => Ok(ServerMessage::AccessChanges {
+        object_id,
+        collab_type,
+        can_read: proto.can_read,
+        can_write: proto.can_write,
         reason: proto.reason,
       }),
       _ => Err(Error::MissingFields),
@@ -504,4 +529,6 @@ pub enum Error {
   MissingFields,
   #[error("failed to decode message: unsupported flag for update: {0}")]
   UnsupportedFlag(u8),
+  #[error("failed to decode message: unknown collab type: {0}")]
+  UnknownCollabType(u8),
 }

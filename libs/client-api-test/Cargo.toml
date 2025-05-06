@@ -24,10 +24,10 @@ collab-entity.workspace = true
 shared-entity.workspace = true
 collab-database.workspace = true
 tracing-subscriber = { version = "0.3.18", features = [
-  "registry",
-  "env-filter",
-  "ansi",
-  "json",
+    "registry",
+    "env-filter",
+    "ansi",
+    "json",
 ] }
 uuid.workspace = true
 lazy_static = "1.4.0"

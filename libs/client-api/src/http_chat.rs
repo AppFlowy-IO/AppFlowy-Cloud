@@ -8,6 +8,7 @@ use client_api_entity::chat_dto::{
 use futures_core::{ready, Stream};
 use pin_project::pin_project;
 use reqwest::Method;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shared_entity::dto::ai_dto::{
   CalculateSimilarityParams, ChatQuestionQuery, RepeatedRelatedQuestion, SimilarityResponse,
@@ -365,6 +366,7 @@ impl QuestionStream {
   }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum QuestionStreamValue {
   Answer {
     value: String,

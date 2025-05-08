@@ -364,7 +364,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let collab_type = CollabType::Unknown;
   let workspace_id = owner.workspace_id().await;
   owner
-    .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None)
+    .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
     .await;
 
   let arc_owner = Arc::new(owner);

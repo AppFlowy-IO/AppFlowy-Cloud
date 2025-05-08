@@ -336,6 +336,7 @@ fn prepare_document_collab_param_with_initial_data(
     object_id: collab_id,
     encoded_collab_v1: encoded_collab_v1.into(),
     collab_type: CollabType::Document,
+    updated_at: None,
   })
 }
 
@@ -352,6 +353,7 @@ fn prepare_default_document_collab_param(collab_id: Uuid) -> Result<CollabParams
     object_id: collab_id,
     encoded_collab_v1: encoded_collab_v1.into(),
     collab_type: CollabType::Document,
+    updated_at: None,
   })
 }
 
@@ -1200,6 +1202,7 @@ async fn create_database_page(
       .encode_to_bytes()?
       .into(),
     collab_type: CollabType::Database,
+    updated_at: None,
   };
   let row_collab_params_list = encoded_database
     .encoded_row_collabs
@@ -1209,6 +1212,7 @@ async fn create_database_page(
         object_id: Uuid::parse_str(&row_collab.object_id).ok()?,
         encoded_collab_v1: row_collab.encoded_collab.encode_to_bytes().unwrap().into(),
         collab_type: CollabType::DatabaseRow,
+        updated_at: None,
       })
     })
     .collect();

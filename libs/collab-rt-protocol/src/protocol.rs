@@ -1,5 +1,5 @@
 use std::borrow::BorrowMut;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
@@ -72,6 +72,8 @@ impl CollabSyncProtocol for ClientSyncProtocol {
 }
 
 pub type CollabRef = Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
+
+pub type WeakCollabRef = Weak<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
 
 #[async_trait]
 pub trait CollabSyncProtocol {

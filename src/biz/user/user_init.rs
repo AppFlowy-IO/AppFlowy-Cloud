@@ -59,6 +59,7 @@ where
       object_id,
       encoded_collab_v1: encoded_collab_v1.into(),
       collab_type: object_type,
+      updated_at: None,
     });
 
     // push the database record
@@ -136,6 +137,7 @@ pub(crate) async fn create_user_awareness(
         object_id,
         encoded_collab_v1: encoded_collab_v1.into(),
         collab_type,
+        updated_at: None,
       },
       txn,
       "create user awareness",
@@ -173,6 +175,7 @@ pub(crate) async fn create_workspace_collab(
         object_id: workspace_id,
         encoded_collab_v1: encoded_collab_v1.into(),
         collab_type: CollabType::Folder,
+        updated_at: None,
       },
       txn,
       "create workspace collab",
@@ -211,6 +214,7 @@ pub(crate) async fn create_workspace_database_collab(
         object_id,
         encoded_collab_v1: encoded_collab_v1.into(),
         collab_type,
+        updated_at: None,
       },
       txn,
       "create database collab",

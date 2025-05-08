@@ -1,32 +1,34 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::state::AppState;
 use actix::Addr;
 use actix_http::header::AUTHORIZATION;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
-use secrecy::Secret;
-use semver::Version;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
-use tracing::{debug, error, instrument, trace};
-
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::ws2::{SessionInfo, WsSession};
 use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
+use collab_stream::model::MessageId;
+use secrecy::Secret;
+use semver::Version;
 use shared_entity::response::AppResponseError;
-
-use crate::state::AppState;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
+use tracing::{debug, error, instrument, trace};
+use uuid::Uuid;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws")
     //.service(establish_ws_connection)
     .service(web::resource("/v1").route(web::get().to(establish_ws_connection_v1)))
+    .service(web::resource("/v2/{workspace_id}").route(web::get().to(establish_ws_connection_v2)))
 }
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
@@ -100,6 +102,50 @@ pub async fn establish_ws_connection_v1(
     connect_at,
   )
   .await
+}
+
+#[instrument(skip_all, err)]
+pub async fn establish_ws_connection_v2(
+  request: HttpRequest,
+  payload: Payload,
+  path: Path<Uuid>,
+  state: Data<AppState>,
+  jwt_secret: Data<Secret<String>>,
+) -> Result<HttpResponse> {
+  let workspace_id = path.into_inner();
+  let ws_server = state.ws_server.clone();
+  let access_token = request.extract_param(AUTHORIZATION.as_str())?;
+  let device_id = request.extract_param("X-AF-Device-ID")?;
+  let client_id: u64 = request
+    .extract_param("X-AF-Client-ID")?
+    .parse()
+    .map_err(|_| AppError::InvalidRequest("client-id header missing or invalid".into()))?;
+  let last_message_id = match request.extract_param("X-AF-Last-Message-ID") {
+    Ok(last_message_id) => {
+      let last_message_id = MessageId::try_from(last_message_id).map_err(|_| {
+        AppError::InvalidRequest("Couldn't parse 'X-AF-Last-Message-ID' head value".into())
+      })?;
+      Some(last_message_id)
+    },
+    Err(_) => None,
+  };
+  let auth = authorization_from_token(access_token.as_str(), &jwt_secret)?;
+  let user_uuid = UserUuid::from_auth(auth)?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let info = SessionInfo::new(client_id, uid, device_id, last_message_id);
+  tracing::debug!(
+    "accepting new session {} (client id: {}) for workspace: {}",
+    info.collab_origin(),
+    client_id,
+    workspace_id
+  );
+  ws::WsResponseBuilder::new(
+    WsSession::new(workspace_id, info, ws_server),
+    &request,
+    payload,
+  )
+  .frame_size(10 * 1024 * 1024)
+  .start()
 }
 
 #[allow(clippy::too_many_arguments)]

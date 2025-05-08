@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use crate::biz::authentication::jwt::Authorization;
 use crate::state::GoTrueAdmin;
 use crate::{biz::workspace::ops::delete_workspace_for_user, config::config::AppleOAuthSetting};
 use app_error::ErrorCode;
-use authentication::jwt::Authorization;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::workspace::{insert_workspace_ids_to_deleted_table, select_user_owned_workspaces_id};
 use gotrue::params::AdminDeleteUserParams;

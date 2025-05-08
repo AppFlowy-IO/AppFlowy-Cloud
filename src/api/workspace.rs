@@ -2,6 +2,7 @@ use crate::api::util::{client_version_from_headers, realtime_user_for_web_reques
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
+use crate::biz::authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
 use crate::biz::collab::ops::{
   get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
 };
@@ -41,7 +42,7 @@ use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::actix_ws::entities::{
   ClientGenerateEmbeddingMessage, ClientHttpStreamMessage, ClientHttpUpdateMessage,
 };
-use authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
+
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
 use collab::core::collab::DataSource;

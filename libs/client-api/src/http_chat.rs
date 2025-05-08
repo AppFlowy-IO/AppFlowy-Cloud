@@ -12,8 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shared_entity::dto::ai_dto::{
   CalculateSimilarityParams, ChatQuestionQuery, RepeatedRelatedQuestion, SimilarityResponse,
-  STREAM_ANSWER_KEY, STREAM_COMMENT_KEY, STREAM_IMAGE_KEY, STREAM_KEEP_ALIVE_KEY,
-  STREAM_METADATA_KEY,
+  STREAM_ANSWER_KEY, STREAM_COMMENT_KEY, STREAM_IMAGE_KEY, STREAM_METADATA_KEY,
 };
 use shared_entity::dto::chat_dto::{ChatSettings, UpdateChatParams};
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -383,8 +382,8 @@ pub enum QuestionStreamValue {
     value: String,
     suggested_questions: Vec<String>,
   },
-  KeepAlive,
 }
+
 impl Stream for QuestionStream {
   type Item = Result<QuestionStreamValue, AppResponseError>;
 
@@ -410,10 +409,6 @@ impl Stream for QuestionStream {
             .and_then(|s| s.as_str().map(ToString::to_string))
           {
             return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: image })));
-          }
-
-          if value.remove(STREAM_KEEP_ALIVE_KEY).is_some() {
-            return Poll::Ready(Some(Ok(QuestionStreamValue::KeepAlive)));
           }
 
           error!("Invalid streaming value: {:?}", value);

@@ -1,3 +1,4 @@
+use crate::biz::authentication::jwt::UserUuid;
 use crate::biz::chat::ops::{
   create_chat, create_chat_message, delete_chat, generate_chat_message_answer,
   get_chat_messages_with_author_uuid, get_question_message, update_chat_message,
@@ -13,7 +14,7 @@ use appflowy_ai_client::dto::{
   ChatQuestion, ChatQuestionQuery, CreateChatContext, MessageData, QuestionMetadata,
   RepeatedRelatedQuestion,
 };
-use authentication::jwt::UserUuid;
+
 use bytes::Bytes;
 use database::chat;
 use futures::Stream;

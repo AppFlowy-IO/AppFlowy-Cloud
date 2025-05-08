@@ -16,11 +16,11 @@ use app_error::AppError;
 use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
 use shared_entity::response::AppResponseError;
 
+use crate::biz::authentication::jwt::{authorization_from_token, UserUuid};
 use crate::state::AppState;
 
 pub fn ws_scope() -> Scope {

@@ -1,4 +1,3 @@
-use authentication::jwt::OptionalUserUuid;
 use collab_folder::CollabOrigin;
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
@@ -35,6 +34,7 @@ use shared_entity::dto::workspace_dto::{
 use shared_entity::response::AppResponseError;
 use workspace_template::document::getting_started::GettingStartedTemplate;
 
+use crate::biz::authentication::jwt::OptionalUserUuid;
 use crate::biz::user::user_init::{
   create_user_awareness, create_workspace_collab, create_workspace_database_collab,
   initialize_workspace_for_user,

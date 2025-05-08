@@ -4,7 +4,7 @@ use actix_web::{
   web::{self, Data, Json},
   HttpResponse, Result, Scope,
 };
-use authentication::jwt::UserUuid;
+
 use database_entity::dto::{
   AvatarImageSource, CreateTemplateCategoryParams, CreateTemplateCreatorParams,
   CreateTemplateParams, GetTemplateCategoriesQueryParams, GetTemplateCreatorsQueryParams,
@@ -15,6 +15,7 @@ use database_entity::dto::{
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use uuid::Uuid;
 
+use crate::biz::authentication::jwt::UserUuid;
 use crate::{biz::template::ops::*, state::AppState};
 
 pub fn template_scope() -> Scope {

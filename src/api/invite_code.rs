@@ -2,11 +2,14 @@ use actix_web::{
   web::{self, Data, Json},
   Result, Scope,
 };
-use authentication::jwt::UserUuid;
+
 use database_entity::dto::{GetInvitationCodeInfoQuery, InvitationCodeInfo};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 
-use crate::{biz::workspace::invite::get_invitation_code_info, state::AppState};
+use crate::{
+  biz::{authentication::jwt::UserUuid, workspace::invite::get_invitation_code_info},
+  state::AppState,
+};
 
 pub fn invite_code_scope() -> Scope {
   web::scope("/api/invite-code-info")

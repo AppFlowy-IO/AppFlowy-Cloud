@@ -1,3 +1,4 @@
+use crate::biz::authentication::jwt::{Authorization, UserUuid};
 use crate::biz::user::user_delete::delete_user;
 use crate::biz::user::user_info::{get_profile, get_user_workspace_info, update_user};
 use crate::biz::user::user_verify::verify_token;
@@ -5,7 +6,6 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
-use authentication::jwt::{Authorization, UserUuid};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
 use shared_entity::dto::auth_dto::{DeleteUserQuery, SignInTokenResponse, UpdateUserParams};
 use shared_entity::response::AppResponseError;

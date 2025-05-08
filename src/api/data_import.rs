@@ -1,10 +1,11 @@
+use crate::biz::authentication::jwt::UserUuid;
 use crate::state::AppState;
 use actix_multipart::Multipart;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, Scope};
 use anyhow::anyhow;
 use app_error::AppError;
-use authentication::jwt::UserUuid;
+
 use aws_sdk_s3::primitives::ByteStream;
 use database::file::BucketClient;
 

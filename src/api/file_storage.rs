@@ -11,7 +11,7 @@ use actix_web::{
 };
 use actix_web::{HttpResponse, Result};
 use app_error::AppError;
-use authentication::jwt::UserUuid;
+
 use chrono::DateTime;
 use database::file::BlobKey;
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
@@ -20,6 +20,7 @@ use database_entity::file_dto::{
   UploadPartResponse,
 };
 
+use crate::biz::authentication::jwt::UserUuid;
 use crate::biz::data_import::LimitedPayload;
 use crate::state::AppState;
 use anyhow::anyhow;

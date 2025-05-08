@@ -3,8 +3,8 @@ use crate::error::EntityError::{DeserializationError, InvalidData};
 
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use collab_entity::proto;
 use collab_entity::CollabType;
+use collab_entity::{proto, EncodedCollab};
 use infra::validate::{validate_not_empty_payload, validate_not_empty_str};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -104,6 +104,14 @@ impl PendingCollabWrite {
       params,
     }
   }
+}
+
+#[derive(Debug)]
+pub struct CollabUpdateData {
+  pub object_id: Uuid,
+  pub collab_type: CollabType,
+  pub encoded_collab: EncodedCollab,
+  pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Validate)]

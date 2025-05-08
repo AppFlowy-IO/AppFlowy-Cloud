@@ -24,7 +24,7 @@ pub struct SessionInfo {
   pub client_id: ClientID,
   pub user_id: i64,
   pub device_id: String,
-  pub last_message_id: MessageId,
+  pub last_message_id: Option<MessageId>,
 }
 
 impl SessionInfo {
@@ -32,7 +32,7 @@ impl SessionInfo {
     client_id: ClientID,
     user_id: i64,
     device_id: String,
-    last_message_id: MessageId,
+    last_message_id: Option<MessageId>,
   ) -> Self {
     Self {
       client_id,
@@ -132,6 +132,7 @@ impl Actor for WsSession {
       session_id: self.id(),
       collab_origin: self.info.collab_origin(),
       addr: ctx.address(),
+      last_message_id: self.info.last_message_id.map(MessageId::into),
       workspace_id: self.current_workspace,
     };
     self

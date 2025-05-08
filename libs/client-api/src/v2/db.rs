@@ -8,6 +8,8 @@ use rand::random;
 use std::str::FromStr;
 use uuid::Uuid;
 use yrs::block::ClientID;
+use yrs::updates::decoder::Decode;
+use yrs::{ReadTxn, StateVector, Transact};
 
 #[derive(Clone)]
 pub(crate) struct Db {
@@ -83,7 +85,10 @@ impl Db {
       &object_id.to_string(),
       &mut txn,
     ) {
-      Ok(_updates_applied) => Ok(()),
+      Ok(_updates_applied) => {
+        tracing::trace!("restored collab {} state: {:#?}", object_id, txn.store());
+        Ok(())
+      },
       Err(PersistenceError::RecordNotFound(_)) => {
         tracing::debug!("collab {} not found in local db", object_id);
         Ok(())
@@ -108,7 +113,7 @@ impl Db {
     object_id: &ObjectId,
     message_id: Option<Rid>,
     update_v1: Vec<u8>,
-  ) -> Result<(), PersistenceError> {
+  ) -> Result<Option<StateVector>, PersistenceError> {
     let ops = self.inner.write_txn();
     tracing::trace!(
       "persisting update for {}/{} by {}",
@@ -116,17 +121,35 @@ impl Db {
       object_id,
       self.uid
     );
-    ops.push_update(
-      self.uid,
-      &self.workspace_id.to_string(),
-      &object_id.to_string(),
-      &update_v1,
-    )?;
+    let workspace_id = self.workspace_id.to_string();
+    let object_id = object_id.to_string();
+    let res = ops.push_update(self.uid, &workspace_id, &object_id, &update_v1);
+    let mut missing = None;
+    match res {
+      Ok(_) => {},
+      Err(PersistenceError::RecordNotFound(_)) => {
+        tracing::debug!("collab {} not found in local db, initializing", object_id);
+        let update = yrs::Update::decode_v1(&update_v1)?;
+        let doc = yrs::Doc::new();
+        let mut tx = doc.transact_mut();
+        tx.apply_update(update)?;
+        let sv = tx.state_vector();
+        if sv == StateVector::default() {
+          tracing::trace!(
+            "collab {} initialized in incomplete state, missing updates found",
+            object_id
+          );
+          missing = Some(sv);
+        }
+        ops.create_new_doc(self.uid, &workspace_id, &object_id, &tx)?;
+      },
+      Err(err) => return Err(err),
+    }
     if let Some(message_id) = message_id {
       ops.update_last_message_id(&self.workspace_id, message_id)?;
     }
     ops.commit_transaction()?;
-    Ok(())
+    Ok(missing)
   }
 }
 

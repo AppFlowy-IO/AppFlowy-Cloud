@@ -4,7 +4,7 @@ use client_api::entity::AFRole;
 use collab_entity::CollabType;
 use serde_json::json;
 use sqlx::types::uuid;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use tracing::trace;
 
 use client_api_test::*;
@@ -247,4 +247,57 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
   assert_client_collab_include_value(&mut client_2, &object_id, expected_json.clone())
     .await
     .unwrap();
+}
+
+#[cfg(feature = "sync-v2")]
+#[tokio::test]
+async fn sync_new_documents_created_when_offline_test() {
+  const TIMEOUT: Duration = Duration::from_secs(5);
+  let collab_type = CollabType::Unknown;
+  let mut client_1 = TestClient::new_user().await;
+  let mut client_2 = TestClient::new_user().await;
+
+  let workspace_id = client_1.workspace_id().await;
+
+  // add client 2 as a member of the workspace
+  client_1
+    .invite_and_accepted_workspace_member(&workspace_id, &client_2, AFRole::Member)
+    .await
+    .unwrap();
+  timeout(TIMEOUT, client_1.disconnect())
+    .await
+    .expect("first disconnect");
+  sleep(Duration::from_secs(1)).await;
+
+  // on client 2: create some new collabs while client 1 is offline
+  let mut object_ids = Vec::new();
+  for _ in 0..5 {
+    let object_id = client_2
+      .create_and_edit_collab(workspace_id, collab_type)
+      .await;
+    client_2.insert_into(&object_id, "key", "value").await;
+    client_2
+      .wait_object_sync_complete(&object_id)
+      .await
+      .unwrap();
+    object_ids.push(object_id);
+  }
+
+  // connect client 1 again and wait a while for sync to complete without asking collabs explicitly
+  timeout(TIMEOUT, client_1.reconnect())
+    .await
+    .expect("reconnect");
+  sleep(Duration::from_secs(5)).await;
+
+  // disconnect client 1 again and check if collabs from client 2 were synced
+  timeout(TIMEOUT, client_1.disconnect())
+    .await
+    .expect("second disconnect");
+  for object_id in object_ids {
+    client_1
+      .open_collab_no_sync(workspace_id, object_id, collab_type)
+      .await;
+
+    assert_client_collab_within_secs(&mut client_1, &object_id, "key", "value".into(), 10).await;
+  }
 }

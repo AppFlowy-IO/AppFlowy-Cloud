@@ -7,8 +7,8 @@ use database_entity::dto::{
 use shared_entity::dto::workspace_dto::{DatabaseRowUpdatedItem, EmbeddedCollabQuery};
 
 use crate::collab::{partition_key_from_collab_type, SNAPSHOT_PER_HOUR};
-use crate::pg_row::AFCollabRowMeta;
 use crate::pg_row::AFSnapshotRow;
+use crate::pg_row::{AFCollabData, AFCollabRowMeta};
 use app_error::AppError;
 use chrono::{DateTime, Duration, Utc};
 
@@ -197,6 +197,34 @@ pub async fn insert_into_af_collab_bulk_for_user(
       })?;
 
   Ok(())
+}
+
+#[inline]
+pub async fn select_collabs_created_since<'a, E>(
+  conn: E,
+  workspace_id: &Uuid,
+  since: DateTime<Utc>,
+) -> Result<Vec<AFCollabData>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let records = sqlx::query_as!(
+    AFCollabData,
+    r#"
+        SELECT c.oid, c.partition_key, c.updated_at, c.blob
+        FROM af_collab c
+        WHERE c.workspace_id = $1
+            AND c.deleted_at IS NULL
+            AND c.created_at > $2
+        ORDER BY updated_at
+        LIMIT 500
+        "#,
+    workspace_id,
+    since
+  )
+  .fetch_all(conn)
+  .await?;
+  Ok(records)
 }
 
 #[inline]

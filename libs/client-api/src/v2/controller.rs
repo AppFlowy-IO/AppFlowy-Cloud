@@ -340,10 +340,12 @@ impl WorkspaceController {
       "X-AF-Client-ID",
       HeaderValue::from_str(&client_id.to_string())?,
     );
-    headers.insert(
-      "X-AF-Last-Message-ID",
-      HeaderValue::from_str(&last_message_id.to_string())?,
-    );
+    if options.sync_eagerly {
+      headers.insert(
+        "X-AF-Last-Message-ID",
+        HeaderValue::from_str(&last_message_id.to_string())?,
+      );
+    }
     headers.insert(
       "Authorization",
       HeaderValue::from_str(&options.access_token)?,
@@ -923,6 +925,7 @@ impl Inner {
     update: Update,
     collab_type: CollabType,
   ) -> anyhow::Result<()> {
+    tracing::trace!("persisting update for {}: {:#?}", object_id, update);
     let update_bytes = update.encode_v1();
     if let Some(rid) = last_message_id {
       if let Some(collab_ref) = self.get_collab(object_id) {
@@ -942,14 +945,22 @@ impl Inner {
         }
       }
     }
-    tracing::trace!(
-      "persisting update for {} ({} bytes)",
-      object_id,
-      update_bytes.len()
-    );
-    self
+    let missing = self
       .db
       .save_update(&object_id, last_message_id, update_bytes)?;
+    if let Some(state_vector) = missing {
+      let messages = self.message_tx.load();
+      if let Some(channel) = &*messages {
+        let msg = ClientMessage::Manifest {
+          object_id,
+          collab_type,
+          last_message_id: last_message_id.unwrap_or_default(),
+          state_vector: state_vector.encode_v1(),
+        };
+        // we received that update from the local client
+        let _ = channel.send((msg, None));
+      }
+    }
     Ok(())
   }
 
@@ -1018,6 +1029,7 @@ pub struct Options {
   pub workspace_db_path: String,
   pub device_id: String,
   pub access_token: String,
+  pub sync_eagerly: bool,
 }
 
 #[cfg(debug_assertions)]

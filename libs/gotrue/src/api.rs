@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::grant::Grant;
 use crate::params::{
   AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
@@ -38,6 +40,7 @@ impl Client {
     let resp = self
       .client
       .get(&url)
+      .timeout(Duration::from_secs(5))
       .send()
       .await
       .context(format!("calling {} failed", url))?;

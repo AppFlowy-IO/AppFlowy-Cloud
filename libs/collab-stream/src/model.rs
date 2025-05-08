@@ -55,6 +55,15 @@ impl From<Rid> for MessageId {
   }
 }
 
+impl Into<Rid> for MessageId {
+  fn into(self) -> Rid {
+    Rid {
+      timestamp: self.timestamp_ms,
+      seq_no: self.sequence_number,
+    }
+  }
+}
+
 impl TryFrom<&[u8]> for MessageId {
   type Error = StreamError;
 

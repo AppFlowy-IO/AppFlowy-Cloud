@@ -4,15 +4,18 @@ use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_proto::Rid;
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 use collab::entity::{EncodedCollab, EncoderVersion};
+use collab_entity::CollabType;
 use database::collab::{
   batch_select_collab_blob, insert_into_af_collab, insert_into_af_collab_bulk_for_user,
-  is_collab_exists, select_blob_from_af_collab, AppResult,
+  is_collab_exists, select_blob_from_af_collab, select_collabs_created_since, AppResult,
 };
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::file::{BucketClient, ResponseBlob};
 use database_entity::dto::{
-  CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult, ZSTD_COMPRESSION_LEVEL,
+  CollabParams, CollabUpdateData, PendingCollabWrite, QueryCollab, QueryCollabResult,
+  ZSTD_COMPRESSION_LEVEL,
 };
 use sqlx::{Error, PgPool, Transaction};
 use std::collections::HashMap;
@@ -132,16 +135,76 @@ impl CollabDiskCache {
   }
 
   #[instrument(level = "trace", skip_all)]
-  pub async fn get_collab_encoded_from_disk(
+  pub async fn get_collabs_created_since(
     &self,
-    workspace_id: &Uuid,
-    query: QueryCollab,
-  ) -> Result<(Rid, EncodedCollab), AppError> {
-    tracing::debug!("try get {}:{} from s3", query.collab_type, query.object_id);
-    let key = collab_key(workspace_id, &query.object_id);
-    match self.s3.get_blob(&key).await {
-      Ok(resp) => {
+    workspace_id: Uuid,
+    since: DateTime<Utc>,
+  ) -> Result<Vec<CollabUpdateData>, AppError> {
+    let mut collabs: HashMap<_, _> =
+      select_collabs_created_since(&self.pg_pool, &workspace_id, since)
+        .await?
+        .into_iter()
+        .flat_map(|record| {
+          let encoded_collab = if record.blob.is_empty() {
+            EncodedCollab {
+              state_vector: Default::default(),
+              doc_state: Default::default(),
+              version: Default::default(),
+            }
+          } else {
+            EncodedCollab::decode_from_bytes(&record.blob).ok()?
+          };
+          Some((
+            record.oid,
+            CollabUpdateData {
+              object_id: record.oid,
+              collab_type: CollabType::from(record.partition_key),
+              encoded_collab,
+              updated_at: Some(record.updated_at),
+            },
+          ))
+        })
+        .collect();
+    tracing::debug!(
+      "Found {} collabs created in workspace {} since {}",
+      collabs.len(),
+      workspace_id,
+      since
+    );
+    let mut join_set = JoinSet::new();
+    for (&oid, collab) in collabs.iter() {
+      if collab.encoded_collab.doc_state.is_empty() {
+        let s3 = self.s3.clone();
         self.metrics.s3_read_collab_count.inc();
+        join_set.spawn(async move {
+          let key = collab_key(&workspace_id, &oid);
+          (oid, Self::get_collab_from_s3(&s3, key).await)
+        });
+      }
+    }
+    while let Some(Ok((oid, res))) = join_set.join_next().await {
+      match res {
+        Ok((rid, encoded_collab)) => {
+          if let Some(collab) = collabs.get_mut(&oid) {
+            collab.updated_at = DateTime::from_timestamp_millis(rid.timestamp as i64);
+            collab.encoded_collab = encoded_collab;
+          }
+        },
+        Err(err) => {
+          tracing::warn!("failed to get collab {} state from S3: {}", oid, err);
+          collabs.remove(&oid);
+        },
+      }
+    }
+    Ok(collabs.into_values().collect())
+  }
+
+  async fn get_collab_from_s3(
+    s3: &AwsS3BucketClientImpl,
+    key: String,
+  ) -> Result<(Rid, EncodedCollab), AppError> {
+    match s3.get_blob(&key).await {
+      Ok(resp) => {
         let blob = resp.to_blob();
         let now = Instant::now();
         let decompressed = zstd::decode_all(&*blob)?;
@@ -157,6 +220,23 @@ impl CollabDiskCache {
           version: EncoderVersion::V1,
         };
         let rid = Rid::default(); //TODO: we need to store it somewhere
+        Ok((rid, encoded_collab))
+      },
+      Err(err) => Err(err),
+    }
+  }
+
+  #[instrument(level = "trace", skip_all)]
+  pub async fn get_collab_encoded_from_disk(
+    &self,
+    workspace_id: &Uuid,
+    query: QueryCollab,
+  ) -> Result<(Rid, EncodedCollab), AppError> {
+    tracing::debug!("try get {}:{} from s3", query.collab_type, query.object_id);
+    let key = collab_key(workspace_id, &query.object_id);
+    match Self::get_collab_from_s3(&self.s3, key).await {
+      Ok((rid, encoded_collab)) => {
+        self.metrics.s3_read_collab_count.inc();
         return Ok((rid, encoded_collab));
       },
       Err(AppError::RecordNotFound(_)) => {
@@ -166,9 +246,7 @@ impl CollabDiskCache {
           query.object_id
         );
       },
-      Err(err) => {
-        return Err(err);
-      },
+      Err(e) => return Err(e.into()),
     }
 
     const MAX_ATTEMPTS: usize = 3;

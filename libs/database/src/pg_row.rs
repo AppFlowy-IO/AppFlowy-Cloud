@@ -309,6 +309,14 @@ pub struct AFCollabRowMeta {
   pub updated_at: DateTime<Utc>,
 }
 
+#[derive(FromRow, Clone, Debug)]
+pub struct AFCollabData {
+  pub oid: Uuid,
+  pub partition_key: i32,
+  pub updated_at: DateTime<Utc>,
+  pub blob: Vec<u8>,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AFChatRow {
   pub chat_id: Uuid,

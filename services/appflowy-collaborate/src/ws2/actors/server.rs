@@ -2,7 +2,7 @@ use super::session::{WsInput, WsSession};
 use super::workspace::{Terminate, Workspace};
 use crate::ws2::collab_store::CollabStore;
 use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
-use appflowy_proto::{ServerMessage, WorkspaceId};
+use appflowy_proto::{Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -85,6 +85,7 @@ pub struct Join {
   /// Current client session identifier.
   pub session_id: ClientID,
   pub collab_origin: CollabOrigin,
+  pub last_message_id: Option<Rid>,
   /// Actix WebSocket session actor address.
   pub addr: Addr<WsSession>,
   /// Workspace to join.

@@ -11,10 +11,10 @@ use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
-use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
+use collab_stream::model::{AwarenessStreamUpdate, MessageId, UpdateStreamMessage};
 use collab_stream::stream_router::StreamRouter;
 use database::collab::{AppResult, CollabStorageAccessControl};
-use database_entity::dto::{CollabParams, QueryCollab};
+use database_entity::dto::{CollabParams, CollabUpdateData, QueryCollab};
 use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamTrimOptions, StreamTrimmingMode};
@@ -24,6 +24,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinSet;
 use tracing::warn;
+use uuid::Uuid;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Update};
@@ -84,6 +85,17 @@ impl CollabStore {
     }
   }
 
+  pub async fn get_collabs_created_since(
+    &self,
+    workspace_id: Uuid,
+    since: DateTime<Utc>,
+  ) -> Result<Vec<CollabUpdateData>, AppError> {
+    self
+      .collab_cache
+      .get_collabs_created_since(workspace_id, since)
+      .await
+  }
+
   /// Returns the latest full state of an object (including all updates).
   pub async fn get_latest_state(
     &self,
@@ -110,6 +122,17 @@ impl CollabStore {
       update: encoded_collab.doc_state,
       state_vector: encoded_collab.state_vector.into(),
     })
+  }
+
+  pub async fn get_workspace_updates(
+    &self,
+    workspace_id: &WorkspaceId,
+    since: MessageId,
+  ) -> AppResult<Vec<UpdateStreamMessage>> {
+    self
+      .collab_cache
+      .get_workspace_updates(workspace_id, None, Some(since.into()), None)
+      .await
   }
 
   pub async fn publish_update(

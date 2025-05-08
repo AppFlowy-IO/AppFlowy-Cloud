@@ -1278,6 +1278,7 @@ pub async fn collect_answer(mut stream: QuestionStream) -> String {
       },
       QuestionStreamValue::Metadata { .. } => {},
       QuestionStreamValue::KeepAlive => {},
+      QuestionStreamValue::LackOfContext { .. } => {},
     }
   }
   answer

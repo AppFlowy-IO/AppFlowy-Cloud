@@ -375,7 +375,11 @@ pub enum QuestionStreamValue {
   ///   {"id": "xx", "source": "", "name": "" }
   /// ]
   Metadata {
-    value: serde_json::Value,
+    value: Value,
+  },
+  LackOfContext {
+    value: String,
+    suggested_questions: Vec<String>,
   },
   KeepAlive,
 }

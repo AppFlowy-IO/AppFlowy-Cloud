@@ -154,7 +154,7 @@ docker logs <NAME>
   underscores_in_headers on;
   ```
 - If AppFlowy Web is served on a separate domain, you will need to modify the nginx conf to prevent CORS issues.
-  By default, we allow requests from `localhost:3000`, using, the configuration below:
+  By default, we allow requests from `localhost:3000`, using the configuration below:
   ```
   map $http_origin $cors_origin {
     # AppFlowy Web origin
@@ -225,8 +225,8 @@ performed via the admin portal as opposed to links provided in emails.
   from the internet.
 - An example site configuration for Nginx has been provided in `external_proxy_config/nginx/appflowy.site.conf`. You can use this as a starting point for your own configuration, and include this in nginx.conf of your external Nginx server.
 
-### I am using Nginx Proxy Manager (or similar UI based proxy manager), and i am not able to replicate the configuration in external_proxy_config/nginx/appflowy.site.conf easily.
-- Another alternative, is to keep the `nginx` service in the `docker-compose.yml` file, then pass all the requests from the proxy manager to the `nginx` service. You have to turn on `Websockets Support`, or any equivalent options that adds a connection upgrade header.
+### I am using Nginx Proxy Manager (or similar UI based proxy manager), and I am not able to replicate the configuration in external_proxy_config/nginx/appflowy.site.conf easily.
+- Another alternative is to keep the `nginx` service in the `docker-compose.yml` file, then pass all the requests from the proxy manager to the `nginx` service. You have to turn on `Websockets Support`, or any equivalent options that adds a connection upgrade header.
 
 ### AppFlowy Web keeps redirecting to the desktop application after login.
 - Refer to the AppFlowy Web section in the deployment steps. Make sure that the necessary headers are present.

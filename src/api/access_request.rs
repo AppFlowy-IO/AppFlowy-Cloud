@@ -3,7 +3,6 @@ use actix_web::{
   Result, Scope,
 };
 
-use authentication::jwt::UserUuid;
 use database_entity::dto::{
   AccessRequestMinimal, ApproveAccessRequestParams, CreateAccessRequestParams,
 };
@@ -14,8 +13,11 @@ use shared_entity::{
 use uuid::Uuid;
 
 use crate::{
-  biz::access_request::ops::{
-    approve_or_reject_access_request, create_access_request, get_access_request,
+  biz::{
+    access_request::ops::{
+      approve_or_reject_access_request, create_access_request, get_access_request,
+    },
+    authentication::jwt::UserUuid,
   },
   state::AppState,
 };

@@ -1,10 +1,11 @@
+use crate::biz::authentication::jwt::Authorization;
 use crate::biz::search::{search_document, summarize_search_results};
 use crate::state::AppState;
 use access_control::act::Action;
 use actix_web::web::{Data, Json, Query};
 use actix_web::{web, Scope};
 use async_openai::config::{AzureConfig, OpenAIConfig};
-use authentication::jwt::Authorization;
+
 use llm_client::chat::{AITool, AzureOpenAIChat, OpenAIChat};
 use shared_entity::dto::search_dto::{
   SearchDocumentRequest, SearchDocumentResponseItem, SearchSummaryResult,

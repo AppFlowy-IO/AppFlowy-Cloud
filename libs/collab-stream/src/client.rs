@@ -128,7 +128,7 @@ impl CollabRedisStream {
           tracing::trace!(
             "replaying current collab update `{}` for {}",
             message_id,
-            oid
+            msg_oid
           );
           result.push((message_id, stream_update));
         }

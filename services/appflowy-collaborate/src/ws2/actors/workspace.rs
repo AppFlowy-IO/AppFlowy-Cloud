@@ -5,9 +5,12 @@ use actix::{
   fut, Actor, ActorContext, Addr, AsyncContext, AtomicResponse, Handler, Recipient,
   ResponseActFuture, Running, SpawnHandle, StreamHandler, WrapFuture,
 };
+use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
+use appflowy_proto::{ObjectId, Rid, ServerMessage, UpdateFlags, WorkspaceId};
+use chrono::DateTime;
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncoderVersion;
 use collab_entity::CollabType;
 use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use std::collections::HashMap;
@@ -153,6 +156,78 @@ impl Workspace {
       },
     }
   }
+
+  async fn publish_collabs_created_since(
+    store: Arc<CollabStore>,
+    workspace_id: WorkspaceId,
+    last_message_id: Rid,
+    reply_to: Addr<WsSession>,
+  ) -> Result<(), AppError> {
+    let since =
+      DateTime::from_timestamp_millis(last_message_id.timestamp as i64).ok_or_else(|| {
+        AppError::Internal(anyhow!(
+          "last message id timestamp is invalid: {}",
+          last_message_id
+        ))
+      })?;
+    {
+      let new_collabs = store.get_collabs_created_since(workspace_id, since).await?;
+      tracing::trace!(
+        "{} collabs created in workspace {} since {}",
+        new_collabs.len(),
+        workspace_id,
+        since
+      );
+      for collab in new_collabs {
+        if !collab.encoded_collab.doc_state.is_empty()
+          && &*collab.encoded_collab.doc_state != &[0, 0]
+        {
+          tracing::trace!(
+            "sending new collab {} state ({} bytes)",
+            collab.object_id,
+            collab.encoded_collab.doc_state.len()
+          );
+          let rid = match collab.updated_at {
+            None => Rid::default(),
+            Some(updated_at) => Rid::new(updated_at.timestamp_millis() as u64, 0),
+          };
+          reply_to.do_send(WsOutput {
+            message: ServerMessage::Update {
+              object_id: collab.object_id,
+              collab_type: collab.collab_type,
+              flags: match collab.encoded_collab.version {
+                EncoderVersion::V1 => UpdateFlags::Lib0v1,
+                EncoderVersion::V2 => UpdateFlags::Lib0v2,
+              },
+              last_message_id: rid,
+              update: collab.encoded_collab.doc_state,
+            },
+          });
+        }
+      }
+    }
+    let updates = store
+      .get_workspace_updates(&workspace_id, last_message_id.into())
+      .await?;
+    for update in updates {
+      tracing::trace!(
+        "sending collab {} update ({} bytes)",
+        update.object_id,
+        update.update.len()
+      );
+      reply_to.do_send(WsOutput {
+        message: ServerMessage::Update {
+          object_id: update.object_id,
+          collab_type: update.collab_type,
+          flags: update.update_flags,
+          last_message_id: update.last_message_id,
+          update: update.update,
+        },
+      });
+    }
+
+    Ok(())
+  }
 }
 
 impl Actor for Workspace {
@@ -255,15 +330,35 @@ impl StreamHandler<(ObjectId, AwarenessStreamUpdate)> for Workspace {
 impl Handler<Join> for Workspace {
   type Result = ();
 
-  fn handle(&mut self, msg: Join, _ctx: &mut Self::Context) -> Self::Result {
+  fn handle(&mut self, msg: Join, ctx: &mut Self::Context) -> Self::Result {
     if msg.workspace_id == self.workspace_id {
-      let handle = SessionHandle::new(msg.collab_origin, msg.addr);
+      let handle = SessionHandle::new(msg.collab_origin, msg.addr.clone());
       self.sessions_by_client_id.insert(msg.session_id, handle);
       tracing::trace!(
         "attached session `{}` to workspace {}",
         msg.session_id,
         msg.workspace_id
       );
+      let store = self.store.clone();
+      let workspace_id = self.workspace_id;
+      let session = msg.addr;
+      if let Some(last_message_id) = msg.last_message_id {
+        ctx.spawn(
+          async move {
+            if let Err(err) =
+              Self::publish_collabs_created_since(store, workspace_id, last_message_id, session)
+                .await
+            {
+              tracing::error!(
+                "failed to send missing collabs for workspace {}: {}",
+                workspace_id,
+                err
+              );
+            }
+          }
+          .into_actor(self),
+        );
+      }
     }
   }
 }

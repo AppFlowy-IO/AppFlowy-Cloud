@@ -120,10 +120,15 @@ pub async fn establish_ws_connection_v2(
     .extract_param("X-AF-Client-ID")?
     .parse()
     .map_err(|_| AppError::InvalidRequest("client-id header missing or invalid".into()))?;
-  let last_message_id = request.extract_param("X-AF-Last-Message-ID")?;
-  let last_message_id = MessageId::try_from(last_message_id).map_err(|_| {
-    AppError::InvalidRequest("Couldn't parse 'X-AF-Last-Message-ID' head value".into())
-  })?;
+  let last_message_id = match request.extract_param("X-AF-Last-Message-ID") {
+    Ok(last_message_id) => {
+      let last_message_id = MessageId::try_from(last_message_id).map_err(|_| {
+        AppError::InvalidRequest("Couldn't parse 'X-AF-Last-Message-ID' head value".into())
+      })?;
+      Some(last_message_id)
+    },
+    Err(_) => None,
+  };
   let auth = authorization_from_token(access_token.as_str(), &jwt_secret)?;
   let user_uuid = UserUuid::from_auth(auth)?;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;

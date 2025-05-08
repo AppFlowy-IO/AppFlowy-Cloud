@@ -4,6 +4,7 @@ use crate::CollabMetrics;
 use app_error::AppError;
 use appflowy_proto::{Rid, UpdateFlags};
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::{EncodedCollab, EncoderVersion};
@@ -11,7 +12,9 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_stream::model::UpdateStreamMessage;
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
-use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
+use database_entity::dto::{
+  CollabParams, CollabUpdateData, PendingCollabWrite, QueryCollab, QueryCollabResult,
+};
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
@@ -195,6 +198,17 @@ impl CollabCache {
         object_id
       ))),
     }
+  }
+
+  pub async fn get_collabs_created_since(
+    &self,
+    workspace_id: Uuid,
+    since: DateTime<Utc>,
+  ) -> Result<Vec<CollabUpdateData>, AppError> {
+    self
+      .disk_cache
+      .get_collabs_created_since(workspace_id, since)
+      .await
   }
 
   pub async fn get_workspace_updates(

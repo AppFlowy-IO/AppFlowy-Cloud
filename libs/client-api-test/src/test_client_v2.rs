@@ -113,6 +113,7 @@ impl TestClient {
       workspace_db_path: db_path,
       device_id: device_id.clone(),
       access_token: api_client.access_token().unwrap(),
+      sync_eagerly: true,
     })
     .unwrap();
 
@@ -839,7 +840,7 @@ impl TestClient {
   ) -> Uuid {
     let object_id = Uuid::new_v4();
     self
-      .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None)
+      .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
       .await;
     object_id
   }
@@ -860,6 +861,7 @@ impl TestClient {
           workspace_db_path: db_path,
           device_id: self.device_id.clone(),
           access_token: self.api_client.access_token().unwrap(),
+          sync_eagerly: true,
         })
         .unwrap();
         workspace.connect().await.unwrap();
@@ -875,6 +877,7 @@ impl TestClient {
     workspace_id: Uuid,
     collab_type: CollabType,
     encoded_collab_v1: Option<EncodedCollab>,
+    sync: bool,
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
@@ -922,7 +925,9 @@ impl TestClient {
     }
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id, test_collab);
-    self.wait_object_sync_complete(&object_id).await.unwrap();
+    if sync {
+      self.wait_object_sync_complete(&object_id).await.unwrap();
+    }
   }
 
   pub async fn open_workspace_collab(&mut self, workspace_id: Uuid) {
@@ -933,6 +938,18 @@ impl TestClient {
 
   #[allow(clippy::await_holding_lock)]
   pub async fn open_collab(
+    &mut self,
+    workspace_id: Uuid,
+    object_id: Uuid,
+    collab_type: CollabType,
+  ) {
+    self
+      .open_collab_with_doc_state(workspace_id, object_id, collab_type, vec![])
+      .await
+  }
+
+  #[allow(clippy::await_holding_lock)]
+  pub async fn open_collab_no_sync(
     &mut self,
     workspace_id: Uuid,
     object_id: Uuid,

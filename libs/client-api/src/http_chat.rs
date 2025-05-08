@@ -380,8 +380,14 @@ pub enum QuestionStreamValue {
   },
   LackOfContext {
     value: String,
-    suggested_questions: Vec<String>,
+    suggested_questions: Vec<SuggestedQuestion>,
   },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SuggestedQuestion {
+  pub content: String,
+  pub object_id: String,
 }
 
 impl Stream for QuestionStream {

@@ -768,6 +768,44 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
   Ok(workspaces)
 }
 
+/// Returns a list of workspaces that the user is part of.
+/// User must be at least member.
+#[inline]
+pub async fn select_all_user_non_guest_workspaces<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  user_uuid: &Uuid,
+) -> Result<Vec<AFWorkspaceRow>, AppError> {
+  let workspaces = sqlx::query_as!(
+    AFWorkspaceRow,
+    r#"
+      SELECT
+        w.workspace_id,
+        w.database_storage_id,
+        w.owner_uid,
+        u.name AS owner_name,
+        u.email AS owner_email,
+        w.created_at,
+        w.workspace_type,
+        w.deleted_at,
+        w.workspace_name,
+        w.icon
+      FROM af_workspace w
+      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
+      JOIN public.af_user u ON w.owner_uid = u.uid
+      WHERE wm.uid = (
+         SELECT uid FROM public.af_user WHERE uuid = $1
+      )
+      AND wm.role_id != $2
+      AND COALESCE(w.is_initialized, true) = true;
+    "#,
+    user_uuid,
+    AFRole::Guest as i32,
+  )
+  .fetch_all(executor)
+  .await?;
+  Ok(workspaces)
+}
+
 /// Returns a list of workspace ids that the user is owner of.
 #[inline]
 pub async fn select_user_owned_workspaces_id<'a, E: Executor<'a, Database = Postgres>>(

@@ -67,6 +67,7 @@ use indexer::scheduler::{UnindexedCollabTask, UnindexedData};
 use itertools::Itertools;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
+
 use sha2::{Digest, Sha256};
 use shared_entity::dto::publish_dto::DuplicatePublishedPageResponse;
 use shared_entity::dto::workspace_dto::*;
@@ -484,6 +485,7 @@ async fn list_workspace_handler(
   state: Data<AppState>,
   query: web::Query<QueryWorkspaceParam>,
 ) -> Result<JsonAppResponse<Vec<AFWorkspace>>> {
+  let exclude_guest = true;
   let QueryWorkspaceParam {
     include_member_count,
     include_role,
@@ -494,6 +496,7 @@ async fn list_workspace_handler(
     &uuid,
     include_member_count.unwrap_or(false),
     include_role.unwrap_or(false),
+    exclude_guest,
   )
   .await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())

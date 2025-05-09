@@ -4,6 +4,7 @@ pub mod auth_dto;
 pub mod billing_dto;
 pub mod chat_dto;
 pub mod file_dto;
+pub mod guest_dto;
 pub mod history_dto;
 pub mod import_dto;
 pub mod publish_dto;

@@ -249,8 +249,13 @@ pub async fn get_all_user_workspaces(
   user_uuid: &Uuid,
   include_member_count: bool,
   include_role: bool,
+  exclude_guest: bool,
 ) -> Result<Vec<AFWorkspace>, AppResponseError> {
-  let workspaces = select_all_user_workspaces(pg_pool, user_uuid).await?;
+  let workspaces = if exclude_guest {
+    select_all_user_non_guest_workspaces(pg_pool, user_uuid).await?
+  } else {
+    select_all_user_workspaces(pg_pool, user_uuid).await?
+  };
   let mut workspaces = workspaces
     .into_iter()
     .flat_map(|row| {

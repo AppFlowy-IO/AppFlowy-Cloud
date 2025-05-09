@@ -378,14 +378,16 @@ pub enum QuestionStreamValue {
   Metadata {
     value: Value,
   },
-  LackOfContext {
-    value: String,
-    suggested_questions: Vec<SuggestedQuestion>,
+  SuggestedQuestion {
+    context_suggested_questions: Vec<ContextSuggestedQuestion>,
+  },
+  FollowUp {
+    should_generate_related_question: bool,
   },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SuggestedQuestion {
+pub struct ContextSuggestedQuestion {
   pub content: String,
   pub object_id: String,
 }

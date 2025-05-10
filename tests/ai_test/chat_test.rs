@@ -491,8 +491,7 @@ async fn collect_answer(
         answer.push_str(&value);
         value.len()
       },
-      QuestionStreamValue::Metadata { .. } => 0,
-      QuestionStreamValue::KeepAlive => 0,
+      _ => 0,
     };
     if let Some(stop_when_num_of_char) = stop_when_num_of_char {
       if num_of_char >= stop_when_num_of_char {

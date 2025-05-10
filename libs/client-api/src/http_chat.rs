@@ -8,11 +8,11 @@ use client_api_entity::chat_dto::{
 use futures_core::{ready, Stream};
 use pin_project::pin_project;
 use reqwest::Method;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shared_entity::dto::ai_dto::{
   CalculateSimilarityParams, ChatQuestionQuery, RepeatedRelatedQuestion, SimilarityResponse,
-  STREAM_ANSWER_KEY, STREAM_COMMENT_KEY, STREAM_IMAGE_KEY, STREAM_KEEP_ALIVE_KEY,
-  STREAM_METADATA_KEY,
+  STREAM_ANSWER_KEY, STREAM_COMMENT_KEY, STREAM_IMAGE_KEY, STREAM_METADATA_KEY,
 };
 use shared_entity::dto::chat_dto::{ChatSettings, UpdateChatParams};
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -365,6 +365,7 @@ impl QuestionStream {
   }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum QuestionStreamValue {
   Answer {
     value: String,
@@ -375,10 +376,22 @@ pub enum QuestionStreamValue {
   ///   {"id": "xx", "source": "", "name": "" }
   /// ]
   Metadata {
-    value: serde_json::Value,
+    value: Value,
   },
-  KeepAlive,
+  SuggestedQuestion {
+    context_suggested_questions: Vec<ContextSuggestedQuestion>,
+  },
+  FollowUp {
+    should_generate_related_question: bool,
+  },
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextSuggestedQuestion {
+  pub content: String,
+  pub object_id: String,
+}
+
 impl Stream for QuestionStream {
   type Item = Result<QuestionStreamValue, AppResponseError>;
 
@@ -404,10 +417,6 @@ impl Stream for QuestionStream {
             .and_then(|s| s.as_str().map(ToString::to_string))
           {
             return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: image })));
-          }
-
-          if value.remove(STREAM_KEEP_ALIVE_KEY).is_some() {
-            return Poll::Ready(Some(Ok(QuestionStreamValue::KeepAlive)));
           }
 
           error!("Invalid streaming value: {:?}", value);

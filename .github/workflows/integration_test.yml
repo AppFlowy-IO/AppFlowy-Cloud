@@ -145,9 +145,16 @@ jobs:
           docker ps -a
           docker compose -f docker-compose-ci.yml logs
 
-      - name: AI Logs
-        if: always()
+      - name: Minio Logs
+        if: failure()
         run: |
+          docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}'appflowy-cloud-minio-1
+          docker logs -f appflowy-cloud-minio-1
+
+      - name: AI Logs
+        if: failure()
+        run: |
+          docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}'appflowy-cloud-ai-1
           docker logs appflowy-cloud-ai-1
 
   cleanup:

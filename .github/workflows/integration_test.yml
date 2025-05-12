@@ -105,8 +105,6 @@ jobs:
           sed -i 's|APPFLOWY_EMBEDDING_CHUNK_SIZE=.*|APPFLOWY_EMBEDDING_CHUNK_SIZE=500|' .env
           sed -i 's|APPFLOWY_EMBEDDING_CHUNK_OVERLAP=.*|APPFLOWY_EMBEDDING_CHUNK_OVERLAP=50|' .env
           sed -i 's|AI_ANTHROPIC_API_KEY=.*|AI_ANTHROPIC_API_KEY=${{ secrets.CI_AI_ANTHROPIC_API_KEY }}|' .env
-          sed -i "s|AI_AWS_ACCESS_KEY_ID=.*|AI_AWS_ACCESS_KEY_ID=${{ secrets.LOCAL_AI_AWS_ACCESS_KEY_ID }}|" .env
-          sed -i "s|AI_AWS_SECRET_ACCESS_KEY=.*|AI_AWS_SECRET_ACCESS_KEY=${{ secrets.LOCAL_AI_AWS_SECRET_ACCESS_KEY }}|" .env
           sed -i 's|AI_APPFLOWY_HOST=.*|AI_APPFLOWY_HOST=http://localhost|' .env
           sed -i 's|APPFLOWY_WEB_URL=.*|APPFLOWY_WEB_URL=http://localhost:3000|' .env
           sed -i 's|.*APPFLOWY_S3_PRESIGNED_URL_ENDPOINT=.*|APPFLOWY_S3_PRESIGNED_URL_ENDPOINT=http://localhost/minio-api|' .env
@@ -147,9 +145,16 @@ jobs:
           docker ps -a
           docker compose -f docker-compose-ci.yml logs
 
-      - name: AI Logs
-        if: always()
+      - name: Minio Logs
+        if: failure()
         run: |
+          docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}' appflowy-cloud-minio-1
+          docker logs -f appflowy-cloud-minio-1
+
+      - name: AI Logs
+        if: failure()
+        run: |
+          docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}' appflowy-cloud-ai-1
           docker logs appflowy-cloud-ai-1
 
   cleanup:

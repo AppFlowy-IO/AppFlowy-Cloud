@@ -112,7 +112,7 @@ impl Db {
     &self,
     object_id: &ObjectId,
     message_id: Option<Rid>,
-    update_v1: Vec<u8>,
+    update_v1: &[u8],
   ) -> Result<Option<StateVector>, PersistenceError> {
     let ops = self.inner.write_txn();
     tracing::trace!(
@@ -123,13 +123,13 @@ impl Db {
     );
     let workspace_id = self.workspace_id.to_string();
     let object_id = object_id.to_string();
-    let res = ops.push_update(self.uid, &workspace_id, &object_id, &update_v1);
+    let res = ops.push_update(self.uid, &workspace_id, &object_id, update_v1);
     let mut missing = None;
     match res {
       Ok(_) => {},
       Err(PersistenceError::RecordNotFound(_)) => {
         tracing::debug!("collab {} not found in local db, initializing", object_id);
-        let update = yrs::Update::decode_v1(&update_v1)?;
+        let update = yrs::Update::decode_v1(update_v1)?;
         let doc = yrs::Doc::new();
         let mut tx = doc.transact_mut();
         tx.apply_update(update)?;

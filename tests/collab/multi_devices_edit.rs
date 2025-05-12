@@ -4,7 +4,7 @@ use client_api::entity::AFRole;
 use collab_entity::CollabType;
 use serde_json::json;
 use sqlx::types::uuid;
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
 use tracing::trace;
 
 use client_api_test::*;
@@ -249,9 +249,10 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     .unwrap();
 }
 
-#[cfg(feature = "sync-v2")]
+//#[cfg(feature = "sync-v2")]
 #[tokio::test]
 async fn sync_new_documents_created_when_offline_test() {
+  use tokio::time::timeout;
   const TIMEOUT: Duration = Duration::from_secs(5);
   let collab_type = CollabType::Unknown;
   let mut client_1 = TestClient::new_user().await;

@@ -600,7 +600,6 @@ impl Client {
   }
 
   /// Only expose this method for testing
-  #[cfg(debug_assertions)]
   pub fn token(&self) -> Arc<RwLock<ClientToken>> {
     self.token.clone()
   }

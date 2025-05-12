@@ -144,12 +144,14 @@ impl TestClient {
     Self::new(registered_user, false).await
   }
 
+  #[cfg(debug_assertions)]
   pub fn disable_receive_message(&mut self) {
     for (_, workspace) in self.workspaces.iter_mut() {
       workspace.disable_receive_message();
     }
   }
 
+  #[cfg(debug_assertions)]
   pub fn enable_receive_message(&mut self) {
     for (_, workspace) in self.workspaces.iter_mut() {
       workspace.enable_receive_message();

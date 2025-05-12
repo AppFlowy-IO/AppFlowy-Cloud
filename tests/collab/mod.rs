@@ -11,5 +11,5 @@ mod stress_test;
 pub mod util;
 mod web_edit;
 
-#[cfg(feature = "sync-v2")]
+#[cfg(all(debug_assertions, feature = "sync-v2"))]
 mod missing_update_test;

@@ -1,4 +1,7 @@
-use prometheus_client::metrics::counter::Counter;
+use prometheus_client::{
+  encoding::EncodeLabelSet,
+  metrics::{counter::Counter, family::Family},
+};
 
 #[derive(Default, Clone)]
 pub struct AIMetrics {
@@ -8,6 +11,7 @@ pub struct AIMetrics {
   total_completion_count: Counter,
   total_summary_row_count: Counter,
   total_translate_row_count: Counter,
+  prompt_usage_count: Family<PromptLabel, Counter>,
 }
 
 impl AIMetrics {
@@ -46,6 +50,11 @@ impl AIMetrics {
       "Total count of translation rows processed",
       metrics.total_translate_row_count.clone(),
     );
+    realtime_registry.register(
+      "prompt_usage_count",
+      "Prompt usage count by prompt id",
+      metrics.prompt_usage_count.clone(),
+    );
 
     metrics
   }
@@ -73,4 +82,18 @@ impl AIMetrics {
   pub fn record_total_translate_row_count(&self, count: u64) {
     self.total_translate_row_count.inc_by(count);
   }
+
+  pub fn record_prompt_usage_count(&self, prompt_id: &str, count: u64) {
+    self
+      .prompt_usage_count
+      .get_or_create(&PromptLabel {
+        prompt_id: prompt_id.to_string(),
+      })
+      .inc_by(count);
+  }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct PromptLabel {
+  pub prompt_id: String,
 }

@@ -226,7 +226,7 @@ impl TryFrom<messages::Message> for ClientMessage {
 
   fn try_from(value: messages::Message) -> Result<Self, Self::Error> {
     let object_id = Uuid::parse_str(&value.object_id)?;
-    let collab_type = CollabType::try_from(value.collab_type).unwrap_or(CollabType::Unknown);
+    let collab_type = CollabType::from(value.collab_type);
 
     match value.data {
       Some(Data::SyncRequest(proto)) => Ok(ClientMessage::Manifest {
@@ -451,7 +451,7 @@ impl TryFrom<messages::Message> for ServerMessage {
 
   fn try_from(value: messages::Message) -> Result<Self, Self::Error> {
     let object_id = Uuid::parse_str(&value.object_id)?;
-    let collab_type = CollabType::try_from(value.collab_type).unwrap_or(CollabType::Unknown);
+    let collab_type = CollabType::from(value.collab_type);
     match value.data {
       Some(Data::SyncRequest(proto)) => {
         let rid = proto.last_message_id.ok_or(Error::MissingFields)?;

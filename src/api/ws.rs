@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::biz::authentication::jwt::{authorization_from_token, UserUuid};
 use crate::state::AppState;
 use actix::Addr;
 use actix_http::header::AUTHORIZATION;
@@ -12,7 +13,6 @@ use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::ws2::{SessionInfo, WsSession};
-use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
 use collab_stream::model::MessageId;

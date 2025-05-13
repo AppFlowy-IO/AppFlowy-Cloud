@@ -11,7 +11,7 @@ env:
   SQLX_VERSION: 0.7.1
   SQLX_FEATURES: "rustls,postgres"
   SQLX_OFFLINE: true
-  RUST_TOOLCHAIN: "1.81"
+  RUST_TOOLCHAIN: "1.86"
 
 jobs:
   test:

@@ -204,6 +204,7 @@ pub async fn select_collabs_created_since<'a, E>(
   conn: E,
   workspace_id: &Uuid,
   since: DateTime<Utc>,
+  limit: usize,
 ) -> Result<Vec<AFCollabData>, sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
@@ -217,10 +218,11 @@ where
             AND c.deleted_at IS NULL
             AND c.created_at > $2
         ORDER BY updated_at
-        LIMIT 500
+        LIMIT $3
         "#,
     workspace_id,
-    since
+    since,
+    limit as i64
   )
   .fetch_all(conn)
   .await?;

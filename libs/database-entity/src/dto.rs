@@ -118,6 +118,10 @@ pub struct CollabUpdateData {
 pub struct CollabParams {
   pub object_id: Uuid,
   pub collab_type: CollabType,
+
+  /// Minimal size of Yrs update is 2 bytes (`[0,0]`) for
+  /// an empty update in lib0 v1 encoding.
+  /// (see: https://github.com/y-crdt/y-crdt/blob/c695dbc8f4c7a80fa03eb656f7ad025b6a2e908b/yrs/src/update.rs#L99).
   #[validate(length(min = 2))]
   pub encoded_collab_v1: Bytes,
   pub updated_at: Option<DateTime<Utc>>,

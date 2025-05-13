@@ -47,6 +47,7 @@ pub struct Workspace {
 
 impl Workspace {
   pub const SNAPSHOT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+  pub const PUBLISH_COLLAB_LIMIT: usize = 500;
 
   pub fn new(
     server: Recipient<Terminate>,
@@ -162,6 +163,7 @@ impl Workspace {
     workspace_id: WorkspaceId,
     last_message_id: Rid,
     reply_to: Addr<WsSession>,
+    limit: usize,
   ) -> Result<(), AppError> {
     let since =
       DateTime::from_timestamp_millis(last_message_id.timestamp as i64).ok_or_else(|| {
@@ -171,7 +173,9 @@ impl Workspace {
         ))
       })?;
     {
-      let new_collabs = store.get_collabs_created_since(workspace_id, since).await?;
+      let new_collabs = store
+        .get_collabs_created_since(workspace_id, since, limit)
+        .await?;
       tracing::trace!(
         "{} collabs created in workspace {} since {}",
         new_collabs.len(),
@@ -179,8 +183,8 @@ impl Workspace {
         since
       );
       for collab in new_collabs {
-        if !collab.encoded_collab.doc_state.is_empty()
-          && *collab.encoded_collab.doc_state != [0, 0]
+        // [0,0] is an empty Yrs document update encoded in v1 encoding
+        if !collab.encoded_collab.doc_state.is_empty() && *collab.encoded_collab.doc_state != [0, 0]
         {
           tracing::trace!(
             "sending new collab {} state ({} bytes)",
@@ -276,7 +280,7 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
           self.workspace_id,
           msg.object_id
         );
-        self.last_message_id = msg.last_message_id.max(msg.last_message_id);
+        self.last_message_id = self.last_message_id.max(msg.last_message_id);
         for session in self.sessions_by_client_id.values() {
           if session.collab_origin == msg.sender {
             continue; // skip the sender
@@ -294,7 +298,7 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
       },
       Err(err) => {
         tracing::error!(
-          "failed to read update stream message for workpsace {}: {:?}",
+          "failed to read update stream message for workspace {}: {:?}",
           self.workspace_id,
           err
         );
@@ -345,9 +349,14 @@ impl Handler<Join> for Workspace {
       if let Some(last_message_id) = msg.last_message_id {
         ctx.spawn(
           async move {
-            if let Err(err) =
-              Self::publish_collabs_created_since(store, workspace_id, last_message_id, session)
-                .await
+            if let Err(err) = Self::publish_collabs_created_since(
+              store,
+              workspace_id,
+              last_message_id,
+              session,
+              Self::PUBLISH_COLLAB_LIMIT,
+            )
+            .await
             {
               tracing::error!(
                 "failed to send missing collabs for workspace {}: {}",

@@ -174,7 +174,7 @@ impl WorkspaceControllerActor {
   }
 
   fn set_connection_status(&self, status: ConnectionStatus) {
-    let _ = self.status_tx.send(status);
+    self.status_tx.send_replace(status);
   }
 
   async fn ping(&self) -> anyhow::Result<()> {

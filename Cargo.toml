@@ -173,36 +173,36 @@ path = "src/lib.rs"
 
 [workspace]
 members = [
-  # libs
-  "libs/snowflake",
-  "libs/collab-rt-entity",
-  "libs/database",
-  "libs/database-entity",
-  "libs/client-api",
-  "libs/infra",
-  "libs/shared-entity",
-  "libs/gotrue",
-  "libs/gotrue-entity",
-  "admin_frontend",
-  "libs/app-error",
-  "libs/workspace-template",
-  "libs/access-control",
-  "libs/collab-rt-protocol",
-  "libs/collab-stream",
-  "libs/client-websocket",
-  "libs/client-api-test",
-  "libs/appflowy-ai-client",
-  "libs/client-api-entity",
-  # services
-  "services/appflowy-collaborate",
-  "services/appflowy-worker",
-  # xtask
-  "xtask",
-  "libs/tonic-proto",
-  "libs/mailer",
-  "libs/indexer",
-  "libs/llm-client",
-  "libs/appflowy-proto",
+    # libs
+    "libs/snowflake",
+    "libs/collab-rt-entity",
+    "libs/database",
+    "libs/database-entity",
+    "libs/client-api",
+    "libs/infra",
+    "libs/shared-entity",
+    "libs/gotrue",
+    "libs/gotrue-entity",
+    "admin_frontend",
+    "libs/app-error",
+    "libs/workspace-template",
+    "libs/access-control",
+    "libs/collab-rt-protocol",
+    "libs/collab-stream",
+    "libs/client-websocket",
+    "libs/client-api-test",
+    "libs/appflowy-ai-client",
+    "libs/client-api-entity",
+    # services
+    "services/appflowy-collaborate",
+    "services/appflowy-worker",
+    # xtask
+    "xtask",
+    "libs/tonic-proto",
+    "libs/mailer",
+    "libs/indexer",
+    "libs/llm-client",
+    "libs/appflowy-proto",
 ]
 
 [workspace.dependencies]

@@ -139,9 +139,10 @@ impl CollabDiskCache {
     &self,
     workspace_id: Uuid,
     since: DateTime<Utc>,
+    limit: usize,
   ) -> Result<Vec<CollabUpdateData>, AppError> {
     let mut collabs: HashMap<_, _> =
-      select_collabs_created_since(&self.pg_pool, &workspace_id, since)
+      select_collabs_created_since(&self.pg_pool, &workspace_id, since, limit)
         .await?
         .into_iter()
         .flat_map(|record| {

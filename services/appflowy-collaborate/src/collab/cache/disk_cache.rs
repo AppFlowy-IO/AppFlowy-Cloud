@@ -246,7 +246,7 @@ impl CollabDiskCache {
           query.object_id
         );
       },
-      Err(e) => return Err(e.into()),
+      Err(e) => return Err(e),
     }
 
     const MAX_ATTEMPTS: usize = 3;

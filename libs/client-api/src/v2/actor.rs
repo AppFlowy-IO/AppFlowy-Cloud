@@ -225,7 +225,7 @@ impl WorkspaceControllerActor {
     let id = actor.db.client_id();
     tracing::trace!("[{}] action {:?}", id, action);
     match action {
-      WorkspaceAction::Connect(ack) => match Self::handle_connect(&actor).await {
+      WorkspaceAction::Connect(ack) => match Self::handle_connect(actor).await {
         Ok(_) => {
           let _ = ack.send(Ok(()));
         },
@@ -273,10 +273,10 @@ impl WorkspaceControllerActor {
       let rid = source.into();
       // persist
       match flags {
-        UpdateFlags::Lib0v1 => self.db.save_update(object_id, rid, &*update),
+        UpdateFlags::Lib0v1 => self.db.save_update(object_id, rid, update),
         UpdateFlags::Lib0v2 => {
           let update_v1 = Update::decode_v2(update)?.encode_v1();
-          self.db.save_update(object_id, rid, &*update_v1)
+          self.db.save_update(object_id, rid, &update_v1)
         },
       }?;
     };
@@ -339,7 +339,7 @@ impl WorkspaceControllerActor {
         let sink = Arc::new(Mutex::new(sink));
         actor.publish_pending_collabs().await?;
         tokio::spawn(Self::remote_receiver_task(
-          Arc::downgrade(&actor),
+          Arc::downgrade(actor),
           stream,
           cancel.clone(),
         ));

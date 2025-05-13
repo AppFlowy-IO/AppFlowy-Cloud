@@ -1,5 +1,4 @@
 mod actor;
-#[cfg(feature = "collab-sync")]
 mod compactor;
 mod controller;
 mod db;

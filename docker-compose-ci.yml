@@ -177,6 +177,8 @@ services:
     networks:
       - shared_network
     depends_on:
+      gotrue:
+        condition: service_healthy
       appflowy_cloud:
         condition: service_started
 

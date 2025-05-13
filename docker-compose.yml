@@ -163,6 +163,8 @@ services:
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
       - ADMIN_FRONTEND_PATH_PREFIX=${ADMIN_FRONTEND_PATH_PREFIX:-}
     depends_on:
+      gotrue:
+        condition: service_healthy
       appflowy_cloud:
         condition: service_started
 

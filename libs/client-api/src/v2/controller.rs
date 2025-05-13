@@ -130,11 +130,20 @@ impl Display for ConnectionStatus {
 
 #[derive(Debug, Clone)]
 pub struct Options {
+  /// Endpoint where server V2 protocol handler is listening on
+  /// (i.e. `ws://{server}:8000/ws/v2`).
   pub url: String,
+  /// UUID of a workspace this controller is responsible for.
   pub workspace_id: WorkspaceId,
+  /// Unique user ID assigned by the server.
   pub uid: i64,
+  /// A local machine path, where current workspace related data should be stored.
   pub workspace_db_path: String,
+  /// Unique identifier of current device
   pub device_id: String,
+  /// Access token used for current client authentication.
   pub access_token: String,
+  /// If true, when connected, it will try to fetch info about new collabs
+  /// created while this client was offline.
   pub sync_eagerly: bool,
 }

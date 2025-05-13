@@ -204,10 +204,11 @@ impl CollabCache {
     &self,
     workspace_id: Uuid,
     since: DateTime<Utc>,
+    limit: usize,
   ) -> Result<Vec<CollabUpdateData>, AppError> {
     self
       .disk_cache
-      .get_collabs_created_since(workspace_id, since)
+      .get_collabs_created_since(workspace_id, since, limit)
       .await
   }
 

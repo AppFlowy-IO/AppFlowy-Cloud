@@ -1008,63 +1008,60 @@ impl CollabPersister {
       .current_collab_updates(&self.workspace_id, &self.object_id, None)
       .await?;
 
+    if updates.is_empty() {
+      // if there were no Redis updates, collab is still not initialized
+      return Ok(None);
+    }
+
+    let mut collab = match self.load_collab_full().await? {
+      Some(collab) => collab,
+      None => Collab::new_with_origin(
+        CollabOrigin::Server,
+        self.object_id.to_string(),
+        vec![],
+        false,
+      ),
+    };
     let start = Instant::now();
     let mut i = 0;
-    let mut collab = None;
     let mut applied_messages = Vec::new();
+    let mut tx = collab.transact_mut();
     for (message_id, update) in updates {
       i += 1;
       let update: Update = update.into_update()?;
-      if collab.is_none() {
-        collab = Some(match self.load_collab_full().await? {
-          Some(collab) => collab,
-          None => Collab::new_with_origin(
-            CollabOrigin::Server,
-            self.object_id.to_string(),
-            vec![],
-            false,
-          ),
-        })
-      };
-      let collab = collab.as_mut().unwrap();
-      collab.transact_mut().apply_update(update).map_err(|err| {
+      tx.apply_update(update).map_err(|err| {
         RTProtocolError::YrsApplyUpdate(format!("collab {} - {}", self.object_id, err))
       })?;
       applied_messages.push(message_id); //TODO: shouldn't this happen before decoding?
       self.metrics.apply_update_count.inc();
     }
+    drop(tx);
 
-    // if there were no Redis updates, collab is still not initialized
-    match collab {
-      Some(collab) => {
-        self.metrics.load_full_collab_count.inc();
-        let elapsed = start.elapsed();
-        self
-          .metrics
-          .load_collab_time
-          .observe(elapsed.as_millis() as f64);
+    self.metrics.load_full_collab_count.inc();
+    let elapsed = start.elapsed();
+    self
+      .metrics
+      .load_collab_time
+      .observe(elapsed.as_millis() as f64);
+    tracing::trace!(
+      "loaded collab full state: {} replaying {} updates in {:?}",
+      self.object_id,
+      i,
+      elapsed
+    );
+    {
+      let tx = collab.transact();
+      if tx.store().pending_update().is_some() || tx.store().pending_ds().is_some() {
         tracing::trace!(
-          "loaded collab full state: {} replaying {} updates in {:?}",
-          self.object_id,
-          i,
-          elapsed
+          "loaded collab {} is incomplete: has pending data",
+          self.object_id
         );
-        {
-          let tx = collab.transact();
-          if tx.store().pending_update().is_some() || tx.store().pending_ds().is_some() {
-            tracing::trace!(
-              "loaded collab {} is incomplete: has pending data",
-              self.object_id
-            );
-          }
-        }
-        Ok(Some(CollabSnapshot {
-          collab,
-          applied_messages,
-        }))
-      },
-      None => Ok(None),
+      }
     }
+    Ok(Some(CollabSnapshot {
+      collab,
+      applied_messages,
+    }))
   }
 
   async fn save(&self) -> Result<(), RealtimeError> {

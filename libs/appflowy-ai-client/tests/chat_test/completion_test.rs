@@ -17,6 +17,7 @@ async fn completion_explain_test() {
       rag_ids: None,
       completion_history: None,
       custom_prompt: None,
+      prompt_id: None,
     }),
     format: ResponseFormat::default(),
   };
@@ -40,6 +41,7 @@ async fn completion_image_test() {
       rag_ids: None,
       completion_history: None,
       custom_prompt: None,
+      prompt_id: None,
     }),
     format: ResponseFormat {
       output_content: OutputContent::IMAGE,
@@ -112,6 +114,7 @@ async fn custom_prompt_test() {
       custom_prompt: Some(CustomPrompt {
         system: "You are a talented artist who excels at providing detailed, creative instructions on how to draw a picture".to_string(),
       }),
+      prompt_id: None,
     }),
     format: Default::default(),
   };

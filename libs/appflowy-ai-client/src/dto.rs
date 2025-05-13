@@ -430,6 +430,10 @@ pub struct CompletionMetadata {
   /// When completion type is 'CustomPrompt', this field should be provided.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub custom_prompt: Option<CustomPrompt>,
+  /// The id of the prompt used for the completion
+  #[serde(default)]
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub prompt_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

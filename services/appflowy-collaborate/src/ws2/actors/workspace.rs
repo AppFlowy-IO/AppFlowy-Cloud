@@ -180,7 +180,7 @@ impl Workspace {
       );
       for collab in new_collabs {
         if !collab.encoded_collab.doc_state.is_empty()
-          && &*collab.encoded_collab.doc_state != &[0, 0]
+          && *collab.encoded_collab.doc_state != [0, 0]
         {
           tracing::trace!(
             "sending new collab {} state ({} bytes)",

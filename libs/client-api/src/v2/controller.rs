@@ -30,19 +30,17 @@ impl WorkspaceController {
   }
 
   pub fn is_connected(&self) -> bool {
-    if let ConnectionStatus::Connected { .. } = &*self.actor.status_channel().borrow() {
-      true
-    } else {
-      false
-    }
+    matches!(
+      &*self.actor.status_channel().borrow(),
+      ConnectionStatus::Connected { .. }
+    )
   }
 
   pub fn is_disconnected(&self) -> bool {
-    if let ConnectionStatus::Disconnected { .. } = &*self.actor.status_channel().borrow() {
-      true
-    } else {
-      false
-    }
+    matches!(
+      &*self.actor.status_channel().borrow(),
+      ConnectionStatus::Disconnected { .. }
+    )
   }
 
   pub async fn connect(&self) -> anyhow::Result<()> {

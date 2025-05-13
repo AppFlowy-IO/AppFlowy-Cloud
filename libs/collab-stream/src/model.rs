@@ -55,11 +55,11 @@ impl From<Rid> for MessageId {
   }
 }
 
-impl Into<Rid> for MessageId {
-  fn into(self) -> Rid {
+impl From<MessageId> for Rid {
+  fn from(val: MessageId) -> Self {
     Rid {
-      timestamp: self.timestamp_ms,
-      seq_no: self.sequence_number,
+      timestamp: val.timestamp_ms,
+      seq_no: val.sequence_number,
     }
   }
 }

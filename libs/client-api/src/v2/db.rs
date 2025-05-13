@@ -123,27 +123,23 @@ impl Db {
     );
     let workspace_id = self.workspace_id.to_string();
     let object_id = object_id.to_string();
-    let res = ops.push_update(self.uid, &workspace_id, &object_id, update_v1);
     let mut missing = None;
-    match res {
-      Ok(_) => {},
-      Err(PersistenceError::RecordNotFound(_)) => {
-        tracing::debug!("collab {} not found in local db, initializing", object_id);
-        let update = yrs::Update::decode_v1(update_v1)?;
-        let doc = yrs::Doc::new();
-        let mut tx = doc.transact_mut();
-        tx.apply_update(update)?;
-        let sv = tx.state_vector();
-        if sv == StateVector::default() {
-          tracing::trace!(
-            "collab {} initialized in incomplete state, missing updates found",
-            object_id
-          );
-          missing = Some(sv);
-        }
-        ops.create_new_doc(self.uid, &workspace_id, &object_id, &tx)?;
-      },
-      Err(err) => return Err(err),
+    if ops.is_exist(self.uid, &workspace_id, &object_id) {
+      ops.push_update(self.uid, &workspace_id, &object_id, update_v1)?;
+    } else {
+      let update = yrs::Update::decode_v1(update_v1)?;
+      let doc = yrs::Doc::new();
+      let mut tx = doc.transact_mut();
+      tx.apply_update(update)?;
+      let sv = tx.state_vector();
+      if sv == StateVector::default() {
+        tracing::trace!(
+          "collab {} initialized in incomplete state, missing updates found",
+          object_id
+        );
+        missing = Some(sv);
+      }
+      ops.create_new_doc(self.uid, &workspace_id, &object_id, &tx)?;
     }
     if let Some(message_id) = message_id {
       ops.update_last_message_id(&self.workspace_id, message_id)?;

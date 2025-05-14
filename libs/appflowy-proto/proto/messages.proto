@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+import "collab.proto";
+import "user.proto";
+
+package messages;
+
+/**
+ * All messages send between client/server are wrapped into a `Message`.
+ */
+message Message {
+    oneof payload {
+        collab.CollabMessage collab_message = 1;
+        user.UserMessage user_message = 2;
+    }
+}

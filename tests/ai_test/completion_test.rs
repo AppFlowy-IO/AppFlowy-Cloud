@@ -19,6 +19,7 @@ async fn generate_chat_message_answer_test() {
       rag_ids: None,
       completion_history: None,
       custom_prompt: None,
+      prompt_id: None,
     }),
     format: Default::default(),
   };

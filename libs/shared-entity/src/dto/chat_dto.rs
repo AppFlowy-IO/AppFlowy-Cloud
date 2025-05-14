@@ -33,6 +33,9 @@ pub struct CreateChatMessageParams {
   #[validate(custom(function = "validate_not_empty_str"))]
   pub content: String,
   pub message_type: ChatMessageType,
+  #[serde(default)]
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub prompt_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +169,7 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::System,
+      prompt_id: None,
     }
   }
 
@@ -173,6 +177,7 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::User,
+      prompt_id: None,
     }
   }
 }

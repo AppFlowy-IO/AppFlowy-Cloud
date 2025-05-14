@@ -182,6 +182,13 @@ async fn create_question_handler(
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
 
+  if let Some(ref prompt_id) = params.prompt_id {
+    state
+      .metrics
+      .ai_metrics
+      .record_prompt_usage_count(prompt_id, 1);
+  }
+
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let resp = create_chat_message(&state.pg_pool, uid, *uuid, chat_id, params).await?;
   Ok(AppResponse::Ok().with_data(resp).into())

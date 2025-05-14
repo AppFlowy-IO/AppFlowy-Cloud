@@ -106,20 +106,24 @@ impl TestClient {
     let db_path = format!("{}/{}/{}", db_path, device_id, workspace_id);
     tokio::fs::create_dir_all(&db_path).await.unwrap();
 
-    let workspace = WorkspaceController::new(WorkspaceControllerOptions {
-      url: LOCALHOST_WS_V2.to_string(),
-      workspace_id,
-      uid,
-      workspace_db_path: db_path,
-      device_id: device_id.clone(),
-      access_token: api_client.access_token().unwrap(),
-      sync_eagerly: true,
-    })
+    let workspace = WorkspaceController::new(
+      WorkspaceControllerOptions {
+        url: LOCALHOST_WS_V2.to_string(),
+        workspace_id,
+        uid,
+        device_id: device_id.clone(),
+        sync_eagerly: true,
+      },
+      &db_path,
+    )
     .unwrap();
 
     if start_ws_conn {
       // Connect to server via websocket
-      workspace.connect().await.unwrap();
+      workspace
+        .connect(api_client.access_token().unwrap())
+        .await
+        .unwrap();
     }
     Self {
       user: registered_user,
@@ -856,17 +860,21 @@ impl TestClient {
         tokio::fs::create_dir_all(&db_path).await.unwrap();
         let uid = self.api_client.get_profile().await.unwrap().uid;
 
-        let workspace = WorkspaceController::new(WorkspaceControllerOptions {
-          url: LOCALHOST_WS_V2.to_string(),
-          workspace_id,
-          uid,
-          workspace_db_path: db_path,
-          device_id: self.device_id.clone(),
-          access_token: self.api_client.access_token().unwrap(),
-          sync_eagerly: true,
-        })
+        let workspace = WorkspaceController::new(
+          WorkspaceControllerOptions {
+            url: LOCALHOST_WS_V2.to_string(),
+            workspace_id,
+            uid,
+            device_id: self.device_id.clone(),
+            sync_eagerly: true,
+          },
+          &db_path,
+        )
         .unwrap();
-        workspace.connect().await.unwrap();
+        workspace
+          .connect(self.api_client.access_token().unwrap())
+          .await
+          .unwrap();
         e.insert(workspace)
       },
     }
@@ -1051,7 +1059,10 @@ impl TestClient {
 
   pub async fn reconnect(&self) {
     for (_, workspace) in self.workspaces.iter() {
-      workspace.connect().await.unwrap();
+      workspace
+        .connect(self.api_client.access_token().unwrap())
+        .await
+        .unwrap();
     }
   }
 

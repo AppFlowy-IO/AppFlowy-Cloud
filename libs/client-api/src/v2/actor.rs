@@ -225,17 +225,19 @@ impl WorkspaceControllerActor {
     let id = actor.db.client_id();
     tracing::trace!("[{}] action {:?}", id, action);
     match action {
-      WorkspaceAction::Connect(ack) => match Self::handle_connect(actor).await {
-        Ok(_) => {
-          let _ = ack.send(Ok(()));
-        },
-        Err(err) => {
-          tracing::error!("[{}] failed to connect: {}", id, err);
-          actor.set_connection_status(ConnectionStatus::Disconnected {
-            reason: Some(err.to_string().into()),
-          });
-          let _ = ack.send(Err(err));
-        },
+      WorkspaceAction::Connect { ack, access_token } => {
+        match Self::handle_connect(actor, access_token).await {
+          Ok(_) => {
+            let _ = ack.send(Ok(()));
+          },
+          Err(err) => {
+            tracing::error!("[{}] failed to connect: {}", id, err);
+            actor.set_connection_status(ConnectionStatus::Disconnected {
+              reason: Some(err.to_string().into()),
+            });
+            let _ = ack.send(Err(err));
+          },
+        }
       },
       WorkspaceAction::Disconnect(ack) => match actor.handle_disconnect().await {
         Ok(_) => {
@@ -314,7 +316,7 @@ impl WorkspaceControllerActor {
     }
   }
 
-  async fn handle_connect(actor: &Arc<Self>) -> anyhow::Result<()> {
+  async fn handle_connect(actor: &Arc<Self>, access_token: String) -> anyhow::Result<()> {
     match &*actor.status_rx.borrow() {
       ConnectionStatus::Connecting { .. } | ConnectionStatus::Connected { .. } => return Ok(()),
       ConnectionStatus::Disconnected { .. } => {},
@@ -327,9 +329,14 @@ impl WorkspaceControllerActor {
 
     let last_message_id = actor.last_message_id.load_full();
     let client_id = actor.db.client_id();
-    let result =
-      Self::establish_connection(&actor.options, client_id, &last_message_id, cancel.clone())
-        .await?;
+    let result = Self::establish_connection(
+      &actor.options,
+      client_id,
+      &last_message_id,
+      cancel.clone(),
+      access_token,
+    )
+    .await?;
 
     match result {
       None => actor.set_connection_status(ConnectionStatus::Disconnected { reason: None }),
@@ -722,6 +729,7 @@ impl WorkspaceControllerActor {
     client_id: ClientID,
     last_message_id: &Rid,
     cancel: CancellationToken,
+    access_token: String,
   ) -> anyhow::Result<Option<WsConn>> {
     let url = format!("{}/{}", options.url, options.workspace_id);
     tracing::info!("establishing WebScoket connection to: {}", url);
@@ -738,10 +746,7 @@ impl WorkspaceControllerActor {
         HeaderValue::from_str(&last_message_id.to_string())?,
       );
     }
-    headers.insert(
-      "Authorization",
-      HeaderValue::from_str(&options.access_token)?,
-    );
+    headers.insert("Authorization", HeaderValue::from_str(&access_token)?);
     let config = WebSocketConfig {
       max_frame_size: None,
       ..WebSocketConfig::default()
@@ -762,7 +767,10 @@ impl WorkspaceControllerActor {
 
 #[derive(Debug)]
 pub(super) enum WorkspaceAction {
-  Connect(tokio::sync::oneshot::Sender<anyhow::Result<()>>),
+  Connect {
+    ack: tokio::sync::oneshot::Sender<anyhow::Result<()>>,
+    access_token: String,
+  },
   Disconnect(tokio::sync::oneshot::Sender<anyhow::Result<()>>),
   Send(ClientMessage, ActionSource),
 }

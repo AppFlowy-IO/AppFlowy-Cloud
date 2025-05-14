@@ -3,6 +3,7 @@ use super::WorkspaceId;
 use crate::entity::CollabType;
 use crate::v2::actor::{WorkspaceAction, WorkspaceControllerActor, WsConn};
 use appflowy_proto::Rid;
+use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use collab_rt_protocol::CollabRef;
 use futures_util::stream::SplitSink;
 use std::fmt::{Display, Formatter};
@@ -18,12 +19,20 @@ pub struct WorkspaceController {
 }
 
 impl WorkspaceController {
-  pub fn new(options: Options) -> anyhow::Result<Self> {
-    let db = Db::open(
-      options.workspace_id,
-      options.uid,
-      &options.workspace_db_path,
-    )?;
+  pub fn new(options: Options, workspace_db_path: &str) -> anyhow::Result<Self> {
+    let db = Db::open(options.workspace_id, options.uid, workspace_db_path)?;
+    Self::new_with_db(options, db)
+  }
+
+  pub fn new_with_rocksdb(
+    options: Options,
+    db: KVTransactionDBRocksdbImpl,
+  ) -> anyhow::Result<Self> {
+    let db = Db::open_with_rocksdb(options.workspace_id, options.uid, db)?;
+    Self::new_with_db(options, db)
+  }
+
+  fn new_with_db(options: Options, db: Db) -> anyhow::Result<Self> {
     let last_message_id = db.last_message_id()?;
     let actor = WorkspaceControllerActor::new(db, options, last_message_id);
     Ok(Self { actor })
@@ -43,9 +52,12 @@ impl WorkspaceController {
     )
   }
 
-  pub async fn connect(&self) -> anyhow::Result<()> {
+  pub async fn connect(&self, access_token: String) -> anyhow::Result<()> {
     let (tx, rx) = tokio::sync::oneshot::channel();
-    self.actor.trigger(WorkspaceAction::Connect(tx));
+    self.actor.trigger(WorkspaceAction::Connect {
+      ack: tx,
+      access_token,
+    });
     rx.await??;
     Ok(())
   }
@@ -137,12 +149,8 @@ pub struct Options {
   pub workspace_id: WorkspaceId,
   /// Unique user ID assigned by the server.
   pub uid: i64,
-  /// A local machine path, where current workspace related data should be stored.
-  pub workspace_db_path: String,
   /// Unique identifier of current device
   pub device_id: String,
-  /// Access token used for current client authentication.
-  pub access_token: String,
   /// If true, when connected, it will try to fetch info about new collabs
   /// created while this client was offline.
   pub sync_eagerly: bool,

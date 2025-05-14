@@ -22,15 +22,24 @@ pub(crate) struct Db {
 impl Db {
   pub fn open(workspace_id: Uuid, uid: i64, path: &str) -> Result<Self, PersistenceError> {
     let inner = KVTransactionDBRocksdbImpl::open(path)?;
-    let ops = inner.write_txn();
+    let this = Self::open_with_rocksdb(workspace_id, uid, inner)?;
+    Ok(this)
+  }
+
+  pub fn open_with_rocksdb(
+    workspace_id: Uuid,
+    uid: i64,
+    db: KVTransactionDBRocksdbImpl,
+  ) -> Result<Self, PersistenceError> {
+    let ops = db.write_txn();
     let client_id = ops.client_id(&workspace_id)?;
     ops.commit_transaction()?;
-    tracing::debug!("opened db for client {} - path: {}", client_id, path);
+    tracing::debug!("opened db for client {}", client_id);
     Ok(Self {
       client_id,
       uid,
       workspace_id,
-      inner,
+      inner: db,
     })
   }
 

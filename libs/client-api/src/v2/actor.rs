@@ -514,6 +514,7 @@ impl WorkspaceControllerActor {
         );
         self.remove_collab(&object_id)?;
       },
+      ServerMessage::UserProfileChange { .. } => {},
     }
     Ok(())
   }

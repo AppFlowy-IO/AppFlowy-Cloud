@@ -13,3 +13,4 @@ prost = { version = "0.13.4", features = ["derive"] }
 
 [build-dependencies]
 prost-build = "0.13.4"
+protoc-bin-vendored = { version = "3.0" }

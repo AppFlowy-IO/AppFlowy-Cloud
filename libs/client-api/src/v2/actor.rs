@@ -462,16 +462,6 @@ impl WorkspaceControllerActor {
           if let Some(msg) = missing {
             self.send_message(msg).await?;
           }
-        } else if !sv.is_empty() {
-          // we haven't seen this collab yet, so we need to send manifest ourselves
-          tracing::trace!("sending manifest for {}", object_id);
-          let reply = ClientMessage::Manifest {
-            object_id,
-            collab_type,
-            last_message_id: local_message_id,
-            state_vector: StateVector::default().encode_v1(),
-          };
-          self.send_message(reply).await?;
         }
       },
       ServerMessage::Update {
@@ -575,7 +565,6 @@ impl WorkspaceControllerActor {
       );
       let mut lock = collab_ref.write().await;
       let collab = (*lock).borrow_mut();
-      let sync_state = collab.get_state().sync_state();
       let doc = collab.get_awareness().doc();
       let mut tx = doc.transact_mut_with(rid.into_bytes().as_ref());
       tx.apply_update(update)?;
@@ -583,11 +572,16 @@ impl WorkspaceControllerActor {
         drop(tx);
         tracing::trace!("found missing updates for {} - sending manifest", object_id);
         self.publish_manifest(collab, collab_type);
-      } else if sync_state == SyncState::InitSyncBegin {
+      } else {
         drop(tx);
-        collab.set_sync_state(SyncState::InitSyncEnd);
+        collab.set_sync_state(SyncState::SyncFinished);
       }
     } else {
+      tracing::trace!(
+        "storing remote update for inactive collab {}: {:#?}",
+        object_id,
+        update
+      );
       let bytes = update.encode_v1();
       self
         .persist_update(object_id, collab_type, Some(rid), bytes)

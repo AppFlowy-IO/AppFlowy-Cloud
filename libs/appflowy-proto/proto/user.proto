@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package user;
+
+
+message UserMessage {
+    oneof payload {
+        UserProfileChange profile_change = 1;
+    }
+}
+
+message UserProfileChange {
+    int64 uid = 1;
+    string name = 2;
+}

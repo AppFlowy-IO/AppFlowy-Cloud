@@ -1,10 +1,11 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::biz::authentication::jwt::{authorization_from_token, UserUuid};
 use crate::state::AppState;
 use actix::Addr;
-use actix_http::header::AUTHORIZATION;
+use actix_http::header::{HeaderMap, AUTHORIZATION};
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
@@ -114,29 +115,20 @@ pub async fn establish_ws_connection_v2(
 ) -> Result<HttpResponse> {
   let workspace_id = path.into_inner();
   let ws_server = state.ws_server.clone();
-  let access_token = request.extract_param(AUTHORIZATION.as_str())?;
-  let device_id = request.extract_param("X-AF-Device-ID")?;
-  let client_id: u64 = request
-    .extract_param("X-AF-Client-ID")?
-    .parse()
-    .map_err(|_| AppError::InvalidRequest("client-id header missing or invalid".into()))?;
-  let last_message_id = match request.extract_param("X-AF-Last-Message-ID") {
-    Ok(last_message_id) => {
-      let last_message_id = MessageId::try_from(last_message_id).map_err(|_| {
-        AppError::InvalidRequest("Couldn't parse 'X-AF-Last-Message-ID' head value".into())
-      })?;
-      Some(last_message_id)
-    },
-    Err(_) => None,
-  };
-  let auth = authorization_from_token(access_token.as_str(), &jwt_secret)?;
+  let params = WsConnectionV2Params::parse(&request)?;
+  let auth = authorization_from_token(params.access_token.as_str(), &jwt_secret)?;
   let user_uuid = UserUuid::from_auth(auth)?;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let info = SessionInfo::new(client_id, uid, device_id, last_message_id);
+  let info = SessionInfo::new(
+    params.client_id,
+    uid,
+    params.device_id,
+    params.last_message_id,
+  );
   tracing::debug!(
     "accepting new session {} (client id: {}) for workspace: {}",
     info.collab_origin(),
-    client_id,
+    params.client_id,
     workspace_id
   );
   ws::WsResponseBuilder::new(
@@ -306,5 +298,57 @@ impl ConnectInfo {
       device_id,
       connect_at,
     })
+  }
+}
+
+struct WsConnectionV2Params {
+  access_token: String,
+  device_id: String,
+  client_id: u64,
+  last_message_id: Option<MessageId>,
+}
+
+impl WsConnectionV2Params {
+  fn parse(req: &HttpRequest) -> Result<Self, AppError> {
+    let headers = req.headers();
+    let url = req.full_url();
+    let query = url.query_pairs().collect::<HashMap<_, _>>();
+
+    let access_token = Self::from_header(headers, AUTHORIZATION.as_str())
+      .or_else(|| Self::from_url(&query, "token"))
+      .ok_or_else(|| AppError::InvalidRequest("Missing access token".into()))?;
+    let device_id = Self::from_header(headers, "X-AF-Device-ID")
+      .or_else(|| Self::from_url(&query, "deviceId"))
+      .ok_or_else(|| AppError::InvalidRequest("Missing device id".into()))?;
+    let client_id: u64 = Self::from_header(headers, "X-AF-Client-ID")
+      .or_else(|| Self::from_url(&query, "clientId"))
+      .and_then(|id| id.parse().ok())
+      .ok_or_else(|| AppError::InvalidRequest("Missing client id".into()))?;
+    let last_message_id = Self::from_header(headers, "X-AF-Last-Message-ID")
+      .or_else(|| Self::from_url(&query, "lastMessageId"));
+    let last_message_id = match last_message_id {
+      None => None,
+      Some(message_id) => Some(MessageId::try_from(message_id).map_err(|_| {
+        AppError::InvalidRequest("Couldn't parse 'X-AF-Last-Message-ID' head value".into())
+      })?),
+    };
+    Ok(WsConnectionV2Params {
+      access_token,
+      device_id,
+      client_id,
+      last_message_id,
+    })
+  }
+
+  fn from_header(headers: &HeaderMap, param: &str) -> Option<String> {
+    let value = headers.get(param).and_then(|v| v.to_str().ok())?;
+    Some(value.to_string())
+  }
+
+  fn from_url(url_params: &HashMap<Cow<str>, Cow<str>>, param: &str) -> Option<String> {
+    // we use params provided from URL as a backup since browser API doesn't allow to
+    // establish WebSocket connection with custom HTTP headers
+    let value = url_params.get(param).cloned()?;
+    Some(value.to_string())
   }
 }

@@ -16,7 +16,6 @@ use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View};
-use database::collab::GetCollabOrigin;
 use database::collab::{select_workspace_database_oid, CollabStorage};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::file::BucketClient;
@@ -216,9 +215,6 @@ impl PublishCollabDuplicator {
       let ws_db_collab = {
         let ws_database_ec = get_latest_collab_encoded(
           &collab_storage,
-          GetCollabOrigin::User {
-            uid: duplicator_uid,
-          },
           dest_workspace_id,
           ws_db_oid,
           CollabType::WorkspaceDatabase,
@@ -281,9 +277,6 @@ impl PublishCollabDuplicator {
 
     let collab_folder_encoded = get_latest_collab_encoded(
       &collab_storage,
-      GetCollabOrigin::User {
-        uid: duplicator_uid,
-      },
       dest_workspace_id,
       dest_workspace_id,
       CollabType::Folder,

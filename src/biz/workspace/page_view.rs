@@ -190,7 +190,7 @@ pub async fn create_folder_view(
   .await?;
   let (workspace_database_id, workspace_database_update) = if let Some(database_id) = database_id {
     let (workspace_database_id, mut workspace_database) =
-      get_latest_workspace_database(collab_storage, pg_pool, collab_origin, workspace_id).await?;
+      get_latest_workspace_database(collab_storage, pg_pool, workspace_id).await?;
     let workspace_database_update = add_new_database_view_for_workspace_database(
       &mut workspace_database,
       &database_id.to_string(),
@@ -535,8 +535,7 @@ pub async fn append_block_at_the_end_of_page(
 ) -> Result<(), AppError> {
   let oid = Uuid::parse_str(view_id).unwrap();
   let update =
-    append_block_to_document_collab(user.uid, collab_storage, workspace_id, oid, serde_blocks)
-      .await?;
+    append_block_to_document_collab(collab_storage, workspace_id, oid, serde_blocks).await?;
   update_page_collab_data(
     appflowy_web_metrics,
     server,
@@ -550,21 +549,15 @@ pub async fn append_block_at_the_end_of_page(
 }
 
 async fn append_block_to_document_collab(
-  uid: i64,
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
   oid: Uuid,
   serde_blocks: &[SerdeBlock],
 ) -> Result<Vec<u8>, AppError> {
-  let original_doc_state = get_latest_collab_encoded(
-    collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    oid,
-    CollabType::Document,
-  )
-  .await?
-  .doc_state;
+  let original_doc_state =
+    get_latest_collab_encoded(collab_storage, workspace_id, oid, CollabType::Document)
+      .await?
+      .doc_state;
   let mut collab = collab_from_doc_state(original_doc_state.to_vec(), &oid)?;
   let document_body = DocumentBody::from_collab(&collab)
     .ok_or_else(|| AppError::Internal(anyhow::anyhow!("invalid document collab")))?;
@@ -1188,7 +1181,7 @@ async fn create_database_page(
   )
   .await?;
   let (workspace_database_id, mut workspace_database) =
-    get_latest_workspace_database(collab_storage, pg_pool, collab_origin, workspace_id).await?;
+    get_latest_workspace_database(collab_storage, pg_pool, workspace_id).await?;
   let database_id: Uuid = encoded_database.encoded_database_collab.object_id.parse()?;
   let workspace_database_update =
     add_new_database_to_workspace(&mut workspace_database, &database_id, view_id).await?;
@@ -1689,8 +1682,7 @@ pub async fn publish_page(
 
   let publish_data = match view.layout {
     collab_folder::ViewLayout::Document => {
-      generate_publish_data_for_document(collab_access_control_storage, uid, workspace_id, view_id)
-        .await
+      generate_publish_data_for_document(collab_access_control_storage, workspace_id, view_id).await
     },
     collab_folder::ViewLayout::Grid
     | collab_folder::ViewLayout::Board
@@ -1732,13 +1724,11 @@ pub async fn publish_page(
 
 async fn generate_publish_data_for_document(
   collab_access_control_storage: &CollabAccessControlStorage,
-  uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
 ) -> Result<Vec<u8>, AppError> {
   let collab = get_latest_collab_encoded(
     collab_access_control_storage,
-    GetCollabOrigin::User { uid },
     workspace_id,
     view_id,
     CollabType::Document,
@@ -1755,13 +1745,7 @@ async fn generate_publish_data_for_database(
   view_id: Uuid,
   visible_database_view_ids: Option<Vec<Uuid>>,
 ) -> Result<Vec<u8>, AppError> {
-  let (_, ws_db) = get_latest_workspace_database(
-    collab_storage,
-    pg_pool,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-  )
-  .await?;
+  let (_, ws_db) = get_latest_workspace_database(collab_storage, pg_pool, workspace_id).await?;
   let db_oid = {
     ws_db
       .get_database_meta_with_view_id(&view_id.to_string())
@@ -1906,8 +1890,7 @@ pub async fn get_page_view_collab(
   };
   let page_collab_data = match view.layout {
     collab_folder::ViewLayout::Document => {
-      get_page_collab_data_for_document(collab_access_control_storage, uid, workspace_id, view_id)
-        .await
+      get_page_collab_data_for_document(collab_access_control_storage, workspace_id, view_id).await
     },
     collab_folder::ViewLayout::Grid
     | collab_folder::ViewLayout::Board
@@ -1954,7 +1937,6 @@ async fn get_page_collab_data_for_database(
     })?;
   let ws_db = get_latest_collab_encoded(
     collab_access_control_storage,
-    GetCollabOrigin::User { uid },
     workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,
@@ -1989,7 +1971,6 @@ async fn get_page_collab_data_for_database(
   };
   let db = get_latest_collab_encoded(
     collab_access_control_storage,
-    GetCollabOrigin::User { uid },
     workspace_id,
     Uuid::parse_str(&db_oid)?,
     CollabType::Database,
@@ -2084,13 +2065,11 @@ async fn get_page_collab_data_for_database(
 
 async fn get_page_collab_data_for_document(
   collab_access_control_storage: &CollabAccessControlStorage,
-  uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
 ) -> Result<PageCollabData, AppError> {
   let collab = get_latest_collab_encoded(
     collab_access_control_storage,
-    GetCollabOrigin::User { uid },
     workspace_id,
     view_id,
     CollabType::Document,
@@ -2134,9 +2113,8 @@ pub async fn create_database_view(
 
   let timestamp = collab_database::database::timestamp();
   let uid = user.uid;
-  let collab_origin = GetCollabOrigin::User { uid };
   let (_, workspace_database) =
-    get_latest_workspace_database(collab_storage, pg_pool, collab_origin, workspace_id).await?;
+    get_latest_workspace_database(collab_storage, pg_pool, workspace_id).await?;
   let database_id: Uuid = workspace_database
     .get_database_meta_with_view_id(&database_view_id.to_string())
     .ok_or(AppError::NoRequiredData(format!(
@@ -2147,7 +2125,6 @@ pub async fn create_database_view(
     .parse()?;
   let encoded_collab = get_latest_collab_encoded(
     collab_storage,
-    GetCollabOrigin::User { uid },
     workspace_id,
     database_id,
     CollabType::Database,
@@ -2218,10 +2195,9 @@ pub async fn create_database_view(
       })?;
     txn.encode_update_v1()
   };
-  let collab_origin = GetCollabOrigin::User { uid };
+
   let (workspace_database_id, mut workspace_database) =
-    get_latest_workspace_database(collab_storage, pg_pool, collab_origin.clone(), workspace_id)
-      .await?;
+    get_latest_workspace_database(collab_storage, pg_pool, workspace_id).await?;
   let workspace_database_update = add_new_database_view_for_workspace_database(
     &mut workspace_database,
     &database_id.to_string(),

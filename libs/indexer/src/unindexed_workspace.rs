@@ -7,7 +7,7 @@ use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::CollabStorage;
 use database::index::{get_collab_embedding_fragment_ids, stream_collabs_without_embeddings};
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
@@ -137,9 +137,7 @@ async fn stream_unindexed_collabs(
         match result {
           Ok(cid) => match cid.collab_type {
             CollabType::Document => {
-              let collab = storage
-                .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
-                .await?;
+              let collab = storage.get_encode_collab(cid.clone().into(), false).await?;
 
               Ok(Some(UnindexedCollab {
                 workspace_id: cid.workspace_id,

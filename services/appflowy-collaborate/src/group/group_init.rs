@@ -24,7 +24,7 @@ use collab_stream::awareness_gossip::AwarenessUpdateSink;
 use collab_stream::error::StreamError;
 use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags};
 use dashmap::DashMap;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::CollabStorage;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
@@ -1183,10 +1183,7 @@ impl CollabPersister {
   async fn load_collab_full(&self) -> Result<Option<Collab>, RealtimeError> {
     // we didn't find a snapshot, or we want a lightweight collab version
     let params = QueryCollabParams::new(self.object_id, self.collab_type, self.workspace_id);
-    let result = self
-      .storage
-      .get_encode_collab(GetCollabOrigin::Server, params, false)
-      .await;
+    let result = self.storage.get_encode_collab(params, false).await;
     let doc_state = match result {
       Ok(encoded_collab) => encoded_collab.doc_state,
       Err(AppError::RecordNotFound(_)) => return Ok(None),

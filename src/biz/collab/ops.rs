@@ -278,13 +278,11 @@ pub async fn get_user_workspace_structure(
 pub async fn get_latest_workspace_database(
   collab_storage: &CollabAccessControlStorage,
   pg_pool: &PgPool,
-  collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
 ) -> Result<(Uuid, WorkspaceDatabase), AppError> {
   let workspace_database_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
   let workspace_database_collab = get_latest_collab(
     collab_storage,
-    collab_origin,
     workspace_id,
     workspace_database_oid,
     CollabType::WorkspaceDatabase,
@@ -341,7 +339,6 @@ pub async fn list_database(
 
   let mut ws_body_collab = get_latest_collab(
     collab_storage,
-    GetCollabOrigin::Server,
     workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,

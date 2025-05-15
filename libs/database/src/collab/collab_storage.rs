@@ -122,7 +122,6 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
   async fn get_encode_collab(
     &self,
-    origin: GetCollabOrigin,
     params: QueryCollabParams,
     from_editing_collab: bool,
   ) -> AppResult<EncodedCollab>;
@@ -144,7 +143,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
-  async fn delete_collab(&self, workspace_id: &Uuid, uid: &i64, object_id: &Uuid) -> AppResult<()>;
+  async fn delete_collab(&self, workspace_id: &Uuid, object_id: &Uuid) -> AppResult<()>;
 
   async fn should_create_snapshot(&self, workspace_id: &Uuid, oid: &Uuid)
     -> Result<bool, AppError>;

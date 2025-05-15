@@ -248,7 +248,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     .unwrap();
 }
 
-//#[cfg(feature = "sync-v2")]
+#[cfg(feature = "sync-v2")]
 #[tokio::test]
 async fn sync_new_documents_created_when_offline_test() {
   use tokio::time::timeout;

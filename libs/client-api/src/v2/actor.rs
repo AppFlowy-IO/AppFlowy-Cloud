@@ -2,7 +2,7 @@ use crate::v2::compactor::ChannelReceiverCompactor;
 use crate::v2::controller::{ConnectionStatus, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
-use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags};
+use appflowy_proto::{ClientMessage, Rid, ServerMessage, ServerNotification, UpdateFlags};
 use arc_swap::ArcSwap;
 use bytes::BytesMut;
 use client_api_entity::CollabType;
@@ -24,6 +24,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
 use tokio_util::sync::CancellationToken;
+use tracing::{error, trace};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -41,6 +42,7 @@ pub(super) struct WorkspaceControllerActor {
   cache: DashMap<ObjectId, WeakCollabRef>,
   /// Persistent database handle.
   db: Db,
+  notification_tx: tokio::sync::broadcast::Sender<ServerNotification>,
   #[cfg(debug_assertions)]
   pub skip_realtime_message: AtomicBool,
 }
@@ -52,6 +54,7 @@ impl WorkspaceControllerActor {
   pub fn new(db: Db, options: Options, last_message_id: Rid) -> Arc<Self> {
     let (status_tx, status_rx) = tokio::sync::watch::channel(ConnectionStatus::default());
     let (message_tx, message_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (notification_tx, _) = tokio::sync::broadcast::channel(100);
     let actor = Arc::new(WorkspaceControllerActor {
       options,
       status_rx,
@@ -62,6 +65,7 @@ impl WorkspaceControllerActor {
       db,
       #[cfg(debug_assertions)]
       skip_realtime_message: AtomicBool::new(false),
+      notification_tx,
     });
     tokio::spawn(Self::actor_loop(
       Arc::downgrade(&actor),
@@ -501,7 +505,7 @@ impl WorkspaceControllerActor {
         // we don't need to decode update for every use case, but do so anyway to confirm
         // that it isn't malformed
         let update = AwarenessUpdate::decode_v1(&awareness)?;
-        tracing::trace!("received awareness update for {}", object_id);
+        trace!("received awareness update for {}", object_id);
         self.save_awareness_update(object_id, update).await?;
       },
       ServerMessage::AccessChanges {
@@ -514,9 +518,22 @@ impl WorkspaceControllerActor {
         );
         self.remove_collab(&object_id)?;
       },
-      ServerMessage::UserProfileChange { .. } => {},
+      ServerMessage::UserProfileChange { uid, name } => {
+        self.send_notification(ServerNotification::UserProfileChange { uid, name });
+      },
     }
     Ok(())
+  }
+
+  fn send_notification(&self, notification: ServerNotification) {
+    if self.notification_tx.is_empty() {
+      return;
+    }
+
+    trace!("send server notification: {:?}", notification);
+    if let Err(err) = self.notification_tx.send(notification) {
+      error!("Failed to send server notification, error: {:?}", err)
+    }
   }
 
   async fn publish_pending_collabs(&self) -> anyhow::Result<()> {

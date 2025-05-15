@@ -278,3 +278,8 @@ impl TryFrom<pb::Message> for ServerMessage {
     }
   }
 }
+
+#[derive(Debug, Clone)]
+pub enum ServerNotification {
+  UserProfileChange { uid: i64, name: String },
+}

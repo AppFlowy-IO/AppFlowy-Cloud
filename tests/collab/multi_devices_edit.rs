@@ -1,14 +1,13 @@
 use std::time::Duration;
 
 use client_api::entity::AFRole;
+use client_api_test::*;
 use collab_entity::CollabType;
+use database_entity::dto::QueryCollabParams;
 use serde_json::json;
 use sqlx::types::uuid;
 use tokio::time::sleep;
 use tracing::trace;
-
-use client_api_test::*;
-use database_entity::dto::QueryCollabParams;
 
 #[tokio::test]
 async fn sync_collab_content_after_reconnect_test() {
@@ -294,11 +293,14 @@ async fn sync_new_documents_created_when_offline_test() {
   timeout(TIMEOUT, client_1.disconnect())
     .await
     .expect("second disconnect");
+  let expected = json!({"key":"value"});
   for object_id in object_ids {
     client_1
-      .open_collab_no_sync(workspace_id, object_id, collab_type)
+      .open_collab(workspace_id, object_id, collab_type)
       .await;
 
-    assert_client_collab_within_secs(&mut client_1, &object_id, "key", "value".into(), 10).await;
+    assert_client_collab_include_value(&mut client_1, &object_id, expected.clone())
+      .await
+      .unwrap();
   }
 }

@@ -958,18 +958,6 @@ impl TestClient {
       .await
   }
 
-  #[allow(clippy::await_holding_lock)]
-  pub async fn open_collab_no_sync(
-    &mut self,
-    workspace_id: Uuid,
-    object_id: Uuid,
-    collab_type: CollabType,
-  ) {
-    self
-      .open_collab_with_doc_state(workspace_id, object_id, collab_type, vec![])
-      .await
-  }
-
   #[allow(unused_variables)]
   pub async fn open_collab_with_doc_state(
     &mut self,

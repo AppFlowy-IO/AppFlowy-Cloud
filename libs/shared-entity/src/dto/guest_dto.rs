@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use database_entity::dto::AFAccessLevel;
+use database_entity::dto::{AFAccessLevel, AFRole};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -16,6 +16,7 @@ pub struct SharedUser {
   pub email: String,
   pub name: String,
   pub access_level: AFAccessLevel,
+  pub role: AFRole,
   pub avatar_url: Option<String>,
 }
 

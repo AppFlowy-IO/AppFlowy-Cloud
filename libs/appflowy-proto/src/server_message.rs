@@ -41,7 +41,6 @@ pub enum ServerMessage {
   },
   UserProfileChange {
     uid: i64,
-    name: String,
   },
 }
 
@@ -120,10 +119,9 @@ impl Debug for ServerMessage {
         .field("can_write", &can_write)
         .field("reason", &reason)
         .finish(),
-      ServerMessage::UserProfileChange { uid, name } => f
+      ServerMessage::UserProfileChange { uid } => f
         .debug_struct("UserProfileChange")
         .field("uid", &uid)
-        .field("name", &name)
         .finish(),
     }
   }
@@ -200,10 +198,10 @@ impl From<ServerMessage> for pb::Message {
           })),
         })),
       },
-      ServerMessage::UserProfileChange { uid, name } => pb::Message {
+      ServerMessage::UserProfileChange { uid } => pb::Message {
         payload: Some(message::Payload::UserMessage(pb::UserMessage {
           payload: Some(pb::user_message::Payload::ProfileChange(
-            UserProfileChange { uid, name },
+            UserProfileChange { uid },
           )),
         })),
       },
@@ -267,10 +265,7 @@ impl TryFrom<pb::Message> for ServerMessage {
           None => Err(Error::MissingFields),
           Some(value) => match value {
             pb::user_message::Payload::ProfileChange(change) => {
-              Ok(ServerMessage::UserProfileChange {
-                uid: change.uid,
-                name: change.name,
-              })
+              Ok(ServerMessage::UserProfileChange { uid: change.uid })
             },
           },
         },
@@ -280,6 +275,6 @@ impl TryFrom<pb::Message> for ServerMessage {
 }
 
 #[derive(Debug, Clone)]
-pub enum ServerNotification {
-  UserProfileChange { uid: i64, name: String },
+pub enum WorkspaceNotification {
+  UserProfileChange { uid: i64 },
 }

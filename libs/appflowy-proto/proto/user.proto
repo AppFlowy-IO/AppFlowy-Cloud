@@ -11,5 +11,4 @@ message UserMessage {
 
 message UserProfileChange {
     int64 uid = 1;
-    string name = 2;
 }

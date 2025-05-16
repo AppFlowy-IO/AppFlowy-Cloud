@@ -2,7 +2,7 @@ use super::db::Db;
 use super::WorkspaceId;
 use crate::entity::CollabType;
 use crate::v2::actor::{WorkspaceAction, WorkspaceControllerActor, WsConn};
-use appflowy_proto::Rid;
+use appflowy_proto::{Rid, WorkspaceNotification};
 use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use collab_rt_protocol::CollabRef;
 use futures_util::stream::SplitSink;
@@ -50,6 +50,14 @@ impl WorkspaceController {
       &*self.actor.status_channel().borrow(),
       ConnectionStatus::Disconnected { .. }
     )
+  }
+
+  pub fn connect_state(&self) -> ConnectState {
+    ConnectState::from(&*self.actor.status_channel().borrow())
+  }
+
+  pub fn subscribe_notification(&self) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
+    self.actor.subscribe_notification()
   }
 
   pub async fn connect(&self, access_token: String) -> anyhow::Result<()> {
@@ -137,6 +145,29 @@ impl Display for ConnectionStatus {
       ConnectionStatus::Connecting { .. } => write!(f, "connecting"),
       ConnectionStatus::Connected { .. } => write!(f, "connected"),
     }
+  }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum ConnectState {
+  Disconnected,
+  Connecting,
+  Connected,
+}
+
+impl From<&ConnectionStatus> for ConnectState {
+  fn from(value: &ConnectionStatus) -> Self {
+    match value {
+      ConnectionStatus::Disconnected { .. } => ConnectState::Disconnected,
+      ConnectionStatus::Connecting { .. } => ConnectState::Connecting,
+      ConnectionStatus::Connected { .. } => ConnectState::Connected,
+    }
+  }
+}
+
+impl ConnectState {
+  pub fn is_connected(&self) -> bool {
+    matches!(self, ConnectState::Connected)
   }
 }
 

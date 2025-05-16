@@ -2,7 +2,7 @@ use crate::v2::compactor::ChannelReceiverCompactor;
 use crate::v2::controller::{ConnectionStatus, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
-use appflowy_proto::{ClientMessage, Rid, ServerMessage, ServerNotification, UpdateFlags};
+use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
 use arc_swap::ArcSwap;
 use bytes::BytesMut;
 use client_api_entity::CollabType;
@@ -42,7 +42,7 @@ pub(super) struct WorkspaceControllerActor {
   cache: DashMap<ObjectId, WeakCollabRef>,
   /// Persistent database handle.
   db: Db,
-  notification_tx: tokio::sync::broadcast::Sender<ServerNotification>,
+  notification_tx: tokio::sync::broadcast::Sender<WorkspaceNotification>,
   #[cfg(debug_assertions)]
   pub skip_realtime_message: AtomicBool,
 }
@@ -72,6 +72,10 @@ impl WorkspaceControllerActor {
       ChannelReceiverCompactor::new(message_rx),
     ));
     actor
+  }
+
+  pub fn subscribe_notification(&self) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
+    self.notification_tx.subscribe()
   }
 
   pub fn client_id(&self) -> ClientID {
@@ -109,18 +113,41 @@ impl WorkspaceControllerActor {
     collab_ref: &CollabRef,
     collab_type: CollabType,
   ) -> anyhow::Result<()> {
+    Self::bind_and_init_collab(actor, collab_ref, collab_type, true).await
+  }
+
+  ///
+  /// Binds a collaboration object to the actor and loads its data if needed.
+  /// This function sets up the necessary callbacks and observers to handle
+  /// collaboration updates and awareness changes.
+  ///
+  /// # Arguments
+  ///
+  /// * `actor`: Reference to the workspace controller actor managing the collaboration
+  /// * `collab_ref`: Reference to the collaboration object to be bound
+  /// * `collab_type`: The type of the collaboration (document, folder, etc.)
+  /// * `init_collab`: Whether to initialize the collaboration data or not
+  pub async fn bind_and_init_collab(
+    actor: &Arc<Self>,
+    collab_ref: &CollabRef,
+    collab_type: CollabType,
+    init_collab: bool,
+  ) -> anyhow::Result<()> {
     let mut collab = collab_ref.write().await;
     let collab = (*collab).borrow_mut();
     let object_id: ObjectId = collab.object_id().parse()?;
-
-    tracing::trace!("binding collab {}/{}", actor.workspace_id(), object_id);
+    trace!("binding collab {}/{}", actor.workspace_id(), object_id);
 
     let sync_state = collab.get_state().clone();
     let last_message_id = actor.last_message_id.clone();
     sync_state.set_init_state(InitState::Loading);
-    if !actor.db.init_collab(collab)? {
-      tracing::debug!("loading collab {} from local db", object_id);
-      actor.db.load(collab)?;
+
+    if init_collab {
+      trace!("init collab {}/{}", actor.workspace_id(), object_id);
+      if !actor.db.init_collab(collab)? {
+        tracing::debug!("loading collab {} from local db", object_id);
+        actor.db.load(collab)?;
+      }
     }
     sync_state.set_init_state(InitState::Initialized);
     // Register callback on this collab to observe incoming updates
@@ -134,14 +161,14 @@ impl WorkspaceControllerActor {
           .origin()
           .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok())
           .into();
-        tracing::trace!(
+        trace!(
           "[{}] emit collab update {:?} {:#?} ",
           client_id,
           rid,
           Update::decode_v1(&e.update).unwrap()
         );
         if let ActionSource::Remote(rid) = rid {
-          tracing::trace!("[{}] {} received collab from remote", client_id, object_id);
+          trace!("[{}] {} received collab from remote", client_id, object_id);
           last_message_id.rcu(|old| {
             if rid > **old {
               Arc::new(rid)
@@ -227,7 +254,7 @@ impl WorkspaceControllerActor {
 
   async fn handle_action(actor: &Arc<Self>, action: WorkspaceAction) {
     let id = actor.db.client_id();
-    tracing::trace!("[{}] action {:?}", id, action);
+    trace!("[{}] action {:?}", id, action);
     match action {
       WorkspaceAction::Connect { ack, access_token } => {
         match Self::handle_connect(actor, access_token).await {
@@ -245,7 +272,7 @@ impl WorkspaceControllerActor {
       },
       WorkspaceAction::Disconnect(ack) => match actor.handle_disconnect().await {
         Ok(_) => {
-          tracing::trace!("[{}] disconnected", id);
+          trace!("[{}] disconnected", id);
           actor.set_connection_status(ConnectionStatus::Disconnected { reason: None });
           let _ = ack.send(Ok(()));
         },
@@ -293,7 +320,7 @@ impl WorkspaceControllerActor {
   }
 
   async fn send_message(&self, msg: ClientMessage) -> anyhow::Result<()> {
-    tracing::trace!("sending message: {:?}", msg);
+    trace!("sending message: {:?}", msg);
     let sync_state = match &msg {
       ClientMessage::Manifest { object_id, .. } => Some((*object_id, SyncState::InitSyncBegin)),
       ClientMessage::Update { object_id, .. } => Some((*object_id, SyncState::SyncFinished)),
@@ -345,7 +372,7 @@ impl WorkspaceControllerActor {
     match result {
       None => actor.set_connection_status(ConnectionStatus::Disconnected { reason: None }),
       Some(connection) => {
-        tracing::trace!("[{}] connected to {}", client_id, actor.options.url);
+        trace!("[{}] connected to {}", client_id, actor.options.url);
         let (sink, stream) = connection.split();
         let sink = Arc::new(Mutex::new(sink));
         actor.publish_pending_collabs().await?;
@@ -396,7 +423,7 @@ impl WorkspaceControllerActor {
           .skip_realtime_message
           .load(std::sync::atomic::Ordering::SeqCst)
         {
-          tracing::trace!("skipping realtime message");
+          trace!("skipping realtime message");
           continue;
         }
       }
@@ -443,7 +470,7 @@ impl WorkspaceControllerActor {
         last_message_id,
         state_vector,
       } => {
-        tracing::trace!(
+        trace!(
           "received manifest message for {} (rid: {})",
           object_id,
           last_message_id
@@ -488,7 +515,7 @@ impl WorkspaceControllerActor {
           UpdateFlags::Lib0v1 => Update::decode_v1(&update)?,
           UpdateFlags::Lib0v2 => Update::decode_v2(&update)?,
         };
-        tracing::trace!(
+        trace!(
           "received update for {} (rid: {})",
           object_id,
           last_message_id
@@ -518,14 +545,14 @@ impl WorkspaceControllerActor {
         );
         self.remove_collab(&object_id)?;
       },
-      ServerMessage::UserProfileChange { uid, name } => {
-        self.send_notification(ServerNotification::UserProfileChange { uid, name });
+      ServerMessage::UserProfileChange { uid } => {
+        self.send_notification(WorkspaceNotification::UserProfileChange { uid });
       },
     }
     Ok(())
   }
 
-  fn send_notification(&self, notification: ServerNotification) {
+  fn send_notification(&self, notification: WorkspaceNotification) {
     if self.notification_tx.is_empty() {
       return;
     }
@@ -562,7 +589,7 @@ impl WorkspaceControllerActor {
   ) -> anyhow::Result<Option<ClientMessage>> {
     if Self::has_missing_updates(&tx) {
       let sv = tx.state_vector();
-      tracing::trace!("collab {} detected missing updates: {:?}", object_id, sv);
+      trace!("collab {} detected missing updates: {:?}", object_id, sv);
       let reply = ClientMessage::Manifest {
         object_id,
         collab_type,
@@ -583,7 +610,7 @@ impl WorkspaceControllerActor {
     update: Update,
   ) -> anyhow::Result<()> {
     if let Some(collab_ref) = self.get_collab(&object_id) {
-      tracing::trace!(
+      trace!(
         "applying remote update for active collab {}: {:#?}",
         object_id,
         update
@@ -595,14 +622,14 @@ impl WorkspaceControllerActor {
       tx.apply_update(update)?;
       if Self::has_missing_updates(&tx) {
         drop(tx);
-        tracing::trace!("found missing updates for {} - sending manifest", object_id);
+        trace!("found missing updates for {} - sending manifest", object_id);
         self.publish_manifest(collab, collab_type);
       } else {
         drop(tx);
         collab.set_sync_state(SyncState::SyncFinished);
       }
     } else {
-      tracing::trace!(
+      trace!(
         "storing remote update for inactive collab {}: {:#?}",
         object_id,
         update
@@ -673,7 +700,7 @@ impl WorkspaceControllerActor {
         Ok(())
       },
       ConnectionStatus::Connecting { cancel } => {
-        tracing::trace!("[{}] cancelling connection", self.db.client_id());
+        trace!("[{}] cancelling connection", self.db.client_id());
         cancel.cancel();
         Ok(())
       },
@@ -750,7 +777,7 @@ impl WorkspaceControllerActor {
     access_token: String,
   ) -> anyhow::Result<Option<WsConn>> {
     let url = format!("{}/{}", options.url, options.workspace_id);
-    tracing::info!("establishing WebScoket connection to: {}", url);
+    tracing::info!("establishing WebSocket connection to: {}", url);
     let mut req = url.into_client_request()?;
     let headers = req.headers_mut();
     headers.insert("X-AF-Device-ID", HeaderValue::from_str(&options.device_id)?);

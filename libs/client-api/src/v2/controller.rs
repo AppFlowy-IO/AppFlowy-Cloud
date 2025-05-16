@@ -96,6 +96,34 @@ impl WorkspaceController {
   pub async fn bind(&self, collab_ref: &CollabRef, collab_type: CollabType) -> anyhow::Result<()> {
     WorkspaceControllerActor::bind(&self.actor, collab_ref, collab_type).await
   }
+
+  /// Binds a collaboration object to the actor and loads its data if needed.
+  /// This function sets up the necessary callbacks and observers to handle
+  /// collaboration updates and awareness changes.
+  ///
+  /// # Arguments
+  ///
+  /// * `actor`: Reference to the workspace controller actor managing the collaboration
+  /// * `collab_ref`: Reference to the collaboration object to be bound
+  /// * `collab_type`: The type of the collaboration (document, folder, etc.)
+  /// * `init_collab`: Whether to initialize the collaboration data or not
+  ///   - When true, attempts to initialize the collab from local disk
+  ///   - Returns false from db.init_collab() if the document already exists in the database
+  ///   - In this case, the existing document will be loaded from the local disk
+  pub async fn bind_and_init_collab(
+    &self,
+    collab_ref: &CollabRef,
+    collab_type: CollabType,
+    init_collab: bool,
+  ) -> anyhow::Result<()> {
+    WorkspaceControllerActor::bind_and_init_collab(
+      &self.actor,
+      collab_ref,
+      collab_type,
+      init_collab,
+    )
+    .await
+  }
 }
 
 #[cfg(debug_assertions)]

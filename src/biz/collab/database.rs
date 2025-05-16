@@ -177,15 +177,9 @@ pub struct PostgresDatabaseCollabService {
 
 impl PostgresDatabaseCollabService {
   pub async fn get_collab(&self, oid: Uuid, collab_type: CollabType) -> EncodedCollab {
-    get_latest_collab_encoded(
-      &self.collab_storage,
-      GetCollabOrigin::Server,
-      self.workspace_id,
-      oid,
-      collab_type,
-    )
-    .await
-    .unwrap()
+    get_latest_collab_encoded(&self.collab_storage, self.workspace_id, oid, collab_type)
+      .await
+      .unwrap()
   }
 }
 

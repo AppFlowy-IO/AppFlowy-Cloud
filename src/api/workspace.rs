@@ -58,7 +58,7 @@ use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::collab_from_encode_collab;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::CollabStorage;
 use database::user::select_uid_from_email;
 use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
@@ -1082,20 +1082,15 @@ async fn batch_create_collab_handler(
 
 // Deprecated
 async fn get_collab_handler(
-  user_uuid: UserUuid,
+  _user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<CollabResponse>>> {
-  let uid = state
-    .user_cache
-    .get_user_uid(&user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
   let params = payload.into_inner();
   let object_id = params.object_id;
   let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, params, true)
+    .get_encode_collab(params, true)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -1108,17 +1103,12 @@ async fn get_collab_handler(
 }
 
 async fn v1_get_collab_handler(
-  user_uuid: UserUuid,
+  _user_uuid: UserUuid,
   path: web::Path<(Uuid, Uuid)>,
   query: web::Query<CollabTypeParam>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<CollabResponse>>> {
   let (workspace_id, object_id) = path.into_inner();
-  let uid = state
-    .user_cache
-    .get_user_uid(&user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
 
   let param = QueryCollabParams {
     workspace_id,
@@ -1130,7 +1120,7 @@ async fn v1_get_collab_handler(
 
   let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
+    .get_encode_collab(param, true)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -1143,18 +1133,13 @@ async fn v1_get_collab_handler(
 }
 
 async fn get_collab_json_handler(
-  user_uuid: UserUuid,
+  _user_uuid: UserUuid,
   path: web::Path<(Uuid, Uuid)>,
   query: web::Query<CollabTypeParam>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<CollabJsonResponse>>> {
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = query.into_inner().collab_type;
-  let uid = state
-    .user_cache
-    .get_user_uid(&user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
 
   let param = QueryCollabParams {
     workspace_id,
@@ -1166,7 +1151,7 @@ async fn get_collab_json_handler(
 
   let doc_state = state
     .collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
+    .get_encode_collab(param, true)
     .await
     .map_err(AppResponseError::from)?
     .doc_state;
@@ -1871,22 +1856,16 @@ async fn get_collab_snapshot_handler(
 
 #[instrument(level = "trace", skip_all, err)]
 async fn create_collab_snapshot_handler(
-  user_uuid: UserUuid,
+  _user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<(Uuid, Uuid)>,
   payload: Json<CollabType>,
 ) -> Result<Json<AppResponse<AFSnapshotMeta>>> {
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.into_inner();
-  let uid = state
-    .user_cache
-    .get_user_uid(&user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
   let data = state
     .collab_access_control_storage
     .get_encode_collab(
-      GetCollabOrigin::User { uid },
       QueryCollabParams::new(object_id, collab_type, workspace_id),
       true,
     )
@@ -2008,22 +1987,16 @@ async fn update_collab_handler(
 
 #[instrument(level = "info", skip(state, payload), err)]
 async fn delete_collab_handler(
-  user_uuid: UserUuid,
+  _user_uuid: UserUuid,
   payload: Json<DeleteCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
   payload.validate().map_err(AppError::from)?;
 
-  let uid = state
-    .user_cache
-    .get_user_uid(&user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
-
   state
     .collab_access_control_storage
-    .delete_collab(&payload.workspace_id, &uid, &payload.object_id)
+    .delete_collab(&payload.workspace_id, &payload.object_id)
     .await
     .map_err(AppResponseError::from)?;
 

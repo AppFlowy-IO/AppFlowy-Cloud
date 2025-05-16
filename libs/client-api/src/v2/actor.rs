@@ -24,7 +24,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, trace};
+use tracing::{error, info, trace};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -87,7 +87,9 @@ impl WorkspaceControllerActor {
   }
 
   pub fn trigger(&self, action: WorkspaceAction) {
-    let _ = self.mailbox.send(action);
+    if let Err(err) = self.mailbox.send(action) {
+      error!("failed to send action to actor: {}", err);
+    }
   }
 
   pub fn status_channel(&self) -> &tokio::sync::watch::Receiver<ConnectionStatus> {
@@ -261,6 +263,11 @@ impl WorkspaceControllerActor {
     trace!("[{}] action {:?}", id, action);
     match action {
       WorkspaceAction::Connect { ack, access_token } => {
+        trace!(
+          "[{}] start websocket connect with token: {}",
+          id,
+          access_token
+        );
         match Self::handle_connect(actor, access_token).await {
           Ok(_) => {
             let _ = ack.send(Ok(()));
@@ -324,13 +331,13 @@ impl WorkspaceControllerActor {
   }
 
   async fn send_message(&self, msg: ClientMessage) -> anyhow::Result<()> {
-    trace!("sending message: {:?}", msg);
     let sync_state = match &msg {
       ClientMessage::Manifest { object_id, .. } => Some((*object_id, SyncState::InitSyncBegin)),
       ClientMessage::Update { object_id, .. } => Some((*object_id, SyncState::SyncFinished)),
       ClientMessage::AwarenessUpdate { .. } => None,
     };
     if let Some(sink) = self.ws_sink() {
+      trace!("sending message: {:?}", msg);
       {
         let bytes = msg.into_bytes()?;
         let mut sink = sink.lock().await;
@@ -339,6 +346,8 @@ impl WorkspaceControllerActor {
       if let Some((object_id, sync_state)) = sync_state {
         self.set_collab_sync_state(&object_id, sync_state).await;
       }
+    } else {
+      trace!("Skip sending message: no sink");
     }
     Ok(())
   }
@@ -550,7 +559,10 @@ impl WorkspaceControllerActor {
         self.remove_collab(&object_id)?;
       },
       ServerMessage::UserProfileChange { uid } => {
-        self.send_notification(WorkspaceNotification::UserProfileChange { uid });
+        self.send_notification(WorkspaceNotification::UserProfileChange {
+          uid,
+          workspace_id: self.options.workspace_id,
+        });
       },
     }
     Ok(())
@@ -614,6 +626,7 @@ impl WorkspaceControllerActor {
     update: Update,
   ) -> anyhow::Result<()> {
     if let Some(collab_ref) = self.get_collab(&object_id) {
+      #[cfg(feature = "verbose_log")]
       trace!(
         "applying remote update for active collab {}: {:#?}",
         object_id,
@@ -781,7 +794,7 @@ impl WorkspaceControllerActor {
     access_token: String,
   ) -> anyhow::Result<Option<WsConn>> {
     let url = format!("{}/{}", options.url, options.workspace_id);
-    tracing::info!("establishing WebSocket connection to: {}", url);
+    info!("establishing WebSocket connection to: {}", url);
     let mut req = url.into_client_request()?;
     let headers = req.headers_mut();
     headers.insert("X-AF-Device-ID", HeaderValue::from_str(&options.device_id)?);
@@ -803,8 +816,16 @@ impl WorkspaceControllerActor {
     let fut = connect_async_with_config(req, Some(config), false);
     tokio::select! {
       res = fut => {
-        let (stream, _resp) = res?;
-        Ok(Some(stream))
+        match res {
+          Ok((stream, _resp)) => {
+            info!("establishing WebSocket successfully");
+            Ok(Some(stream))
+          },
+          Err(err) => {
+            error!("establishing WebSocket failed");
+            Err(err.into())
+          }
+        }
       }
       _ = cancel.cancelled() => {
         tracing::debug!("connection cancelled");

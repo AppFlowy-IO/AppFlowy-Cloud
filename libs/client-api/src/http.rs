@@ -246,6 +246,15 @@ impl Client {
     Ok(token_str)
   }
 
+  pub fn get_access_token(&self) -> Result<String, AppResponseError> {
+    self
+      .token
+      .read()
+      .as_ref()
+      .map(|v| v.access_token.clone())
+      .ok_or_else(|| AppResponseError::new(ErrorCode::UserUnAuthorized, "user is not logged in"))
+  }
+
   pub fn subscribe_token_state(&self) -> TokenStateReceiver {
     self.token.read().subscribe()
   }

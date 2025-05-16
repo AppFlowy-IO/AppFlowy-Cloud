@@ -95,6 +95,7 @@ impl Db {
       &mut txn,
     ) {
       Ok(_updates_applied) => {
+        #[cfg(feature = "verbose_log")]
         tracing::trace!("restored collab {} state: {:#?}", object_id, txn.store());
         Ok(())
       },

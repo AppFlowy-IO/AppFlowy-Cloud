@@ -1,7 +1,7 @@
 use crate::pb;
 use crate::pb::collab_message::Data;
 use crate::pb::message::Payload;
-use crate::pb::{message, SyncRequest, UserProfileChange};
+use crate::pb::{SyncRequest, UserProfileChange, message};
 use crate::shared::{Error, ObjectId, Rid, UpdateFlags};
 use bytes::Bytes;
 use collab::preclude::sync::AwarenessUpdate;
@@ -276,5 +276,5 @@ impl TryFrom<pb::Message> for ServerMessage {
 
 #[derive(Debug, Clone)]
 pub enum WorkspaceNotification {
-  UserProfileChange { uid: i64 },
+  UserProfileChange { uid: i64, workspace_id: Uuid },
 }

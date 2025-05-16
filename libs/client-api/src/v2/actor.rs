@@ -211,6 +211,7 @@ impl WorkspaceControllerActor {
   }
 
   fn set_connection_status(&self, status: ConnectionStatus) {
+    trace!("set connection status: {:?}", status);
     self.status_tx.send_replace(status);
   }
 
@@ -388,13 +389,18 @@ impl WorkspaceControllerActor {
         trace!("[{}] connected to {}", client_id, actor.options.url);
         let (sink, stream) = connection.split();
         let sink = Arc::new(Mutex::new(sink));
-        actor.publish_pending_collabs().await?;
+        actor.set_connection_status(ConnectionStatus::Connected {
+          sink,
+          cancel: cancel.clone(),
+        });
+        if let Err(err) = actor.publish_pending_collabs().await {
+          error!("failed to publish pending collabs: {}", err);
+        }
         tokio::spawn(Self::remote_receiver_task(
           Arc::downgrade(actor),
           stream,
-          cancel.clone(),
+          cancel,
         ));
-        actor.set_connection_status(ConnectionStatus::Connected { sink, cancel });
       },
     }
     Ok(())

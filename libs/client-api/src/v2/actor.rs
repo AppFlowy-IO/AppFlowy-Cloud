@@ -127,6 +127,10 @@ impl WorkspaceControllerActor {
   /// * `collab_ref`: Reference to the collaboration object to be bound
   /// * `collab_type`: The type of the collaboration (document, folder, etc.)
   /// * `init_collab`: Whether to initialize the collaboration data or not
+  ///   - When true, attempts to initialize the collab from local disk
+  ///   - Returns false from db.init_collab() if the document already exists in the database
+  ///   - In this case, the existing document will be loaded from the local disk
+  ///
   pub async fn bind_and_init_collab(
     actor: &Arc<Self>,
     collab_ref: &CollabRef,

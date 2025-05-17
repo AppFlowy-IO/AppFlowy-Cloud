@@ -554,6 +554,7 @@ dependencies = [
  "sqlx",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-tungstenite 0.20.1",
  "tsify",
  "url",
  "uuid",

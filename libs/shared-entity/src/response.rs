@@ -162,6 +162,10 @@ impl AppResponseError {
   pub fn is_record_not_found(&self) -> bool {
     matches!(self.code, ErrorCode::RecordNotFound)
   }
+
+  pub fn is_user_unauthorized(&self) -> bool {
+    matches!(self.code, ErrorCode::UserUnAuthorized)
+  }
 }
 
 impl<T> From<T> for AppResponseError

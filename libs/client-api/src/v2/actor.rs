@@ -1,7 +1,8 @@
 use crate::v2::compactor::ChannelReceiverCompactor;
-use crate::v2::controller::{ConnectionStatus, Options};
+use crate::v2::controller::{ConnectionStatus, DisconnectedReason, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
+use app_error::AppError;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
 use arc_swap::ArcSwap;
 use bytes::BytesMut;
@@ -12,12 +13,12 @@ use collab_rt_protocol::{CollabRef, WeakCollabRef};
 use dashmap::DashMap;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
+use shared_entity::response::AppResponseError;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 use tokio::select;
 use tokio::sync::Mutex;
-use tokio::time::MissedTickBehavior;
+use tokio::time::{Duration, MissedTickBehavior};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
@@ -208,7 +209,7 @@ impl WorkspaceControllerActor {
     Ok(())
   }
 
-  fn set_connection_status(&self, status: ConnectionStatus) {
+  pub(crate) fn set_connection_status(&self, status: ConnectionStatus) {
     trace!("set connection status: {:?}", status);
     self.status_tx.send_replace(status);
   }
@@ -249,8 +250,7 @@ impl WorkspaceControllerActor {
           if let Err(err) = actor.ping().await {
             error!("failed to send ping: {}", err);
             actor.set_connection_status(ConnectionStatus::Disconnected {
-              reason: Some(err.to_string().into()),
-              retry: true,
+              reason: Some(DisconnectedReason::Other( err.to_string().into())),
             });
           }
         }
@@ -275,8 +275,7 @@ impl WorkspaceControllerActor {
           Err(err) => {
             error!("[{}] failed to connect: {}", id, err);
             actor.set_connection_status(ConnectionStatus::Disconnected {
-              reason: Some(err.to_string().into()),
-              retry: true,
+              reason: Some(DisconnectedReason::Other(err.to_string().into())),
             });
             let _ = ack.send(Err(err));
           },
@@ -286,16 +285,16 @@ impl WorkspaceControllerActor {
         Ok(_) => {
           trace!("[{}] disconnected", id);
           actor.set_connection_status(ConnectionStatus::Disconnected {
-            reason: None,
-            retry: false,
+            reason: Some(DisconnectedReason::UserDisconnect(
+              "User disconnect successfully".into(),
+            )),
           });
           let _ = ack.send(Ok(()));
         },
         Err(err) => {
           tracing::warn!("[{}] failed to disconnect: {}", id, err);
           actor.set_connection_status(ConnectionStatus::Disconnected {
-            reason: Some(err.to_string().into()),
-            retry: false,
+            reason: Some(DisconnectedReason::UserDisconnect(err.to_string().into())),
           });
           let _ = ack.send(Err(err));
         },
@@ -304,8 +303,7 @@ impl WorkspaceControllerActor {
         if let Err(err) = actor.handle_send(msg, source).await {
           error!("[{}] failed to send client message: {}", id, err);
           actor.set_connection_status(ConnectionStatus::Disconnected {
-            reason: Some(err.to_string().into()),
-            retry: false,
+            reason: Some(DisconnectedReason::Other(err.to_string().into())),
           });
         }
       },
@@ -331,7 +329,13 @@ impl WorkspaceControllerActor {
       }?;
     };
     if let ActionSource::Local = source {
-      self.send_message(msg).await?;
+      if let Err(err) = self.send_message(msg).await {
+        error!("Failed to send message: {}", err);
+        self.set_connection_status(ConnectionStatus::Disconnected {
+          reason: Some(DisconnectedReason::Other(err.to_string().into())),
+        });
+        return Err(err);
+      }
     }
     Ok(())
   }
@@ -366,7 +370,10 @@ impl WorkspaceControllerActor {
     }
   }
 
-  async fn handle_connect(actor: &Arc<Self>, access_token: String) -> anyhow::Result<()> {
+  pub(crate) async fn handle_connect(
+    actor: &Arc<Self>,
+    access_token: String,
+  ) -> Result<(), AppResponseError> {
     match &*actor.status_rx.borrow() {
       ConnectionStatus::Connecting { .. } | ConnectionStatus::Connected { .. } => return Ok(()),
       ConnectionStatus::Disconnected { .. } => {},
@@ -389,10 +396,9 @@ impl WorkspaceControllerActor {
     .await?;
 
     match result {
-      None => actor.set_connection_status(ConnectionStatus::Disconnected {
-        reason: None,
-        retry: false,
-      }),
+      None => {
+        actor.set_connection_status(ConnectionStatus::Disconnected { reason: None });
+      },
       Some(connection) => {
         trace!("[{}] connected to {}", client_id, actor.options.url);
         let (sink, stream) = connection.split();
@@ -401,6 +407,7 @@ impl WorkspaceControllerActor {
           sink,
           cancel: cancel.clone(),
         });
+
         if let Err(err) = actor.publish_pending_collabs().await {
           error!("failed to publish pending collabs: {}", err);
         }
@@ -426,7 +433,9 @@ impl WorkspaceControllerActor {
       };
     if let Some(actor) = weak_actor.upgrade() {
       error!("failed to receive messages from server: {:?}", reason);
-      // actor.set_connection_status(ConnectionStatus::Disconnected { reason });
+      actor.set_connection_status(ConnectionStatus::Disconnected {
+        reason: reason.map(DisconnectedReason::Other),
+      });
     }
   }
 
@@ -718,10 +727,9 @@ impl WorkspaceControllerActor {
   }
 
   async fn handle_disconnect(&self) -> anyhow::Result<()> {
-    let previous_status = self.status_tx.send_replace(ConnectionStatus::Disconnected {
-      reason: None,
-      retry: false,
-    });
+    let previous_status = self
+      .status_tx
+      .send_replace(ConnectionStatus::Disconnected { reason: None });
     match previous_status {
       ConnectionStatus::Connected { sink, cancel } => {
         cancel.cancel();
@@ -808,7 +816,7 @@ impl WorkspaceControllerActor {
     last_message_id: &Rid,
     cancel: CancellationToken,
     access_token: String,
-  ) -> anyhow::Result<Option<WsConn>> {
+  ) -> Result<Option<WsConn>, AppResponseError> {
     let url = format!("{}/{}", options.url, options.workspace_id);
     info!("establishing WebSocket connection to: {}", url);
     let mut req = url.into_client_request()?;
@@ -839,7 +847,7 @@ impl WorkspaceControllerActor {
           },
           Err(err) => {
             error!("establishing WebSocket failed");
-            Err(err.into())
+            Err(AppError::from(err).into())
           }
         }
       }
@@ -854,7 +862,7 @@ impl WorkspaceControllerActor {
 #[derive(Debug)]
 pub(super) enum WorkspaceAction {
   Connect {
-    ack: tokio::sync::oneshot::Sender<anyhow::Result<()>>,
+    ack: tokio::sync::oneshot::Sender<Result<(), AppResponseError>>,
     access_token: String,
   },
   Disconnect(tokio::sync::oneshot::Sender<anyhow::Result<()>>),

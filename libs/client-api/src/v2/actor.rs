@@ -2,6 +2,7 @@ use crate::v2::compactor::ChannelReceiverCompactor;
 use crate::v2::controller::{ConnectionStatus, DisconnectedReason, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
+use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
 use arc_swap::ArcSwap;
@@ -717,7 +718,18 @@ impl WorkspaceControllerActor {
 
   fn has_missing_updates<T: ReadTxn>(tx: &T) -> bool {
     let store = tx.store();
-    store.pending_update().is_some() || store.pending_ds().is_some()
+    let missing = store.pending_update().is_some() || store.pending_ds().is_some();
+
+    #[cfg(feature = "message_verbose_log")]
+    if missing {
+      trace!(
+        "missing updates: {:?}, delete sets: {:?}",
+        store.pending_update(),
+        store.pending_ds()
+      );
+    }
+
+    missing
   }
 
   async fn save_awareness_update(

@@ -237,13 +237,22 @@ impl Client {
   /// string representation of the access token. If the lock cannot be acquired or
   /// the token is not present, an error is returned.
   #[instrument(level = "debug", skip_all, err)]
-  pub fn get_token(&self) -> Result<String, AppResponseError> {
+  pub fn get_token_str(&self) -> Result<String, AppResponseError> {
     let token_str = self
       .token
       .read()
       .try_get()
       .map_err(|err| AppResponseError::from(AppError::OAuthError(err.to_string())))?;
     Ok(token_str)
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub fn get_token(&self) -> Result<GotrueTokenResponse, AppResponseError> {
+    let guard = self.token.read();
+    let resp = guard
+      .as_ref()
+      .ok_or_else(|| AppResponseError::new(ErrorCode::UserUnAuthorized, "user is not logged in"))?;
+    Ok(resp.clone())
   }
 
   pub fn get_access_token(&self) -> Result<String, AppResponseError> {

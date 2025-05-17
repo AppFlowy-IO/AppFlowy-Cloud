@@ -24,16 +24,16 @@ and real-time WebSocket communication for an efficient and collaborative user ex
 
 ## Table of Contents
 
-- [🚀 Deployment](#-deployment)
-- [💻 Development](#-development)
-- [🐞 Debugging](#-debugging)
-- [⚙️ Contributing](#-contributing)
+- [🚀 Deployment](#deployment)
+- [💻 Development](#development)
+- [🐞 Debugging](#debugging)
+- [⚙️ Contributing](#️contributing)
 
-## 🚀 Deployment
+## 🚀Deployment
 
 - See [deployment guide](./doc/DEPLOYMENT.md)
 
-## 💻 Development
+## 💻Development
 
 ### Pre-requisites
 
@@ -126,7 +126,7 @@ For managing Docker containers, Portainer's Web UI is an excellent tool. Access 
 environments, including container deployment, networking, volume management, and more. Access it
 at [Web UI](http://localhost:9442)
 
-## ⚙️ Contributing
+## ⚙️Contributing
 
 Any new contribution is more than welcome in this project!
 If you want to know more about the development workflow or want to contribute, please visit

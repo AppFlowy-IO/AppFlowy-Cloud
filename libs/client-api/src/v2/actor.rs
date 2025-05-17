@@ -111,14 +111,6 @@ impl WorkspaceControllerActor {
     *self.last_message_id.load_full()
   }
 
-  pub async fn bind(
-    actor: &Arc<Self>,
-    collab_ref: &CollabRef,
-    collab_type: CollabType,
-  ) -> anyhow::Result<()> {
-    Self::bind_and_init_collab(actor, collab_ref, collab_type, true).await
-  }
-
   ///
   /// Binds a collaboration object to the actor and loads its data if needed.
   /// This function sets up the necessary callbacks and observers to handle
@@ -129,16 +121,11 @@ impl WorkspaceControllerActor {
   /// * `actor`: Reference to the workspace controller actor managing the collaboration
   /// * `collab_ref`: Reference to the collaboration object to be bound
   /// * `collab_type`: The type of the collaboration (document, folder, etc.)
-  /// * `init_collab`: Whether to initialize the collaboration data or not
-  ///   - When true, attempts to initialize the collab from local disk
-  ///   - Returns false from db.init_collab() if the document already exists in the database
-  ///   - In this case, the existing document will be loaded from the local disk
   ///
-  pub async fn bind_and_init_collab(
+  pub async fn bind(
     actor: &Arc<Self>,
     collab_ref: &CollabRef,
     collab_type: CollabType,
-    init_collab: bool,
   ) -> anyhow::Result<()> {
     let mut collab = collab_ref.write().await;
     let collab = (*collab).borrow_mut();
@@ -149,12 +136,10 @@ impl WorkspaceControllerActor {
     let last_message_id = actor.last_message_id.clone();
     sync_state.set_init_state(InitState::Loading);
 
-    if init_collab {
-      trace!("init collab {}/{}", actor.workspace_id(), object_id);
-      if !actor.db.init_collab(collab)? {
-        tracing::debug!("loading collab {} from local db", object_id);
-        actor.db.load(collab)?;
-      }
+    trace!("init collab {}/{}", actor.workspace_id(), object_id);
+    if !actor.db.init_collab(collab)? {
+      tracing::debug!("loading collab {} from local db", object_id);
+      actor.db.load(collab)?;
     }
     sync_state.set_init_state(InitState::Initialized);
     // Register callback on this collab to observe incoming updates

@@ -1,11 +1,10 @@
-use super::db::Db;
+use super::db::{Db, DbHolder};
 use super::WorkspaceId;
 use crate::entity::CollabType;
 use crate::v2::actor::{WorkspaceAction, WorkspaceControllerActor, WsConn};
 use crate::v2::conn_retry::ReconnectionManager;
 use app_error::ErrorCode;
 use appflowy_proto::{Rid, WorkspaceNotification};
-use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use collab_rt_protocol::CollabRef;
 use futures_core::Stream;
 use futures_util::stream::SplitSink;
@@ -32,10 +31,7 @@ impl WorkspaceController {
     Self::new_with_db(options, db)
   }
 
-  pub fn new_with_rocksdb(
-    options: Options,
-    db: KVTransactionDBRocksdbImpl,
-  ) -> anyhow::Result<Self> {
+  pub fn new_with_rocksdb<T: Into<DbHolder>>(options: Options, db: T) -> anyhow::Result<Self> {
     let db = Db::open_with_rocksdb(options.workspace_id, options.uid, db)?;
     Self::new_with_db(options, db)
   }
@@ -122,10 +118,6 @@ impl WorkspaceController {
     self.actor.last_message_id()
   }
 
-  pub async fn bind(&self, collab_ref: &CollabRef, collab_type: CollabType) -> anyhow::Result<()> {
-    WorkspaceControllerActor::bind(&self.actor, collab_ref, collab_type).await
-  }
-
   /// Binds a collaboration object to the actor and loads its data if needed.
   /// This function sets up the necessary callbacks and observers to handle
   /// collaboration updates and awareness changes.
@@ -135,23 +127,8 @@ impl WorkspaceController {
   /// * `actor`: Reference to the workspace controller actor managing the collaboration
   /// * `collab_ref`: Reference to the collaboration object to be bound
   /// * `collab_type`: The type of the collaboration (document, folder, etc.)
-  /// * `init_collab`: Whether to initialize the collaboration data or not
-  ///   - When true, attempts to initialize the collab from local disk
-  ///   - Returns false from db.init_collab() if the document already exists in the database
-  ///   - In this case, the existing document will be loaded from the local disk
-  pub async fn bind_and_init_collab(
-    &self,
-    collab_ref: &CollabRef,
-    collab_type: CollabType,
-    init_collab: bool,
-  ) -> anyhow::Result<()> {
-    WorkspaceControllerActor::bind_and_init_collab(
-      &self.actor,
-      collab_ref,
-      collab_type,
-      init_collab,
-    )
-    .await
+  pub async fn bind(&self, collab_ref: &CollabRef, collab_type: CollabType) -> anyhow::Result<()> {
+    WorkspaceControllerActor::bind(&self.actor, collab_ref, collab_type).await
   }
 }
 

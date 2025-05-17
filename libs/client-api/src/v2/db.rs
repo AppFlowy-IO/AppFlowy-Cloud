@@ -1,4 +1,5 @@
 use super::{ObjectId, WorkspaceId};
+use anyhow::anyhow;
 use appflowy_proto::Rid;
 use collab::preclude::Collab;
 use collab_plugins::local_storage::kv::doc::CollabKVAction;
@@ -6,6 +7,7 @@ use collab_plugins::local_storage::kv::{KVStore, KVTransactionDB, PersistenceErr
 use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use rand::random;
 use std::str::FromStr;
+use std::sync::{Arc, Weak};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::updates::decoder::Decode;
@@ -16,7 +18,7 @@ pub(crate) struct Db {
   client_id: ClientID,
   uid: i64,
   workspace_id: Uuid,
-  inner: KVTransactionDBRocksdbImpl,
+  inner: DbHolder,
 }
 
 impl Db {
@@ -26,14 +28,17 @@ impl Db {
     Ok(this)
   }
 
-  pub fn open_with_rocksdb(
+  pub fn open_with_rocksdb<T: Into<DbHolder>>(
     workspace_id: Uuid,
     uid: i64,
-    db: KVTransactionDBRocksdbImpl,
+    db: T,
   ) -> Result<Self, PersistenceError> {
-    let ops = db.write_txn();
+    let db = db.into();
+    let instance = db.get()?;
+    let ops = instance.write_txn();
     let client_id = ops.client_id(&workspace_id)?;
     ops.commit_transaction()?;
+
     tracing::debug!("opened db for client {}", client_id);
     Ok(Self {
       client_id,
@@ -48,8 +53,11 @@ impl Db {
   }
 
   pub fn last_message_id(&self) -> Result<Rid, PersistenceError> {
-    let ops = self.inner.write_txn();
-    let message_id = ops.last_message_id(&self.workspace_id)?;
+    let message_id = self
+      .inner
+      .get()?
+      .write_txn()
+      .last_message_id(&self.workspace_id)?;
     Ok(message_id)
   }
 
@@ -64,7 +72,8 @@ impl Db {
       self.uid
     );
     let tx = collab.transact();
-    let ops = self.inner.write_txn();
+    let instance = self.inner.get()?;
+    let ops = instance.write_txn();
     match ops.create_new_doc(
       self.uid,
       &self.workspace_id.to_string(),
@@ -84,7 +93,8 @@ impl Db {
   }
 
   pub fn load(&self, collab: &mut Collab) -> Result<(), PersistenceError> {
-    let ops = self.inner.write_txn();
+    let instance = self.inner.get()?;
+    let ops = instance.write_txn();
     let object_id = ObjectId::from_str(collab.object_id())
       .map_err(|err| PersistenceError::InvalidData(err.to_string()))?;
     let mut txn = collab.transact_mut();
@@ -108,7 +118,8 @@ impl Db {
   }
 
   pub fn remove_doc(&self, object_id: &Uuid) -> Result<(), PersistenceError> {
-    let ops = self.inner.write_txn();
+    let instance = self.inner.get()?;
+    let ops = instance.write_txn();
     ops.delete_doc(
       self.uid,
       &self.workspace_id.to_string(),
@@ -124,7 +135,8 @@ impl Db {
     message_id: Option<Rid>,
     update_v1: &[u8],
   ) -> Result<Option<StateVector>, PersistenceError> {
-    let ops = self.inner.write_txn();
+    let instance = self.inner.get()?;
+    let ops = instance.write_txn();
     tracing::trace!(
       "persisting update for {}/{} by {}",
       self.workspace_id,
@@ -273,5 +285,44 @@ mod keys {
     key.extend_from_slice(workspace_id.as_bytes());
     key.push(TERMINATOR);
     key
+  }
+}
+
+/// A holder for RocksDB instances that supports both strong and weak references.
+/// 
+/// Since RocksDB should have only one instance at a time, this enum allows for
+/// proper reference management. Callers that need to hold a reference to the database
+/// should use a weak reference to avoid keeping the instance alive unnecessarily.
+#[derive(Clone)]
+pub enum DbHolder {
+  /// Strong reference to RocksDB instance, maintains the instance alive as long as this reference exists
+  Strong(Arc<KVTransactionDBRocksdbImpl>),
+  /// Weak reference to RocksDB instance, allows the instance to be dropped when no strong references remain
+  Weak(Weak<KVTransactionDBRocksdbImpl>),
+}
+
+impl DbHolder {
+  /// Attempts to get a strong reference to the RocksDB instance.
+  /// 
+  /// If this is a strong holder, it simply clones the Arc.
+  /// If this is a weak holder, it attempts to upgrade the weak reference,
+  /// which will fail if the database has been dropped.
+  pub fn get(&self) -> anyhow::Result<Arc<KVTransactionDBRocksdbImpl>> {
+    match self {
+      Self::Strong(db) => Ok(db.clone()),
+      Self::Weak(db) => db.upgrade().ok_or_else(|| anyhow!("rocksdb was dropped")),
+    }
+  }
+}
+
+impl From<KVTransactionDBRocksdbImpl> for DbHolder {
+  fn from(value: KVTransactionDBRocksdbImpl) -> Self {
+    Self::Strong(Arc::new(value))
+  }
+}
+
+impl From<Weak<KVTransactionDBRocksdbImpl>> for DbHolder {
+  fn from(value: Weak<KVTransactionDBRocksdbImpl>) -> Self {
+    Self::Weak(value)
   }
 }

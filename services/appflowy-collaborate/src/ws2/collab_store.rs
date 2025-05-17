@@ -23,7 +23,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinSet;
-use tracing::warn;
+use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
@@ -136,6 +136,7 @@ impl CollabStore {
       .await
   }
 
+  #[instrument(level = "trace", skip_all, err)]
   pub async fn publish_update(
     &self,
     workspace_id: WorkspaceId,
@@ -151,7 +152,7 @@ impl CollabStore {
       .await?;
 
     let key = UpdateStreamMessage::stream_key(&workspace_id);
-    tracing::trace!("publishing update to '{}' (object id: {})", key, object_id);
+    trace!("publishing update to '{}' (object id: {})", key, object_id);
     let mut conn = self.connection_manager.clone();
     let items: String =
       UpdateStreamMessage::prepare_command(&key, &object_id, collab_type, sender, update)
@@ -160,6 +161,7 @@ impl CollabStore {
     Rid::from_str(&items).map_err(|err| anyhow!("failed to parse rid: {}", err))
   }
 
+  #[instrument(level = "trace", skip_all, err)]
   pub async fn publish_awareness_update(
     &self,
     workspace_id: WorkspaceId,
@@ -171,6 +173,7 @@ impl CollabStore {
       data: update,
       sender,
     };
+    trace!("broadcast {} awareness update", object_id);
     self
       .awareness_broadcast
       .send(&workspace_id.to_string(), &object_id.to_string(), &msg)

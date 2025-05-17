@@ -534,3 +534,27 @@ impl From<async_openai::error::OpenAIError> for AppError {
     }
   }
 }
+
+use tokio_tungstenite::tungstenite::Error as TungsteniteError;
+
+impl From<TungsteniteError> for AppError {
+  fn from(err: TungsteniteError) -> Self {
+    match &err {
+      TungsteniteError::Http(resp) => {
+        let status = resp.status();
+        if status == StatusCode::UNAUTHORIZED.as_u16() || status == StatusCode::NOT_FOUND.as_u16() {
+          AppError::UserUnAuthorized("Unauthorized websocket connection".to_string())
+        } else {
+          AppError::Internal(err.into())
+        }
+      },
+      _ => AppError::Internal(err.into()),
+    }
+  }
+}
+
+impl From<tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue> for AppError {
+  fn from(err: tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue) -> Self {
+    AppError::InvalidRequest(err.to_string())
+  }
+}

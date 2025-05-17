@@ -1,5 +1,6 @@
 mod actor;
 mod compactor;
+mod conn_retry;
 mod controller;
 mod db;
 

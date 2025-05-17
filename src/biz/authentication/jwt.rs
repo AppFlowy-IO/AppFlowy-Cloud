@@ -93,20 +93,19 @@ pub struct Authorization {
 
 impl Authorization {
   pub fn uuid(&self) -> Result<uuid::Uuid, actix_web::Error> {
-    self
-      .claims
-      .sub
-      .as_deref()
-      .map(Uuid::from_str)
-      .ok_or(actix_web::error::ErrorUnauthorized(
+    let sub = self.claims.sub.as_deref();
+    match sub {
+      None => Err(actix_web::error::ErrorUnauthorized(
         "Invalid Authorization header, missing sub(uuid)",
-      ))?
-      .map_err(|e| {
-        actix_web::error::ErrorUnauthorized(format!(
-          "Invalid Authorization header, invalid sub(uuid): {}",
-          e
-        ))
-      })
+      )),
+      Some(sub) => match Uuid::from_str(sub) {
+        Ok(uuid) => Ok(uuid),
+        Err(_) => Err(actix_web::error::ErrorUnauthorized(format!(
+          "Invalid Authorization header, invalid sub: {}",
+          sub
+        ))),
+      },
+    }
   }
 }
 

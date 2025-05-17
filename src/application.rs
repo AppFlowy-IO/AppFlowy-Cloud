@@ -12,7 +12,7 @@ use access_control::noops::collab::{
 };
 use access_control::noops::workspace::WorkspaceAccessControlImpl as NoOpsWorkspaceAccessControlImpl;
 use access_control::workspace::WorkspaceAccessControl;
-use actix::Supervisor;
+use actix::{Actor, Supervisor};
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -38,6 +38,7 @@ use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::snapshot::SnapshotControl;
+use appflowy_collaborate::ws2::{CollabStore, WsServer};
 use appflowy_collaborate::CollaborationServer;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
@@ -133,7 +134,6 @@ pub async fn run_actix_server(
     state.awareness_gossip.clone(),
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
-    Duration::from_secs(config.collab.group_prune_grace_period_secs),
     state.indexer_scheduler.clone(),
   )
   .await
@@ -295,7 +295,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   .await;
   let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
     collab_cache.clone(),
-    collab_storage_access_control,
+    collab_storage_access_control.clone(),
     snapshot_control,
     rt_cmd_tx,
   ));
@@ -325,6 +325,15 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     embedder_config,
     redis_conn_manager.clone(),
   );
+  let collab_store = CollabStore::new(
+    collab_storage_access_control.clone(),
+    collab_cache.clone().into(),
+    redis_conn_manager.clone(),
+    redis_stream_router.clone(),
+    awareness_gossip.clone(),
+    indexer_scheduler.clone(),
+  );
+  let ws_server = WsServer::new(collab_store).start();
 
   info!("Application state initialized");
   Ok(AppState {
@@ -350,6 +359,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     mailer,
     ai_client: appflowy_ai_client,
     indexer_scheduler,
+    ws_server,
   })
 }
 

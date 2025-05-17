@@ -141,6 +141,14 @@ impl TestClient {
     Self::new(registered_user, false).await
   }
 
+  pub fn disable_receive_message(&mut self) {
+    self.ws_client.disable_receive_message();
+  }
+
+  pub fn enable_receive_message(&mut self) {
+    self.ws_client.enable_receive_message();
+  }
+
   pub async fn insert_view_to_general_space(
     &self,
     workspace_id: &Uuid,
@@ -820,7 +828,7 @@ impl TestClient {
   ) -> Uuid {
     let object_id = Uuid::new_v4();
     self
-      .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None)
+      .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
       .await;
     object_id
   }
@@ -832,6 +840,7 @@ impl TestClient {
     workspace_id: Uuid,
     collab_type: CollabType,
     encoded_collab_v1: Option<EncodedCollab>,
+    sync: bool,
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
@@ -897,7 +906,9 @@ impl TestClient {
     }
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id, test_collab);
-    self.wait_object_sync_complete(&object_id).await.unwrap();
+    if sync {
+      self.wait_object_sync_complete(&object_id).await.unwrap();
+    }
   }
 
   pub async fn open_workspace_collab(&mut self, workspace_id: Uuid) {

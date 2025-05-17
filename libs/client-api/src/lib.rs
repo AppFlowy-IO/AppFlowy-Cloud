@@ -23,6 +23,9 @@ mod http_settings;
 pub mod notify;
 mod ping;
 mod retry;
+
+#[cfg(feature = "collab-sync")]
+pub mod v2;
 pub mod ws;
 
 pub mod error {
@@ -34,6 +37,7 @@ pub mod error {
 pub mod entity {
   #[cfg(not(target_arch = "wasm32"))]
   pub use crate::http_chat::*;
+  pub use appflowy_proto::WorkspaceNotification;
   pub use client_api_entity::*;
 }
 

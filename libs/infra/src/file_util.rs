@@ -86,7 +86,7 @@ pub struct ChunkedBytesIterator<'a> {
   chunked_data: &'a ChunkedBytes,
   current_index: usize,
 }
-impl<'a> Iterator for ChunkedBytesIterator<'a> {
+impl Iterator for ChunkedBytesIterator<'_> {
   type Item = Bytes;
 
   fn next(&mut self) -> Option<Self::Item> {

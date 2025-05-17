@@ -972,7 +972,8 @@ async fn batch_create_collab_handler(
         let compressed_data = &payload_buffer[offset..offset + len];
         match decompress(compressed_data.to_vec(), buffer_size) {
           Ok(decompressed_data) => {
-            let params = CollabParams::from_bytes(&decompressed_data).ok()?;
+            let params = CreateCollabData::from_bytes(&decompressed_data).ok()?;
+            let params = CollabParams::from(params);
             if params.validate().is_ok() {
               let encoded_collab =
                 EncodedCollab::decode_from_bytes(&params.encoded_collab_v1).ok()?;

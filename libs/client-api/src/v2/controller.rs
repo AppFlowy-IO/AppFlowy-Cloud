@@ -3,13 +3,18 @@ use super::WorkspaceId;
 use crate::entity::CollabType;
 use crate::v2::actor::{WorkspaceAction, WorkspaceControllerActor, WsConn};
 use crate::v2::conn_retry::ReconnectionManager;
+use app_error::ErrorCode;
 use appflowy_proto::{Rid, WorkspaceNotification};
 use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use collab_rt_protocol::CollabRef;
+use futures_core::Stream;
 use futures_util::stream::SplitSink;
+use shared_entity::response::AppResponseError;
 use std::fmt::{Display, Formatter};
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
+use tokio_stream::wrappers::WatchStream;
+use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
 use tracing::trace;
@@ -67,11 +72,20 @@ impl WorkspaceController {
     ConnectState::from(&*self.actor.status_channel().borrow())
   }
 
+  pub fn subscribe_connect_state(&self) -> impl Stream<Item = ConnectState> {
+    let status_rx = self.actor.status_channel().clone();
+    WatchStream::new(status_rx).map(|status| ConnectState::from(&status))
+  }
+
   pub fn subscribe_notification(&self) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
     self.actor.subscribe_notification()
   }
 
   pub async fn connect(&self, access_token: String) -> anyhow::Result<()> {
+    if access_token.is_empty() {
+      return Err(anyhow::anyhow!("access token is empty"));
+    }
+
     self
       .connection_manager
       .set_access_token(access_token.clone());
@@ -162,8 +176,18 @@ impl WorkspaceController {
 pub enum DisconnectedReason {
   Other(Arc<str>),
   ReachMaximumRetry,
+  MessageLoopEnd(Arc<str>),
   UserDisconnect(Arc<str>),
   Unauthorized(Arc<str>),
+}
+
+impl From<AppResponseError> for DisconnectedReason {
+  fn from(value: AppResponseError) -> Self {
+    match value.code {
+      ErrorCode::UserUnAuthorized => DisconnectedReason::Unauthorized(value.message.into()),
+      _ => DisconnectedReason::Other(value.message.into()),
+    }
+  }
 }
 
 impl DisconnectedReason {
@@ -252,6 +276,8 @@ fn spawn_reconnection(
 ) {
   tokio::spawn(async move {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+    interval.tick().await;
+
     loop {
       tokio::select! {
         result = connect_status_rx.changed() => {

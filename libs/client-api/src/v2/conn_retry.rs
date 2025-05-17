@@ -138,9 +138,9 @@ impl ReconnectionManager {
         },
         Err(err) => {
           error!("Reconnection attempt {} failed: {}", attempt + 1, err);
-          // We'll update the status, but with retry still set to true
+          let reason = DisconnectedReason::from(err);
           actor.set_connection_status(ConnectionStatus::Disconnected {
-            reason: Some(DisconnectedReason::Other(err.to_string().into())),
+            reason: Some(reason),
           });
         },
       }

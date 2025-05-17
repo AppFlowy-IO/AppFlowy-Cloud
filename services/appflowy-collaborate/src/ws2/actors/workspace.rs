@@ -95,7 +95,11 @@ impl Workspace {
                 update: state.update,
               },
             });
-            tracing::trace!("sending manifest for {}", msg.object_id);
+            tracing::trace!(
+              "sending manifest for {}, sv:{:?}",
+              msg.object_id,
+              state.state_vector
+            );
             sender.conn.do_send(WsOutput {
               message: ServerMessage::Manifest {
                 object_id: msg.object_id,

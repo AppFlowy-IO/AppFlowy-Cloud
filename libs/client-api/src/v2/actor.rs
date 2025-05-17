@@ -274,8 +274,9 @@ impl WorkspaceControllerActor {
           },
           Err(err) => {
             error!("[{}] failed to connect: {}", id, err);
+            let reason = DisconnectedReason::from(err.clone());
             actor.set_connection_status(ConnectionStatus::Disconnected {
-              reason: Some(DisconnectedReason::Other(err.to_string().into())),
+              reason: Some(reason),
             });
             let _ = ack.send(Err(err));
           },
@@ -434,7 +435,7 @@ impl WorkspaceControllerActor {
     if let Some(actor) = weak_actor.upgrade() {
       error!("failed to receive messages from server: {:?}", reason);
       actor.set_connection_status(ConnectionStatus::Disconnected {
-        reason: reason.map(DisconnectedReason::Other),
+        reason: reason.map(DisconnectedReason::MessageLoopEnd),
       });
     }
   }
@@ -466,6 +467,8 @@ impl WorkspaceControllerActor {
       }
       match msg {
         Message::Binary(bytes) => {
+          #[cfg(feature = "message_verbose_log")]
+          trace!("[WsMessage] received binary: len:{}", bytes.len());
           let msg = ServerMessage::from_bytes(&bytes)?;
           actor.handle_receive(msg).await?;
         },
@@ -478,8 +481,17 @@ impl WorkspaceControllerActor {
           buf.extend_from_slice(frame.payload());
           if frame.header().is_final {
             let bytes = std::mem::take(&mut buf);
+            #[cfg(feature = "message_verbose_log")]
+            trace!(
+              "[WsMessage] received final frame, len:{}, total:{}",
+              frame.len(),
+              bytes.len()
+            );
             let msg = ServerMessage::from_bytes(&bytes)?;
             actor.handle_receive(msg).await?;
+          } else {
+            #[cfg(feature = "message_verbose_log")]
+            trace!("[WsMessage] received frame: len:{}", frame.len());
           }
         },
         Message::Close(close) => {
@@ -507,12 +519,21 @@ impl WorkspaceControllerActor {
         last_message_id,
         state_vector,
       } => {
+        #[cfg(feature = "message_verbose_log")]
         trace!(
-          "received manifest message for {} (rid: {})",
+          "received manifest message for {} (rid: {}), sv:{:?}",
           object_id,
-          last_message_id
+          last_message_id,
+          state_vector
         );
-        let sv = StateVector::decode_v1(&state_vector)?;
+
+        let sv = if state_vector.is_empty() {
+          // If no inserts or other operations have ever been applied, the sv will be empty (i.e. []).
+          StateVector::default()
+        } else {
+          StateVector::decode_v1(&state_vector)?
+        };
+
         let local_message_id = self.last_message_id();
         if let Some(collab_ref) = self.get_collab(&object_id) {
           let (msg, missing) = {
@@ -552,6 +573,7 @@ impl WorkspaceControllerActor {
           UpdateFlags::Lib0v1 => Update::decode_v1(&update)?,
           UpdateFlags::Lib0v2 => Update::decode_v2(&update)?,
         };
+        #[cfg(feature = "message_verbose_log")]
         trace!(
           "received update for {} (rid: {})",
           object_id,
@@ -569,6 +591,8 @@ impl WorkspaceControllerActor {
         // we don't need to decode update for every use case, but do so anyway to confirm
         // that it isn't malformed
         let update = AwarenessUpdate::decode_v1(&awareness)?;
+
+        #[cfg(feature = "message_verbose_log")]
         trace!("received awareness update for {}", object_id);
         self.save_awareness_update(object_id, update).await?;
       },

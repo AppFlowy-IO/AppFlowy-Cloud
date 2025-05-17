@@ -147,6 +147,7 @@ impl WorkspaceController {
 pub enum ConnectionStatus {
   Disconnected {
     reason: Option<Arc<str>>,
+    retry: bool,
   },
   Connecting {
     cancel: CancellationToken,
@@ -159,17 +160,24 @@ pub enum ConnectionStatus {
 
 impl Default for ConnectionStatus {
   fn default() -> Self {
-    ConnectionStatus::Disconnected { reason: None }
+    ConnectionStatus::Disconnected {
+      reason: None,
+      retry: false,
+    }
   }
 }
 
 impl Display for ConnectionStatus {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      ConnectionStatus::Disconnected { reason: None } => write!(f, "disconnected"),
+      ConnectionStatus::Disconnected {
+        reason: None,
+        retry: _,
+      } => write!(f, "disconnected"),
       ConnectionStatus::Disconnected {
         reason: Some(reason),
-      } => write!(f, "disconnected: {}", reason),
+        retry,
+      } => write!(f, "disconnected: {}, retry: {}", reason, retry),
       ConnectionStatus::Connecting { .. } => write!(f, "connecting"),
       ConnectionStatus::Connected { .. } => write!(f, "connected"),
     }
@@ -178,7 +186,10 @@ impl Display for ConnectionStatus {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ConnectState {
-  Disconnected,
+  Disconnected {
+    reason: Option<Arc<str>>,
+    retry: bool,
+  },
   Connecting,
   Connected,
 }
@@ -186,7 +197,10 @@ pub enum ConnectState {
 impl From<&ConnectionStatus> for ConnectState {
   fn from(value: &ConnectionStatus) -> Self {
     match value {
-      ConnectionStatus::Disconnected { .. } => ConnectState::Disconnected,
+      ConnectionStatus::Disconnected { reason, retry } => ConnectState::Disconnected {
+        reason: reason.clone(),
+        retry: *retry,
+      },
       ConnectionStatus::Connecting { .. } => ConnectState::Connecting,
       ConnectionStatus::Connected { .. } => ConnectState::Connected,
     }

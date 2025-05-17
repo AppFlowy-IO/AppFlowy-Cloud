@@ -194,11 +194,9 @@ impl WorkspaceControllerActor {
         if origin.map(|o| o.as_ref()) != Some(Self::REMOTE_ORIGIN.as_bytes()) {
           match awareness.update_with_clients(e.all_changes()) {
             Ok(update) => inner.publish_awareness(object_id, collab_type, update),
-            Err(err) => tracing::error!(
+            Err(err) => error!(
               "[{}] failed to prepare awareness update for {}: {}",
-              client_id,
-              object_id,
-              err
+              client_id, object_id, err
             ),
           }
         }
@@ -249,9 +247,10 @@ impl WorkspaceControllerActor {
             None => break, // controller dropped
           };
           if let Err(err) = actor.ping().await {
-            tracing::error!("failed to send ping: {}", err);
+            error!("failed to send ping: {}", err);
             actor.set_connection_status(ConnectionStatus::Disconnected {
               reason: Some(err.to_string().into()),
+              retry: true,
             });
           }
         }
@@ -274,9 +273,10 @@ impl WorkspaceControllerActor {
             let _ = ack.send(Ok(()));
           },
           Err(err) => {
-            tracing::error!("[{}] failed to connect: {}", id, err);
+            error!("[{}] failed to connect: {}", id, err);
             actor.set_connection_status(ConnectionStatus::Disconnected {
               reason: Some(err.to_string().into()),
+              retry: true,
             });
             let _ = ack.send(Err(err));
           },
@@ -285,22 +285,27 @@ impl WorkspaceControllerActor {
       WorkspaceAction::Disconnect(ack) => match actor.handle_disconnect().await {
         Ok(_) => {
           trace!("[{}] disconnected", id);
-          actor.set_connection_status(ConnectionStatus::Disconnected { reason: None });
+          actor.set_connection_status(ConnectionStatus::Disconnected {
+            reason: None,
+            retry: false,
+          });
           let _ = ack.send(Ok(()));
         },
         Err(err) => {
           tracing::warn!("[{}] failed to disconnect: {}", id, err);
           actor.set_connection_status(ConnectionStatus::Disconnected {
             reason: Some(err.to_string().into()),
+            retry: false,
           });
           let _ = ack.send(Err(err));
         },
       },
       WorkspaceAction::Send(msg, source) => {
         if let Err(err) = actor.handle_send(msg, source).await {
-          tracing::error!("[{}] failed to handle client message: {}", id, err);
+          error!("[{}] failed to send client message: {}", id, err);
           actor.set_connection_status(ConnectionStatus::Disconnected {
             reason: Some(err.to_string().into()),
+            retry: false,
           });
         }
       },
@@ -384,7 +389,10 @@ impl WorkspaceControllerActor {
     .await?;
 
     match result {
-      None => actor.set_connection_status(ConnectionStatus::Disconnected { reason: None }),
+      None => actor.set_connection_status(ConnectionStatus::Disconnected {
+        reason: None,
+        retry: false,
+      }),
       Some(connection) => {
         trace!("[{}] connected to {}", client_id, actor.options.url);
         let (sink, stream) = connection.split();
@@ -411,13 +419,14 @@ impl WorkspaceControllerActor {
     stream: SplitStream<WsConn>,
     cancel: CancellationToken,
   ) {
-    let reason = match Self::remote_receiver_loop(weak_actor.clone(), stream, cancel.clone()).await
-    {
-      Ok(_) => None,
-      Err(err) => Some(Arc::from(err.to_string())),
-    };
+    let reason: Option<Arc<str>> =
+      match Self::remote_receiver_loop(weak_actor.clone(), stream, cancel.clone()).await {
+        Ok(_) => None,
+        Err(err) => Some(Arc::from(err.to_string())),
+      };
     if let Some(actor) = weak_actor.upgrade() {
-      actor.set_connection_status(ConnectionStatus::Disconnected { reason });
+      error!("failed to receive messages from server: {:?}", reason);
+      // actor.set_connection_status(ConnectionStatus::Disconnected { reason });
     }
   }
 
@@ -452,7 +461,7 @@ impl WorkspaceControllerActor {
           actor.handle_receive(msg).await?;
         },
         Message::Text(_) => {
-          tracing::error!("text messages are not supported")
+          error!("text messages are not supported")
         },
         Message::Ping(_) => { /* do nothing */ },
         Message::Pong(_) => { /* do nothing */ },
@@ -709,9 +718,10 @@ impl WorkspaceControllerActor {
   }
 
   async fn handle_disconnect(&self) -> anyhow::Result<()> {
-    let previous_status = self
-      .status_tx
-      .send_replace(ConnectionStatus::Disconnected { reason: None });
+    let previous_status = self.status_tx.send_replace(ConnectionStatus::Disconnected {
+      reason: None,
+      retry: false,
+    });
     match previous_status {
       ConnectionStatus::Connected { sink, cancel } => {
         cancel.cancel();

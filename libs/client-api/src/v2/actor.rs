@@ -2,7 +2,6 @@ use crate::v2::compactor::ChannelReceiverCompactor;
 use crate::v2::controller::{ConnectionStatus, DisconnectedReason, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
-use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
 use arc_swap::ArcSwap;
@@ -236,7 +235,7 @@ impl WorkspaceControllerActor {
           if let Err(err) = actor.ping().await {
             error!("failed to send ping: {}", err);
             actor.set_connection_status(ConnectionStatus::Disconnected {
-              reason: Some(DisconnectedReason::Other( err.to_string().into())),
+              reason: Some(DisconnectedReason::Unexpected( err.to_string().into())),
             });
           }
         }
@@ -290,7 +289,7 @@ impl WorkspaceControllerActor {
         if let Err(err) = actor.handle_send(msg, source).await {
           error!("[{}] failed to send client message: {}", id, err);
           actor.set_connection_status(ConnectionStatus::Disconnected {
-            reason: Some(DisconnectedReason::Other(err.to_string().into())),
+            reason: Some(DisconnectedReason::Unexpected(err.to_string().into())),
           });
         }
       },
@@ -319,7 +318,7 @@ impl WorkspaceControllerActor {
       if let Err(err) = self.send_message(msg).await {
         error!("Failed to send message: {}", err);
         self.set_connection_status(ConnectionStatus::Disconnected {
-          reason: Some(DisconnectedReason::Other(err.to_string().into())),
+          reason: Some(DisconnectedReason::Unexpected(err.to_string().into())),
         });
         return Err(err);
       }
@@ -541,8 +540,8 @@ impl WorkspaceControllerActor {
             (msg, missing)
           };
           self.send_message(msg).await?;
-          if let Some(msg) = missing {
-            self.send_message(msg).await?;
+          if let Some(missing) = missing {
+            self.send_message(missing).await?;
           }
         }
       },
@@ -652,6 +651,20 @@ impl WorkspaceControllerActor {
     }
   }
 
+  /// Applies or persists remote updates for collaborative objects.
+  ///
+  /// # Arguments
+  /// * `object_id` - The identifier of the collaborative object
+  /// * `collab_type` - The type of collaboration
+  /// * `rid` - The message identifier for this update
+  /// * `update` - The update data to apply
+  ///
+  /// # Behavior
+  /// - For active collabs (in memory): Directly applies the update and checks for missing updates
+  /// - For inactive collabs: Encodes and persists the update to the database
+  ///
+  /// Sets the sync state to SyncFinished when successful or triggers manifest publication
+  /// if missing updates are detected.
   async fn save_remote_update(
     &self,
     object_id: ObjectId,
@@ -693,6 +706,13 @@ impl WorkspaceControllerActor {
     Ok(())
   }
 
+  /// Saves the provided update to the persistent database and checks if there  are any missing
+  /// updates in the collaboration sequence. If gaps are detected in the update history, it
+  /// automatically triggers a manifest message to request the missing updates.
+  ///
+  /// It is primarily used when receiving updates for collaborative objects that
+  /// aren't currently active in memory. Active objects handle their updates through the
+  /// in-memory collaboration object directly.
   async fn persist_update(
     &self,
     object_id: ObjectId,

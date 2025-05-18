@@ -1,6 +1,7 @@
 use crate::database::database_collab::create_database_collab;
 use crate::document::parser::JsonToDocumentParser;
 use crate::{TemplateData, TemplateObjectId};
+use collab::core::collab::CollabOptions;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_database::entity::CreateDatabaseParams;
@@ -16,7 +17,8 @@ pub async fn create_document_from_json(
 
   // 2. create a new document with the getting started data
   let data = tokio::task::spawn_blocking(move || {
-    let collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], false);
+    let options = CollabOptions::new(object_id.clone());
+    let collab = Collab::new_with_options(CollabOrigin::Empty, options)?;
     let document = Document::create_with_data(collab, document_data)?;
     let encoded_collab = document.encode_collab()?;
 

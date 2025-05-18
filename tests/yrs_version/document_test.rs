@@ -14,7 +14,6 @@ fn load_yrs_0172_version_get_started_document_using_current_yrs_version() {
     CollabOrigin::Empty,
     DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
     "fake_id",
-    vec![],
   )
   .unwrap();
 

@@ -26,7 +26,6 @@ fn load_yrs_0172_version_folder_using_current_yrs_version() {
     CollabOrigin::Empty,
     encode_collab.into(),
     "fake_id", // just use fake id
-    vec![],
   )
   .unwrap();
 

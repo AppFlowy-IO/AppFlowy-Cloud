@@ -45,7 +45,7 @@ use appflowy_collaborate::actix_ws::entities::{
 
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
-use collab::core::collab::DataSource;
+use collab::core::collab::{CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
@@ -977,14 +977,9 @@ async fn batch_create_collab_handler(
             if params.validate().is_ok() {
               let encoded_collab =
                 EncodedCollab::decode_from_bytes(&params.encoded_collab_v1).ok()?;
-              let collab = Collab::new_with_source(
-                CollabOrigin::Empty,
-                &params.object_id.to_string(),
-                DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
-                vec![],
-                false,
-              )
-              .ok()?;
+              let options = CollabOptions::new(params.object_id.to_string())
+                .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.to_vec()));
+              let collab = Collab::new_with_options(CollabOrigin::Empty, options).ok()?;
 
               match params.collab_type.validate_require_data(&collab) {
                 Ok(_) => {

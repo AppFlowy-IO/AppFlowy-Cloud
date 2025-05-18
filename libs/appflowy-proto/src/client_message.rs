@@ -29,7 +29,7 @@ pub enum ClientMessage {
     last_message_id: Rid,
     state_vector: Vec<u8>,
   },
-  
+
   /// Sends local changes to be synchronized with other clients.
   ///
   /// # Fields
@@ -43,7 +43,7 @@ pub enum ClientMessage {
     flags: UpdateFlags,
     update: Vec<u8>,
   },
-  
+
   /// Shares user presence and status information with other clients.
   ///
   /// # Fields

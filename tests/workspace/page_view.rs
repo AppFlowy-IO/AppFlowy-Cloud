@@ -38,7 +38,6 @@ async fn get_latest_folder(test_client: &TestClient, workspace_id: &Uuid) -> Fol
     CollabOrigin::Client(CollabClient::new(uid, test_client.device_id.clone())),
     encoded_collab.into(),
     &workspace_id.to_string(),
-    vec![],
   )
   .unwrap()
 }

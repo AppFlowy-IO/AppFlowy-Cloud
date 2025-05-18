@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Context;
+use collab::core::collab::CollabOptions;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
@@ -36,8 +37,8 @@ pub fn generate_random_string(len: usize) -> String {
 }
 
 pub fn make_big_collab_doc_state(object_id: &Uuid, key: &str, value: String) -> Vec<u8> {
-  let mut collab =
-    Collab::new_with_origin(CollabOrigin::Empty, object_id.to_string(), vec![], false);
+  let options = CollabOptions::new(object_id.to_string());
+  let mut collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   collab.insert(key, value);
   collab
     .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
@@ -97,14 +98,9 @@ pub fn empty_document_editor(object_id: &Uuid) -> TestDocumentEditor {
     .unwrap()
     .doc_state
     .to_vec();
-  let collab = Collab::new_with_source(
-    CollabOrigin::Empty,
-    &object_id,
-    DataSource::DocStateV1(doc_state),
-    vec![],
-    false,
-  )
-  .unwrap();
+  let options =
+    CollabOptions::new(object_id.clone()).with_data_source(DataSource::DocStateV1(doc_state));
+  let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   TestDocumentEditor {
     document: Document::open(collab).unwrap(),
   }
@@ -117,7 +113,7 @@ pub fn alex_software_engineer_story() -> Vec<&'static str> {
     "He learned tennis while living in Singapore and now enjoys playing with his friends on weekends.",
     "Alex had an unforgettable experience trying two diamond slopes in Lake Tahoe, which challenged his snowboarding skills.",
     "He brought his bike with him when he moved to Singapore, excited to explore the city on two wheels.",
-    "Although he hasn’t ridden his bike in Singapore yet, Alex looks forward to cycling through the city’s famous parks and scenic routes.",
+    "Although he hasn't ridden his bike in Singapore yet, Alex looks forward to cycling through the city's famous parks and scenic routes.",
     "Alex enjoys the thrill of playing different sports, finding balance between his work and physical activities.",
     "From the adrenaline of snowboarding to the strategic moves on the tennis court, each sport gives him a sense of freedom and excitement.",
   ]
@@ -126,14 +122,14 @@ pub fn alex_software_engineer_story() -> Vec<&'static str> {
 pub fn snowboarding_in_japan_plan() -> Vec<&'static str> {
   vec![
     "Our trip begins with a flight from American to Tokyo on January 7th.",
-    "In Tokyo, we’ll spend three days, from February 7th to 10th, exploring the city’s tech scene and snowboarding gear shops.",
-    "We’ll visit popular spots like Shibuya, Shinjuku, and Odaiba before heading to our next destination.",
+    "In Tokyo, we'll spend three days, from February 7th to 10th, exploring the city's tech scene and snowboarding gear shops.",
+    "We'll visit popular spots like Shibuya, Shinjuku, and Odaiba before heading to our next destination.",
     "From Tokyo, we fly to Sendai and then travel to Zao Onsen for a 3-day stay from February 10th to 14th.",
     "Zao Onsen is famous for its beautiful snow and the iconic ice trees, which will make for a unique snowboarding experience.",
-    "After Zao Onsen, we fly from Sendai to Chitose, then head to Sapporo for a 2-day visit, exploring the city’s vibrant atmosphere and winter attractions.",
-    "On the next day, we’ll spend time at Sapporo Tein, a ski resort that offers great runs and stunning views of the city and the sea.",
+    "After Zao Onsen, we fly from Sendai to Chitose, then head to Sapporo for a 2-day visit, exploring the city's vibrant atmosphere and winter attractions.",
+    "On the next day, we'll spend time at Sapporo Tein, a ski resort that offers great runs and stunning views of the city and the sea.",
     "Then we head to Rusutsu for 5 days, one of the top ski resorts in Japan, known for its deep powder snow and extensive runs.",
-    "Finally, we’ll fly back to Singapore after experiencing some of the best snowboarding Japan has to offer.",
+    "Finally, we'll fly back to Singapore after experiencing some of the best snowboarding Japan has to offer.",
     "Ski resorts to visit include Niseko (二世谷), Rusutsu (留寿都), Sapporo Tein (札幌和海景), and Zao Onsen Ski Resort (冰树).",
   ]
 }
@@ -148,8 +144,8 @@ pub fn alex_banker_story() -> Vec<&'static str> {
     "For Alex, food is a form of relaxation and self-care, a break from",
     "the hectic world of banking. A perfect meal brings them comfort.",
     "Whether dining out or cooking at home, Alex enjoys savoring flavors",
-    "and experiencing the joy of good food. It’s their favorite way to unwind.",
-    "Though they don’t share the same passion for sports, Alex finds",
+    "and experiencing the joy of good food. It's their favorite way to unwind.",
+    "Though they don't share the same passion for sports, Alex finds",
     "happiness in the culinary world, where each new dish is an adventure.",
   ]
 }
@@ -162,7 +158,8 @@ pub fn empty_collab_doc_state(object_id: &str, collab_type: CollabType) -> Vec<u
       .doc_state
       .to_vec(),
     CollabType::Unknown => {
-      let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+      let options = CollabOptions::new(object_id.to_string());
+      let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
       collab
         .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
         .unwrap()
@@ -174,8 +171,8 @@ pub fn empty_collab_doc_state(object_id: &str, collab_type: CollabType) -> Vec<u
 }
 
 pub fn test_encode_collab_v1(object_id: &Uuid, key: &str, value: &str) -> EncodedCollab {
-  let mut collab =
-    Collab::new_with_origin(CollabOrigin::Empty, object_id.to_string(), vec![], false);
+  let options = CollabOptions::new(object_id.to_string());
+  let mut collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   collab.insert(key, value);
   collab
     .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))

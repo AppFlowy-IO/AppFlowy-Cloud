@@ -5,7 +5,7 @@ use app_error::AppError;
 use appflowy_proto::{Rid, UpdateFlags};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use collab::core::collab::DataSource;
+use collab::core::collab::{CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::preclude::Collab;
@@ -153,18 +153,21 @@ impl CollabCache {
     tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
     if !updates.is_empty() {
       let mut collab = match encoded_collab {
-        Some(encoded_collab) => Collab::new_with_source(
-          CollabOrigin::Server,
-          &object_id.to_string(),
-          match encoded_collab.version {
-            EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
-            EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
-          },
-          vec![],
-          false,
-        )
-        .map_err(|err| AppError::Internal(err.into()))?,
-        None => Collab::new_with_origin(CollabOrigin::Server, object_id.to_string(), vec![], false),
+        Some(encoded_collab) => {
+          let options = CollabOptions::new(object_id.to_string()).with_data_source(
+            match encoded_collab.version {
+              EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
+              EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
+            },
+          );
+          Collab::new_with_options(CollabOrigin::Server, options)
+            .map_err(|err| AppError::Internal(err.into()))?
+        },
+        None => {
+          let options = CollabOptions::new(object_id.to_string());
+          Collab::new_with_options(CollabOrigin::Server, options)
+            .map_err(|err| AppError::Internal(err.into()))?
+        },
       };
       {
         let mut tx = collab.transact_mut();

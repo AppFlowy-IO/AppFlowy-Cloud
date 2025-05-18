@@ -1,7 +1,6 @@
-use std::sync::Arc;
-
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use collab::core::collab::CollabOptions;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_database::workspace_database::WorkspaceDatabase;
@@ -12,6 +11,7 @@ use database::collab::CollabStorage;
 use database::pg_row::AFWorkspaceRow;
 use database_entity::dto::CollabParams;
 use sqlx::Transaction;
+use std::sync::Arc;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 use workspace_template::{TemplateObjectId, WorkspaceTemplate, WorkspaceTemplateBuilder};
@@ -118,7 +118,9 @@ pub(crate) async fn create_user_awareness(
 ) -> Result<Uuid, AppError> {
   let object_id = user_awareness_object_id(user_uuid, &workspace_id);
   let collab_type = CollabType::UserAwareness;
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id.to_string(), vec![], false);
+  let options = CollabOptions::new(object_id.to_string());
+  let collab = Collab::new_with_options(CollabOrigin::Empty, options)
+    .map_err(|e| AppError::Internal(e.into()))?;
 
   // TODO(nathan): Maybe using hardcode encoded collab
   let user_awareness = UserAwareness::create(collab, None)?;
@@ -156,8 +158,9 @@ pub(crate) async fn create_workspace_collab(
   let workspace = Workspace::new(workspace_id.to_string(), name.to_string(), uid);
   let folder_data = FolderData::new(workspace);
 
-  let collab =
-    Collab::new_with_origin(CollabOrigin::Empty, workspace_id.to_string(), vec![], false);
+  let options = CollabOptions::new(workspace_id.to_string());
+  let collab = Collab::new_with_options(CollabOrigin::Empty, options)
+    .map_err(|e| AppError::Internal(e.into()))?;
   let folder = Folder::create(uid, collab, None, folder_data);
   let encode_collab = folder
     .encode_collab()
@@ -193,7 +196,9 @@ pub(crate) async fn create_workspace_database_collab(
   initial_database_records: Vec<(String, String)>,
 ) -> Result<(), AppError> {
   let collab_type = CollabType::WorkspaceDatabase;
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id.to_string(), vec![], false);
+  let options = CollabOptions::new(object_id.to_string());
+  let collab = Collab::new_with_options(CollabOrigin::Empty, options)
+    .map_err(|e| AppError::Internal(e.into()))?;
   let mut workspace_database = WorkspaceDatabase::create(collab);
   for (object_id, database_id) in initial_database_records {
     workspace_database.add_database(&database_id, vec![object_id]);

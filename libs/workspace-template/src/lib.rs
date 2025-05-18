@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 pub use anyhow::Result;
 use async_trait::async_trait;
+use collab::core::collab::CollabOptions;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 
@@ -146,7 +147,8 @@ impl WorkspaceTemplateBuilder {
         private: Default::default(),
       };
 
-      let collab = Collab::new_with_origin(CollabOrigin::Empty, &workspace_id, vec![], false);
+      let options = CollabOptions::new(workspace_id.clone());
+      let collab = Collab::new_with_options(CollabOrigin::Empty, options)?;
       let folder = Folder::create(uid, collab, None, folder_data);
       let data = folder.encode_collab()?;
       Ok::<_, anyhow::Error>(TemplateData {

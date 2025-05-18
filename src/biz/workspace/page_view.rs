@@ -20,7 +20,7 @@ use appflowy_collaborate::actix_ws::entities::ClientHttpUpdateMessage;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use bytes::Bytes;
 use chrono::DateTime;
-use collab::core::collab::Collab;
+use collab::core::collab::{Collab, CollabOptions};
 use collab_database::database::{
   gen_database_group_id, gen_database_id, gen_field_id, gen_row_id, Database, DatabaseContext,
 };
@@ -319,7 +319,9 @@ fn prepare_document_collab_param_with_initial_data(
   page_data: serde_json::Value,
   collab_id: Uuid,
 ) -> Result<CollabParams, AppError> {
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, collab_id.to_string(), vec![], false);
+  let options = CollabOptions::new(collab_id.to_string());
+  let collab = Collab::new_with_options(CollabOrigin::Empty, options)
+    .map_err(|e| AppError::Internal(e.into()))?;
   let document_data = JsonToDocumentParser::json_to_document(page_data)?;
   let document = Document::create_with_data(collab, document_data)
     .map_err(|err| AppError::InvalidPageData(err.to_string()))?;
@@ -2006,14 +2008,8 @@ async fn get_page_collab_data_for_database(
       err
     ))
   })?;
-  let db_collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    &db_oid,
-    db.clone().into(),
-    vec![],
-    false,
-  )
-  .map_err(|err| {
+  let options = CollabOptions::new(db_oid.to_string()).with_data_source(db.clone().into());
+  let db_collab = Collab::new_with_options(CollabOrigin::Server, options).map_err(|err| {
     AppError::Internal(anyhow!(
       "Unable to create collab from object id {}: {}",
       &db_oid,
@@ -2157,20 +2153,15 @@ pub async fn create_database_view(
     CollabType::Database,
   )
   .await?;
-  let mut database_collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    &database_id.to_string(),
-    encoded_collab.into(),
-    vec![],
-    false,
-  )
-  .map_err(|err| {
-    AppError::Internal(anyhow!(
-      "Unable to create collab from object id {}: {}",
-      &database_id,
-      err
-    ))
-  })?;
+  let options = CollabOptions::new(database_id.to_string()).with_data_source(encoded_collab.into());
+  let mut database_collab =
+    Collab::new_with_options(CollabOrigin::Server, options).map_err(|err| {
+      AppError::Internal(anyhow!(
+        "Unable to create collab from object id {}: {}",
+        &database_id,
+        err
+      ))
+    })?;
 
   let database_body = DatabaseBody::from_collab(
     &database_collab,

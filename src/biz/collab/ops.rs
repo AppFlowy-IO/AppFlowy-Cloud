@@ -80,6 +80,7 @@ use crate::biz::collab::folder_view::check_if_view_is_space;
 use crate::biz::collab::utils::get_database_row_doc_changes;
 use crate::biz::workspace::ops::broadcast_update_with_timeout;
 use crate::biz::workspace::page_view::update_workspace_folder_data;
+use collab::core::collab::CollabOptions;
 use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
 use std::collections::HashSet;
@@ -425,12 +426,9 @@ pub async fn insert_database_row(
   let new_db_row_id_str = RowId::from(new_db_row_id.to_string());
   let creation_time = Utc::now();
 
-  let mut new_db_row_collab = Collab::new_with_origin(
-    CollabOrigin::Empty,
-    new_db_row_id.to_string(),
-    vec![],
-    false,
-  );
+  let options = CollabOptions::new(new_db_row_id.to_string());
+  let mut new_db_row_collab = Collab::new_with_options(CollabOrigin::Empty, options)
+    .map_err(|err| AppError::Internal(err.into()))?;
   let new_db_row_body = DatabaseRowBody::create(
     new_db_row_id_str.clone(),
     &mut new_db_row_collab,
@@ -903,13 +901,9 @@ pub async fn list_database_row_details(
           },
         };
         let id = id.to_string();
-        let collab = match Collab::new_with_source(
-          CollabOrigin::Server,
-          &id.to_string(),
-          ec.into(),
-          vec![],
-          false,
-        ) {
+        let options =
+          collab::core::collab::CollabOptions::new(id.to_string()).with_data_source(ec.into());
+        let collab = match Collab::new_with_options(CollabOrigin::Server, options) {
           Ok(collab) => collab,
           Err(err) => {
             tracing::error!("Failed to create collab: {:?}", err);
@@ -1001,14 +995,9 @@ fn fill_in_db_row_doc(
     QueryCollabResult::Failed { error } => return Err(AppError::Internal(anyhow::anyhow!(error))),
   };
   let ec = EncodedCollab::decode_from_bytes(&ec_bytes)?;
-  let doc_collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    &doc_id.to_string(),
-    ec.into(),
-    vec![],
-    false,
-  )
-  .map_err(|err| {
+  let options =
+    collab::core::collab::CollabOptions::new(doc_id.to_string()).with_data_source(ec.into());
+  let doc_collab = Collab::new_with_options(CollabOrigin::Server, options).map_err(|err| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to create document collab: {:?}",
       err

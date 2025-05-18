@@ -151,7 +151,8 @@ impl WorkspaceController {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum DisconnectedReason {
-  Other(Arc<str>),
+  /// When disconnect reason is unexpected. ReconnectionManager will try to reconnect after a period of time
+  Unexpected(Arc<str>),
   ReachMaximumRetry,
   MessageLoopEnd(Arc<str>),
   UserDisconnect(Arc<str>),
@@ -162,14 +163,14 @@ impl From<AppResponseError> for DisconnectedReason {
   fn from(value: AppResponseError) -> Self {
     match value.code {
       ErrorCode::UserUnAuthorized => DisconnectedReason::Unauthorized(value.message.into()),
-      _ => DisconnectedReason::Other(value.message.into()),
+      _ => DisconnectedReason::Unexpected(value.message.into()),
     }
   }
 }
 
 impl DisconnectedReason {
   pub fn retriable(&self) -> bool {
-    matches!(self, Self::Other(..))
+    matches!(self, Self::Unexpected(..))
   }
 }
 

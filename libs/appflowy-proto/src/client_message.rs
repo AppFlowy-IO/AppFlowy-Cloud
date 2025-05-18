@@ -11,20 +11,45 @@ use prost::Message;
 use std::fmt::{Debug, Formatter};
 use uuid::Uuid;
 
+/// Represents messages sent from the client to the server through the WebSocket connection.
+/// ClientMessage is used to synchronize collaborative data between clients.
 #[derive(Clone)]
 pub enum ClientMessage {
+  /// Requests synchronization by providing the client's state vector.
+  /// The server responds with updates the client is missing.
+  ///
+  /// # Fields
+  /// * `object_id` - The unique identifier of the collaborative object
+  /// * `collab_type` - The type of collaborative object (document, folder, etc.)
+  /// * `last_message_id` - The ID of the last message received by this client
+  /// * `state_vector` - A compressed representation of the client's document state
   Manifest {
     object_id: ObjectId,
     collab_type: CollabType,
     last_message_id: Rid,
     state_vector: Vec<u8>,
   },
+  
+  /// Sends local changes to be synchronized with other clients.
+  ///
+  /// # Fields
+  /// * `object_id` - The unique identifier of the collaborative object
+  /// * `collab_type` - The type of collaborative object
+  /// * `flags` - Encoding version flag (Lib0v1 or Lib0v2)
+  /// * `update` - The encoded changes to be applied
   Update {
     object_id: ObjectId,
     collab_type: CollabType,
     flags: UpdateFlags,
     update: Vec<u8>,
   },
+  
+  /// Shares user presence and status information with other clients.
+  ///
+  /// # Fields
+  /// * `object_id` - The unique identifier of the collaborative object
+  /// * `collab_type` - The type of collaborative object
+  /// * `awareness` - Encoded user presence data
   AwarenessUpdate {
     object_id: ObjectId,
     collab_type: CollabType,
@@ -85,6 +110,7 @@ impl Debug for ClientMessage {
 }
 
 impl ClientMessage {
+  /// Returns a reference to the object ID contained in this message.
   pub fn object_id(&self) -> &ObjectId {
     match self {
       ClientMessage::Manifest { object_id, .. } => object_id,
@@ -93,16 +119,24 @@ impl ClientMessage {
     }
   }
 
+  /// Converts this ClientMessage into a serialized byte array.
+  ///
+  /// This is typically used before sending the message over the network.
   pub fn into_bytes(self) -> Result<Vec<u8>, Error> {
     Ok(pb::Message::from(self).encode_to_vec())
   }
 
+  /// Creates a ClientMessage from a serialized byte array.
+  ///
+  /// This is typically used after receiving a message from the network.
   pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
     let proto = pb::Message::decode(bytes)?;
     Self::try_from(proto)
   }
 }
 
+/// Converts a ClientMessage into the protocol buffer message format.
+/// This is used for serialization before network transmission.
 impl From<ClientMessage> for pb::Message {
   fn from(value: ClientMessage) -> Self {
     match value {
@@ -160,6 +194,8 @@ impl From<ClientMessage> for pb::Message {
   }
 }
 
+/// Attempts to convert a protocol buffer message into a ClientMessage.
+/// This is used for deserialization after receiving a message from the network.
 impl TryFrom<pb::Message> for ClientMessage {
   type Error = Error;
 

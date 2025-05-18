@@ -86,7 +86,20 @@ sequenceDiagram
     Note over Server: Server already has document
     Note over Server: with state vector [A:3, B:2]
     ClientA ->>+ Server: ClientMessage::Manifest {object_id, collab_type, last_message_id, SV: [A:0]}
-    Note over Server: Compare client SV [A:0] with server SV [A:3, B:2]<br>Determine client is missing updates
+    Note over Server: Server processes client manifest:
+    Note over Server: 1. Loads existing document
+    Note over Server: 2. Compares client SV [A:0] with server SV [A:3, B:2]
+    Note over Server: 3. Determines client is missing updates
+    Note over Server: 4. Encodes missing updates based on SV diff
+    Server -->>- ClientA: ServerMessage::Manifest {object_id, collab_type, last_message_id, SV: [A:3, B:2]}
+    Note over ClientA: Process server manifest
+    Note over ClientA: 1. Encode current state based on server SV
+    ClientA ->>+ Server: ClientMessage::Update {updates based on diff}
+    Note over ClientA: 2. Check for missing updates<br>Detect missing operations
+    ClientA ->> Server: ClientMessage::Manifest {request missing updates}
+    Note over Server: Server processes second manifest:
+    Note over Server: 1. Recognizes client request for missing updates
+    Note over Server: 2. Packages updates A:1-3, B:1-2
     Server -->>- ClientA: ServerMessage::Update {updates for A:1-3, B:1-2}
     Note over ClientA: Apply updates<br>SV now: [A:3, B:2]
     Note over ClientA: Local edit
@@ -100,10 +113,21 @@ sequenceDiagram
 In this scenario:
 
 1. Client connects with an empty or outdated state vector
-2. Server detects the difference between client's SV and server's SV
-3. Server sends all missing updates in a single message
-4. Client applies updates to catch up with server state
-5. Normal editing can then proceed with real-time updates
+2. Server processes the client manifest:
+   - Loads the existing document state
+   - Compares client's state vector [A:0] with its own [A:3, B:2]
+   - Identifies that the client is missing updates
+   - Responds with its state vector in a manifest message
+3. Client processes server manifest:
+   - Encodes its document state as an update based on server's state vector
+   - Sends this update to the server
+   - Checks if it's missing any operations
+   - Sends another manifest to request missing updates
+4. Server processes the second manifest:
+   - Identifies which specific updates the client needs
+   - Packages these updates and sends them to the client
+5. Client applies updates to catch up with server state
+6. Normal editing can then proceed with real-time updates
 
 #### Case 2: Server Does Not Have the Document
 
@@ -118,24 +142,35 @@ sequenceDiagram
     ClientA ->> Server: Connect (Establish WebSocket)
     Server -->> ClientA: Connection established
     ClientA ->> Server: ClientMessage::Manifest {object_id, collab_type, last_message_id, SV: [A:3]}
-    Note over Server: Check group existence<br>Document not found
-    Note over Server: Create new CollabGroup<br>Initialize with empty SV
-    Note over Server: Register ClientA as active participant
-    Server -->> ClientA: ServerMessage::Manifest {SV: []}
-    Note over ClientA: Detect server is missing all updates<br>SV differences: A:1-3
-    ClientA ->> Server: ClientMessage::Update {update A:1}
-    Note over Server: Apply update<br>SV now: [A:1]
-    ClientA ->> Server: ClientMessage::Update {update A:2}
-    Note over Server: Apply update<br>SV now: [A:2]
-    ClientA ->> Server: ClientMessage::Update {update A:3}
-    Note over Server: Apply update<br>SV now: [A:3]
+    Note over Server: Server processes client manifest:
+    Note over Server: 1. Checks document existence - not found
+    Note over Server: 2. Creates new CollabGroup
+    Note over Server: 3. Initializes with empty state vector
+    Note over Server: 4. Registers ClientA as active participant
+    Server -->> ClientA: ServerMessage::Manifest {object_id, collab_type, last_message_id, SV: []}
+    Note over ClientA: Process server manifest
+    Note over ClientA: 1. Encode full document state since server SV is empty
+    Note over ClientA: 2. No missing updates since server has empty SV
+    ClientA ->> Server: ClientMessage::Update {full document state}
+    Note over Server: Server processes client update:
+    Note over Server: 1. Applies complete update to empty document
+    Note over Server: 2. Updates server SV to [A:3]
     Note over Server: Document now exists with SV [A:3]
     Note over ClientB: Client B connects
     ClientB ->> Server: Connect (Establish WebSocket)
     Server -->> ClientB: Connection established
     ClientB ->> Server: ClientMessage::Manifest {object_id, collab_type, last_message_id, SV: [B:0]}
-    Note over Server: Register ClientB as active participant
-    Note over Server: Compare SVs<br>ClientB missing: [A:1-3]
+    Note over Server: Server processes client manifest:
+    Note over Server: 1. Loads existing document
+    Note over Server: 2. Compares client SV [B:0] with server SV [A:3]
+    Note over Server: 3. Determines client is missing updates
+    Server -->> ClientB: ServerMessage::Manifest {SV: [A:3]}
+    Note over ClientB: Process server manifest
+    ClientB ->> Server: ClientMessage::Update {empty update based on server SV}
+    Note over ClientB: Detect missing updates
+    ClientB ->> Server: ClientMessage::Manifest {request missing updates}
+    Note over Server: Server processes second manifest:
+    Note over Server: 1. Packages updates A:1-3
     Server -->> ClientB: ServerMessage::Update {updates for A:1-3}
     Note over ClientB: Apply updates<br>SV now: [A:3, B:0]
     Note over ClientA: Disconnects
@@ -147,12 +182,24 @@ In this scenario:
 
 1. Client connects to the server and establishes a WebSocket connection
 2. Client sends a Manifest message for a document the server doesn't know about
-3. Server creates a new CollabGroup for this document and registers the client as an active participant
-4. Client detects the server is missing all local updates
-5. Client sends all local updates to the server
-6. Server builds up its document state from client updates
-7. When other clients connect, they are registered as active participants and receive the updates
-8. When a client disconnects, it's removed from the active participants list
+3. Server processes the client manifest:
+   - Checks for document existence and finds it doesn't exist
+   - Creates a new CollabGroup for this document
+   - Initializes it with an empty state vector
+   - Registers the client as an active participant
+   - Responds with a manifest containing empty state vector
+4. Client processes server manifest:
+   - Sees that server has empty state vector
+   - Encodes its entire document state as an update
+   - Sends this complete update to the server (no need to request missing updates)
+5. Server processes the client update:
+   - Applies the complete update to the empty document
+   - Updates its state vector to reflect the client's document state [A:3]
+6. When other clients connect, the server:
+   - Recognizes that the document now exists
+   - Compares the new client's state vector with its own
+   - Sends a manifest with current state vector
+   - Processes the client's response and provides missing updates
 
 The server maintains a list of active participants (subscribers) for each document, which allows it to:
 
@@ -162,10 +209,10 @@ The server maintains a list of active participants (subscribers) for each docume
 
 Key differences between the two scenarios:
 
-- In Case 1, the server sends missing updates to the client
-- In Case 2, the client sends missing updates to the server
-- Case 2 establishes a new document on the server
-- Both cases result in consistent document states across all clients
+- In Case 1, the server recognizes an existing document and provides its state vector for comparison
+- In Case 2, the server creates a new document and initializes it with the client's document state
+- In both cases, the server compares state vectors to determine what updates need to be exchanged
+- In both cases, the server maintains a registry of active clients for broadcasting updates
 
 When a client makes changes in normal operation:
 
@@ -526,6 +573,7 @@ sequenceDiagram
     participant ClientA
     participant Server
     participant ClientB
+    participant RocksDB
     Note over ClientA, ClientB: Initial Connection Phase
     ClientA ->>+ Server: Connect (no previous messages)
     Server -->>- ClientA: Connected
@@ -533,65 +581,94 @@ sequenceDiagram
     ClientA ->>+ Server: ClientMessage::Manifest<br>{last_message_id: Rid::default(), SV: [A:0]}
     Server -->>- ClientA: ServerMessage::Manifest (empty)
     Note over ClientA, ClientB: Update Creation and Propagation
-    Note over ClientA: Local edit at t=1000ms
-    Note over ClientA: Create Rid {1000, 1}<br>Update SV to [A:1]
-    ClientA ->>+ Server: ClientMessage::Update<br>{update, flags, Rid: {1000, 1}}
-    Note over Server: Store update with Rid {1000, 1}<br>Update last_message_id if {1000, 1} > current
-    Server ->>- ClientB: ServerMessage::Update<br>{update, last_message_id: {1000, 1}}
-    Note over ClientB: Compare received Rid {1000, 1}<br>with current last_message_id Rid::default()<br>{1000, 1} > {0, 0}, so update
-    Note over ClientB: last_message_id = {1000, 1}<br>Apply update<br>Update SV to [A:1, B:0]
+    Note over ClientA: Local edit at t=1000ms<br>Update SV to [A:1]
+    Note over ClientA: Client sends update without Rid<br>(ActionSource::Local)
+    ClientA ->>+ Server: ClientMessage::Update<br>{update, flags, collab_type}
+    Note over Server: Server uses XADD with "*" ID<br>Redis generates and returns message ID<br>Server converts Redis ID to Rid
+    Note over Server: Server stores update with Redis-generated Rid<br>Update last_message_id if new Rid > current
+    Server ->>- ClientB: ServerMessage::Update<br>{update, last_message_id: server-generated Rid}
+    Note over ClientB: Compare received Rid with current last_message_id<br>If server Rid > current, update last_message_id
+    ClientB ->> RocksDB: Write last_message_id to disk<br>Key: [META_SPACE, LAST_MESSAGE_ID, workspace_id, TERMINATOR]<br>Value: timestamp (8B) + seq_no (2B)
+    Note over ClientB: Apply update<br>Update SV to [A:1, B:0]
     Note over ClientA, ClientB: Multiple Edits With Same Timestamp
-    Note over ClientA: Two rapid edits at t=1500ms
-    Note over ClientA: Create Rid {1500, 1} for first edit<br>Update SV to [A:2]
-    ClientA ->>+ Server: ClientMessage::Update<br>{update1, flags, Rid: {1500, 1}}
-    Note over Server: Store update with Rid {1500, 1}
-    Note over ClientA: Create Rid {1500, 2} for second edit<br>Update SV to [A:3]
-    ClientA ->> Server: ClientMessage::Update<br>{update2, flags, Rid: {1500, 2}}
-    Note over Server: Process in order (seq_no ensures ordering)
-    Server ->>- ClientB: ServerMessage::Update<br>{update1, last_message_id: {1500, 1}}
-    Server ->> ClientB: ServerMessage::Update<br>{update2, last_message_id: {1500, 2}}
-    Note over ClientB: Apply updates in order<br>last_message_id = {1500, 2}<br>SV = [A:3, B:0]
+    Note over ClientA: Two rapid edits
+    Note over ClientA: Client sends first update<br>Update SV to [A:2]
+    ClientA ->>+ Server: ClientMessage::Update<br>{update1, flags, collab_type}
+    Note over Server: Server processes using XADD<br>Generates Rid with timestamp and seq_no=1
+    Note over ClientA: Client sends second update<br>Update SV to [A:3]
+    ClientA ->> Server: ClientMessage::Update<br>{update2, flags, collab_type}
+    Note over Server: For updates arriving within same millisecond<br>Redis auto-increments sequence number to seq_no=2
+    Server ->>- ClientB: ServerMessage::Update<br>{update1, last_message_id: server Rid#1}
+    Server ->> ClientB: ServerMessage::Update<br>{update2, last_message_id: server Rid#2}
+    Note over ClientB: Process in save_remote_update()<br>Compare Rids, keep highest one
+    ClientB ->> RocksDB: Save highest Rid (server Rid#2) to disk<br>Using atomic transaction
+    Note over ClientB: Apply updates<br>Update last_message_id to highest Rid<br>SV = [A:3, B:0]
+    ClientA ->> RocksDB: Store max(current_rid, new_rid) in RocksDB
+    Note over ClientA: SV = [A:3, B:0]
     Note over ClientA, ClientB: Out of Order Message Reception
-    Note over ClientB: Local edit at t=2000ms
-    Note over ClientB: Create Rid {2000, 1}<br>Update SV to [A:3, B:1]
-    ClientB ->>+ Server: ClientMessage::Update<br>{update, flags, Rid: {2000, 1}}
+    Note over ClientB: Local edit 1<br>Update SV to [A:3, B:1]
+    ClientB ->>+ Server: ClientMessage::Update<br>{update1, flags, collab_type}
     Note over Server: Network delay for message 1
-    Note over ClientB: Local edit at t=2200ms
-    Note over ClientB: Create Rid {2200, 1}<br>Update SV to [A:3, B:2]
-    ClientB ->> Server: ClientMessage::Update<br>{update, flags, Rid: {2200, 1}}
-    Note over Server: Message 2 arrives first due to network conditions
-    Server ->> ClientA: ServerMessage::Update<br>{update, last_message_id: {2200, 1}}
-    Note over ClientA: Update last_message_id = {2200, 1}<br>Apply update<br>SV = [A:3, B:1]
-    Note over Server: Later, message 1 arrives
-    Server ->>- ClientA: ServerMessage::Update<br>{update, last_message_id: {2000, 1}}
-    Note over ClientA: Compare received Rid {2000, 1}<br>with current last_message_id {2200, 1}<br>{2000, 1} < {2200, 1}, so don't update last_message_id<br>But still apply the update<br>SV = [A:3, B:2]
-    Note over ClientA, ClientB: Reconnection After Disconnect
-    Note over ClientB: Disconnects
-    Note over ClientA: Edit while ClientB disconnected<br>Create Rid {3000, 1}<br>SV = [A:4, B:2]
-    ClientA ->> Server: ClientMessage::Update<br>{update, flags, Rid: {3000, 1}}
-    Note over Server: Server stores update<br>last_message_id = {3000, 1}
-    Note over ClientB: Reconnects with last_message_id = {2200, 1}
-    ClientB ->>+ Server: ClientMessage::Manifest<br>{last_message_id: {2200, 1}, SV: [A:3, B:2]}
-    Note over Server: Server detects ClientB<br>is missing update with Rid {3000, 1}
-    Server -->>- ClientB: ServerMessage::Update<br>{update, last_message_id: {3000, 1}}
-    Note over ClientB: Updates last_message_id = {3000, 1}<br>Applies update<br>SV = [A:4, B:2]
-    Note over ClientA, ClientB: Duplicate Message Handling
-    Note over Server: Network hiccup causes<br>duplicate message to be sent
-    Server ->> ClientB: ServerMessage::Update<br>{update, last_message_id: {3000, 1}} (duplicate)
-    Note over ClientB: Compare received Rid {3000, 1}<br>with current last_message_id {3000, 1}<br>Equal, so ignore update<br>SV remains [A:4, B:2]
+    Note over ClientB: Local edit 2<br>Update SV to [A:3, B:2]
+    ClientB ->> Server: ClientMessage::Update<br>{update2, flags, collab_type}
+    Note over Server: Message 2 arrives first<br>Server assigns Rid with current timestamp
+    Server ->> ClientA: ServerMessage::Update<br>{update2, last_message_id: server Rid for msg 2}
+    Note over ClientA: In save_remote_update()<br>Update last_message_id if Rid > current<br>Apply update<br>SV = [A:3, B:1]
+    ClientA ->> RocksDB: Persist Rid to workspace_id key
+    Note over Server: Later, message 1 arrives<br>Server assigns new Rid with current timestamp
+    Server ->>- ClientA: ServerMessage::Update<br>{update1, last_message_id: server Rid for msg 1}
+    Note over ClientA: Compare received Rid with current last_message_id<br>Only update last_message_id if Rid > current<br>Apply update<br>SV = [A:3, B:2]
+    ClientA ->> RocksDB: If new Rid > stored Rid:<br>persist_update() → save_update() → update_last_message_id()
 ```
 
-This detailed diagram illustrates key Rid operations:
+Key points about the Rid sequence and timing:
 
-1. **Initialization**: Clients start with `Rid::default()` as their last_message_id
-2. **Update Creation**: New updates generate new Rids with current timestamp and incrementing sequence numbers
-3. **Ordering Guarantee**: Sequence numbers ensure ordering even when timestamps are identical
-4. **Out-of-Order Processing**: Later updates (by timestamp) are recognized even if they arrive first
-5. **Reconnection**: The last_message_id helps identify what updates a reconnecting client is missing
-6. **Duplicate Detection**: Comparing incoming Rid with stored last_message_id prevents duplicate processing
+1. **Client-side Rid Handling**:
+   - Clients don't generate Rids for their own local updates
+   - When sending updates to the server, they use `ActionSource::Local` (no Rid attached)
+   - Clients only track the highest Rid they've seen via their `last_message_id`
+   - Clients receive server-generated Rids with updates and update their last_message_id if the new Rid is higher
 
-The Rid system ensures that even in challenging network conditions with message delays, out-of-order delivery, or
-duplicates, the document state remains consistent across all clients.
+2. **Server-side Rid Generation**:
+   - When receiving updates from clients, the server generates new Rids using Redis XADD with "*" for auto-ID
+   - Redis generates a message ID with format "timestamp-sequence"
+   - The sequence number is automatically incremented for multiple entries within the same millisecond
+   - Server converts Redis-generated IDs into Rids and attaches them to outgoing updates
+
+3. **Client Rid Persistence Mechanism**:
+   - When receiving a message with a Rid, the client compares it to its current value using `old_message_id.max(message_id)`
+   - The client only persists the higher of the two values
+   - Storage happens in the `update_last_message_id` method on the RocksDB transaction
+   - The Rid is stored as a binary value consisting of 10 bytes (8 bytes timestamp + 2 bytes seq_no)
+   - The key format in RocksDB is: `[META_SPACE, LAST_MESSAGE_ID, workspace_id, TERMINATOR]`
+   - Persistence happens within the same transaction as update storage for atomic operations
+   - For active collabs, Rid is stored when processing server updates in `save_remote_update()`
+   - For inactive collabs, Rid is stored during `persist_update()` when the collab is not in memory
+
+4. **Update Processing on Both Sides**:
+   - On receiving an update with a Rid, clients compare it to their current last_message_id:
+     ```rust
+     if rid > **old {
+       Arc::new(rid)
+     } else {
+       old.clone()
+     }
+     ```
+   - Updates are always applied to the document regardless of Rid comparison
+   - Only the last_message_id tracking is affected by Rid ordering
+
+5. **Rid Comparison Logic**:
+   - When comparing Rids, first compare timestamps, then sequence numbers:
+     ```rust
+     match self.timestamp.cmp(&other.timestamp) {
+       Ordering::Equal => self.seq_no.cmp(&other.seq_no),
+       ordering => ordering,
+     }
+     ```
+   - This total ordering ensures consistent document states across all clients
+
+This mechanism ensures each update has a globally unique identifier, enabling reliable ordering even with network
+delays, out-of-order delivery, or multiple edits occurring simultaneously across different clients.
 
 ## ClientID Management in Collaborative Editing
 

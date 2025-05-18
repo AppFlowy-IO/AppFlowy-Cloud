@@ -16,9 +16,10 @@ use futures_util::{SinkExt, StreamExt};
 use shared_entity::response::AppResponseError;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::select;
 use tokio::sync::Mutex;
-use tokio::time::{Duration, MissedTickBehavior};
+use tokio::time::MissedTickBehavior;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
@@ -39,8 +40,8 @@ pub(super) struct WorkspaceControllerActor {
   status_tx: tokio::sync::watch::Sender<ConnectionStatus>,
   mailbox: WorkspaceControllerMailbox,
   last_message_id: Arc<ArcSwap<Rid>>,
-  /// Cache for collabs actually existing in the memory.
-  cache: DashMap<ObjectId, WeakCollabRef>,
+  /// Cache for collabs actually existing in the memory, along with their type.
+  cache: DashMap<ObjectId, CachedCollab>,
   /// Persistent database handle.
   db: Db,
   notification_tx: tokio::sync::broadcast::Sender<WorkspaceNotification>,
@@ -188,9 +189,12 @@ impl WorkspaceControllerActor {
         }
       }
     });
-    actor.publish_manifest(collab, collab_type);
+    actor.publish_manifest(object_id, collab, collab_type);
     actor.publish_awareness(object_id, collab_type, awareness.update()?);
-    actor.cache.insert(object_id, Arc::downgrade(collab_ref));
+    actor.cache.insert(
+      object_id,
+      CachedCollab::new(Arc::downgrade(collab_ref), collab_type),
+    );
     Ok(())
   }
 
@@ -614,13 +618,17 @@ impl WorkspaceControllerActor {
 
   async fn publish_pending_collabs(&self) -> anyhow::Result<()> {
     let last_message_id = self.last_message_id();
-    let pending: Vec<_> = self.cache.iter().map(|e| *e.key()).collect();
-    for object_id in pending {
+    let pending: Vec<_> = self
+      .cache
+      .iter()
+      .map(|e| (*e.key(), e.value().collab_type))
+      .collect();
+    for (object_id, collab_type) in pending {
       if let Some(collab_ref) = self.get_collab(&object_id) {
         let state_vector = collab_ref.read().await.borrow().transact().state_vector();
         let manifest = ClientMessage::Manifest {
           object_id,
-          collab_type: CollabType::Unknown,
+          collab_type,
           last_message_id,
           state_vector: state_vector.encode_v1(),
         };
@@ -687,7 +695,7 @@ impl WorkspaceControllerActor {
       if Self::has_missing_updates(&tx) {
         drop(tx);
         trace!("found missing updates for {} - sending manifest", object_id);
-        self.publish_manifest(collab, collab_type);
+        self.publish_manifest(object_id, collab, collab_type);
       } else {
         drop(tx);
         collab.set_sync_state(SyncState::SyncFinished);
@@ -706,7 +714,7 @@ impl WorkspaceControllerActor {
     Ok(())
   }
 
-  /// Saves the provided update to the persistent database and checks if there  are any missing
+  /// Saves the provided update to the persistent database and checks if there are any missing
   /// updates in the collaboration sequence. If gaps are detected in the update history, it
   /// automatically triggers a manifest message to request the missing updates.
   ///
@@ -790,9 +798,8 @@ impl WorkspaceControllerActor {
     }
   }
 
-  fn publish_manifest(&self, collab: &Collab, collab_type: CollabType) {
+  fn publish_manifest(&self, object_id: ObjectId, collab: &Collab, collab_type: CollabType) {
     let last_message_id = self.last_message_id();
-    let object_id = collab.object_id();
     let awareness = collab.get_awareness();
     let doc = awareness.doc();
     let state_vector = doc.transact().state_vector();
@@ -803,7 +810,7 @@ impl WorkspaceControllerActor {
       state_vector
     );
     let msg = ClientMessage::Manifest {
-      object_id: object_id.parse().unwrap(),
+      object_id,
       collab_type,
       last_message_id,
       state_vector: state_vector.encode_v1(),
@@ -937,3 +944,23 @@ impl From<Option<Rid>> for ActionSource {
 pub(super) type WsConn = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
 pub(super) type WorkspaceControllerMailbox = tokio::sync::mpsc::UnboundedSender<WorkspaceAction>;
+
+/// Contains cached information about a collab document
+#[derive(Clone)]
+struct CachedCollab {
+  collab_ref: WeakCollabRef,
+  collab_type: CollabType,
+}
+
+impl CachedCollab {
+  fn new(collab_ref: WeakCollabRef, collab_type: CollabType) -> Self {
+    Self {
+      collab_ref,
+      collab_type,
+    }
+  }
+
+  fn upgrade(&self) -> Option<CollabRef> {
+    self.collab_ref.upgrade()
+  }
+}

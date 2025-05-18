@@ -670,6 +670,54 @@ Key points about the Rid sequence and timing:
 This mechanism ensures each update has a globally unique identifier, enabling reliable ordering even with network
 delays, out-of-order delivery, or multiple edits occurring simultaneously across different clients.
 
+### Handling Irrecoverable Missing Updates
+
+In some cases, documents may experience issues with missing dependencies that cannot be resolved through normal
+synchronization. This can happen due to:
+
+1. Lost updates from clients that never synchronized with the server
+2. Complex dependency chains where a critical operation is missing
+3. Network disruptions causing permanent gaps in the update history
+
+To address these situations, the client-api implements both automatic and manual reset mechanisms:
+
+```mermaid
+flowchart TD
+    A[Document Applies Update] --> B{Missing Dependencies?}
+    B -->|No| C[Normal Operation]
+    B -->|Yes| D[Request Missing Updates]
+    D --> E{Consecutive Missing<br>Update Counter >= 5?}
+    E -->|Yes| F[Automatic Full State Reset]
+    E -->|No| G[Normal Manifest Request]
+    
+    H[Document in Syncing State] --> I{Syncing for > 60 seconds?}
+    I -->|Yes| F
+    I -->|No| J[Continue Sync Process]
+    
+    K[User Observes Sync Issues] --> L[Manual Reset via API]
+    L --> F
+    
+    F --> M[Generate Complete Document State<br>with Empty State Vector]
+    M --> N[Send as Update to Server]
+    N --> O[All Clients Reset to Same State]
+```
+
+#### Automatic Reset Triggers:
+
+1. **Consecutive Missing Updates**: After 5 consecutive detections of missing updates for the same document
+2. **Extended Sync Duration**: When a document has been in the "Syncing" state for more than 60 seconds
+
+#### Manual Reset API:
+
+```rust
+// Client code
+workspace_controller.reset_document_state(&object_id).await?;
+```
+
+The reset process sends a complete document state encoded with an empty state vector (`StateVector::default()`),
+which creates a fresh foundation without dependencies on any previous operations. This allows all clients to
+reset to a consistent state and continue collaboration without the missing dependencies.
+
 ## ClientID Management in Collaborative Editing
 
 In collaborative editing systems, ClientIDs play a crucial role in identifying the source of changes and managing

@@ -1,5 +1,5 @@
 use anyhow::Error;
-use collab::core::collab::DataSource;
+use collab::core::collab::{CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
@@ -14,13 +14,9 @@ pub async fn collab_from_encode_collab(object_id: &Uuid, data: &[u8]) -> Result<
 
   tokio::task::spawn_blocking(move || {
     let encoded_collab = EncodedCollab::decode_from_bytes(&data)?;
-    let collab = Collab::new_with_source(
-      CollabOrigin::Empty,
-      &object_id,
-      DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
-      vec![],
-      false,
-    )?;
+    let options = CollabOptions::new(object_id.to_string())
+      .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.to_vec()));
+    let collab = Collab::new_with_options(CollabOrigin::Empty, options)?;
 
     Ok::<_, Error>(collab)
   })

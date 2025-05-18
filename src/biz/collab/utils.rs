@@ -1,6 +1,6 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::DataSource;
+use collab::core::collab::{CollabOptions, DataSource};
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -324,14 +324,9 @@ pub async fn get_latest_collab(
   collab_type: CollabType,
 ) -> Result<Collab, AppError> {
   let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
-  let collab: Collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    &oid.to_string(),
-    ec.into(),
-    vec![],
-    false,
-  )
-  .map_err(|e| {
+  let options =
+    collab::core::collab::CollabOptions::new(oid.to_string()).with_data_source(ec.into());
+  let collab = Collab::new_with_options(CollabOrigin::Server, options).map_err(|e| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to create collab from encoded collab: {:?}",
       e
@@ -395,7 +390,6 @@ pub async fn get_latest_collab_folder(
     CollabOrigin::Server,
     encoded_collab.into(),
     &workspace_id.to_string(),
-    vec![],
   )
   .map_err(|e| {
     AppError::Internal(anyhow::anyhow!(
@@ -457,14 +451,10 @@ pub async fn collab_to_doc_state(
 }
 
 pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &Uuid) -> Result<Collab, AppError> {
-  let collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    &object_id.to_string(),
-    DataSource::DocStateV1(doc_state),
-    vec![],
-    false,
-  )
-  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  let options =
+    CollabOptions::new(object_id.to_string()).with_data_source(DataSource::DocStateV1(doc_state));
+  let collab = Collab::new_with_options(CollabOrigin::Server, options)
+    .map_err(|e| AppError::Unhandled(e.to_string()))?;
   Ok(collab)
 }
 

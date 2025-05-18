@@ -4,6 +4,7 @@ use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
+use collab::core::collab::CollabOptions;
 use collab::core::origin::CollabOrigin;
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::preclude::Collab;
@@ -245,7 +246,9 @@ impl CollabStore {
             update.sender.client_user_id().unwrap_or(0),
           )
         };
-        let mut collab = Collab::new(0, object_id.to_string(), "device", vec![], false);
+        let options = CollabOptions::new(object_id.to_string());
+        let mut collab = Collab::new_with_options(CollabOrigin::Server, options)
+          .map_err(|err| anyhow!("failed to create collab: {}", err))?;
         // apply all known updates
         let rid = {
           let mut tx = collab.transact_mut();

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use async_trait::async_trait;
+use collab::core::collab::CollabOptions;
 use collab::preclude::Collab;
 use collab_database::{
   database::{gen_database_group_id, gen_field_id},
@@ -199,22 +200,19 @@ impl DatabaseCollabService for PostgresDatabaseCollabService {
   ) -> Result<Collab, DatabaseError> {
     let object_id = Uuid::parse_str(object_id)?;
     match encoded_collab {
-      None => Collab::new_with_source(
-        CollabOrigin::Empty,
-        &object_id.to_string(),
-        self.get_collab(object_id, object_type).await.into(),
-        vec![],
-        false,
-      )
-      .map_err(|err| DatabaseError::Internal(err.into())),
-      Some((encoded_collab, _)) => Collab::new_with_source(
-        CollabOrigin::Empty,
-        &object_id.to_string(),
-        encoded_collab.into(),
-        vec![],
-        false,
-      )
-      .map_err(|err| DatabaseError::Internal(err.into())),
+      None => {
+        let collab_data = self.get_collab(object_id, object_type).await;
+        let options =
+          CollabOptions::new(object_id.to_string()).with_data_source(collab_data.into());
+        Collab::new_with_options(CollabOrigin::Empty, options)
+          .map_err(|err| DatabaseError::Internal(err.into()))
+      },
+      Some((encoded_collab, _)) => {
+        let options =
+          CollabOptions::new(object_id.to_string()).with_data_source(encoded_collab.into());
+        Collab::new_with_options(CollabOrigin::Empty, options)
+          .map_err(|err| DatabaseError::Internal(err.into()))
+      },
     }
   }
 

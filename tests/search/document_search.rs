@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use appflowy_ai_client::dto::CalculateSimilarityParams;
 use client_api_test::{ai_test_enabled, collect_answer, TestClient};
+use collab::core::collab::CollabOptions;
+use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;
@@ -124,13 +126,15 @@ async fn test_document_indexing_and_search() {
   let collab_type = CollabType::Document;
   let encoded_collab = {
     let document_data = getting_started_document_data().unwrap();
-    let collab = Collab::new(
-      test_client.uid().await,
-      object_id.to_string(),
-      test_client.device_id.clone(),
-      vec![],
-      false,
-    );
+    let options = CollabOptions::new(object_id.to_string());
+    let collab = Collab::new_with_options(
+      CollabOrigin::Client(CollabClient::new(
+        test_client.uid().await,
+        test_client.device_id.clone(),
+      )),
+      options,
+    )
+    .unwrap();
     let document = Document::create_with_data(collab, document_data).unwrap();
     document.encode_collab().unwrap()
   };

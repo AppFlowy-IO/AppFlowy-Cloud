@@ -2,7 +2,7 @@ use crate::error::RealtimeError;
 use anyhow::anyhow;
 use app_error::AppError;
 use arc_swap::ArcSwap;
-use collab::core::collab::DataSource;
+use collab::core::collab::{CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::lock::RwLock;
@@ -352,14 +352,10 @@ impl CollabGroup {
       .encode_collab()
       .await
       .map_err(|e| AppError::Internal(e.into()))?;
-    let collab = Collab::new_with_source(
-      CollabOrigin::Server,
-      &self.object_id().to_string(),
-      DataSource::DocStateV1(collab.doc_state.into()),
-      vec![],
-      false,
-    )
-    .map_err(|e| AppError::Internal(e.into()))?;
+    let options = CollabOptions::new(self.object_id().to_string())
+      .with_data_source(DataSource::DocStateV1(collab.doc_state.into()));
+    let collab = Collab::new_with_options(CollabOrigin::Server, options)
+      .map_err(|e| AppError::Internal(e.into()))?;
     let workspace_id = self.state.workspace_id;
     let object_id = self.state.object_id;
     let collab_type = self.state.collab_type;
@@ -384,13 +380,9 @@ impl CollabGroup {
     }
 
     let encoded_collab = self.encode_collab().await?;
-    let collab = Collab::new_with_source(
-      CollabOrigin::Server,
-      &self.object_id().to_string(),
-      DataSource::DocStateV1(encoded_collab.doc_state.into()),
-      vec![],
-      false,
-    )?;
+    let options = CollabOptions::new(self.object_id().to_string())
+      .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.into()));
+    let collab = Collab::new_with_options(CollabOrigin::Server, options)?;
     let update = collab.transact().encode_state_as_update_v1(&state_vector);
     Ok(update)
   }
@@ -950,12 +942,10 @@ impl CollabPersister {
     let start = Instant::now();
     let mut collab = match self.load_collab_full().await? {
       Some(collab) => collab,
-      None => Collab::new_with_origin(
-        CollabOrigin::Server,
-        self.object_id.to_string(),
-        vec![],
-        false,
-      ),
+      None => {
+        let options = CollabOptions::new(self.object_id.to_string());
+        Collab::new_with_options(CollabOrigin::Server, options)?
+      },
     };
     self.metrics.load_collab_count.inc();
 
@@ -1015,12 +1005,10 @@ impl CollabPersister {
 
     let mut collab = match self.load_collab_full().await? {
       Some(collab) => collab,
-      None => Collab::new_with_origin(
-        CollabOrigin::Server,
-        self.object_id.to_string(),
-        vec![],
-        false,
-      ),
+      None => {
+        let options = CollabOptions::new(self.object_id.to_string());
+        Collab::new_with_options(CollabOrigin::Server, options)?
+      },
     };
     let start = Instant::now();
     let mut i = 0;
@@ -1188,13 +1176,11 @@ impl CollabPersister {
       Err(err) => return Err(RealtimeError::Internal(err.into())),
     };
 
-    let collab: Collab = Collab::new_with_source(
-      CollabOrigin::Server,
-      &self.object_id.to_string(),
-      DataSource::DocStateV1(doc_state.into()),
-      vec![],
-      false,
-    )?;
+    let collab: Collab = {
+      let options = CollabOptions::new(self.object_id.to_string())
+        .with_data_source(DataSource::DocStateV1(doc_state.into()));
+      Collab::new_with_options(CollabOrigin::Server, options)?
+    };
     Ok(Some(collab))
   }
 }

@@ -912,7 +912,6 @@ async fn process_unzip_file(
     CollabOrigin::Server,
     folder_collab.into(),
     &imported.workspace_id,
-    vec![],
   )
   .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
 

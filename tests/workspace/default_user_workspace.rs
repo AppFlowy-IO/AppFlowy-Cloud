@@ -19,7 +19,6 @@ async fn get_document_collab_from_remote(
     CollabOrigin::Empty,
     resp.encode_collab.into(),
     &document_id.to_string(),
-    vec![],
   )
   .unwrap()
 }

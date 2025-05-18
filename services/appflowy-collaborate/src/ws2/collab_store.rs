@@ -153,13 +153,19 @@ impl CollabStore {
       .await?;
 
     let key = UpdateStreamMessage::stream_key(&workspace_id);
-    trace!("publishing update to '{}' (object id: {})", key, object_id);
     let mut conn = self.connection_manager.clone();
     let items: String =
       UpdateStreamMessage::prepare_command(&key, &object_id, collab_type, sender, update)
         .query_async(&mut conn)
         .await?;
-    Rid::from_str(&items).map_err(|err| anyhow!("failed to parse rid: {}", err))
+    let rid = Rid::from_str(&items).map_err(|err| anyhow!("failed to parse rid: {}", err))?;
+    trace!(
+      "publishing update to '{}' (object id: {}), rid:{}",
+      key,
+      object_id,
+      rid
+    );
+    Ok(rid)
   }
 
   #[instrument(level = "trace", skip_all, err)]

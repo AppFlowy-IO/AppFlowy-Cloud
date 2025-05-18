@@ -298,7 +298,6 @@ impl PublishCollabDuplicator {
         CollabOrigin::Server,
         collab_folder_encoded.into(),
         &dest_workspace_id.to_string(),
-        vec![],
       )
       .map_err(|e| AppError::Unhandled(e.to_string()))
     })
@@ -821,7 +820,7 @@ impl PublishCollabDuplicator {
                   };
                 };
               }
-            };
+            }
           }
         }
       }

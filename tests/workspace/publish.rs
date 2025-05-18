@@ -1153,7 +1153,6 @@ async fn duplicate_to_workspace_doc_inline_database() {
       CollabOrigin::Server,
       collab_resp.encode_collab.into(),
       &workspace_id_2.to_string(),
-      vec![],
     )
     .unwrap();
 

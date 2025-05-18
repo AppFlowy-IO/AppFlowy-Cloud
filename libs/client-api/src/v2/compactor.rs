@@ -140,7 +140,7 @@ mod test {
   #[tokio::test]
   async fn update_compaction() {
     let oid = Uuid::new_v4();
-    let mut c1 = Collab::new(1, oid.to_string(), "device-id", vec![], false);
+    let mut c1 = Collab::new(1, oid.to_string(), "device-id", None);
     let (tx, rx) = unbounded_channel();
     let mut rx = ChannelReceiverCompactor::new(rx);
     let counter = Arc::new(AtomicUsize::new(0));
@@ -178,7 +178,7 @@ mod test {
 
     // we produced UPDATE_COUNT updates on C1, but only took 1 update on C2
     // this should be fine as compactor should deal with compacing pending updates
-    let mut c2 = Collab::new(2, oid.to_string(), "device-id", vec![], false);
+    let mut c2 = Collab::new(2, oid.to_string(), "device-id", None);
     let update = match flags {
       UpdateFlags::Lib0v1 => Update::decode_v1(&update).unwrap(),
       UpdateFlags::Lib0v2 => Update::decode_v2(&update).unwrap(),

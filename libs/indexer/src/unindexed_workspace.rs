@@ -3,7 +3,7 @@ use crate::entity::{EmbeddingRecord, UnindexedCollab};
 use crate::scheduler::{batch_insert_records, IndexerScheduler};
 use crate::vector::embedder::AFEmbedder;
 use appflowy_ai_client::dto::EmbeddingModel;
-use collab::core::collab::DataSource;
+use collab::core::collab::{CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
@@ -224,14 +224,9 @@ fn compute_embedding_records(
     .into_par_iter()
     .flat_map(|unindexed| {
       let indexer = indexer_provider.indexer_for(unindexed.collab_type)?;
-      let collab = Collab::new_with_source(
-        CollabOrigin::Empty,
-        &unindexed.object_id.to_string(),
-        DataSource::DocStateV1(unindexed.collab.doc_state.into()),
-        vec![],
-        false,
-      )
-      .ok()?;
+      let options = CollabOptions::new(unindexed.object_id.to_string())
+        .with_data_source(DataSource::DocStateV1(unindexed.collab.doc_state.into()));
+      let collab = Collab::new_with_options(CollabOrigin::Empty, options).ok()?;
 
       let mut chunks = indexer
         .create_embedded_chunks_from_collab(&collab, model)

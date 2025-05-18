@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use collab::core::collab::CollabOptions;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
@@ -44,16 +45,8 @@ impl DatabaseCollabService for TestDatabaseCollabService {
       },
       Some((encoded_collab, _)) => encoded_collab,
     };
-    Ok(
-      Collab::new_with_source(
-        CollabOrigin::Empty,
-        object_id,
-        encoded_collab.into(),
-        vec![],
-        false,
-      )
-      .unwrap(),
-    )
+    let options = CollabOptions::new(object_id.to_string()).with_data_source(encoded_collab.into());
+    Ok(Collab::new_with_options(CollabOrigin::Empty, options).unwrap())
   }
 
   async fn get_collabs(

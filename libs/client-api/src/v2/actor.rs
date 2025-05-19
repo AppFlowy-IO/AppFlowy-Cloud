@@ -32,7 +32,7 @@ use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
-use yrs::{ReadTxn, StateVector, Transact, Transaction, Update};
+use yrs::{ReadTxn, StateVector, Transact, Transaction, TransactionMut, Update, WriteTxn};
 
 pub(super) struct WorkspaceControllerActor {
   options: Options,
@@ -529,7 +529,7 @@ impl WorkspaceControllerActor {
             let lock = collab_ref.read().await;
             let collab = lock.borrow();
             let tx = collab.get_awareness().doc().transact();
-            let update = tx.encode_state_as_update_v1(&sv);
+            let update = tx.encode_diff_v1(&sv); // encode state without pending updates
             let msg = ClientMessage::Update {
               object_id,
               collab_type,
@@ -644,7 +644,7 @@ impl WorkspaceControllerActor {
     collab_type: CollabType,
     local_message_id: Rid,
   ) -> anyhow::Result<Option<ClientMessage>> {
-    if Self::has_missing_updates(&tx) {
+    if tx.has_missing_updates() {
       let sv = tx.state_vector();
       trace!("collab {} detected missing updates: {:?}", object_id, sv);
       let reply = ClientMessage::Manifest {
@@ -692,7 +692,7 @@ impl WorkspaceControllerActor {
       let doc = collab.get_awareness().doc();
       let mut tx = doc.transact_mut_with(rid.into_bytes().as_ref());
       tx.apply_update(update)?;
-      if Self::has_missing_updates(&tx) {
+      if Self::prune_missing_updates(&mut tx) {
         drop(tx);
         trace!("found missing updates for {} - sending manifest", object_id);
         self.publish_manifest(object_id, collab, collab_type);
@@ -744,20 +744,18 @@ impl WorkspaceControllerActor {
     Ok(())
   }
 
-  fn has_missing_updates<T: ReadTxn>(tx: &T) -> bool {
-    let store = tx.store();
-    let missing = store.pending_update().is_some() || store.pending_ds().is_some();
-
-    #[cfg(feature = "message_verbose_log")]
-    if missing {
-      trace!(
-        "missing updates: {:?}, delete sets: {:?}",
-        store.pending_update(),
-        store.pending_ds()
-      );
+  /// We try to prune missing updates. If there were any, return true.
+  /// Server, when requested, will resend "continuous" missing updates
+  /// (with no holes inside) so on the second resend we either get all
+  /// missing updates or none at all.
+  fn prune_missing_updates(tx: &mut TransactionMut) -> bool {
+    let missing = tx.prune_pending();
+    if let Some(update) = missing {
+      trace!("missing updates: {:?}", update);
+      true
+    } else {
+      false
     }
-
-    missing
   }
 
   async fn save_awareness_update(

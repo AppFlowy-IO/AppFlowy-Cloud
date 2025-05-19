@@ -75,7 +75,7 @@ If you would like to use one of the identity providers to log in, refer to the [
 
 If you would like to use magic link to log in, you will need to set up env variables related to SMTP.
 
-If neither of the above are configured, then the only was to sign in is via the admin portal (the home page), using the admin email
+If neither of the above are configured, then the only way to sign in is via the admin portal (the home page), using the admin email
 and password. After logging in as an admin, you can add users and set their passwords. The new user will be able to login to the admin
 portal using this credential.
 

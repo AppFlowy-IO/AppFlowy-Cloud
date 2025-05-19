@@ -3,7 +3,7 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
-use collab::core::collab::{TransactionExt, TransactionMutExt};
+use collab::core::collab::TransactionMutExt;
 use collab::core::origin::CollabOrigin;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
@@ -154,14 +154,7 @@ pub trait CollabSyncProtocol {
       let txn = collab.get_awareness().doc().try_transact().map_err(|err| {
         RTProtocolError::YrsTransaction(format!("fail to handle sync step1. error: {}", err))
       })?;
-      txn.try_encode_state_as_update_v1(&sv).map_err(|err| {
-        RTProtocolError::YrsEncodeState(format!(
-          "fail to encode state as update. error: {}\ninit state vector: {:?}\ndocument state: {:#?}",
-          err,
-          sv,
-          txn.store()
-        ))
-      })?
+      txn.encode_diff_v1(&sv)
     };
     Ok(Some(
       Message::Sync(SyncMessage::SyncStep2(update)).encode_v1(),

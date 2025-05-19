@@ -279,9 +279,7 @@ impl CollabStore {
           }
           rid
         }; // commit the transaction
-        let full_state = collab
-          .transact()
-          .encode_state_as_update_v1(&StateVector::default());
+        let full_state = collab.transact().encode_diff_v1(&StateVector::default());
         let paragraphs = if collab_type == CollabType::Document {
           let tx = collab.transact();
           DocumentBody::from_collab(&collab)

@@ -186,12 +186,8 @@ impl CollabCache {
       let tx = collab.transact();
       let state_vector = tx.state_vector().encode_v1();
       encoded_collab = Some(match encoding {
-        EncoderVersion::V1 => {
-          EncodedCollab::new_v1(state_vector, tx.encode_state_as_update_v1(from))
-        },
-        EncoderVersion::V2 => {
-          EncodedCollab::new_v2(state_vector, tx.encode_state_as_update_v2(from))
-        },
+        EncoderVersion::V1 => EncodedCollab::new_v1(state_vector, tx.encode_diff_v1(from)),
+        EncoderVersion::V2 => EncodedCollab::new_v2(state_vector, tx.encode_diff_v2(from)),
       });
     }
     match encoded_collab {

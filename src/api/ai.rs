@@ -41,6 +41,17 @@ async fn stream_complete_text_handler(
   let params = payload.into_inner();
   state.metrics.ai_metrics.record_total_completion_count(1);
 
+  if let Some(prompt_id) = params
+    .metadata
+    .as_ref()
+    .and_then(|metadata| metadata.prompt_id.as_ref())
+  {
+    state
+      .metrics
+      .ai_metrics
+      .record_prompt_usage_count(prompt_id, 1);
+  }
+
   match state
     .ai_client
     .stream_completion_text(params, ai_model)

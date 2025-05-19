@@ -8,7 +8,7 @@ use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
 };
 use bytes::Bytes;
-use collab::core::collab::DataSource;
+use collab::core::collab::{CollabOptions, DataSource};
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::{EncodedCollab, EncoderVersion};
@@ -223,7 +223,6 @@ impl TestClient {
       CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone())),
       folder_collab.into(),
       &workspace_id.to_string(),
-      vec![],
     )
     .unwrap()
   }
@@ -335,7 +334,6 @@ impl TestClient {
       CollabOrigin::Empty,
       data.encode_collab.into(),
       &workspace_id.to_string(),
-      vec![],
     )
     .unwrap()
   }
@@ -346,14 +344,9 @@ impl TestClient {
       .get_collab(workspace_id, db_storage_id, CollabType::WorkspaceDatabase)
       .await
       .unwrap();
-    Collab::new_with_source(
-      CollabOrigin::Server,
-      &db_storage_id.to_string(),
-      collab_resp.encode_collab.into(),
-      vec![],
-      false,
-    )
-    .unwrap()
+    let options = CollabOptions::new(db_storage_id.to_string())
+      .with_data_source(collab_resp.encode_collab.into());
+    Collab::new_with_options(CollabOrigin::Server, options).unwrap()
   }
 
   pub async fn create_document_collab(&self, workspace_id: Uuid, object_id: Uuid) -> Document {
@@ -361,14 +354,9 @@ impl TestClient {
       .get_collab(workspace_id, object_id, CollabType::Document)
       .await
       .unwrap();
-    let collab = Collab::new_with_source(
-      CollabOrigin::Server,
-      &object_id.to_string(),
-      collab_resp.encode_collab.into(),
-      vec![],
-      false,
-    )
-    .unwrap();
+    let options =
+      CollabOptions::new(object_id.to_string()).with_data_source(collab_resp.encode_collab.into());
+    let collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
     Document::open(collab).unwrap()
   }
 
@@ -387,14 +375,9 @@ impl TestClient {
       .get_collab(workspace_id, db_id, CollabType::Database)
       .await
       .unwrap();
-    Collab::new_with_source(
-      CollabOrigin::Server,
-      &db_id.to_string(),
-      db_collab_collab_resp.encode_collab.into(),
-      vec![],
-      false,
-    )
-    .unwrap()
+    let options = CollabOptions::new(db_id.to_string())
+      .with_data_source(db_collab_collab_resp.encode_collab.into());
+    Collab::new_with_options(CollabOrigin::Server, options).unwrap()
   }
 
   pub async fn get_user_awareness(&self) -> UserAwareness {
@@ -410,14 +393,10 @@ impl TestClient {
       ))
       .await
       .unwrap();
-    let collab = Collab::new_with_source(
-      CollabOrigin::Empty,
-      &awareness_object_id.to_string(),
+    let options = CollabOptions::new(awareness_object_id.to_string()).with_data_source(
       DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
-      vec![],
-      false,
-    )
-    .unwrap();
+    );
+    let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
 
     UserAwareness::open(collab, None).unwrap()
   }
@@ -819,14 +798,9 @@ impl TestClient {
     let resp = self
       .get_collab(workspace_id, object_id, collab_type)
       .await?;
-    let collab = Collab::new_with_source(
-      CollabOrigin::Server,
-      &object_id.to_string(),
-      resp.encode_collab.into(),
-      vec![],
-      false,
-    )
-    .unwrap();
+    let options =
+      CollabOptions::new(object_id.to_string()).with_data_source(resp.encode_collab.into());
+    let collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
     Ok(collab)
   }
 
@@ -892,15 +866,14 @@ impl TestClient {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let mut collab = match encoded_collab_v1 {
-      None => Collab::new_with_origin(origin.clone(), object_id.to_string(), vec![], false),
-      Some(data) => Collab::new_with_source(
-        origin.clone(),
-        &object_id.to_string(),
-        DataSource::DocStateV1(data.doc_state.to_vec()),
-        vec![],
-        false,
-      )
-      .unwrap(),
+      None => {
+        let options = CollabOptions::new(object_id.to_string());
+        Collab::new_with_options(origin.clone(), options).unwrap()
+      },
+      Some(data) => {
+        let options = CollabOptions::new(object_id.to_string()).with_data_source(data.into());
+        Collab::new_with_options(origin.clone(), options).unwrap()
+      },
     };
 
     collab.emit_awareness_state();
@@ -968,14 +941,9 @@ impl TestClient {
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let mut collab = Collab::new_with_source(
-      origin.clone(),
-      &object_id.to_string(),
-      DataSource::DocStateV1(doc_state),
-      vec![],
-      false,
-    )
-    .unwrap();
+    let options =
+      CollabOptions::new(object_id.to_string()).with_data_source(DataSource::DocStateV1(doc_state));
+    let mut collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
     collab.emit_awareness_state();
     let collab = Arc::new(RwLock::from(collab));
     let collab_ref = collab.clone() as CollabRef;
@@ -1004,14 +972,9 @@ impl TestClient {
   ) -> Result<(), AppResponseError> {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = Collab::new_with_source(
-      origin.clone(),
-      &object_id.to_string(),
-      DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()),
-      vec![],
-      false,
-    )
-    .unwrap();
+    let options =
+      CollabOptions::new(object_id.to_string()).with_data_source(encoded_collab_v1.into());
+    let collab = Collab::new_with_options(origin.clone(), options).unwrap();
 
     let encoded_collab_v1 = collab
       .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
@@ -1150,12 +1113,11 @@ pub async fn assert_server_snapshot(
           Ok(snapshot_data) => {
           let encoded_collab_v1 =
             EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
-          let json = Collab::new_with_source(
+          let options = CollabOptions::new(object_id.to_string())
+            .with_data_source(DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()));
+          let json = Collab::new_with_options(
             CollabOrigin::Empty,
-            &object_id.to_string(),
-            DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()),
-            vec![],
-            false,
+            options,
           )
           .unwrap()
           .to_json_value();
@@ -1207,15 +1169,10 @@ pub async fn assert_server_collab(
             EncoderVersion::V1 => DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
             EncoderVersion::V2 => DataSource::DocStateV2(data.encode_collab.doc_state.to_vec()),
           };
-          let collab = Collab::new_with_source(
-            CollabOrigin::Empty,
-            &object_id.to_string(),
-            source,
-            vec![],
-            false,
-          )
-          .unwrap();
-          let json = collab.to_json_value();
+          let options = CollabOptions::new(object_id.to_string()).with_data_source(source);
+          let json = Collab::new_with_options(CollabOrigin::Empty, options)
+            .unwrap()
+            .to_json_value();
 
           *cloned_final_json.lock().await = json.clone();
           if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive))

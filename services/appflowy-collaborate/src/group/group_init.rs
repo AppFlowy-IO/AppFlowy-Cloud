@@ -700,7 +700,7 @@ impl CollabGroup {
 
     // prepare document state update and state vector
     let tx = snapshot.collab.transact();
-    let doc_state = tx.encode_state_as_update_v1(remote_sv);
+    let doc_state = tx.encode_diff_v1(remote_sv);
     let local_sv = tx.state_vector();
     drop(tx);
 
@@ -736,7 +736,7 @@ impl CollabGroup {
     };
     let missing_updates = {
       let state_vector = state.state_vector.read().await;
-      match state_vector.partial_cmp(&decoded_update.state_vector_lower()) {
+      match state_vector.partial_cmp(&decoded_update.state_vector()) {
         None | Some(std::cmp::Ordering::Less) => Some(state_vector.clone()),
         _ => None,
       }
@@ -1084,9 +1084,8 @@ impl CollabPersister {
       .await?
     {
       let collab = snapshot.collab;
-      let doc_state_light = collab
-        .transact()
-        .encode_state_as_update_v1(&StateVector::default());
+      // encode_diff doesn't include pending updates
+      let doc_state_light = collab.transact().encode_diff_v1(&StateVector::default());
       let light_len = doc_state_light.len();
       self.write_collab(doc_state_light).await?;
 

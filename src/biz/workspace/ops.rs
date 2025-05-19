@@ -556,8 +556,8 @@ pub async fn remove_workspace_members(
 pub async fn get_workspace_members(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-) -> Result<Vec<AFWorkspaceMemberRow>, AppResponseError> {
-  Ok(select_workspace_member_list(pg_pool, workspace_id).await?)
+) -> Result<Vec<AFWorkspaceMemberRow>, AppError> {
+  select_workspace_member_list(pg_pool, workspace_id).await
 }
 
 pub async fn get_workspace_member(

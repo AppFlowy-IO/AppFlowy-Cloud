@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use yrs::block::ClientID;
 use yrs::updates::encoder::Encode;
-use yrs::StateVector;
+use yrs::{StateVector, Update};
 
 #[derive(Clone)]
 struct SessionHandle {
@@ -133,13 +133,18 @@ impl Workspace {
         };
       },
       InputMessage::Update(collab_type, update) => {
+        let update = update.encode_v1();
+        if update == Update::EMPTY_V1 {
+          tracing::trace!("skipping empty update {}", msg.object_id);
+          return;
+        }
         if let Err(err) = store
           .publish_update(
             msg.workspace_id,
             msg.object_id,
             collab_type,
             &msg.sender,
-            update.encode_v1(),
+            update,
           )
           .await
         {

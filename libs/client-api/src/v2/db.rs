@@ -1,4 +1,5 @@
 use super::{ObjectId, WorkspaceId};
+use crate::v2::actor::ActionSource;
 use anyhow::anyhow;
 use appflowy_proto::Rid;
 use collab::preclude::Collab;
@@ -8,6 +9,7 @@ use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use rand::random;
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
+use tracing::instrument;
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::updates::decoder::Decode;
@@ -129,11 +131,13 @@ impl Db {
     Ok(())
   }
 
+  #[instrument(level = "trace", skip_all, err)]
   pub fn save_update(
     &self,
     object_id: &ObjectId,
     message_id: Option<Rid>,
     update_v1: &[u8],
+    action_source: ActionSource,
   ) -> Result<Option<StateVector>, PersistenceError> {
     if update_v1 == Update::EMPTY_V1 {
       tracing::trace!("skipping empty update {}", object_id);
@@ -141,12 +145,17 @@ impl Db {
     }
     let instance = self.inner.get()?;
     let ops = instance.write_txn();
+
+    #[cfg(feature = "verbose_log")]
     tracing::trace!(
-      "persisting update for {}/{} by {}",
+      "persisting {} update for {}/{} by {}. update: {:#?}",
+      action_source,
       self.workspace_id,
       object_id,
-      self.uid
+      self.uid,
+      yrs::Update::decode_v1(update_v1)
     );
+
     let workspace_id = self.workspace_id.to_string();
     let object_id = object_id.to_string();
     let mut missing = None;

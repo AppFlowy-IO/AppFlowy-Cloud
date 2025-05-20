@@ -11,7 +11,7 @@ use std::sync::{Arc, Weak};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::updates::decoder::Decode;
-use yrs::{ReadTxn, StateVector, Transact};
+use yrs::{ReadTxn, StateVector, Transact, Update};
 
 #[derive(Clone)]
 pub(crate) struct Db {
@@ -135,6 +135,10 @@ impl Db {
     message_id: Option<Rid>,
     update_v1: &[u8],
   ) -> Result<Option<StateVector>, PersistenceError> {
+    if update_v1 == Update::EMPTY_V1 {
+      tracing::trace!("skipping empty update {}", object_id);
+      return Ok(None);
+    }
     let instance = self.inner.get()?;
     let ops = instance.write_txn();
     tracing::trace!(
@@ -289,7 +293,7 @@ mod keys {
 }
 
 /// A holder for RocksDB instances that supports both strong and weak references.
-/// 
+///
 /// Since RocksDB should have only one instance at a time, this enum allows for
 /// proper reference management. Callers that need to hold a reference to the database
 /// should use a weak reference to avoid keeping the instance alive unnecessarily.
@@ -303,7 +307,7 @@ pub enum DbHolder {
 
 impl DbHolder {
   /// Attempts to get a strong reference to the RocksDB instance.
-  /// 
+  ///
   /// If this is a strong holder, it simply clones the Arc.
   /// If this is a weak holder, it attempts to upgrade the weak reference,
   /// which will fail if the database has been dropped.

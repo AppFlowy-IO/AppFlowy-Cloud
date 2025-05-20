@@ -559,8 +559,9 @@ impl WorkspaceControllerActor {
         // we don't need to decode update for every use case, but do so anyway to confirm
         // that it isn't malformed
         let update = match flags {
-          UpdateFlags::Lib0v1 => Update::decode_v1(&update)?,
-          UpdateFlags::Lib0v2 => Update::decode_v2(&update)?,
+          UpdateFlags::Lib0v1 if update != Update::EMPTY_V1 => Update::decode_v1(&update)?,
+          UpdateFlags::Lib0v2 if update != Update::EMPTY_V2 => Update::decode_v2(&update)?,
+          _ => return Ok(()),
         };
         #[cfg(feature = "message_verbose_log")]
         trace!(
@@ -644,7 +645,7 @@ impl WorkspaceControllerActor {
     collab_type: CollabType,
     local_message_id: Rid,
   ) -> anyhow::Result<Option<ClientMessage>> {
-    if tx.has_missing_updates() {
+    if tx.store().pending_update().is_some() || tx.store().pending_ds().is_some() {
       let sv = tx.state_vector();
       trace!("collab {} detected missing updates: {:?}", object_id, sv);
       let reply = ClientMessage::Manifest {

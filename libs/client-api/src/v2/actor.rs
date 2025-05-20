@@ -10,10 +10,12 @@ use client_api_entity::CollabType;
 use collab::core::collab_state::{InitState, SyncState};
 use collab::preclude::Collab;
 use collab_rt_protocol::{CollabRef, WeakCollabRef};
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use shared_entity::response::AppResponseError;
+use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -45,6 +47,8 @@ pub(super) struct WorkspaceControllerActor {
   /// Persistent database handle.
   db: Db,
   notification_tx: tokio::sync::broadcast::Sender<WorkspaceNotification>,
+  /// Used to record recently changed collabs
+  latest_changed_collabs: DashSet<ChangedCollab>,
   #[cfg(debug_assertions)]
   pub skip_realtime_message: AtomicBool,
 }
@@ -68,12 +72,27 @@ impl WorkspaceControllerActor {
       #[cfg(debug_assertions)]
       skip_realtime_message: AtomicBool::new(false),
       notification_tx,
+      latest_changed_collabs: DashSet::new(),
     });
     tokio::spawn(Self::actor_loop(
       Arc::downgrade(&actor),
       ChannelReceiverCompactor::new(message_rx),
     ));
     actor
+  }
+
+  /// Return current changed collab ids and clear the set.
+  pub async fn consume_latest_changed_collabs(&self) -> HashSet<ChangedCollab> {
+    let result: HashSet<_> = self
+      .latest_changed_collabs
+      .iter()
+      .map(|item| ChangedCollab {
+        id: item.id,
+        collab_type: item.collab_type,
+      })
+      .collect();
+    self.latest_changed_collabs.clear();
+    result
   }
 
   pub fn subscribe_notification(&self) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
@@ -305,16 +324,26 @@ impl WorkspaceControllerActor {
       object_id,
       flags,
       update,
+      collab_type,
       ..
     } = &msg
     {
       let rid = source.into();
+      let changed_collab = ChangedCollab {
+        id: *object_id,
+        collab_type: *collab_type,
+      };
+      // Only insert if not already present
+      if !self.latest_changed_collabs.contains(&changed_collab) {
+        self.latest_changed_collabs.insert(changed_collab);
+      }
+
       // persist
       match flags {
-        UpdateFlags::Lib0v1 => self.db.save_update(object_id, rid, update),
+        UpdateFlags::Lib0v1 => self.db.save_update(object_id, rid, update, source),
         UpdateFlags::Lib0v2 => {
           let update_v1 = Update::decode_v2(update)?.encode_v1();
-          self.db.save_update(object_id, rid, &update_v1)
+          self.db.save_update(object_id, rid, &update_v1, source)
         },
       }?;
     };
@@ -709,7 +738,13 @@ impl WorkspaceControllerActor {
       );
       let bytes = update.encode_v1();
       self
-        .persist_update(object_id, collab_type, Some(rid), bytes)
+        .persist_update(
+          object_id,
+          collab_type,
+          Some(rid),
+          bytes,
+          ActionSource::Remote(rid),
+        )
         .await?;
     }
     Ok(())
@@ -728,10 +763,20 @@ impl WorkspaceControllerActor {
     collab_type: CollabType,
     last_message_id: Option<Rid>,
     update_bytes: Vec<u8>,
+    action_source: ActionSource,
   ) -> anyhow::Result<()> {
+    let changed_collab = ChangedCollab {
+      id: object_id,
+      collab_type,
+    };
+    // Only insert if not already present
+    if !self.latest_changed_collabs.contains(&changed_collab) {
+      self.latest_changed_collabs.insert(changed_collab);
+    }
+
     let missing = self
       .db
-      .save_update(&object_id, last_message_id, &update_bytes)?;
+      .save_update(&object_id, last_message_id, &update_bytes, action_source)?;
     if let Some(state_vector) = missing {
       let msg = ClientMessage::Manifest {
         object_id,
@@ -922,6 +967,15 @@ pub(super) enum ActionSource {
   Remote(Rid),
 }
 
+impl Display for ActionSource {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ActionSource::Local => f.write_str("local"),
+      ActionSource::Remote(_) => f.write_str("remote"),
+    }
+  }
+}
+
 impl From<ActionSource> for Option<Rid> {
   fn from(value: ActionSource) -> Self {
     match value {
@@ -962,4 +1016,10 @@ impl CachedCollab {
   fn upgrade(&self) -> Option<CollabRef> {
     self.collab_ref.upgrade()
   }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ChangedCollab {
+  pub id: ObjectId,
+  pub collab_type: CollabType,
 }

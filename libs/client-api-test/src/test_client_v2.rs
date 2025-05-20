@@ -136,6 +136,7 @@ impl TestClient {
   }
 
   pub async fn new_user() -> Self {
+    setup_log();
     let registered_user = generate_unique_registered_user().await;
     let this = Self::new(registered_user, true).await;
     let uid = this.uid().await;

@@ -106,9 +106,14 @@ impl Db {
       &object_id.to_string(),
       &mut txn,
     ) {
-      Ok(_updates_applied) => {
+      Ok(updates_applied) => {
         #[cfg(feature = "verbose_log")]
-        tracing::trace!("restored collab {} state: {:#?}", object_id, txn.store());
+        tracing::trace!(
+          "restored collab {}, apply updates:{}, state: {:#?}",
+          object_id,
+          updates_applied,
+          txn.store()
+        );
         Ok(())
       },
       Err(PersistenceError::RecordNotFound(_)) => {
@@ -153,7 +158,7 @@ impl Db {
       self.workspace_id,
       object_id,
       self.uid,
-      yrs::Update::decode_v1(update_v1)
+      yrs::Update::decode_v1(update_v1).unwrap(),
     );
 
     let workspace_id = self.workspace_id.to_string();

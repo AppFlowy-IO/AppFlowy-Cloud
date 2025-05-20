@@ -1,5 +1,5 @@
 use super::db::{Db, DbHolder};
-use super::WorkspaceId;
+use super::{ChangedCollab, WorkspaceId};
 use crate::entity::CollabType;
 use crate::v2::actor::{WorkspaceAction, WorkspaceControllerActor, WsConn};
 use crate::v2::conn_retry::ReconnectionManager;
@@ -9,6 +9,7 @@ use collab_rt_protocol::CollabRef;
 use futures_core::Stream;
 use futures_util::stream::SplitSink;
 use shared_entity::response::AppResponseError;
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
@@ -48,6 +49,10 @@ impl WorkspaceController {
       actor,
       connection_manager,
     })
+  }
+
+  pub async fn consume_latest_changed_collab(&self) -> HashSet<ChangedCollab> {
+    self.actor.consume_latest_changed_collabs().await
   }
 
   pub fn is_connected(&self) -> bool {

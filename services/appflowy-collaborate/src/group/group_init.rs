@@ -737,7 +737,9 @@ impl CollabGroup {
     let missing_updates = {
       let state_vector = state.state_vector.read().await;
       match state_vector.partial_cmp(&decoded_update.state_vector()) {
-        None | Some(std::cmp::Ordering::Less) => Some(state_vector.clone()),
+        // None marks concurrent state vectors, meaning that current collab group
+        // has some of the updates that the client didn't see and vice versa
+        None => Some(state_vector.clone()),
         _ => None,
       }
     };

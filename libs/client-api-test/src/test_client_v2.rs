@@ -900,7 +900,10 @@ impl TestClient {
     #[cfg(feature = "collab-sync")]
     {
       let workspace = self.workspace_for(workspace_id).await;
-      workspace.bind(&collab_ref, collab_type).await.unwrap();
+      workspace
+        .bind_and_cache_collab_ref(&collab_ref, collab_type)
+        .await
+        .unwrap();
     }
     {
       let mut lock = collab.write().await;
@@ -952,7 +955,10 @@ impl TestClient {
     #[cfg(feature = "collab-sync")]
     {
       let workspace = self.workspace_for(workspace_id).await;
-      workspace.bind(&collab_ref, collab_type).await.unwrap();
+      workspace
+        .bind_and_cache_collab_ref(&collab_ref, collab_type)
+        .await
+        .unwrap();
     }
     {
       let mut lock = collab.write().await;

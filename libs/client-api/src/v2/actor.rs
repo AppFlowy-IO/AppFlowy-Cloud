@@ -95,6 +95,18 @@ impl WorkspaceControllerActor {
     result
   }
 
+  pub fn cache_collab_ref(
+    &self,
+    object_id: ObjectId,
+    collab_ref: &CollabRef,
+    collab_type: CollabType,
+  ) {
+    self.cache.insert(
+      object_id,
+      CachedCollab::new(Arc::downgrade(collab_ref), collab_type),
+    );
+  }
+
   pub fn subscribe_notification(&self) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
     self.notification_tx.subscribe()
   }
@@ -142,13 +154,27 @@ impl WorkspaceControllerActor {
   /// * `collab_ref`: Reference to the collaboration object to be bound
   /// * `collab_type`: The type of the collaboration (document, folder, etc.)
   ///
-  pub async fn bind(
+  pub async fn bind_collab_ref(
     actor: &Arc<Self>,
     collab_ref: &CollabRef,
     collab_type: CollabType,
   ) -> anyhow::Result<()> {
     let mut collab = collab_ref.write().await;
     let collab = (*collab).borrow_mut();
+    let object_id: ObjectId = collab.object_id().parse()?;
+    Self::bind(actor, collab, collab_type).await?;
+    actor.cache.insert(
+      object_id,
+      CachedCollab::new(Arc::downgrade(collab_ref), collab_type),
+    );
+    Ok(())
+  }
+
+  pub async fn bind(
+    actor: &Arc<Self>,
+    collab: &mut Collab,
+    collab_type: CollabType,
+  ) -> anyhow::Result<()> {
     let object_id: ObjectId = collab.object_id().parse()?;
     trace!(
       "binding collab {}/{}/{}",
@@ -215,10 +241,6 @@ impl WorkspaceControllerActor {
     });
     actor.publish_manifest(object_id, collab, collab_type);
     actor.publish_awareness(object_id, collab_type, awareness.update()?);
-    actor.cache.insert(
-      object_id,
-      CachedCollab::new(Arc::downgrade(collab_ref), collab_type),
-    );
     Ok(())
   }
 

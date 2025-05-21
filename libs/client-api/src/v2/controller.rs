@@ -52,8 +52,8 @@ impl WorkspaceController {
     })
   }
 
-  pub async fn consume_latest_changed_collab(&self) -> HashSet<ChangedCollab> {
-    self.actor.consume_latest_changed_collabs().await
+  pub fn consume_latest_changed_collab(&self) -> HashSet<ChangedCollab> {
+    self.actor.consume_latest_changed_collabs()
   }
 
   pub fn is_connected(&self) -> bool {

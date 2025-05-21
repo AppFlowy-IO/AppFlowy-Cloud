@@ -29,7 +29,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, instrument, trace};
+use tracing::{error, info, instrument, trace, warn};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -155,7 +155,7 @@ impl WorkspaceControllerActor {
   /// * `collab_ref`: Reference to the collaboration object to be bound
   /// * `collab_type`: The type of the collaboration (document, folder, etc.)
   ///
-  pub async fn bind_collab_ref(
+  pub async fn bind_and_cache_collab_ref(
     actor: &Arc<Self>,
     collab_ref: &CollabRef,
     collab_type: CollabType,
@@ -184,6 +184,16 @@ impl WorkspaceControllerActor {
       object_id,
       collab_type
     );
+
+    if actor.cache.contains_key(&object_id) {
+      warn!(
+        "collab {}/{}/{} already bind",
+        actor.workspace_id(),
+        object_id,
+        collab_type
+      );
+      return Ok(());
+    }
 
     collab_type.validate_require_data(collab)?;
     let sync_state = collab.get_state().clone();

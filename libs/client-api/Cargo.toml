@@ -54,10 +54,10 @@ dashmap.workspace = true
 tokio-tungstenite = { workspace = true, features = ["stream"] }
 rand = "0.8.5"
 smallvec = { workspace = true, features = [
-    "serde",
-    "const_generics",
-    "const_new",
-    "write",
+  "serde",
+  "const_generics",
+  "const_new",
+  "write",
 ] }
 collab-plugins = { workspace = true, features = [] }
 
@@ -84,7 +84,7 @@ tokio = { workspace = true, features = ["sync"] }
 again = { version = "0.1.2" }
 
 [features]
-default = ["message_verbose_log", "verbose_log"]
+default = ["verbose_log"]
 collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
 template = ["workspace-template"]
@@ -92,4 +92,3 @@ sync_verbose_log = ["collab-rt-protocol/verbose_log"]
 test_fast_sync = []
 enable_brotli = ["brotli"]
 verbose_log = []
-message_verbose_log = []

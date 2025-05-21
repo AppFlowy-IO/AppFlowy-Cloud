@@ -1,4 +1,5 @@
 use super::{ObjectId, WorkspaceId};
+use crate::sync_trace;
 use crate::v2::actor::ActionSource;
 use anyhow::anyhow;
 use appflowy_proto::Rid;
@@ -10,7 +11,7 @@ use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use rand::random;
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
-use tracing::{instrument, trace};
+use tracing::instrument;
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::updates::decoder::Decode;
@@ -72,7 +73,7 @@ impl Db {
     //NOTE: this shouldn't be needed, however the way how existing persistence is written,
     // it's necessary
     let collab_id: Uuid = collab.object_id().parse().unwrap();
-    trace!(
+    sync_trace!(
       "initializing collab {}/{}/{} in local db by {}",
       &self.workspace_id,
       collab_id,
@@ -90,7 +91,7 @@ impl Db {
     ) {
       Ok(_) => {
         ops.commit_transaction()?;
-        trace!(
+        sync_trace!(
           "Save collab {}/{}/{} to local db. store: {:#?}",
           &self.workspace_id,
           collab_id,
@@ -117,7 +118,6 @@ impl Db {
       &mut txn,
     ) {
       Ok(updates_applied) => {
-        #[cfg(feature = "verbose_log")]
         tracing::trace!(
           "restored collab {}, apply updates:{}, state: {:#?}",
           object_id,
@@ -155,14 +155,13 @@ impl Db {
     action_source: ActionSource,
   ) -> Result<Option<StateVector>, PersistenceError> {
     if update_v1 == Update::EMPTY_V1 {
-      tracing::trace!("skipping empty update {}", object_id);
+      sync_trace!("skipping empty update {}", object_id);
       return Ok(None);
     }
     let instance = self.inner.get()?;
     let ops = instance.write_txn();
 
-    #[cfg(feature = "verbose_log")]
-    tracing::trace!(
+    sync_trace!(
       "persisting {} update for {}/{} by {}. update: {:#?}",
       action_source,
       self.workspace_id,
@@ -214,7 +213,7 @@ where
     }
 
     let client_id = random::<u64>() & ((1 << 53) - 1); // client ids are 53 bits
-    tracing::trace!(
+    sync_trace!(
       "generated new client id {} for workspace {}",
       client_id,
       workspace_id
@@ -244,7 +243,7 @@ where
     let message_id = old_message_id.max(message_id);
     let key = keys::make_last_message_id_key(workspace_id);
     self.insert(key, message_id.into_bytes())?;
-    tracing::trace!(
+    sync_trace!(
       "updated last message id for workspace {} to {}",
       workspace_id,
       message_id

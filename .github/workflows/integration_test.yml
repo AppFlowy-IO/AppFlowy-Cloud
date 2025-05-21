@@ -145,11 +145,6 @@ jobs:
           docker ps -a
           docker compose -f docker-compose-ci.yml logs
 
-      - name: Minio Logs
-        if: failure()
-        run: |
-          docker logs -f appflowy-cloud-minio-1
-
       - name: AI Logs
         if: failure()
         run: |

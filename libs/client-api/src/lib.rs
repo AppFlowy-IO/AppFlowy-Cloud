@@ -24,6 +24,7 @@ pub mod notify;
 mod ping;
 mod retry;
 
+pub mod log;
 #[cfg(feature = "collab-sync")]
 pub mod v2;
 pub mod ws;

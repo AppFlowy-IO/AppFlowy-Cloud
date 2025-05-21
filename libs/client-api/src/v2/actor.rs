@@ -2,6 +2,7 @@ use crate::v2::compactor::ChannelReceiverCompactor;
 use crate::v2::controller::{ConnectionStatus, DisconnectedReason, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
+use crate::{sync_error, sync_trace};
 use app_error::AppError;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
 use arc_swap::ArcSwap;
@@ -29,7 +30,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -178,14 +179,19 @@ impl WorkspaceControllerActor {
     collab_type: CollabType,
   ) -> anyhow::Result<()> {
     let object_id: ObjectId = collab.object_id().parse()?;
-    trace!(
+    sync_trace!(
       "binding collab {}/{}/{}",
       actor.workspace_id(),
       object_id,
       collab_type
     );
 
-    if actor.cache.contains_key(&object_id) {
+    if actor
+      .cache
+      .get(&object_id)
+      .and_then(|v| v.upgrade())
+      .is_some()
+    {
       warn!(
         "collab {}/{}/{} already bind",
         actor.workspace_id(),
@@ -200,7 +206,7 @@ impl WorkspaceControllerActor {
     let last_message_id = actor.last_message_id.clone();
     sync_state.set_init_state(InitState::Loading);
 
-    trace!("init collab {}/{}", actor.workspace_id(), object_id);
+    sync_trace!("init collab {}/{}", actor.workspace_id(), object_id);
     if !actor.db.init_collab(collab, &collab_type)? {
       tracing::debug!("loading collab {} from local db", object_id);
       actor.db.load(collab)?;
@@ -217,14 +223,14 @@ impl WorkspaceControllerActor {
           .origin()
           .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok())
           .into();
-        trace!(
+        sync_trace!(
           "[{}] emit collab update {:?} {:#?} ",
           client_id,
           rid,
           Update::decode_v1(&e.update).unwrap()
         );
         if let ActionSource::Remote(rid) = rid {
-          trace!("[{}] {} received collab from remote", client_id, object_id);
+          sync_trace!("[{}] {} received collab from remote", client_id, object_id);
           last_message_id.rcu(|old| {
             if rid > **old {
               Arc::new(rid)
@@ -258,7 +264,7 @@ impl WorkspaceControllerActor {
   }
 
   pub(crate) fn set_connection_status(&self, status: ConnectionStatus) {
-    trace!("set connection status: {:?}", status);
+    sync_trace!("set connection status: {:?}", status);
     self.status_tx.send_replace(status);
   }
 
@@ -296,7 +302,7 @@ impl WorkspaceControllerActor {
             None => break, // controller dropped
           };
           if let Err(err) = actor.ping().await {
-            error!("failed to send ping: {}", err);
+            sync_error!("failed to send ping: {}", err);
             actor.set_connection_status(ConnectionStatus::Disconnected {
               reason: Some(DisconnectedReason::Unexpected( err.to_string().into())),
             });
@@ -308,10 +314,10 @@ impl WorkspaceControllerActor {
 
   async fn handle_action(actor: &Arc<Self>, action: WorkspaceAction) {
     let id = actor.db.client_id();
-    trace!("[{}] action {:?}", id, action);
+    sync_trace!("[{}] action {:?}", id, action);
     match action {
       WorkspaceAction::Connect { ack, access_token } => {
-        trace!(
+        sync_trace!(
           "[{}] start websocket connect with token: {}",
           id,
           access_token
@@ -321,7 +327,7 @@ impl WorkspaceControllerActor {
             let _ = ack.send(Ok(()));
           },
           Err(err) => {
-            error!("[{}] failed to connect: {}", id, err);
+            sync_error!("[{}] failed to connect: {}", id, err);
             let reason = DisconnectedReason::from(err.clone());
             actor.set_connection_status(ConnectionStatus::Disconnected {
               reason: Some(reason),
@@ -332,7 +338,7 @@ impl WorkspaceControllerActor {
       },
       WorkspaceAction::Disconnect(ack) => match actor.handle_disconnect().await {
         Ok(_) => {
-          trace!("[{}] disconnected", id);
+          sync_trace!("[{}] disconnected", id);
           actor.set_connection_status(ConnectionStatus::Disconnected {
             reason: Some(DisconnectedReason::UserDisconnect(
               "User disconnect successfully".into(),
@@ -350,7 +356,7 @@ impl WorkspaceControllerActor {
       },
       WorkspaceAction::Send(msg, source) => {
         if let Err(err) = actor.handle_send(msg, source).await {
-          error!("[{}] failed to send client message: {}", id, err);
+          sync_error!("[{}] failed to send client message: {}", id, err);
           actor.set_connection_status(ConnectionStatus::Disconnected {
             reason: Some(DisconnectedReason::Unexpected(err.to_string().into())),
           });
@@ -387,7 +393,7 @@ impl WorkspaceControllerActor {
     };
     if let ActionSource::Local = source {
       if let Err(err) = self.send_message(msg).await {
-        error!("Failed to send message: {}", err);
+        sync_error!("Failed to send message: {}", err);
         self.set_connection_status(ConnectionStatus::Disconnected {
           reason: Some(DisconnectedReason::Unexpected(err.to_string().into())),
         });
@@ -404,7 +410,7 @@ impl WorkspaceControllerActor {
       ClientMessage::AwarenessUpdate { .. } => None,
     };
     if let Some(sink) = self.ws_sink() {
-      trace!("sending message: {:?}", msg);
+      sync_trace!("sending message: {:?}", msg);
       {
         let bytes = msg.into_bytes()?;
         let mut sink = sink.lock().await;
@@ -414,7 +420,7 @@ impl WorkspaceControllerActor {
         self.set_collab_sync_state(&object_id, sync_state).await;
       }
     } else {
-      trace!("Skip sending message: no sink");
+      sync_trace!("Skip sending message: no sink");
     }
     Ok(())
   }
@@ -457,7 +463,7 @@ impl WorkspaceControllerActor {
         actor.set_connection_status(ConnectionStatus::Disconnected { reason: None });
       },
       Some(connection) => {
-        trace!("[{}] connected to {}", client_id, actor.options.url);
+        sync_trace!("[{}] connected to {}", client_id, actor.options.url);
         let (sink, stream) = connection.split();
         let sink = Arc::new(Mutex::new(sink));
         actor.set_connection_status(ConnectionStatus::Connected {
@@ -466,7 +472,7 @@ impl WorkspaceControllerActor {
         });
 
         if let Err(err) = actor.publish_pending_collabs().await {
-          error!("failed to publish pending collabs: {}", err);
+          sync_error!("failed to publish pending collabs: {}", err);
         }
         tokio::spawn(Self::remote_receiver_task(
           Arc::downgrade(actor),
@@ -489,7 +495,7 @@ impl WorkspaceControllerActor {
         Err(err) => Some(Arc::from(err.to_string())),
       };
     if let Some(actor) = weak_actor.upgrade() {
-      error!("failed to receive messages from server: {:?}", reason);
+      sync_error!("failed to receive messages from server: {:?}", reason);
       actor.set_connection_status(ConnectionStatus::Disconnected {
         reason: reason.map(DisconnectedReason::MessageLoopEnd),
       });
@@ -517,19 +523,18 @@ impl WorkspaceControllerActor {
           .skip_realtime_message
           .load(std::sync::atomic::Ordering::SeqCst)
         {
-          trace!("skipping realtime message");
+          sync_trace!("skipping realtime message");
           continue;
         }
       }
       match msg {
         Message::Binary(bytes) => {
-          #[cfg(feature = "message_verbose_log")]
-          trace!("[WsMessage] received binary: len:{}", bytes.len());
+          sync_trace!("[WsMessage] received binary: len:{}", bytes.len());
           let msg = ServerMessage::from_bytes(&bytes)?;
           actor.handle_receive(msg).await?;
         },
         Message::Text(_) => {
-          error!("text messages are not supported")
+          sync_error!("text messages are not supported");
         },
         Message::Ping(_) => { /* do nothing */ },
         Message::Pong(_) => { /* do nothing */ },
@@ -537,8 +542,7 @@ impl WorkspaceControllerActor {
           buf.extend_from_slice(frame.payload());
           if frame.header().is_final {
             let bytes = std::mem::take(&mut buf);
-            #[cfg(feature = "message_verbose_log")]
-            trace!(
+            sync_trace!(
               "[WsMessage] received final frame, len:{}, total:{}",
               frame.len(),
               bytes.len()
@@ -546,8 +550,7 @@ impl WorkspaceControllerActor {
             let msg = ServerMessage::from_bytes(&bytes)?;
             actor.handle_receive(msg).await?;
           } else {
-            #[cfg(feature = "message_verbose_log")]
-            trace!("[WsMessage] received frame: len:{}", frame.len());
+            sync_trace!("[WsMessage] received frame: len:{}", frame.len());
           }
         },
         Message::Close(close) => {
@@ -575,8 +578,7 @@ impl WorkspaceControllerActor {
         last_message_id,
         state_vector,
       } => {
-        #[cfg(feature = "message_verbose_log")]
-        trace!(
+        sync_trace!(
           "received manifest message for {} (rid: {}), sv:{:?}",
           object_id,
           last_message_id,
@@ -630,12 +632,6 @@ impl WorkspaceControllerActor {
           UpdateFlags::Lib0v2 if update != Update::EMPTY_V2 => Update::decode_v2(&update)?,
           _ => return Ok(()),
         };
-        #[cfg(feature = "message_verbose_log")]
-        trace!(
-          "received update for {} (rid: {})",
-          object_id,
-          last_message_id
-        );
         self
           .save_remote_update(object_id, collab_type, last_message_id, update)
           .await?;
@@ -648,9 +644,6 @@ impl WorkspaceControllerActor {
         // we don't need to decode update for every use case, but do so anyway to confirm
         // that it isn't malformed
         let update = AwarenessUpdate::decode_v1(&awareness)?;
-
-        #[cfg(feature = "message_verbose_log")]
-        trace!("received awareness update for {}", object_id);
         self.save_awareness_update(object_id, update).await?;
       },
       ServerMessage::AccessChanges {
@@ -678,9 +671,9 @@ impl WorkspaceControllerActor {
       return;
     }
 
-    trace!("send server notification: {:?}", notification);
+    sync_trace!("send server notification: {:?}", notification);
     if let Err(err) = self.notification_tx.send(notification) {
-      error!("Failed to send server notification, error: {:?}", err)
+      sync_error!("Failed to send server notification, error: {:?}", err);
     }
   }
 
@@ -714,7 +707,7 @@ impl WorkspaceControllerActor {
   ) -> anyhow::Result<Option<ClientMessage>> {
     if tx.store().pending_update().is_some() || tx.store().pending_ds().is_some() {
       let sv = tx.state_vector();
-      trace!("collab {} detected missing updates: {:?}", object_id, sv);
+      sync_trace!("collab {} detected missing updates: {:?}", object_id, sv);
       let reply = ClientMessage::Manifest {
         object_id,
         collab_type,
@@ -749,8 +742,7 @@ impl WorkspaceControllerActor {
     update: Update,
   ) -> anyhow::Result<()> {
     if let Some(collab_ref) = self.get_collab(&object_id) {
-      #[cfg(feature = "verbose_log")]
-      trace!(
+      sync_trace!(
         "applying remote update for active collab {}: {:#?}",
         object_id,
         update
@@ -763,14 +755,14 @@ impl WorkspaceControllerActor {
       tx.apply_update(update)?;
       if Self::prune_missing_updates(&mut tx) {
         drop(tx);
-        trace!("found missing updates for {} - sending manifest", object_id);
+        sync_trace!("found missing updates for {} - sending manifest", object_id);
         self.publish_manifest(object_id, collab, collab_type);
       } else {
         drop(tx);
         collab.set_sync_state(SyncState::SyncFinished);
       }
     } else {
-      trace!(
+      sync_trace!(
         "storing remote update for inactive collab {}: {:#?}",
         object_id,
         update
@@ -834,7 +826,7 @@ impl WorkspaceControllerActor {
   fn prune_missing_updates(tx: &mut TransactionMut) -> bool {
     let missing = tx.prune_pending();
     if let Some(update) = missing {
-      trace!("missing updates: {:?}", update);
+      sync_trace!("missing updates: {:?}", update);
       true
     } else {
       false
@@ -849,6 +841,12 @@ impl WorkspaceControllerActor {
     if let Some(collab_ref) = self.get_collab(&object_id) {
       let mut lock = collab_ref.write().await;
       let collab = (*lock).borrow_mut();
+
+      sync_trace!(
+        "applying awareness update for active collab {}: {:#?}",
+        object_id,
+        update
+      );
       collab
         .get_awareness()
         .apply_update_with(update, Self::REMOTE_ORIGIN)?;
@@ -871,7 +869,7 @@ impl WorkspaceControllerActor {
         Ok(())
       },
       ConnectionStatus::Connecting { cancel } => {
-        trace!("[{}] cancelling connection", self.db.client_id());
+        sync_trace!("[{}] cancelling connection", self.db.client_id());
         cancel.cancel();
         Ok(())
       },

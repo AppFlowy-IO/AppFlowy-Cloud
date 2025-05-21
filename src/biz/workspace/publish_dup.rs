@@ -5,11 +5,11 @@ use anyhow::anyhow;
 use bytes::Bytes;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
-use collab_database::rows::meta_id_from_row_id;
-use collab_database::rows::DatabaseRowBody;
-use collab_database::rows::RowMetaKey;
 use collab_database::rows::CELL_FIELD_TYPE;
+use collab_database::rows::DatabaseRowBody;
 use collab_database::rows::ROW_CELLS;
+use collab_database::rows::RowMetaKey;
+use collab_database::rows::meta_id_from_row_id;
 use collab_database::template::entity::CELL_DATA;
 use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
 use collab_document::blocks::DocumentData;
@@ -17,10 +17,10 @@ use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View};
 use database::collab::GetCollabOrigin;
-use database::collab::{select_workspace_database_oid, CollabStorage};
-use database::file::s3_client_impl::AwsS3BucketClientImpl;
+use database::collab::{CollabStorage, select_workspace_database_oid};
 use database::file::BucketClient;
 use database::file::ResponseBlob;
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::publish::select_published_data_for_view_id;
 use database::publish::select_published_metadata_for_view_id;
 use database_entity::dto::CollabParams;
@@ -165,7 +165,7 @@ impl PublishCollabDuplicator {
       None => {
         return Err(AppError::RecordNotFound(
           "view not found, it might be unpublished".to_string(),
-        ))
+        ));
       },
     };
     root_view.parent_view_id = self.dest_view_id.to_string();
@@ -449,7 +449,7 @@ impl PublishCollabDuplicator {
     }
   }
 
-  async fn deep_copy_doc<'a>(
+  async fn deep_copy_doc(
     &mut self,
     pub_view_id: Uuid,
     dup_view_id: Uuid,
@@ -513,9 +513,9 @@ impl PublishCollabDuplicator {
           .flat_map(|js_val| js_val.get_mut("attributes"))
           .flat_map(|attributes| attributes.get_mut("mention"))
           .filter(|mention| {
-            mention.get("type").map_or(false, |type_| {
-              type_.as_str().map_or(false, |type_| type_ == "page")
-            })
+            mention
+              .get("type")
+              .is_some_and(|type_| type_.as_str().is_some_and(|type_| type_ == "page"))
           })
           .flat_map(|mention| mention.get_mut("page_id"));
 
@@ -650,7 +650,7 @@ impl PublishCollabDuplicator {
   /// deep copy inline database for doc
   /// returns new view_id
   /// parent_view_id is assumed to be doc itself
-  async fn deep_copy_inline_database_in_doc<'a>(
+  async fn deep_copy_inline_database_in_doc(
     &mut self,
     view_id: Uuid,
     doc_view_id: &str,
@@ -678,7 +678,7 @@ impl PublishCollabDuplicator {
 
   /// deep copy referenced database for doc
   /// returns new (view_id, parent_id)
-  async fn deep_copy_ref_database_in_doc<'a>(
+  async fn deep_copy_ref_database_in_doc(
     &mut self,
     view_id: Uuid,
     parent_id: Uuid,
@@ -726,7 +726,7 @@ impl PublishCollabDuplicator {
   /// attempts to use `new_view_id` for `published_view_id` if not already published
   /// stores all view_id references in `duplicated_refs`
   /// returns (published_db_id, new_db_id, is_already_duplicated)
-  async fn deep_copy_database<'a>(
+  async fn deep_copy_database(
     &mut self,
     published_db: &PublishDatabaseData,
     pub_view_id: &Uuid,
@@ -1007,7 +1007,7 @@ impl PublishCollabDuplicator {
   /// Deep copy a published database to the destination workspace.
   /// Returns the Folder view for main view (`new_view_id`) and map from old to new view_id.
   /// If the database is already duplicated before, does not return the view with `new_view_id`
-  async fn deep_copy_database_view<'a>(
+  async fn deep_copy_database_view(
     &mut self,
     new_view_id: Uuid,
     published_db: PublishDatabaseData,

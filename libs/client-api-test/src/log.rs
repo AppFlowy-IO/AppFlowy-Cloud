@@ -1,7 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use {
   std::sync::Once,
-  tracing_subscriber::{fmt::Subscriber, util::SubscriberInitExt, EnvFilter},
+  tracing_subscriber::{EnvFilter, fmt::Subscriber, util::SubscriberInitExt},
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -48,7 +48,9 @@ pub fn setup_log() {
     filters.push(format!("client_api={}", level));
     filters.push(format!("appflowy_cloud={}", level));
     filters.push(format!("collab={}", level));
-    std::env::set_var("RUST_LOG", filters.join(","));
+    unsafe {
+      std::env::set_var("RUST_LOG", filters.join(","));
+    }
 
     let subscriber = Subscriber::builder()
       .with_ansi(true)

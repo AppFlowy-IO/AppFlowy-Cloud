@@ -7,12 +7,12 @@ use axum::{
   http::request::Parts,
   response::{IntoResponse, Redirect},
 };
-use axum_extra::extract::{cookie::Cookie, CookieJar};
+use axum_extra::extract::{CookieJar, cookie::Cookie};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue_entity::dto::GotrueTokenResponse;
 use jwt::{Claims, Header};
-use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue, ToRedisArgs};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use redis::{AsyncCommands, FromRedisValue, ToRedisArgs, aio::ConnectionManager};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 static SESSION_EXPIRATION: usize = 60 * 60 * 24; // 1 day
 
@@ -284,7 +284,7 @@ where
 
 fn expect_redis_value_data(v: &redis::Value) -> redis::RedisResult<Option<&[u8]>> {
   match v {
-    redis::Value::Data(ref bytes) => Ok(Some(bytes)),
+    redis::Value::Data(bytes) => Ok(Some(bytes)),
     redis::Value::Nil => Ok(None),
     x => Err(redis::RedisError::from((
       redis::ErrorKind::TypeError,

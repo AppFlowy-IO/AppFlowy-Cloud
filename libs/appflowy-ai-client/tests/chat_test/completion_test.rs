@@ -22,7 +22,7 @@ async fn completion_explain_test() {
     format: ResponseFormat::default(),
   };
   let stream = client
-    .stream_completion_text(params, "gpt-4o-mini")
+    .stream_completion_text(params, "gpt-4o-mini".to_string())
     .await
     .unwrap();
   let text = collect_stream_text(stream).await;
@@ -49,7 +49,7 @@ async fn completion_image_test() {
     },
   };
   let stream = client
-    .stream_completion_text(params, "gpt-4o-mini")
+    .stream_completion_text(params, "gpt-4o-mini".to_string())
     .await
     .unwrap();
   let text = collect_stream_text(stream).await;
@@ -70,7 +70,7 @@ async fn continue_writing_test() {
     },
   };
   let stream = client
-    .stream_completion_text(params, "gpt-4o-mini")
+    .stream_completion_text(params, "gpt-4o-mini".to_string())
     .await
     .unwrap();
   let text = collect_stream_text(stream).await;
@@ -88,7 +88,7 @@ async fn make_text_shorter_text() {
         format: ResponseFormat::default(),
     };
   let stream = client
-    .stream_completion_text(params, "gpt-4o-mini")
+    .stream_completion_text(params, "gpt-4o-mini".to_string())
     .await
     .unwrap();
 
@@ -119,7 +119,7 @@ async fn custom_prompt_test() {
     format: Default::default(),
   };
   let stream = client
-    .stream_completion_text(params, "gpt-4o-mini")
+    .stream_completion_text(params, "gpt-4o-mini".to_string())
     .await
     .unwrap();
   let text = collect_stream_text(stream).await;

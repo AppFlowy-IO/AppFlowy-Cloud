@@ -5,7 +5,7 @@ use crate::biz::chat::ops::{
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
-use actix_web::{web, HttpRequest, HttpResponse, Scope};
+use actix_web::{HttpRequest, HttpResponse, Scope, web};
 use serde::Deserialize;
 
 use crate::api::util::ai_model_from_header;
@@ -244,14 +244,18 @@ async fn answer_stream_handler(
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
   let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &chat_id).await?;
-  let ai_model = ai_model_from_header(&req);
+  let ai_model = ai_model_from_header(&req).to_string();
+
   state.metrics.ai_metrics.record_total_stream_count(1);
-  match state
-    .ai_client
+
+  // Create owned values
+  let ai_client = state.ai_client.clone();
+
+  match ai_client
     .stream_question(
       workspace_id,
-      &chat_id,
-      &content,
+      chat_id,
+      content,
       Some(metadata),
       rag_ids,
       ai_model,
@@ -289,22 +293,23 @@ async fn answer_stream_v2_handler(
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
   let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &chat_id).await?;
-  let ai_model = ai_model_from_header(&req);
+  let ai_model = ai_model_from_header(&req).to_string();
 
   state.metrics.ai_metrics.record_total_stream_count(1);
   trace!(
     "[Chat] stream answer for chat: {}, question: {}, rag_ids: {:?}",
-    chat_id,
-    content,
-    rag_ids
+    chat_id, content, rag_ids
   );
-  match state
-    .ai_client
+
+  // Create AI client
+  let ai_client = state.ai_client.clone();
+
+  match ai_client
     .stream_question_v2(
       workspace_id,
-      &chat_id,
+      chat_id,
       question_id,
-      &content,
+      content,
       Some(metadata),
       rag_ids,
       ai_model,
@@ -345,7 +350,8 @@ async fn answer_stream_v3_handler(
   let (content, metadata) =
     chat::chat_ops::select_chat_message_content(&state.pg_pool, payload.question_id).await?;
   let rag_ids = chat::chat_ops::select_chat_rag_ids(&state.pg_pool, &payload.chat_id).await?;
-  let ai_model = ai_model_from_header(&req);
+  let ai_model = ai_model_from_header(&req).to_string();
+
   state.metrics.ai_metrics.record_total_stream_count(1);
   if payload.format.output_content.is_image() {
     state.metrics.ai_metrics.record_stream_image_count(1);
@@ -366,8 +372,11 @@ async fn answer_stream_v3_handler(
   };
 
   trace!("[Chat] stream v3 {:?}", question);
-  match state
-    .ai_client
+
+  // Clone the AI client
+  let ai_client = state.ai_client.clone();
+
+  match ai_client
     .stream_question_v3(ai_model, question, Some(60))
     .await
   {

@@ -2,14 +2,14 @@ use crate::api::util::ai_model_from_header;
 use crate::state::AppState;
 
 use actix_web::web::{Data, Json};
-use actix_web::{web, HttpRequest, HttpResponse, Scope};
+use actix_web::{HttpRequest, HttpResponse, Scope, web};
 use app_error::AppError;
 use appflowy_ai_client::dto::{
   CalculateSimilarityParams, LocalAIConfig, ModelList, SimilarityResponse, TranslateRowParams,
   TranslateRowResponse,
 };
 
-use futures_util::{stream, TryStreamExt};
+use futures_util::{TryStreamExt, stream};
 
 use serde::Deserialize;
 use shared_entity::dto::ai_dto::{
@@ -37,7 +37,7 @@ async fn stream_complete_text_handler(
   payload: Json<CompleteTextParams>,
   req: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
-  let ai_model = ai_model_from_header(&req);
+  let ai_model = ai_model_from_header(&req).to_string();
   let params = payload.into_inner();
   state.metrics.ai_metrics.record_total_completion_count(1);
 
@@ -52,11 +52,8 @@ async fn stream_complete_text_handler(
       .record_prompt_usage_count(prompt_id, 1);
   }
 
-  match state
-    .ai_client
-    .stream_completion_text(params, ai_model)
-    .await
-  {
+  let ai_client = state.ai_client.clone();
+  match ai_client.stream_completion_text(params, ai_model).await {
     Ok(stream) => Ok(
       HttpResponse::Ok()
         .content_type("text/event-stream")
@@ -77,11 +74,12 @@ async fn stream_complete_v2_handler(
   payload: Json<CompleteTextParams>,
   req: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
-  let ai_model = ai_model_from_header(&req);
+  let ai_model = ai_model_from_header(&req).to_string();
   let params = payload.into_inner();
   state.metrics.ai_metrics.record_total_completion_count(1);
 
-  match state.ai_client.stream_completion_v2(params, ai_model).await {
+  let ai_client = state.ai_client.clone();
+  match ai_client.stream_completion_v2(params, ai_model).await {
     Ok(stream) => Ok(
       HttpResponse::Ok()
         .content_type("text/event-stream")
@@ -96,6 +94,7 @@ async fn stream_complete_v2_handler(
     ),
   }
 }
+
 #[instrument(level = "debug", skip(state, payload), err)]
 async fn summarize_row_handler(
   state: Data<AppState>,

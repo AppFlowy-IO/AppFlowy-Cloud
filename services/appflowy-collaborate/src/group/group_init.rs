@@ -26,11 +26,11 @@ use collab_stream::model::{AwarenessStreamUpdate, CollabStreamUpdate, MessageId,
 use dashmap::DashMap;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::{CollabParams, QueryCollabParams};
-use futures::{pin_mut, Sink, Stream};
+use futures::{Sink, Stream, pin_mut};
 use futures_util::{SinkExt, StreamExt};
 use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
@@ -415,8 +415,7 @@ impl CollabGroup {
     if self.state.subscribers.remove(user).is_some() {
       trace!(
         "{} remove subscriber from group: {}",
-        self.state.object_id,
-        user
+        self.state.object_id, user
       );
     }
   }
@@ -576,8 +575,7 @@ impl CollabGroup {
 
     trace!(
       "Applying client updates: {}, origin:{}",
-      collab_msg,
-      message_origin
+      collab_msg, message_origin
     );
 
     let payload = collab_msg.payload();
@@ -744,7 +742,7 @@ impl CollabGroup {
     };
     let missing_updates = {
       let state_vector = state.state_vector.read().await;
-      match state_vector.partial_cmp(&decoded_update.state_vector_lower()) {
+      match state_vector.partial_cmp(&decoded_update.state_vector()) {
         None | Some(std::cmp::Ordering::Less) => Some(state_vector.clone()),
         _ => None,
       }

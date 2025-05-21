@@ -7,7 +7,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let protoc_path_str = protoc_path.to_str().expect("protoc path to str");
 
     // Set the `PROTOC` environment variable to the path of the `protoc` binary.
-    std::env::set_var("PROTOC", protoc_path_str);
+    unsafe {
+      std::env::set_var("PROTOC", protoc_path_str);
+    }
   });
 
   let proto_files = vec!["proto/realtime.proto", "proto/collab.proto"];

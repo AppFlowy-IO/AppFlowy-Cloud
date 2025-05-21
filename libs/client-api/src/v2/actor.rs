@@ -150,14 +150,19 @@ impl WorkspaceControllerActor {
     let mut collab = collab_ref.write().await;
     let collab = (*collab).borrow_mut();
     let object_id: ObjectId = collab.object_id().parse()?;
-    trace!("binding collab {}/{}", actor.workspace_id(), object_id);
+    trace!(
+      "binding collab {}/{}/{}",
+      actor.workspace_id(),
+      object_id,
+      collab_type
+    );
 
     let sync_state = collab.get_state().clone();
     let last_message_id = actor.last_message_id.clone();
     sync_state.set_init_state(InitState::Loading);
 
     trace!("init collab {}/{}", actor.workspace_id(), object_id);
-    if !actor.db.init_collab(collab)? {
+    if !actor.db.init_collab(collab, &collab_type)? {
       tracing::debug!("loading collab {} from local db", object_id);
       actor.db.load(collab)?;
     }
@@ -717,6 +722,7 @@ impl WorkspaceControllerActor {
         object_id,
         update
       );
+
       let mut lock = collab_ref.write().await;
       let collab = (*lock).borrow_mut();
       let doc = collab.get_awareness().doc();

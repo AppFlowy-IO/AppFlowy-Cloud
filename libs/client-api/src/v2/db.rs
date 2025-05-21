@@ -99,10 +99,7 @@ impl Db {
         );
         Ok(true)
       },
-      Err(PersistenceError::DocumentAlreadyExist) => {
-        tracing::warn!("collab {} already exists in local db", collab_id);
-        Ok(false)
-      },
+      Err(PersistenceError::DocumentAlreadyExist) => Ok(false),
       Err(err) => Err(err),
     }
   }

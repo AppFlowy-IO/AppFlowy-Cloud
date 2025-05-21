@@ -2,6 +2,7 @@ use super::{ObjectId, WorkspaceId};
 use crate::v2::actor::ActionSource;
 use anyhow::anyhow;
 use appflowy_proto::Rid;
+use client_api_entity::CollabType;
 use collab::preclude::Collab;
 use collab_plugins::local_storage::kv::doc::CollabKVAction;
 use collab_plugins::local_storage::kv::{KVStore, KVTransactionDB, PersistenceError};
@@ -9,7 +10,7 @@ use collab_plugins::local_storage::rocksdb::kv_impl::KVTransactionDBRocksdbImpl;
 use rand::random;
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
-use tracing::instrument;
+use tracing::{instrument, trace};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::updates::decoder::Decode;
@@ -63,14 +64,19 @@ impl Db {
     Ok(message_id)
   }
 
-  pub fn init_collab(&self, collab: &Collab) -> Result<bool, PersistenceError> {
+  pub fn init_collab(
+    &self,
+    collab: &Collab,
+    collab_type: &CollabType,
+  ) -> Result<bool, PersistenceError> {
     //NOTE: this shouldn't be needed, however the way how existing persistence is written,
     // it's necessary
     let collab_id: Uuid = collab.object_id().parse().unwrap();
-    tracing::trace!(
-      "initializing collab {}/{} in local db by {}",
+    trace!(
+      "initializing collab {}/{}/{} in local db by {}",
       &self.workspace_id,
       collab_id,
+      collab_type,
       self.uid
     );
     let tx = collab.transact();
@@ -84,6 +90,12 @@ impl Db {
     ) {
       Ok(_) => {
         ops.commit_transaction()?;
+        trace!(
+          "Save collab {}/{}/{} to local db",
+          &self.workspace_id,
+          collab_id,
+          collab_type,
+        );
         Ok(true)
       },
       Err(PersistenceError::DocumentAlreadyExist) => {

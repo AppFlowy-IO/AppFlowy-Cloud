@@ -83,7 +83,7 @@ impl WorkspaceControllerActor {
   }
 
   /// Return current changed collab ids and clear the set.
-  pub async fn consume_latest_changed_collabs(&self) -> HashSet<ChangedCollab> {
+  pub fn consume_latest_changed_collabs(&self) -> HashSet<ChangedCollab> {
     let result: HashSet<_> = self
       .latest_changed_collabs
       .iter()

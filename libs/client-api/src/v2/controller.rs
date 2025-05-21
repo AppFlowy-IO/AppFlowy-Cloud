@@ -1,10 +1,11 @@
 use super::db::{Db, DbHolder};
-use super::{ChangedCollab, WorkspaceId};
+use super::{ChangedCollab, ObjectId, WorkspaceId};
 use crate::entity::CollabType;
 use crate::v2::actor::{WorkspaceAction, WorkspaceControllerActor, WsConn};
 use crate::v2::conn_retry::ReconnectionManager;
 use app_error::ErrorCode;
 use appflowy_proto::{Rid, WorkspaceNotification};
+use collab::preclude::Collab;
 use collab_rt_protocol::CollabRef;
 use futures_core::Stream;
 use futures_util::stream::SplitSink;
@@ -132,8 +133,28 @@ impl WorkspaceController {
   /// * `actor`: Reference to the workspace controller actor managing the collaboration
   /// * `collab_ref`: Reference to the collaboration object to be bound
   /// * `collab_type`: The type of the collaboration (document, folder, etc.)
-  pub async fn bind(&self, collab_ref: &CollabRef, collab_type: CollabType) -> anyhow::Result<()> {
-    WorkspaceControllerActor::bind(&self.actor, collab_ref, collab_type).await
+  pub async fn bind_and_cache_collab_ref(
+    &self,
+    collab_ref: &CollabRef,
+    collab_type: CollabType,
+  ) -> anyhow::Result<()> {
+    WorkspaceControllerActor::bind_collab_ref(&self.actor, collab_ref, collab_type).await
+  }
+
+  pub async fn bind(&self, collab: &mut Collab, collab_type: CollabType) -> anyhow::Result<()> {
+    WorkspaceControllerActor::bind(&self.actor, collab, collab_type).await
+  }
+
+  pub async fn cache_collab_ref(
+    &self,
+    object_id: ObjectId,
+    collab_ref: &CollabRef,
+    collab_type: CollabType,
+  ) -> anyhow::Result<()> {
+    self
+      .actor
+      .cache_collab_ref(object_id, collab_ref, collab_type);
+    Ok(())
   }
 }
 

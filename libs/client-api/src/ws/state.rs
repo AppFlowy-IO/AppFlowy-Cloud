@@ -1,4 +1,4 @@
-use tokio::sync::broadcast::{channel, Receiver, Sender};
+use tokio::sync::broadcast::{Receiver, Sender, channel};
 use tracing::trace;
 
 pub struct ConnectStateNotify {

@@ -1,10 +1,10 @@
 use actix_http::Payload;
-use actix_web::{web::Data, FromRequest, HttpRequest};
+use actix_web::{FromRequest, HttpRequest, web::Data};
 
 use gotrue_entity::gotrue_jwt::GoTrueJWTClaims;
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
-use sqlx::types::{uuid, Uuid};
+use sqlx::types::{Uuid, uuid};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;

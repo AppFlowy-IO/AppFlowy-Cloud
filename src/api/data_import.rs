@@ -2,7 +2,7 @@ use crate::biz::authentication::jwt::UserUuid;
 use crate::state::AppState;
 use actix_multipart::Multipart;
 use actix_web::web::{Data, Json};
-use actix_web::{web, HttpRequest, Scope};
+use actix_web::{HttpRequest, Scope, web};
 use anyhow::anyhow;
 use app_error::AppError;
 
@@ -10,8 +10,8 @@ use aws_sdk_s3::primitives::ByteStream;
 use database::file::BucketClient;
 
 use crate::biz::workspace::ops::{create_empty_workspace, create_upload_task, num_pending_task};
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use database::user::select_name_and_email_from_uuid;
 use database::workspace::select_import_task_by_state;
 use database_entity::dto::{CreateImportTask, CreateImportTaskResponse};
@@ -171,14 +171,12 @@ async fn import_data_handler(
 
   trace!(
     "[Import] content length: {}, content md5: {}",
-    content_length,
-    md5_base64
+    content_length, md5_base64
   );
   if file.md5_base64 != md5_base64 {
     trace!(
       "Import file fail. The Content-MD5:{} doesn't match file md5:{}",
-      md5_base64,
-      file.md5_base64
+      md5_base64, file.md5_base64
     );
 
     return Err(
@@ -193,8 +191,7 @@ async fn import_data_handler(
   if content_length != file.size {
     trace!(
       "Import file fail. The Content-Length:{} doesn't match file size:{}",
-      content_length,
-      file.size
+      content_length, file.size
     );
 
     return Err(

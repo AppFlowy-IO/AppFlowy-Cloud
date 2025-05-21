@@ -1,9 +1,9 @@
 use actix_http::header::{HeaderName, HeaderValue};
-use std::future::{ready, Ready};
-use tracing::{span, Instrument, Level};
+use std::future::{Ready, ready};
+use tracing::{Instrument, Level, span};
 
 use crate::api::util::{client_version_from_headers, device_id_from_headers};
-use actix_service::{forward_ready, Service, Transform};
+use actix_service::{Service, Transform, forward_ready};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use futures_util::future::LocalBoxFuture;
 

@@ -1,5 +1,5 @@
 use appflowy_ai_client::dto::{CompleteTextParams, CompletionMetadata, CompletionType};
-use client_api_test::{ai_test_enabled, collect_completion_v2, TestClient};
+use client_api_test::{TestClient, ai_test_enabled, collect_completion_v2};
 
 #[tokio::test]
 async fn generate_chat_message_answer_test() {

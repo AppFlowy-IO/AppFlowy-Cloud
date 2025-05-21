@@ -3,8 +3,8 @@ use crate::error::EntityError::{DeserializationError, InvalidData};
 
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use collab_entity::proto;
 use collab_entity::CollabType;
+use collab_entity::proto;
 use infra::validate::{validate_not_empty_payload, validate_not_empty_str};
 use prost::Message;
 use serde::{Deserialize, Serialize};

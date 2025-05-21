@@ -1,5 +1,5 @@
 use crate::import_worker::report::{ImportNotifier, ImportProgress, ImportResult};
-use crate::s3_client::{download_file, AutoRemoveDownloadedFile, S3StreamResponse};
+use crate::s3_client::{AutoRemoveDownloadedFile, S3StreamResponse, download_file};
 use anyhow::anyhow;
 use aws_sdk_s3::primitives::ByteStream;
 
@@ -14,15 +14,14 @@ use collab_database::workspace_database::WorkspaceDatabase;
 use collab_entity::CollabType;
 use collab_folder::{Folder, View, ViewLayout};
 use collab_importer::imported_collab::ImportType;
-use collab_importer::notion::page::CollabResource;
 use collab_importer::notion::NotionImporter;
+use collab_importer::notion::page::CollabResource;
 use collab_importer::util::FileId;
 use database::collab::{insert_into_af_collab_bulk_for_user, select_blob_from_af_collab};
-use database::resource_usage::{insert_blob_metadata_bulk, BulkInsertMeta};
+use database::resource_usage::{BulkInsertMeta, insert_blob_metadata_bulk};
 use database::workspace::{
-  delete_from_workspace, select_import_task, select_workspace_database_storage_id,
+  ImportTaskState, delete_from_workspace, select_import_task, select_workspace_database_storage_id,
   update_import_task_status, update_updated_at_of_workspace_with_uid, update_workspace_status,
-  ImportTaskState,
 };
 use database_entity::dto::CollabParams;
 
@@ -32,7 +31,7 @@ use collab_importer::zip_tool::async_zip::async_unzip;
 use collab_importer::zip_tool::sync_zip::sync_unzip;
 
 use futures::stream::FuturesUnordered;
-use futures::{stream, AsyncBufRead, AsyncReadExt, StreamExt};
+use futures::{AsyncBufRead, AsyncReadExt, StreamExt, stream};
 use infra::env_util::get_env_var;
 use redis::aio::ConnectionManager;
 use redis::streams::{
@@ -44,8 +43,8 @@ use redis::{AsyncCommands, RedisResult, Value};
 use database::pg_row::AFImportTask;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
-use sqlx::types::chrono::{DateTime, TimeZone, Utc};
 use sqlx::PgPool;
+use sqlx::types::chrono::{DateTime, TimeZone, Utc};
 use std::collections::{HashMap, HashSet};
 use std::env::temp_dir;
 use std::fmt::Display;
@@ -60,7 +59,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
 use tokio::task::spawn_local;
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::time::{MissedTickBehavior, interval};
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
@@ -284,7 +283,7 @@ async fn consume_task(
         return Err(ImportError::UpgradeToLatestVersion(format!(
           "Missing file_size for task: {}",
           task.task_id
-        )))
+        )));
       },
       Some(file_size) => {
         if file_size > context.maximum_import_file_size as i64 {
@@ -564,8 +563,7 @@ async fn process_task(
 
       trace!(
         "[Import]: {} download and unzip file result: {:?}",
-        task.workspace_id,
-        unzip_result
+        task.workspace_id, unzip_result
       );
       match unzip_result {
         Ok(unzip_dir_path) => {
@@ -729,9 +727,7 @@ async fn download_and_unzip_file(
 
   trace!(
     "[Import] {} start download file: {:?}, size: {}",
-    import_task.workspace_id,
-    import_task.s3_key,
-    blob_meta.content_length
+    import_task.workspace_id, import_task.s3_key, blob_meta.content_length
   );
 
   let S3StreamResponse {
@@ -893,8 +889,7 @@ async fn process_unzip_file(
   let nested_views = imported.build_nested_views().await;
   trace!(
     "[Import]: {} imported nested views:{}",
-    import_task.workspace_id,
-    nested_views
+    import_task.workspace_id, nested_views
   );
 
   // 1. Open the workspace folder
@@ -934,8 +929,7 @@ async fn process_unzip_file(
   while let Some(imported_collab_info) = stream.next().await {
     trace!(
       "[Import]: {} imported collab: {}",
-      import_task.workspace_id,
-      imported_collab_info
+      import_task.workspace_id, imported_collab_info
     );
     resources.extend(imported_collab_info.resources);
     collab_params_list.extend(
@@ -1108,8 +1102,7 @@ async fn process_unzip_file(
 
   trace!(
     "[Import]: {} update task:{} status to completed",
-    import_task.workspace_id,
-    import_task.task_id,
+    import_task.workspace_id, import_task.task_id,
   );
   update_import_task_status(
     &import_task.task_id,
@@ -1486,7 +1479,12 @@ impl Display for NotionImportTask {
     write!(
       f,
       "NotionImportTask {{ task_id: {}, workspace_id: {}, file_size:{:?}MB, workspace_name: {}, user_name: {}, user_email: {} }}",
-      self.task_id, self.workspace_id, file_size_mb, self.workspace_name, self.user_name, self.user_email
+      self.task_id,
+      self.workspace_id,
+      file_size_mb,
+      self.workspace_name,
+      self.user_name,
+      self.user_email
     )
   }
 }

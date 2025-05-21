@@ -1,15 +1,15 @@
 #![allow(unused_imports)]
 
 use crate::command::{CLCommandSender, CollaborationCommand};
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use app_error::AppError;
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use database::collab::{
-  insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStorage,
-  CollabStorageAccessControl, GetCollabOrigin,
+  AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl, GetCollabOrigin,
+  insert_into_af_collab_bulk_for_user,
 };
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams,
@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender, channel};
 use tokio::time::timeout;
 use tracing::warn;
 use tracing::{error, instrument, trace};
@@ -214,8 +214,7 @@ where
   ) -> Result<(), AppError> {
     trace!(
       "Queue insert collab:{}:{}",
-      params.object_id,
-      params.collab_type
+      params.object_id, params.collab_type
     );
     if let Err(err) = params.check_encode_collab().await {
       return Err(AppError::NoRequiredData(format!(
@@ -312,8 +311,7 @@ where
         .await?;
       trace!(
         "Update policy for user:{} to create collab:{}",
-        uid,
-        params.object_id
+        uid, params.object_id
       );
       self
         .access_control

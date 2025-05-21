@@ -1,11 +1,11 @@
-use crate::{process_response_data, process_response_error, Client};
+use crate::{Client, process_response_data, process_response_error};
 
 use app_error::AppError;
 use bytes::Bytes;
 use futures_util::TryStreamExt;
 use mime::Mime;
-use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
-use reqwest::{header, Method, StatusCode};
+use percent_encoding::{NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
+use reqwest::{Method, StatusCode, header};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
 use shared_entity::response::AppResponseError;
 

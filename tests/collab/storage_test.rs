@@ -1,6 +1,6 @@
 use app_error::ErrorCode;
-use appflowy_collaborate::collab::cache::mem_cache::CollabMemCache;
 use appflowy_collaborate::CollabMetrics;
+use appflowy_collaborate::collab::cache::mem_cache::CollabMemCache;
 use client_api_test::*;
 use collab::core::transaction::DocTransactionExtension;
 use collab::entity::EncodedCollab;
@@ -12,8 +12,8 @@ use database_entity::dto::{
 };
 use sqlx::types::Uuid;
 use std::collections::HashMap;
-use workspace_template::document::getting_started::GettingStartedTemplate;
 use workspace_template::WorkspaceTemplateBuilder;
+use workspace_template::document::getting_started::GettingStartedTemplate;
 
 use crate::collab::util::{redis_connection_manager, test_encode_collab_v1};
 

@@ -158,7 +158,9 @@ pub enum AppError {
   #[error("There is existing access request for workspace {workspace_id} and view {view_id}")]
   AccessRequestAlreadyExists { workspace_id: Uuid, view_id: Uuid },
 
-  #[error("There is existing published view for workspace {workspace_id} with publish_name {publish_name}")]
+  #[error(
+    "There is existing published view for workspace {workspace_id} with publish_name {publish_name}"
+  )]
   PublishNameAlreadyExists {
     workspace_id: Uuid,
     publish_name: String,

@@ -4,8 +4,8 @@ use dashmap::DashMap;
 use redis::aio::MultiplexedConnection;
 use redis::{AsyncCommands, Client, RedisError};
 use std::sync::Arc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 

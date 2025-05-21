@@ -9,8 +9,8 @@ use collab_database::{
   entity::FieldType,
   error::DatabaseError,
   fields::{
-    date_type_option::DateTypeOption, default_field_settings_for_fields,
-    select_type_option::SingleSelectTypeOption, Field, TypeOptionData,
+    Field, TypeOptionData, date_type_option::DateTypeOption, default_field_settings_for_fields,
+    select_type_option::SingleSelectTypeOption,
   },
   views::{
     BoardLayoutSetting, CalendarLayoutSetting, DatabaseLayout, FieldSettingsByFieldIdMap, Group,
@@ -86,14 +86,16 @@ fn resolve_board_dependencies(
   }?;
 
   let groups = group_ids.iter().map(|id| Group::new(id.clone())).collect();
-  let group_settings: Vec<GroupSettingMap> = vec![GroupSetting {
-    id: gen_database_group_id(),
-    field_id: group_field.id.clone(),
-    field_type: group_field.field_type,
-    groups,
-    content: Default::default(),
-  }
-  .into()];
+  let group_settings: Vec<GroupSettingMap> = vec![
+    GroupSetting {
+      id: gen_database_group_id(),
+      field_id: group_field.id.clone(),
+      field_type: group_field.field_type,
+      groups,
+      content: Default::default(),
+    }
+    .into(),
+  ];
 
   let mut layout_settings = LayoutSettings::default();
   layout_settings.insert(database_layout, BoardLayoutSetting::new().into());

@@ -14,7 +14,7 @@ use crate::collab::util::{
   generate_random_bytes, generate_random_string, make_big_collab_doc_state,
 };
 use client_api_test::*;
-use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
+use collab_rt_entity::{CollabMessage, MAXIMUM_REALTIME_MESSAGE_SIZE, RealtimeMessage, UpdateSync};
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
   let collab_type = CollabType::Unknown;

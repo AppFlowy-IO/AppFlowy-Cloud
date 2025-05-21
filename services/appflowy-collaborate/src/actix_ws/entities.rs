@@ -4,8 +4,8 @@ use app_error::AppError;
 
 use bytes::Bytes;
 use collab_entity::CollabType;
-use collab_rt_entity::user::RealtimeUser;
 pub use collab_rt_entity::RealtimeMessage;
+use collab_rt_entity::user::RealtimeUser;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::Debug;
 use uuid::Uuid;

@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::document::util::create_document_from_json;
 use crate::hierarchy_builder::{ViewBuilder, WorkspaceViewBuilder};
-use crate::{gen_view_id, TemplateData, WorkspaceTemplate};
+use crate::{TemplateData, WorkspaceTemplate, gen_view_id};
 
 pub struct VaultTemplate;
 

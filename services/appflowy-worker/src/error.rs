@@ -169,64 +169,54 @@ impl ImportError {
         ),
         format!("Task ID: {} - Internal error: {}", task_id, err),
       ),
-      ImportError::UnZipFileError(_) => {
-        (
-          format!(
-            "Task ID: {} - There was an issue unzipping the file. Please check the file and try again.",
-            task_id
-          ),
-          format!("Task ID: {} - Unzip file error", task_id),
-        )
-      }
-      ImportError::UploadFileNotFound => {
-        (
-          format!(
-            "Task ID: {} - The upload file could not be found. Please check the file and try again.",
-            task_id
-          ),
-          format!("Task ID: {} - Upload file not found", task_id),
-        )
-      }
-      ImportError::UploadFileExpire => {
-        (
-          format!(
-            "Task ID: {} - The upload file has expired. Please upload the file again.",
-            task_id
-          ),
-          format!("Task ID: {} - Upload file expired", task_id),
-        )
-      }
-      ImportError::UpgradeToLatestVersion(s) => {
-        (
-          format!(
-            "Task ID: {} - {}, please upgrade to the latest version of the app to import this file",
-            task_id,
-            s,
-
-          ),
-          format!("Task ID: {} - Upgrade to latest version", task_id),
-        )
-      }
-      ImportError::UploadFileTooLarge{ file_size_in_mb, max_size_in_mb}=> {
-        (
-          format!(
-            "Task ID: {} - The file size is too large. The maximum file size allowed is {} MB. Please upload a smaller file.",
-            task_id,
-            max_size_in_mb,
-          ),
-          format!("Task ID: {} - Upload file too large: {} MB", task_id, file_size_in_mb),
-        )
-      }
-      ImportError::InvalidUuid(err) =>  {
-        (
-          format!(
-            "Task ID: {} - Identifier is not valid UUID: {}",
-            task_id,
-            err
-          ),
-          format!("Task ID: {} - Identifier is not valid UUID", task_id),
-        )
-      }
+      ImportError::UnZipFileError(_) => (
+        format!(
+          "Task ID: {} - There was an issue unzipping the file. Please check the file and try again.",
+          task_id
+        ),
+        format!("Task ID: {} - Unzip file error", task_id),
+      ),
+      ImportError::UploadFileNotFound => (
+        format!(
+          "Task ID: {} - The upload file could not be found. Please check the file and try again.",
+          task_id
+        ),
+        format!("Task ID: {} - Upload file not found", task_id),
+      ),
+      ImportError::UploadFileExpire => (
+        format!(
+          "Task ID: {} - The upload file has expired. Please upload the file again.",
+          task_id
+        ),
+        format!("Task ID: {} - Upload file expired", task_id),
+      ),
+      ImportError::UpgradeToLatestVersion(s) => (
+        format!(
+          "Task ID: {} - {}, please upgrade to the latest version of the app to import this file",
+          task_id, s,
+        ),
+        format!("Task ID: {} - Upgrade to latest version", task_id),
+      ),
+      ImportError::UploadFileTooLarge {
+        file_size_in_mb,
+        max_size_in_mb,
+      } => (
+        format!(
+          "Task ID: {} - The file size is too large. The maximum file size allowed is {} MB. Please upload a smaller file.",
+          task_id, max_size_in_mb,
+        ),
+        format!(
+          "Task ID: {} - Upload file too large: {} MB",
+          task_id, file_size_in_mb
+        ),
+      ),
+      ImportError::InvalidUuid(err) => (
+        format!(
+          "Task ID: {} - Identifier is not valid UUID: {}",
+          task_id, err
+        ),
+        format!("Task ID: {} - Identifier is not valid UUID", task_id),
+      ),
     }
   }
 }

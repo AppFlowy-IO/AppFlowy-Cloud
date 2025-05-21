@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use appflowy_ai_client::dto::CalculateSimilarityParams;
-use client_api_test::{ai_test_enabled, collect_answer, TestClient};
+use client_api_test::{TestClient, ai_test_enabled, collect_answer};
 use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;

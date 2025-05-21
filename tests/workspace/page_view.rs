@@ -2,12 +2,12 @@ use std::{collections::HashSet, time::Duration};
 
 use client_api::entity::{QueryCollab, QueryCollabParams};
 use client_api_test::{
-  generate_unique_registered_user, generate_unique_registered_user_client, TestClient,
+  TestClient, generate_unique_registered_user, generate_unique_registered_user_client,
 };
 use collab::core::origin::CollabClient;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use shared_entity::dto::workspace_dto::{
   AddRecentPagesParams, AppendBlockToPageParams, CreateFolderViewParams,
   CreatePageDatabaseViewParams, CreatePageParams, CreateSpaceParams, DuplicatePageParams,
@@ -514,10 +514,12 @@ async fn move_page_to_trash_then_restore() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  assert!(!folder
-    .get_my_trash_sections()
-    .iter()
-    .any(|v| v.id == view_ids_to_be_deleted[0].to_string()));
+  assert!(
+    !folder
+      .get_my_trash_sections()
+      .iter()
+      .any(|v| v.id == view_ids_to_be_deleted[0].to_string())
+  );
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -533,10 +535,12 @@ async fn move_page_to_trash_then_restore() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  assert!(!folder
-    .get_my_trash_sections()
-    .iter()
-    .any(|v| v.id == view_ids_to_be_deleted[1].to_string()));
+  assert!(
+    !folder
+      .get_my_trash_sections()
+      .iter()
+      .any(|v| v.id == view_ids_to_be_deleted[1].to_string())
+  );
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -601,10 +605,12 @@ async fn move_page_with_child_to_trash_then_restore() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  assert!(!folder
-    .get_my_trash_sections()
-    .iter()
-    .any(|v| v.id == general_space.view_id.to_string()));
+  assert!(
+    !folder
+      .get_my_trash_sections()
+      .iter()
+      .any(|v| v.id == general_space.view_id.to_string())
+  );
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -669,13 +675,17 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  assert!(folder
-    .get_view(&general_space.view_id.to_string())
-    .is_none());
-  assert!(!folder
-    .get_my_trash_sections()
-    .iter()
-    .any(|v| v.id == general_space.view_id.to_string()));
+  assert!(
+    folder
+      .get_view(&general_space.view_id.to_string())
+      .is_none()
+  );
+  assert!(
+    !folder
+      .get_my_trash_sections()
+      .iter()
+      .any(|v| v.id == general_space.view_id.to_string())
+  );
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)
@@ -740,13 +750,17 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  assert!(folder
-    .get_view(&general_space.view_id.to_string())
-    .is_none());
-  assert!(!folder
-    .get_my_trash_sections()
-    .iter()
-    .any(|v| v.id == general_space.view_id.to_string()));
+  assert!(
+    folder
+      .get_view(&general_space.view_id.to_string())
+      .is_none()
+  );
+  assert!(
+    !folder
+      .get_my_trash_sections()
+      .iter()
+      .any(|v| v.id == general_space.view_id.to_string())
+  );
   let view_found = web_client
     .api_client
     .get_workspace_trash(&workspace_id)

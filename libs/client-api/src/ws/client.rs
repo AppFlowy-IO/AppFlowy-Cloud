@@ -9,9 +9,9 @@ use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 // use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use semver::Version;
-use tokio::sync::broadcast::{channel, Receiver, Sender};
-use tokio::sync::oneshot;
 use tokio::sync::Mutex;
+use tokio::sync::broadcast::{Receiver, Sender, channel};
+use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
 use tokio_tungstenite::tungstenite::http::{HeaderMap, HeaderValue};
 use tracing::{error, info, trace, warn};
@@ -21,9 +21,9 @@ use crate::retry::retry_connect;
 use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
 use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
 use client_websocket::{CloseCode, CloseFrame, Message, WebSocketStream};
-use collab_rt_entity::user::UserMessage;
 use collab_rt_entity::ClientCollabMessage;
 use collab_rt_entity::ServerCollabMessage;
+use collab_rt_entity::user::UserMessage;
 use collab_rt_entity::{RealtimeMessage, SystemMessage};
 
 pub struct WSClientConfig {

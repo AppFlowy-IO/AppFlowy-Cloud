@@ -1,8 +1,8 @@
 use crate::config::{Config, DatabaseSetting, Environment, S3Setting};
 use anyhow::Error;
 use redis::aio::ConnectionManager;
-use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 
 use crate::import_worker::worker::run_import_worker;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
@@ -14,7 +14,7 @@ use axum::Router;
 
 use crate::mailer::AFWorkerMailer;
 use crate::metric::ImportMetrics;
-use appflowy_worker::indexer_worker::{run_background_indexer, BackgroundIndexerConfig};
+use appflowy_worker::indexer_worker::{BackgroundIndexerConfig, run_background_indexer};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -30,8 +30,8 @@ use tokio::net::TcpListener;
 use tokio::task::LocalSet;
 use tracing::info;
 use tracing::subscriber::set_global_default;
-use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt;
 
 pub async fn run_server(
   listener: TcpListener,

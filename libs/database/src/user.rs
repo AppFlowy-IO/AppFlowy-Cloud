@@ -108,13 +108,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
   email: &str,
   name: &str,
 ) -> Result<Uuid, AppError> {
-  let name = {
-    if name.is_empty() {
-      email
-    } else {
-      name
-    }
-  };
+  let name = { if name.is_empty() { email } else { name } };
 
   let row = sqlx::query!(
     r#"

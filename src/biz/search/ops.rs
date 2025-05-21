@@ -8,7 +8,7 @@ use appflowy_ai_client::dto::EmbeddingModel;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab_folder::{Folder, View};
 use database::collab::GetCollabOrigin;
-use database::index::{search_documents, SearchDocumentParams};
+use database::index::{SearchDocumentParams, search_documents};
 use indexer::scheduler::IndexerScheduler;
 use indexer::vector::embedder::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFormat};
 use infra::env_util::get_env_var;
@@ -143,10 +143,7 @@ pub async fn search_document(
 
   trace!(
     "[Search] query: {}, limit: {}, score: {:?}, workspace: {}",
-    request.query,
-    params.limit,
-    params.score,
-    params.workspace_id,
+    request.query, params.limit, params.score, params.workspace_id,
   );
 
   // Perform document search.

@@ -1,11 +1,11 @@
 use app_error::AppError;
+use async_openai::Client;
 use async_openai::config::{AzureConfig, Config, OpenAIConfig};
 use async_openai::types::{
   ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
   CreateChatCompletionRequestArgs, ResponseFormat, ResponseFormatJsonSchema,
 };
-use async_openai::Client;
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{error, info, trace};

@@ -1,4 +1,4 @@
-use crate::error::{internal, StreamError};
+use crate::error::{StreamError, internal};
 use collab::core::awareness::AwarenessUpdate;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::updates::decoder::Decode;

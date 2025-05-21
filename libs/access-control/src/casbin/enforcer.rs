@@ -1,4 +1,4 @@
-use super::access::{load_group_policies, POLICY_FIELD_INDEX_OBJECT, POLICY_FIELD_INDEX_SUBJECT};
+use super::access::{POLICY_FIELD_INDEX_OBJECT, POLICY_FIELD_INDEX_SUBJECT, load_group_policies};
 use crate::act::Acts;
 use crate::entity::{ObjectType, SubjectType};
 use crate::metrics::MetricsCalState;

@@ -1,7 +1,7 @@
 use anyhow::Error;
 use client_api_entity::GotrueTokenResponse;
 use std::ops::{Deref, DerefMut};
-use tokio::sync::broadcast::{channel, Receiver, Sender};
+use tokio::sync::broadcast::{Receiver, Sender, channel};
 use tracing::{event, warn};
 
 pub type TokenStateReceiver = Receiver<TokenState>;

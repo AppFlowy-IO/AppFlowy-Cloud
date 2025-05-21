@@ -1,12 +1,12 @@
 use crate::response::{AppResponse, AppResponseError};
 use app_error::{AppError, ErrorCode};
 use bytes::{Buf, Bytes, BytesMut};
-use futures::{ready, Stream, TryStreamExt};
+use futures::{Stream, TryStreamExt, ready};
 
 use pin_project::pin_project;
 use serde::de::DeserializeOwned;
-use serde_json::de::SliceRead;
 use serde_json::StreamDeserializer;
+use serde_json::de::SliceRead;
 
 use crate::dto::ai_dto::StringOrMessage;
 use futures::stream::StreamExt;

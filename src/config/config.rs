@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use indexer::vector::embedder::get_open_ai_config;
 use infra::env_util::{get_env_var, get_env_var_opt};

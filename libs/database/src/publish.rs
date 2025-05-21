@@ -75,7 +75,9 @@ pub async fn insert_non_orginal_workspace_publish_namespace(
   if res.rows_affected() != 1 {
     tracing::error!(
       "Failed to insert workspace publish namespace, workspace_id: {}, new_namespace: {}, rows_affected: {}",
-      workspace_id, new_namespace, res.rows_affected()
+      workspace_id,
+      new_namespace,
+      res.rows_affected()
     );
   }
 
@@ -107,7 +109,9 @@ pub async fn update_non_orginal_workspace_publish_namespace(
   if res.rows_affected() != 1 {
     tracing::error!(
       "Failed to update workspace publish namespace, workspace_id: {}, new_namespace: {}, rows_affected: {}",
-      workspace_id, new_namespace, res.rows_affected()
+      workspace_id,
+      new_namespace,
+      res.rows_affected()
     );
   }
 
@@ -134,8 +138,10 @@ pub async fn update_workspace_default_publish_view<'a, E: Executor<'a, Database 
 
   if res.rows_affected() != 1 {
     tracing::error!(
-        "Failed to update workspace default publish view, workspace_id: {}, new_view_id: {}, rows_affected: {}",
-        workspace_id, new_view_id, res.rows_affected()
+      "Failed to update workspace default publish view, workspace_id: {}, new_view_id: {}, rows_affected: {}",
+      workspace_id,
+      new_view_id,
+      res.rows_affected()
     );
   }
 
@@ -302,7 +308,10 @@ pub async fn insert_or_replace_publish_collabs(
   if res.rows_affected() != item_count as u64 {
     tracing::warn!(
       "Failed to insert or replace publish collab meta batch, workspace_id: {}, publisher_uuid: {}, rows_affected: {}, item_count: {}",
-      workspace_id, publisher_uuid, res.rows_affected(), item_count
+      workspace_id,
+      publisher_uuid,
+      res.rows_affected(),
+      item_count
     );
   }
 
@@ -416,11 +425,11 @@ pub async fn update_published_collabs(
 
     if res.rows_affected() != 1 {
       tracing::error!(
-          "Failed to update published collab publish name, workspace_id: {}, view_id: {}, rows_affected: {}",
-          workspace_id,
-          patch.view_id,
-          res.rows_affected()
-        );
+        "Failed to update published collab publish name, workspace_id: {}, view_id: {}, rows_affected: {}",
+        workspace_id,
+        patch.view_id,
+        res.rows_affected()
+      );
     }
   }
 

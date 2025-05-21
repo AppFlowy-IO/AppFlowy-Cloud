@@ -1,4 +1,4 @@
-use appflowy_cloud::application::{init_state, Application};
+use appflowy_cloud::application::{Application, init_state};
 use appflowy_cloud::config::config::get_configuration;
 use appflowy_cloud::telemetry::init_subscriber;
 

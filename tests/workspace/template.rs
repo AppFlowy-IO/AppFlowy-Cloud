@@ -113,12 +113,16 @@ async fn test_template_category_crud() {
     .categories;
   // Since the table might not be in a clean state, we can't guarantee that there is only one category of type Feature
   assert!(!category_by_type_search_result.is_empty());
-  assert!(category_by_type_search_result
-    .iter()
-    .all(|r| r.category_type == TemplateCategoryType::Feature));
-  assert!(category_by_type_search_result
-    .iter()
-    .any(|r| r.name == second_category_name));
+  assert!(
+    category_by_type_search_result
+      .iter()
+      .all(|r| r.category_type == TemplateCategoryType::Feature)
+  );
+  assert!(
+    category_by_type_search_result
+      .iter()
+      .any(|r| r.name == second_category_name)
+  );
   let result = guest_client
     .delete_template_category(new_template_category.id)
     .await;

@@ -9,7 +9,7 @@ use reqwest::Method;
 use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::{process_response_data, process_response_error, Client};
+use crate::{Client, process_response_data, process_response_error};
 
 fn template_api_prefix(base_url: &str) -> String {
   format!("{}/api/template-center", base_url)

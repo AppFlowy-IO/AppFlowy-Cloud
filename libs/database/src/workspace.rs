@@ -4,7 +4,7 @@ use database_entity::dto::{
   InvitationCodeInfo, Reaction,
 };
 use futures_util::stream::BoxStream;
-use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
+use sqlx::{Executor, PgPool, Postgres, Transaction, types::uuid};
 use std::{collections::HashMap, ops::DerefMut};
 use tracing::{event, instrument};
 use uuid::Uuid;
@@ -1197,7 +1197,10 @@ pub async fn insert_comment_to_published_view<'a, E: Executor<'a, Database = Pos
   if res.rows_affected() != 1 {
     tracing::error!(
       "Failed to insert comment to published view, view_id: {}, user_id: {}, content: {}, rows_affected: {}",
-      view_id, user_uuid, content, res.rows_affected()
+      view_id,
+      user_uuid,
+      content,
+      res.rows_affected()
     );
   }
 
@@ -1311,7 +1314,10 @@ pub async fn insert_reaction_on_comment<'a, E: Executor<'a, Database = Postgres>
   if res.rows_affected() != 1 {
     tracing::error!(
       "Failed to insert reaction to comment, comment_id: {}, user_id: {}, reaction_type: {}, rows_affected: {}",
-      comment_id, user_uuid, reaction_type, res.rows_affected()
+      comment_id,
+      user_uuid,
+      reaction_type,
+      res.rows_affected()
     );
   };
 
@@ -1337,7 +1343,10 @@ pub async fn delete_reaction_from_comment<'a, E: Executor<'a, Database = Postgre
   if res.rows_affected() != 1 {
     tracing::error!(
       "Failed to delete reaction from published comment, comment_id: {}, user_id: {}, reaction_type: {}, rows_affected: {}",
-      comment_id, user_uuid, reaction_type, res.rows_affected()
+      comment_id,
+      user_uuid,
+      reaction_type,
+      res.rows_affected()
     );
   };
 

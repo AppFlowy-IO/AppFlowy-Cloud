@@ -7,7 +7,7 @@ use serde_json::json;
 use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::{process_response_data, process_response_error, Client};
+use crate::{Client, process_response_data, process_response_error};
 
 impl Client {
   pub async fn share_view_with_guest(

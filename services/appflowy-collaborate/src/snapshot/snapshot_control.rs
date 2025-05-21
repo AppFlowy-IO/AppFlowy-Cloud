@@ -11,8 +11,8 @@ use validator::Validate;
 
 use app_error::AppError;
 use database::collab::{
-  get_all_collab_snapshot_meta, latest_snapshot_time, select_snapshot, AppResult,
-  COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
+  AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR, get_all_collab_snapshot_meta,
+  latest_snapshot_time, select_snapshot,
 };
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::file::{BucketClient, ResponseBlob};
@@ -97,8 +97,7 @@ impl SnapshotControl {
       (Some(time), Some(threshold_time)) => {
         trace!(
           "latest snapshot time: {}, threshold time: {}",
-          time,
-          threshold_time
+          time, threshold_time
         );
         Ok(time < threshold_time)
       },

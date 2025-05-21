@@ -1,6 +1,6 @@
 use crate::gen_view_id;
 use collab_folder::{
-  timestamp, IconType, RepeatedViewIdentifier, View, ViewIcon, ViewIdentifier, ViewLayout,
+  IconType, RepeatedViewIdentifier, View, ViewIcon, ViewIdentifier, ViewLayout, timestamp,
 };
 use std::future::Future;
 

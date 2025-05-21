@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use axum::{response::IntoResponse, Json};
+use axum::{Json, response::IntoResponse};
 
 #[derive(serde::Serialize)]
 pub struct WebApiResponse<T>

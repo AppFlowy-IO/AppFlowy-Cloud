@@ -1,11 +1,11 @@
 use client_api::entity::{QueryCollab, QueryCollabParams, UpdateCollabWebParams};
 use client_api_test::{
-  assert_client_collab_within_secs, assert_server_collab, generate_unique_registered_user,
-  TestClient,
+  TestClient, assert_client_collab_within_secs, assert_server_collab,
+  generate_unique_registered_user,
 };
 use collab_entity::CollabType;
 use serde_json::json;
-use yrs::{updates::decoder::Decode, Map, ReadTxn, StateVector, Transact};
+use yrs::{Map, ReadTxn, StateVector, Transact, updates::decoder::Decode};
 
 #[tokio::test]
 async fn web_and_native_app_edit_same_collab_test() {

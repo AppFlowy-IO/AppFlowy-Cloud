@@ -1,17 +1,17 @@
 use crate::metrics::CollabStreamMetrics;
 use loole::{Receiver, Sender};
-use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::Client;
 use redis::Commands;
 use redis::Connection;
 use redis::RedisError;
 use redis::RedisResult;
 use redis::Value;
+use redis::streams::{StreamReadOptions, StreamReadReply};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
-use std::sync::Arc;
-use std::thread::{sleep, JoinHandle};
+use std::thread::{JoinHandle, sleep};
 use std::time::Duration;
 
 /// Redis stream key.

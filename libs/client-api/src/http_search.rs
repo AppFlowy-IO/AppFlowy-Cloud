@@ -6,7 +6,7 @@ use shared_entity::dto::search_dto::{
 use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::{process_response_data, Client};
+use crate::{Client, process_response_data};
 
 impl Client {
   /// If `score` is `None`, it will use the score from the server. High score means more relevant.

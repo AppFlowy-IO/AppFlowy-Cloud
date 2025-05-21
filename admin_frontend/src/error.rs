@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use axum::{
-  http::{status, StatusCode},
+  http::{StatusCode, status},
   response::{IntoResponse, Redirect},
 };
 

@@ -1,5 +1,5 @@
 use actix_web::web::Data;
-use actix_web::{web, Scope};
+use actix_web::{Scope, web};
 use shared_entity::dto::server_info_dto::ServerInfoResponseItem;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 

@@ -7,12 +7,12 @@ use sqlx::PgPool;
 
 // Book content broken into logical chunks for testing
 const TEST_CHUNKS: [&str; 6] = [
-    "The Five Dysfunctions of a Team",
-    "Part I: Underachievement - Introduces Kathryn Petersen, the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup with a dysfunctional executive team.",
-    "Part II: Lighting the Fire - Kathryn organizes an offsite meeting to build trust and introduce constructive conflict, encouraging open discussion about disagreements.",
-    "Part IV: Traction - The team experiences benefits of improved trust and open conflict, with accountability becoming routine and meetings increasingly productive.",
-    "The Model identifies five key dysfunctions: Absence of Trust, Fear of Conflict, Lack of Commitment, Avoidance of Accountability, and Inattention to Results.",
-    "The book provides practical strategies for building trust, encouraging conflict, ensuring commitment, embracing accountability, and focusing on collective results."
+  "The Five Dysfunctions of a Team",
+  "Part I: Underachievement - Introduces Kathryn Petersen, the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup with a dysfunctional executive team.",
+  "Part II: Lighting the Fire - Kathryn organizes an offsite meeting to build trust and introduce constructive conflict, encouraging open discussion about disagreements.",
+  "Part IV: Traction - The team experiences benefits of improved trust and open conflict, with accountability becoming routine and meetings increasingly productive.",
+  "The Model identifies five key dysfunctions: Absence of Trust, Fear of Conflict, Lack of Commitment, Avoidance of Accountability, and Inattention to Results.",
+  "The book provides practical strategies for building trust, encouraging conflict, ensuring commitment, embracing accountability, and focusing on collective results.",
 ];
 
 #[sqlx::test(migrations = false)]
@@ -94,7 +94,7 @@ async fn test_embed_over_context_size(pool: PgPool) {
   let doc_id = uuid::Uuid::new_v4();
   let workspace_id = user.workspace_id;
   create_test_collab_document(&pool, &user.uid, &workspace_id, &doc_id).await;
-  let content= "The Five Dysfunctions of a Team Part I: Underachievement - Introduces Kathryn Petersen, the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup with a dysfunctional executive team. Part II: Lighting the Fire - Kathryn organizes an offsite meeting to build trust and introduce constructive conflict, encouraging open discussion about disagreements. Part IV: Traction - The team experiences benefits of improved trust and open conflict, with accountability becoming routine and meetings increasingly productive. The Model identifies five key dysfunctions: Absence of Trust, Fear of Conflict, Lack of Commitment, Avoidance of Accountability, and Inattention to Results. The book provides practical strategies for building trust, encouraging conflict, ensuring commitment, embracing accountability, and focusing on collective results.";
+  let content = "The Five Dysfunctions of a Team Part I: Underachievement - Introduces Kathryn Petersen, the newly appointed CEO of DecisionTech, a struggling Silicon Valley startup with a dysfunctional executive team. Part II: Lighting the Fire - Kathryn organizes an offsite meeting to build trust and introduce constructive conflict, encouraging open discussion about disagreements. Part IV: Traction - The team experiences benefits of improved trust and open conflict, with accountability becoming routine and meetings increasingly productive. The Model identifies five key dysfunctions: Absence of Trust, Fear of Conflict, Lack of Commitment, Avoidance of Accountability, and Inattention to Results. The book provides practical strategies for building trust, encouraging conflict, ensuring commitment, embracing accountability, and focusing on collective results.";
   let chunks = split_text_into_chunks(
     doc_id,
     vec![content.to_string()],

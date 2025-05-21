@@ -1,5 +1,5 @@
 use crate::http_chat::CompletionStream;
-use crate::{process_response_data, Client};
+use crate::{Client, process_response_data};
 use bytes::Bytes;
 use futures_core::Stream;
 use reqwest::Method;

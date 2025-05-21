@@ -1,5 +1,5 @@
 use crate::error::WorkerError;
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use aws_sdk_s3::error::SdkError;
 use std::fs::Permissions;
 
@@ -8,8 +8,8 @@ use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::operation::head_object::{HeadObjectError, HeadObjectOutput};
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use futures::AsyncReadExt;
 use std::ops::Deref;
 use std::os::unix::fs::PermissionsExt;
@@ -92,8 +92,7 @@ impl S3Client for S3ClientImpl {
 
         trace!(
           "get object from S3: {} ({:?} bytes)",
-          object_key,
-          content_length
+          object_key, content_length
         );
 
         Ok(S3StreamResponse {
@@ -270,14 +269,12 @@ pub async fn download_file(
   let zip_file_path = zip_file_dir.join("file.zip");
   trace!(
     "[Import] {} start to write stream to file: {:?}",
-    workspace_id,
-    zip_file_path
+    workspace_id, zip_file_path
   );
   write_stream_to_file(&zip_file_path, expected_md5_base64, stream).await?;
   trace!(
     "[Import] {} finish writing stream to file: {:?}",
-    workspace_id,
-    zip_file_path
+    workspace_id, zip_file_path
   );
   Ok(AutoRemoveDownloadedFile {
     zip_file_path,

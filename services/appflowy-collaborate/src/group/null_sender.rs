@@ -1,5 +1,5 @@
-use crate::error::RealtimeError;
 use crate::RealtimeClientWebsocketSink;
+use crate::error::RealtimeError;
 use collab_rt_entity::RealtimeMessage;
 use futures::Sink;
 use std::marker::PhantomData;

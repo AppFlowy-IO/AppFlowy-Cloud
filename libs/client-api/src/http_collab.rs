@@ -1,6 +1,6 @@
 use crate::entity::CollabType;
 use crate::{
-  blocking_brotli_compress, brotli_compress, process_response_data, process_response_error, Client,
+  Client, blocking_brotli_compress, brotli_compress, process_response_data, process_response_error,
 };
 use anyhow::anyhow;
 use app_error::AppError;
@@ -16,8 +16,8 @@ use client_api_entity::{
   CreateCollabParams, DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams,
   RepeatedAFCollabEmbedInfo, UpdateCollabWebParams,
 };
-use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
+use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use futures::Stream;
 use futures_util::stream;
 use prost::Message;

@@ -19,8 +19,7 @@ impl ImportNotifier for EmailNotifier {
         let subject = "Notification: Import Report";
         trace!(
           "[Import]: sending import notion report email to {}, params: {:?}",
-          result.user_email,
-          result,
+          result.user_email, result,
         );
 
         let template_name = if result.is_success {

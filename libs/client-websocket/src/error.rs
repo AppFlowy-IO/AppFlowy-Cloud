@@ -1,4 +1,4 @@
-use http::{header::HeaderName, Response};
+use http::{Response, header::HeaderName};
 use std::{io, result, str, string};
 use thiserror::Error;
 use tokio_tungstenite::tungstenite::http;

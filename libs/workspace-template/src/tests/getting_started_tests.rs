@@ -7,10 +7,10 @@ use collab_document::document_data::generate_id;
 use collab_entity::CollabType;
 use serde_json::json;
 
-use crate::document::getting_started::*;
 use crate::TemplateData;
 use crate::TemplateObjectId;
-use crate::{hierarchy_builder::WorkspaceViewBuilder, WorkspaceTemplate};
+use crate::document::getting_started::*;
+use crate::{WorkspaceTemplate, hierarchy_builder::WorkspaceViewBuilder};
 
 #[cfg(test)]
 mod tests {

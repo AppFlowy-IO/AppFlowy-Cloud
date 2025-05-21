@@ -4,7 +4,7 @@ use crate::ws::{
 };
 
 use app_error::gotrue::GoTrueError;
-use client_websocket::{connect_async, WebSocketStream};
+use client_websocket::{WebSocketStream, connect_async};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use parking_lot::RwLock;
 use std::future::Future;

@@ -1,4 +1,4 @@
-use client_api_test::{ai_test_enabled, TestClient};
+use client_api_test::{TestClient, ai_test_enabled};
 use serde_json::json;
 use shared_entity::dto::ai_dto::{SummarizeRowData, SummarizeRowParams};
 

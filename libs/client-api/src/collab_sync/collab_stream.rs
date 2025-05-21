@@ -13,19 +13,19 @@ use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, trace, warn};
 use uuid::Uuid;
+use yrs::ReadTxn;
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::Encode;
-use yrs::ReadTxn;
 
-use client_api_entity::{validate_data_for_folder, CollabType};
+use client_api_entity::{CollabType, validate_data_for_folder};
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
 use collab_rt_protocol::{
   ClientSyncProtocol, CollabSyncProtocol, Message, MessageReader, SyncMessage,
 };
 
 use crate::collab_sync::{
-  start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
+  CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason, start_sync,
 };
 
 pub type CollabRef = Weak<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
@@ -474,9 +474,7 @@ impl SeqNumCounter {
     if cfg!(feature = "sync_verbose_log") {
       trace!(
         "receive {} seq_num, ack:{}, broadcast:{}",
-        object_id,
-        ack_seq_num,
-        broadcast_seq_num,
+        object_id, ack_seq_num, broadcast_seq_num,
       );
     }
 

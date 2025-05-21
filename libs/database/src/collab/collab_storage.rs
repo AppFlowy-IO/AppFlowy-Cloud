@@ -147,7 +147,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   async fn delete_collab(&self, workspace_id: &Uuid, uid: &i64, object_id: &Uuid) -> AppResult<()>;
 
   async fn should_create_snapshot(&self, workspace_id: &Uuid, oid: &Uuid)
-    -> Result<bool, AppError>;
+  -> Result<bool, AppError>;
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta>;
   async fn queue_snapshot(&self, params: InsertSnapshotParams) -> AppResult<()>;

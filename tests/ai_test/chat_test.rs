@@ -5,7 +5,7 @@ use appflowy_ai_client::dto::{
   ChatQuestionQuery, OutputContent, OutputContentMetadata, OutputLayout, ResponseFormat,
 };
 use client_api::entity::{QuestionStream, QuestionStreamValue};
-use client_api_test::{ai_test_enabled, TestClient};
+use client_api_test::{TestClient, ai_test_enabled};
 use futures_util::StreamExt;
 use serde_json::json;
 use shared_entity::dto::chat_dto::{

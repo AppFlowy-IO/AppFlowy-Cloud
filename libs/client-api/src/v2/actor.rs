@@ -16,6 +16,7 @@ use futures_util::{SinkExt, StreamExt};
 use shared_entity::response::AppResponseError;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -28,7 +29,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, trace};
+use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -170,6 +171,7 @@ impl WorkspaceControllerActor {
     Ok(())
   }
 
+  #[instrument(level = "trace", skip_all, err)]
   pub async fn bind(
     actor: &Arc<Self>,
     collab: &mut Collab,
@@ -183,6 +185,7 @@ impl WorkspaceControllerActor {
       collab_type
     );
 
+    collab_type.validate_require_data(collab)?;
     let sync_state = collab.get_state().clone();
     let last_message_id = actor.last_message_id.clone();
     sync_state.set_init_state(InitState::Loading);
@@ -356,13 +359,11 @@ impl WorkspaceControllerActor {
     } = &msg
     {
       let rid = source.into();
-      let changed_collab = ChangedCollab {
-        id: *object_id,
-        collab_type: *collab_type,
-      };
-      // Only insert if not already present
-      if !self.latest_changed_collabs.contains(&changed_collab) {
-        self.latest_changed_collabs.insert(changed_collab);
+      if !self.latest_changed_collabs.contains(object_id) {
+        self.latest_changed_collabs.insert(ChangedCollab {
+          id: *object_id,
+          collab_type: *collab_type,
+        });
       }
 
       // persist
@@ -793,13 +794,11 @@ impl WorkspaceControllerActor {
     update_bytes: Vec<u8>,
     action_source: ActionSource,
   ) -> anyhow::Result<()> {
-    let changed_collab = ChangedCollab {
-      id: object_id,
-      collab_type,
-    };
-    // Only insert if not already present
-    if !self.latest_changed_collabs.contains(&changed_collab) {
-      self.latest_changed_collabs.insert(changed_collab);
+    if !self.latest_changed_collabs.contains(&object_id) {
+      self.latest_changed_collabs.insert(ChangedCollab {
+        id: object_id,
+        collab_type,
+      });
     }
 
     let missing = self
@@ -1046,8 +1045,26 @@ impl CachedCollab {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct ChangedCollab {
   pub id: ObjectId,
   pub collab_type: CollabType,
+}
+
+impl PartialEq for ChangedCollab {
+  fn eq(&self, other: &Self) -> bool {
+    self.id == other.id
+  }
+}
+impl Eq for ChangedCollab {}
+
+impl Hash for ChangedCollab {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.id.hash(state);
+  }
+}
+impl std::borrow::Borrow<ObjectId> for ChangedCollab {
+  fn borrow(&self) -> &ObjectId {
+    &self.id
+  }
 }

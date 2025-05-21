@@ -91,10 +91,11 @@ impl Db {
       Ok(_) => {
         ops.commit_transaction()?;
         trace!(
-          "Save collab {}/{}/{} to local db",
+          "Save collab {}/{}/{} to local db. store: {:#?}",
           &self.workspace_id,
           collab_id,
           collab_type,
+          tx.store()
         );
         Ok(true)
       },

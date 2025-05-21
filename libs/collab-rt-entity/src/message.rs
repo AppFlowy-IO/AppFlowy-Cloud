@@ -1,4 +1,4 @@
-use anyhow::{Error, anyhow};
+use anyhow::{anyhow, Error};
 use bincode::{DefaultOptions, Options};
 use std::collections::HashMap;
 

@@ -1,7 +1,7 @@
 use crate::pb;
 use crate::pb::collab_message::Data;
 use crate::pb::message::Payload;
-use crate::pb::{SyncRequest, UserProfileChange, message};
+use crate::pb::{message, SyncRequest, UserProfileChange};
 use crate::shared::{Error, ObjectId, Rid, UpdateFlags};
 use bytes::Bytes;
 use collab::preclude::sync::AwarenessUpdate;

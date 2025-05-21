@@ -1,6 +1,6 @@
 use crate::message::RealtimeMessage;
 use crate::{CollabMessage, MsgId};
-use anyhow::{Error, anyhow};
+use anyhow::{anyhow, Error};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use serde::{Deserialize, Serialize};

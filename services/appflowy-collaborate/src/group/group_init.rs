@@ -734,35 +734,39 @@ impl CollabGroup {
       .await
       .map_err(|err| RTProtocolError::Internal(err.into()))??
     };
+    state
+      .metrics
+      .load_collab_time
+      .observe(start.elapsed().as_millis() as f64);
     let missing_updates = {
-      let state_vector = state.state_vector.read().await;
-      match state_vector.partial_cmp(&decoded_update.state_vector()) {
-        // None marks concurrent state vectors, meaning that current collab group
-        // has some of the updates that the client didn't see and vice versa
-        None => Some(state_vector.clone()),
+      let current_sv = state.state_vector.read().await;
+      let update_sv = decoded_update.state_vector();
+      match current_sv.partial_cmp(&update_sv) {
+        None => {
+          // None marks concurrent state vectors, meaning that current collab group
+          // has some of the updates that the client didn't see and vice versa
+          tracing::trace!("missing updates found for {}", state.object_id);
+          Some(Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1())
+        },
+        Some(std::cmp::Ordering::Greater) if decoded_update.delete_set().is_empty() => {
+          // This update has no new data. In fact server is more up to date, that this
+          // update suggests, so we'll discard it and send sync step back to the client
+          // to let it know that we have new data, that client needs to know about.
+          return Ok(Some(
+            Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1(),
+          ));
+        },
         _ => None,
       }
     };
 
-    if let Some(missing_updates) = missing_updates {
-      let msg = Message::Sync(SyncMessage::SyncStep1(missing_updates));
-      tracing::debug!("subscriber {} send update with missing data", origin);
-      Ok(Some(msg.encode_v1()))
-    } else {
-      state
-        .persister
-        .send_update(origin.clone(), update)
-        .await
-        .map_err(|err| RTProtocolError::Internal(err.into()))?;
-      let elapsed = start.elapsed();
+    state
+      .persister
+      .send_update(origin.clone(), update)
+      .await
+      .map_err(|err| RTProtocolError::Internal(err.into()))?;
 
-      state
-        .metrics
-        .load_collab_time
-        .observe(elapsed.as_millis() as f64);
-
-      Ok(None)
-    }
+    Ok(missing_updates)
   }
 
   async fn handle_update(
@@ -915,7 +919,8 @@ impl CollabPersister {
     let update = CollabStreamUpdate::new(update, sender, UpdateFlags::default());
     let msg_id = self.update_sink.send(&update).await?;
     tracing::trace!(
-      "persisted update from {} ({} bytes) - msg id: {}",
+      "persisted update for {} from {} ({} bytes) - msg id: {}",
+      self.object_id,
       update.sender,
       len,
       msg_id

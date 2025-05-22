@@ -639,19 +639,19 @@ async fn get_workspace_members_handler(
   let workspace_id = workspace_id.into_inner();
   state
     .workspace_access_control
-    .enforce_role(&uid, &workspace_id, AFRole::Member)
+    .enforce_role(&uid, &workspace_id, AFRole::Guest)
     .await?;
-  let members = workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
-    .await?
-    .into_iter()
-    .map(|member| AFWorkspaceMember {
-      name: member.name,
-      email: member.email,
-      role: member.role,
-      avatar_url: member.avatar_url,
-      joined_at: member.created_at,
-    })
-    .collect();
+  let requester_member_info =
+    workspace::ops::get_workspace_member(&uid, &state.pg_pool, &workspace_id).await?;
+  let members: Vec<AFWorkspaceMember> = if requester_member_info.role == AFRole::Guest {
+    vec![requester_member_info.into()]
+  } else {
+    workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
+      .await?
+      .into_iter()
+      .map(|member| member.into())
+      .collect()
+  };
 
   Ok(AppResponse::Ok().with_data(members).into())
 }

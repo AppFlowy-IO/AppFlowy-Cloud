@@ -49,6 +49,15 @@ impl DatabaseCollabService for TestDatabaseCollabService {
     Ok(Collab::new_with_options(CollabOrigin::Empty, options).unwrap())
   }
 
+  async fn finalize_collab(
+    &self,
+    _object_id: Uuid,
+    _collab_type: CollabType,
+    _collab: &mut Collab,
+  ) -> Result<(), DatabaseError> {
+    Ok(())
+  }
+
   async fn get_collabs(
     &self,
     object_ids: Vec<String>,

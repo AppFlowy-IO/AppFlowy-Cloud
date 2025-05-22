@@ -216,6 +216,15 @@ impl DatabaseCollabService for PostgresDatabaseCollabService {
     }
   }
 
+  async fn finalize_collab(
+    &self,
+    _object_id: Uuid,
+    _collab_type: CollabType,
+    _collab: &mut Collab,
+  ) -> Result<(), DatabaseError> {
+    Ok(())
+  }
+
   async fn get_collabs(
     &self,
     object_ids: Vec<String>,

@@ -1,7 +1,7 @@
 use anyhow::Error;
 use serde::de::DeserializeOwned;
-use sqlx::postgres::PgListener;
 use sqlx::PgPool;
+use sqlx::postgres::PgListener;
 use tokio::sync::broadcast;
 use tracing::error;
 

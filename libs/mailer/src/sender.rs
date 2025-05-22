@@ -1,12 +1,12 @@
 use handlebars::Handlebars;
-use lettre::message::header::ContentType;
-use lettre::message::Message;
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::transport::smtp::client::Tls;
-use lettre::transport::smtp::client::TlsParameters;
 use lettre::Address;
 use lettre::AsyncSmtpTransport;
 use lettre::AsyncTransport;
+use lettre::message::Message;
+use lettre::message::header::ContentType;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::transport::smtp::client::Tls;
+use lettre::transport::smtp::client::TlsParameters;
 use secrecy::ExposeSecret;
 
 #[derive(Clone)]

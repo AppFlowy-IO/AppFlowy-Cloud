@@ -2,9 +2,9 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use assert_json_diff::{
-  assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
+  CompareMode, Config, assert_json_eq, assert_json_include, assert_json_matches_no_panic,
 };
 use bytes::Bytes;
 use collab::core::collab::DataSource;
@@ -22,9 +22,9 @@ use collab_folder::{Folder, ViewLayout};
 use collab_user::core::UserAwareness;
 use mime::Mime;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use shared_entity::dto::publish_dto::PublishViewMetaData;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{Duration, sleep, timeout};
 use tokio_stream::StreamExt;
 use tracing::trace;
 use uuid::Uuid;
@@ -52,7 +52,7 @@ use shared_entity::dto::workspace_dto::{
 use shared_entity::response::AppResponseError;
 
 use crate::database_util::TestDatabaseCollabService;
-use crate::user::{generate_unique_registered_user, User};
+use crate::user::{User, generate_unique_registered_user};
 use crate::{load_env, localhost_client_with_device_id, setup_log};
 
 pub type CollabRef = Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;

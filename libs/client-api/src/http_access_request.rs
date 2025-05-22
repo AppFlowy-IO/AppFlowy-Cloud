@@ -1,12 +1,12 @@
 use client_api_entity::{
-  access_request_dto::AccessRequest, AccessRequestMinimal, ApproveAccessRequestParams,
-  CreateAccessRequestParams,
+  AccessRequestMinimal, ApproveAccessRequestParams, CreateAccessRequestParams,
+  access_request_dto::AccessRequest,
 };
 use reqwest::Method;
 use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::{process_response_data, process_response_error, Client};
+use crate::{Client, process_response_data, process_response_error};
 
 impl Client {
   pub async fn get_access_request(

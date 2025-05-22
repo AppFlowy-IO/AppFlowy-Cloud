@@ -1,11 +1,11 @@
-use crate::collab::cache::encode_collab_from_bytes;
 use crate::CollabMetrics;
+use crate::collab::cache::encode_collab_from_bytes;
 use anyhow::anyhow;
 use app_error::AppError;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use database::collab::CollabMetadata;
-use redis::{pipe, AsyncCommands};
+use redis::{AsyncCommands, pipe};
 use std::sync::Arc;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
@@ -219,7 +219,7 @@ impl CollabMemCache {
       // Perform update only if the new timestamp is greater than the existing one
       if current_value
         .as_ref()
-        .map_or(true, |(ts, _)| timestamp >= *ts)
+        .is_none_or(|(ts, _)| timestamp >= *ts)
       {
         let mut pipeline = pipe();
         let data = [timestamp.to_be_bytes().as_ref(), data].concat();

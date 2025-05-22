@@ -8,17 +8,17 @@ use indexer::queue::{
   ack_task, default_indexer_group_option, ensure_indexer_consumer_group,
   read_background_embed_tasks,
 };
-use indexer::scheduler::{spawn_pg_write_embeddings, UnindexedCollabTask, UnindexedData};
+use indexer::scheduler::{UnindexedCollabTask, UnindexedData, spawn_pg_write_embeddings};
 use indexer::vector::embedder::{AFEmbedder, AzureConfig, OpenAIConfig};
 use indexer::vector::open_ai;
 use redis::aio::ConnectionManager;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio::sync::RwLock;
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio::task::JoinSet;
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::time::{MissedTickBehavior, interval};
 use tracing::{error, info, trace, warn};
 
 pub struct BackgroundIndexerConfig {
@@ -140,12 +140,15 @@ async fn process_upcoming_tasks(
             tasks.retain(|task| {
               indexed_collabs
                 .get(&task.object_id)
-                .map_or(true, |indexed_at| task.created_at > indexed_at.timestamp())
+                .is_none_or(|indexed_at| task.created_at > indexed_at.timestamp())
             });
           }
 
           if all_tasks_len != tasks.len() {
-            info!("[Background Embedding] filter out {} tasks where `created_at` is less than `indexed_at`", all_tasks_len - tasks.len());
+            info!(
+              "[Background Embedding] filter out {} tasks where `created_at` is less than `indexed_at`",
+              all_tasks_len - tasks.len()
+            );
           }
 
           let start = Instant::now();
@@ -159,9 +162,7 @@ async fn process_upcoming_tasks(
               if let Ok(embedder) = create_embedder(&config) {
                 trace!(
                   "[Background Embedding] processing task: {}, content:{:?}, collab_type: {}",
-                  task.object_id,
-                  task.data,
-                  task.collab_type
+                  task.object_id, task.data, task.collab_type
                 );
                 let paragraphs = match task.data {
                   UnindexedData::Paragraphs(paragraphs) => paragraphs,
@@ -175,10 +176,9 @@ async fn process_upcoming_tasks(
                   Ok(chunks) => chunks,
                   Err(err) => {
                     warn!(
-                    "[Background Embedding] failed to create embedded chunks for task: {}, error: {:?}",
-                    task.object_id,
-                    err
-                  );
+                      "[Background Embedding] failed to create embedded chunks for task: {}, error: {:?}",
+                      task.object_id, err
+                    );
                     continue;
                   },
                 };

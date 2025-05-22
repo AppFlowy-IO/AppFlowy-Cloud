@@ -2,7 +2,7 @@ use super::adapter::PgAdapter;
 use super::enforcer::AFEnforcer;
 use crate::act::{Action, Acts};
 use crate::entity::{ObjectType, SubjectType};
-use crate::metrics::{tick_metric, AccessControlMetrics};
+use crate::metrics::{AccessControlMetrics, tick_metric};
 
 use anyhow::anyhow;
 use app_error::AppError;

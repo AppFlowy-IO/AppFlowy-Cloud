@@ -2,7 +2,7 @@ use crate::api::metrics::AppFlowyWebMetrics;
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz::chat::ops::create_chat;
 use crate::biz::collab::database::{
-  resolve_dependencies_when_create_database_linked_view, LinkedViewDependencies,
+  LinkedViewDependencies, resolve_dependencies_when_create_database_linked_view,
 };
 use crate::biz::collab::folder_view::{
   check_if_view_is_space, get_prev_view_id, parse_extra_field_as_json, to_dto_view_icon,
@@ -22,16 +22,16 @@ use bytes::Bytes;
 use chrono::DateTime;
 use collab::core::collab::Collab;
 use collab_database::database::{
-  gen_database_group_id, gen_database_id, gen_field_id, gen_row_id, Database, DatabaseContext,
+  Database, DatabaseContext, gen_database_group_id, gen_database_id, gen_field_id, gen_row_id,
 };
 use collab_database::entity::{CreateDatabaseParams, CreateViewParams, EncodedDatabase, FieldType};
 use collab_database::fields::select_type_option::{
   SelectOption, SelectOptionColor, SelectOptionIds, SingleSelectTypeOption,
 };
 use collab_database::fields::{
-  default_field_settings_by_layout_map, default_field_settings_for_fields, Field,
+  Field, default_field_settings_by_layout_map, default_field_settings_for_fields,
 };
-use collab_database::rows::{new_cell_builder, CreateRowParams};
+use collab_database::rows::{CreateRowParams, new_cell_builder};
 use collab_database::template::entity::CELL_DATA;
 use collab_database::views::{
   BoardLayoutSetting, CalendarLayoutSetting, DatabaseLayout, Group, GroupSetting, GroupSettingMap,
@@ -43,9 +43,9 @@ use collab_document::document::{Document, DocumentBody};
 use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
-use collab_folder::{timestamp, CollabOrigin, Folder, SectionItem, SpaceInfo};
+use collab_folder::{CollabOrigin, Folder, SectionItem, SpaceInfo, timestamp};
 use collab_rt_entity::user::RealtimeUser;
-use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
+use database::collab::{CollabStorage, GetCollabOrigin, select_workspace_database_oid};
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
 use database_entity::dto::{
@@ -485,14 +485,16 @@ async fn prepare_default_board_encoded_database(
   let mut group_ids = vec![card_status_field_id.clone()];
   group_ids.extend(card_status_option_ids);
   let groups = group_ids.iter().map(|id| Group::new(id.clone())).collect();
-  let group_settings: Vec<GroupSettingMap> = vec![GroupSetting {
-    id: gen_database_group_id(),
-    field_id: card_status_field_id.clone(),
-    field_type: card_status_field_type,
-    groups,
-    content: Default::default(),
-  }
-  .into()];
+  let group_settings: Vec<GroupSettingMap> = vec![
+    GroupSetting {
+      id: gen_database_group_id(),
+      field_id: card_status_field_id.clone(),
+      field_type: card_status_field_type,
+      groups,
+      content: Default::default(),
+    }
+    .into(),
+  ];
 
   let mut rows = vec![];
   let card_status_select_option_ids = SelectOptionIds::from(vec![default_option_id.clone()]);
@@ -2128,7 +2130,7 @@ pub async fn create_database_view(
     _ => {
       return Err(AppError::InvalidRequest(
         "The layout type is not supported for database view creation".to_string(),
-      ))
+      ));
     },
   };
 

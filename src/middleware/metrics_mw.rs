@@ -1,9 +1,9 @@
-use actix_service::{forward_ready, Service, Transform};
+use actix_service::{Service, Transform, forward_ready};
+use actix_web::Error;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::web::Data;
-use actix_web::Error;
 use futures_util::future::LocalBoxFuture;
-use std::future::{ready, Ready};
+use std::future::{Ready, ready};
 use std::sync::Arc;
 
 use super::request_id::get_request_id;

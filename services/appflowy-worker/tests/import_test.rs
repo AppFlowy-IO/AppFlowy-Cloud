@@ -1,25 +1,25 @@
 use anyhow::Result;
 use appflowy_worker::error::WorkerError;
 use appflowy_worker::import_worker::report::{ImportNotifier, ImportProgress};
-use appflowy_worker::import_worker::worker::{run_import_worker, ImportTask};
+use appflowy_worker::import_worker::worker::{ImportTask, run_import_worker};
 use appflowy_worker::s3_client::{BlobMeta, S3Client, S3StreamResponse};
 use aws_sdk_s3::primitives::ByteStream;
 use axum::async_trait;
 
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use redis::RedisResult;
+use redis::aio::ConnectionManager;
 use serde_json::json;
-use sqlx::PgPool;
 use sqlx::__rt::timeout;
+use sqlx::PgPool;
 use std::sync::{Arc, Once};
 use std::time::Duration;
 use tokio::runtime::Builder;
 use tokio::task::LocalSet;
 
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
 #[sqlx::test(migrations = false)]
 async fn create_custom_task_test(pg_pool: PgPool) {
@@ -236,7 +236,9 @@ pub fn setup_log() {
     let level = std::env::var("RUST_LOG").unwrap_or("trace".to_string());
     let mut filters = vec![];
     filters.push(format!("appflowy_worker={}", level));
-    std::env::set_var("RUST_LOG", filters.join(","));
+    unsafe {
+      std::env::set_var("RUST_LOG", filters.join(","));
+    }
 
     let subscriber = Subscriber::builder()
       .with_ansi(true)

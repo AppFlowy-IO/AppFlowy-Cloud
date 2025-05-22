@@ -8,8 +8,8 @@ use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
+use collab_rt_entity::user::RealtimeUser;
 use collab_stream::client::CollabRedisStream;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database_entity::dto::QueryCollabParams;
@@ -140,10 +140,7 @@ where
 
     trace!(
       "[realtime]: create group: uid:{},workspace_id:{},object_id:{}:{}",
-      user.uid,
-      workspace_id,
-      object_id,
-      collab_type
+      user.uid, workspace_id, object_id, collab_type
     );
 
     let group = CollabGroup::new(

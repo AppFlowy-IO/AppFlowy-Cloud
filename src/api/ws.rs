@@ -4,7 +4,7 @@ use std::time::Duration;
 use actix::Addr;
 use actix_http::header::AUTHORIZATION;
 use actix_web::web::{Data, Path, Payload};
-use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
+use actix_web::{HttpRequest, HttpResponse, Result, Scope, get, web};
 use actix_web_actors::ws;
 use secrecy::Secret;
 use semver::Version;
@@ -16,11 +16,11 @@ use app_error::AppError;
 use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
+use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use shared_entity::response::AppResponseError;
 
-use crate::biz::authentication::jwt::{authorization_from_token, UserUuid};
+use crate::biz::authentication::jwt::{UserUuid, authorization_from_token};
 use crate::state::AppState;
 
 pub fn ws_scope() -> Scope {

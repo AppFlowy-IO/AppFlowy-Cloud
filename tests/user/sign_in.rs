@@ -54,14 +54,15 @@ async fn sign_in_success() {
       .unwrap()
       .is_new;
     assert!(is_new);
-    assert!(c
-      .token()
-      .read()
-      .as_ref()
-      .unwrap()
-      .user
-      .confirmed_at
-      .is_some());
+    assert!(
+      c.token()
+        .read()
+        .as_ref()
+        .unwrap()
+        .user
+        .confirmed_at
+        .is_some()
+    );
 
     let workspaces = c.get_workspaces().await.unwrap();
     assert_eq!(workspaces.len(), 1);

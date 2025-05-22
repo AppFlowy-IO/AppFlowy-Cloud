@@ -1,18 +1,18 @@
-use crate::{process_response_data, process_response_error, Client};
+use crate::{Client, process_response_data, process_response_error};
 
 use app_error::AppError;
 use client_api_entity::chat_dto::{
   ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
   RepeatedChatMessage, RepeatedChatMessageWithAuthorUuid, UpdateChatMessageContentParams,
 };
-use futures_core::{ready, Stream};
+use futures_core::{Stream, ready};
 use pin_project::pin_project;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shared_entity::dto::ai_dto::{
-  CalculateSimilarityParams, ChatQuestionQuery, RepeatedRelatedQuestion, SimilarityResponse,
-  STREAM_ANSWER_KEY, STREAM_COMMENT_KEY, STREAM_IMAGE_KEY, STREAM_METADATA_KEY,
+  CalculateSimilarityParams, ChatQuestionQuery, RepeatedRelatedQuestion, STREAM_ANSWER_KEY,
+  STREAM_COMMENT_KEY, STREAM_IMAGE_KEY, STREAM_METADATA_KEY, SimilarityResponse,
 };
 use shared_entity::dto::chat_dto::{ChatSettings, UpdateChatParams};
 use shared_entity::response::{AppResponse, AppResponseError};

@@ -11,10 +11,10 @@ use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::operation::delete_objects::DeleteObjectsOutput;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 
+use aws_sdk_s3::Client;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
-use aws_sdk_s3::Client;
 use database_entity::file_dto::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartData,
   UploadPartResponse,
@@ -92,10 +92,7 @@ impl AwsS3BucketClientImpl {
       });
     trace!(
       "generated presigned url: {}, public presigned url:{}, endpoint:{}, presigned_url_endpoint:{:?}",
-      url,
-      public_url,
-      self.endpoint,
-      self.presigned_url_endpoint
+      url, public_url, self.endpoint, self.presigned_url_endpoint
     );
     Ok(public_url)
   }
@@ -138,8 +135,7 @@ impl AwsS3BucketClientImpl {
 
     trace!(
       "completed upload to S3: {} ({} bytes)",
-      object_key,
-      content_len
+      object_key, content_len
     );
 
     Ok((content_len as usize, content_type))

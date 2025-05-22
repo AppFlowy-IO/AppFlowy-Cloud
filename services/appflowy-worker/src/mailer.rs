@@ -52,7 +52,7 @@ pub struct ImportNotionMailerParam {
 
 #[cfg(test)]
 mod tests {
-  use crate::mailer::{AFWorkerMailer, ImportNotionMailerParam, IMPORT_SUCCESS_TEMPLATE};
+  use crate::mailer::{AFWorkerMailer, IMPORT_SUCCESS_TEMPLATE, ImportNotionMailerParam};
   use mailer::sender::Mailer;
 
   #[tokio::test]

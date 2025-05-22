@@ -7,6 +7,7 @@ use crate::dto::{
 use crate::error::AIError;
 
 use bytes::Bytes;
+use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
@@ -44,8 +45,8 @@ impl AppFlowyAIClient {
   pub async fn stream_completion_text(
     &self,
     params: CompleteTextParams,
-    model: &str,
-  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+    model: String,
+  ) -> Result<BoxStream<'static, Result<Bytes, AIError>>, AIError> {
     if params.text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
     }
@@ -57,14 +58,15 @@ impl AppFlowyAIClient {
       .json(&params)
       .send()
       .await?;
-    AIResponse::<()>::stream_response(resp).await
+    let stream = AIResponse::<()>::stream_response(resp).await?;
+    Ok(Box::pin(stream))
   }
 
   pub async fn stream_completion_v2(
     &self,
     params: CompleteTextParams,
-    model: &str,
-  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+    model: String,
+  ) -> Result<BoxStream<'static, Result<Bytes, AIError>>, AIError> {
     if params.text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
     }
@@ -76,7 +78,8 @@ impl AppFlowyAIClient {
       .json(&params)
       .send()
       .await?;
-    AIResponse::<()>::stream_response(resp).await
+    let stream = AIResponse::<()>::stream_response(resp).await?;
+    Ok(Box::pin(stream))
   }
 
   pub async fn summarize_row(
@@ -181,16 +184,16 @@ impl AppFlowyAIClient {
   pub async fn stream_question(
     &self,
     workspace_id: String,
-    chat_id: &str,
-    content: &str,
+    chat_id: String,
+    content: String,
     metadata: Option<Value>,
     rag_ids: Vec<String>,
-    model: &str,
-  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+    model: String,
+  ) -> Result<BoxStream<'static, Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
-      chat_id: chat_id.to_string(),
+      chat_id,
       data: MessageData {
-        content: content.to_string(),
+        content,
         metadata,
         message_id: None,
       },
@@ -208,24 +211,25 @@ impl AppFlowyAIClient {
       .json(&json)
       .send()
       .await?;
-    AIResponse::<()>::stream_response(resp).await
+    let stream = AIResponse::<()>::stream_response(resp).await?;
+    Ok(Box::pin(stream))
   }
 
   #[allow(clippy::too_many_arguments)]
   pub async fn stream_question_v2(
     &self,
     workspace_id: String,
-    chat_id: &str,
+    chat_id: String,
     question_id: i64,
-    content: &str,
+    content: String,
     metadata: Option<Value>,
     rag_ids: Vec<String>,
-    model: &str,
-  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+    model: String,
+  ) -> Result<BoxStream<'static, Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
-      chat_id: chat_id.to_string(),
+      chat_id,
       data: MessageData {
-        content: content.to_string(),
+        content,
         metadata,
         message_id: Some(question_id.to_string()),
       },
@@ -235,15 +239,16 @@ impl AppFlowyAIClient {
         rag_ids,
       },
     };
-    self.stream_question_v3(model, json, Some(30)).await
+    let stream = self.stream_question_v3(model, json, Some(30)).await?;
+    Ok(stream)
   }
 
   pub async fn stream_question_v3(
     &self,
-    model: &str,
+    model: String,
     question: ChatQuestion,
     timeout_secs: Option<u64>,
-  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+  ) -> Result<BoxStream<'static, Result<Bytes, AIError>>, AIError> {
     let url = format!("{}/v2/chat/message/stream", self.url);
     let resp = self
       .async_http_client(Method::POST, &url)?
@@ -252,7 +257,8 @@ impl AppFlowyAIClient {
       .timeout(Duration::from_secs(timeout_secs.unwrap_or(30)))
       .send()
       .await?;
-    AIResponse::<()>::stream_response(resp).await
+    let stream = AIResponse::<()>::stream_response(resp).await?;
+    Ok(Box::pin(stream))
   }
 
   pub async fn get_related_question(
@@ -391,7 +397,7 @@ where
 
   pub async fn stream_response(
     resp: reqwest::Response,
-  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+  ) -> Result<BoxStream<'static, Result<Bytes, AIError>>, AIError> {
     let status_code = resp.status();
     if status_code.is_server_error() {
       let body = resp.text().await?;
@@ -405,7 +411,7 @@ where
     let stream = resp
       .bytes_stream()
       .map(|item| item.map_err(|err| AIError::Internal(err.into())));
-    Ok(stream)
+    Ok(Box::pin(stream))
   }
 }
 impl From<reqwest::Error> for AIError {

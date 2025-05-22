@@ -109,11 +109,11 @@ impl ConnectState {
 
 #[cfg(test)]
 mod tests {
+  use crate::RealtimeClientWebsocketSink;
   use crate::client::client_msg_router::ClientMessageRouter;
   use crate::connect_state::ConnectState;
-  use crate::RealtimeClientWebsocketSink;
-  use collab_rt_entity::user::{RealtimeUser, UserDevice};
   use collab_rt_entity::RealtimeMessage;
+  use collab_rt_entity::user::{RealtimeUser, UserDevice};
   use std::time::Duration;
   use tokio::time::sleep;
 

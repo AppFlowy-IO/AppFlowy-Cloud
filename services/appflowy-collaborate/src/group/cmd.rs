@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use collab_entity::CollabType;
-use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabAck;
+use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{
   AckCode, ClientCollabMessage, MessageByObjectId, ServerCollabMessage, SinkMessage, UpdateSync,
 };
@@ -21,8 +21,8 @@ use collab_rt_protocol::{Message, SyncMessage};
 use database::collab::CollabStorage;
 use tracing::{error, instrument, trace, warn};
 use uuid::Uuid;
-use yrs::updates::encoder::Encode;
 use yrs::StateVector;
+use yrs::updates::encoder::Encode;
 
 /// Using [GroupCommand] to interact with the group
 /// - HandleClientCollabMessage: Handle the client message
@@ -201,7 +201,10 @@ where
       // 2. **Duplicate Connections from the Same Device**: When a client from the same device attempts
       // to establish a new WebSocket connection while a previous connection from that device already
       // exists, the new connection will supersede and replace the old one.
-      trace!("The client stream: {} is not found, it should be created when the client is connected with this websocket server", user);
+      trace!(
+        "The client stream: {} is not found, it should be created when the client is connected with this websocket server",
+        user
+      );
       return Ok(());
     }
 

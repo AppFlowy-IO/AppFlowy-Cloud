@@ -41,20 +41,24 @@ async fn join_workspace_by_invite_code() {
     .unwrap()
     .workspace_id;
   assert_eq!(workspace_id, invited_workspace_id);
-  assert!(invitee_client
-    .get_workspaces()
-    .await
-    .unwrap()
-    .iter()
-    .any(|w| w.workspace_id == invited_workspace_id));
+  assert!(
+    invitee_client
+      .get_workspaces()
+      .await
+      .unwrap()
+      .iter()
+      .any(|w| w.workspace_id == invited_workspace_id)
+  );
   owner_client
     .delete_workspace_invitation_code(&workspace_id)
     .await
     .unwrap();
-  assert!(owner_client
-    .get_workspace_invitation_code(&workspace_id)
-    .await
-    .unwrap()
-    .code
-    .is_none());
+  assert!(
+    owner_client
+      .get_workspace_invitation_code(&workspace_id)
+      .await
+      .unwrap()
+      .code
+      .is_none()
+  );
 }

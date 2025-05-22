@@ -2,9 +2,9 @@ use std::fmt::{Debug, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use yrs::StateVector;
 use yrs::updates::decoder::{Decode, Decoder};
 use yrs::updates::encoder::{Encode, Encoder};
-use yrs::StateVector;
 
 /// Tag id for [Message::Sync].
 pub const MSG_SYNC: u8 = 0;
@@ -286,7 +286,7 @@ impl<'a, D: Decoder> MessageReader<'a, D> {
   }
 }
 
-impl<'a, D: Decoder> Iterator for MessageReader<'a, D> {
+impl<D: Decoder> Iterator for MessageReader<'_, D> {
   type Item = Result<Message, yrs::encoding::read::Error>;
 
   fn next(&mut self) -> Option<Self::Item> {

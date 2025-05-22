@@ -1,4 +1,4 @@
-use actix_web::{web::Data, Result};
+use actix_web::{Result, web::Data};
 use app_error::ErrorCode;
 use shared_entity::{
   dto::guest_dto::{
@@ -9,8 +9,8 @@ use shared_entity::{
 };
 
 use actix_web::{
-  web::{self},
   Scope,
+  web::{self},
 };
 use uuid::Uuid;
 

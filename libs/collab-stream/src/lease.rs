@@ -1,7 +1,7 @@
 use crate::error::StreamError;
 use async_trait::async_trait;
-use redis::aio::ConnectionManager;
 use redis::Value;
+use redis::aio::ConnectionManager;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const RELEASE_SCRIPT: &str = r#"

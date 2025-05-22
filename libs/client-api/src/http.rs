@@ -1,12 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
 use app_error::ErrorCode;
-use client_api_entity::auth_dto::DeleteUserQuery;
-use client_api_entity::server_info_dto::ServerInfoResponseItem;
-use client_api_entity::workspace_dto::FavoriteSectionItems;
-use client_api_entity::workspace_dto::RecentSectionItems;
-use client_api_entity::workspace_dto::TrashSectionItems;
-use client_api_entity::workspace_dto::{FolderView, QueryWorkspaceFolder, QueryWorkspaceParam};
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
 use client_api_entity::GetInvitationCodeInfoQuery;
@@ -15,6 +9,12 @@ use client_api_entity::InvitedWorkspace;
 use client_api_entity::JoinWorkspaceByInviteCodeParams;
 use client_api_entity::WorkspaceInviteCodeParams;
 use client_api_entity::WorkspaceInviteToken as WorkspaceInviteCode;
+use client_api_entity::auth_dto::DeleteUserQuery;
+use client_api_entity::server_info_dto::ServerInfoResponseItem;
+use client_api_entity::workspace_dto::FavoriteSectionItems;
+use client_api_entity::workspace_dto::RecentSectionItems;
+use client_api_entity::workspace_dto::TrashSectionItems;
+use client_api_entity::workspace_dto::{FolderView, QueryWorkspaceFolder, QueryWorkspaceParam};
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
@@ -44,11 +44,11 @@ use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::auth_dto::{SignInPasswordResponse, SignInTokenResponse};
 use shared_entity::dto::workspace_dto::WorkspaceSpaceUsage;
 use shared_entity::response::{AppResponse, AppResponseError};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
+use tokio_retry::strategy::FixedInterval;
 use tracing::{debug, error, event, info, instrument, trace, warn};
 use url::Url;
 use uuid::Uuid;
@@ -177,8 +177,7 @@ impl Client {
 
       trace!(
         "Client version: {}, features: {:?}",
-        client_version,
-        enabled_features
+        client_version, enabled_features
       );
     }
 
@@ -1189,9 +1188,7 @@ impl Client {
     ];
     trace!(
       "start request: {}, method: {}, headers: {:?}",
-      url,
-      method,
-      headers
+      url, method, headers
     );
 
     let mut request_builder = self

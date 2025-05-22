@@ -1,7 +1,7 @@
 use http::HeaderMap;
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc, task::Waker};
-use wasm_bindgen::{closure::Closure, JsCast};
+use wasm_bindgen::{JsCast, closure::Closure};
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
 pub async fn connect_async(url: &str, header_map: HeaderMap) -> crate::Result<WebSocketStream> {

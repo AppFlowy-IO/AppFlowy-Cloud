@@ -3,7 +3,7 @@ use crate::biz::search::{search_document, summarize_search_results};
 use crate::state::AppState;
 use access_control::act::Action;
 use actix_web::web::{Data, Json, Query};
-use actix_web::{web, Scope};
+use actix_web::{Scope, web};
 use async_openai::config::{AzureConfig, OpenAIConfig};
 
 use llm_client::chat::{AITool, AzureOpenAIChat, OpenAIChat};

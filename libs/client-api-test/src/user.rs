@@ -1,4 +1,4 @@
-use crate::client::{localhost_client, LOCALHOST_GOTRUE};
+use crate::client::{LOCALHOST_GOTRUE, localhost_client};
 use crate::log::setup_log;
 use client_api::Client;
 use lazy_static::lazy_static;

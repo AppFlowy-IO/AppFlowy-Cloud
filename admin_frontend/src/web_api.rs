@@ -10,15 +10,15 @@ use crate::models::{
   WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
-use crate::session::{self, new_session_cookie, CodeSession, UserSession};
+use crate::session::{self, CodeSession, UserSession, new_session_cookie};
+use axum::Form;
 use axum::extract::{Path, Query};
-use axum::http::{status, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, status};
 use axum::response::{IntoResponse, Redirect, Result};
 use axum::routing::{delete, get};
-use axum::Form;
-use axum::{extract::State, routing::post, Router};
-use axum_extra::extract::cookie::Cookie;
+use axum::{Router, extract::State, routing::post};
 use axum_extra::extract::CookieJar;
+use axum_extra::extract::cookie::Cookie;
 use base64::engine::Engine;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
 use gotrue::params::{
@@ -26,8 +26,8 @@ use gotrue::params::{
   MagicLinkParams,
 };
 use gotrue_entity::dto::{GotrueTokenResponse, SignUpResponse, UpdateGotrueUserParams, User};
-use rand::distributions::Alphanumeric;
 use rand::Rng;
+use rand::distributions::Alphanumeric;
 use sha2::Digest;
 use tracing::info;
 
@@ -117,12 +117,12 @@ async fn open_app_handler(
   session: UserSession,
 ) -> Result<axum::response::Response, WebApiError<'static>> {
   let app_sign_in_url = format!(
-      "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
-        session.token.access_token,
-        session.token.expires_at,
-        session.token.expires_in,
-        session.token.refresh_token,
-        session.token.token_type,
+    "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
+    session.token.access_token,
+    session.token.expires_at,
+    session.token.expires_in,
+    session.token.refresh_token,
+    session.token.token_type,
   );
   Ok(htmx_redirect(&app_sign_in_url).into_response())
 }

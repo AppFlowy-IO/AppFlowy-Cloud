@@ -7,7 +7,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use super::util::TestScenario;
-use client_api_test::{assert_server_collab, TestClient};
+use client_api_test::{TestClient, assert_server_collab};
 use database_entity::dto::AFRole;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

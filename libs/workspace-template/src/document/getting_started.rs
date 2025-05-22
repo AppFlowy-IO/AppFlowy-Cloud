@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use collab::core::origin::CollabOrigin;
 
 use collab::preclude::Collab;
-use collab_database::database::{timestamp, DatabaseData};
+use collab_database::database::{DatabaseData, timestamp};
 use collab_database::entity::CreateDatabaseParams;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
@@ -16,7 +16,7 @@ use serde_json::Value;
 use crate::document::parser::JsonToDocumentParser;
 use crate::document::util::{create_database_from_params, create_document_from_json};
 use crate::hierarchy_builder::{ViewBuilder, WorkspaceViewBuilder};
-use crate::{gen_view_id, TemplateData, TemplateObjectId, WorkspaceTemplate};
+use crate::{TemplateData, TemplateObjectId, WorkspaceTemplate, gen_view_id};
 
 // Template Folder Structure:
 // |-- General (space)
@@ -31,8 +31,6 @@ use crate::{gen_view_id, TemplateData, TemplateObjectId, WorkspaceTemplate};
 pub struct GettingStartedTemplate;
 
 impl GettingStartedTemplate {
-  /// Create a document template data from the given JSON string
-
   /// Create a series of database templates from the given JSON String
   ///
   /// Notes: The output contains DatabaseCollab, DatabaseRowCollab

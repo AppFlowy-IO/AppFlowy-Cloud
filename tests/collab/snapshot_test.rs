@@ -1,4 +1,4 @@
-use client_api_test::{assert_server_collab, TestClient};
+use client_api_test::{TestClient, assert_server_collab};
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;

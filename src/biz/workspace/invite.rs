@@ -3,7 +3,7 @@ use database::workspace::{
   delete_all_invite_code_for_workspace, insert_workspace_invite_code, select_invitation_code_info,
   select_invite_code_for_workspace_id, select_invited_workspace_id, upsert_workspace_member_uid,
 };
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{Rng, distributions::Alphanumeric};
 use sqlx::PgPool;
 use uuid::Uuid;
 

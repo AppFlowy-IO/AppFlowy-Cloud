@@ -2,9 +2,9 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tokio::time::{sleep_until, Instant};
+use tokio::sync::mpsc;
+use tokio::time::{Instant, sleep_until};
 use tracing::{error, trace};
 
 use client_websocket::Message;

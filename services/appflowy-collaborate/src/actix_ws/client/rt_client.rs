@@ -1,17 +1,17 @@
+use crate::RealtimeClientWebsocketSink;
 use crate::actix_ws::entities::{ClientWebSocketMessage, Connect, Disconnect, RealtimeMessage};
 use crate::error::RealtimeError;
-use crate::RealtimeClientWebsocketSink;
 use actix::{
-  fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, Context, ContextFutureSpawner,
-  Handler, MailboxError, Recipient, Running, StreamHandler, WrapFuture,
+  Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, Context, ContextFutureSpawner, Handler,
+  MailboxError, Recipient, Running, StreamHandler, WrapFuture, fut,
 };
 use actix_web_actors::ws;
 use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError, WebsocketContext};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::Bytes;
-use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::SystemMessage;
+use collab_rt_entity::user::RealtimeUser;
 use governor::clock::DefaultClock;
 use governor::middleware::NoOpMiddleware;
 use governor::state::{InMemoryState, NotKeyed};

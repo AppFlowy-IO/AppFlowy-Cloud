@@ -1,6 +1,6 @@
 use prometheus_client::metrics::gauge::Gauge;
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use prometheus_client::registry::Registry;

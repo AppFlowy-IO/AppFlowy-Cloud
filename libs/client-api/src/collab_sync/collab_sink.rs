@@ -209,9 +209,7 @@ where
       if cfg!(feature = "sync_verbose_log") {
         trace!(
           "{}: sending messages:{:?} not contains {}",
-          self.object.object_id,
-          sending_messages,
-          income_message_id
+          self.object.object_id, sending_messages, income_message_id
         );
       }
       return Ok(false);
@@ -320,8 +318,7 @@ where
             if cfg!(feature = "sync_verbose_log") {
               trace!(
                 "🔥client sending {} messages {:?}",
-                self.object.object_id,
-                message_ids
+                self.object.object_id, message_ids
               );
             }
           },
@@ -387,9 +384,7 @@ where
         for (msg_id, merged_ids) in merged_ids {
           trace!(
             "{}: merged {:?} messages into: {:?}",
-            self.object.object_id,
-            merged_ids,
-            msg_id
+            self.object.object_id, merged_ids, msg_id
           );
         }
       }

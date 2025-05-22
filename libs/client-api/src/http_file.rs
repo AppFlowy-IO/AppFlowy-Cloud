@@ -1,5 +1,5 @@
 use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
-use crate::{process_response_data, process_response_error, Client};
+use crate::{Client, process_response_data, process_response_error};
 
 use app_error::AppError;
 use async_trait::async_trait;
@@ -10,13 +10,13 @@ use client_api_entity::{
 };
 use client_api_entity::{CreateImportTask, CreateImportTaskResponse};
 
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
-use reqwest::{multipart, Body, Method};
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+use reqwest::{Body, Method, multipart};
 use shared_entity::response::AppResponseError;
 use std::path::Path;
 
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use shared_entity::dto::import_dto::UserImportTask;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -66,9 +66,9 @@ impl Client {
     // Encode the parent directory to ensure it's URL-safe.
     let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     let url = format!(
-            "{}/api/file_storage/{workspace_id}/upload_part/{parent_dir}/{file_id}/{upload_id}/{part_number}",
-            self.base_url
-        );
+      "{}/api/file_storage/{workspace_id}/upload_part/{parent_dir}/{file_id}/{upload_id}/{part_number}",
+      self.base_url
+    );
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?

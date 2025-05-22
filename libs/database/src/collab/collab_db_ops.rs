@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use collab_entity::CollabType;
 use database_entity::dto::{
   AFCollabEmbedInfo, AFSnapshotMeta, AFSnapshotMetas, CollabParams, QueryCollab, QueryCollabResult,
@@ -6,7 +6,7 @@ use database_entity::dto::{
 };
 use shared_entity::dto::workspace_dto::{DatabaseRowUpdatedItem, EmbeddedCollabQuery};
 
-use crate::collab::{partition_key_from_collab_type, SNAPSHOT_PER_HOUR};
+use crate::collab::{SNAPSHOT_PER_HOUR, partition_key_from_collab_type};
 use crate::pg_row::AFCollabRowMeta;
 use crate::pg_row::AFSnapshotRow;
 use app_error::AppError;
@@ -368,8 +368,8 @@ pub async fn should_create_snapshot2<'a, E: Executor<'a, Database = Postgres>>(
 /// of snapshots stored for the specified `oid` does not exceed the provided `snapshot_limit`. If the limit
 /// is exceeded, the oldest snapshots are deleted to maintain the limit.
 ///
-pub async fn create_snapshot_and_maintain_limit<'a>(
-  mut transaction: Transaction<'a, Postgres>,
+pub async fn create_snapshot_and_maintain_limit(
+  mut transaction: Transaction<'_, Postgres>,
   workspace_id: &Uuid,
   oid: &Uuid,
   encoded_collab_v1: &[u8],

@@ -5,7 +5,7 @@ use reqwest::Method;
 use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
-use crate::{process_response_data, process_response_error, Client};
+use crate::{Client, process_response_data, process_response_error};
 
 fn quick_note_resources_url(base_url: &str, workspace_id: Uuid) -> String {
   format!("{base_url}/api/workspace/{workspace_id}/quick-note")

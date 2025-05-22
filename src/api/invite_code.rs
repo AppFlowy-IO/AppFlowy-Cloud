@@ -1,6 +1,6 @@
 use actix_web::{
-  web::{self, Data, Json},
   Result, Scope,
+  web::{self, Data, Json},
 };
 
 use database_entity::dto::{GetInvitationCodeInfoQuery, InvitationCodeInfo};

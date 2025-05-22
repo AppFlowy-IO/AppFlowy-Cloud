@@ -1,4 +1,4 @@
-use crate::api::util::{client_version_from_headers, realtime_user_for_web_request, PayloadReader};
+use crate::api::util::{PayloadReader, client_version_from_headers, realtime_user_for_web_request};
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
@@ -29,15 +29,15 @@ use crate::biz::workspace::quick_note::{
   create_quick_note, delete_quick_note, list_quick_notes, update_quick_note,
 };
 use crate::domain::compression::{
-  blocking_decompress, decompress, CompressionType, X_COMPRESSION_TYPE,
+  CompressionType, X_COMPRESSION_TYPE, blocking_decompress, decompress,
 };
 use crate::state::AppState;
 use access_control::act::Action;
 use actix_web::web::{Bytes, Path, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
-use actix_web::{web, HttpResponse, ResponseError, Scope};
 use actix_web::{HttpRequest, Result};
-use anyhow::{anyhow, Context};
+use actix_web::{HttpResponse, ResponseError, Scope, web};
+use anyhow::{Context, anyhow};
 use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::actix_ws::entities::{
   ClientGenerateEmbeddingMessage, ClientHttpStreamMessage, ClientHttpUpdateMessage,
@@ -53,10 +53,10 @@ use collab_database::entity::FieldType;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::timestamp;
+use collab_rt_entity::RealtimeMessage;
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::collab_from_encode_collab;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::user::select_uid_from_email;

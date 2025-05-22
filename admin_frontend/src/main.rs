@@ -9,7 +9,7 @@ mod templates;
 mod web_api;
 mod web_app;
 
-use axum::{response::Redirect, routing::get, Router};
+use axum::{Router, response::Redirect, routing::get};
 use models::AppState;
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;

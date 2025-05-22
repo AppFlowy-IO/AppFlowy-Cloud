@@ -10,7 +10,7 @@ use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{
-  timestamp, Folder, FolderData, RepeatedViewIdentifier, ViewIdentifier, ViewLayout, Workspace,
+  Folder, FolderData, RepeatedViewIdentifier, ViewIdentifier, ViewLayout, Workspace, timestamp,
 };
 use uuid::Uuid;
 

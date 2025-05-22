@@ -14,11 +14,11 @@ use access_control::noops::workspace::WorkspaceAccessControlImpl as NoOpsWorkspa
 use access_control::workspace::WorkspaceAccessControl;
 use actix::Supervisor;
 use actix_identity::IdentityMiddleware;
-use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
+use actix_session::storage::RedisSessionStore;
 use actix_web::cookie::Key;
 use actix_web::middleware::NormalizePath;
-use actix_web::{dev::Server, web, web::Data, App, HttpResponse, HttpServer, Responder};
+use actix_web::{App, HttpResponse, HttpServer, Responder, dev::Server, web, web::Data};
 use anyhow::{Context, Error};
 use appflowy_collaborate::collab::access_control::CollabStorageAccessControlImpl;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
@@ -28,17 +28,17 @@ use aws_sdk_s3::types::{
 };
 use mailer::config::MailerSetting;
 use secrecy::ExposeSecret;
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::CollaborationServer;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::snapshot::SnapshotControl;
-use appflowy_collaborate::CollaborationServer;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::{StreamRouter, StreamRouterOptions};

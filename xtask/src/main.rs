@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::process::Stdio;
 use tokio::process::Command;
 use tokio::select;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 /// Run servers:
 /// cargo run --package xtask
@@ -16,7 +16,9 @@ async fn main() -> Result<()> {
   let is_stress_test = std::env::args().any(|arg| arg == "--stress-test");
   let disable_log = std::env::args().any(|arg| arg == "--disable-log");
   let target_dir = "./target";
-  std::env::set_var("CARGO_TARGET_DIR", target_dir);
+  unsafe {
+    std::env::set_var("CARGO_TARGET_DIR", target_dir);
+  }
 
   let appflowy_cloud_bin_name = "appflowy_cloud";
   let worker_bin_name = "appflowy_worker";

@@ -2,7 +2,7 @@ use crate::config::config::Environment;
 use actix_web::rt::task::JoinHandle;
 use chrono::Local;
 use tracing::subscriber::set_global_default;
-use tracing_subscriber::{fmt::format::Writer, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt::format::Writer};
 
 /// Register a subscriber as global default to process span data.
 ///

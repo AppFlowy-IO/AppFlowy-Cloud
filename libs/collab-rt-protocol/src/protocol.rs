@@ -6,11 +6,11 @@ use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::lock::RwLock;
-use collab::preclude::Collab;
+use collab::preclude::{Collab, Transact};
 use tokio::task::spawn_blocking;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
-use yrs::{ReadTxn, StateVector, Transact, Update};
+use yrs::{ReadTxn, StateVector, Update};
 
 use crate::message::{CustomMessage, Message, RTProtocolError, SyncMessage, SyncMeta};
 

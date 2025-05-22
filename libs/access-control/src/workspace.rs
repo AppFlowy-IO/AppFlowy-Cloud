@@ -25,7 +25,7 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
   ) -> Result<(), AppError>;
 
   async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
-    -> Result<(), AppError>;
+  -> Result<(), AppError>;
 
   async fn remove_user_from_workspace(
     &self,

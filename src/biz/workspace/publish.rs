@@ -26,7 +26,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 use database::{
-  file::{s3_client_impl::AwsS3BucketClientImpl, BucketClient, ResponseBlob},
+  file::{BucketClient, ResponseBlob, s3_client_impl::AwsS3BucketClientImpl},
   publish::{
     insert_or_replace_publish_collabs, select_publish_collab_meta, select_published_collab_blob,
     select_published_collab_info, select_published_collab_workspace_view_id,

@@ -101,7 +101,7 @@ impl Message {
       Message::Text(s) => Ok(s.as_str()),
       Message::Binary(data) => Ok(std::str::from_utf8(data)?),
       Message::Close(None) => Ok(""),
-      Message::Close(Some(ref frame)) => Ok(&frame.reason),
+      Message::Close(Some(frame)) => Ok(&frame.reason),
       Message::Ping(data) => Ok(std::str::from_utf8(data)?),
       Message::Pong(data) => Ok(std::str::from_utf8(data)?),
     }
@@ -165,7 +165,7 @@ pub struct CloseFrame<'t> {
   pub reason: std::borrow::Cow<'t, str>,
 }
 
-impl<'t> CloseFrame<'t> {
+impl CloseFrame<'_> {
   /// Convert into a owned string.
   pub fn into_owned(self) -> CloseFrame<'static> {
     CloseFrame {
@@ -175,7 +175,7 @@ impl<'t> CloseFrame<'t> {
   }
 }
 
-impl<'t> std::fmt::Display for CloseFrame<'t> {
+impl std::fmt::Display for CloseFrame<'_> {
   fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
     write!(f, "{} ({})", self.reason, self.code)
   }

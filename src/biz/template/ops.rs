@@ -9,7 +9,7 @@ use anyhow::Context;
 use app_error::ErrorCode;
 use aws_sdk_s3::primitives::ByteStream;
 use database::{
-  file::{s3_client_impl::AwsS3BucketClientImpl, BucketClient, ResponseBlob},
+  file::{BucketClient, ResponseBlob, s3_client_impl::AwsS3BucketClientImpl},
   publish::{select_publish_info_for_view_ids, select_published_collab_info},
   template::*,
 };

@@ -1,8 +1,8 @@
 use appflowy_ai_client::client::AppFlowyAIClient;
 use std::sync::Once;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
 mod chat_test;
 mod row_test;
@@ -20,7 +20,9 @@ pub fn setup_log() {
     let level = std::env::var("RUST_LOG").unwrap_or("trace".to_string());
     let mut filters = vec![];
     filters.push(format!("appflowy_ai_client={}", level));
-    std::env::set_var("RUST_LOG", filters.join(","));
+    unsafe {
+      std::env::set_var("RUST_LOG", filters.join(","));
+    }
 
     let subscriber = Subscriber::builder()
       .with_ansi(true)

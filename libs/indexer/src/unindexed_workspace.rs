@@ -1,6 +1,6 @@
 use crate::collab_indexer::IndexerProvider;
 use crate::entity::{EmbeddingRecord, UnindexedCollab};
-use crate::scheduler::{batch_insert_records, IndexerScheduler};
+use crate::scheduler::{IndexerScheduler, batch_insert_records};
 use crate::vector::embedder::AFEmbedder;
 use appflowy_ai_client::dto::EmbeddingModel;
 use collab::core::collab::DataSource;
@@ -9,12 +9,12 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database::collab::{CollabStorage, GetCollabOrigin};
 use database::index::{get_collab_embedding_fragment_ids, stream_collabs_without_embeddings};
-use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
+use futures_util::stream::BoxStream;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
-use sqlx::pool::PoolConnection;
 use sqlx::Postgres;
+use sqlx::pool::PoolConnection;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -206,8 +206,7 @@ async fn _create_embeddings(
   while let Some(Ok(Some(record))) = join_set.join_next().await {
     trace!(
       "[Embedding] generate collab:{} embeddings, tokens used: {}",
-      record.object_id,
-      record.tokens_used
+      record.object_id, record.tokens_used
     );
     results.push(record);
   }

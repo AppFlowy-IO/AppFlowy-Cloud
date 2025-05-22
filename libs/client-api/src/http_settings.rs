@@ -5,7 +5,7 @@ use client_api_entity::AFWorkspaceSettings;
 use shared_entity::response::AppResponseError;
 
 use crate::entity::AFWorkspaceSettingsChange;
-use crate::{process_response_data, Client};
+use crate::{Client, process_response_data};
 
 impl Client {
   #[instrument(level = "info", skip_all, err)]

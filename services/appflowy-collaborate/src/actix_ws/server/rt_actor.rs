@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
-use crate::error::RealtimeError;
 use crate::CollaborationServer;
+use crate::error::RealtimeError;
 use actix::{Actor, Context, Handler};
 use anyhow::anyhow;
 use app_error::AppError;
@@ -132,7 +132,10 @@ where
     match (user, message.split_messages_by_object_id()) {
       (Some(user), Ok(messages)) => self.handle_client_message(user, messages),
       (None, _) => {
-        warn!("Can't find the realtime user uid:{}, device:{}. User should connect via websocket before", uid,device_id);
+        warn!(
+          "Can't find the realtime user uid:{}, device:{}. User should connect via websocket before",
+          uid, device_id
+        );
         Ok(())
       },
       (Some(_), Err(err)) => {

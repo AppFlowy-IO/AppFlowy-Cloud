@@ -11,7 +11,7 @@ use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
 use nanoid::nanoid;
 use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use redis::aio::ConnectionManager;
 use tokio::time::sleep;
 

@@ -4,10 +4,10 @@ use collab_rt_protocol::{Message, SyncMessage};
 use database_entity::dto::AFWorkspaceSettingsChange;
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use redis::AsyncCommands;
 use serde_json::json;
-use sqlx::{types::uuid, PgPool};
+use sqlx::{PgPool, types::uuid};
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

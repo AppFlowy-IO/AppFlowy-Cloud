@@ -89,7 +89,7 @@ async fn revoke_apple_user(
         return Err(AppResponseError::new(
           ErrorCode::InvalidRequest,
           "apple email deletion must provide access_token or refresh_token",
-        ))
+        ));
       },
     },
   };

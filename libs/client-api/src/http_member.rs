@@ -1,4 +1,4 @@
-use crate::{process_response_data, process_response_error, Client};
+use crate::{Client, process_response_data, process_response_error};
 use client_api_entity::{
   AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceMember, QueryWorkspaceMember,
 };

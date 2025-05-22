@@ -1,4 +1,4 @@
-use client_api_test::{generate_unique_email, ADMIN_USER, LOCALHOST_GOTRUE};
+use client_api_test::{ADMIN_USER, LOCALHOST_GOTRUE, generate_unique_email};
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},

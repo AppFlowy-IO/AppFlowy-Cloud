@@ -4,12 +4,12 @@ use std::task::{Context, Poll};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderMap;
 use tokio_tungstenite::{
-  tungstenite::{
-    error::*,
-    protocol::{frame::coding::Data, CloseFrame},
-    Message, Result,
-  },
   MaybeTlsStream,
+  tungstenite::{
+    Message, Result,
+    error::*,
+    protocol::{CloseFrame, frame::coding::Data},
+  },
 };
 
 pub async fn connect_async(url: &str, header_map: HeaderMap) -> crate::Result<WebSocketStream> {

@@ -1,9 +1,10 @@
 use super::{ObjectId, WorkspaceId};
-use crate::sync_trace;
 use crate::v2::actor::ActionSource;
+use crate::{sync_error, sync_trace};
 use anyhow::anyhow;
 use appflowy_proto::Rid;
 use client_api_entity::CollabType;
+use collab::core::transaction::DocTransactionExtension;
 use collab::preclude::Collab;
 use collab_plugins::local_storage::kv::doc::CollabKVAction;
 use collab_plugins::local_storage::kv::{KVStore, KVTransactionDB, PersistenceError};
@@ -67,71 +68,107 @@ impl Db {
 
   pub fn init_collab(
     &self,
+    object_id: &ObjectId,
     collab: &Collab,
     collab_type: &CollabType,
   ) -> Result<bool, PersistenceError> {
-    //NOTE: this shouldn't be needed, however the way how existing persistence is written,
-    // it's necessary
-    let collab_id: Uuid = collab.object_id().parse().unwrap();
     sync_trace!(
       "initializing collab {}/{}/{} in local db by {}",
       &self.workspace_id,
-      collab_id,
+      object_id,
       collab_type,
       self.uid
     );
     let tx = collab.transact();
     let instance = self.inner.get()?;
     let ops = instance.write_txn();
-    match ops.create_new_doc(
-      self.uid,
-      &self.workspace_id.to_string(),
-      &collab_id.to_string(),
-      &tx,
-    ) {
-      Ok(_) => {
-        ops.commit_transaction()?;
-        sync_trace!(
-          "Save collab {}/{}/{} to local db. store: {:#?}",
-          &self.workspace_id,
-          collab_id,
-          collab_type,
-          tx.store()
-        );
-        Ok(true)
-      },
-      Err(PersistenceError::DocumentAlreadyExist) => Ok(false),
-      Err(err) => Err(err),
+
+    let workspace_id = self.workspace_id.to_string();
+    let object_id = object_id.to_string();
+
+    if ops.is_exist(self.uid, &workspace_id, &object_id) {
+      match ops.create_new_doc(self.uid, &workspace_id, &object_id, &tx) {
+        Ok(_) => {
+          ops.commit_transaction()?;
+          sync_trace!(
+            "Save collab {}/{}/{} to local db. store: {:#?}",
+            &self.workspace_id,
+            object_id,
+            collab_type,
+            tx.store()
+          );
+          Ok(true)
+        },
+        Err(PersistenceError::DocumentAlreadyExist) => Ok(false),
+        Err(err) => Err(err),
+      }
+    } else {
+      Ok(false)
     }
   }
 
-  pub fn load(&self, collab: &mut Collab) -> Result<(), PersistenceError> {
+  /// Loads a document from the local database into the provided Collab instance.
+  ///
+  /// This function retrieves updates from the local database and applies it to the given
+  /// object. When the flush parameter is enabled, it will remove all individual updates and
+  /// store only the final document state and state vector,
+  ///
+  /// # Parameters
+  /// * `collab` - The mutable Collab instance to load the document data into
+  /// * `flush` - When true, consolidates storage by replacing all individual updates with
+  ///   the final document state
+  pub fn load(&self, collab: &mut Collab, flush: bool) -> Result<(), PersistenceError> {
     let instance = self.inner.get()?;
     let ops = instance.write_txn();
     let object_id = ObjectId::from_str(collab.object_id())
       .map_err(|err| PersistenceError::InvalidData(err.to_string()))?;
-    let mut txn = collab.transact_mut();
-    match ops.load_doc_with_txn(
-      self.uid,
-      &self.workspace_id.to_string(),
-      &object_id.to_string(),
-      &mut txn,
-    ) {
-      Ok(updates_applied) => {
-        tracing::trace!(
-          "restored collab {}, apply updates:{}, state: {:#?}",
-          object_id,
-          updates_applied,
-          txn.store()
-        );
-        Ok(())
-      },
-      Err(PersistenceError::RecordNotFound(_)) => {
-        tracing::debug!("collab {} not found in local db", object_id);
-        Ok(())
-      },
-      Err(err) => Err(err),
+    {
+      let mut txn = collab.transact_mut();
+      match ops.load_doc_with_txn(
+        self.uid,
+        &self.workspace_id.to_string(),
+        &object_id.to_string(),
+        &mut txn,
+      ) {
+        Ok(updates_applied) => {
+          tracing::trace!(
+            "restored collab {}, apply updates:{}, state: {:#?}",
+            object_id,
+            updates_applied,
+            txn.store()
+          );
+        },
+        Err(PersistenceError::RecordNotFound(_)) => {
+          tracing::debug!("collab {} not found in local db", object_id);
+        },
+        Err(err) => return Err(err),
+      }
     }
+
+    if flush {
+      let flush_doc = || {
+        let encoded = collab.transact().get_encoded_collab_v1();
+        ops.flush_doc(
+          self.uid,
+          &self.workspace_id.to_string(),
+          &object_id.to_string(),
+          encoded.state_vector.to_vec(),
+          encoded.doc_state.to_vec(),
+        )?;
+        ops.commit_transaction()?;
+        Ok::<_, PersistenceError>(())
+      };
+
+      if let Err(err) = flush_doc() {
+        sync_error!(
+          "Failed to flush collab {} to local db: {}",
+          collab.object_id(),
+          err
+        );
+      }
+    }
+
+    Ok(())
   }
 
   pub fn remove_doc(&self, object_id: &Uuid) -> Result<(), PersistenceError> {

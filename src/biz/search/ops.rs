@@ -117,7 +117,7 @@ pub async fn search_document(
     workspace_uuid,
   )
   .await?;
-  let private_views = private_space_and_trash_view_ids(&folder);
+  let private_views = private_space_and_trash_view_ids(&folder)?;
   let mut searchable_view_ids = HashSet::new();
   populate_searchable_view_ids(
     &folder,

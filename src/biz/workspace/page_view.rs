@@ -533,7 +533,7 @@ pub async fn append_block_at_the_end_of_page(
   view_id: &str,
   serde_blocks: &[SerdeBlock],
 ) -> Result<(), AppError> {
-  let oid = Uuid::parse_str(view_id).unwrap();
+  let oid = Uuid::parse_str(view_id)?;
   let update =
     append_block_to_document_collab(user.uid, collab_storage, workspace_id, oid, serde_blocks)
       .await?;

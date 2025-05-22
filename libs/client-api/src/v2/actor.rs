@@ -8,7 +8,7 @@ use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNo
 use arc_swap::ArcSwap;
 use bytes::BytesMut;
 use client_api_entity::CollabType;
-use collab::core::collab_state::{InitState, SyncState};
+use collab::core::collab_state::{InitState, State, SyncState};
 use collab::preclude::Collab;
 use collab_rt_protocol::{CollabRef, WeakCollabRef};
 use dashmap::{DashMap, DashSet};
@@ -34,7 +34,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 use yrs::block::ClientID;
-use yrs::sync::AwarenessUpdate;
+use yrs::sync::{Awareness, AwarenessUpdate};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Transact, Transaction, TransactionMut, Update, WriteTxn};
@@ -186,13 +186,6 @@ impl WorkspaceControllerActor {
     collab_type: CollabType,
   ) -> anyhow::Result<()> {
     let object_id: ObjectId = collab.object_id().parse()?;
-    sync_trace!(
-      "binding collab {}/{}/{}",
-      actor.workspace_id(),
-      object_id,
-      collab_type
-    );
-
     if actor
       .cache
       .get(&object_id)
@@ -209,6 +202,13 @@ impl WorkspaceControllerActor {
     }
 
     collab_type.validate_require_data(collab)?;
+    sync_info!(
+      "binding collab {}/{}/{}",
+      actor.workspace_id(),
+      object_id,
+      collab_type
+    );
+
     let sync_state = collab.get_state().clone();
     let last_message_id = actor.last_message_id.clone();
     sync_state.set_init_state(InitState::Loading);
@@ -219,54 +219,28 @@ impl WorkspaceControllerActor {
       actor.db.load(collab, true)?;
     }
     sync_state.set_init_state(InitState::Initialized);
-    // Register callback on this collab to observe incoming updates
-    let weak_inner = Arc::downgrade(actor);
     let client_id = actor.db.client_id();
     sync_state.set_sync_state(SyncState::InitSyncBegin);
-    let awareness = collab.get_awareness();
-    awareness.doc().observe_update_v1_with("af", move |tx, e| {
-      if let Some(inner) = weak_inner.upgrade() {
-        let rid: ActionSource = tx
-          .origin()
-          .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok())
-          .into();
-        sync_trace!(
-          "[{}] emit collab update {:?} {:#?} ",
-          client_id,
-          rid,
-          Update::decode_v1(&e.update).unwrap()
-        );
-        if let ActionSource::Remote(rid) = rid {
-          sync_trace!("[{}] {} received collab from remote", client_id, object_id);
-          last_message_id.rcu(|old| {
-            if rid > **old {
-              Arc::new(rid)
-            } else {
-              old.clone()
-            }
-          });
-        } else {
-          sync_state.set_sync_state(SyncState::Syncing);
-        }
-        inner.publish_update(object_id, collab_type, rid, e.update.clone());
-      }
-    })?;
-    let weak_inner = Arc::downgrade(actor);
-    awareness.on_change_with("af", move |awareness, e, origin| {
-      if let Some(inner) = weak_inner.upgrade() {
-        if origin.map(|o| o.as_ref()) != Some(Self::REMOTE_ORIGIN.as_bytes()) {
-          match awareness.update_with_clients(e.all_changes()) {
-            Ok(update) => inner.publish_awareness(object_id, collab_type, update),
-            Err(err) => error!(
-              "[{}] failed to prepare awareness update for {}: {}",
-              client_id, object_id, err
-            ),
-          }
-        }
-      }
-    });
+
+    // Register callback on this collab to observe incoming updates
+    observe_update(
+      collab_type,
+      object_id,
+      sync_state,
+      last_message_id,
+      Arc::downgrade(actor),
+      client_id,
+      collab.get_awareness(),
+    )?;
+
+    // Only observe awareness changed if current collab type support it
+    if collab_type.awareness_enabled() {
+      let awareness = collab.get_awareness();
+      observe_awareness(actor, collab_type, object_id, client_id, awareness);
+      actor.publish_awareness(object_id, collab_type, awareness.update()?);
+    }
+
     actor.publish_manifest(object_id, collab, collab_type);
-    actor.publish_awareness(object_id, collab_type, awareness.update()?);
     Ok(())
   }
 
@@ -1174,6 +1148,70 @@ impl std::borrow::Borrow<ObjectId> for ChangedCollab {
   fn borrow(&self) -> &ObjectId {
     &self.id
   }
+}
+
+#[inline]
+fn observe_awareness(
+  actor: &Arc<WorkspaceControllerActor>,
+  collab_type: CollabType,
+  object_id: ObjectId,
+  client_id: ClientID,
+  awareness: &Awareness,
+) {
+  let weak_inner = Arc::downgrade(actor);
+  awareness.on_change_with("af", move |awareness, e, origin| {
+    if let Some(inner) = weak_inner.upgrade() {
+      if origin.map(|o| o.as_ref()) != Some(WorkspaceControllerActor::REMOTE_ORIGIN.as_bytes()) {
+        match awareness.update_with_clients(e.all_changes()) {
+          Ok(update) => inner.publish_awareness(object_id, collab_type, update),
+          Err(err) => error!(
+            "[{}] failed to prepare awareness update for {}: {}",
+            client_id, object_id, err
+          ),
+        }
+      }
+    }
+  });
+}
+
+#[inline]
+fn observe_update(
+  collab_type: CollabType,
+  object_id: ObjectId,
+  sync_state: Arc<State>,
+  last_message_id: Arc<ArcSwap<Rid>>,
+  weak_inner: Weak<WorkspaceControllerActor>,
+  client_id: ClientID,
+  awareness: &Awareness,
+) -> anyhow::Result<()> {
+  awareness.doc().observe_update_v1_with("af", move |tx, e| {
+    if let Some(inner) = weak_inner.upgrade() {
+      let rid: ActionSource = tx
+        .origin()
+        .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok())
+        .into();
+      sync_trace!(
+        "[{}] emit collab update {:?} {:#?} ",
+        client_id,
+        rid,
+        Update::decode_v1(&e.update).unwrap()
+      );
+      if let ActionSource::Remote(rid) = rid {
+        sync_trace!("[{}] {} received collab from remote", client_id, object_id);
+        last_message_id.rcu(|old| {
+          if rid > **old {
+            Arc::new(rid)
+          } else {
+            old.clone()
+          }
+        });
+      } else {
+        sync_state.set_sync_state(SyncState::Syncing);
+      }
+      inner.publish_update(object_id, collab_type, rid, e.update.clone());
+    }
+  })?;
+  Ok(())
 }
 
 fn publish_inactive_collab(

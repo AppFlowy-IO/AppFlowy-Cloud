@@ -4,10 +4,10 @@ use chrono::{DateTime, Utc};
 
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWebUserWithObfuscatedName, AFWorkspace,
-  AFWorkspaceInvitationStatus, AccessRequestMinimal, AccessRequestStatus, AccessRequestWithViewId,
-  AccessRequesterInfo, AccountLink, GlobalComment, QuickNote, Reaction, Template, TemplateCategory,
-  TemplateCategoryMinimal, TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal,
-  TemplateGroup, TemplateMinimal,
+  AFWorkspaceInvitationStatus, AFWorkspaceMember, AccessRequestMinimal, AccessRequestStatus,
+  AccessRequestWithViewId, AccessRequesterInfo, AccountLink, GlobalComment, QuickNote, Reaction,
+  Template, TemplateCategory, TemplateCategoryMinimal, TemplateCategoryType, TemplateCreator,
+  TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -184,6 +184,18 @@ pub struct AFWorkspaceMemberRow {
   pub avatar_url: Option<String>,
   pub role: AFRole,
   pub created_at: Option<DateTime<Utc>>,
+}
+
+impl From<AFWorkspaceMemberRow> for AFWorkspaceMember {
+  fn from(value: AFWorkspaceMemberRow) -> Self {
+    AFWorkspaceMember {
+      name: value.name.clone(),
+      email: value.email.clone(),
+      role: value.role.clone(),
+      avatar_url: value.avatar_url.clone(),
+      joined_at: value.created_at,
+    }
+  }
 }
 
 #[derive(FromRow)]

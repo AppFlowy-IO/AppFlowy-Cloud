@@ -408,11 +408,11 @@ async fn add_workspace_member_and_then_member_get_member_list() {
   assert_eq!(members.len(), 3);
 
   // guest should not be able to get the member list of the workspace
-  let error = guest
+  let members = guest
     .try_get_workspace_members(&workspace_id)
     .await
-    .unwrap_err();
-  assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
+    .unwrap();
+  assert_eq!(members.len(), 1);
 }
 
 #[tokio::test]

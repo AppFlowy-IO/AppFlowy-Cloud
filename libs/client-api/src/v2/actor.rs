@@ -2,7 +2,7 @@ use crate::v2::compactor::ChannelReceiverCompactor;
 use crate::v2::controller::{ConnectionStatus, DisconnectedReason, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
-use crate::{sync_error, sync_trace};
+use crate::{sync_error, sync_info, sync_trace};
 use app_error::AppError;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
 use arc_swap::ArcSwap;
@@ -15,13 +15,14 @@ use dashmap::{DashMap, DashSet};
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use shared_entity::response::AppResponseError;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::select;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex;
 use tokio::time::MissedTickBehavior;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -45,7 +46,7 @@ pub(super) struct WorkspaceControllerActor {
   mailbox: WorkspaceControllerMailbox,
   last_message_id: Arc<ArcSwap<Rid>>,
   /// Cache for collabs actually existing in the memory, along with their type.
-  cache: DashMap<ObjectId, CachedCollab>,
+  cache: Arc<DashMap<ObjectId, CachedCollab>>,
   /// Persistent database handle.
   db: Db,
   notification_tx: tokio::sync::broadcast::Sender<WorkspaceNotification>,
@@ -69,7 +70,7 @@ impl WorkspaceControllerActor {
       status_tx,
       mailbox: message_tx,
       last_message_id: Arc::new(ArcSwap::new(last_message_id.into())),
-      cache: DashMap::new(),
+      cache: Arc::new(DashMap::new()),
       db,
       #[cfg(debug_assertions)]
       skip_realtime_message: AtomicBool::new(false),
@@ -135,7 +136,13 @@ impl WorkspaceControllerActor {
     self.cache.get(object_id)?.upgrade()
   }
 
-  pub fn remove_collab(&self, object_id: &ObjectId) -> anyhow::Result<()> {
+  /// Remove colla from the cache
+  pub fn remove_collab(&self, object_id: &ObjectId) {
+    self.cache.remove(object_id);
+  }
+
+  /// Remove collab from cache and delete the object from db
+  pub fn delete_collab(&self, object_id: &ObjectId) -> anyhow::Result<()> {
     self.cache.remove(object_id);
     self.db.remove_doc(object_id)?;
     Ok(())
@@ -654,7 +661,7 @@ impl WorkspaceControllerActor {
           object_id,
           reason
         );
-        self.remove_collab(&object_id)?;
+        self.delete_collab(&object_id)?;
       },
       ServerMessage::UserProfileChange { uid } => {
         self.send_notification(WorkspaceNotification::UserProfileChange {
@@ -679,11 +686,22 @@ impl WorkspaceControllerActor {
 
   async fn publish_pending_collabs(&self) -> anyhow::Result<()> {
     let last_message_id = self.last_message_id();
-    let pending: Vec<_> = self
+    let mut pending: Vec<_> = self
       .cache
       .iter()
       .map(|e| (*e.key(), e.value().collab_type))
       .collect();
+
+    sync_info!("Publishing pending collabs: {}", pending.len());
+    // Sort by collab_type: Document > Database > Folder
+    pending.sort_by_key(|(_, collab_type)| match collab_type {
+      CollabType::Document => 0,
+      CollabType::Database => 1,
+      CollabType::Folder => 2,
+      _ => 3,
+    });
+
+    let mut inactive_collab = vec![];
     for (object_id, collab_type) in pending {
       if let Some(collab_ref) = self.get_collab(&object_id) {
         let state_vector = collab_ref.read().await.borrow().transact().state_vector();
@@ -694,9 +712,90 @@ impl WorkspaceControllerActor {
           state_vector: state_vector.encode_v1(),
         };
         self.trigger(WorkspaceAction::Send(manifest, ActionSource::Local));
+      } else {
+        // remove collab that already dropped
+        self.remove_collab(&object_id);
+
+        // Collabs not in memory are considered inactive. We need to sync these when
+        // connection is established to handle changes made while offline.
+        inactive_collab.push((object_id, collab_type));
       }
     }
+
+    let cancel_token = CancellationToken::new();
+    let cancel_token_clone = cancel_token.clone();
+    let mut connect_status = self.status_tx.subscribe();
+    tokio::spawn(async move {
+      while connect_status.changed().await.is_ok() {
+        if !matches!(*connect_status.borrow(), ConnectionStatus::Connected { .. }) {
+          sync_info!("Connection status changed to disconnected, cancelling deferred sync");
+          cancel_token_clone.cancel();
+          break;
+        }
+      }
+    });
+
+    self.spawn_publish_inactive_collabs(inactive_collab, cancel_token);
     Ok(())
+  }
+
+  /// Publish inactive collabs in the background.
+  pub fn spawn_publish_inactive_collabs(
+    &self,
+    collabs: Vec<(ObjectId, CollabType)>,
+    cancel_token: CancellationToken,
+  ) {
+    if collabs.is_empty() {
+      return;
+    }
+
+    sync_info!("Publishing inactive collabs: {}", collabs.len());
+    let last_message_id = self.last_message_id();
+    let sender = self.mailbox.clone();
+    let db = self.db.clone();
+    let cache = Arc::downgrade(&self.cache);
+    tokio::spawn(async move {
+      for chunk in collabs.chunks(10) {
+        if cancel_token.is_cancelled() {
+          sync_info!("Deferred sync cancelled due to disconnection");
+          break;
+        }
+
+        loop {
+          let num_of_unsynced_collab = match cache.upgrade() {
+            None => break,
+            Some(cache) => num_of_unsynced_collab(cache),
+          };
+          if num_of_unsynced_collab >= 10 {
+            sync_trace!(
+              "Too many unsynced collabs ({}), delaying inactive collab sync",
+              num_of_unsynced_collab
+            );
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            if cancel_token.is_cancelled() {
+              sync_info!("Deferred sync cancelled during wait");
+              return;
+            }
+          } else {
+            break;
+          }
+        }
+
+        let object_ids: Vec<_> = chunk.iter().map(|(object_id, _)| object_id).collect();
+        match db.batch_get_state_vector(&object_ids) {
+          Ok(vectors) => {
+            if let Err(err) = publish_inactive_collab(last_message_id, &sender, chunk, vectors) {
+              sync_error!("Failed to publish inactive collab: {}", err);
+              return;
+            }
+          },
+          Err(err) => {
+            sync_error!("Failed to get state vectors for batch: {}", err);
+          },
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+      }
+    });
   }
 
   fn check_missing_updates(
@@ -1075,4 +1174,46 @@ impl std::borrow::Borrow<ObjectId> for ChangedCollab {
   fn borrow(&self) -> &ObjectId {
     &self.id
   }
+}
+
+fn publish_inactive_collab(
+  last_message_id: Rid,
+  sender: &UnboundedSender<WorkspaceAction>,
+  chunk: &[(ObjectId, CollabType)],
+  vectors: Vec<(ObjectId, StateVector)>,
+) -> anyhow::Result<()> {
+  let mut collab_types = chunk
+    .iter()
+    .map(|(object_id, collab_type)| (object_id, *collab_type))
+    .collect::<HashMap<_, _>>();
+
+  for (object_id, state_vector) in vectors {
+    if let Some(collab_type) = collab_types.remove(&object_id) {
+      let manifest = ClientMessage::Manifest {
+        object_id,
+        collab_type,
+        last_message_id,
+        state_vector: state_vector.encode_v1(),
+      };
+
+      sender.send(WorkspaceAction::Send(manifest, ActionSource::Local))?;
+    }
+  }
+  Ok(())
+}
+
+fn num_of_unsynced_collab(cache: Arc<DashMap<ObjectId, CachedCollab>>) -> usize {
+  cache
+    .iter()
+    .filter(|entry| {
+      if let Some(collab) = entry.value().upgrade() {
+        collab
+          .try_read()
+          .map(|guard| guard.borrow().get_state().sync_state() != SyncState::SyncFinished)
+          .unwrap_or(true)
+      } else {
+        false
+      }
+    })
+    .count()
 }

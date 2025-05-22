@@ -4,6 +4,8 @@ use crate::{sync_error, sync_trace};
 use anyhow::anyhow;
 use appflowy_proto::Rid;
 use client_api_entity::CollabType;
+use collab::core::collab::CollabOptions;
+use collab::core::origin::CollabOrigin;
 use collab::core::transaction::DocTransactionExtension;
 use collab::preclude::Collab;
 use collab_plugins::local_storage::kv::doc::CollabKVAction;
@@ -105,6 +107,58 @@ impl Db {
     } else {
       Ok(false)
     }
+  }
+
+  #[allow(dead_code)]
+  pub fn get_state_vector(&self, object_id: &ObjectId) -> Result<StateVector, PersistenceError> {
+    let instance = self.inner.get()?;
+    let ops = instance.read_txn();
+    let object_id = object_id.to_string();
+    let options = CollabOptions::new(object_id.to_string());
+    let mut collab = Collab::new_with_options(CollabOrigin::Empty, options)?;
+    let mut txn = collab.transact_mut();
+    ops.load_doc_with_txn(
+      self.uid,
+      &self.workspace_id.to_string(),
+      &object_id.to_string(),
+      &mut txn,
+    )?;
+
+    Ok(txn.state_vector())
+  }
+
+  pub fn batch_get_state_vector(
+    &self,
+    object_ids: &[&ObjectId],
+  ) -> Result<Vec<(ObjectId, StateVector)>, PersistenceError> {
+    let instance = self.inner.get()?;
+    let ops = instance.read_txn();
+    let mut result = Vec::new();
+
+    for object_id in object_ids {
+      let get_state_vector = || -> Result<StateVector, PersistenceError> {
+        let object_id_str = object_id.to_string();
+        let options = CollabOptions::new(object_id_str.to_string());
+        let mut collab = Collab::new_with_options(CollabOrigin::Empty, options)?;
+        let mut txn = collab.transact_mut();
+
+        ops.load_doc_with_txn(
+          self.uid,
+          &self.workspace_id.to_string(),
+          &object_id_str,
+          &mut txn,
+        )?;
+
+        Ok(txn.state_vector())
+      };
+
+      match get_state_vector() {
+        Ok(state_vector) => result.push((**object_id, state_vector)),
+        Err(_) => continue,
+      }
+    }
+
+    Ok(result)
   }
 
   /// Loads a document from the local database into the provided Collab instance.

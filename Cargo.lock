@@ -601,6 +601,7 @@ dependencies = [
  "app-error",
  "appflowy-ai-client",
  "appflowy-collaborate",
+ "appflowy-proto",
  "assert-json-diff",
  "async-openai",
  "async-stream",

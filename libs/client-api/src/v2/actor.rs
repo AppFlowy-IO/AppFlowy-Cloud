@@ -233,7 +233,7 @@ impl WorkspaceControllerActor {
       collab.get_awareness(),
     )?;
 
-    // Only observe awareness changed if current collab type support it
+    // Only observe awareness changed if the collab supports it
     if collab_type.awareness_enabled() {
       let awareness = collab.get_awareness();
       observe_awareness(actor, collab_type, object_id, client_id, awareness);

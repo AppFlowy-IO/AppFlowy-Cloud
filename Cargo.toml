@@ -144,6 +144,7 @@ nanoid = "0.4.0"
 indexer.workspace = true
 llm-client.workspace = true
 async-openai.workspace = true
+appflowy-proto.workspace = true
 
 [dev-dependencies]
 flate2 = "1.0"

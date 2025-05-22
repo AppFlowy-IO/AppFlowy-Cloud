@@ -14,6 +14,7 @@ use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::ws2::{SessionInfo, WsSession};
+use appflowy_proto::ServerMessage;
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
 use collab_stream::model::MessageId;
@@ -131,8 +132,21 @@ pub async fn establish_ws_connection_v2(
     params.client_id,
     workspace_id
   );
+
+  let (tx, rx) = mpsc::channel(10);
+  let mut user_change_recv = state.pg_listeners.subscribe_user_change(uid);
+  actix::spawn(async move {
+    while let Some(notification) = user_change_recv.recv().await {
+      if let Some(user) = notification.payload {
+        let _ = tx
+          .send(ServerMessage::UserProfileChange { uid: user.uid })
+          .await;
+      }
+    }
+  });
+
   ws::WsResponseBuilder::new(
-    WsSession::new(workspace_id, info, ws_server),
+    WsSession::new(workspace_id, info, ws_server, rx),
     &request,
     payload,
   )

@@ -5,12 +5,13 @@ use actix::{
 };
 use actix_http::ws::{CloseCode, CloseReason, Item, ProtocolError};
 use actix_web_actors::ws;
-use appflowy_proto::{ClientMessage, ObjectId, Rid, UpdateFlags, WorkspaceId};
+use appflowy_proto::{ClientMessage, ObjectId, Rid, ServerMessage, UpdateFlags, WorkspaceId};
 use bytes::{Bytes, BytesMut};
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab_entity::CollabType;
 use collab_stream::model::MessageId;
 use std::time::{Duration, Instant};
+use tracing::error;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
@@ -47,22 +48,30 @@ impl SessionInfo {
   }
 }
 
+pub type ExtraMessageReceiver = tokio::sync::mpsc::Receiver<ServerMessage>;
 pub struct WsSession {
   current_workspace: WorkspaceId,
   info: SessionInfo,
   server: Addr<WsServer>,
   hb: Instant,
   buf: Option<BytesMut>,
+  extra_message_rx: Option<ExtraMessageReceiver>,
 }
 
 impl WsSession {
-  pub fn new(workspace: WorkspaceId, info: SessionInfo, server: Addr<WsServer>) -> Self {
+  pub fn new(
+    workspace: WorkspaceId,
+    info: SessionInfo,
+    server: Addr<WsServer>,
+    extra_message_rx: ExtraMessageReceiver,
+  ) -> Self {
     WsSession {
       info,
       server,
       current_workspace: workspace,
       hb: Instant::now(),
       buf: None,
+      extra_message_rx: Some(extra_message_rx),
     }
   }
 
@@ -128,6 +137,19 @@ impl Actor for WsSession {
   fn started(&mut self, ctx: &mut Self::Context) {
     tracing::trace!("starting session `{}`", self.id());
     self.hb(ctx);
+
+    let recipient = ctx.address().recipient();
+    if let Some(mut external_source) = self.extra_message_rx.take() {
+      actix::spawn(async move {
+        while let Some(message) = external_source.recv().await {
+          let output = WsOutput { message };
+          let _ = recipient.send(output).await;
+        }
+      });
+    } else {
+      error!("extra_message_sender only take once");
+    }
+
     let join = Join {
       session_id: self.id(),
       collab_origin: self.info.collab_origin(),

@@ -8,6 +8,13 @@ use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
 };
 use bytes::Bytes;
+use client_api::entity::id::user_awareness_object_id;
+use client_api::entity::{
+  CompletionStream, CompletionStreamValue, PublishCollabItem, PublishCollabMetadata,
+  QueryWorkspaceMember, QuestionStream, QuestionStreamValue, UpdateCollabWebParams,
+  WorkspaceNotification,
+};
+use client_api::v2::{WorkspaceController, WorkspaceControllerOptions, WorkspaceId};
 use collab::core::collab::{CollabOptions, DataSource};
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
@@ -21,35 +28,28 @@ use collab_entity::CollabType;
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
 use collab_folder::{Folder, ViewLayout};
 use collab_user::core::UserAwareness;
-use mime::Mime;
-use serde::Deserialize;
-use serde_json::{json, Value};
-use shared_entity::dto::publish_dto::PublishViewMetaData;
-use tempfile::TempDir;
-use tokio::time::{sleep, timeout, Duration};
-use tokio_stream::StreamExt;
-use tracing::trace;
-use uuid::Uuid;
-
-use client_api::entity::id::user_awareness_object_id;
-use client_api::entity::{
-  CompletionStream, CompletionStreamValue, PublishCollabItem, PublishCollabMetadata,
-  QueryWorkspaceMember, QuestionStream, QuestionStreamValue, UpdateCollabWebParams,
-};
-use client_api::v2::{WorkspaceController, WorkspaceControllerOptions, WorkspaceId};
 use database_entity::dto::{
   AFCollabEmbedInfo, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
   AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
   CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams, QuerySnapshotParams,
   SnapshotData,
 };
+use mime::Mime;
+use serde::Deserialize;
+use serde_json::{json, Value};
 use shared_entity::dto::ai_dto::CalculateSimilarityParams;
+use shared_entity::dto::publish_dto::PublishViewMetaData;
 use shared_entity::dto::search_dto::SearchDocumentResponseItem;
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CollabResponse, EmbeddedCollabQuery, PublishedDuplicate, WorkspaceMemberChangeset,
   WorkspaceMemberInvitation, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
+use tempfile::TempDir;
+use tokio::time::{sleep, timeout, Duration};
+use tokio_stream::StreamExt;
+use tracing::trace;
+use uuid::Uuid;
 
 use crate::database_util::TestDatabaseCollabService;
 use crate::user::{generate_unique_registered_user, User};
@@ -78,6 +78,17 @@ impl TestClient {
     let mut lock = self.collabs.get(object_id).unwrap().collab.write().await;
     let collab = (*lock).borrow_mut();
     collab.insert(key, value);
+  }
+
+  pub fn subscribe_workspace_notification(
+    &self,
+    workspace_id: &Uuid,
+  ) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
+    self
+      .workspaces
+      .get(workspace_id)
+      .unwrap()
+      .subscribe_notification()
   }
 
   pub async fn new_with_device_id(

@@ -1,4 +1,5 @@
 use app_error::ErrorCode;
+use appflowy_proto::WorkspaceNotification;
 use client_api::ws::{WSClient, WSClientConfig};
 use client_api_test::*;
 use serde_json::json;
@@ -182,6 +183,40 @@ async fn user_change_notify_test() {
     },
     _ = fut => {
       panic!("update user timeout");
+    },
+  }
+}
+
+#[tokio::test]
+async fn user_change_notify_test_v2() {
+  let test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let mut workspace_changed = test_client.subscribe_workspace_notification(&workspace_id);
+
+  // Update user name
+  let new_name = "lucas";
+  let user_id = test_client.uid().await;
+  let api_client = test_client.api_client.clone();
+  let clone_api_client = api_client.clone();
+  tokio::spawn(async move {
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    clone_api_client
+      .update_user(UpdateUserParams::new().with_name(new_name))
+      .await
+      .unwrap();
+  });
+
+  // Wait for notification with a reasonable timeout
+  match tokio::time::timeout(Duration::from_secs(30), workspace_changed.recv()).await {
+    Ok(notification) => {
+      if let Ok(WorkspaceNotification::UserProfileChange { uid, .. }) = notification {
+        assert_eq!(user_id, uid);
+        let profile = api_client.get_profile().await.unwrap();
+        assert_eq!(profile.name.unwrap().as_str(), new_name);
+      }
+    },
+    Err(_) => {
+      panic!("Timed out waiting for user change notification");
     },
   }
 }

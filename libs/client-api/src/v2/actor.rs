@@ -648,11 +648,7 @@ impl WorkspaceControllerActor {
   }
 
   fn send_notification(&self, notification: WorkspaceNotification) {
-    if self.notification_tx.is_empty() {
-      return;
-    }
-
-    sync_trace!("send server notification: {:?}", notification);
+    sync_trace!("Receive server notification: {:?}", notification);
     if let Err(err) = self.notification_tx.send(notification) {
       sync_error!("Failed to send server notification, error: {:?}", err);
     }

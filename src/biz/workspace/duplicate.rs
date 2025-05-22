@@ -71,7 +71,6 @@ pub async fn duplicate_view_tree_and_collab(
     })?;
   let encoded_ws_db = get_latest_collab_encoded(
     &collab_storage,
-    GetCollabOrigin::User { uid },
     workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,

@@ -20,7 +20,6 @@ use actix_web::cookie::Key;
 use actix_web::middleware::NormalizePath;
 use actix_web::{dev::Server, web, web::Data, App, HttpResponse, HttpServer, Responder};
 use anyhow::{Context, Error};
-use appflowy_collaborate::collab::access_control::CollabStorageAccessControlImpl;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
@@ -282,11 +281,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config.collab.s3_collab_threshold as usize,
   );
 
-  let collab_storage_access_control = CollabStorageAccessControlImpl {
-    collab_access_control: collab_access_control.clone(),
-    workspace_access_control: workspace_access_control.clone(),
-    cache: collab_cache.clone(),
-  };
   let snapshot_control = SnapshotControl::new(
     pg_pool.clone(),
     s3_client.clone(),
@@ -295,7 +289,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   .await;
   let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
     collab_cache.clone(),
-    collab_storage_access_control,
     snapshot_control,
     rt_cmd_tx,
   ));

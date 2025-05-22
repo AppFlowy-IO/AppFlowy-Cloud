@@ -201,7 +201,6 @@ pub async fn get_latest_collab_database_row_body(
 ) -> Result<(Collab, DatabaseRowBody), AppError> {
   let mut db_row_collab = get_latest_collab(
     collab_storage,
-    GetCollabOrigin::Server,
     workspace_id,
     db_row_id,
     CollabType::DatabaseRow,
@@ -227,7 +226,6 @@ pub async fn get_latest_collab_database_body(
 ) -> Result<(Collab, DatabaseBody), AppError> {
   let db_collab = get_latest_collab(
     collab_storage,
-    GetCollabOrigin::Server,
     workspace_id,
     database_id,
     CollabType::Database,
@@ -249,14 +247,12 @@ pub async fn get_latest_collab_database_body(
 
 pub async fn get_latest_collab_encoded(
   collab_storage: &CollabAccessControlStorage,
-  collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
   object_id: Uuid,
   collab_type: CollabType,
 ) -> Result<EncodedCollab, AppError> {
   collab_storage
     .get_encode_collab(
-      collab_origin,
       QueryCollabParams {
         workspace_id,
         inner: QueryCollab {
@@ -318,12 +314,11 @@ pub async fn batch_get_latest_collab_encoded(
 
 pub async fn get_latest_collab(
   storage: &CollabAccessControlStorage,
-  origin: GetCollabOrigin,
   workspace_id: Uuid,
   oid: Uuid,
   collab_type: CollabType,
 ) -> Result<Collab, AppError> {
-  let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
+  let ec = get_latest_collab_encoded(storage, workspace_id, oid, collab_type).await?;
   let collab: Collab = Collab::new_with_source(
     CollabOrigin::Server,
     &oid.to_string(),
@@ -343,13 +338,11 @@ pub async fn get_latest_collab(
 pub async fn get_latest_collab_workspace_database_body(
   pg_pool: &PgPool,
   storage: &CollabAccessControlStorage,
-  origin: GetCollabOrigin,
   workspace_id: Uuid,
 ) -> Result<WorkspaceDatabaseBody, AppError> {
   let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id).await?;
   let mut collab = get_latest_collab(
     storage,
-    origin,
     workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,
@@ -377,7 +370,6 @@ pub async fn get_latest_collab_folder(
   };
   let encoded_collab = get_latest_collab_encoded(
     collab_storage,
-    collab_origin,
     workspace_id,
     workspace_id,
     CollabType::Folder,
@@ -409,18 +401,11 @@ pub async fn get_latest_collab_folder(
 
 pub async fn get_latest_collab_document(
   collab_storage: &CollabAccessControlStorage,
-  collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
   doc_oid: Uuid,
 ) -> Result<Document, AppError> {
-  let doc_collab = get_latest_collab(
-    collab_storage,
-    collab_origin,
-    workspace_id,
-    doc_oid,
-    CollabType::Document,
-  )
-  .await?;
+  let doc_collab =
+    get_latest_collab(collab_storage, workspace_id, doc_oid, CollabType::Document).await?;
   Document::open(doc_collab).map_err(|e| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to create document body from collab, doc_oid: {}, {}",
@@ -593,13 +578,7 @@ pub async fn get_database_row_doc_changes(
   match doc_id {
     Some(doc_id) => {
       let doc_uuid = Uuid::parse_str(&doc_id)?;
-      let cur_doc = get_latest_collab_document(
-        collab_storage,
-        GetCollabOrigin::Server,
-        workspace_id,
-        doc_uuid,
-      )
-      .await?;
+      let cur_doc = get_latest_collab_document(collab_storage, workspace_id, doc_uuid).await?;
 
       let md_importer = MDImporter::new(None);
       let new_doc_data = md_importer

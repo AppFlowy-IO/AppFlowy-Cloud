@@ -1,6 +1,7 @@
 use super::db::{Db, DbHolder};
 use super::{ChangedCollab, ObjectId, WorkspaceId};
 use crate::entity::CollabType;
+use crate::sync_trace;
 use crate::v2::actor::{WorkspaceAction, WorkspaceControllerActor, WsConn};
 use crate::v2::conn_retry::ReconnectionManager;
 use app_error::ErrorCode;
@@ -14,11 +15,12 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
+use tokio::time::interval;
 use tokio_stream::wrappers::WatchStream;
 use tokio_stream::StreamExt;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::error::ProtocolError;
+use tokio_tungstenite::tungstenite::{Error, Message};
 use tokio_util::sync::CancellationToken;
-use tracing::trace;
 use yrs::block::ClientID;
 
 #[derive(Clone)]
@@ -179,10 +181,53 @@ impl WorkspaceController {
 pub enum DisconnectedReason {
   /// When disconnect reason is unexpected. ReconnectionManager will try to reconnect after a period of time
   Unexpected(Arc<str>),
+  ResetWithoutClosingHandshake,
+  MessageDecode(Arc<str>),
   ReachMaximumRetry,
   MessageLoopEnd(Arc<str>),
+  CannotHandleReceiveMessage(Arc<str>),
   UserDisconnect(Arc<str>),
   Unauthorized(Arc<str>),
+}
+
+impl Display for DisconnectedReason {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      DisconnectedReason::Unexpected(reason) => write!(f, "unexpected: {}", reason),
+      DisconnectedReason::ResetWithoutClosingHandshake => {
+        write!(f, "reset without closing handshake")
+      },
+      DisconnectedReason::MessageDecode(reason) => write!(f, "message decode: {}", reason),
+      DisconnectedReason::ReachMaximumRetry => write!(f, "reach maximum retry"),
+      DisconnectedReason::MessageLoopEnd(reason) => write!(f, "message loop end: {}", reason),
+      DisconnectedReason::CannotHandleReceiveMessage(reason) => {
+        write!(f, "cannot handle receive message: {}", reason)
+      },
+      DisconnectedReason::UserDisconnect(reason) => write!(f, "user disconnect: {}", reason),
+      DisconnectedReason::Unauthorized(reason) => write!(f, "unauthorized: {}", reason),
+    }
+  }
+}
+
+impl From<appflowy_proto::Error> for DisconnectedReason {
+  fn from(value: appflowy_proto::Error) -> Self {
+    DisconnectedReason::MessageDecode(value.to_string().into())
+  }
+}
+
+impl From<tokio_tungstenite::tungstenite::Error> for DisconnectedReason {
+  fn from(value: Error) -> Self {
+    match value {
+      Error::Io(err) => DisconnectedReason::Unexpected(err.to_string().into()),
+      Error::Protocol(p) => match p {
+        ProtocolError::ResetWithoutClosingHandshake => {
+          DisconnectedReason::ResetWithoutClosingHandshake
+        },
+        _ => DisconnectedReason::Unexpected(format!("{:?}", p).into()),
+      },
+      _ => DisconnectedReason::MessageLoopEnd(value.to_string().into()),
+    }
+  }
 }
 
 impl From<AppResponseError> for DisconnectedReason {
@@ -196,7 +241,10 @@ impl From<AppResponseError> for DisconnectedReason {
 
 impl DisconnectedReason {
   pub fn retriable(&self) -> bool {
-    matches!(self, Self::Unexpected(..))
+    matches!(
+      self,
+      Self::Unexpected(..) | Self::ResetWithoutClosingHandshake
+    )
   }
 }
 
@@ -212,6 +260,16 @@ pub enum ConnectionStatus {
     sink: Arc<Mutex<SplitSink<WsConn, Message>>>,
     cancel: CancellationToken,
   },
+  StartReconnect,
+}
+
+impl ConnectionStatus {
+  pub fn disconnected_reason(&self) -> &Option<DisconnectedReason> {
+    match self {
+      ConnectionStatus::Disconnected { reason } => reason,
+      _ => &None,
+    }
+  }
 }
 
 impl Default for ConnectionStatus {
@@ -229,6 +287,7 @@ impl Display for ConnectionStatus {
       } => write!(f, "disconnected: {:?}, ", reason),
       ConnectionStatus::Connecting { .. } => write!(f, "connecting"),
       ConnectionStatus::Connected { .. } => write!(f, "connected"),
+      ConnectionStatus::StartReconnect => write!(f, "start reconnect"),
     }
   }
 }
@@ -248,6 +307,7 @@ impl From<&ConnectionStatus> for ConnectState {
       },
       ConnectionStatus::Connecting { .. } => ConnectState::Connecting,
       ConnectionStatus::Connected { .. } => ConnectState::Connected,
+      ConnectionStatus::StartReconnect => ConnectState::Connecting,
     }
   }
 }
@@ -279,14 +339,16 @@ fn spawn_reconnection(
   mut connect_status_rx: tokio::sync::watch::Receiver<ConnectionStatus>,
 ) {
   tokio::spawn(async move {
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+    // Using interval to check connection status every 10 minutes. This ensures connection
+    // monitoring continues even when the app is running in the background.
+    let mut interval = interval(std::time::Duration::from_secs(600));
     interval.tick().await;
 
     loop {
       tokio::select! {
         result = connect_status_rx.changed() => {
           if result.is_err() {
-            trace!("connection state change dropped");
+            sync_trace!("connection state change dropped");
             break;
           }
 
@@ -297,7 +359,6 @@ fn spawn_reconnection(
             }
           }
         }
-        // Periodically check the connection status
         _ = interval.tick() => {
           match manager.upgrade() {
             None => break ,
@@ -315,12 +376,23 @@ fn check_and_reconnect(
   manager: &Arc<ReconnectionManager>,
   connect_status_rx: &tokio::sync::watch::Receiver<ConnectionStatus>,
 ) {
-  if let ConnectionStatus::Disconnected {
-    reason: Some(reason),
-  } = &*connect_status_rx.borrow()
-  {
-    if reason.retriable() {
-      manager.trigger_reconnect(reason);
-    }
+  sync_trace!(
+    "check current connection status:{:?}",
+    connect_status_rx.borrow()
+  );
+  match &*connect_status_rx.borrow() {
+    ConnectionStatus::Disconnected {
+      reason: Some(reason),
+    } => {
+      if reason.retriable() {
+        manager.trigger_reconnect(&reason.to_string());
+      }
+    },
+    ConnectionStatus::Disconnected { reason: None } => {},
+    ConnectionStatus::Connecting { .. } => {},
+    ConnectionStatus::Connected { .. } => {},
+    ConnectionStatus::StartReconnect => {
+      manager.trigger_reconnect("start reconnect");
+    },
   }
 }

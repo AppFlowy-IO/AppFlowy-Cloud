@@ -2,7 +2,7 @@ use crate::v2::compactor::ChannelReceiverCompactor;
 use crate::v2::controller::{ConnectionStatus, DisconnectedReason, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
-use crate::{sync_error, sync_info, sync_trace};
+use crate::{sync_error, sync_info, sync_trace, sync_warn};
 use app_error::AppError;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
 use arc_swap::ArcSwap;
@@ -328,7 +328,7 @@ impl WorkspaceControllerActor {
           let _ = ack.send(Ok(()));
         },
         Err(err) => {
-          tracing::warn!("[{}] failed to disconnect: {}", id, err);
+          sync_warn!("[{}] failed to disconnect: {}", id, err);
           actor.set_connection_status(ConnectionStatus::Disconnected {
             reason: Some(DisconnectedReason::UserDisconnect(err.to_string().into())),
           });
@@ -401,7 +401,22 @@ impl WorkspaceControllerActor {
         self.set_collab_sync_state(&object_id, sync_state).await;
       }
     } else {
-      sync_trace!("Skip sending message: no sink");
+      // When the connection is disconnected, we need to check if the reason is retriable.
+      // If the current disconnection status is retriable, we trigger a reconnection attempt.
+      // Once reconnection is initiated, additional reconnection triggers will be ignored
+      // until the current reconnection process completes.
+      let should_retry = self
+        .status_rx
+        .borrow()
+        .disconnected_reason()
+        .as_ref()
+        .map(|v| v.retriable() || matches!(v, DisconnectedReason::ReachMaximumRetry))
+        .unwrap_or(false);
+
+      if should_retry {
+        self.set_connection_status(ConnectionStatus::StartReconnect);
+      }
+      sync_trace!("Skip sending message: sink");
     }
     Ok(())
   }
@@ -421,6 +436,7 @@ impl WorkspaceControllerActor {
     match &*actor.status_rx.borrow() {
       ConnectionStatus::Connecting { .. } | ConnectionStatus::Connected { .. } => return Ok(()),
       ConnectionStatus::Disconnected { .. } => {},
+      ConnectionStatus::StartReconnect => {},
     }
 
     let cancel = CancellationToken::new();
@@ -470,16 +486,12 @@ impl WorkspaceControllerActor {
     stream: SplitStream<WsConn>,
     cancel: CancellationToken,
   ) {
-    let reason: Option<Arc<str>> =
-      match Self::remote_receiver_loop(weak_actor.clone(), stream, cancel.clone()).await {
-        Ok(_) => None,
-        Err(err) => Some(Arc::from(err.to_string())),
-      };
+    let reason = Self::remote_receiver_loop(weak_actor.clone(), stream, cancel.clone())
+      .await
+      .err();
     if let Some(actor) = weak_actor.upgrade() {
       sync_error!("failed to receive messages from server: {:?}", reason);
-      actor.set_connection_status(ConnectionStatus::Disconnected {
-        reason: reason.map(DisconnectedReason::MessageLoopEnd),
-      });
+      actor.set_connection_status(ConnectionStatus::Disconnected { reason });
     }
   }
 
@@ -487,7 +499,7 @@ impl WorkspaceControllerActor {
     weak_actor: Weak<WorkspaceControllerActor>,
     mut stream: SplitStream<WsConn>,
     cancel: CancellationToken,
-  ) -> anyhow::Result<()> {
+  ) -> Result<(), DisconnectedReason> {
     let mut buf = BytesMut::new();
     while let Some(res) = stream.next().await {
       if cancel.is_cancelled() {
@@ -512,7 +524,9 @@ impl WorkspaceControllerActor {
         Message::Binary(bytes) => {
           sync_trace!("[WsMessage] received binary: len:{}", bytes.len());
           let msg = ServerMessage::from_bytes(&bytes)?;
-          actor.handle_receive(msg).await?;
+          actor.handle_receive(msg).await.map_err(|err| {
+            DisconnectedReason::CannotHandleReceiveMessage(err.to_string().into())
+          })?;
         },
         Message::Text(_) => {
           sync_error!("text messages are not supported");
@@ -529,7 +543,9 @@ impl WorkspaceControllerActor {
               bytes.len()
             );
             let msg = ServerMessage::from_bytes(&bytes)?;
-            actor.handle_receive(msg).await?;
+            actor.handle_receive(msg).await.map_err(|err| {
+              DisconnectedReason::CannotHandleReceiveMessage(err.to_string().into())
+            })?;
           } else {
             sync_trace!("[WsMessage] received frame: len:{}", frame.len());
           }
@@ -696,11 +712,15 @@ impl WorkspaceControllerActor {
     let cancel_token_clone = cancel_token.clone();
     let mut connect_status = self.status_tx.subscribe();
     tokio::spawn(async move {
-      while connect_status.changed().await.is_ok() {
-        if !matches!(*connect_status.borrow(), ConnectionStatus::Connected { .. }) {
-          sync_info!("Connection status changed to disconnected, cancelling deferred sync");
-          cancel_token_clone.cancel();
-          break;
+      select! {
+        _ = cancel_token_clone.cancelled() => {
+          sync_info!("Deferred sync finished");
+        }
+        _ = connect_status.changed() => {
+          if !matches!(*connect_status.borrow(), ConnectionStatus::Connected { .. }) {
+            cancel_token_clone.cancel();
+            sync_info!("Connection disconnect, cancel publishing inactive collabs");
+          }
         }
       }
     });
@@ -765,6 +785,8 @@ impl WorkspaceControllerActor {
         }
         tokio::time::sleep(Duration::from_secs(5)).await;
       }
+
+      cancel_token.cancel();
     });
   }
 
@@ -943,6 +965,7 @@ impl WorkspaceControllerActor {
         Ok(())
       },
       ConnectionStatus::Disconnected { .. } => Ok(()),
+      ConnectionStatus::StartReconnect => Ok(()),
     }
   }
 

@@ -25,3 +25,10 @@ macro_rules! sync_error{
         tracing::error!(target: "sync_log", $($arg)*);
     }
 }
+
+#[macro_export]
+macro_rules! sync_warn{
+    ($($arg:tt)*) => {
+        tracing::warn!(target: "sync_log", $($arg)*);
+    }
+}

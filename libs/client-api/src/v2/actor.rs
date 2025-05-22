@@ -207,9 +207,9 @@ impl WorkspaceControllerActor {
     sync_state.set_init_state(InitState::Loading);
 
     sync_trace!("init collab {}/{}", actor.workspace_id(), object_id);
-    if !actor.db.init_collab(collab, &collab_type)? {
+    if !actor.db.init_collab(&object_id, collab, &collab_type)? {
       tracing::debug!("loading collab {} from local db", object_id);
-      actor.db.load(collab)?;
+      actor.db.load(collab, true)?;
     }
     sync_state.set_init_state(InitState::Initialized);
     // Register callback on this collab to observe incoming updates

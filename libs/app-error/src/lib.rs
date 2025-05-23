@@ -200,8 +200,11 @@ pub enum AppError {
   #[error("{0} is already a member of the workspace")]
   InvalidGuest(String),
 
-  #[error("workspace guest limit exceeded")]
-  GuestLimitExceeded,
+  #[error("free plan workspace guest limit exceeded")]
+  FreePlanGuestLimitExceeded,
+
+  #[error("paid plan workspace guest limit exceeded")]
+  PaidPlanGuestLimitExceeded,
 }
 
 impl AppError {
@@ -287,7 +290,8 @@ impl AppError {
       AppError::FeatureNotAvailable(_) => ErrorCode::FeatureNotAvailable,
       AppError::InvalidInvitationCode => ErrorCode::InvalidInvitationCode,
       AppError::InvalidGuest(_) => ErrorCode::InvalidGuest,
-      AppError::GuestLimitExceeded => ErrorCode::GuestLimitExceeded,
+      AppError::FreePlanGuestLimitExceeded => ErrorCode::FreePlanGuestLimitExceeded,
+      AppError::PaidPlanGuestLimitExceeded => ErrorCode::PaidPlanGuestLimitExceeded,
     }
   }
 }
@@ -467,7 +471,8 @@ pub enum ErrorCode {
   FeatureNotAvailable = 1067,
   InvalidInvitationCode = 1068,
   InvalidGuest = 1069,
-  GuestLimitExceeded = 1070,
+  FreePlanGuestLimitExceeded = 1070,
+  PaidPlanGuestLimitExceeded = 1071,
 }
 
 impl ErrorCode {

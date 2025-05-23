@@ -324,22 +324,17 @@ struct WsConnectionV2Params {
 
 impl WsConnectionV2Params {
   fn parse(req: &HttpRequest) -> Result<Self, AppError> {
-    let headers = req.headers();
     let url = req.full_url();
     let query = url.query_pairs().collect::<HashMap<_, _>>();
 
-    let access_token = Self::from_header(headers, AUTHORIZATION.as_str())
-      .or_else(|| Self::from_url(&query, "token"))
+    let access_token = Self::from_url(&query, "token")
       .ok_or_else(|| AppError::InvalidRequest("Missing access token".into()))?;
-    let device_id = Self::from_header(headers, "X-AF-Device-ID")
-      .or_else(|| Self::from_url(&query, "deviceId"))
+    let device_id = Self::from_url(&query, "deviceId")
       .ok_or_else(|| AppError::InvalidRequest("Missing device id".into()))?;
-    let client_id: u64 = Self::from_header(headers, "X-AF-Client-ID")
-      .or_else(|| Self::from_url(&query, "clientId"))
+    let client_id: u64 = Self::from_url(&query, "clientId")
       .and_then(|id| id.parse().ok())
       .ok_or_else(|| AppError::InvalidRequest("Missing client id".into()))?;
-    let last_message_id = Self::from_header(headers, "X-AF-Last-Message-ID")
-      .or_else(|| Self::from_url(&query, "lastMessageId"));
+    let last_message_id = Self::from_url(&query, "lastMessageId");
     let last_message_id = match last_message_id {
       None => None,
       Some(message_id) => Some(MessageId::try_from(message_id).map_err(|_| {
@@ -352,11 +347,6 @@ impl WsConnectionV2Params {
       client_id,
       last_message_id,
     })
-  }
-
-  fn from_header(headers: &HeaderMap, param: &str) -> Option<String> {
-    let value = headers.get(param).and_then(|v| v.to_str().ok())?;
-    Some(value.to_string())
   }
 
   fn from_url(url_params: &HashMap<Cow<str>, Cow<str>>, param: &str) -> Option<String> {

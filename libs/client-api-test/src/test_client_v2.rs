@@ -958,7 +958,7 @@ impl TestClient {
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let options =
       CollabOptions::new(object_id.to_string()).with_data_source(DataSource::DocStateV1(doc_state));
-    let mut collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
+    let mut collab = Collab::new_with_options(origin.clone(), options).unwrap();
     collab.emit_awareness_state();
     let collab = Arc::new(RwLock::from(collab));
     let collab_ref = collab.clone() as CollabRef;

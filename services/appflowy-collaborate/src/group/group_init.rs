@@ -2,7 +2,7 @@ use crate::error::RealtimeError;
 use anyhow::anyhow;
 use app_error::AppError;
 use arc_swap::ArcSwap;
-use collab::core::collab::{CollabOptions, DataSource};
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::lock::RwLock;
@@ -352,7 +352,7 @@ impl CollabGroup {
       .encode_collab()
       .await
       .map_err(|e| AppError::Internal(e.into()))?;
-    let options = CollabOptions::new(self.object_id().to_string())
+    let options = CollabOptions::new(self.object_id().to_string(), default_client_id())
       .with_data_source(DataSource::DocStateV1(collab.doc_state.into()));
     let collab = Collab::new_with_options(CollabOrigin::Server, options)
       .map_err(|e| AppError::Internal(e.into()))?;
@@ -380,7 +380,7 @@ impl CollabGroup {
     }
 
     let encoded_collab = self.encode_collab().await?;
-    let options = CollabOptions::new(self.object_id().to_string())
+    let options = CollabOptions::new(self.object_id().to_string(), default_client_id())
       .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.into()));
     let collab = Collab::new_with_options(CollabOrigin::Server, options)?;
     let update = collab.transact().encode_state_as_update_v1(&state_vector);
@@ -950,7 +950,7 @@ impl CollabPersister {
     let mut collab = match self.load_collab_full().await? {
       Some(collab) => collab,
       None => {
-        let options = CollabOptions::new(self.object_id.to_string());
+        let options = CollabOptions::new(self.object_id.to_string(), default_client_id());
         Collab::new_with_options(CollabOrigin::Server, options)?
       },
     };
@@ -1013,7 +1013,7 @@ impl CollabPersister {
     let mut collab = match self.load_collab_full().await? {
       Some(collab) => collab,
       None => {
-        let options = CollabOptions::new(self.object_id.to_string());
+        let options = CollabOptions::new(self.object_id.to_string(), default_client_id());
         Collab::new_with_options(CollabOrigin::Server, options)?
       },
     };
@@ -1183,7 +1183,7 @@ impl CollabPersister {
     };
 
     let collab: Collab = {
-      let options = CollabOptions::new(self.object_id.to_string())
+      let options = CollabOptions::new(self.object_id.to_string(), default_client_id())
         .with_data_source(DataSource::DocStateV1(doc_state.into()));
       Collab::new_with_options(CollabOrigin::Server, options)?
     };

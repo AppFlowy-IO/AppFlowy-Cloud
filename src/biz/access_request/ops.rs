@@ -23,6 +23,7 @@ use database_entity::dto::AFRole;
 use shared_entity::dto::access_request_dto::{AccessRequest, AccessRequestView};
 use sqlx::PgPool;
 use uuid::Uuid;
+use collab::core::collab::default_client_id;
 
 pub async fn create_access_request(
   pg_pool: &PgPool,
@@ -85,6 +86,7 @@ pub async fn get_access_request(
     collab_storage,
     GetCollabOrigin::Server,
     access_request_with_view_id.workspace.workspace_id,
+    default_client_id(),
   )
   .await?;
   let view = folder.get_view(&access_request_with_view_id.view_id.to_string());

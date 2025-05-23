@@ -1,5 +1,5 @@
 use crate::yrs_version::util::read_bytes_from_file;
-use collab::core::collab::DataSource;
+use collab::core::collab::{default_client_id, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab_document::document::Document;
@@ -14,6 +14,7 @@ fn load_yrs_0172_version_get_started_document_using_current_yrs_version() {
     CollabOrigin::Empty,
     DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
     "fake_id",
+    default_client_id(),
   )
   .unwrap();
 

@@ -4,7 +4,7 @@ use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use collab::core::collab::CollabOptions;
+use collab::core::collab::{default_client_id, CollabOptions};
 use collab::core::origin::CollabOrigin;
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::preclude::Collab;
@@ -252,7 +252,7 @@ impl CollabStore {
             update.sender.client_user_id().unwrap_or(0),
           )
         };
-        let options = CollabOptions::new(object_id.to_string());
+        let options = CollabOptions::new(object_id.to_string(), default_client_id());
         let mut collab = Collab::new_with_options(CollabOrigin::Server, options)
           .map_err(|err| anyhow!("failed to create collab: {}", err))?;
         // apply all known updates
@@ -266,7 +266,12 @@ impl CollabStore {
           tx.apply_update(decode_update(&update)?)?;
 
           // apply updates from redis stream targeting this collab
-          tracing::trace!("snapshotting {} updates for {}", updates.len(), object_id);
+          tracing::trace!(
+            "snapshotting {} updates for {}:{}",
+            updates.len(),
+            object_id,
+            collab_type
+          );
           for update in updates {
             if update.object_id == object_id {
               rid = rid.max(update.last_message_id);

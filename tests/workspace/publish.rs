@@ -1,3 +1,4 @@
+use crate::workspace::published_data::{self};
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::folder_view::collab_folder_to_folder_view;
 use appflowy_cloud::biz::collab::utils::collab_from_doc_state;
@@ -7,6 +8,7 @@ use client_api::entity::{
 };
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
+use collab::core::collab::default_client_id;
 use collab::util::MapExt;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -25,8 +27,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use uuid::Uuid;
-
-use crate::workspace::published_data::{self};
+use yrs::block::ClientID;
 
 #[tokio::test]
 async fn test_set_publish_namespace_set() {
@@ -1067,7 +1068,10 @@ async fn duplicate_to_workspace_doc_inline_database() {
   // view of grid1
   let view_of_grid_1_view_id: Uuid = "d8589e98-88fc-42e4-888c-b03338bf22bb".parse().unwrap();
   let view_of_grid_1_db_data = hex::decode(published_data::VIEW_OF_GRID_1_DB_DATA).unwrap();
-  let (pub_db_id, pub_row_ids) = get_database_id_and_row_ids(&view_of_grid_1_db_data);
+  let (pub_db_id, pub_row_ids) = get_database_id_and_row_ids(
+    &view_of_grid_1_db_data,
+    client_1.client_id(&workspace_id).await,
+  );
 
   client_1
     .publish_collabs(
@@ -1153,6 +1157,7 @@ async fn duplicate_to_workspace_doc_inline_database() {
       CollabOrigin::Server,
       collab_resp.encode_collab.into(),
       &workspace_id_2.to_string(),
+      default_client_id(),
     )
     .unwrap();
 
@@ -1438,7 +1443,9 @@ async fn duplicate_to_workspace_db_with_relation() {
 
       let rel_col_db_body = DatabaseBody::from_collab(
         &db_with_rel_col_collab,
-        Arc::new(NoPersistenceDatabaseCollabService),
+        Arc::new(NoPersistenceDatabaseCollabService {
+          client_id: client_2.client_id(&workspace_id_2).await,
+        }),
         None,
       )
       .unwrap();
@@ -1518,7 +1525,9 @@ async fn duplicate_to_workspace_db_row_with_doc() {
 
       let db_body = DatabaseBody::from_collab(
         &db_collab,
-        Arc::new(NoPersistenceDatabaseCollabService),
+        Arc::new(NoPersistenceDatabaseCollabService {
+          client_id: client_2.client_id(&workspace_id_2).await,
+        }),
         None,
       )
       .unwrap();
@@ -1604,7 +1613,9 @@ async fn duplicate_to_workspace_db_rel_self() {
     let txn = db_rel_self_collab.transact();
     let db_rel_self_body = DatabaseBody::from_collab(
       &db_rel_self_collab,
-      Arc::new(NoPersistenceDatabaseCollabService),
+      Arc::new(NoPersistenceDatabaseCollabService {
+        client_id: client_2.client_id(&workspace_id_2).await,
+      }),
       None,
     )
     .unwrap();
@@ -1707,9 +1718,13 @@ async fn duplicate_to_workspace_inline_db_doc_with_relation() {
   }
 }
 
-fn get_database_id_and_row_ids(published_db_blob: &[u8]) -> (Uuid, HashSet<Uuid>) {
+fn get_database_id_and_row_ids(
+  published_db_blob: &[u8],
+  client_id: ClientID,
+) -> (Uuid, HashSet<Uuid>) {
   let pub_db_data = serde_json::from_slice::<PublishDatabaseData>(published_db_blob).unwrap();
-  let db_collab = collab_from_doc_state(pub_db_data.database_collab, &Uuid::default()).unwrap();
+  let db_collab =
+    collab_from_doc_state(pub_db_data.database_collab, &Uuid::default(), client_id).unwrap();
   let pub_db_id = DatabaseBody::database_id_from_collab(&db_collab)
     .unwrap()
     .parse::<Uuid>()

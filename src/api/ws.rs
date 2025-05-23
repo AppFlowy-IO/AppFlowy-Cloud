@@ -5,7 +5,7 @@ use std::time::Duration;
 use crate::biz::authentication::jwt::{authorization_from_token, UserUuid};
 use crate::state::AppState;
 use actix::Addr;
-use actix_http::header::{HeaderMap, AUTHORIZATION};
+use actix_http::header::AUTHORIZATION;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;

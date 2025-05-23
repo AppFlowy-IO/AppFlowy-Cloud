@@ -23,9 +23,6 @@ async fn realtime_write_single_collab_test() {
   let object_id = test_client
     .create_and_edit_collab(workspace_id, collab_type)
     .await;
-  test_client
-    .open_collab(workspace_id, object_id, collab_type)
-    .await;
 
   // Edit the collab
   for i in 0..=5 {
@@ -174,10 +171,6 @@ async fn realtime_write_multiple_collab_test() {
 
     let object_id = test_client
       .create_and_edit_collab(workspace_id, collab_type)
-      .await;
-
-    test_client
-      .open_collab(workspace_id, object_id, collab_type)
       .await;
     for i in 0..=5 {
       test_client
@@ -369,17 +362,11 @@ async fn multiple_collab_edit_test() {
   let object_id_1 = client_1
     .create_and_edit_collab(workspace_id_1, collab_type)
     .await;
-  client_1
-    .open_collab(workspace_id_1, object_id_1, collab_type)
-    .await;
 
   let mut client_2 = TestClient::new_user().await;
   let workspace_id_2 = client_2.workspace_id().await;
   let object_id_2 = client_2
     .create_and_edit_collab(workspace_id_2, collab_type)
-    .await;
-  client_2
-    .open_collab(workspace_id_2, object_id_2, collab_type)
     .await;
 
   client_1

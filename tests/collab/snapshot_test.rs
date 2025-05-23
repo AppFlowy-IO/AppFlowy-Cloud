@@ -1,6 +1,6 @@
 use client_api_test::{assert_server_collab, TestClient};
-use collab::core::collab::CollabOptions;
 use collab::core::collab::DataSource;
+use collab::core::collab::{default_client_id, CollabOptions};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, JsonValue};
@@ -74,7 +74,7 @@ async fn verify_snapshot_state(
 
   // retrieve state
   let encoded_collab = EncodedCollab::decode_from_bytes(&snapshot.encoded_collab_v1).unwrap();
-  let options = CollabOptions::new(oid.to_string())
+  let options = CollabOptions::new(oid.to_string(), default_client_id())
     .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.into()));
   let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   let actual = collab.to_json_value();

@@ -43,7 +43,7 @@ impl ReconnectionManager {
     }
 
     if self.in_progress.swap(true, Ordering::SeqCst) {
-      sync_trace!("reconnect already in progress");
+      sync_trace!("reconnect already in progress, skip retry");
       return;
     }
 
@@ -51,11 +51,13 @@ impl ReconnectionManager {
     let weak_actor = self.weak_actor.clone();
     tokio::spawn(async move {
       if let Some(actor) = weak_actor.upgrade() {
-        manager.retry_with_exponential_backoff(actor, token).await;
+        if manager.retry_with_exponential_backoff(actor, token).await {
+          sync_info!("reconnect succeeded");
+        } else {
+          sync_error!("reconnect failed");
+        }
       }
-
       manager.in_progress.store(false, Ordering::SeqCst);
-      sync_trace!("reconnect stop");
     });
   }
 
@@ -63,7 +65,7 @@ impl ReconnectionManager {
     &self,
     actor: Arc<WorkspaceControllerActor>,
     token: String,
-  ) {
+  ) -> bool {
     let mut delay = self.initial_delay;
     for attempt in 1..=self.max_attempts {
       sync_trace!(attempt, ?delay, "waiting before reconnect");
@@ -73,11 +75,11 @@ impl ReconnectionManager {
       match &*actor.status_channel().borrow() {
         ConnectionStatus::Connected { .. } | ConnectionStatus::Connecting { .. } => {
           sync_trace!("already connected/connecting; stopping retries");
-          return;
+          return false;
         },
         ConnectionStatus::Disconnected { reason: Some(r) } if !r.retriable() => {
           sync_trace!(?r, "non-retriable disconnect; aborting");
-          return;
+          return false;
         },
         _ => {},
       }
@@ -86,7 +88,7 @@ impl ReconnectionManager {
       match WorkspaceControllerActor::handle_connect(&actor, token.clone()).await {
         Ok(()) => {
           sync_info!(attempt, "reconnected successfully");
-          return;
+          return true;
         },
         Err(err) => {
           sync_error!(attempt, %err, "reconnect attempt failed");
@@ -109,5 +111,6 @@ impl ReconnectionManager {
     actor.set_connection_status(ConnectionStatus::Disconnected {
       reason: Some(DisconnectedReason::ReachMaximumRetry),
     });
+    false
   }
 }

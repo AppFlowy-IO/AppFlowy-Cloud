@@ -1,5 +1,4 @@
 use std::borrow::BorrowMut;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -15,12 +14,12 @@ use client_api::entity::{
   WorkspaceNotification,
 };
 use client_api::v2::{WorkspaceController, WorkspaceControllerOptions, WorkspaceId};
-use collab::core::collab::{CollabOptions, DataSource};
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::lock::{Mutex, RwLock};
-use collab::preclude::{Collab, Prelim};
+use collab::preclude::{ClientID, Collab, Prelim};
 use collab_database::database::{Database, DatabaseContext};
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::document::Document;
@@ -28,6 +27,7 @@ use collab_entity::CollabType;
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
 use collab_folder::{Folder, ViewLayout};
 use collab_user::core::UserAwareness;
+use dashmap::DashMap;
 use database_entity::dto::{
   AFCollabEmbedInfo, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
   AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
@@ -59,7 +59,7 @@ pub type CollabRef = Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
 
 pub struct TestClient {
   pub user: User,
-  pub workspaces: HashMap<WorkspaceId, WorkspaceController>,
+  pub workspaces: DashMap<WorkspaceId, Arc<WorkspaceController>>,
   pub api_client: client_api::Client,
   pub collabs: HashMap<Uuid, TestCollab>,
   pub device_id: String,
@@ -78,6 +78,11 @@ impl TestClient {
     let mut lock = self.collabs.get(object_id).unwrap().collab.write().await;
     let collab = (*lock).borrow_mut();
     collab.insert(key, value);
+  }
+
+  pub async fn client_id(&self, workspace_id: &Uuid) -> ClientID {
+    let workspace = self.workspace_for(*workspace_id).await;
+    workspace.client_id()
   }
 
   pub fn subscribe_workspace_notification(
@@ -136,14 +141,17 @@ impl TestClient {
         .await
         .unwrap();
     }
-    Self {
+
+    let this = Self {
       user: registered_user,
-      workspaces: HashMap::from_iter([(workspace_id, workspace)]),
+      workspaces: DashMap::from_iter([(workspace_id, Arc::new(workspace))]),
       api_client,
       collabs: Default::default(),
       device_id,
       temp_dir,
-    }
+    };
+    this.workspace_for(workspace_id).await;
+    this
   }
 
   pub async fn new_user() -> Self {
@@ -162,14 +170,16 @@ impl TestClient {
 
   #[cfg(debug_assertions)]
   pub fn disable_receive_message(&mut self) {
-    for (_, workspace) in self.workspaces.iter_mut() {
+    for mut entry in self.workspaces.iter_mut() {
+      let workspace = entry.value_mut();
       workspace.disable_receive_message();
     }
   }
 
   #[cfg(debug_assertions)]
   pub fn enable_receive_message(&mut self) {
-    for (_, workspace) in self.workspaces.iter_mut() {
+    for mut entry in self.workspaces.iter_mut() {
+      let workspace = entry.value_mut();
       workspace.enable_receive_message();
     }
   }
@@ -235,14 +245,17 @@ impl TestClient {
       CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone())),
       folder_collab.into(),
       &workspace_id.to_string(),
+      self.client_id(&workspace_id).await,
     )
     .unwrap()
   }
 
   pub async fn get_database(&self, workspace_id: Uuid, database_id: &str) -> Database {
+    let client_id = self.client_id(&workspace_id).await;
     let service = TestDatabaseCollabService {
       api_client: self.api_client.clone(),
       workspace_id,
+      client_id,
     };
     let context = DatabaseContext::new(Arc::new(service));
     Database::open(database_id, context).await.unwrap()
@@ -278,6 +291,7 @@ impl TestClient {
       &workspace_database_id.to_string(),
       CollabOrigin::Empty,
       collab.encode_collab.into(),
+      self.client_id(&workspace_id).await,
     )
     .unwrap()
   }
@@ -325,6 +339,7 @@ impl TestClient {
   }
 
   pub async fn open_workspace(&self, workspace_id: &Uuid) -> AFWorkspace {
+    self.workspace_for(*workspace_id).await;
     self.api_client.open_workspace(workspace_id).await.unwrap()
   }
 
@@ -346,6 +361,7 @@ impl TestClient {
       CollabOrigin::Empty,
       data.encode_collab.into(),
       &workspace_id.to_string(),
+      self.client_id(&workspace_id).await,
     )
     .unwrap()
   }
@@ -356,7 +372,8 @@ impl TestClient {
       .get_collab(workspace_id, db_storage_id, CollabType::WorkspaceDatabase)
       .await
       .unwrap();
-    let options = CollabOptions::new(db_storage_id.to_string())
+    let client_id = self.client_id(&workspace_id).await;
+    let options = CollabOptions::new(db_storage_id.to_string(), client_id)
       .with_data_source(collab_resp.encode_collab.into());
     Collab::new_with_options(CollabOrigin::Server, options).unwrap()
   }
@@ -366,8 +383,8 @@ impl TestClient {
       .get_collab(workspace_id, object_id, CollabType::Document)
       .await
       .unwrap();
-    let options =
-      CollabOptions::new(object_id.to_string()).with_data_source(collab_resp.encode_collab.into());
+    let options = CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id).await)
+      .with_data_source(collab_resp.encode_collab.into());
     let collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
     Document::open(collab).unwrap()
   }
@@ -387,7 +404,7 @@ impl TestClient {
       .get_collab(workspace_id, db_id, CollabType::Database)
       .await
       .unwrap();
-    let options = CollabOptions::new(db_id.to_string())
+    let options = CollabOptions::new(db_id.to_string(), self.client_id(&workspace_id).await)
       .with_data_source(db_collab_collab_resp.encode_collab.into());
     Collab::new_with_options(CollabOrigin::Server, options).unwrap()
   }
@@ -405,9 +422,13 @@ impl TestClient {
       ))
       .await
       .unwrap();
-    let options = CollabOptions::new(awareness_object_id.to_string()).with_data_source(
-      DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
-    );
+    let options = CollabOptions::new(
+      awareness_object_id.to_string(),
+      self.client_id(&workspace_id).await,
+    )
+    .with_data_source(DataSource::DocStateV1(
+      data.encode_collab.doc_state.to_vec(),
+    ));
     let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
 
     UserAwareness::open(collab, None).unwrap()
@@ -810,8 +831,8 @@ impl TestClient {
     let resp = self
       .get_collab(workspace_id, object_id, collab_type)
       .await?;
-    let options =
-      CollabOptions::new(object_id.to_string()).with_data_source(resp.encode_collab.into());
+    let options = CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id).await)
+      .with_data_source(resp.encode_collab.into());
     let collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
     Ok(collab)
   }
@@ -837,10 +858,10 @@ impl TestClient {
     object_id
   }
 
-  pub async fn workspace_for(&mut self, workspace_id: Uuid) -> &WorkspaceController {
+  pub async fn workspace_for(&self, workspace_id: Uuid) -> Arc<WorkspaceController> {
     match self.workspaces.entry(workspace_id) {
-      Entry::Occupied(e) => e.into_mut(),
-      Entry::Vacant(e) => {
+      dashmap::mapref::entry::Entry::Occupied(e) => e.get().clone(),
+      dashmap::mapref::entry::Entry::Vacant(e) => {
         let db_path = self.temp_dir.path().to_str().unwrap();
         let db_path = format!("{}/{}/{}", db_path, self.device_id, workspace_id);
         tokio::fs::create_dir_all(&db_path).await.unwrap();
@@ -861,7 +882,7 @@ impl TestClient {
           .connect(self.api_client.access_token().unwrap())
           .await
           .unwrap();
-        e.insert(workspace)
+        e.insert(Arc::new(workspace)).value().clone()
       },
     }
   }
@@ -879,11 +900,14 @@ impl TestClient {
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let mut collab = match encoded_collab_v1 {
       None => {
-        let options = CollabOptions::new(object_id.to_string());
+        let options =
+          CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id).await);
         Collab::new_with_options(origin.clone(), options).unwrap()
       },
       Some(data) => {
-        let options = CollabOptions::new(object_id.to_string()).with_data_source(data.into());
+        let options =
+          CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id).await)
+            .with_data_source(data.into());
         Collab::new_with_options(origin.clone(), options).unwrap()
       },
     };
@@ -956,8 +980,8 @@ impl TestClient {
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let options =
-      CollabOptions::new(object_id.to_string()).with_data_source(DataSource::DocStateV1(doc_state));
+    let options = CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id))
+      .with_data_source(DataSource::DocStateV1(doc_state));
     let mut collab = Collab::new_with_options(origin.clone(), options).unwrap();
     collab.emit_awareness_state();
     let collab = Arc::new(RwLock::from(collab));
@@ -990,8 +1014,8 @@ impl TestClient {
   ) -> Result<(), AppResponseError> {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let options =
-      CollabOptions::new(object_id.to_string()).with_data_source(encoded_collab_v1.into());
+    let options = CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id).await)
+      .with_data_source(encoded_collab_v1.into());
     let collab = Collab::new_with_options(origin.clone(), options).unwrap();
 
     let encoded_collab_v1 = collab
@@ -1021,13 +1045,15 @@ impl TestClient {
   }
 
   pub async fn disconnect(&self) {
-    for (_, workspace) in self.workspaces.iter() {
+    for entry in self.workspaces.iter() {
+      let workspace = entry.value();
       workspace.disconnect().await.unwrap();
     }
   }
 
   pub async fn reconnect(&self) {
-    for (_, workspace) in self.workspaces.iter() {
+    for entry in self.workspaces.iter() {
+      let workspace = entry.value();
       workspace
         .connect(self.api_client.access_token().unwrap())
         .await
@@ -1131,7 +1157,7 @@ pub async fn assert_server_snapshot(
           Ok(snapshot_data) => {
           let encoded_collab_v1 =
             EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
-          let options = CollabOptions::new(object_id.to_string())
+          let options = CollabOptions::new(object_id.to_string(), default_client_id())
             .with_data_source(DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()));
           let json = Collab::new_with_options(
             CollabOrigin::Empty,
@@ -1187,7 +1213,8 @@ pub async fn assert_server_collab(
             EncoderVersion::V1 => DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
             EncoderVersion::V2 => DataSource::DocStateV2(data.encode_collab.doc_state.to_vec()),
           };
-          let options = CollabOptions::new(object_id.to_string()).with_data_source(source);
+          let options =
+            CollabOptions::new(object_id.to_string(), default_client_id()).with_data_source(source);
           let json = Collab::new_with_options(CollabOrigin::Empty, options)
             .unwrap()
             .to_json_value();

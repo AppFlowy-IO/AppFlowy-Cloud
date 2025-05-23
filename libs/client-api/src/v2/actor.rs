@@ -200,12 +200,14 @@ impl WorkspaceControllerActor {
       return Ok(());
     }
 
+    let client_id = actor.db.client_id();
     collab_type.validate_require_data(collab)?;
     sync_info!(
-      "binding collab {}/{}/{}",
+      "binding collab {}/{}/{} for client:{}",
       actor.workspace_id(),
       object_id,
-      collab_type
+      collab_type,
+      client_id,
     );
 
     let sync_state = collab.get_state().clone();

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use access_control::collab::RealtimeAccessControl;
 use app_error::AppError;
-use collab::core::collab::{CollabOptions, DataSource};
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
@@ -123,7 +123,7 @@ where
       .await;
     let state_vector = match res {
       Ok(collab) => {
-        let options = CollabOptions::new(object_id.to_string())
+        let options = CollabOptions::new(object_id.to_string(), default_client_id())
           .with_data_source(DataSource::DocStateV1(collab.doc_state.into()));
         Collab::new_with_options(CollabOrigin::Server, options)?
           .transact()
@@ -173,7 +173,7 @@ where
   let encode_collab = storage
     .get_encode_collab(GetCollabOrigin::User { uid }, params.clone(), false)
     .await?;
-  let options = CollabOptions::new(object_id.to_string())
+  let options = CollabOptions::new(object_id.to_string(), default_client_id())
     .with_data_source(DataSource::DocStateV1(encode_collab.doc_state.to_vec()));
   let result = Collab::new_with_options(CollabOrigin::Server, options);
   match result {
@@ -199,7 +199,7 @@ where
     &params.collab_type,
   )
   .await?;
-  let options = CollabOptions::new(object_id.to_string())
+  let options = CollabOptions::new(object_id.to_string(), default_client_id())
     .with_data_source(DataSource::DocStateV1(encode_collab.doc_state.to_vec()));
   let collab = Collab::new_with_options(CollabOrigin::Empty, options).ok()?;
   Some((collab, encode_collab))
@@ -226,7 +226,7 @@ where
       .await
       .ok()?;
     if let Ok(encoded_collab) = EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1) {
-      let options = CollabOptions::new(object_id.to_string())
+      let options = CollabOptions::new(object_id.to_string(), default_client_id())
         .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.to_vec()));
       if let Ok(collab) = Collab::new_with_options(CollabOrigin::Empty, options) {
         // TODO(nathan): this check is not necessary, can be removed in the future.

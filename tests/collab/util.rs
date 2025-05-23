@@ -1,15 +1,14 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use collab::core::collab::CollabOptions;
 use collab::core::collab::DataSource;
+use collab::core::collab::{default_client_id, CollabOptions};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_document::blocks::Block;
 use collab_document::document::Document;
 use collab_document::document_data::default_document_collab_data;
-use collab_entity::CollabType;
 use nanoid::nanoid;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -37,7 +36,7 @@ pub fn generate_random_string(len: usize) -> String {
 }
 
 pub fn make_big_collab_doc_state(object_id: &Uuid, key: &str, value: String) -> Vec<u8> {
-  let options = CollabOptions::new(object_id.to_string());
+  let options = CollabOptions::new(object_id.to_string(), default_client_id());
   let mut collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   collab.insert(key, value);
   collab
@@ -94,12 +93,13 @@ impl TestDocumentEditor {
 
 pub fn empty_document_editor(object_id: &Uuid) -> TestDocumentEditor {
   let object_id = object_id.to_string();
-  let doc_state = default_document_collab_data(&object_id)
+  let client_id = default_client_id();
+  let doc_state = default_document_collab_data(&object_id, client_id)
     .unwrap()
     .doc_state
     .to_vec();
-  let options =
-    CollabOptions::new(object_id.clone()).with_data_source(DataSource::DocStateV1(doc_state));
+  let options = CollabOptions::new(object_id.clone(), client_id)
+    .with_data_source(DataSource::DocStateV1(doc_state));
   let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   TestDocumentEditor {
     document: Document::open(collab).unwrap(),
@@ -150,28 +150,8 @@ pub fn alex_banker_story() -> Vec<&'static str> {
   ]
 }
 
-#[allow(dead_code)]
-pub fn empty_collab_doc_state(object_id: &str, collab_type: CollabType) -> Vec<u8> {
-  match collab_type {
-    CollabType::Document => default_document_collab_data(object_id)
-      .unwrap()
-      .doc_state
-      .to_vec(),
-    CollabType::Unknown => {
-      let options = CollabOptions::new(object_id.to_string());
-      let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
-      collab
-        .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
-        .unwrap()
-        .doc_state
-        .to_vec()
-    },
-    _ => panic!("collab type not supported"),
-  }
-}
-
 pub fn test_encode_collab_v1(object_id: &Uuid, key: &str, value: &str) -> EncodedCollab {
-  let options = CollabOptions::new(object_id.to_string());
+  let options = CollabOptions::new(object_id.to_string(), default_client_id());
   let mut collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   collab.insert(key, value);
   collab

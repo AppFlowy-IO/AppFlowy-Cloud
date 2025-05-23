@@ -1,6 +1,6 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::{CollabOptions, DataSource};
+use collab::core::collab::{CollabOptions, DataSource, default_client_id};
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -39,6 +39,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use uuid::Uuid;
+use yrs::block::ClientID;
 use yrs::Map;
 
 pub const DEFAULT_SPACE_ICON: &str = "interface_essential/home-3";
@@ -235,7 +236,7 @@ pub async fn get_latest_collab_database_body(
   .await?;
   let db_body = DatabaseBody::from_collab(
     &db_collab,
-    Arc::new(NoPersistenceDatabaseCollabService),
+    Arc::new(NoPersistenceDatabaseCollabService { client_id: default_client_id() }),
     None,
   )
   .ok_or_else(|| {
@@ -325,7 +326,7 @@ pub async fn get_latest_collab(
 ) -> Result<Collab, AppError> {
   let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
   let options =
-    collab::core::collab::CollabOptions::new(oid.to_string()).with_data_source(ec.into());
+    collab::core::collab::CollabOptions::new(oid.to_string(), default_client_id()).with_data_source(ec.into());
   let collab = Collab::new_with_options(CollabOrigin::Server, options).map_err(|e| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to create collab from encoded collab: {:?}",
@@ -363,6 +364,7 @@ pub async fn get_latest_collab_folder(
   collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
+  client_id: ClientID,
 ) -> Result<Folder, AppError> {
   let folder_uid = if let GetCollabOrigin::User { uid } = collab_origin {
     uid
@@ -390,6 +392,7 @@ pub async fn get_latest_collab_folder(
     CollabOrigin::Server,
     encoded_collab.into(),
     &workspace_id.to_string(),
+    client_id,
   )
   .map_err(|e| {
     AppError::Internal(anyhow::anyhow!(
@@ -450,9 +453,13 @@ pub async fn collab_to_doc_state(
   .await?
 }
 
-pub fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &Uuid) -> Result<Collab, AppError> {
-  let options =
-    CollabOptions::new(object_id.to_string()).with_data_source(DataSource::DocStateV1(doc_state));
+pub fn collab_from_doc_state(
+  doc_state: Vec<u8>,
+  object_id: &Uuid,
+  client_id: ClientID,
+) -> Result<Collab, AppError> {
+  let options = CollabOptions::new(object_id.to_string(), client_id)
+    .with_data_source(DataSource::DocStateV1(doc_state));
   let collab = Collab::new_with_options(CollabOrigin::Server, options)
     .map_err(|e| AppError::Unhandled(e.to_string()))?;
   Ok(collab)
@@ -518,18 +525,19 @@ pub async fn create_row_document(
   row_doc_content: String,
 ) -> Result<CreatedRowDocument, AppError> {
   let md_importer = MDImporter::new(None);
+  let client_id = default_client_id();
   let new_doc_id_str = new_doc_id.to_string();
   let doc_data = md_importer
     .import(&new_doc_id_str, row_doc_content)
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e)))?;
-  let doc = Document::create(&new_doc_id_str, doc_data)
+  let doc = Document::create(&new_doc_id_str, doc_data, client_id)
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create document: {:?}", e)))?;
   let doc_ec = doc.encode_collab().map_err(|e| {
     AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
   })?;
 
   let mut folder =
-    get_latest_collab_folder(collab_storage, GetCollabOrigin::Server, workspace_id).await?;
+    get_latest_collab_folder(collab_storage, GetCollabOrigin::Server, workspace_id, client_id).await?;
   let folder_updates = {
     let mut folder_txn = folder.collab.transact_mut();
     folder.body.views.insert(
@@ -595,7 +603,7 @@ pub async fn get_database_row_doc_changes(
       let new_doc_data = md_importer
         .import(&doc_id, row_doc_content)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to import markdown: {:?}", e)))?;
-      let new_doc = Document::create(&doc_id, new_doc_data)
+      let new_doc = Document::create(&doc_id, new_doc_data, default_client_id())
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create document: {:?}", e)))?;
 
       // if the document content is the same, there is no need to update

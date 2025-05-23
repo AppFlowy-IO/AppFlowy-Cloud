@@ -1,4 +1,5 @@
 use client_api_test::*;
+use collab::core::collab::default_client_id;
 use collab::core::origin::CollabOrigin;
 use collab_document::{blocks::json_str_to_hashmap, document::Document};
 use collab_entity::CollabType;
@@ -19,6 +20,7 @@ async fn get_document_collab_from_remote(
     CollabOrigin::Empty,
     resp.encode_collab.into(),
     &document_id.to_string(),
+    default_client_id(),
   )
   .unwrap()
 }

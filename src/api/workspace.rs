@@ -45,7 +45,7 @@ use appflowy_collaborate::actix_ws::entities::{
 
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
-use collab::core::collab::{CollabOptions, DataSource};
+use collab::core::collab::{CollabOptions, DataSource, default_client_id};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
@@ -977,7 +977,7 @@ async fn batch_create_collab_handler(
             if params.validate().is_ok() {
               let encoded_collab =
                 EncodedCollab::decode_from_bytes(&params.encoded_collab_v1).ok()?;
-              let options = CollabOptions::new(params.object_id.to_string())
+              let options = CollabOptions::new(params.object_id.to_string(), default_client_id())
                 .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.to_vec()));
               let collab = Collab::new_with_options(CollabOrigin::Empty, options).ok()?;
 
@@ -1166,7 +1166,7 @@ async fn get_collab_json_handler(
     .await
     .map_err(AppResponseError::from)?
     .doc_state;
-  let collab = collab_from_doc_state(doc_state.to_vec(), &object_id)?;
+  let collab = collab_from_doc_state(doc_state.to_vec(), &object_id, default_client_id())?;
 
   let resp = CollabJsonResponse {
     collab: collab.to_json_value(),

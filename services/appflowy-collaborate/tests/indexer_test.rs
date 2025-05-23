@@ -1,4 +1,4 @@
-use collab::core::collab::CollabOptions;
+use collab::core::collab::{default_client_id, CollabOptions};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_document::document::Document;
@@ -9,7 +9,7 @@ use workspace_template::document::getting_started::{
 #[test]
 fn document_plain_text() {
   let doc = getting_started_document_data().unwrap();
-  let options = CollabOptions::new("1".to_string());
+  let options = CollabOptions::new("1".to_string(), default_client_id());
   let collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
   let document = Document::create_with_data(collab, doc).unwrap();
   let text = document.paragraphs().join("");
@@ -20,7 +20,7 @@ fn document_plain_text() {
 #[test]
 fn document_plain_text_with_nested_blocks() {
   let doc = get_initial_document_data().unwrap();
-  let options = CollabOptions::new("1".to_string());
+  let options = CollabOptions::new("1".to_string(), default_client_id());
   let collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
   let document = Document::create_with_data(collab, doc).unwrap();
   let text = document.paragraphs().join("");

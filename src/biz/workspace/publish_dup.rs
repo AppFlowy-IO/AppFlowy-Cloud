@@ -50,6 +50,8 @@ use crate::biz::collab::utils::get_latest_collab_encoded;
 use super::ops::broadcast_update;
 use super::ops::broadcast_update_with_timeout;
 
+use collab::core::collab::default_client_id;
+
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
   pg_pool: &PgPool,
@@ -160,6 +162,7 @@ impl PublishCollabDuplicator {
     // new view after deep copy
     // this is the root of the document/database duplicated
     let root_view_id = gen_view_id();
+    let client_id = default_client_id();
     let mut root_view = match self.deep_copy(root_view_id, publish_view_id).await? {
       Some(v) => v,
       None => {
@@ -225,7 +228,7 @@ impl PublishCollabDuplicator {
           CollabType::WorkspaceDatabase,
         )
         .await?;
-        collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid)?
+        collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid, client_id)?
       };
 
       let mut ws_db = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
@@ -298,6 +301,7 @@ impl PublishCollabDuplicator {
         CollabOrigin::Server,
         collab_folder_encoded.into(),
         &dest_workspace_id.to_string(),
+        client_id,
       )
       .map_err(|e| AppError::Unhandled(e.to_string()))
     })
@@ -429,7 +433,8 @@ impl PublishCollabDuplicator {
 
     match metadata.view.layout {
       ViewLayout::Document => {
-        let doc_collab = collab_from_doc_state(published_blob, &Uuid::default())?;
+        let doc_collab =
+          collab_from_doc_state(published_blob, &Uuid::default(), default_client_id())?;
         let doc = Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
         let new_doc_view = self
           .deep_copy_doc(publish_view_id, new_view_id, doc, metadata)
@@ -477,7 +482,7 @@ impl PublishCollabDuplicator {
 
     {
       // write modified doc_data back to storage
-      let empty_collab = collab_from_doc_state(vec![], &dup_view_id)?;
+      let empty_collab = collab_from_doc_state(vec![], &dup_view_id, default_client_id())?;
       let new_doc = tokio::task::spawn_blocking(move || {
         Document::create_with_data(empty_collab, doc_data)
           .map_err(|e| AppError::Unhandled(e.to_string()))
@@ -735,11 +740,15 @@ impl PublishCollabDuplicator {
     new_view_id: Uuid,
   ) -> Result<(Uuid, Uuid, bool), AppError> {
     // collab of database
-    let mut db_collab =
-      collab_from_doc_state(published_db.database_collab.clone(), &Uuid::default())?;
+    let client_id = default_client_id();
+    let mut db_collab = collab_from_doc_state(
+      published_db.database_collab.clone(),
+      &Uuid::default(),
+      client_id,
+    )?;
     let db_body = DatabaseBody::from_collab(
       &db_collab,
-      Arc::new(NoPersistenceDatabaseCollabService),
+      Arc::new(NoPersistenceDatabaseCollabService { client_id }),
       None,
     )
     .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
@@ -833,7 +842,8 @@ impl PublishCollabDuplicator {
         .get(pub_row_id)
         .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", pub_row_id)))?;
 
-      let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
+      let mut db_row_collab =
+        collab_from_doc_state(row_bin_data.clone(), &dup_row_id, default_client_id())?;
       let mut db_row_body = DatabaseRowBody::open((*pub_row_id).into(), &mut db_row_collab)
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
@@ -861,7 +871,11 @@ impl PublishCollabDuplicator {
             .database_row_document_collabs
             .get(&pub_row_doc_id)
           {
-            match collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id) {
+            match collab_from_doc_state(
+              row_doc_doc_state.to_vec(),
+              &pub_row_doc_id,
+              default_client_id(),
+            ) {
               Ok(pub_doc_collab) => {
                 let pub_doc =
                   Document::open(pub_doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;

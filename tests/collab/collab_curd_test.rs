@@ -1,5 +1,6 @@
 use app_error::ErrorCode;
 use assert_json_diff::assert_json_include;
+use collab::core::collab::default_client_id;
 use collab::entity::EncodedCollab;
 use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
@@ -53,7 +54,7 @@ async fn batch_insert_collab_with_empty_payload_test() {
 async fn create_collab_params_compatibility_serde_test() {
   // This test is to make sure that the CreateCollabParams is compatible with the old InsertCollabParams
   let object_id = uuid::Uuid::new_v4();
-  let encoded_collab_v1 = default_document_collab_data(&object_id.to_string())
+  let encoded_collab_v1 = default_document_collab_data(&object_id.to_string(), default_client_id())
     .unwrap()
     .encode_to_bytes()
     .unwrap();

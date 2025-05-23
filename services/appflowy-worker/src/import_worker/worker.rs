@@ -41,6 +41,7 @@ use redis::streams::{
 };
 use redis::{AsyncCommands, RedisResult, Value};
 
+use collab::core::collab::default_client_id;
 use database::pg_row::AFImportTask;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
@@ -872,6 +873,7 @@ async fn process_unzip_file(
   redis_client: &mut ConnectionManager,
   s3_client: &Arc<dyn S3Client>,
 ) -> Result<(), ImportError> {
+  let client_id = default_client_id();
   let _ =
     Uuid::parse_str(&import_task.workspace_id).map_err(|err| ImportError::Internal(err.into()))?;
   let notion_importer = NotionImporter::new(
@@ -912,6 +914,7 @@ async fn process_unzip_file(
     CollabOrigin::Server,
     folder_collab.into(),
     &imported.workspace_id,
+    client_id,
   )
   .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
 
@@ -989,6 +992,7 @@ async fn process_unzip_file(
       &w_database_id.to_string(),
       CollabOrigin::Server,
       w_db_collab.into(),
+      client_id,
     )
     .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
     w_database.batch_add_database(database_view_ids_by_database_id);

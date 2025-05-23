@@ -1,3 +1,4 @@
+use collab::core::collab::default_client_id;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab_folder::Folder;
@@ -26,6 +27,7 @@ fn load_yrs_0172_version_folder_using_current_yrs_version() {
     CollabOrigin::Empty,
     encode_collab.into(),
     "fake_id", // just use fake id
+    default_client_id(),
   )
   .unwrap();
 

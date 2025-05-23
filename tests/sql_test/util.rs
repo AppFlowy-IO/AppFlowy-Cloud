@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use collab::core::collab::default_client_id;
 use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
 use database::collab::insert_into_af_collab;
@@ -74,7 +75,7 @@ pub async fn create_test_collab_document(
   workspace_id: &Uuid,
   doc_id: &Uuid,
 ) {
-  let document = default_document_collab_data(&doc_id.to_string()).unwrap();
+  let document = default_document_collab_data(&doc_id.to_string(), default_client_id()).unwrap();
   let params = CollabParams {
     object_id: *doc_id,
     encoded_collab_v1: Bytes::from(document.encode_to_bytes().unwrap()),

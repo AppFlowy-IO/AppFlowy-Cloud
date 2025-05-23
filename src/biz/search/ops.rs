@@ -22,6 +22,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{error, trace};
 use uuid::Uuid;
+use collab::core::collab::default_client_id;
 
 static MAX_SEARCH_DEPTH: i32 = 10;
 
@@ -115,6 +116,7 @@ pub async fn search_document(
     collab_storage,
     GetCollabOrigin::User { uid },
     workspace_uuid,
+    default_client_id(),
   )
   .await?;
   let private_views = private_space_and_trash_view_ids(&folder)?;

@@ -5,7 +5,7 @@ use app_error::AppError;
 use appflowy_proto::{Rid, UpdateFlags};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use collab::core::collab::{CollabOptions, DataSource};
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::preclude::Collab;
@@ -154,17 +154,16 @@ impl CollabCache {
     if !updates.is_empty() {
       let mut collab = match encoded_collab {
         Some(encoded_collab) => {
-          let options = CollabOptions::new(object_id.to_string()).with_data_source(
-            match encoded_collab.version {
+          let options = CollabOptions::new(object_id.to_string(), default_client_id())
+            .with_data_source(match encoded_collab.version {
               EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
               EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
-            },
-          );
+            });
           Collab::new_with_options(CollabOrigin::Server, options)
             .map_err(|err| AppError::Internal(err.into()))?
         },
         None => {
-          let options = CollabOptions::new(object_id.to_string());
+          let options = CollabOptions::new(object_id.to_string(), default_client_id());
           Collab::new_with_options(CollabOrigin::Server, options)
             .map_err(|err| AppError::Internal(err.into()))?
         },

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::Error;
 use async_trait::async_trait;
-use collab::core::collab::CollabOptions;
+use collab::core::collab::{default_client_id, CollabOptions};
 use collab::core::origin::CollabOrigin;
 
 use collab::preclude::Collab;
@@ -311,7 +311,7 @@ impl WorkspaceTemplate for DocumentTemplate {
   }
 
   async fn create(&self, object_id: String) -> anyhow::Result<Vec<TemplateData>> {
-    let options = CollabOptions::new(object_id.clone());
+    let options = CollabOptions::new(object_id.clone(), default_client_id());
     let collab = Collab::new_with_options(CollabOrigin::Empty, options)?;
     let document = Document::create_with_data(collab, self.0.clone())?;
     let data = document.encode_collab()?;

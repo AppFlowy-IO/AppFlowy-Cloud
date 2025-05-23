@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
 
   portainer:
     restart: on-failure
@@ -22,7 +22,7 @@ services:
     image: alpine/curl
     restart: on-failure
     environment:
-      - PORTAINER_PASSWORD=${PORTAINER_PASSWORD}
+      PORTAINER_PASSWORD: ${PORTAINER_PASSWORD}
     volumes:
       - ./docker/portainer/setup.sh:/setup.sh
     command: ./setup.sh
@@ -31,7 +31,7 @@ services:
     restart: on-failure
     image: dpage/pgadmin4
     environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     volumes:
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json

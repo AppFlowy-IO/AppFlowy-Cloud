@@ -185,20 +185,20 @@ impl WorkspaceControllerActor {
     collab_type: CollabType,
   ) -> anyhow::Result<()> {
     let object_id: ObjectId = collab.object_id().parse()?;
-    if actor
-      .cache
-      .get(&object_id)
-      .and_then(|v| v.upgrade())
-      .is_some()
-    {
-      warn!(
-        "collab {}/{}/{} already bind",
-        actor.workspace_id(),
-        object_id,
-        collab_type
-      );
-      return Ok(());
-    }
+    // if actor
+    //   .cache
+    //   .get(&object_id)
+    //   .and_then(|v| v.upgrade())
+    //   .is_some()
+    // {
+    //   warn!(
+    //     "collab {}/{}/{} already bind",
+    //     actor.workspace_id(),
+    //     object_id,
+    //     collab_type
+    //   );
+    //   return Ok(());
+    // }
 
     let client_id = actor.db.client_id();
     collab_type.validate_require_data(collab)?;

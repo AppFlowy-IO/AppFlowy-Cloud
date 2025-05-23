@@ -30,7 +30,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::{Awareness, AwarenessUpdate};

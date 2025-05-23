@@ -980,7 +980,7 @@ impl TestClient {
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let options = CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id))
+    let options = CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id).await)
       .with_data_source(DataSource::DocStateV1(doc_state));
     let mut collab = Collab::new_with_options(origin.clone(), options).unwrap();
     collab.emit_awareness_state();

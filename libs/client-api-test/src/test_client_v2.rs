@@ -965,8 +965,21 @@ impl TestClient {
     object_id: Uuid,
     collab_type: CollabType,
   ) {
+    let params = QueryCollabParams {
+      workspace_id,
+      inner: QueryCollab {
+        object_id,
+        collab_type,
+      },
+    };
+    let doc_state = self
+      .api_client
+      .get_collab(params)
+      .await
+      .map(|c| c.encode_collab.doc_state.to_vec())
+      .unwrap_or_default();
     self
-      .open_collab_with_doc_state(workspace_id, object_id, collab_type, vec![])
+      .open_collab_with_doc_state(workspace_id, object_id, collab_type, doc_state)
       .await
   }
 

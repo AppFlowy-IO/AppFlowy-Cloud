@@ -233,7 +233,8 @@ impl WorkspaceControllerActor {
     )?;
 
     // Only observe awareness changed if the collab supports it
-    if collab_type.awareness_enabled() {
+    let sync_awareness = collab_type.awareness_enabled() || cfg!(debug_assertions);
+    if sync_awareness {
       let awareness = collab.get_awareness();
       observe_awareness(actor, collab_type, object_id, client_id, awareness);
       actor.publish_awareness(object_id, collab_type, awareness.update()?);
@@ -1012,6 +1013,12 @@ impl WorkspaceControllerActor {
     collab_type: CollabType,
     update: AwarenessUpdate,
   ) {
+    tracing::trace!(
+      "[{}] publishing awareness update for {}: {:#?}",
+      self.db.client_id(),
+      object_id,
+      update
+    );
     let awareness = update.encode_v1();
     let msg = ClientMessage::AwarenessUpdate {
       object_id,

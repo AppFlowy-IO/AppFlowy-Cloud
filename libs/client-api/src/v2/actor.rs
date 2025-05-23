@@ -16,7 +16,7 @@ use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use shared_entity::response::AppResponseError;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
@@ -26,7 +26,6 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex;
 use tokio::time::MissedTickBehavior;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
@@ -1036,22 +1035,17 @@ impl WorkspaceControllerActor {
     cancel: CancellationToken,
     access_token: String,
   ) -> Result<Option<WsConn>, AppResponseError> {
-    let url = format!("{}/{}", options.url, options.workspace_id);
-    info!("establishing WebSocket connection to: {}", url);
-    let mut req = url.into_client_request()?;
-    let headers = req.headers_mut();
-    headers.insert("X-AF-Device-ID", HeaderValue::from_str(&options.device_id)?);
-    headers.insert(
-      "X-AF-Client-ID",
-      HeaderValue::from_str(&client_id.to_string())?,
+    let mut url = format!(
+      "{}/{}?clientId={}&deviceId={}",
+      options.url, options.workspace_id, client_id, options.device_id
     );
+    info!("establishing WebSocket connection to: {}", url);
+    // don't include auth token in the log message (or maybe it doesn't matter?)
+    write!(url, "&token={}", access_token).unwrap();
     if options.sync_eagerly {
-      headers.insert(
-        "X-AF-Last-Message-ID",
-        HeaderValue::from_str(&last_message_id.to_string())?,
-      );
+      write!(url, "&lastMessageId={}", last_message_id).unwrap();
     }
-    headers.insert("Authorization", HeaderValue::from_str(&access_token)?);
+    let req = url.into_client_request()?;
     let config = WebSocketConfig {
       max_frame_size: None,
       ..WebSocketConfig::default()

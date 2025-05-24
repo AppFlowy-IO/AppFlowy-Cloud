@@ -505,11 +505,15 @@ impl WorkspaceControllerActor {
     let mut buf = BytesMut::new();
     while let Some(res) = stream.next().await {
       if cancel.is_cancelled() {
+        sync_trace!("remote receiver loop cancelled");
         break;
       }
       let actor = match weak_actor.upgrade() {
         Some(inner) => inner,
-        None => break,
+        None => {
+          sync_trace!("remote receiver loop ended - actor dropped");
+          break;
+        },
       };
       let msg = res?;
       #[cfg(debug_assertions)]
@@ -554,8 +558,8 @@ impl WorkspaceControllerActor {
         },
         Message::Close(close) => {
           match close {
-            None => tracing::info!("received close request from server"),
-            Some(frame) => tracing::info!(
+            None => sync_info!("received close request from server"),
+            Some(frame) => sync_info!(
               "received close request from server: {} - {}",
               frame.code,
               frame.reason

@@ -75,24 +75,3 @@ async fn summary_search_result() {
   assert_eq!(resp.summaries[0].sources.len(), 1);
   assert_eq!(resp.summaries[0].sources[0], docs[0].object_id);
 }
-
-#[tokio::test]
-async fn summary_search_result2() {
-  if !ai_test_enabled() {
-    return;
-  }
-  load_env();
-  setup_log();
-  let (open_ai_config, azure_config) = get_open_ai_config();
-  let ai_chat = create_ai_tool(&azure_config, &open_ai_config).unwrap();
-  let model_name = "gpt-4o-mini";
-  let docs = vec![ LLMDocument::new("Kathryn leads exercises that reveal personal histories, enabling the team members to see each other beyond their\nprofessional roles. She also introduces the idea of constructive conflict, encouraging open discussion about\ndisagreements and differing opinions. Despite the discomfort this causes for some team members who are used to\nindividualistic work styles, Kathryn emphasizes that trust and openness are crucial for effective teamwork.Part III: Heavy LiftingWith initial trust in place, Kathryn shifts her focus to accountability and responsibility. This part highlights the\nchallenges team members face when taking ownership of collective goals.".to_string(), Uuid::new_v4())];
-
-  let resp = ai_chat
-    .summarize_documents("Kathryn tennis", model_name, docs.clone(), true)
-    .await
-    .unwrap();
-  dbg!(&resp);
-  assert_eq!(resp.summaries.len(), 1);
-  assert!(resp.summaries[0].sources.len() > 1);
-}

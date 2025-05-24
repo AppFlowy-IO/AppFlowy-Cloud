@@ -46,7 +46,7 @@ pub struct SummarySearchResultRequest {
 
 fn default_search_score_limit() -> f64 {
   // Higher score means better match.
-  0.4
+  0.2
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -11,7 +11,7 @@ use uuid::Uuid;
 async fn client_apply_update_find_missing_update_test() {
   let (_client_1, mut client_2, object_id, mut expected_json) = make_clients().await;
   // "title" => "hello world" is not delivered to client_2 and is considered a missing update
-  client_2.ws_client.enable_receive_message();
+  client_2.enable_receive_message();
   {
     let mut lock = client_2
       .collabs
@@ -35,7 +35,7 @@ async fn client_apply_update_find_missing_update_test() {
 async fn client_ping_find_missing_update_test() {
   let (_client_1, mut client_2, object_id, expected_json) = make_clients().await;
   // "title" => "hello world" is not delivered to client_2 and is considered a missing update
-  client_2.ws_client.enable_receive_message();
+  client_2.enable_receive_message();
 
   // the collab ping will trigger a init sync with reason InitSyncReason::MissUpdates after a period of time
   assert_client_collab_include_value(&mut client_2, &object_id, expected_json)
@@ -52,7 +52,7 @@ async fn make_clients() -> (TestClient, TestClient, Uuid, Value) {
   // Create a collaborative document with client_1 and invite client_2 to collaborate.
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(workspace_id, collab_type)
+    .open_and_edit_collab(workspace_id, collab_type)
     .await;
   client_1
     .invite_and_accepted_workspace_member(&workspace_id, &client_2, AFRole::Member)
@@ -67,7 +67,7 @@ async fn make_clients() -> (TestClient, TestClient, Uuid, Value) {
     .wait_object_sync_complete(&object_id)
     .await
     .unwrap();
-  client_2.ws_client.disable_receive_message();
+  client_2.disable_receive_message();
 
   // Client_1 makes the first edit by inserting "task 1".
   {

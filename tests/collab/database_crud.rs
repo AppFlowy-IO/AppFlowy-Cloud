@@ -227,6 +227,15 @@ async fn database_fields_crud() {
       .unwrap();
     assert_eq!(row_details.len(), 1);
     let new_row_detail = &row_details[0];
+    println!(
+      "Available keys in cells: {:?}",
+      new_row_detail.cells.keys().collect::<Vec<_>>()
+    );
+    println!("Number of cells: {}", new_row_detail.cells.len());
+    for (key, value) in &new_row_detail.cells {
+      println!("Cell '{}': {:?}", key, value);
+    }
+
     assert_eq!(new_row_detail.cells["Description"], my_description);
     assert_eq!(new_row_detail.cells["Status"], my_status);
     assert_eq!(new_row_detail.cells["Multiselect"][0], "social");

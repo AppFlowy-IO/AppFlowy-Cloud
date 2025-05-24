@@ -18,9 +18,7 @@ async fn viewing_document_editing_users_test() {
     .await
     .unwrap();
 
-  let object_id = owner
-    .create_and_edit_collab(workspace_id, collab_type)
-    .await;
+  let object_id = owner.open_and_edit_collab(workspace_id, collab_type).await;
 
   let owner_uid = owner.uid().await;
   let clients = owner.get_connect_users(&object_id).await;

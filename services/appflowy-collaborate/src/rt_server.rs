@@ -58,7 +58,6 @@ where
     awareness_gossip: Arc<AwarenessGossip>,
     redis_connection_manager: ConnectionManager,
     group_persistence_interval: Duration,
-    prune_grace_period: Duration,
     indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
     let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
@@ -84,7 +83,6 @@ where
         metrics.clone(),
         collab_stream,
         group_persistence_interval,
-        prune_grace_period,
         indexer_scheduler.clone(),
       )
       .await?,

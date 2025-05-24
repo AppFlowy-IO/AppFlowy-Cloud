@@ -1,4 +1,5 @@
 use crate::sql_test::util::{create_test_user, generate_random_bytes, setup_db};
+use chrono::Utc;
 
 use collab_entity::CollabType;
 use database::collab::{
@@ -29,6 +30,7 @@ async fn insert_collab_sql_test(pool: PgPool) {
     5120000, // 5 MB
   ];
   let start_time = std::time::Instant::now();
+  let updated_at = Utc::now();
   for &data_size in &data_sizes {
     let encoded_collab_v1 = generate_random_bytes(data_size);
     let object_id = uuid::Uuid::new_v4();
@@ -38,6 +40,7 @@ async fn insert_collab_sql_test(pool: PgPool) {
       object_id,
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encoded_collab_v1.into(),
+      updated_at: Some(updated_at),
     };
     insert_into_af_collab(&mut txn, &user.uid, &user.workspace_id, &params)
       .await
@@ -55,6 +58,10 @@ async fn insert_collab_sql_test(pool: PgPool) {
 
     assert_eq!(meta.oid, object_id.to_string());
     assert_eq!(meta.workspace_id, user.workspace_id);
+    assert_eq!(
+      meta.updated_at.timestamp_millis(),
+      updated_at.timestamp_millis()
+    );
     assert!(meta.created_at.is_some());
     assert!(meta.deleted_at.is_none());
   }
@@ -91,6 +98,7 @@ async fn insert_bulk_collab_sql_test(pool: PgPool) {
       object_id,
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encoded_collab_v1.clone().into(), // Store the original data for validation
+      updated_at: None,
     };
 
     collab_params_list.push(params);
@@ -109,7 +117,7 @@ async fn insert_bulk_collab_sql_test(pool: PgPool) {
 
   // Validate inserted data
   for (i, object_id) in object_ids.iter().enumerate() {
-    let inserted_data = select_blob_from_af_collab(&pool, &CollabType::Unknown, object_id)
+    let (_, inserted_data) = select_blob_from_af_collab(&pool, &CollabType::Unknown, object_id)
       .await
       .unwrap();
 
@@ -168,11 +176,13 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
       object_id,
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encoded_collab_v1.clone().into(),
+      updated_at: None,
     },
     CollabParams {
       object_id, // Duplicate oid
       collab_type: CollabType::Unknown,
       encoded_collab_v1: generate_random_bytes(2048).into(), // Different data to test update
+      updated_at: None,
     },
   ];
 
@@ -183,7 +193,7 @@ async fn test_bulk_insert_duplicate_oid_partition_key(pool: PgPool) {
   txn.commit().await.unwrap();
 
   // Validate the data was updated, not duplicated
-  let data = select_blob_from_af_collab(&pool, &CollabType::Unknown, &object_id)
+  let (_, data) = select_blob_from_af_collab(&pool, &CollabType::Unknown, &object_id)
     .await
     .unwrap();
   assert_eq!(data, encoded_collab_v1); // should equal the data that insert first time
@@ -213,6 +223,7 @@ async fn test_batch_insert_comparison(pool: PgPool) {
           object_id: uuid::Uuid::new_v4(),
           collab_type: CollabType::Unknown,
           encoded_collab_v1: generate_random_bytes(row_size).into(), // Generate random bytes for the given row size
+          updated_at: None,
         })
         .collect();
 

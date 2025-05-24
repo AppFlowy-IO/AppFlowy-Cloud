@@ -35,7 +35,7 @@ pub async fn insert_new_access_request<'a, E: Executor<'a, Database = Postgres>>
     Err(e)
       if e
         .as_database_error()
-        .map_or(false, |e| e.constraint().is_some()) =>
+        .is_some_and(|e| e.constraint().is_some()) =>
     {
       Err(AppError::AccessRequestAlreadyExists {
         workspace_id,

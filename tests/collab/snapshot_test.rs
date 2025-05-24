@@ -1,5 +1,6 @@
 use client_api_test::{assert_server_collab, TestClient};
 use collab::core::collab::DataSource;
+use collab::core::collab::{default_client_id, CollabOptions};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, JsonValue};
@@ -13,7 +14,7 @@ async fn read_write_snapshot() {
 
   // prepare initial document
   let wid = c.workspace_id().await;
-  let oid = c.create_and_edit_collab(wid, CollabType::Unknown).await;
+  let oid = c.open_and_edit_collab(wid, CollabType::Unknown).await;
   c.open_collab(wid, oid, CollabType::Unknown).await;
   c.insert_into(&oid, "title", "t1").await;
   c.wait_object_sync_complete(&oid).await.unwrap();
@@ -73,14 +74,9 @@ async fn verify_snapshot_state(
 
   // retrieve state
   let encoded_collab = EncodedCollab::decode_from_bytes(&snapshot.encoded_collab_v1).unwrap();
-  let collab = Collab::new_with_source(
-    CollabOrigin::Empty,
-    &oid.to_string(),
-    DataSource::DocStateV1(encoded_collab.doc_state.into()),
-    vec![],
-    true,
-  )
-  .unwrap();
+  let options = CollabOptions::new(oid.to_string(), default_client_id())
+    .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.into()));
+  let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   let actual = collab.to_json_value();
   assert_eq!(actual, expected);
 }

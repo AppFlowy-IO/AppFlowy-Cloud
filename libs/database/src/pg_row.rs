@@ -306,6 +306,15 @@ pub struct AFCollabRowMeta {
 
   pub deleted_at: Option<DateTime<Utc>>,
   pub created_at: Option<DateTime<Utc>>,
+  pub updated_at: DateTime<Utc>,
+}
+
+#[derive(FromRow, Clone, Debug)]
+pub struct AFCollabData {
+  pub oid: Uuid,
+  pub partition_key: i32,
+  pub updated_at: DateTime<Utc>,
+  pub blob: Vec<u8>,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]

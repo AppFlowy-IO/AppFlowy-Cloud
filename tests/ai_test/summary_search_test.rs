@@ -1,5 +1,5 @@
 use appflowy_cloud::api::search::create_ai_tool;
-use client_api_test::{ai_test_enabled, load_env};
+use client_api_test::{ai_test_enabled, load_env, setup_log};
 use indexer::vector::embedder::get_open_ai_config;
 use llm_client::chat::LLMDocument;
 use uuid::Uuid;
@@ -48,6 +48,7 @@ async fn summary_search_result() {
     return;
   }
   load_env();
+  setup_log();
   let (open_ai_config, azure_config) = get_open_ai_config();
   let ai_chat = create_ai_tool(&azure_config, &open_ai_config).unwrap();
   let model_name = "gpt-4o-mini";

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use access_control::collab::RealtimeAccessControl;
 use app_error::AppError;
-use collab::core::collab::DataSource;
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
@@ -31,7 +31,6 @@ pub struct GroupManager<S> {
   metrics_calculate: Arc<CollabRealtimeMetrics>,
   collab_redis_stream: Arc<CollabRedisStream>,
   persistence_interval: Duration,
-  prune_grace_period: Duration,
   indexer_scheduler: Arc<IndexerScheduler>,
 }
 
@@ -46,7 +45,6 @@ where
     metrics_calculate: Arc<CollabRealtimeMetrics>,
     collab_stream: CollabRedisStream,
     persistence_interval: Duration,
-    prune_grace_period: Duration,
     indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
     let collab_stream = Arc::new(collab_stream);
@@ -57,7 +55,6 @@ where
       metrics_calculate,
       collab_redis_stream: collab_stream,
       persistence_interval,
-      prune_grace_period,
       indexer_scheduler,
     })
   }
@@ -125,15 +122,13 @@ where
       .get_encode_collab(GetCollabOrigin::Server, params, false)
       .await;
     let state_vector = match res {
-      Ok(collab) => Collab::new_with_source(
-        CollabOrigin::Server,
-        &object_id.to_string(),
-        DataSource::DocStateV1(collab.doc_state.into()),
-        vec![],
-        false,
-      )?
-      .transact()
-      .state_vector(),
+      Ok(collab) => {
+        let options = CollabOptions::new(object_id.to_string(), default_client_id())
+          .with_data_source(DataSource::DocStateV1(collab.doc_state.into()));
+        Collab::new_with_options(CollabOrigin::Server, options)?
+          .transact()
+          .state_vector()
+      },
       Err(err) if err.is_record_not_found() => StateVector::default(),
       Err(err) => return Err(RealtimeError::CannotCreateGroup(err.to_string())),
     };
@@ -155,7 +150,6 @@ where
       self.storage.clone(),
       self.collab_redis_stream.clone(),
       self.persistence_interval,
-      self.prune_grace_period,
       state_vector,
       self.indexer_scheduler.clone(),
     )
@@ -179,13 +173,9 @@ where
   let encode_collab = storage
     .get_encode_collab(GetCollabOrigin::User { uid }, params.clone(), false)
     .await?;
-  let result = Collab::new_with_source(
-    CollabOrigin::Server,
-    &object_id.to_string(),
-    DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
-    vec![],
-    false,
-  );
+  let options = CollabOptions::new(object_id.to_string(), default_client_id())
+    .with_data_source(DataSource::DocStateV1(encode_collab.doc_state.to_vec()));
+  let result = Collab::new_with_options(CollabOrigin::Server, options);
   match result {
     Ok(collab) => Ok((collab, encode_collab)),
     Err(err) => load_collab_from_snapshot(object_id, params, storage)
@@ -209,14 +199,9 @@ where
     &params.collab_type,
   )
   .await?;
-  let collab = Collab::new_with_source(
-    CollabOrigin::Server,
-    &object_id.to_string(),
-    DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
-    vec![],
-    false,
-  )
-  .ok()?;
+  let options = CollabOptions::new(object_id.to_string(), default_client_id())
+    .with_data_source(DataSource::DocStateV1(encode_collab.doc_state.to_vec()));
+  let collab = Collab::new_with_options(CollabOrigin::Empty, options).ok()?;
   Some((collab, encode_collab))
 }
 
@@ -241,13 +226,9 @@ where
       .await
       .ok()?;
     if let Ok(encoded_collab) = EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1) {
-      if let Ok(collab) = Collab::new_with_source(
-        CollabOrigin::Empty,
-        &object_id.to_string(),
-        DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
-        vec![],
-        false,
-      ) {
+      let options = CollabOptions::new(object_id.to_string(), default_client_id())
+        .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.to_vec()));
+      if let Ok(collab) = Collab::new_with_options(CollabOrigin::Empty, options) {
         // TODO(nathan): this check is not necessary, can be removed in the future.
         collab_type.validate_require_data(&collab).ok()?;
         return Some(encoded_collab);

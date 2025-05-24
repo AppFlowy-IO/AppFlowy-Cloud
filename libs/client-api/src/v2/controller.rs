@@ -3,9 +3,10 @@ use super::{ChangedCollab, ObjectId, WorkspaceId};
 use crate::entity::CollabType;
 use crate::sync_trace;
 use crate::v2::actor::{WorkspaceAction, WorkspaceControllerActor, WsConn};
-use crate::v2::conn_retry::ReconnectionManager;
+use crate::v2::conn_retry::{ReconnectTarget, ReconnectionManager};
 use app_error::ErrorCode;
 use appflowy_proto::{Rid, WorkspaceNotification};
+use async_trait::async_trait;
 use collab::preclude::Collab;
 use collab_rt_protocol::CollabRef;
 use futures_core::Stream;
@@ -45,7 +46,7 @@ impl WorkspaceController {
     let actor = WorkspaceControllerActor::new(db, options, last_message_id);
 
     let conn_status = actor.status_channel().clone();
-    let connection_manager = Arc::new(ReconnectionManager::new(Arc::downgrade(&actor)));
+    let connection_manager = Arc::new(ReconnectionManager::new(actor.clone()));
     spawn_reconnection(Arc::downgrade(&connection_manager), conn_status);
 
     Ok(Self {
@@ -334,7 +335,24 @@ pub struct Options {
   pub sync_eagerly: bool,
 }
 
-fn spawn_reconnection(
+#[async_trait]
+impl ReconnectTarget for WorkspaceControllerActor {
+  fn status_channel(&self) -> &tokio::sync::watch::Receiver<ConnectionStatus> {
+    self.status_channel()
+  }
+
+  async fn attempt_connect(self: Arc<Self>, token: String) -> Result<(), AppResponseError> {
+    WorkspaceControllerActor::handle_connect(&self, token).await
+  }
+
+  fn set_disconnected(&self, reason: DisconnectedReason) {
+    self.set_connection_status(ConnectionStatus::Disconnected {
+      reason: Some(reason),
+    });
+  }
+}
+
+pub fn spawn_reconnection(
   manager: Weak<ReconnectionManager>,
   mut connect_status_rx: tokio::sync::watch::Receiver<ConnectionStatus>,
 ) {

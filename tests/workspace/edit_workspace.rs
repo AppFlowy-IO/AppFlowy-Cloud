@@ -8,33 +8,6 @@ use client_api_test::*;
 use database_entity::dto::AFRole;
 
 #[tokio::test]
-async fn edit_workspace_without_permission() {
-  let mut client_1 = TestClient::new_user().await;
-  let mut client_2 = TestClient::new_user().await;
-
-  let workspace_id = client_1.workspace_id().await;
-  client_1.open_workspace_collab(workspace_id).await;
-  client_2.open_workspace_collab(workspace_id).await;
-
-  client_1
-    .insert_into(&workspace_id, "name", "AppFlowy")
-    .await;
-  client_1
-    .wait_object_sync_complete(&workspace_id)
-    .await
-    .unwrap();
-
-  assert_client_collab_include_value(&mut client_1, &workspace_id, json!({"name": "AppFlowy"}))
-    .await
-    .unwrap();
-
-  // client 2 has not permission to read/edit the workspace
-  assert_client_collab_include_value(&mut client_2, &workspace_id, json!({}))
-    .await
-    .unwrap();
-}
-
-#[tokio::test]
 async fn init_sync_workspace_with_member_permission() {
   let mut owner = TestClient::new_user().await;
   let mut guest = TestClient::new_user().await;

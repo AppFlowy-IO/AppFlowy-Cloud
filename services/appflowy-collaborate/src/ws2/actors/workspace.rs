@@ -1,6 +1,8 @@
 use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
 use crate::ws2::collab_store::CollabStore;
+use crate::ws2::{BroadcastPermissionChanges, UpdateUserPermissions};
+use actix::ActorFutureExt;
 use actix::{
   fut, Actor, ActorContext, Addr, AsyncContext, AtomicResponse, Handler, Recipient,
   ResponseActFuture, Running, SpawnHandle, StreamHandler, WrapFuture,
@@ -13,40 +15,31 @@ use collab::core::origin::CollabOrigin;
 use collab::entity::EncoderVersion;
 use collab_entity::CollabType;
 use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
+use futures_util::future::join_all;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use yrs::block::ClientID;
 use yrs::updates::encoder::Encode;
 use yrs::{StateVector, Update};
-
-#[derive(Clone)]
-struct SessionHandle {
-  collab_origin: CollabOrigin,
-  conn: Addr<WsSession>,
-}
-
-impl SessionHandle {
-  fn new(collab_origin: CollabOrigin, conn: Addr<WsSession>) -> Self {
-    Self {
-      collab_origin,
-      conn,
-    }
-  }
-}
 
 pub struct Workspace {
   server: Recipient<Terminate>,
   workspace_id: WorkspaceId,
   last_message_id: Rid,
   store: Arc<CollabStore>,
-  sessions_by_client_id: HashMap<ClientID, SessionHandle>,
+  sessions_by_client_id: HashMap<ClientID, WorkspaceSessionHandle>,
   updates_handle: Option<SpawnHandle>,
   awareness_handle: Option<SpawnHandle>,
   snapshot_handle: Option<SpawnHandle>,
+  permission_cache_cleanup_handle: Option<SpawnHandle>,
 }
 
 impl Workspace {
-  pub const SNAPSHOT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+  pub const SNAPSHOT_INTERVAL: Duration = Duration::from_secs(60);
+  pub const PERMISSION_CACHE_CLEANUP_INTERVAL: Duration = Duration::from_secs(180); // 3 minutes
   pub const PUBLISH_COLLAB_LIMIT: usize = 500;
 
   pub fn new(
@@ -63,10 +56,11 @@ impl Workspace {
       updates_handle: None,
       awareness_handle: None,
       snapshot_handle: None,
+      permission_cache_cleanup_handle: None,
     }
   }
 
-  async fn hande_ws_input(store: Arc<CollabStore>, sender: SessionHandle, msg: WsInput) {
+  async fn hande_ws_input(store: Arc<CollabStore>, sender: WorkspaceSessionHandle, msg: WsInput) {
     match msg.message {
       InputMessage::Manifest(collab_type, rid, state_vector) => {
         match store
@@ -124,8 +118,9 @@ impl Workspace {
           },
           Err(err) => {
             tracing::error!(
-              "failed to resolve state of {}/{}: {}",
+              "failed to resolve state of {}/{}/{}: {}",
               msg.workspace_id,
+              msg.client_id,
               msg.object_id,
               err
             );
@@ -169,6 +164,8 @@ impl Workspace {
 
   async fn publish_collabs_created_since(
     store: Arc<CollabStore>,
+    session_handle: WorkspaceSessionHandle,
+    client_id: ClientID,
     workspace_id: WorkspaceId,
     last_message_id: Rid,
     reply_to: Addr<WsSession>,
@@ -192,6 +189,19 @@ impl Workspace {
         since
       );
       for collab in new_collabs {
+        if session_handle
+          .can_read_collab(&store, &collab.object_id)
+          .await
+          .is_err()
+        {
+          tracing::trace!(
+            "user {} lack of permission. skip publish new collab {}",
+            session_handle.uid,
+            collab.object_id,
+          );
+          continue;
+        };
+
         // [0,0] is an empty Yrs document update encoded in v1 encoding
         if !collab.encoded_collab.doc_state.is_empty() && *collab.encoded_collab.doc_state != [0, 0]
         {
@@ -228,6 +238,20 @@ impl Workspace {
         update.object_id,
         update.update.len()
       );
+
+      if session_handle
+        .can_read_collab(&store, &update.object_id)
+        .await
+        .is_err()
+      {
+        tracing::trace!(
+          "user {} lack of permission. skip publish collab {}, client_id: {}",
+          session_handle.uid,
+          update.object_id,
+          client_id,
+        );
+        continue;
+      };
       reply_to.do_send(WsOutput {
         message: ServerMessage::Update {
           object_id: update.object_id,
@@ -260,6 +284,10 @@ impl Actor for Workspace {
       .workspace_awareness_stream(&self.workspace_id);
     self.awareness_handle = Some(ctx.add_stream(stream));
     self.snapshot_handle = Some(ctx.notify_later(Snapshot, Self::SNAPSHOT_INTERVAL));
+    self.permission_cache_cleanup_handle = Some(ctx.notify_later(
+      CleanupPermissionCaches,
+      Self::PERMISSION_CACHE_CLEANUP_INTERVAL,
+    ));
   }
 
   fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
@@ -276,35 +304,17 @@ impl Actor for Workspace {
     if let Some(handle) = self.snapshot_handle.take() {
       ctx.cancel_future(handle);
     }
+    if let Some(handle) = self.permission_cache_cleanup_handle.take() {
+      ctx.cancel_future(handle);
+    }
     Running::Stop
   }
 }
 
 impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
   fn handle(&mut self, item: anyhow::Result<UpdateStreamMessage>, ctx: &mut Self::Context) {
-    match item {
-      Ok(msg) => {
-        tracing::trace!(
-          "received update for {}/{}",
-          self.workspace_id,
-          msg.object_id
-        );
-        self.last_message_id = self.last_message_id.max(msg.last_message_id);
-        for session in self.sessions_by_client_id.values() {
-          if session.collab_origin == msg.sender {
-            continue; // skip the sender
-          }
-          session.conn.do_send(WsOutput {
-            message: ServerMessage::Update {
-              object_id: msg.object_id,
-              collab_type: msg.collab_type,
-              flags: msg.update_flags,
-              last_message_id: msg.last_message_id,
-              update: msg.update.clone(),
-            },
-          });
-        }
-      },
+    let msg = match item {
+      Ok(msg) => msg,
       Err(err) => {
         tracing::error!(
           "failed to read update stream message for workspace {}: {:?}",
@@ -312,8 +322,57 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
           err
         );
         ctx.stop();
+        return;
       },
-    }
+    };
+
+    self.last_message_id = self.last_message_id.max(msg.last_message_id);
+
+    let store = self.store.clone();
+    let object_id = msg.object_id;
+    let collab_type = msg.collab_type;
+    let update_flags = msg.update_flags;
+    let last_message_id = msg.last_message_id;
+    let update = msg.update.clone();
+
+    let sessions: Vec<WorkspaceSessionHandle> = self
+      .sessions_by_client_id
+      .values()
+      .filter(|s| s.collab_origin != msg.sender)
+      .cloned()
+      .collect();
+
+    ctx.spawn(
+      async move {
+        // For each session, check permission then send if allowed
+        let send_tasks = sessions.into_iter().map(|session| {
+          let store = Arc::clone(&store);
+          let update = update.clone();
+          async move {
+            if session.can_read_collab(&store, &object_id).await.is_ok() {
+              session.conn.do_send(WsOutput {
+                message: ServerMessage::Update {
+                  object_id,
+                  collab_type,
+                  flags: update_flags,
+                  last_message_id,
+                  update,
+                },
+              });
+            } else {
+              tracing::trace!(
+                "user {} lack of permission. skip publish collab {}",
+                session.uid,
+                object_id,
+              );
+            }
+          }
+        });
+        join_all(send_tasks).await;
+      }
+      .into_actor(self)
+      .map(|_, _, _| ()),
+    );
   }
 }
 
@@ -345,8 +404,15 @@ impl Handler<Join> for Workspace {
 
   fn handle(&mut self, msg: Join, ctx: &mut Self::Context) -> Self::Result {
     if msg.workspace_id == self.workspace_id {
-      let handle = SessionHandle::new(msg.collab_origin, msg.addr.clone());
-      self.sessions_by_client_id.insert(msg.session_id, handle);
+      let handle = WorkspaceSessionHandle::new(
+        msg.uid,
+        msg.workspace_id,
+        msg.collab_origin,
+        msg.addr.clone(),
+      );
+      self
+        .sessions_by_client_id
+        .insert(msg.session_id, handle.clone());
       tracing::trace!(
         "attached session `{}` to workspace {}",
         msg.session_id,
@@ -360,6 +426,8 @@ impl Handler<Join> for Workspace {
           async move {
             if let Err(err) = Self::publish_collabs_created_since(
               store,
+              handle,
+              msg.session_id,
               workspace_id,
               last_message_id,
               session,
@@ -453,6 +521,33 @@ impl Handler<Snapshot> for Workspace {
   }
 }
 
+impl Handler<CleanupPermissionCaches> for Workspace {
+  type Result = ();
+
+  fn handle(&mut self, _: CleanupPermissionCaches, ctx: &mut Self::Context) -> Self::Result {
+    // Schedule the next cleanup
+    self.permission_cache_cleanup_handle = Some(ctx.notify_later(
+      CleanupPermissionCaches,
+      Self::PERMISSION_CACHE_CLEANUP_INTERVAL,
+    ));
+
+    // Collect sessions to avoid borrowing issues
+    let sessions: Vec<WorkspaceSessionHandle> =
+      self.sessions_by_client_id.values().cloned().collect();
+
+    // Execute cleanup asynchronously
+    ctx.spawn(
+      async move {
+        for session in sessions {
+          session.cleanup_expired_cache().await;
+        }
+      }
+      .into_actor(self)
+      .map(|_, _, _| ()),
+    );
+  }
+}
+
 #[derive(actix::Message)]
 #[rtype(result = "()")]
 pub struct Terminate {
@@ -462,3 +557,192 @@ pub struct Terminate {
 #[derive(actix::Message)]
 #[rtype(result = "()")]
 struct Snapshot;
+
+#[derive(actix::Message)]
+#[rtype(result = "()")]
+struct CleanupPermissionCaches;
+
+impl Handler<UpdateUserPermissions> for Workspace {
+  type Result = ();
+
+  fn handle(&mut self, msg: UpdateUserPermissions, _: &mut Self::Context) -> Self::Result {
+    // TODO(nathan): send message when documents permission changed
+    // Find sessions for the specific user
+    let user_sessions: Vec<WorkspaceSessionHandle> = self
+      .sessions_by_client_id
+      .values()
+      .filter(|session| session.uid == msg.uid)
+      .cloned()
+      .collect();
+
+    // Apply permission updates to user's sessions
+    if !user_sessions.is_empty() {
+      tokio::spawn(async move {
+        for session in user_sessions {
+          session.apply_permission_updates(msg.updates.clone()).await;
+        }
+      });
+    }
+  }
+}
+
+impl Handler<BroadcastPermissionChanges> for Workspace {
+  type Result = ();
+
+  fn handle(&mut self, msg: BroadcastPermissionChanges, _: &mut Self::Context) -> Self::Result {
+    // TODO(nathan): send message when list of documents permission changed
+    let sessions: Vec<WorkspaceSessionHandle> = self
+      .sessions_by_client_id
+      .values()
+      .filter(|session| {
+        // Exclude the user who made the change (if specified)
+        if let Some(exclude_uid) = msg.exclude_uid {
+          session.uid != exclude_uid
+        } else {
+          true
+        }
+      })
+      .cloned()
+      .collect();
+
+    let changes = msg.changes;
+    tokio::spawn(async move {
+      for session in sessions {
+        if changes.workspace_level_change {
+          // Workspace-level change: clear all permissions for this user
+          session.clear_permission_cache().await;
+        } else {
+          session
+            .apply_permission_updates(changes.updates.clone())
+            .await;
+        }
+      }
+    });
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionUpdate {
+  pub object_id: ObjectId,
+  pub permission_type: PermissionType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PermissionType {
+  NoAccess,
+  Read,
+  Write,
+}
+
+impl PermissionType {
+  pub fn can_read(&self) -> bool {
+    matches!(self, PermissionType::Read | PermissionType::Write)
+  }
+  pub fn can_write(&self) -> bool {
+    matches!(self, PermissionType::Write)
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkPermissionUpdate {
+  pub updates: Vec<PermissionUpdate>,
+  pub workspace_level_change: bool, // true if workspace role changed
+}
+
+#[derive(Clone)]
+struct WorkspaceSessionHandle {
+  uid: i64,
+  workspace_id: WorkspaceId,
+  collab_origin: CollabOrigin,
+  conn: Addr<WsSession>,
+  // Permission cache with expiration
+  permission_cache: Arc<RwLock<HashMap<ObjectId, (PermissionType, Instant)>>>,
+  cache_ttl: Duration,
+}
+
+impl WorkspaceSessionHandle {
+  fn new(
+    uid: i64,
+    workspace_id: WorkspaceId,
+    collab_origin: CollabOrigin,
+    conn: Addr<WsSession>,
+  ) -> Self {
+    Self::new_with_cache_ttl(
+      uid,
+      workspace_id,
+      collab_origin,
+      conn,
+      Duration::from_secs(300), // 5 minutes cache TTL
+    )
+  }
+
+  fn new_with_cache_ttl(
+    uid: i64,
+    workspace_id: WorkspaceId,
+    collab_origin: CollabOrigin,
+    conn: Addr<WsSession>,
+    cache_ttl: Duration,
+  ) -> Self {
+    Self {
+      uid,
+      workspace_id,
+      collab_origin,
+      conn,
+      permission_cache: Arc::new(RwLock::new(HashMap::new())),
+      cache_ttl,
+    }
+  }
+
+  /// Check if user has read permission for object, using cache when possible
+  async fn can_read_collab(
+    &self,
+    store: &Arc<CollabStore>,
+    object_id: &ObjectId,
+  ) -> Result<bool, AppError> {
+    let now = Instant::now();
+
+    // Check cache first
+    if let Some((permission, cached_at)) = self.permission_cache.read().await.get(object_id) {
+      if now.duration_since(*cached_at) < self.cache_ttl {
+        return Ok(permission.can_read());
+      }
+    }
+
+    // Cache miss or expired, check permission and update cache
+    let has_permission = store
+      .enforce_read_collab(&self.workspace_id, &self.uid, object_id)
+      .await
+      .is_ok();
+
+    // Update cache
+    self
+      .permission_cache
+      .write()
+      .await
+      .insert(*object_id, (PermissionType::Read, now));
+
+    Ok(has_permission)
+  }
+
+  /// Apply permission updates and send WebSocket notification
+  async fn apply_permission_updates(&self, updates: Vec<PermissionUpdate>) {
+    let mut cache = self.permission_cache.write().await;
+    let now = Instant::now();
+    for update in updates {
+      cache.insert(update.object_id, (update.permission_type, now));
+    }
+  }
+
+  /// Clear all cached permissions (useful when user's workspace role changes)
+  async fn clear_permission_cache(&self) {
+    let mut cache = self.permission_cache.write().await;
+    cache.clear();
+  }
+
+  /// Remove expired entries from cache
+  async fn cleanup_expired_cache(&self) {
+    let now = Instant::now();
+    let mut cache = self.permission_cache.write().await;
+    cache.retain(|_, (_, cached_at)| now.duration_since(*cached_at) < self.cache_ttl);
+  }
+}

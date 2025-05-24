@@ -1,6 +1,7 @@
 use super::session::{WsInput, WsSession};
 use super::workspace::{Terminate, Workspace};
 use crate::ws2::collab_store::CollabStore;
+use crate::ws2::{BulkPermissionUpdate, PermissionUpdate};
 use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
 use appflowy_proto::{Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
@@ -82,6 +83,7 @@ impl Handler<Terminate> for WsServer {
 #[derive(actix::Message)]
 #[rtype(result = "()")]
 pub struct Join {
+  pub uid: i64,
   /// Current client session identifier.
   pub session_id: ClientID,
   pub collab_origin: CollabOrigin,
@@ -105,4 +107,18 @@ pub struct Leave {
 #[rtype(result = "()")]
 pub struct WsOutput {
   pub message: ServerMessage,
+}
+
+#[derive(actix::Message)]
+#[rtype(result = "()")]
+pub struct UpdateUserPermissions {
+  pub uid: i64,
+  pub updates: Vec<PermissionUpdate>,
+}
+
+#[derive(actix::Message)]
+#[rtype(result = "()")]
+pub struct BroadcastPermissionChanges {
+  pub changes: BulkPermissionUpdate,
+  pub exclude_uid: Option<i64>, // Don't send to the user who made the change
 }

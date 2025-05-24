@@ -543,6 +543,14 @@ pub async fn remove_workspace_members(
       workspace_access_control
         .remove_user_from_workspace(&uid, workspace_id)
         .await?;
+
+      // TODO: Add permission cache invalidation for removed user
+      // if let Some(realtime_server) = get_realtime_server_handle() {
+      //   realtime_server.send_to_workspace(
+      //     *workspace_id,
+      //     InvalidateUserPermissions { uid }
+      //   ).await;
+      // }
     }
   }
 

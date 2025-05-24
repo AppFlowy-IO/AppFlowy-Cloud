@@ -966,7 +966,7 @@ impl TestClient {
 
   pub async fn open_workspace_collab(&mut self, workspace_id: Uuid) {
     self
-      .open_collab(workspace_id, workspace_id, CollabType::Unknown)
+      .open_collab(workspace_id, workspace_id, CollabType::Folder)
       .await;
   }
 
@@ -1008,7 +1008,9 @@ impl TestClient {
     let options = CollabOptions::new(object_id.to_string(), self.client_id(&workspace_id).await)
       .with_data_source(DataSource::DocStateV1(doc_state));
     let mut collab = Collab::new_with_options(origin.clone(), options).unwrap();
+    collab_type.validate_require_data(&collab).unwrap();
     collab.emit_awareness_state();
+
     let collab = Arc::new(RwLock::from(collab));
     let collab_ref = collab.clone() as CollabRef;
 

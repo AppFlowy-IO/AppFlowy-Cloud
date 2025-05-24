@@ -73,7 +73,8 @@ async fn chat_with_multiple_selected_source_test() {
     .collect();
   test_client
     .wait_until_all_embedding(&workspace_id, query)
-    .await;
+    .await
+    .unwrap();
 
   // create chat
   let chat_id = Uuid::new_v4().to_string();
@@ -213,7 +214,8 @@ async fn chat_with_selected_source_override_test() {
   test_client.api_client.create_collab(params).await.unwrap();
   test_client
     .wait_until_get_embedding(&workspace_id, &object_id)
-    .await;
+    .await
+    .unwrap();
 
   // chat with document
   let chat_id = uuid::Uuid::new_v4().to_string();

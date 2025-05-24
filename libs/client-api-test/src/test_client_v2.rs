@@ -67,7 +67,7 @@ use crate::{load_env, localhost_client_with_device_id, setup_log};
 use crate::assertion_utils::{
   assert_server_collab_eventually, assert_server_snapshot_eventually, JsonAssertable,
 };
-use crate::async_utils::retry_with_backoff;
+use crate::async_utils::retry_api_with_constant_interval;
 use crate::test_client_config::{RetryConfig, TestClientConstants};
 use crate::workspace_ops::WorkspaceManager;
 
@@ -652,10 +652,10 @@ impl TestClient {
     &self,
     workspace_id: &Uuid,
     query: Vec<EmbeddedCollabQuery>,
-  ) -> Vec<AFCollabEmbedInfo> {
+  ) -> Result<Vec<AFCollabEmbedInfo>, AppResponseError> {
     let expected_count = query.len();
 
-    retry_with_backoff(
+    retry_api_with_constant_interval(
       || async {
         match self
           .api_client
@@ -663,35 +663,40 @@ impl TestClient {
           .await
         {
           Ok(items) if items.len() == expected_count => Ok(items),
-          Ok(items) => Err(anyhow!(
-            "Expected {} embeddings, got {}",
-            expected_count,
-            items.len()
-          )),
-          Err(e) => Err(anyhow!("Failed to get embeddings: {}", e)),
+          Ok(items) => Err(AppResponseError {
+            code: shared_entity::response::ErrorCode::RecordNotFound,
+            message: format!(
+              "Expected {} embeddings, got {}",
+              expected_count,
+              items.len()
+            )
+            .into(),
+          }),
+          Err(e) => Err(e),
         }
       },
       RetryConfig::for_embedding(),
     )
     .await
-    .unwrap_or_else(|e| panic!("Failed to get all embeddings: {}", e))
   }
 
   /// Waits until embedding is available for a specific object
-  pub async fn wait_until_get_embedding(&self, workspace_id: &Uuid, object_id: &Uuid) {
-    retry_with_backoff(
+  pub async fn wait_until_get_embedding(
+    &self,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
+  ) -> Result<(), AppResponseError> {
+    retry_api_with_constant_interval(
       || async {
         self
           .api_client
           .get_collab_embed_info(workspace_id, object_id)
           .await
-          .map_err(|e| anyhow!("Embedding not ready: {}", e))
           .map(|_| ())
       },
       RetryConfig::for_embedding(),
     )
     .await
-    .unwrap_or_else(|e| panic!("Failed to get embedding: {}", e));
   }
 
   /// Waits until search results are available
@@ -702,17 +707,19 @@ impl TestClient {
     limit: u32,
     preview: u32,
     score_limit: Option<f32>,
-  ) -> Vec<SearchDocumentResponseItem> {
-    retry_with_backoff(
+  ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
+    retry_api_with_constant_interval(
       || async {
         let response = self
           .api_client
           .search_documents(workspace_id, query, limit, preview, score_limit)
-          .await
-          .map_err(|e| anyhow!("Search failed: {}", e))?;
+          .await?;
 
         if response.is_empty() {
-          Err(anyhow!("No search results found"))
+          Err(AppResponseError {
+            code: shared_entity::response::ErrorCode::RecordNotFound,
+            message: "No search results found".into(),
+          })
         } else {
           Ok(response)
         }
@@ -720,7 +727,6 @@ impl TestClient {
       RetryConfig::for_search(),
     )
     .await
-    .unwrap_or_else(|e| panic!("Failed to get search results: {}", e))
   }
 
   pub async fn assert_similarity(
@@ -797,13 +803,16 @@ impl TestClient {
     condition: impl Fn(&AFSnapshotMetas) -> bool + Send + Sync + 'static,
     timeout_secs: u64,
   ) -> Result<AFSnapshotMetas, AppResponseError> {
-    retry_with_backoff(
+    retry_api_with_constant_interval(
       || async {
         let snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
         if condition(&snapshot_metas) {
           Ok(snapshot_metas)
         } else {
-          Err(anyhow!("Snapshot condition not met yet"))
+          Err(AppResponseError {
+            code: shared_entity::response::ErrorCode::RecordNotFound,
+            message: "Snapshot condition not met yet".into(),
+          })
         }
       },
       RetryConfig {
@@ -813,7 +822,6 @@ impl TestClient {
       },
     )
     .await
-    .map_err(AppResponseError::from)
   }
 
   pub async fn create_collab_list(

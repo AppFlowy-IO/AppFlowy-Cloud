@@ -442,7 +442,7 @@ impl BucketClient for AwsS3BucketClientImpl {
           .delete(delete)
           .send()
           .await
-          .map_err(|err| anyhow!("Failed to delete delete object: {}", err))?;
+          .map_err(|err| anyhow!("Failed to delete object: {:?}", err))?;
 
         if let Some(errors) = delete_objects_output.errors {
           for error in errors {

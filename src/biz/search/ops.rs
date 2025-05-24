@@ -6,6 +6,7 @@ use crate::{
 use app_error::AppError;
 use appflowy_ai_client::dto::EmbeddingModel;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use collab::core::collab::default_client_id;
 use collab_folder::{Folder, View};
 use database::collab::GetCollabOrigin;
 use database::index::{search_documents, SearchDocumentParams};
@@ -22,7 +23,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{error, trace};
 use uuid::Uuid;
-use collab::core::collab::default_client_id;
 
 static MAX_SEARCH_DEPTH: i32 = 10;
 
@@ -192,13 +192,9 @@ pub async fn summarize_search_results(
   }
 
   let ai_tool = ai_tool.unwrap();
-  let model_name = get_env_var("AI_OPENAI_API_SUMMARY_MODEL", "gpt-4o-mini");
+  let model_name = get_env_var("AI_OPENAI_API_SUMMARY_MODEL", "gpt-4.1-nano");
 
   let mut summaries = Vec::new();
-  trace!(
-    "[Search] use {} model to summarize search results",
-    model_name
-  );
   let SummarySearchResultRequest {
     query,
     search_results,
@@ -209,6 +205,12 @@ pub async fn summarize_search_results(
     .into_iter()
     .map(|result| LLMDocument::new(result.content, result.object_id))
     .collect();
+
+  trace!(
+    "[Search] use {} model to summarize search result docs: {:#?}",
+    model_name,
+    llm_docs,
+  );
   match ai_tool
     .summarize_documents(&query, &model_name, llm_docs, only_context)
     .await

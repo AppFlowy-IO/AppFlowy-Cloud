@@ -55,7 +55,7 @@ impl Indexer for DocumentIndexer {
       object_id,
       paragraphs,
       model,
-      get_env_var("APPFLOWY_EMBEDDING_CHUNK_SIZE", "1000")
+      get_env_var("APPFLOWY_EMBEDDING_CHUNK_SIZE", "2000")
         .parse::<usize>()
         .unwrap_or(1000),
       get_env_var("APPFLOWY_EMBEDDING_CHUNK_OVERLAP", "200")
@@ -144,6 +144,13 @@ pub fn split_text_into_chunks(
   if paragraphs.is_empty() {
     return Ok(vec![]);
   }
+
+  trace!(
+    "[Embedding] Splitting document `{}` into chunks with chunk_size: {}, overlap: {}, paragraphs: {:?}",
+    object_id,
+    chunk_size,
+    overlap, paragraphs
+  );
   let split_contents = group_paragraphs_by_max_content_len(paragraphs, chunk_size, overlap);
   let metadata = json!({
       "id": object_id,

@@ -86,6 +86,18 @@ impl CollabStore {
     }
   }
 
+  pub async fn enforce_read_collab(
+    &self,
+    workspace_id: &WorkspaceId,
+    uid: &i64,
+    object_id: &ObjectId,
+  ) -> AppResult<()> {
+    self
+      .access_control
+      .enforce_read_collab(workspace_id, uid, object_id)
+      .await
+  }
+
   pub async fn get_collabs_created_since(
     &self,
     workspace_id: Uuid,

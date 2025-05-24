@@ -75,6 +75,10 @@ impl WsSession {
     }
   }
 
+  pub fn uid(&self) -> i64 {
+    self.info.user_id
+  }
+
   /// Unique identifier of current session.
   fn id(&self) -> ClientID {
     self.info.client_id
@@ -151,6 +155,7 @@ impl Actor for WsSession {
     }
 
     let join = Join {
+      uid: self.info.user_id,
       session_id: self.id(),
       collab_origin: self.info.collab_origin(),
       addr: ctx.address(),
@@ -193,6 +198,14 @@ impl Handler<WsOutput> for WsSession {
     if let Ok(bytes) = msg.message.into_bytes() {
       ctx.binary(bytes);
     };
+  }
+}
+
+impl Handler<GetUid> for WsSession {
+  type Result = i64;
+
+  fn handle(&mut self, _msg: GetUid, _ctx: &mut Self::Context) -> Self::Result {
+    self.uid()
   }
 }
 
@@ -269,6 +282,10 @@ pub struct WsInput {
   pub sender: CollabOrigin,
   pub client_id: ClientID,
 }
+
+#[derive(actix::Message)]
+#[rtype(result = "i64")]
+pub struct GetUid;
 
 pub enum InputMessage {
   Manifest(CollabType, Rid, StateVector),

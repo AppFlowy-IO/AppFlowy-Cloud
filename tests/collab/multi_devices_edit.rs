@@ -1,12 +1,9 @@
-use std::time::Duration;
-
 use client_api::entity::AFRole;
 use client_api_test::*;
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabParams;
 use serde_json::json;
 use sqlx::types::uuid;
-use tokio::time::sleep;
 use tracing::trace;
 
 #[tokio::test]
@@ -104,8 +101,6 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .unwrap();
   trace!("client 2 disconnect: {:?}", client_2.device_id);
   client_2.disconnect().await;
-  sleep(Duration::from_millis(2000)).await;
-
   client_2.insert_into(&object_id, "name", "workspace2").await;
   client_2.reconnect().await;
   client_2
@@ -119,6 +114,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
 
   assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected_json.clone(), 60)
     .await;
+
   assert_client_collab_within_secs(&mut client_1, &object_id, "name", expected_json.clone(), 60)
     .await;
 }

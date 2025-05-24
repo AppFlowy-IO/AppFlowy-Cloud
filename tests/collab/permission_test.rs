@@ -9,8 +9,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use client_api_test::{
-  assert_client_collab_include_value, assert_client_collab_within_secs, assert_server_collab,
-  TestClient,
+  assert_client_collab_include_value, assert_client_collab_value, assert_client_collab_within_secs,
+  assert_server_collab, TestClient,
 };
 use database_entity::dto::AFRole;
 
@@ -24,7 +24,7 @@ async fn recv_updates_without_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(workspace_id, collab_type)
+    .open_and_edit_collab(workspace_id, collab_type)
     .await;
 
   client_2
@@ -38,7 +38,10 @@ async fn recv_updates_without_permission_test() {
     .wait_object_sync_complete(&object_id)
     .await
     .unwrap();
-  assert_client_collab_within_secs(&mut client_2, &object_id, "name", json!({}), 60).await;
+
+  assert_client_collab_value(&mut client_2, &object_id, json!({}))
+    .await
+    .unwrap();
 }
 
 // #[tokio::test]
@@ -159,7 +162,7 @@ async fn edit_collab_with_readonly_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(workspace_id, collab_type)
+    .open_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -205,7 +208,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(workspace_id, collab_type)
+    .open_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -252,7 +255,7 @@ async fn edit_collab_with_full_access_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(workspace_id, collab_type)
+    .open_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -297,7 +300,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(workspace_id, collab_type)
+    .open_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -364,7 +367,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let collab_type = CollabType::Unknown;
   let workspace_id = owner.workspace_id().await;
   owner
-    .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
+    .open_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
     .await;
 
   let arc_owner = Arc::new(owner);
@@ -440,9 +443,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let mut owner = TestClient::new_user().await;
   let collab_type = CollabType::Unknown;
   let workspace_id = owner.workspace_id().await;
-  let object_id = owner
-    .create_and_edit_collab(workspace_id, collab_type)
-    .await;
+  let object_id = owner.open_and_edit_collab(workspace_id, collab_type).await;
 
   let arc_owner = Arc::new(owner);
 

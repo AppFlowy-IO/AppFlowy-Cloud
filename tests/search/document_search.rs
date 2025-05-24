@@ -149,7 +149,7 @@ async fn test_document_indexing_and_search() {
     document.encode_collab().unwrap()
   };
   test_client
-    .create_and_edit_collab_with_data(
+    .open_and_edit_collab_with_data(
       object_id,
       workspace_id,
       collab_type,

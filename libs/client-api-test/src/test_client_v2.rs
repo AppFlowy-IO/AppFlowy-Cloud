@@ -877,14 +877,14 @@ impl TestClient {
   }
 
   #[allow(clippy::await_holding_lock)]
-  pub async fn create_and_edit_collab(
+  pub async fn open_and_edit_collab(
     &mut self,
     workspace_id: Uuid,
     collab_type: CollabType,
   ) -> Uuid {
     let object_id = Uuid::new_v4();
     self
-      .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
+      .open_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
       .await;
     object_id
   }
@@ -900,7 +900,7 @@ impl TestClient {
   }
 
   #[allow(unused_variables)]
-  pub async fn create_and_edit_collab_with_data(
+  pub async fn open_and_edit_collab_with_data(
     &mut self,
     object_id: Uuid,
     workspace_id: Uuid,
@@ -1224,6 +1224,24 @@ pub async fn assert_server_collab(
     config,
   )
   .await
+}
+
+pub async fn assert_client_collab_value(
+  client: &mut TestClient,
+  object_id: &Uuid,
+  expected: Value,
+) -> Result<(), Error> {
+  let test_collab = client
+    .collabs
+    .get(object_id)
+    .ok_or_else(|| anyhow!("Collab not found for object_id: {}", object_id))?;
+
+  let config = crate::test_client_config::AssertionConfig {
+    timeout: Duration::from_secs(TestClientConstants::SYNC_TIMEOUT_SECS),
+    ..Default::default()
+  };
+
+  test_collab.assert_json_eventually(expected, config).await
 }
 
 /// Asserts that a client collab's specific key eventually matches the expected value

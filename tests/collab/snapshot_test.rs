@@ -14,7 +14,7 @@ async fn read_write_snapshot() {
 
   // prepare initial document
   let wid = c.workspace_id().await;
-  let oid = c.create_and_edit_collab(wid, CollabType::Unknown).await;
+  let oid = c.open_and_edit_collab(wid, CollabType::Unknown).await;
   c.open_collab(wid, oid, CollabType::Unknown).await;
   c.insert_into(&oid, "title", "t1").await;
   c.wait_object_sync_complete(&oid).await.unwrap();

@@ -52,7 +52,7 @@ async fn make_clients() -> (TestClient, TestClient, Uuid, Value) {
   // Create a collaborative document with client_1 and invite client_2 to collaborate.
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_and_edit_collab(workspace_id, collab_type)
+    .open_and_edit_collab(workspace_id, collab_type)
     .await;
   client_1
     .invite_and_accepted_workspace_member(&workspace_id, &client_2, AFRole::Member)

@@ -13,6 +13,7 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::dto::QuerySnapshotParams;
 use shared_entity::dto::workspace_dto::CollabResponse;
+use tracing::info;
 
 use crate::async_utils::retry_with_backoff;
 use crate::test_client_config::{AssertionConfig, RetryConfig};
@@ -112,6 +113,11 @@ pub async fn assert_server_collab_eventually(
 
       if assert_json_matches_no_panic(&json, &expected, Config::new(config.comparison_mode)).is_ok()
       {
+        info!(
+          "Server collab assertion passed.\nExpected: {}\nActual: {}",
+          serde_json::to_string_pretty(&expected).unwrap_or_default(),
+          serde_json::to_string_pretty(&json).unwrap_or_default()
+        );
         Ok(())
       } else {
         Err(anyhow!(

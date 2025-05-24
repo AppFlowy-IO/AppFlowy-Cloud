@@ -1,6 +1,6 @@
 use super::{ObjectId, WorkspaceId};
 use crate::v2::actor::ActionSource;
-use crate::{sync_error, sync_trace};
+use crate::{sync_debug, sync_error, sync_trace};
 use anyhow::anyhow;
 use appflowy_proto::Rid;
 use client_api_entity::CollabType;
@@ -46,7 +46,7 @@ impl Db {
     let client_id = ops.client_id(&workspace_id)?;
     ops.commit_transaction()?;
 
-    tracing::debug!("opened db for client {}", client_id);
+    sync_debug!("db client_id {}", client_id);
     Ok(Self {
       client_id,
       uid,

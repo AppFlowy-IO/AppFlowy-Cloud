@@ -2,7 +2,7 @@ use crate::v2::compactor::ChannelReceiverCompactor;
 use crate::v2::controller::{ConnectionStatus, DisconnectedReason, Options};
 use crate::v2::db::Db;
 use crate::v2::ObjectId;
-use crate::{sync_error, sync_info, sync_trace, sync_warn};
+use crate::{sync_debug, sync_error, sync_info, sync_trace, sync_warn};
 use app_error::AppError;
 use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
 use arc_swap::ArcSwap;
@@ -36,7 +36,7 @@ use yrs::block::ClientID;
 use yrs::sync::{Awareness, AwarenessUpdate};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
-use yrs::{ReadTxn, StateVector, Transact, Transaction, TransactionMut, Update, WriteTxn};
+use yrs::{ReadTxn, StateVector, Transact, Transaction, Update, WriteTxn};
 
 pub(super) struct WorkspaceControllerActor {
   options: Options,
@@ -300,7 +300,7 @@ impl WorkspaceControllerActor {
     sync_trace!("[{}] action {:?}", id, action);
     match action {
       WorkspaceAction::Connect { ack, access_token } => {
-        sync_trace!(
+        sync_debug!(
           "[{}] start websocket connect with token: {}",
           id,
           access_token
@@ -393,7 +393,7 @@ impl WorkspaceControllerActor {
       ClientMessage::AwarenessUpdate { .. } => None,
     };
     if let Some(sink) = self.ws_sink() {
-      sync_trace!("sending message: {:?}", msg);
+      sync_debug!("[{}] sending message: {:?}", self.db.client_id(), msg);
       {
         let bytes = msg.into_bytes()?;
         let mut sink = sink.lock().await;
@@ -462,7 +462,7 @@ impl WorkspaceControllerActor {
         actor.set_connection_status(ConnectionStatus::Disconnected { reason: None });
       },
       Some(connection) => {
-        sync_trace!("[{}] connected to {}", client_id, actor.options.url);
+        sync_debug!("[{}] connected to {}", client_id, actor.options.url);
         let (sink, stream) = connection.split();
         let sink = Arc::new(Mutex::new(sink));
         actor.set_connection_status(ConnectionStatus::Connected {
@@ -488,6 +488,7 @@ impl WorkspaceControllerActor {
     stream: SplitStream<WsConn>,
     cancel: CancellationToken,
   ) {
+    sync_debug!("remote receiver task started");
     let reason = Self::remote_receiver_loop(weak_actor.clone(), stream, cancel.clone())
       .await
       .err();
@@ -570,6 +571,7 @@ impl WorkspaceControllerActor {
         },
       }
     }
+    sync_trace!("remote receiver loop ended");
     Ok(())
   }
 
@@ -685,6 +687,7 @@ impl WorkspaceControllerActor {
       .collect();
 
     sync_info!("Publishing pending collabs: {}", pending.len());
+    sync_debug!("pending collabs: {:?}", pending);
     // Sort by collab_type: Document > Database > Folder
     pending.sort_by_key(|(_, collab_type)| match collab_type {
       CollabType::Document => 0,
@@ -703,6 +706,7 @@ impl WorkspaceControllerActor {
           last_message_id,
           state_vector: state_vector.encode_v1(),
         };
+        sync_trace!("publish pending collab: {:#?}", manifest);
         self.trigger(WorkspaceAction::Send(manifest, ActionSource::Local));
       } else {
         // remove collab that already dropped
@@ -710,6 +714,7 @@ impl WorkspaceControllerActor {
 
         // Collabs not in memory are considered inactive. We need to sync these when
         // connection is established to handle changes made while offline.
+        sync_trace!("the pending collab {} is inactive", object_id);
         inactive_collab.push((object_id, collab_type));
       }
     }
@@ -839,8 +844,9 @@ impl WorkspaceControllerActor {
     update: Update,
   ) -> anyhow::Result<()> {
     if let Some(collab_ref) = self.get_collab(&object_id) {
-      sync_trace!(
-        "applying remote update for active collab {}: {:#?}",
+      sync_debug!(
+        "[{}] applying remote update for active collab {}: {:#?}",
+        self.db.client_id(),
         object_id,
         update
       );
@@ -850,13 +856,29 @@ impl WorkspaceControllerActor {
       let doc = collab.get_awareness().doc();
       let mut tx = doc.transact_mut_with(rid.into_bytes().as_ref());
       tx.apply_update(update)?;
-      if Self::prune_missing_updates(&mut tx) {
-        drop(tx);
-        sync_trace!("found missing updates for {} - sending manifest", object_id);
-        self.publish_manifest(object_id, collab, collab_type);
-      } else {
-        drop(tx);
-        collab.set_sync_state(SyncState::SyncFinished);
+
+      // We try to prune missing updates. If there were any, return true.
+      // Server, when requested, will resend "continuous" missing updates
+      // (with no holes inside) so on the second resend we either get all
+      // missing updates or none at all.
+      let missing = tx.prune_pending();
+      drop(tx);
+
+      // If there are no missing updates, we can set the sync state to SyncFinished
+      // If there are missing updates, we will send a manifest to request them
+      match missing {
+        None => {
+          collab.set_sync_state(SyncState::SyncFinished);
+        },
+        Some(update) => {
+          sync_debug!(
+            "[{}] found missing update:{:#?} for {} - sending manifest",
+            self.db.client_id(),
+            update,
+            object_id
+          );
+          self.publish_manifest(object_id, collab, collab_type);
+        },
       }
     } else {
       sync_trace!(
@@ -914,20 +936,6 @@ impl WorkspaceControllerActor {
       self.trigger(WorkspaceAction::Send(msg, ActionSource::Local));
     }
     Ok(())
-  }
-
-  /// We try to prune missing updates. If there were any, return true.
-  /// Server, when requested, will resend "continuous" missing updates
-  /// (with no holes inside) so on the second resend we either get all
-  /// missing updates or none at all.
-  fn prune_missing_updates(tx: &mut TransactionMut) -> bool {
-    let missing = tx.prune_pending();
-    if let Some(update) = missing {
-      sync_trace!("missing updates: {:?}", update);
-      true
-    } else {
-      false
-    }
   }
 
   async fn save_awareness_update(

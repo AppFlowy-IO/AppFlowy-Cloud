@@ -149,7 +149,7 @@ appflowy-proto.workspace = true
 [dev-dependencies]
 flate2 = "1.0"
 assert-json-diff = "2.0.2"
-client-api-test = { path = "libs/client-api-test", features = ["collab-sync"] }
+client-api-test = { path = "libs/client-api-test", features = ["collab-sync", "v2"] }
 client-api = { path = "libs/client-api", features = [
   "collab-sync",
   "test_util",

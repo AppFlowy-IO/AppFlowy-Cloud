@@ -57,8 +57,6 @@ use crate::{load_env, localhost_client_with_device_id, setup_log};
 
 use collab::core::collab::CollabOptions;
 
-pub type CollabRef = Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
-
 pub struct TestClient {
   pub user: User,
   pub ws_client: WSClient,

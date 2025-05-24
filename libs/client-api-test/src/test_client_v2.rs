@@ -1,25 +1,37 @@
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{anyhow, Error};
-use assert_json_diff::{
-  assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
-};
+use async_trait::async_trait;
 use bytes::Bytes;
+use mime::Mime;
+use serde::Deserialize;
+use serde_json::Value;
+use tempfile::TempDir;
+use tokio_stream::StreamExt;
+use tracing::trace;
+use uuid::Uuid;
+
+// Client API imports
 use client_api::entity::id::user_awareness_object_id;
 use client_api::entity::{
   CompletionStream, CompletionStreamValue, PublishCollabItem, PublishCollabMetadata,
   QueryWorkspaceMember, QuestionStream, QuestionStreamValue, UpdateCollabWebParams,
   WorkspaceNotification,
 };
-use client_api::v2::{WorkspaceController, WorkspaceControllerOptions, WorkspaceId};
-use collab::core::collab::{default_client_id, CollabOptions, DataSource};
+use client_api::v2::WorkspaceController;
+
+// Collab imports
+use collab::core::collab::{CollabOptions, DataSource};
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
-use collab::entity::{EncodedCollab, EncoderVersion};
-use collab::lock::{Mutex, RwLock};
+use collab::entity::EncodedCollab;
+use collab::lock::RwLock;
 use collab::preclude::{ClientID, Collab, Prelim};
+
+// Collab feature imports
 use collab_database::database::{Database, DatabaseContext};
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::document::Document;
@@ -27,16 +39,16 @@ use collab_entity::CollabType;
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
 use collab_folder::{Folder, ViewLayout};
 use collab_user::core::UserAwareness;
-use dashmap::DashMap;
+
+// Database entity imports
 use database_entity::dto::{
   AFCollabEmbedInfo, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
   AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
   CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams, QuerySnapshotParams,
   SnapshotData,
 };
-use mime::Mime;
-use serde::Deserialize;
-use serde_json::{json, Value};
+
+// Shared entity imports
 use shared_entity::dto::ai_dto::CalculateSimilarityParams;
 use shared_entity::dto::publish_dto::PublishViewMetaData;
 use shared_entity::dto::search_dto::SearchDocumentResponseItem;
@@ -45,34 +57,118 @@ use shared_entity::dto::workspace_dto::{
   WorkspaceMemberInvitation, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
-use tempfile::TempDir;
-use tokio::time::{sleep, timeout, Duration};
-use tokio_stream::StreamExt;
-use tracing::trace;
-use uuid::Uuid;
 
+// Internal imports
 use crate::database_util::TestDatabaseCollabService;
 use crate::user::{generate_unique_registered_user, User};
-use crate::{load_env, localhost_client_with_device_id, setup_log, LOCALHOST_WS_V2};
+use crate::{load_env, localhost_client_with_device_id, setup_log};
+
+// New module imports
+use crate::assertion_utils::{
+  assert_server_collab_eventually, assert_server_snapshot_eventually, JsonAssertable,
+};
+use crate::async_utils::retry_with_backoff;
+use crate::test_client_config::{RetryConfig, TestClientConstants};
+use crate::workspace_ops::WorkspaceManager;
 
 pub type CollabRef = Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>;
 
 pub struct TestClient {
   pub user: User,
-  pub workspaces: DashMap<WorkspaceId, Arc<WorkspaceController>>,
   pub api_client: client_api::Client,
   pub collabs: HashMap<Uuid, TestCollab>,
   pub device_id: String,
-  temp_dir: TempDir,
+  workspace_manager: WorkspaceManager,
 }
 
 impl TestClient {
+  ///
+  /// # Arguments
+  /// * `registered_user` - The user to sign in with
+  /// * `start_ws_conn` - Whether to start websocket connections immediately
   pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
     load_env();
     setup_log();
     let device_id = Uuid::new_v4().to_string();
     Self::new_with_device_id(&device_id, registered_user, start_ws_conn).await
   }
+
+  /// Creates a new test client with a specific device ID
+  pub async fn new_with_device_id(
+    device_id: &str,
+    registered_user: User,
+    start_ws_conn: bool,
+  ) -> Self {
+    setup_log();
+    let temp_dir = Arc::new(TempDir::new().unwrap());
+    let api_client = localhost_client_with_device_id(device_id);
+
+    // Sign in the user
+    api_client
+      .sign_in_password(&registered_user.email, &registered_user.password)
+      .await
+      .unwrap();
+
+    let uid = api_client.get_profile().await.unwrap().uid;
+    let workspace_id = api_client
+      .get_workspaces()
+      .await
+      .unwrap()
+      .first()
+      .unwrap()
+      .workspace_id;
+    let device_id = api_client.device_id.clone();
+
+    let workspace_manager = WorkspaceManager::new(device_id.clone(), temp_dir.clone());
+    let client = Self {
+      user: registered_user,
+      api_client,
+      collabs: HashMap::new(),
+      device_id,
+      workspace_manager,
+    };
+
+    // Set up the initial workspace
+    if start_ws_conn {
+      let access_token = client.api_client.access_token().ok();
+      client
+        .workspace_manager
+        .get_or_create_workspace(workspace_id, uid, access_token)
+        .await
+        .unwrap();
+    } else {
+      client
+        .workspace_manager
+        .get_or_create_workspace(workspace_id, uid, None)
+        .await
+        .unwrap();
+    }
+
+    client
+  }
+
+  /// Creates a new user and test client
+  pub async fn new_user() -> Self {
+    setup_log();
+    let registered_user = generate_unique_registered_user().await;
+    let client = Self::new(registered_user, true).await;
+    let uid = client.uid().await;
+    trace!("🤖New user created: {}", uid);
+    client
+  }
+
+  /// Creates a new user without websocket connection
+  pub async fn new_user_without_ws_conn() -> Self {
+    let registered_user = generate_unique_registered_user().await;
+    Self::new(registered_user, false).await
+  }
+
+  /// Creates a test client for an existing user with a new device
+  pub async fn user_with_new_device(registered_user: User) -> Self {
+    Self::new(registered_user, true).await
+  }
+
+  // === Collab Operations ===
 
   pub async fn insert_into<S: Prelim>(&self, object_id: &Uuid, key: &str, value: S) {
     let mut lock = self.collabs.get(object_id).unwrap().collab.write().await;
@@ -90,98 +186,21 @@ impl TestClient {
     workspace_id: &Uuid,
   ) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
     self
-      .workspaces
-      .get(workspace_id)
+      .workspace_manager
+      .get_workspace(workspace_id)
       .unwrap()
       .subscribe_notification()
   }
 
-  pub async fn new_with_device_id(
-    device_id: &str,
-    registered_user: User,
-    start_ws_conn: bool,
-  ) -> Self {
-    setup_log();
-    let temp_dir = TempDir::new().unwrap();
-    let api_client = localhost_client_with_device_id(device_id);
-    api_client
-      .sign_in_password(&registered_user.email, &registered_user.password)
-      .await
-      .unwrap();
-    let uid = api_client.get_profile().await.unwrap().uid;
-    let workspace_id = api_client
-      .get_workspaces()
-      .await
-      .unwrap()
-      .first()
-      .unwrap()
-      .workspace_id;
-    let device_id = api_client.device_id.clone();
-
-    let db_path = temp_dir.path().to_str().unwrap();
-    let db_path = format!("{}/{}/{}", db_path, device_id, workspace_id);
-    tokio::fs::create_dir_all(&db_path).await.unwrap();
-
-    let workspace = WorkspaceController::new(
-      WorkspaceControllerOptions {
-        url: LOCALHOST_WS_V2.to_string(),
-        workspace_id,
-        uid,
-        device_id: device_id.clone(),
-        sync_eagerly: true,
-      },
-      &db_path,
-    )
-    .unwrap();
-
-    if start_ws_conn {
-      // Connect to server via websocket
-      workspace
-        .connect(api_client.access_token().unwrap())
-        .await
-        .unwrap();
-    }
-
-    let this = Self {
-      user: registered_user,
-      workspaces: DashMap::from_iter([(workspace_id, Arc::new(workspace))]),
-      api_client,
-      collabs: Default::default(),
-      device_id,
-      temp_dir,
-    };
-    this.workspace_for(workspace_id).await;
-    this
-  }
-
-  pub async fn new_user() -> Self {
-    setup_log();
-    let registered_user = generate_unique_registered_user().await;
-    let this = Self::new(registered_user, true).await;
-    let uid = this.uid().await;
-    trace!("🤖New user created: {}", uid);
-    this
-  }
-
-  pub async fn new_user_without_ws_conn() -> Self {
-    let registered_user = generate_unique_registered_user().await;
-    Self::new(registered_user, false).await
-  }
-
+  /// Enables/disables message receiving for debugging (debug builds only)
   #[cfg(debug_assertions)]
   pub fn disable_receive_message(&mut self) {
-    for mut entry in self.workspaces.iter_mut() {
-      let workspace = entry.value_mut();
-      workspace.disable_receive_message();
-    }
+    self.workspace_manager.set_receive_message(false);
   }
 
   #[cfg(debug_assertions)]
   pub fn enable_receive_message(&mut self) {
-    for mut entry in self.workspaces.iter_mut() {
-      let workspace = entry.value_mut();
-      workspace.enable_receive_message();
-    }
+    self.workspace_manager.set_receive_message(true);
   }
 
   pub async fn insert_view_to_general_space(
@@ -328,10 +347,6 @@ impl TestClient {
     let mut lock = test_collab.collab.write().await;
     let collab = (*lock).borrow_mut();
     collab.emit_awareness_state();
-  }
-
-  pub async fn user_with_new_device(registered_user: User) -> Self {
-    Self::new(registered_user, true).await
   }
 
   pub async fn get_user_workspace_info(&self) -> AFUserWorkspaceInfo {
@@ -539,37 +554,43 @@ impl TestClient {
     self.api_client.get_workspace_member(params).await
   }
 
+  /// Waits for an object to complete synchronization with default timeout
   pub async fn wait_object_sync_complete(&self, object_id: &Uuid) -> Result<(), Error> {
     self
-      .wait_object_sync_complete_with_secs(object_id, 60)
+      .wait_object_sync_complete_with_secs(object_id, TestClientConstants::SYNC_TIMEOUT_SECS)
       .await
   }
 
+  /// Waits for an object to complete synchronization with custom timeout
   pub async fn wait_object_sync_complete_with_secs(
     &self,
     object_id: &Uuid,
-    secs: u64,
+    timeout_secs: u64,
   ) -> Result<(), Error> {
-    let (current_sync_state, mut sync_state) = {
-      let lock = self.collabs.get(object_id).unwrap().collab.read().await;
+    let test_collab = self
+      .collabs
+      .get(object_id)
+      .ok_or_else(|| anyhow!("Collab not found for object_id: {}", object_id))?;
+
+    let (current_sync_state, mut sync_state_stream) = {
+      let lock = test_collab.collab.read().await;
       let changes = lock.subscribe_sync_state();
       let current_state = lock.get_state().sync_state();
       (current_state, changes)
     };
+
+    // If already synced, return immediately
     if current_sync_state == SyncState::SyncFinished {
-      // we don't need to wait - the sync has already finished
       return Ok(());
     }
-    let duration = Duration::from_secs(secs);
-    while let Ok(Some(state)) = timeout(duration, sync_state.next()).await {
-      if state == SyncState::SyncFinished {
-        return Ok(());
-      }
-    }
 
-    Err(anyhow!(
-      "Timeout or SyncState stream ended before reaching SyncFinished"
-    ))
+    // Use our async utility for waiting
+    crate::assertion_utils::wait_for_sync_complete(
+      &mut sync_state_stream,
+      current_sync_state,
+      Duration::from_secs(timeout_secs),
+    )
+    .await
   }
 
   #[allow(dead_code)]
@@ -599,6 +620,7 @@ impl TestClient {
       .unwrap()
   }
 
+  /// Gets the workspace ID for the current user
   pub async fn workspace_id(&self) -> Uuid {
     self
       .api_client
@@ -610,70 +632,69 @@ impl TestClient {
       .workspace_id
   }
 
+  /// Gets the email of the current user
   pub async fn email(&self) -> String {
     self.api_client.get_profile().await.unwrap().email.unwrap()
   }
 
+  /// Gets the UID of the current user
   pub async fn uid(&self) -> i64 {
     self.api_client.get_profile().await.unwrap().uid
   }
 
+  /// Gets the full user profile
   pub async fn get_user_profile(&self) -> AFUserProfile {
     self.api_client.get_profile().await.unwrap()
   }
 
+  /// Waits until all embeddings are ready for the given queries
   pub async fn wait_until_all_embedding(
     &self,
     workspace_id: &Uuid,
     query: Vec<EmbeddedCollabQuery>,
   ) -> Vec<AFCollabEmbedInfo> {
-    let timeout_duration = Duration::from_secs(30);
-    let poll_interval = Duration::from_millis(2000);
-    let poll_fut = async {
-      loop {
+    let expected_count = query.len();
+
+    retry_with_backoff(
+      || async {
         match self
           .api_client
           .batch_get_collab_embed_info(workspace_id, query.clone())
           .await
         {
-          Ok(items) if items.len() == query.len() => return Ok::<_, Error>(items),
-          _ => tokio::time::sleep(poll_interval).await,
+          Ok(items) if items.len() == expected_count => Ok(items),
+          Ok(items) => Err(anyhow!(
+            "Expected {} embeddings, got {}",
+            expected_count,
+            items.len()
+          )),
+          Err(e) => Err(anyhow!("Failed to get embeddings: {}", e)),
         }
-      }
-    };
-
-    // Enforce timeout
-    match timeout(timeout_duration, poll_fut).await {
-      Ok(Ok(items)) => items,
-      Ok(Err(e)) => panic!("Test failed: {}", e),
-      Err(_) => panic!("Test failed: Timeout after 30 seconds."),
-    }
+      },
+      RetryConfig::for_embedding(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("Failed to get all embeddings: {}", e))
   }
 
+  /// Waits until embedding is available for a specific object
   pub async fn wait_until_get_embedding(&self, workspace_id: &Uuid, object_id: &Uuid) {
-    let result = timeout(Duration::from_secs(30), async {
-      while self
-        .api_client
-        .get_collab_embed_info(workspace_id, object_id)
-        .await
-        .is_err()
-      {
-        tokio::time::sleep(Duration::from_millis(2000)).await;
-      }
-      self
-        .api_client
-        .get_collab_embed_info(workspace_id, object_id)
-        .await
-    })
-    .await;
-
-    match result {
-      Ok(Ok(_)) => {},
-      Ok(Err(e)) => panic!("Test failed: API returned an error: {:?}", e),
-      Err(_) => panic!("Test failed: Timeout after 30 seconds."),
-    }
+    retry_with_backoff(
+      || async {
+        self
+          .api_client
+          .get_collab_embed_info(workspace_id, object_id)
+          .await
+          .map_err(|e| anyhow!("Embedding not ready: {}", e))
+          .map(|_| ())
+      },
+      RetryConfig::for_embedding(),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("Failed to get embedding: {}", e));
   }
 
+  /// Waits until search results are available
   pub async fn wait_unit_get_search_result(
     &self,
     workspace_id: &Uuid,
@@ -682,24 +703,24 @@ impl TestClient {
     preview: u32,
     score_limit: Option<f32>,
   ) -> Vec<SearchDocumentResponseItem> {
-    timeout(Duration::from_secs(30), async {
-      loop {
+    retry_with_backoff(
+      || async {
         let response = self
           .api_client
           .search_documents(workspace_id, query, limit, preview, score_limit)
           .await
-          .unwrap();
+          .map_err(|e| anyhow!("Search failed: {}", e))?;
 
         if response.is_empty() {
-          tokio::time::sleep(Duration::from_millis(1500)).await;
-          continue;
+          Err(anyhow!("No search results found"))
         } else {
-          return response;
+          Ok(response)
         }
-      }
-    })
+      },
+      RetryConfig::for_search(),
+    )
     .await
-    .unwrap()
+    .unwrap_or_else(|e| panic!("Failed to get search results: {}", e))
   }
 
   pub async fn assert_similarity(
@@ -768,29 +789,31 @@ impl TestClient {
       .await
   }
 
+  /// Gets snapshot list and waits until a condition is met
   pub async fn get_snapshot_list_until(
     &self,
     workspace_id: &Uuid,
     object_id: &Uuid,
-    f: impl Fn(&AFSnapshotMetas) -> bool + Send + Sync + 'static,
+    condition: impl Fn(&AFSnapshotMetas) -> bool + Send + Sync + 'static,
     timeout_secs: u64,
   ) -> Result<AFSnapshotMetas, AppResponseError> {
-    let duration = Duration::from_secs(timeout_secs);
-    #[allow(clippy::blocks_in_conditions)]
-    match timeout(duration, async {
-      let mut snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
-      // Loop until the condition `f` returns true or the timeout is reached
-      while !f(&snapshot_metas) {
-        sleep(Duration::from_secs(5)).await;
-        snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
-      }
-      Ok(snapshot_metas)
-    })
+    retry_with_backoff(
+      || async {
+        let snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
+        if condition(&snapshot_metas) {
+          Ok(snapshot_metas)
+        } else {
+          Err(anyhow!("Snapshot condition not met yet"))
+        }
+      },
+      RetryConfig {
+        timeout: Duration::from_secs(timeout_secs),
+        poll_interval: Duration::from_secs(TestClientConstants::SNAPSHOT_POLL_INTERVAL_SECS),
+        max_retries: (timeout_secs / TestClientConstants::SNAPSHOT_POLL_INTERVAL_SECS) as u32,
+      },
+    )
     .await
-    {
-      Ok(result) => result,
-      Err(_) => panic!("Operation timed out after {} seconds", timeout_secs),
-    }
+    .map_err(AppResponseError::from)
   }
 
   pub async fn create_collab_list(
@@ -859,32 +882,13 @@ impl TestClient {
   }
 
   pub async fn workspace_for(&self, workspace_id: Uuid) -> Arc<WorkspaceController> {
-    match self.workspaces.entry(workspace_id) {
-      dashmap::mapref::entry::Entry::Occupied(e) => e.get().clone(),
-      dashmap::mapref::entry::Entry::Vacant(e) => {
-        let db_path = self.temp_dir.path().to_str().unwrap();
-        let db_path = format!("{}/{}/{}", db_path, self.device_id, workspace_id);
-        tokio::fs::create_dir_all(&db_path).await.unwrap();
-        let uid = self.api_client.get_profile().await.unwrap().uid;
-
-        let workspace = WorkspaceController::new(
-          WorkspaceControllerOptions {
-            url: LOCALHOST_WS_V2.to_string(),
-            workspace_id,
-            uid,
-            device_id: self.device_id.clone(),
-            sync_eagerly: true,
-          },
-          &db_path,
-        )
-        .unwrap();
-        workspace
-          .connect(self.api_client.access_token().unwrap())
-          .await
-          .unwrap();
-        e.insert(Arc::new(workspace)).value().clone()
-      },
-    }
+    let uid = self.api_client.get_profile().await.unwrap().uid;
+    let access_token = self.api_client.access_token().ok();
+    self
+      .workspace_manager
+      .get_or_create_workspace(workspace_id, uid, access_token)
+      .await
+      .unwrap()
   }
 
   #[allow(unused_variables)]
@@ -1058,20 +1062,15 @@ impl TestClient {
   }
 
   pub async fn disconnect(&self) {
-    for entry in self.workspaces.iter() {
-      let workspace = entry.value();
-      workspace.disconnect().await.unwrap();
-    }
+    self.workspace_manager.disconnect_all().await.unwrap();
   }
 
   pub async fn reconnect(&self) {
-    for entry in self.workspaces.iter() {
-      let workspace = entry.value();
-      workspace
-        .connect(self.api_client.access_token().unwrap())
-        .await
-        .unwrap();
-    }
+    self
+      .workspace_manager
+      .connect_all(self.api_client.access_token().unwrap())
+      .await
+      .unwrap();
   }
 
   pub async fn get_edit_collab_json(&self, object_id: &Uuid) -> Value {
@@ -1150,6 +1149,26 @@ impl TestCollab {
   }
 }
 
+#[async_trait]
+impl JsonAssertable for TestCollab {
+  async fn get_json(&self) -> Result<Value, Error> {
+    let lock = self.collab.read().await;
+    Ok(lock.to_json_value())
+  }
+}
+
+/// Wrapper to make TestClient's collabs JSON assertable
+impl TestClient {
+  /// Gets a collab by ID and provides JSON assertion capabilities
+  pub fn get_collab_assertable(&self, object_id: &Uuid) -> Option<&TestCollab> {
+    self.collabs.get(object_id)
+  }
+}
+
+/// Asserts that a server snapshot eventually matches the expected JSON
+///
+/// This is a convenience function that uses the new assertion utilities.
+/// Consider using `assert_server_snapshot_eventually` directly for more control.
 pub async fn assert_server_snapshot(
   client: &client_api::Client,
   workspace_id: &Uuid,
@@ -1157,49 +1176,22 @@ pub async fn assert_server_snapshot(
   snapshot_id: &i64,
   expected: Value,
 ) {
-  let mut retry_count = 0;
-  loop {
-    tokio::select! {
-       _ = tokio::time::sleep(Duration::from_secs(10)) => {
-         panic!("Query snapshot timeout");
-       },
-       result = client.get_snapshot(workspace_id, object_id, QuerySnapshotParams {snapshot_id: *snapshot_id },
-        ) => {
-        retry_count += 1;
-        match &result {
-          Ok(snapshot_data) => {
-          let encoded_collab_v1 =
-            EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
-          let options = CollabOptions::new(object_id.to_string(), default_client_id())
-            .with_data_source(DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()));
-          let json = Collab::new_with_options(
-            CollabOrigin::Empty,
-            options,
-          )
-          .unwrap()
-          .to_json_value();
-            if retry_count > 10 {
-              assert_json_eq!(json, expected);
-              break;
-            }
-
-            if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
-              break;
-            }
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-          },
-          Err(e) => {
-            if retry_count > 10 {
-              panic!("Query snapshot failed: {}", e);
-            }
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-          }
-        }
-       },
-    }
-  }
+  assert_server_snapshot_eventually(
+    client,
+    workspace_id,
+    object_id,
+    *snapshot_id,
+    expected,
+    crate::test_client_config::AssertionConfig::default(),
+  )
+  .await
+  .unwrap_or_else(|e| panic!("Server snapshot assertion failed: {}", e));
 }
 
+/// Asserts that a server collab eventually matches the expected JSON
+///
+/// This is a convenience function that uses the new assertion utilities.
+/// Consider using `assert_server_collab_eventually` directly for more control.
 pub async fn assert_server_collab(
   workspace_id: Uuid,
   client: &mut client_api::Client,
@@ -1208,56 +1200,23 @@ pub async fn assert_server_collab(
   timeout_secs: u64,
   expected: Value,
 ) -> Result<(), Error> {
-  let duration = Duration::from_secs(timeout_secs);
-  let collab_type = *collab_type;
-  let final_json = Arc::new(Mutex::from(json!({})));
-
-  // Use tokio::time::timeout to apply a timeout to the entire operation
-  let cloned_final_json = final_json.clone();
-  let operation = async {
-    loop {
-      let result = client
-        .get_collab(QueryCollabParams::new(object_id, collab_type, workspace_id))
-        .await;
-
-      match &result {
-        Ok(data) => {
-          let source = match data.encode_collab.version {
-            EncoderVersion::V1 => DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
-            EncoderVersion::V2 => DataSource::DocStateV2(data.encode_collab.doc_state.to_vec()),
-          };
-          let options =
-            CollabOptions::new(object_id.to_string(), default_client_id()).with_data_source(source);
-          let json = Collab::new_with_options(CollabOrigin::Empty, options)
-            .unwrap()
-            .to_json_value();
-
-          *cloned_final_json.lock().await = json.clone();
-          if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive))
-            .is_ok()
-          {
-            return;
-          }
-        },
-        Err(e) => {
-          // Instead of panicking immediately, log or handle the error and continue the loop
-          // until the timeout is reached.
-          eprintln!("Query collab failed: {}", e);
-        },
-      }
-
-      // Sleep before retrying. Adjust the sleep duration as needed.
-      tokio::time::sleep(Duration::from_millis(1000)).await;
-    }
+  let config = crate::test_client_config::AssertionConfig {
+    timeout: Duration::from_secs(timeout_secs),
+    ..Default::default()
   };
 
-  if timeout(duration, operation).await.is_err() {
-    eprintln!("json:{}\nexpected:{}", final_json.lock().await, expected);
-    return Err(anyhow!("time out for the action"));
-  }
-  Ok(())
+  assert_server_collab_eventually(
+    client,
+    workspace_id,
+    object_id,
+    *collab_type,
+    expected,
+    config,
+  )
+  .await
 }
 
+/// Asserts that a client collab's specific key eventually matches the expected value
 pub async fn assert_client_collab_within_secs(
   client: &mut TestClient,
   object_id: &Uuid,
@@ -1265,72 +1224,42 @@ pub async fn assert_client_collab_within_secs(
   expected: Value,
   secs: u64,
 ) {
-  let mut retry_count = 0;
-  loop {
-    tokio::select! {
-       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
-         panic!("timeout");
-       },
-       json = async {
-        let lock = client
-          .collabs
-          .get_mut(object_id)
-          .unwrap()
-          .collab
-          .read()
-          .await;
-        lock.to_json_value()
-      } => {
-        retry_count += 1;
-        if retry_count > 60 {
-            assert_eq!(json[key], expected[key], "object_id: {}", object_id);
-            break;
-          }
-        if json[key] == expected[key] {
-          break;
-        }
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-      }
-    }
-  }
+  let test_collab = client
+    .collabs
+    .get(object_id)
+    .unwrap_or_else(|| panic!("Collab not found for object_id: {}", object_id));
+
+  let config = crate::test_client_config::AssertionConfig {
+    timeout: Duration::from_secs(secs),
+    ..Default::default()
+  };
+
+  test_collab
+    .assert_json_key_eventually(key, expected, config)
+    .await
+    .unwrap_or_else(|e| panic!("Client collab assertion failed: {}", e));
 }
 
+/// Asserts that a client collab eventually includes the expected values
 pub async fn assert_client_collab_include_value(
   client: &mut TestClient,
   object_id: &Uuid,
   expected: Value,
 ) -> Result<(), Error> {
-  let secs = 60;
-  let mut retry_count = 0;
-  loop {
-    tokio::select! {
-       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
-        return Err(anyhow!("timeout"));
-       },
-       json = async {
-        let lock = client
-          .collabs
-          .get_mut(object_id)
-          .unwrap()
-          .collab
-          .read()
-          .await;
-        lock.to_json_value()
-      } => {
-        retry_count += 1;
-        if retry_count > 30 {
-          assert_json_include!(actual: json, expected: expected);
-          return Ok(());
-          }
-        if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
-          return Ok(());
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-      }
-    }
-  }
+  let test_collab = client
+    .collabs
+    .get(object_id)
+    .ok_or_else(|| anyhow!("Collab not found for object_id: {}", object_id))?;
+
+  let config = crate::test_client_config::AssertionConfig {
+    timeout: Duration::from_secs(TestClientConstants::SYNC_TIMEOUT_SECS),
+    ..Default::default()
+  };
+
+  test_collab.assert_json_eventually(expected, config).await
 }
 
+/// Collects all answer values from a question stream
 pub async fn collect_answer(mut stream: QuestionStream) -> String {
   let mut answer = String::new();
   while let Some(value) = stream.next().await {
@@ -1346,6 +1275,7 @@ pub async fn collect_answer(mut stream: QuestionStream) -> String {
   answer
 }
 
+/// Collects answer and comment values from a completion stream
 pub async fn collect_completion_v2(mut stream: CompletionStream) -> (String, String) {
   let mut answer = String::new();
   let mut comment = String::new();

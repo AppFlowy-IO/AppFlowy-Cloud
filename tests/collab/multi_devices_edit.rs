@@ -61,6 +61,61 @@ async fn sync_collab_content_after_reconnect_test() {
 }
 
 #[tokio::test]
+async fn same_client_connect_then_edit_multiple_time_test() {
+  let collab_type = CollabType::Unknown;
+  let registered_user = generate_unique_registered_user().await;
+  let mut client_1 = TestClient::user_with_new_device(registered_user.clone()).await;
+
+  let workspace_id = client_1.workspace_id().await;
+  let object_id = client_1
+    .create_and_edit_collab(workspace_id, collab_type)
+    .await;
+
+  // client 1 edit the collab
+  client_1.insert_into(&object_id, "1", "a").await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+  client_1.disconnect().await;
+
+  client_1.insert_into(&object_id, "2", "b").await;
+  client_1.reconnect().await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+
+  for _ in 0..5 {
+    client_1.reconnect().await;
+    client_1
+      .wait_object_sync_complete(&object_id)
+      .await
+      .unwrap();
+    client_1.disconnect().await;
+  }
+
+  let expected_json = json!({
+    "1": "a",
+    "2": "b"
+  });
+  assert_server_collab(
+    workspace_id,
+    &mut client_1.api_client,
+    object_id,
+    &collab_type,
+    30,
+    expected_json.clone(),
+  )
+  .await
+  .unwrap();
+
+  assert_client_collab_value(&mut client_1, &object_id, expected_json)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
 async fn same_client_with_diff_devices_edit_same_collab_test() {
   let collab_type = CollabType::Unknown;
   let registered_user = generate_unique_registered_user().await;

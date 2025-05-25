@@ -488,12 +488,16 @@ impl WorkspaceControllerActor {
     stream: SplitStream<WsConn>,
     cancel: CancellationToken,
   ) {
-    sync_debug!("remote receiver task started");
+    sync_debug!("websocket receiver task started");
     let reason = Self::remote_receiver_loop(weak_actor.clone(), stream, cancel.clone())
       .await
       .err();
     if let Some(actor) = weak_actor.upgrade() {
-      sync_error!("failed to receive messages from server: {:?}", reason);
+      if reason.is_some() {
+        sync_error!("failed to receive messages from server: {:?}", reason);
+      } else {
+        sync_debug!("websocket receiver task ended");
+      }
       actor.set_connection_status(ConnectionStatus::Disconnected { reason });
     }
   }
@@ -571,7 +575,7 @@ impl WorkspaceControllerActor {
         },
       }
     }
-    sync_trace!("remote receiver loop ended");
+    sync_debug!("websocket receiver loop ended");
     Ok(())
   }
 

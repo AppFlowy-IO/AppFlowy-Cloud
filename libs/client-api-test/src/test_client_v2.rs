@@ -1085,6 +1085,7 @@ impl TestClient {
       .connect_all(self.api_client.access_token().unwrap())
       .await
       .unwrap();
+    tokio::time::sleep(Duration::from_secs(2)).await;
   }
 
   pub async fn get_edit_collab_json(&self, object_id: &Uuid) -> Value {

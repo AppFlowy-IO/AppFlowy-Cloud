@@ -11,6 +11,7 @@ use access_control::workspace::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use collab::core::collab::default_client_id;
 use database::{
   access_request::{
     insert_new_access_request, select_access_request_by_request_id, update_access_request_status,
@@ -23,7 +24,6 @@ use database_entity::dto::AFRole;
 use shared_entity::dto::access_request_dto::{AccessRequest, AccessRequestView};
 use sqlx::PgPool;
 use uuid::Uuid;
-use collab::core::collab::default_client_id;
 
 pub async fn create_access_request(
   pg_pool: &PgPool,

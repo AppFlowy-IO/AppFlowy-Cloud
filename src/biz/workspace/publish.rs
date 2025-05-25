@@ -208,8 +208,13 @@ pub async fn list_collab_publish_info(
   collab_storage: &CollabAccessControlStorage,
   workspace_id: Uuid,
 ) -> Result<Vec<PublishInfoView>, AppError> {
-  let folder =
-    get_latest_collab_folder(collab_storage, GetCollabOrigin::Server, workspace_id, default_client_id()).await?;
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::Server,
+    workspace_id,
+    default_client_id(),
+  )
+  .await?;
 
   let publish_infos = publish_collab_store
     .list_collab_publish_info(&workspace_id)

@@ -1,6 +1,6 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::{CollabOptions, DataSource, default_client_id};
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
@@ -236,7 +236,9 @@ pub async fn get_latest_collab_database_body(
   .await?;
   let db_body = DatabaseBody::from_collab(
     &db_collab,
-    Arc::new(NoPersistenceDatabaseCollabService { client_id: default_client_id() }),
+    Arc::new(NoPersistenceDatabaseCollabService {
+      client_id: default_client_id(),
+    }),
     None,
   )
   .ok_or_else(|| {
@@ -325,8 +327,8 @@ pub async fn get_latest_collab(
   collab_type: CollabType,
 ) -> Result<Collab, AppError> {
   let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
-  let options =
-    collab::core::collab::CollabOptions::new(oid.to_string(), default_client_id()).with_data_source(ec.into());
+  let options = collab::core::collab::CollabOptions::new(oid.to_string(), default_client_id())
+    .with_data_source(ec.into());
   let collab = Collab::new_with_options(CollabOrigin::Server, options).map_err(|e| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to create collab from encoded collab: {:?}",
@@ -536,8 +538,13 @@ pub async fn create_row_document(
     AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
   })?;
 
-  let mut folder =
-    get_latest_collab_folder(collab_storage, GetCollabOrigin::Server, workspace_id, client_id).await?;
+  let mut folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::Server,
+    workspace_id,
+    client_id,
+  )
+  .await?;
   let folder_updates = {
     let mut folder_txn = folder.collab.transact_mut();
     folder.body.views.insert(

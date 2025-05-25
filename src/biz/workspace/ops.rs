@@ -57,9 +57,6 @@ pub async fn delete_workspace_for_user(
   // remove from postgres
   delete_from_workspace(&pg_pool, &workspace_id).await?;
 
-  // TODO: There can be a rare case where user uploads while workspace is being deleted.
-  // We need some routine job to clean up these orphaned files.
-
   Ok(())
 }
 

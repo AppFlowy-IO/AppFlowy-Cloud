@@ -53,7 +53,7 @@ fancy-regex = "0.11.0"
 bytes.workspace = true
 validator.workspace = true
 mime = "0.3.17"
-aws-sdk-s3 = { version = "1.63.0", features = [
+aws-sdk-s3 = { version = "1.88.0", features = [
   "behavior-version-latest",
   "rt-tokio",
 ] }

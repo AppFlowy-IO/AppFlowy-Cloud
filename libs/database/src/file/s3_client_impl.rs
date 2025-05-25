@@ -20,7 +20,7 @@ use database_entity::file_dto::{
   UploadPartResponse,
 };
 
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 
 pub type S3BucketStorage = BucketStorage<AwsS3BucketClientImpl>;
 
@@ -252,7 +252,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       match res {
         Ok(_) => deleted += len,
         Err(err) => {
-          tracing::warn!("failed to deleted {} objects: {}", len, err);
+          tracing::warn!("failed to delete {} objects: {}", len, err);
           tokio::time::sleep(Duration::from_millis(100)).await;
         },
       }
@@ -420,12 +420,19 @@ impl BucketClient for AwsS3BucketClientImpl {
 
       // Step 2: Delete the listed objects in batches of 1000
       while !objects_to_delete.is_empty() {
+        debug!(
+          "Deleting batch of {} objects from S3 bucket: {}",
+          objects_to_delete.len(),
+          self.bucket
+        );
+
         let batch = if objects_to_delete.len() > 1000 {
           objects_to_delete.split_off(1000)
         } else {
           Vec::new()
         };
 
+        trace!("deleting objects: {:?}", objects_to_delete);
         let delete = Delete::builder()
           .set_objects(Some(objects_to_delete))
           .build()
@@ -446,7 +453,7 @@ impl BucketClient for AwsS3BucketClientImpl {
 
         if let Some(errors) = delete_objects_output.errors {
           for error in errors {
-            println!("Error deleting object: {:?}", error);
+            error!("Error deleting object: {:?}", error);
           }
         }
 

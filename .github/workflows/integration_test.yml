@@ -37,6 +37,10 @@ jobs:
   setup:
     name: Setup Environment
     runs-on: ubuntu-latest
+    outputs:
+      worker_version: ${{ steps.push_images.outputs.worker_version }}
+      cloud_version: ${{ steps.push_images.outputs.cloud_version }}
+      admin_frontend_version: ${{ steps.push_images.outputs.admin_frontend_version }}
     steps:
       - uses: actions/checkout@v4
       - name: Install prerequisites
@@ -45,29 +49,44 @@ jobs:
           sudo apt-get install protobuf-compiler
           sudo update-ca-certificates
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
       - name: Build Docker Images
         run: |
           export DOCKER_DEFAULT_PLATFORM=linux/amd64
           cp deploy.env .env
-          docker compose build appflowy_cloud  appflowy_worker admin_frontend
+          docker compose build \
+            --parallel \
+            --build-arg BUILDKIT_INLINE_CACHE=1 PROFILE=debug\
+            appflowy_cloud appflowy_worker admin_frontend
 
       - name: Push docker images to docker hub
+        id: push_images
         run: |
           docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker tag appflowyinc/appflowy_worker appflowyinc/appflowy_worker:${GITHUB_SHA}
           docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:${GITHUB_SHA}
-          echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker push appflowyinc/appflowy_worker:${GITHUB_SHA}
           docker push appflowyinc/admin_frontend:${GITHUB_SHA}
-          APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
-          APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
-          APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
+          echo "worker_version=${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          echo "cloud_version=${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          echo "admin_frontend_version=${GITHUB_SHA}" >> $GITHUB_OUTPUT
 
   test:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: setup
+    timeout-minutes: 60
     strategy:
       matrix:
         include:
@@ -115,25 +134,19 @@ jobs:
         # the wasm-pack headless tests will run on random ports, so we need to allow all origins
         run: sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
       - name: Run Docker-Compose
         run: |
-          export APPFLOWY_WORKER_VERSION=${GITHUB_SHA}
-          export APPFLOWY_CLOUD_VERSION=${GITHUB_SHA}
-          export APPFLOWY_ADMIN_FRONTEND_VERSION=${GITHUB_SHA}
+          export APPFLOWY_WORKER_VERSION=${{ needs.setup.outputs.worker_version }}
+          export APPFLOWY_CLOUD_VERSION=${{ needs.setup.outputs.cloud_version }}
+          export APPFLOWY_ADMIN_FRONTEND_VERSION=${{ needs.setup.outputs.admin_frontend_version }}
           export APPFLOWY_AI_VERSION=${{ env.APPFLOWY_AI_VERSION }}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
 
-      - name: Install prerequisites
+      - name: Wait for services to be ready
         run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
+          echo "Waiting for services to be ready..."
+          timeout 300 bash -c 'until curl -f http://localhost/health 2>/dev/null; do sleep 5; done' || echo "Health check timeout - proceeding anyway"
 
       - name: Run Tests
         run: |
@@ -156,18 +169,22 @@ jobs:
     if: always()
     needs: test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image_name: [ "appflowy_cloud", "appflowy_worker", "admin_frontend" ]
     steps:
       - name: Remove Docker Images from Docker Hub
+        continue-on-error: true
         run: |
           TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "appflowyinc", "password": "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
-          if [ -z "$TOKEN" ]; then
-            echo "Error: Docker Hub token not set"
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Error: Failed to get Docker Hub token"
             exit 1
           fi
-          IMAGE_TAG="${{ matrix.test_service }}"
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/${IMAGE_TAG}/tags/${GITHUB_SHA}/)
-          if [ "$RESPONSE" -ne 204 ]; then
-            echo "Error: Failed to delete Docker image tag. HTTP response code: $RESPONSE"
+          IMAGE_NAME="${{ matrix.image_name }}"
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/${IMAGE_NAME}/tags/${GITHUB_SHA}/)
+          if [ "$RESPONSE" -ne 204 ] && [ "$RESPONSE" -ne 404 ]; then
+            echo "Warning: Failed to delete Docker image tag. HTTP response code: $RESPONSE"
           else
-            echo "Successfully deleted Docker image tag for $IMAGE_TAG:${GITHUB_SHA}"
+            echo "Successfully deleted Docker image tag for $IMAGE_NAME:${GITHUB_SHA}"
           fi

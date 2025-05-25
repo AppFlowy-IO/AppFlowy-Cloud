@@ -5,7 +5,12 @@ use std::env;
 use tracing::warn;
 use uuid::Uuid;
 
-#[cfg(not(target_arch = "wasm32"))]
+// When running appflowy with Nginx, you need to set the environment variables in your .env file.
+// LOCALHOST_URL=http://localhost
+// LOCALHOST_WS=ws://localhost/ws/v1
+// LOCALHOST_WS_V2=ws://localhost/ws/v2
+// LOCALHOST_GOTRUE=http://localhost/gotrue
+
 lazy_static! {
   pub static ref LOCALHOST_URL: Cow<'static, str> =
     get_env_var("LOCALHOST_URL", "http://localhost:8000");
@@ -16,20 +21,6 @@ lazy_static! {
   pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
     get_env_var("LOCALHOST_GOTRUE", "http://localhost:9999");
 }
-
-// Use following configuration when using local server with nginx
-//
-// #[cfg(not(target_arch = "wasm32"))]
-// lazy_static! {
-//   pub static ref LOCALHOST_URL: Cow<'static, str> =
-//     get_env_var("LOCALHOST_URL", "http://localhost");
-//   pub static ref LOCALHOST_WS: Cow<'static, str> =
-//     get_env_var("LOCALHOST_WS", "ws://localhost/ws/v1");
-//   pub static ref LOCALHOST_WS_V2: Cow<'static, str> =
-//     get_env_var("LOCALHOST_WS_V2", "ws://localhost/ws/v2");
-//   pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
-//     get_env_var("LOCALHOST_GOTRUE", "http://localhost/gotrue");
-// }
 
 #[allow(dead_code)]
 fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {

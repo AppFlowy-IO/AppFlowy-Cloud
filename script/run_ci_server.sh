@@ -14,6 +14,9 @@
 #
 # skip build and pull images instead
 # SKIP_BUILD=1 ./run_ci_server.sh cloud v1.2.3
+#
+# build with release profile (optimized, slower build)
+# RELEASE_BUILD=1 ./run_ci_server.sh cloud v1.2.3
 
 set -eo pipefail
 set -x
@@ -69,13 +72,13 @@ docker compose down
 
 # Build or pull
 if [[ -z "${SKIP_BUILD+x}" ]]; then
-  # Use release profile by default (set DEBUG_BUILD=1 for faster debug builds)
-  if [[ -n "${DEBUG_BUILD+x}" ]]; then
-    echo "Building with debug profile for faster compilation (less optimized)"
-    BUILD_ARGS="--build-arg PROFILE=debug"
-  else
+  # Use debug profile by default for faster builds (set RELEASE_BUILD=1 for optimized production builds)
+  if [[ -n "${RELEASE_BUILD+x}" ]]; then
     echo "Building with release profile (optimized for production)"
     BUILD_ARGS="--build-arg PROFILE=release"
+  else
+    echo "Building with debug profile for faster compilation (default)"
+    BUILD_ARGS="--build-arg PROFILE=debug"
   fi
   
   # Build selected services (using default platform for better performance)
@@ -90,6 +93,7 @@ if [[ -z "${SKIP_BUILD+x}" ]]; then
     -f admin_frontend/Dockerfile .
 
   # Generate override for selected services
+  rm -f docker-compose.override.yml  # Clean up any existing override file
   cat > docker-compose.override.yml <<EOF
 version: '3'
 services:
@@ -135,6 +139,38 @@ EOF
   docker compose -f docker-compose-ci.yml -f docker-compose.override.yml up -d
   rm docker-compose.override.yml
 
+  # Update .env file with nginx proxy URLs for local testing
+  echo ""
+  echo "Updating .env file with nginx proxy URLs for local testing..."
+  
+  # Backup original .env if it doesn't have a backup already
+  if [[ ! -f ".env.backup" ]]; then
+    cp .env .env.backup
+    echo "Created backup: .env.backup"
+  fi
+  
+  # Remove existing LOCALHOST_* variables and add new ones
+  grep -v "^LOCALHOST_" .env | grep -v "# Local testing URLs (added by run_ci_server.sh)" > .env.tmp || true
+  cat >> .env.tmp <<EOF
+
+# Local testing URLs (added by run_ci_server.sh)
+LOCALHOST_URL=http://localhost
+LOCALHOST_WS=ws://localhost/ws/v1
+LOCALHOST_WS_V2=ws://localhost/ws/v2
+LOCALHOST_GOTRUE=http://localhost/gotrue
+EOF
+  
+  mv .env.tmp .env
+  
+  echo "Updated .env file with:"
+  echo "  LOCALHOST_URL=http://localhost"
+  echo "  LOCALHOST_WS=ws://localhost/ws/v1"
+  echo "  LOCALHOST_WS_V2=ws://localhost/ws/v2"
+  echo "  LOCALHOST_GOTRUE=http://localhost/gotrue"
+  echo ""
+  echo "You can now run your tests. The .env file has been updated."
+  echo "To restore original settings, run: cp .env.backup .env"
+
 else
   echo "Skipping build; using existing images with tag $IMAGE_VERSION"
   export RUST_LOG=trace
@@ -162,4 +198,36 @@ else
   fi
 
   docker compose -f docker-compose-ci.yml up -d
+  
+  # Update .env file with nginx proxy URLs for local testing
+  echo ""
+  echo "Updating .env file with nginx proxy URLs for local testing..."
+  
+  # Backup original .env if it doesn't have a backup already
+  if [[ ! -f ".env.backup" ]]; then
+    cp .env .env.backup
+    echo "Created backup: .env.backup"
+  fi
+  
+  # Remove existing LOCALHOST_* variables and add new ones
+  grep -v "^LOCALHOST_" .env | grep -v "# Local testing URLs (added by run_ci_server.sh)" > .env.tmp || true
+  cat >> .env.tmp <<EOF
+
+# Local testing URLs (added by run_ci_server.sh)
+LOCALHOST_URL=http://localhost
+LOCALHOST_WS=ws://localhost/ws/v1
+LOCALHOST_WS_V2=ws://localhost/ws/v2
+LOCALHOST_GOTRUE=http://localhost/gotrue
+EOF
+  
+  mv .env.tmp .env
+  
+  echo "Updated .env file with:"
+  echo "  LOCALHOST_URL=http://localhost"
+  echo "  LOCALHOST_WS=ws://localhost/ws/v1"
+  echo "  LOCALHOST_WS_V2=ws://localhost/ws/v2"
+  echo "  LOCALHOST_GOTRUE=http://localhost/gotrue"
+  echo ""
+  echo "You can now run your tests. The .env file has been updated."
+  echo "To restore original settings, run: cp .env.backup .env"
 fi

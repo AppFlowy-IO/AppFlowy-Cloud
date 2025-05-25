@@ -46,7 +46,7 @@ use appflowy_collaborate::actix_ws::entities::{
 
 use bytes::BytesMut;
 use chrono::{DateTime, Duration, Utc};
-use collab::core::collab::{CollabOptions, DataSource, default_client_id};
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;

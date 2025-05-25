@@ -324,8 +324,13 @@ pub async fn get_published_view(
   pg_pool: &PgPool,
 ) -> Result<PublishedView, AppError> {
   let workspace_id = select_workspace_id_for_publish_namespace(pg_pool, &publish_namespace).await?;
-  let folder =
-    get_latest_collab_folder(collab_storage, GetCollabOrigin::Server, workspace_id, default_client_id()).await?;
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::Server,
+    workspace_id,
+    default_client_id(),
+  )
+  .await?;
   let publish_view_ids_with_publish_info =
     select_published_view_ids_with_publish_info_for_workspace(pg_pool, workspace_id).await?;
   let publish_view_id_to_info_map: HashMap<String, PublishedViewInfo> =
@@ -378,8 +383,13 @@ pub async fn list_database(
   })?;
   let db_metas = ws_body.get_all_meta(&ws_body_collab.transact());
 
-  let folder =
-    get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, workspace_id, default_client_id()).await?;
+  let folder = get_latest_collab_folder(
+    collab_storage,
+    GetCollabOrigin::User { uid },
+    workspace_id,
+    default_client_id(),
+  )
+  .await?;
 
   let trash = folder
     .get_all_trash_sections()

@@ -1,6 +1,6 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::{CollabOptions, default_client_id};
+use collab::core::collab::{default_client_id, CollabOptions};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_database::workspace_database::WorkspaceDatabase;

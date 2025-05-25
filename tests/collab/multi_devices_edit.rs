@@ -69,7 +69,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .open_and_edit_collab(workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // client 1 edit the collab
@@ -130,10 +130,10 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
 
   // different devices create different collabs. the collab will be synced between devices
   let object_id_1 = device_1
-    .open_and_edit_collab(workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
   let object_id_2 = device_2
-    .open_and_edit_collab(workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // client 1 edit the collab with object_id_1
@@ -189,7 +189,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .open_and_edit_collab(workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // add client 2 as a member of the workspace
@@ -269,7 +269,7 @@ async fn sync_new_documents_created_when_offline_test() {
   let mut object_ids = Vec::new();
   for _ in 0..5 {
     let object_id = client_2
-      .open_and_edit_collab(workspace_id, collab_type)
+      .create_and_edit_collab(workspace_id, collab_type)
       .await;
     client_2.insert_into(&object_id, "key", "value").await;
     client_2

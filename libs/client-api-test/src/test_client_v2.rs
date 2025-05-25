@@ -177,7 +177,7 @@ impl TestClient {
   }
 
   pub async fn client_id(&self, workspace_id: &Uuid) -> ClientID {
-    let workspace = self.workspace_for(*workspace_id).await;
+    let workspace = self.workspace_controller_for(*workspace_id).await;
     workspace.client_id()
   }
 
@@ -354,7 +354,7 @@ impl TestClient {
   }
 
   pub async fn open_workspace(&self, workspace_id: &Uuid) -> AFWorkspace {
-    self.workspace_for(*workspace_id).await;
+    self.workspace_controller_for(*workspace_id).await;
     self.api_client.open_workspace(workspace_id).await.unwrap()
   }
 
@@ -876,20 +876,7 @@ impl TestClient {
     self.api_client.batch_get_collab(workspace_id, params).await
   }
 
-  #[allow(clippy::await_holding_lock)]
-  pub async fn open_and_edit_collab(
-    &mut self,
-    workspace_id: Uuid,
-    collab_type: CollabType,
-  ) -> Uuid {
-    let object_id = Uuid::new_v4();
-    self
-      .open_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
-      .await;
-    object_id
-  }
-
-  pub async fn workspace_for(&self, workspace_id: Uuid) -> Arc<WorkspaceController> {
+  async fn workspace_controller_for(&self, workspace_id: Uuid) -> Arc<WorkspaceController> {
     let uid = self.api_client.get_profile().await.unwrap().uid;
     let access_token = self.api_client.access_token().ok();
     self
@@ -899,14 +886,26 @@ impl TestClient {
       .unwrap()
   }
 
+  pub async fn create_and_edit_collab(
+    &mut self,
+    workspace_id: Uuid,
+    collab_type: CollabType,
+  ) -> Uuid {
+    let object_id = Uuid::new_v4();
+    self
+      .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
+      .await;
+    object_id
+  }
+
   #[allow(unused_variables)]
-  pub async fn open_and_edit_collab_with_data(
+  pub async fn create_and_edit_collab_with_data(
     &mut self,
     object_id: Uuid,
     workspace_id: Uuid,
     collab_type: CollabType,
     encoded_collab_v1: Option<EncodedCollab>,
-    sync: bool,
+    wait_until_doc_synced: bool,
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
@@ -946,7 +945,7 @@ impl TestClient {
     let collab_ref = collab.clone() as CollabRef;
     #[cfg(feature = "collab-sync")]
     {
-      let workspace = self.workspace_for(workspace_id).await;
+      let workspace = self.workspace_controller_for(workspace_id).await;
       workspace
         .bind_and_cache_collab_ref(&collab_ref, collab_type)
         .await
@@ -959,7 +958,7 @@ impl TestClient {
     }
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id, test_collab);
-    if sync {
+    if wait_until_doc_synced {
       self.wait_object_sync_complete(&object_id).await.unwrap();
     }
   }
@@ -1016,7 +1015,7 @@ impl TestClient {
 
     #[cfg(feature = "collab-sync")]
     {
-      let workspace = self.workspace_for(workspace_id).await;
+      let workspace = self.workspace_controller_for(workspace_id).await;
       workspace
         .bind_and_cache_collab_ref(&collab_ref, collab_type)
         .await

@@ -545,6 +545,7 @@ pub async fn select_chat_messages_with_author_uuid(
           cm.created_at,
           cm.author,
           af_user.uuid AS author_uuid,
+          cm.meta_data,
           cm.reply_message_id
         FROM af_chat_messages AS cm
         LEFT OUTER JOIN af_user ON (cm.author->>'author_id')::BIGINT = af_user.uid
@@ -630,6 +631,7 @@ pub async fn select_chat_messages_with_author_uuid(
     DateTime<Utc>,
     serde_json::Value,
     Option<Uuid>,
+    serde_json::Value,
     Option<i64>,
   )> = sqlx::query_as_with(&query, args)
     .fetch_all(txn.deref_mut())
@@ -638,7 +640,7 @@ pub async fn select_chat_messages_with_author_uuid(
   let messages = rows
     .into_iter()
     .flat_map(
-      |(message_id, content, created_at, author, author_uuid, reply_message_id)| {
+      |(message_id, content, created_at, author, author_uuid, metadata, reply_message_id)| {
         match serde_json::from_value::<ChatAuthor>(author) {
           Ok(author) => Some(ChatMessageWithAuthorUuid {
             author: ChatAuthorWithUuid {
@@ -649,7 +651,7 @@ pub async fn select_chat_messages_with_author_uuid(
             },
             message_id,
             content,
-            metadata: json!([]),
+            metadata,
             created_at,
             reply_message_id,
           }),

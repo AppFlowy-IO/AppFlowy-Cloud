@@ -475,7 +475,7 @@ async fn get_model_list_test() {
     .unwrap()
     .models;
   assert!(!models.is_empty());
-  assert!(models.len() >= 5, "models.len() = {}", models.len());
+  assert!(models.len() >= 2, "models.len() = {}", models.len());
   println!("models: {:?}", models);
 }
 

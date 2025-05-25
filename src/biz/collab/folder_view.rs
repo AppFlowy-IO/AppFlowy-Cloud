@@ -17,14 +17,16 @@ pub struct PrivateSpaceAndTrashViews {
   pub view_ids_in_trash: HashSet<Uuid>,
 }
 
-pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrashViews {
+pub fn private_space_and_trash_view_ids(
+  folder: &Folder,
+) -> Result<PrivateSpaceAndTrashViews, AppError> {
   let mut view_ids_in_trash = HashSet::new();
   let mut my_private_space_ids = HashSet::new();
   let mut other_private_space_ids = HashSet::new();
   for private_section in folder.get_my_private_sections() {
     match folder.get_view(&private_section.id) {
       Some(private_view) if check_if_view_is_space(&private_view) => {
-        let section_id = Uuid::parse_str(&private_section.id).unwrap();
+        let section_id = Uuid::parse_str(&private_section.id)?;
         my_private_space_ids.insert(section_id);
       },
       _ => (),
@@ -32,7 +34,7 @@ pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrash
   }
 
   for private_section in folder.get_all_private_sections() {
-    let private_section_id = Uuid::parse_str(&private_section.id).unwrap();
+    let private_section_id = Uuid::parse_str(&private_section.id)?;
     match folder.get_view(&private_section.id) {
       Some(private_view)
         if check_if_view_is_space(&private_view)
@@ -44,14 +46,14 @@ pub fn private_space_and_trash_view_ids(folder: &Folder) -> PrivateSpaceAndTrash
     }
   }
   for trash_view in folder.get_all_trash_sections() {
-    let trash_view_id = Uuid::parse_str(&trash_view.id).unwrap();
+    let trash_view_id = Uuid::parse_str(&trash_view.id)?;
     view_ids_in_trash.insert(trash_view_id);
   }
-  PrivateSpaceAndTrashViews {
+  Ok(PrivateSpaceAndTrashViews {
     my_private_space_ids,
     other_private_space_ids,
     view_ids_in_trash,
-  }
+  })
 }
 
 /// Return all folders belonging to a workspace, excluding private sections which the user does not have access to.
@@ -62,7 +64,7 @@ pub fn collab_folder_to_folder_view(
   max_depth: u32,
   pubished_view_ids: &HashSet<Uuid>,
 ) -> Result<FolderView, AppError> {
-  let private_space_and_trash_view_ids = private_space_and_trash_view_ids(folder);
+  let private_space_and_trash_view_ids = private_space_and_trash_view_ids(folder)?;
 
   to_folder_view(
     workspace_id,
@@ -331,9 +333,13 @@ pub struct ViewTree {
   pub children: Vec<ViewTree>,
 }
 
-pub fn get_view_and_children(folder: &Folder, view_id: &str) -> Option<ViewTree> {
-  let private_space_and_trash_views = private_space_and_trash_view_ids(folder);
-  get_view_and_children_recursive(folder, &private_space_and_trash_views, view_id)
+pub fn get_view_and_children(folder: &Folder, view_id: &str) -> Result<Option<ViewTree>, AppError> {
+  let private_space_and_trash_views = private_space_and_trash_view_ids(folder)?;
+  Ok(get_view_and_children_recursive(
+    folder,
+    &private_space_and_trash_views,
+    view_id,
+  ))
 }
 
 fn get_view_and_children_recursive(

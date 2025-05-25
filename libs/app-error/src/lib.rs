@@ -196,6 +196,15 @@ pub enum AppError {
 
   #[error("unable to find invitation code")]
   InvalidInvitationCode,
+
+  #[error("{0} is already a member of the workspace")]
+  InvalidGuest(String),
+
+  #[error("free plan workspace guest limit exceeded")]
+  FreePlanGuestLimitExceeded,
+
+  #[error("paid plan workspace guest limit exceeded")]
+  PaidPlanGuestLimitExceeded,
 }
 
 impl AppError {
@@ -280,6 +289,9 @@ impl AppError {
       AppError::InvalidBlock(_) => ErrorCode::InvalidBlock,
       AppError::FeatureNotAvailable(_) => ErrorCode::FeatureNotAvailable,
       AppError::InvalidInvitationCode => ErrorCode::InvalidInvitationCode,
+      AppError::InvalidGuest(_) => ErrorCode::InvalidGuest,
+      AppError::FreePlanGuestLimitExceeded => ErrorCode::FreePlanGuestLimitExceeded,
+      AppError::PaidPlanGuestLimitExceeded => ErrorCode::PaidPlanGuestLimitExceeded,
     }
   }
 }
@@ -458,6 +470,9 @@ pub enum ErrorCode {
   AIResponseError = 1066,
   FeatureNotAvailable = 1067,
   InvalidInvitationCode = 1068,
+  InvalidGuest = 1069,
+  FreePlanGuestLimitExceeded = 1070,
+  PaidPlanGuestLimitExceeded = 1071,
 }
 
 impl ErrorCode {

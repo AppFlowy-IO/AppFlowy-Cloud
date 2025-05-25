@@ -90,7 +90,7 @@ impl WorkspaceManager {
     }
 
     if !errors.is_empty() {
-      return Err(anyhow!("Failed to connect some workspaces: {:?}", errors));
+      panic!("Failed to connect some workspaces: {:?}", errors);
     }
 
     Ok(())

@@ -32,7 +32,7 @@ tracing = { version = "0.1.40" }
 uuid = { workspace = true, features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3.30"
-aws-sdk-s3 = { version = "1.36.0", features = [
+aws-sdk-s3 = { version = "1.88.0", features = [
   "behavior-version-latest",
   "rt-tokio",
 ], optional = true }

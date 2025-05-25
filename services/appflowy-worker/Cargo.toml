@@ -45,7 +45,7 @@ sqlx = { workspace = true, default-features = false, features = [
   "migrate",
 ] }
 secrecy = { workspace = true, features = ["serde"] }
-aws-sdk-s3 = { version = "1.36.0", features = [
+aws-sdk-s3 = { version = "1.88.0", features = [
   "behavior-version-latest",
   "rt-tokio",
 ] }

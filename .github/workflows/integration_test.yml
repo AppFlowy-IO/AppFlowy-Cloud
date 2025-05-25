@@ -66,7 +66,8 @@ jobs:
           cp deploy.env .env
           docker compose build \
             --parallel \
-            --build-arg BUILDKIT_INLINE_CACHE=1 PROFILE=debug\
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --build-arg PROFILE=debug \
             appflowy_cloud appflowy_worker admin_frontend
 
       - name: Push docker images to docker hub

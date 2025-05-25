@@ -21,7 +21,7 @@ async fn realtime_write_single_collab_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = test_client
-    .open_and_edit_collab(workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
 
   // Edit the collab
@@ -170,7 +170,7 @@ async fn realtime_write_multiple_collab_test() {
     let collab_type = CollabType::Unknown;
 
     let object_id = test_client
-      .open_and_edit_collab(workspace_id, collab_type)
+      .create_and_edit_collab(workspace_id, collab_type)
       .await;
     for i in 0..=5 {
       test_client
@@ -215,7 +215,9 @@ async fn second_connect_override_first_connect_test() {
   let mut client = TestClient::new_user().await;
   let workspace_id = client.workspace_id().await;
 
-  let object_id = client.open_and_edit_collab(workspace_id, collab_type).await;
+  let object_id = client
+    .create_and_edit_collab(workspace_id, collab_type)
+    .await;
 
   client.insert_into(&object_id, "1", "a").await;
 
@@ -270,7 +272,7 @@ async fn same_device_multiple_connect_in_order_test() {
   let workspace_id = old_client.workspace_id().await;
 
   let object_id = old_client
-    .open_and_edit_collab(workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
   // simulate client try to connect the websocket server by three times
   // each connect alter the document
@@ -307,7 +309,7 @@ async fn two_direction_peer_sync_test() {
   let mut client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .open_and_edit_collab(workspace_id, collab_type)
+    .create_and_edit_collab(workspace_id, collab_type)
     .await;
 
   let mut client_2 = TestClient::new_user().await;
@@ -358,13 +360,13 @@ async fn multiple_collab_edit_test() {
   let mut client_1 = TestClient::new_user().await;
   let workspace_id_1 = client_1.workspace_id().await;
   let object_id_1 = client_1
-    .open_and_edit_collab(workspace_id_1, collab_type)
+    .create_and_edit_collab(workspace_id_1, collab_type)
     .await;
 
   let mut client_2 = TestClient::new_user().await;
   let workspace_id_2 = client_2.workspace_id().await;
   let object_id_2 = client_2
-    .open_and_edit_collab(workspace_id_2, collab_type)
+    .create_and_edit_collab(workspace_id_2, collab_type)
     .await;
 
   client_1

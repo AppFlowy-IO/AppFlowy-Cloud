@@ -131,11 +131,16 @@ impl TestClient {
     // Set up the initial workspace
     if start_ws_conn {
       let access_token = client.api_client.access_token().ok();
-      client
+      if let Err(err) = client
         .workspace_manager
-        .get_or_create_workspace(workspace_id, uid, access_token)
+        .get_or_create_workspace(workspace_id, uid, access_token.clone())
         .await
-        .unwrap();
+      {
+        panic!(
+          "Failed to create workspace: {}, token: {:?}",
+          err, access_token
+        );
+      }
     } else {
       client
         .workspace_manager

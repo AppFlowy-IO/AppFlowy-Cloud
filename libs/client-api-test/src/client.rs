@@ -25,18 +25,11 @@ lazy_static! {
 //     get_env_var("LOCALHOST_URL", "http://localhost");
 //   pub static ref LOCALHOST_WS: Cow<'static, str> =
 //     get_env_var("LOCALHOST_WS", "ws://localhost/ws/v1");
+//   pub static ref LOCALHOST_WS_V2: Cow<'static, str> =
+//     get_env_var("LOCALHOST_WS_V2", "ws://localhost/ws/v2");
 //   pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
 //     get_env_var("LOCALHOST_GOTRUE", "http://localhost/gotrue");
 // }
-
-// The env vars are not available in wasm32-unknown-unknown
-#[cfg(target_arch = "wasm32")]
-lazy_static! {
-  pub static ref LOCALHOST_URL: Cow<'static, str> = Cow::Owned("http://localhost".to_string());
-  pub static ref LOCALHOST_WS: Cow<'static, str> = Cow::Owned("ws://localhost/ws/v1".to_string());
-  pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
-    Cow::Owned("http://localhost/gotrue".to_string());
-}
 
 #[allow(dead_code)]
 fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {

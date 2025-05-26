@@ -303,7 +303,9 @@ where
       }
     }
 
-    let client_id = random::<u64>() & ((1 << 53) - 1); // client ids are 53 bits
+    // Keep client IDs 32bit, at least until client ID decoding
+    // bug is fixed (see: https://github.com/y-crdt/y-crdt/blob/826d15908105a349eb4a52e327e33cbc4720eda3/yrs/src/updates/decoder.rs#L144)
+    let client_id = random::<u32>() as u64;
     sync_trace!(
       "generated new client id {} for workspace {}",
       client_id,

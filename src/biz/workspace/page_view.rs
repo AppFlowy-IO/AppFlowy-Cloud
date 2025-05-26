@@ -355,6 +355,29 @@ fn prepare_default_document_collab_param(collab_id: Uuid) -> Result<CollabParams
   })
 }
 
+pub async fn create_orphaned_view(
+  uid: i64,
+  pg_pool: &PgPool,
+  collab_storage: &CollabAccessControlStorage,
+  workspace_id: Uuid,
+  document_id: Uuid,
+) -> Result<(), AppError> {
+  let default_document_collab_params = prepare_default_document_collab_param(document_id)?;
+  let mut transaction = pg_pool.begin().await?;
+  let action = format!("Create new orphaned view: {}", document_id);
+  collab_storage
+    .upsert_new_collab_with_transaction(
+      workspace_id,
+      &uid,
+      default_document_collab_params,
+      &mut transaction,
+      &action,
+    )
+    .await?;
+  transaction.commit().await?;
+  Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn prepare_new_encoded_database(
   view_id: &Uuid,

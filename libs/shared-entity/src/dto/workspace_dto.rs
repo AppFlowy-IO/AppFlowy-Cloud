@@ -203,6 +203,11 @@ pub struct CreatePageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateOrphanedViewParams {
+  pub document_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdatePageParams {
   pub name: String,
   pub icon: Option<ViewIcon>,

@@ -35,7 +35,7 @@ pub fn generate_random_string(len: usize) -> String {
     .collect()
 }
 
-pub fn make_big_collab_doc_state(object_id: &Uuid, key: &str, value: String) -> Vec<u8> {
+pub fn make_collab_with_key_value(object_id: &Uuid, key: &str, value: String) -> Vec<u8> {
   let options = CollabOptions::new(object_id.to_string(), default_client_id());
   let mut collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
   collab.insert(key, value);

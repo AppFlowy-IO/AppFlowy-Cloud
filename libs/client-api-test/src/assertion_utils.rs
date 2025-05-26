@@ -2,6 +2,7 @@ use anyhow::{anyhow, Error};
 use assert_json_diff::{assert_json_matches_no_panic, Config};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;
@@ -9,6 +10,7 @@ use uuid::Uuid;
 use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
+use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::dto::QuerySnapshotParams;
@@ -209,13 +211,14 @@ pub async fn wait_for_sync_complete(
   sync_state_stream: &mut tokio_stream::wrappers::WatchStream<SyncState>,
   current_state: SyncState,
   timeout_duration: Duration,
+  collab: &Arc<RwLock<Collab>>,
 ) -> Result<(), Error> {
   if current_state == SyncState::SyncFinished {
     return Ok(());
   }
 
   use tokio_stream::StreamExt;
-  timeout(timeout_duration, async {
+  let result = timeout(timeout_duration, async {
     while let Some(state) = sync_state_stream.next().await {
       if state == SyncState::SyncFinished {
         return Ok(());
@@ -225,6 +228,18 @@ pub async fn wait_for_sync_complete(
       "Sync state stream ended before reaching SyncFinished"
     ))
   })
-  .await
-  .map_err(|_| anyhow!("Timeout waiting for sync to complete"))?
+  .await;
+
+  match result {
+    Ok(sync_result) => sync_result,
+    Err(_) => {
+      // Timeout occurred, check the actual sync state in collab
+      let lock = collab.read().await;
+      let actual_sync_state = lock.get_state().sync_state();
+      Err(anyhow!(
+        "Timeout waiting for sync to complete. Current sync state in collab: {:?}",
+        actual_sync_state
+      ))
+    },
+  }
 }

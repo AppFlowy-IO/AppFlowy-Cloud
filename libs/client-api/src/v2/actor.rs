@@ -97,18 +97,6 @@ impl WorkspaceControllerActor {
     result
   }
 
-  pub fn cache_collab_ref(
-    &self,
-    object_id: ObjectId,
-    collab_ref: &CollabRef,
-    collab_type: CollabType,
-  ) {
-    self.cache.insert(
-      object_id,
-      CachedCollab::new(Arc::downgrade(collab_ref), collab_type),
-    );
-  }
-
   pub fn subscribe_notification(&self) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
     self.notification_tx.subscribe()
   }
@@ -170,36 +158,32 @@ impl WorkspaceControllerActor {
     let mut collab = collab_ref.write().await;
     let collab = (*collab).borrow_mut();
     let object_id: ObjectId = collab.object_id().parse()?;
-    Self::bind(actor, collab, collab_type).await?;
-    actor.cache.insert(
-      object_id,
-      CachedCollab::new(Arc::downgrade(collab_ref), collab_type),
-    );
+
+    let entry = actor.cache.entry(object_id);
+    Self::bind(actor, collab, collab_type)?;
+    entry.insert(CachedCollab::new(Arc::downgrade(collab_ref), collab_type));
     Ok(())
   }
 
+  pub fn cache_collab_ref(
+    &self,
+    object_id: ObjectId,
+    collab_ref: &CollabRef,
+    collab_type: CollabType,
+  ) {
+    self.cache.insert(
+      object_id,
+      CachedCollab::new(Arc::downgrade(collab_ref), collab_type),
+    );
+  }
+
   #[instrument(level = "trace", skip_all, err)]
-  pub async fn bind(
+  pub fn bind(
     actor: &Arc<Self>,
     collab: &mut Collab,
     collab_type: CollabType,
   ) -> anyhow::Result<()> {
     let object_id: ObjectId = collab.object_id().parse()?;
-    // if actor
-    //   .cache
-    //   .get(&object_id)
-    //   .and_then(|v| v.upgrade())
-    //   .is_some()
-    // {
-    //   warn!(
-    //     "collab {}/{}/{} already bind",
-    //     actor.workspace_id(),
-    //     object_id,
-    //     collab_type
-    //   );
-    //   return Ok(());
-    // }
-
     let client_id = actor.db.client_id();
     collab_type.validate_require_data(collab)?;
     sync_info!(
@@ -389,7 +373,7 @@ impl WorkspaceControllerActor {
   async fn send_message(&self, msg: ClientMessage) -> anyhow::Result<()> {
     let sync_state = match &msg {
       ClientMessage::Manifest { object_id, .. } => Some((*object_id, SyncState::InitSyncBegin)),
-      ClientMessage::Update { object_id, .. } => Some((*object_id, SyncState::SyncFinished)),
+      ClientMessage::Update { object_id, .. } => Some((*object_id, SyncState::Syncing)),
       ClientMessage::AwarenessUpdate { .. } => None,
     };
     if let Some(sink) = self.ws_sink() {

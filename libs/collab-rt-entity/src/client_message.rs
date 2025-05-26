@@ -1,7 +1,7 @@
 use crate::message::RealtimeMessage;
 use crate::server_message::ServerInit;
 use crate::{CollabMessage, MessageByObjectId, MsgId};
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;

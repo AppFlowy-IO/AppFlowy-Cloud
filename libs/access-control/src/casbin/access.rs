@@ -108,7 +108,7 @@ impl AccessControl {
 /// Roles and access levels are defined with the following mappings:
 /// - **Role "1" (Owner):** Can `delete`, `write`, and `read`.
 /// - **Role "2" (Member):** Can `write` and `read`.
-/// - **Role "3" (Guest):** Can `read`.
+/// - **Role "3" (Guest):** Can `write` and `read`.
 ///
 /// ## Access Levels:
 /// - **"10" (Read-only):** Permission to `read`.
@@ -258,6 +258,7 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
         grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
       AFRole::Guest => {
+        grouping_policies.push([role.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
         grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
     }

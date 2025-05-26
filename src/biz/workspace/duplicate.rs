@@ -6,7 +6,7 @@ use std::{
 use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use collab_database::{
   database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
   entity::{CreateDatabaseParams, CreateViewParams},
@@ -39,7 +39,7 @@ pub async fn duplicate_view_tree_and_collab(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   pg_pool: &PgPool,
   workspace_id: Uuid,
   view_id: Uuid,
@@ -194,7 +194,7 @@ async fn duplicate_database(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   workspace_id: Uuid,
   duplicate_context: &DuplicateContext,
   workspace_database: &mut WorkspaceDatabase,
@@ -296,7 +296,7 @@ async fn duplicate_database(
 }
 
 async fn duplicate_document(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   workspace_id: Uuid,
   uid: i64,
   duplicate_context: &DuplicateContext,

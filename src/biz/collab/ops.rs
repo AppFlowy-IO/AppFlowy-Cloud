@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use actix_web::web::Data;
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use chrono::DateTime;
 use chrono::Utc;
 use collab::preclude::Collab;
@@ -85,7 +85,7 @@ use sqlx::types::Uuid;
 use std::collections::HashSet;
 
 pub async fn get_user_favorite_folder_views(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -115,7 +115,7 @@ pub async fn get_user_favorite_folder_views(
 }
 
 pub async fn get_user_recent_folder_views(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -145,7 +145,7 @@ pub async fn get_user_recent_folder_views(
 }
 
 pub async fn get_user_trash_folder_views(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   uid: i64,
   workspace_id: Uuid,
 ) -> Result<Vec<TrashFolderView>, AppError> {
@@ -241,7 +241,7 @@ async fn fix_old_workspace_folder(
 pub async fn get_user_workspace_structure(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   pg_pool: &PgPool,
   user: RealtimeUser,
   workspace_id: Uuid,
@@ -276,7 +276,7 @@ pub async fn get_user_workspace_structure(
 }
 
 pub async fn get_latest_workspace_database(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   pg_pool: &PgPool,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
@@ -297,7 +297,7 @@ pub async fn get_latest_workspace_database(
 }
 
 pub async fn get_published_view(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   publish_namespace: String,
   pg_pool: &PgPool,
 ) -> Result<PublishedView, AppError> {
@@ -333,7 +333,7 @@ pub async fn get_published_view(
 
 pub async fn list_database(
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   uid: i64,
   workspace_id: Uuid,
 ) -> Result<Vec<AFDatabase>, AppError> {
@@ -385,7 +385,7 @@ pub async fn list_database(
 }
 
 pub async fn list_database_row_ids(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_uuid_str: Uuid,
   database_uuid_str: Uuid,
 ) -> Result<Vec<AFDatabaseRow>, AppError> {
@@ -412,7 +412,7 @@ pub async fn list_database_row_ids(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_database_row(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   pg_pool: &PgPool,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
@@ -595,7 +595,7 @@ pub async fn insert_database_row(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_database_row(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   pg_pool: &PgPool,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
@@ -739,7 +739,7 @@ pub async fn upsert_database_row(
 }
 
 pub async fn get_database_fields(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
 ) -> Result<Vec<AFDatabaseField>, AppError> {
@@ -765,7 +765,7 @@ pub async fn get_database_fields(
 // returns the id of the field created
 pub async fn add_database_field(
   uid: i64,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   pg_pool: &PgPool,
   workspace_id: Uuid,
   database_id: Uuid,
@@ -832,7 +832,7 @@ pub async fn add_database_field(
 }
 
 pub async fn list_database_row_ids_updated(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   pg_pool: &PgPool,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
@@ -850,7 +850,7 @@ pub async fn list_database_row_ids_updated(
 }
 
 pub async fn list_database_row_details(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   uid: i64,
   workspace_uuid: Uuid,
   database_uuid: Uuid,

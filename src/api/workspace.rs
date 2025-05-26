@@ -425,7 +425,7 @@ async fn create_workspace_handler(
   let new_workspace = workspace::ops::create_workspace_for_user(
     &state.pg_pool,
     state.workspace_access_control.clone(),
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     &uuid,
     uid,
     &workspace_name,
@@ -910,7 +910,7 @@ async fn create_collab_handler(
 
   let action = format!("Create new collab: {}", params);
   state
-    .collab_access_control_storage
+    .collab_storage
     .upsert_new_collab_with_transaction(workspace_id, &uid, params, &mut transaction, &action)
     .await?;
 
@@ -1060,7 +1060,7 @@ async fn batch_create_collab_handler(
 
   let start = Instant::now();
   state
-    .collab_access_control_storage
+    .collab_storage
     .batch_insert_new_collab(workspace_id, &uid, collab_params_list)
     .await?;
 
@@ -1094,7 +1094,7 @@ async fn get_collab_handler(
   let params = payload.into_inner();
   let object_id = params.object_id;
   let encode_collab = state
-    .collab_access_control_storage
+    .collab_storage
     .get_encode_collab(GetCollabOrigin::User { uid }, params, true)
     .await
     .map_err(AppResponseError::from)?;
@@ -1129,7 +1129,7 @@ async fn v1_get_collab_handler(
   };
 
   let encode_collab = state
-    .collab_access_control_storage
+    .collab_storage
     .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
     .await
     .map_err(AppResponseError::from)?;
@@ -1165,7 +1165,7 @@ async fn get_collab_json_handler(
   };
 
   let doc_state = state
-    .collab_access_control_storage
+    .collab_storage
     .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
     .await
     .map_err(AppResponseError::from)?
@@ -1194,10 +1194,6 @@ async fn post_web_update_handler(
     .await
     .map_err(AppResponseError::from)?;
   let (workspace_id, object_id) = path.into_inner();
-  state
-    .collab_access_control
-    .enforce_action(&workspace_id, &uid, &object_id, Action::Write)
-    .await?;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   trace!("create onetime web realtime user: {}", user);
 
@@ -1233,7 +1229,7 @@ async fn post_space_handler(
     server,
     user,
     &state.pg_pool,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &payload.space_permission,
     &payload.name,
@@ -1260,7 +1256,7 @@ async fn update_space_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     &payload.space_permission,
@@ -1287,7 +1283,7 @@ async fn post_folder_view_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     &state.pg_pool,
     workspace_uuid,
     &payload.parent_view_id,
@@ -1316,7 +1312,7 @@ async fn post_page_view_handler(
     server,
     user,
     &state.pg_pool,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &payload.parent_view_id,
     &payload.layout,
@@ -1354,7 +1350,7 @@ async fn append_block_to_page_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     &serde_blocks,
@@ -1378,7 +1374,7 @@ async fn move_page_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     &payload.new_parent_view_id,
@@ -1403,7 +1399,7 @@ async fn reorder_favorite_page_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     payload.prev_view_id.as_deref(),
@@ -1428,7 +1424,7 @@ async fn duplicate_page_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    state.collab_access_control_storage.clone(),
+    state.collab_storage.clone(),
     &state.pg_pool,
     workspace_uuid,
     view_id,
@@ -1452,7 +1448,7 @@ async fn move_page_to_trash_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
   )
@@ -1474,7 +1470,7 @@ async fn restore_page_from_trash_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
   )
@@ -1498,7 +1494,7 @@ async fn add_recent_pages_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     recent_view_ids,
   )
@@ -1520,7 +1516,7 @@ async fn restore_all_pages_from_trash_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
   )
   .await?;
@@ -1549,7 +1545,7 @@ async fn delete_page_from_trash_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_id,
     &view_id,
   )
@@ -1579,7 +1575,7 @@ async fn delete_all_pages_from_trash_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_id,
   )
   .await?;
@@ -1610,7 +1606,7 @@ async fn publish_page_handler(
   } = payload.into_inner();
   publish_page(
     &state.pg_pool,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     state.published_collab_store.as_ref(),
     uid,
     *user_uuid,
@@ -1666,7 +1662,7 @@ async fn post_page_database_view_handler(
     server,
     user,
     &state.pg_pool,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     &payload.layout,
@@ -1697,7 +1693,7 @@ async fn update_page_view_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     &payload.name,
@@ -1724,7 +1720,7 @@ async fn update_page_name_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     &payload.name,
@@ -1749,7 +1745,7 @@ async fn update_page_icon_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     Some(icon),
@@ -1773,7 +1769,7 @@ async fn update_page_extra_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     &payload.extra,
@@ -1796,7 +1792,7 @@ async fn remove_page_icon_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     None,
@@ -1819,7 +1815,7 @@ async fn get_page_view_handler(
 
   let page_collab = get_page_view_collab(
     &state.pg_pool,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     uid,
     workspace_uuid,
     view_id,
@@ -1843,7 +1839,7 @@ async fn favorite_page_view_handler(
     &state.metrics.appflowy_web_metrics,
     server,
     user,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_uuid,
     &view_id,
     payload.is_favorite,
@@ -1861,7 +1857,7 @@ async fn get_collab_snapshot_handler(
 ) -> Result<Json<AppResponse<SnapshotData>>> {
   let (workspace_id, object_id) = path.into_inner();
   let data = state
-    .collab_access_control_storage
+    .collab_storage
     .get_collab_snapshot(workspace_id, object_id, &payload.snapshot_id)
     .await
     .map_err(AppResponseError::from)?;
@@ -1884,7 +1880,7 @@ async fn create_collab_snapshot_handler(
     .await
     .map_err(AppResponseError::from)?;
   let data = state
-    .collab_access_control_storage
+    .collab_storage
     .get_encode_collab(
       GetCollabOrigin::User { uid },
       QueryCollabParams::new(object_id, collab_type, workspace_id),
@@ -1894,7 +1890,7 @@ async fn create_collab_snapshot_handler(
     .doc_state;
 
   let meta = state
-    .collab_access_control_storage
+    .collab_storage
     .create_snapshot(InsertSnapshotParams {
       object_id,
       workspace_id,
@@ -1914,7 +1910,7 @@ async fn get_all_collab_snapshot_list_handler(
 ) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
   let (workspace_id, object_id) = path.into_inner();
   let data = state
-    .collab_access_control_storage
+    .collab_storage
     .get_collab_snapshot_list(&workspace_id, &object_id)
     .await
     .map_err(AppResponseError::from)?;
@@ -1936,7 +1932,7 @@ async fn batch_get_collab_handler(
     .map_err(AppResponseError::from)?;
   let result = BatchQueryCollabResult(
     state
-      .collab_access_control_storage
+      .collab_storage
       .batch_get_collab(&uid, workspace_id, payload.into_inner().0, false)
       .await,
   );
@@ -2000,7 +1996,7 @@ async fn update_collab_handler(
   }
 
   state
-    .collab_access_control_storage
+    .collab_storage
     .queue_insert_or_update_collab(workspace_id, &uid, params, false)
     .await?;
   Ok(AppResponse::Ok().into())
@@ -2022,7 +2018,7 @@ async fn delete_collab_handler(
     .map_err(AppResponseError::from)?;
 
   state
-    .collab_access_control_storage
+    .collab_storage
     .delete_collab(&payload.workspace_id, &uid, &payload.object_id)
     .await
     .map_err(AppResponseError::from)?;
@@ -2168,7 +2164,7 @@ async fn post_published_duplicate_handler(
     biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
       &state.pg_pool,
       state.bucket_client.clone(),
-      state.collab_access_control_storage.clone(),
+      state.collab_storage.clone(),
       uid,
       params.published_view_id,
       workspace_id,
@@ -2189,7 +2185,7 @@ async fn list_published_collab_info_handler(
 ) -> Result<Json<AppResponse<Vec<PublishInfoView>>>> {
   let publish_infos = biz::workspace::publish::list_collab_publish_info(
     state.published_collab_store.as_ref(),
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     workspace_id.into_inner(),
   )
   .await?;
@@ -2490,7 +2486,7 @@ async fn get_workspace_folder_handler(
   let folder_view = biz::collab::ops::get_user_workspace_structure(
     &state.metrics.appflowy_web_metrics,
     server,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     &state.pg_pool,
     user,
     workspace_id,
@@ -2512,13 +2508,8 @@ async fn get_recent_views_handler(
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
-  let folder_views = get_user_recent_folder_views(
-    &state.collab_access_control_storage,
-    &state.pg_pool,
-    uid,
-    workspace_id,
-  )
-  .await?;
+  let folder_views =
+    get_user_recent_folder_views(&state.collab_storage, &state.pg_pool, uid, workspace_id).await?;
   let section_items = RecentSectionItems {
     views: folder_views,
   };
@@ -2536,13 +2527,9 @@ async fn get_favorite_views_handler(
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
-  let folder_views = get_user_favorite_folder_views(
-    &state.collab_access_control_storage,
-    &state.pg_pool,
-    uid,
-    workspace_id,
-  )
-  .await?;
+  let folder_views =
+    get_user_favorite_folder_views(&state.collab_storage, &state.pg_pool, uid, workspace_id)
+      .await?;
   let section_items = FavoriteSectionItems {
     views: folder_views,
   };
@@ -2560,8 +2547,7 @@ async fn get_trash_views_handler(
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
-  let folder_views =
-    get_user_trash_folder_views(&state.collab_access_control_storage, uid, workspace_id).await?;
+  let folder_views = get_user_trash_folder_views(&state.collab_storage, uid, workspace_id).await?;
   let section_items = TrashSectionItems {
     views: folder_views,
   };
@@ -2573,7 +2559,7 @@ async fn get_workspace_publish_outline_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PublishedView>>> {
   let published_view = biz::collab::ops::get_published_view(
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     publish_namespace.into_inner(),
     &state.pg_pool,
   )
@@ -2588,13 +2574,9 @@ async fn list_database_handler(
 ) -> Result<Json<AppResponse<Vec<AFDatabase>>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
-  let dbs = biz::collab::ops::list_database(
-    &state.pg_pool,
-    &state.collab_access_control_storage,
-    uid,
-    workspace_id,
-  )
-  .await?;
+  let dbs =
+    biz::collab::ops::list_database(&state.pg_pool, &state.collab_storage, uid, workspace_id)
+      .await?;
   Ok(Json(AppResponse::Ok().with_data(dbs)))
 }
 
@@ -2611,12 +2593,8 @@ async fn list_database_row_id_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
 
-  let db_rows = biz::collab::ops::list_database_row_ids(
-    &state.collab_access_control_storage,
-    workspace_id,
-    db_id,
-  )
-  .await?;
+  let db_rows =
+    biz::collab::ops::list_database_row_ids(&state.collab_storage, workspace_id, db_id).await?;
   Ok(Json(AppResponse::Ok().with_data(db_rows)))
 }
 
@@ -2636,7 +2614,7 @@ async fn post_database_row_handler(
   let AddDatatabaseRow { cells, document } = add_database_row.into_inner();
 
   let new_db_row_id = biz::collab::ops::insert_database_row(
-    state.collab_access_control_storage.clone(),
+    state.collab_storage.clone(),
     &state.pg_pool,
     workspace_id,
     db_id,
@@ -2682,7 +2660,7 @@ async fn put_database_row_handler(
   };
 
   biz::collab::ops::upsert_database_row(
-    state.collab_access_control_storage.clone(),
+    state.collab_storage.clone(),
     &state.pg_pool,
     workspace_id,
     db_id,
@@ -2707,12 +2685,8 @@ async fn get_database_fields_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
 
-  let db_fields = biz::collab::ops::get_database_fields(
-    &state.collab_access_control_storage,
-    workspace_id,
-    db_id,
-  )
-  .await?;
+  let db_fields =
+    biz::collab::ops::get_database_fields(&state.collab_storage, workspace_id, db_id).await?;
 
   Ok(Json(AppResponse::Ok().with_data(db_fields)))
 }
@@ -2732,7 +2706,7 @@ async fn post_database_fields_handler(
 
   let field_id = biz::collab::ops::add_database_field(
     uid,
-    state.collab_access_control_storage.clone(),
+    state.collab_storage.clone(),
     &state.pg_pool,
     workspace_id,
     db_id,
@@ -2763,7 +2737,7 @@ async fn list_database_row_id_updated_handler(
     .unwrap_or_else(|| Utc::now() - Duration::hours(1));
 
   let db_rows = biz::collab::ops::list_database_row_ids_updated(
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     &state.pg_pool,
     workspace_id,
     db_id,
@@ -2793,7 +2767,7 @@ async fn list_database_row_details_handler(
   static UNSUPPORTED_FIELD_TYPES: &[FieldType] = &[FieldType::Relation];
 
   let db_rows = biz::collab::ops::list_database_row_details(
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     uid,
     workspace_id,
     db_id,

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
+use access_control::collab::RealtimeAccessControl;
 use access_control::workspace::WorkspaceAccessControl;
 use anyhow::anyhow;
 use dashmap::DashMap;
@@ -15,7 +15,7 @@ use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use collab_stream::awareness_gossip::AwarenessGossip;
@@ -46,8 +46,7 @@ pub struct AppState {
   pub awareness_gossip: Arc<AwarenessGossip>,
   pub redis_connection_manager: RedisConnectionManager,
   pub collab_cache: CollabCache,
-  pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
-  pub collab_access_control: Arc<dyn CollabAccessControl>,
+  pub collab_storage: Arc<CollabStorageWithCache>,
   pub workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   pub realtime_access_control: Arc<dyn RealtimeAccessControl>,
   pub bucket_storage: Arc<S3BucketStorage>,

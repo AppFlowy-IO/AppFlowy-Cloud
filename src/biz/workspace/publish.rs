@@ -1,4 +1,4 @@
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use database::{
   collab::GetCollabOrigin,
   publish::{
@@ -203,7 +203,7 @@ pub async fn get_workspace_publish_namespace(
 
 pub async fn list_collab_publish_info(
   publish_collab_store: &dyn PublishedCollabStore,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
 ) -> Result<Vec<PublishInfoView>, AppError> {
   let folder =

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_database::workspace_database::WorkspaceDatabase;
@@ -25,7 +25,7 @@ pub async fn initialize_workspace_for_user<T>(
   row: &AFWorkspaceRow,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   templates: Vec<T>,
-  collab_storage: &Arc<CollabAccessControlStorage>,
+  collab_storage: &Arc<CollabStorageWithCache>,
 ) -> anyhow::Result<(), AppError>
 where
   T: WorkspaceTemplate + Send + Sync + 'static,
@@ -112,7 +112,7 @@ pub(crate) async fn create_user_awareness(
   uid: &i64,
   user_uuid: &Uuid,
   workspace_id: Uuid,
-  storage: &Arc<CollabAccessControlStorage>,
+  storage: &Arc<CollabStorageWithCache>,
   txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<Uuid, AppError> {
   let object_id = user_awareness_object_id(user_uuid, &workspace_id);
@@ -148,7 +148,7 @@ pub(crate) async fn create_workspace_collab(
   uid: i64,
   workspace_id: Uuid,
   name: &str,
-  storage: &Arc<CollabAccessControlStorage>,
+  storage: &Arc<CollabStorageWithCache>,
   txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<(), AppError> {
   let workspace = Workspace::new(workspace_id.to_string(), name.to_string(), uid);
@@ -185,7 +185,7 @@ pub(crate) async fn create_workspace_database_collab(
   workspace_id: Uuid,
   uid: &i64,
   object_id: Uuid,
-  storage: &Arc<CollabAccessControlStorage>,
+  storage: &Arc<CollabStorageWithCache>,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   initial_database_records: Vec<(String, String)>,
 ) -> Result<(), AppError> {

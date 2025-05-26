@@ -3,13 +3,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use access_control::casbin::access::AccessControl;
-use access_control::casbin::collab::{CollabAccessControlImpl, RealtimeCollabAccessControlImpl};
+use access_control::casbin::collab::RealtimeCollabAccessControlImpl;
 use access_control::casbin::workspace::WorkspaceAccessControlImpl;
-use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
-use access_control::noops::collab::{
-  CollabAccessControlImpl as NoOpsCollabAccessControlImpl,
-  RealtimeCollabAccessControlImpl as NoOpsRealtimeCollabAccessControlImpl,
-};
+use access_control::collab::RealtimeAccessControl;
+use access_control::noops::collab::RealtimeCollabAccessControlImpl as NoOpsRealtimeCollabAccessControlImpl;
 use access_control::noops::workspace::WorkspaceAccessControlImpl as NoOpsWorkspaceAccessControlImpl;
 use access_control::workspace::WorkspaceAccessControl;
 use actix::Supervisor;
@@ -20,7 +17,6 @@ use actix_web::cookie::Key;
 use actix_web::middleware::NormalizePath;
 use actix_web::{dev::Server, web, web::Data, App, HttpResponse, HttpServer, Responder};
 use anyhow::{Context, Error};
-use appflowy_collaborate::collab::access_control::CollabStorageAccessControlImpl;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
@@ -35,7 +31,7 @@ use tracing::{error, info};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::collab::storage::CollabStorageImpl;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
@@ -121,7 +117,7 @@ pub async fn run_actix_server(
       )
     })?;
 
-  let storage = state.collab_access_control_storage.clone();
+  let storage = state.collab_storage.clone();
 
   // Initialize metrics that which are registered in the registry.
   let realtime_server = CollaborationServer::<_>::new(
@@ -256,12 +252,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
 
   let user_cache = UserCache::new(pg_pool.clone()).await;
-  let collab_access_control: Arc<dyn CollabAccessControl> =
-    if config.access_control.is_enabled && config.access_control.enable_collab_access_control {
-      Arc::new(CollabAccessControlImpl::new(access_control.clone()))
-    } else {
-      Arc::new(NoOpsCollabAccessControlImpl::new())
-    };
   let workspace_access_control: Arc<dyn WorkspaceAccessControl> =
     if config.access_control.is_enabled && config.access_control.enable_workspace_access_control {
       Arc::new(WorkspaceAccessControlImpl::new(access_control.clone()))
@@ -282,20 +272,14 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config.collab.s3_collab_threshold as usize,
   );
 
-  let collab_storage_access_control = CollabStorageAccessControlImpl {
-    collab_access_control: collab_access_control.clone(),
-    workspace_access_control: workspace_access_control.clone(),
-    cache: collab_cache.clone(),
-  };
   let snapshot_control = SnapshotControl::new(
     pg_pool.clone(),
     s3_client.clone(),
     metrics.collab_metrics.clone(),
   )
   .await;
-  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
+  let collab_storage = Arc::new(CollabStorageWithCache::new(
     collab_cache.clone(),
-    collab_storage_access_control,
     snapshot_control,
     rt_cmd_tx,
   ));
@@ -320,7 +304,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let indexer_scheduler = IndexerScheduler::new(
     IndexerProvider::new(),
     pg_pool.clone(),
-    collab_access_control_storage.clone(),
+    collab_storage.clone(),
     metrics.embedding_metrics.clone(),
     embedder_config,
     redis_conn_manager.clone(),
@@ -337,8 +321,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     awareness_gossip,
     redis_connection_manager: redis_conn_manager,
     collab_cache,
-    collab_access_control_storage,
-    collab_access_control,
+    collab_storage,
     workspace_access_control,
     realtime_access_control,
     bucket_storage,

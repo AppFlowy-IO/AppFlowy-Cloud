@@ -5,7 +5,7 @@ use crate::{
 };
 use app_error::AppError;
 use appflowy_ai_client::dto::EmbeddingModel;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use collab_folder::{Folder, View};
 use database::collab::GetCollabOrigin;
 use database::index::{search_documents, SearchDocumentParams};
@@ -75,7 +75,7 @@ fn populate_searchable_view_ids(
 #[allow(clippy::too_many_arguments)]
 pub async fn search_document(
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   indexer_scheduler: &Arc<IndexerScheduler>,
   uid: i64,
   workspace_uuid: Uuid,

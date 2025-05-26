@@ -1,5 +1,5 @@
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -54,7 +54,7 @@ use super::ops::broadcast_update_with_timeout;
 pub async fn duplicate_published_collab_to_workspace(
   pg_pool: &PgPool,
   bucket_client: AwsS3BucketClientImpl,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   dest_uid: i64,
   publish_view_id: Uuid,
   dest_workspace_id: Uuid,
@@ -82,7 +82,7 @@ pub async fn duplicate_published_collab_to_workspace(
 pub struct PublishCollabDuplicator {
   /// for fetching and writing folder data
   /// of dest workspace
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   /// A map to store the old view_id that was duplicated and new view_id assigned.
   /// If value is none, it means the view_id is not published.
   duplicated_refs: HashMap<Uuid, Option<Uuid>>,
@@ -132,7 +132,7 @@ impl PublishCollabDuplicator {
   pub fn new(
     pg_pool: PgPool,
     bucket_client: AwsS3BucketClientImpl,
-    collab_storage: Arc<CollabAccessControlStorage>,
+    collab_storage: Arc<CollabStorageWithCache>,
     dest_uid: i64,
     dest_workspace_id: Uuid,
     dest_view_id: Uuid,

@@ -36,26 +36,18 @@ use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
 use crate::snapshot::SnapshotControl;
 
-pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessControlImpl>;
-
-/// A wrapper around the actual storage implementation that provides access control and caching.
+/// Collab storage implementation with caching and snapshot control.
 #[derive(Clone)]
-pub struct CollabStorageImpl<AC> {
+pub struct CollabStorageWithCache {
   cache: CollabCache,
-  /// access control for collab object. Including read/write
-  access_control: AC,
   snapshot_control: SnapshotControl,
   rt_cmd_sender: CLCommandSender,
   queue: Sender<PendingCollabWrite>,
 }
 
-impl<AC> CollabStorageImpl<AC>
-where
-  AC: CollabStorageAccessControl,
-{
+impl CollabStorageWithCache {
   pub fn new(
     cache: CollabCache,
-    access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: CLCommandSender,
   ) -> Self {
@@ -63,7 +55,6 @@ where
     tokio::spawn(Self::periodic_write_task(cache.clone(), reader));
     Self {
       cache,
-      access_control,
       snapshot_control,
       rt_cmd_sender,
       queue,
@@ -104,33 +95,6 @@ where
     Ok(())
   }
 
-  async fn check_write_workspace_permission(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-  ) -> Result<(), AppError> {
-    // If the collab doesn't exist, check if the user has enough permissions to create collab.
-    // If the user is the owner or member of the workspace, the user can create collab.
-    self
-      .access_control
-      .enforce_write_workspace(uid, workspace_id)
-      .await?;
-    Ok(())
-  }
-
-  async fn check_write_collab_permission(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-    object_id: &Uuid,
-  ) -> Result<(), AppError> {
-    // If the collab already exists, check if the user has enough permissions to update collab
-    self
-      .access_control
-      .enforce_write_collab(workspace_id, uid, object_id)
-      .await?;
-    Ok(())
-  }
   async fn get_encode_collab_from_editing(&self, object_id: Uuid) -> Option<EncodedCollab> {
     let (ret, rx) = tokio::sync::oneshot::channel();
     let timeout_duration = Duration::from_secs(5);
@@ -284,10 +248,7 @@ where
 }
 
 #[async_trait]
-impl<AC> CollabStorage for CollabStorageImpl<AC>
-where
-  AC: CollabStorageAccessControl,
-{
+impl CollabStorage for CollabStorageWithCache {
   async fn queue_insert_or_update_collab(
     &self,
     workspace_id: Uuid,
@@ -296,30 +257,6 @@ where
     flush_to_disk: bool,
   ) -> AppResult<()> {
     params.validate()?;
-    let is_exist = self
-      .cache
-      .is_exist(&workspace_id, &params.object_id)
-      .await?;
-    // If the collab already exists, check if the user has enough permissions to update collab
-    // Otherwise, check if the user has enough permissions to create collab.
-    if is_exist {
-      self
-        .check_write_collab_permission(&workspace_id, uid, &params.object_id)
-        .await?;
-    } else {
-      self
-        .check_write_workspace_permission(&workspace_id, uid)
-        .await?;
-      trace!(
-        "Update policy for user:{} to create collab:{}",
-        uid,
-        params.object_id
-      );
-      self
-        .access_control
-        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-        .await?;
-    }
     if flush_to_disk {
       self.insert_collab(&workspace_id, uid, params).await?;
     } else {
@@ -334,18 +271,6 @@ where
     uid: &i64,
     params_list: Vec<CollabParams>,
   ) -> AppResult<()> {
-    self
-      .check_write_workspace_permission(&workspace_id, uid)
-      .await?;
-
-    // TODO(nathan): batch insert permission
-    for params in &params_list {
-      self
-        .access_control
-        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-        .await?;
-    }
-
     match tokio::time::timeout(
       Duration::from_secs(60),
       self.batch_insert_collabs(workspace_id, uid, params_list),
@@ -371,14 +296,6 @@ where
     action_description: &str,
   ) -> AppResult<()> {
     params.validate()?;
-    self
-      .check_write_workspace_permission(&workspace_id, uid)
-      .await?;
-    self
-      .access_control
-      .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-      .await?;
-
     match tokio::time::timeout(
       Duration::from_secs(120),
       self
@@ -402,22 +319,12 @@ where
   #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, from_editing_collab = %from_editing_collab))]
   async fn get_encode_collab(
     &self,
-    origin: GetCollabOrigin,
+    // TODO: Remove this parameter
+    _origin: GetCollabOrigin,
     params: QueryCollabParams,
     from_editing_collab: bool,
   ) -> AppResult<EncodedCollab> {
     params.validate()?;
-    match origin {
-      GetCollabOrigin::User { uid } => {
-        // Check if the user has enough permissions to access the collab
-        self
-          .access_control
-          .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)
-          .await?;
-      },
-      GetCollabOrigin::Server => {},
-    }
-
     // Early return if editing collab is initialized, as it indicates no need to query further.
     if from_editing_collab {
       // Attempt to retrieve encoded collab from the editing collab
@@ -506,11 +413,13 @@ where
     results
   }
 
-  async fn delete_collab(&self, workspace_id: &Uuid, uid: &i64, object_id: &Uuid) -> AppResult<()> {
-    self
-      .access_control
-      .enforce_delete(workspace_id, uid, object_id)
-      .await?;
+  async fn delete_collab(
+    &self,
+    workspace_id: &Uuid,
+    // TODO: Remove this parameter
+    _uid: &i64,
+    object_id: &Uuid,
+  ) -> AppResult<()> {
     self.cache.delete_collab(workspace_id, object_id).await?;
     Ok(())
   }

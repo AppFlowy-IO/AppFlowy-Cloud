@@ -17,7 +17,7 @@ use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::ClientHttpUpdateMessage;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use bytes::Bytes;
 use chrono::DateTime;
 use collab::core::collab::Collab;
@@ -76,7 +76,7 @@ pub async fn update_space(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   space_permission: &SpacePermission,
@@ -112,7 +112,7 @@ pub async fn create_space(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   space_permission: &SpacePermission,
   name: &str,
@@ -166,7 +166,7 @@ pub async fn create_folder_view(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   pg_pool: &PgPool,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
@@ -233,7 +233,7 @@ pub async fn create_page(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
   view_layout: &ViewLayout,
@@ -528,7 +528,7 @@ pub async fn append_block_at_the_end_of_page(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   serde_blocks: &[SerdeBlock],
@@ -551,7 +551,7 @@ pub async fn append_block_at_the_end_of_page(
 
 async fn append_block_to_document_collab(
   uid: i64,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   oid: Uuid,
   serde_blocks: &[SerdeBlock],
@@ -1013,7 +1013,7 @@ async fn create_document_page(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
   name: Option<&str>,
@@ -1072,7 +1072,7 @@ async fn create_grid_page(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
   name: Option<&str>,
@@ -1103,7 +1103,7 @@ async fn create_board_page(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
   name: Option<&str>,
@@ -1135,7 +1135,7 @@ async fn create_calendar_page(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
   name: Option<&str>,
@@ -1167,7 +1167,7 @@ async fn create_database_page(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
   view_id: &Uuid,
@@ -1278,7 +1278,7 @@ async fn create_chat_page(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   parent_view_id: &Uuid,
   name: Option<&str>,
@@ -1323,7 +1323,7 @@ pub async fn move_page(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   new_parent_view_id: &str,
@@ -1348,7 +1348,7 @@ pub async fn reorder_favorite_page(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   prev_view_id: Option<&str>,
@@ -1371,7 +1371,7 @@ pub async fn move_page_to_trash(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
 ) -> Result<(), AppError> {
@@ -1397,7 +1397,7 @@ pub async fn restore_page_from_trash(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
 ) -> Result<(), AppError> {
@@ -1419,7 +1419,7 @@ pub async fn add_recent_pages(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   recent_view_ids: Vec<String>,
 ) -> Result<(), AppError> {
@@ -1441,7 +1441,7 @@ pub async fn restore_all_pages_from_trash(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
 ) -> Result<(), AppError> {
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
@@ -1462,7 +1462,7 @@ pub async fn delete_trash(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
 ) -> Result<(), AppError> {
@@ -1478,7 +1478,7 @@ pub async fn delete_all_pages_from_trash(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
 ) -> Result<(), AppError> {
   let uid = user.uid;
@@ -1494,7 +1494,7 @@ pub async fn update_page(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   name: &str,
@@ -1522,7 +1522,7 @@ pub async fn update_page_name(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   name: &str,
@@ -1546,7 +1546,7 @@ pub async fn update_page_icon(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   icon: Option<&ViewIcon>,
@@ -1570,7 +1570,7 @@ pub async fn update_page_extra(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   extra: &str,
@@ -1595,7 +1595,7 @@ pub async fn favorite_page(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   view_id: &str,
   is_favorite: bool,
@@ -1641,7 +1641,7 @@ fn generate_publish_name(view_id: &str, name: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 pub async fn publish_page(
   pg_pool: &PgPool,
-  collab_access_control_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   publish_collab_store: &dyn PublishedCollabStore,
   uid: i64,
   user_uuid: Uuid,
@@ -1652,12 +1652,8 @@ pub async fn publish_page(
   comments_enabled: bool,
   duplicate_enabled: bool,
 ) -> Result<(), AppError> {
-  let folder = get_latest_collab_folder(
-    collab_access_control_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-  )
-  .await?;
+  let folder =
+    get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, workspace_id).await?;
   let view = folder
     .get_view(&view_id.to_string())
     .ok_or(AppError::InvalidFolderView(format!(
@@ -1689,15 +1685,14 @@ pub async fn publish_page(
 
   let publish_data = match view.layout {
     collab_folder::ViewLayout::Document => {
-      generate_publish_data_for_document(collab_access_control_storage, uid, workspace_id, view_id)
-        .await
+      generate_publish_data_for_document(collab_storage, uid, workspace_id, view_id).await
     },
     collab_folder::ViewLayout::Grid
     | collab_folder::ViewLayout::Board
     | collab_folder::ViewLayout::Calendar => {
       generate_publish_data_for_database(
         pg_pool,
-        collab_access_control_storage,
+        collab_storage,
         uid,
         workspace_id,
         view_id,
@@ -1731,13 +1726,13 @@ pub async fn publish_page(
 }
 
 async fn generate_publish_data_for_document(
-  collab_access_control_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
 ) -> Result<Vec<u8>, AppError> {
   let collab = get_latest_collab_encoded(
-    collab_access_control_storage,
+    collab_storage,
     GetCollabOrigin::User { uid },
     workspace_id,
     view_id,
@@ -1749,7 +1744,7 @@ async fn generate_publish_data_for_document(
 
 async fn generate_publish_data_for_database(
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
@@ -1845,17 +1840,13 @@ pub async fn unpublish_page(
 
 pub async fn get_page_view_collab(
   pg_pool: &PgPool,
-  collab_access_control_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
 ) -> Result<PageCollab, AppError> {
-  let folder = get_latest_collab_folder(
-    collab_access_control_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-  )
-  .await?;
+  let folder =
+    get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, workspace_id).await?;
   let view = folder
     .get_view(&view_id.to_string())
     .ok_or(AppError::InvalidFolderView(format!(
@@ -1906,20 +1897,12 @@ pub async fn get_page_view_collab(
   };
   let page_collab_data = match view.layout {
     collab_folder::ViewLayout::Document => {
-      get_page_collab_data_for_document(collab_access_control_storage, uid, workspace_id, view_id)
-        .await
+      get_page_collab_data_for_document(collab_storage, uid, workspace_id, view_id).await
     },
     collab_folder::ViewLayout::Grid
     | collab_folder::ViewLayout::Board
     | collab_folder::ViewLayout::Calendar => {
-      get_page_collab_data_for_database(
-        pg_pool,
-        collab_access_control_storage,
-        uid,
-        workspace_id,
-        view_id,
-      )
-      .await
+      get_page_collab_data_for_database(pg_pool, collab_storage, uid, workspace_id, view_id).await
     },
     collab_folder::ViewLayout::Chat => Err(AppError::InvalidRequest(
       "Page view for AI chat is not supported at the moment".to_string(),
@@ -1938,7 +1921,7 @@ pub async fn get_page_view_collab(
 
 async fn get_page_collab_data_for_database(
   pg_pool: &PgPool,
-  collab_access_control_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
@@ -1953,7 +1936,7 @@ async fn get_page_collab_data_for_database(
       ))
     })?;
   let ws_db = get_latest_collab_encoded(
-    collab_access_control_storage,
+    collab_storage,
     GetCollabOrigin::User { uid },
     workspace_id,
     ws_db_oid,
@@ -1988,7 +1971,7 @@ async fn get_page_collab_data_for_database(
       .database_id
   };
   let db = get_latest_collab_encoded(
-    collab_access_control_storage,
+    collab_storage,
     GetCollabOrigin::User { uid },
     workspace_id,
     Uuid::parse_str(&db_oid)?,
@@ -2042,7 +2025,7 @@ async fn get_page_collab_data_for_database(
       collab_type: CollabType::DatabaseRow,
     })
     .collect();
-  let row_query_collab_results = collab_access_control_storage
+  let row_query_collab_results = collab_storage
     .batch_get_collab(&uid, workspace_id, queries, true)
     .await;
   let row_data = tokio::task::spawn_blocking(move || {
@@ -2083,13 +2066,13 @@ async fn get_page_collab_data_for_database(
 }
 
 async fn get_page_collab_data_for_document(
-  collab_access_control_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
 ) -> Result<PageCollabData, AppError> {
   let collab = get_latest_collab_encoded(
-    collab_access_control_storage,
+    collab_storage,
     GetCollabOrigin::User { uid },
     workspace_id,
     view_id,
@@ -2115,7 +2098,7 @@ pub async fn create_database_view(
   server: Data<RealtimeServerAddr>,
   user: RealtimeUser,
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   database_view_id: &Uuid,
   view_layout: &ViewLayout,

@@ -17,7 +17,7 @@ use yrs::updates::encoder::Encode;
 
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
 
@@ -68,7 +68,7 @@ pub async fn delete_workspace_for_user(
 pub async fn create_empty_workspace(
   pg_pool: &PgPool,
   workspace_access_control: Arc<dyn WorkspaceAccessControl>,
-  collab_storage: &Arc<CollabAccessControlStorage>,
+  collab_storage: &Arc<CollabStorageWithCache>,
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,
@@ -115,7 +115,7 @@ pub async fn create_empty_workspace(
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
   workspace_access_control: Arc<dyn WorkspaceAccessControl>,
-  collab_storage: &Arc<CollabAccessControlStorage>,
+  collab_storage: &Arc<CollabStorageWithCache>,
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,
@@ -706,7 +706,7 @@ pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppErro
 
 /// broadcast updates to collab group if exists
 pub async fn broadcast_update(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   oid: Uuid,
   encoded_update: Vec<u8>,
 ) -> Result<(), AppError> {
@@ -731,7 +731,7 @@ pub async fn broadcast_update(
 /// like [broadcast_update] but in separate tokio task
 /// waits for a maximum of 30 seconds for the broadcast to complete
 pub async fn broadcast_update_with_timeout(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<CollabStorageWithCache>,
   oid: Uuid,
   encoded_update: Vec<u8>,
 ) -> tokio::task::JoinHandle<()> {

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use async_trait::async_trait;
 use collab::preclude::Collab;
 use collab_database::{
@@ -172,7 +172,7 @@ fn create_card_status_field() -> Field {
 #[derive(Clone)]
 pub struct PostgresDatabaseCollabService {
   pub workspace_id: Uuid,
-  pub collab_storage: Arc<CollabAccessControlStorage>,
+  pub collab_storage: Arc<CollabStorageWithCache>,
 }
 
 impl PostgresDatabaseCollabService {

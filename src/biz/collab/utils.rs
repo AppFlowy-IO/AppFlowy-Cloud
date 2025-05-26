@@ -1,5 +1,5 @@
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::storage::CollabStorageWithCache;
 use collab::core::collab::DataSource;
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
@@ -195,7 +195,7 @@ pub fn type_options_serde(
 }
 
 pub async fn get_latest_collab_database_row_body(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   db_row_id: Uuid,
 ) -> Result<(Collab, DatabaseRowBody), AppError> {
@@ -221,7 +221,7 @@ pub async fn get_latest_collab_database_row_body(
 }
 
 pub async fn get_latest_collab_database_body(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   database_id: Uuid,
 ) -> Result<(Collab, DatabaseBody), AppError> {
@@ -248,7 +248,7 @@ pub async fn get_latest_collab_database_body(
 }
 
 pub async fn get_latest_collab_encoded(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
   object_id: Uuid,
@@ -270,7 +270,7 @@ pub async fn get_latest_collab_encoded(
 }
 
 pub async fn batch_get_latest_collab_encoded(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
   oid_list: &[Uuid],
@@ -317,7 +317,7 @@ pub async fn batch_get_latest_collab_encoded(
 }
 
 pub async fn get_latest_collab(
-  storage: &CollabAccessControlStorage,
+  storage: &CollabStorageWithCache,
   origin: GetCollabOrigin,
   workspace_id: Uuid,
   oid: Uuid,
@@ -342,7 +342,7 @@ pub async fn get_latest_collab(
 
 pub async fn get_latest_collab_workspace_database_body(
   pg_pool: &PgPool,
-  storage: &CollabAccessControlStorage,
+  storage: &CollabStorageWithCache,
   origin: GetCollabOrigin,
   workspace_id: Uuid,
 ) -> Result<WorkspaceDatabaseBody, AppError> {
@@ -365,7 +365,7 @@ pub async fn get_latest_collab_workspace_database_body(
 }
 
 pub async fn get_latest_collab_folder(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
 ) -> Result<Folder, AppError> {
@@ -408,7 +408,7 @@ pub async fn get_latest_collab_folder(
 }
 
 pub async fn get_latest_collab_document(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
   doc_oid: Uuid,
@@ -524,7 +524,7 @@ pub async fn create_row_document(
   workspace_id: Uuid,
   uid: i64,
   new_doc_id: Uuid,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   row_doc_content: String,
 ) -> Result<CreatedRowDocument, AppError> {
   let md_importer = MDImporter::new(None);
@@ -573,7 +573,7 @@ pub enum DocChanges {
 }
 
 pub async fn get_database_row_doc_changes(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &CollabStorageWithCache,
   workspace_id: Uuid,
   row_doc_content: Option<String>,
   db_row_body: &DatabaseRowBody,

@@ -384,7 +384,8 @@ pub async fn create_orphaned_view(
   workspace_id: Uuid,
   document_id: Uuid,
 ) -> Result<(), AppError> {
-  let default_document_collab_params = prepare_default_document_collab_param(document_id)?;
+  let default_document_collab_params =
+    prepare_default_document_collab_param(default_client_id(), document_id)?;
   let mut transaction = pg_pool.begin().await?;
   let action = format!("Create new orphaned view: {}", document_id);
   collab_storage

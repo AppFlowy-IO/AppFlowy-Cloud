@@ -20,7 +20,7 @@ on:
 
 env:
   NODE_VERSION: '20.12.0'
-  RUST_TOOLCHAIN: "1.80.0"
+  RUST_TOOLCHAIN: "1.86.0"
 jobs:
   publish:
     runs-on: ubuntu-latest

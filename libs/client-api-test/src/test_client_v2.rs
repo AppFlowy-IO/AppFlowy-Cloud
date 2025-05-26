@@ -61,7 +61,7 @@ use shared_entity::response::AppResponseError;
 // Internal imports
 use crate::database_util::TestDatabaseCollabService;
 use crate::user::{generate_unique_registered_user, User};
-use crate::{load_env, localhost_client_with_device_id, setup_log};
+use crate::{assertion_utils, load_env, localhost_client_with_device_id, setup_log};
 
 // New module imports
 use crate::assertion_utils::{
@@ -590,10 +590,11 @@ impl TestClient {
     }
 
     // Use our async utility for waiting
-    crate::assertion_utils::wait_for_sync_complete(
+    assertion_utils::wait_for_sync_complete(
       &mut sync_state_stream,
       current_sync_state,
       Duration::from_secs(timeout_secs),
+      &test_collab.collab,
     )
     .await
   }

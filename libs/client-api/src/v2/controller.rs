@@ -144,8 +144,8 @@ impl WorkspaceController {
     WorkspaceControllerActor::bind_and_cache_collab_ref(&self.actor, collab_ref, collab_type).await
   }
 
-  pub async fn bind(&self, collab: &mut Collab, collab_type: CollabType) -> anyhow::Result<()> {
-    WorkspaceControllerActor::bind(&self.actor, collab, collab_type).await
+  pub fn bind(&self, collab: &mut Collab, collab_type: CollabType) -> anyhow::Result<()> {
+    WorkspaceControllerActor::bind(&self.actor, collab, collab_type)
   }
 
   pub async fn cache_collab_ref(

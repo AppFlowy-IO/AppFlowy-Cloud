@@ -30,7 +30,7 @@ env:
   POSTGRES_PASSWORD: password
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
   SQLX_OFFLINE: true
-  RUST_TOOLCHAIN: "1.80"
+  RUST_TOOLCHAIN: "1.86"
   APPFLOWY_AI_VERSION: "0.9.38-amd64"
 
 jobs:

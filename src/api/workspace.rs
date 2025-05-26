@@ -19,10 +19,11 @@ use crate::biz::workspace::ops::{
 };
 use crate::biz::workspace::page_view::{
   add_recent_pages, append_block_at_the_end_of_page, create_database_view, create_folder_view,
-  create_page, create_space, delete_all_pages_from_trash, delete_trash, favorite_page,
-  get_page_view_collab, move_page, move_page_to_trash, publish_page, reorder_favorite_page,
-  restore_all_pages_from_trash, restore_page_from_trash, unpublish_page, update_page,
-  update_page_collab_data, update_page_extra, update_page_icon, update_page_name, update_space,
+  create_orphaned_view, create_page, create_space, delete_all_pages_from_trash, delete_trash,
+  favorite_page, get_page_view_collab, move_page, move_page_to_trash, publish_page,
+  reorder_favorite_page, restore_all_pages_from_trash, restore_page_from_trash, unpublish_page,
+  update_page, update_page_collab_data, update_page_extra, update_page_icon, update_page_name,
+  update_space,
 };
 use crate::biz::workspace::publish::get_workspace_default_publish_view_info_meta;
 use crate::biz::workspace::quick_note::{
@@ -264,6 +265,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/page-view/{view_id}/unpublish")
         .route(web::post().to(unpublish_page_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/orphaned-view")
+        .route(web::post().to(post_orphaned_view_handler)),
     )
     .service(
       web::resource("/{workspace_id}/batch/collab")
@@ -1327,6 +1332,25 @@ async fn post_page_view_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(page)))
+}
+
+async fn post_orphaned_view_handler(
+  user_uuid: UserUuid,
+  path: web::Path<Uuid>,
+  payload: Json<CreateOrphanedViewParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let workspace_uuid = path.into_inner();
+  create_orphaned_view(
+    uid,
+    &state.pg_pool,
+    &state.collab_access_control_storage,
+    workspace_uuid,
+    payload.document_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn append_block_to_page_handler(

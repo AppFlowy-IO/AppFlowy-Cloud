@@ -47,7 +47,6 @@ web-sys = { version = "0.3", features = ["console"] }
 
 
 [features]
-default = ["collab-sync", "v2"]
-collab-sync = ["client-api/collab-sync"]
+default = ["v2"]
 ai-test-enabled = []
 v2 = []

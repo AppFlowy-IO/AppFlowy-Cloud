@@ -14,7 +14,6 @@ mod http_template;
 mod http_view;
 pub use http::*;
 
-#[cfg(feature = "collab-sync")]
 pub mod collab_sync;
 
 mod http_chat;
@@ -25,7 +24,6 @@ mod ping;
 mod retry;
 
 pub mod log;
-#[cfg(feature = "collab-sync")]
 pub mod v2;
 pub mod ws;
 

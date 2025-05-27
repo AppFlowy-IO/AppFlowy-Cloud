@@ -879,7 +879,14 @@ mod tests {
       vec![Ok(())],
     );
     let target: Arc<dyn ReconnectTarget + Send + Sync> = Arc::new(fake_target);
-    let manager = ReconnectionManager::new_for_target(target.clone());
+    let manager = ReconnectionManager::with_config_for_target(
+      target.clone(),
+      RetryConfig {
+        initial_delay: Duration::from_millis(10),
+        max_delay: Duration::from_millis(10),
+        max_attempts: 1,
+      },
+    );
 
     manager.set_access_token(long_token);
     manager.trigger_reconnect("test trigger");

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT deleted_at IS NOT NULL AS is_deleted\n        FROM af_collab\n        WHERE oid = $1;\n      ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_deleted",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a7c03becdf9954611ac7ad96e1f5bb5e8364f095f1cc4dc23719b218eb032973"
+}

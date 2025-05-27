@@ -59,7 +59,9 @@ async fn edit_workspace_with_guest_permission() {
     .await
     .unwrap();
 
-  owner.insert_into(&workspace_id, "name", "zack").await;
+  owner
+    .insert_into(&workspace_id, "name", "workspace 1")
+    .await;
   owner
     .wait_object_sync_complete(&workspace_id)
     .await
@@ -70,12 +72,16 @@ async fn edit_workspace_with_guest_permission() {
   sleep(Duration::from_secs(3)).await;
 
   // client_2 only has the guest permission, so it can not edit the collab
-  guest.insert_into(&workspace_id, "name", "nathan").await;
+  guest
+    .insert_into(&workspace_id, "name", "workspace 2")
+    .await;
 
-  assert_client_collab_include_value(&mut owner, &workspace_id, json!({"name": "zack"}))
+  let expected_value = json!({"name": "workspace 2"});
+
+  assert_client_collab_include_value(&mut owner, &workspace_id, expected_value.clone())
     .await
     .unwrap();
-  assert_client_collab_include_value(&mut guest, &workspace_id, json!({"name": "nathan"}))
+  assert_client_collab_include_value(&mut guest, &workspace_id, expected_value.clone())
     .await
     .unwrap();
 
@@ -85,9 +91,7 @@ async fn edit_workspace_with_guest_permission() {
     workspace_id,
     &CollabType::Folder,
     30,
-    json!({
-      "name": "zack"
-    }),
+    expected_value,
   )
   .await
   .unwrap();

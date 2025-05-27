@@ -98,6 +98,18 @@ impl CollabStore {
       .await
   }
 
+  pub async fn enforce_write_collab(
+    &self,
+    workspace_id: &WorkspaceId,
+    uid: &i64,
+    object_id: &ObjectId,
+  ) -> AppResult<()> {
+    self
+      .access_control
+      .enforce_write_collab(workspace_id, uid, object_id)
+      .await
+  }
+
   pub async fn get_collabs_created_since(
     &self,
     workspace_id: Uuid,
@@ -158,12 +170,6 @@ impl CollabStore {
     sender: &CollabOrigin,
     update: Vec<u8>,
   ) -> anyhow::Result<Rid> {
-    let uid = sender.client_user_id().unwrap_or(0);
-    self
-      .access_control
-      .enforce_write_collab(&workspace_id, &uid, &object_id)
-      .await?;
-
     let key = UpdateStreamMessage::stream_key(&workspace_id);
     let mut conn = self.connection_manager.clone();
     let items: String =

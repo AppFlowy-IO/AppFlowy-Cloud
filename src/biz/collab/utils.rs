@@ -327,8 +327,8 @@ pub async fn get_latest_collab(
   collab_type: CollabType,
 ) -> Result<Collab, AppError> {
   let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
-  let options = collab::core::collab::CollabOptions::new(oid.to_string(), default_client_id())
-    .with_data_source(ec.into());
+  let options =
+    CollabOptions::new(oid.to_string(), default_client_id()).with_data_source(ec.into());
   let collab = Collab::new_with_options(CollabOrigin::Server, options).map_err(|e| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to create collab from encoded collab: {:?}",

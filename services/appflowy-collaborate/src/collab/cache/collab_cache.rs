@@ -100,6 +100,14 @@ impl CollabCache {
     workspace_id: &Uuid,
     query: QueryCollab,
   ) -> Result<(Rid, EncodedCollab), AppError> {
+    let is_deleted = self.disk_cache.is_collab_deleted(&query.object_id).await?;
+    if is_deleted {
+      return Err(AppError::RecordDeleted(format!(
+        "Collab with object_id: {} already deleted",
+        query.object_id
+      )));
+    }
+
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
       tracing::debug!(

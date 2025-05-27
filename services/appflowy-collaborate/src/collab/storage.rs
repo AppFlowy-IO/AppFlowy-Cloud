@@ -368,6 +368,7 @@ where
     _from_editing_collab: bool,
   ) -> AppResult<EncodedCollab> {
     params.validate()?;
+
     if let GetCollabOrigin::User { uid } = origin {
       // Check if the user has enough permissions to access the collab
       self

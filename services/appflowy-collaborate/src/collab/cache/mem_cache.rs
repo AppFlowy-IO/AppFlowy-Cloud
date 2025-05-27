@@ -80,6 +80,7 @@ impl CollabMemCache {
   }
 
   pub async fn remove_encode_collab(&self, object_id: &Uuid) -> Result<(), AppError> {
+    trace!("Removing encode collab from cache: {}", object_id);
     let cache_object_id = encode_collab_key(object_id);
     self
       .connection_manager
@@ -188,9 +189,10 @@ impl CollabMemCache {
     timestamp: i64,
     expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
-    tracing::trace!(
-      "insert collab {} to memory cache at {}",
+    trace!(
+      "insert collab {}, data:{} to memory cache at {}",
       object_id,
+      data.len(),
       timestamp
     );
     self

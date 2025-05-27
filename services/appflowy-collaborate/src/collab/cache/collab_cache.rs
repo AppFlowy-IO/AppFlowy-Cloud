@@ -100,14 +100,6 @@ impl CollabCache {
     workspace_id: &Uuid,
     query: QueryCollab,
   ) -> Result<(Rid, EncodedCollab), AppError> {
-    let is_deleted = self.disk_cache.is_collab_deleted(&query.object_id).await?;
-    if is_deleted {
-      return Err(AppError::RecordDeleted(format!(
-        "Collab with object_id: {} already deleted",
-        query.object_id
-      )));
-    }
-
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
       tracing::debug!(
@@ -304,11 +296,13 @@ impl CollabCache {
 
     // when the data is written to the disk cache but fails to be written to the memory cache
     // we log the error and continue.
-    self.cache_collab(object_id, collab_type, encode_collab_data, timestamp);
+    self
+      .cache_collab(object_id, collab_type, encode_collab_data, timestamp)
+      .await;
     Ok(())
   }
 
-  fn cache_collab(
+  async fn cache_collab(
     &self,
     object_id: Uuid,
     collab_type: CollabType,
@@ -316,19 +310,17 @@ impl CollabCache {
     timestamp: i64,
   ) {
     let mem_cache = self.mem_cache.clone();
-    tokio::spawn(async move {
-      if let Err(err) = mem_cache
-        .insert_encode_collab_data(
-          &object_id,
-          &encode_collab_data,
-          timestamp,
-          Some(cache_exp_secs_from_collab_type(&collab_type)),
-        )
-        .await
-      {
-        error!("Failed to insert encode collab into memory cache: {}", err);
-      }
-    });
+    if let Err(err) = mem_cache
+      .insert_encode_collab_data(
+        &object_id,
+        &encode_collab_data,
+        timestamp,
+        Some(cache_exp_secs_from_collab_type(&collab_type)),
+      )
+      .await
+    {
+      error!("Failed to insert encode collab into memory cache: {}", err);
+    }
   }
 
   pub async fn insert_encode_collab_to_disk(
@@ -346,7 +338,9 @@ impl CollabCache {
       .updated_at
       .unwrap_or_else(chrono::Utc::now)
       .timestamp_millis();
-    self.cache_collab(p.object_id, p.collab_type, p.encoded_collab_v1, timestamp);
+    self
+      .cache_collab(p.object_id, p.collab_type, p.encoded_collab_v1, timestamp)
+      .await;
     Ok(())
   }
 

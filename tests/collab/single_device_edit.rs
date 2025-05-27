@@ -126,7 +126,7 @@ async fn write_big_chunk_data_init_sync_test() {
   let object_id = Uuid::new_v4();
   let big_text = generate_random_string((MAXIMUM_REALTIME_MESSAGE_SIZE / 2) as usize);
   let collab_type = CollabType::Unknown;
-  let doc_state = make_collab_with_key_value(&object_id, "big_text", big_text.clone());
+  let doc_state = make_collab_with_key_value(&object_id, "text", big_text.clone());
 
   // the big doc_state will force the init_sync using the http request.
   // It will trigger the POST_REALTIME_MESSAGE_STREAM_HANDLER to handle the request.
@@ -145,7 +145,7 @@ async fn write_big_chunk_data_init_sync_test() {
     &collab_type,
     10,
     json!({
-      "big_text": big_text
+      "text": big_text
     }),
   )
   .await

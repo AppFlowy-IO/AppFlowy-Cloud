@@ -1,7 +1,6 @@
 mod collab;
 mod messages;
-mod user;
+pub mod notification;
 
 pub use collab::*;
 pub use messages::*;
-pub use user::*;

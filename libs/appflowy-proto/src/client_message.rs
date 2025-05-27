@@ -239,7 +239,7 @@ impl TryFrom<pb::Message> for ClientMessage {
             _ => Err(Error::MissingFields),
           }
         },
-        Payload::UserMessage(_) => Err(Error::UnsupportedClientMessage),
+        Payload::Notification(_) => Err(Error::UnsupportedClientMessage),
       },
     }
   }

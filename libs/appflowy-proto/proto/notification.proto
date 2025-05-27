@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package notification;
+
+message WorkspaceNotification {
+    oneof payload {
+        UserProfileChange profile_change = 1;
+        PermissionChanged permission_changed = 2;
+    }
+}
+
+message UserProfileChange {
+    int64 uid = 1;
+    optional string name = 2;
+    optional string email = 3;
+}
+
+message PermissionChanged {
+    string object_id = 1;
+    uint32 reason = 2;
+}

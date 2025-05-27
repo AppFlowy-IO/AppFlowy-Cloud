@@ -235,6 +235,15 @@ impl CollabDiskCache {
   ) -> Result<(Rid, EncodedCollab), AppError> {
     tracing::debug!("try get {}:{} from s3", query.collab_type, query.object_id);
     let key = collab_key(workspace_id, &query.object_id);
+
+    let is_deleted = self.is_collab_deleted(&query.object_id).await?;
+    if is_deleted {
+      return Err(AppError::RecordDeleted(format!(
+        "Collaboration record for {}:{} is deleted",
+        query.collab_type, query.object_id
+      )));
+    }
+
     match Self::get_collab_from_s3(&self.s3, key).await {
       Ok((rid, encoded_collab)) => {
         self.metrics.s3_read_collab_count.inc();
@@ -429,6 +438,21 @@ impl CollabDiskCache {
       Ok(_) | Err(AppError::RecordNotFound(_)) => Ok(()),
       Err(err) => Err(err),
     }
+  }
+
+  pub async fn is_collab_deleted(&self, object_id: &Uuid) -> AppResult<bool> {
+    let result = sqlx::query!(
+      r#"
+        SELECT deleted_at IS NOT NULL AS is_deleted
+        FROM af_collab
+        WHERE oid = $1;
+      "#,
+      object_id
+    )
+    .fetch_one(&self.pg_pool)
+    .await?;
+
+    Ok(result.is_deleted.unwrap_or(false))
   }
 
   async fn insert_blob_with_retries(

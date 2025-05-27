@@ -13,6 +13,6 @@ pub mod message {
     #[prost(message, tag = "1")]
     CollabMessage(super::super::collab::CollabMessage),
     #[prost(message, tag = "2")]
-    UserMessage(super::super::user::UserMessage),
+    Notification(super::super::notification::WorkspaceNotification),
   }
 }

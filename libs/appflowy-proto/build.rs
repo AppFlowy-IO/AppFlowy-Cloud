@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let proto_files = vec![
     "proto/messages.proto",
     "proto/collab.proto",
-    "proto/user.proto",
+    "proto/notification.proto",
   ];
   for proto_file in &proto_files {
     println!("cargo:rerun-if-changed={}", proto_file);

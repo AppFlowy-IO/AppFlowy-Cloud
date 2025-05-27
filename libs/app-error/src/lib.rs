@@ -27,6 +27,9 @@ pub enum AppError {
   #[error("Record not found:{0}")]
   RecordNotFound(String),
 
+  #[error("Record deleted:{0}")]
+  RecordDeleted(String),
+
   #[error("Record already exist:{0}")]
   RecordAlreadyExists(String),
 
@@ -292,6 +295,7 @@ impl AppError {
       AppError::InvalidGuest(_) => ErrorCode::InvalidGuest,
       AppError::FreePlanGuestLimitExceeded => ErrorCode::FreePlanGuestLimitExceeded,
       AppError::PaidPlanGuestLimitExceeded => ErrorCode::PaidPlanGuestLimitExceeded,
+      AppError::RecordDeleted(_) => ErrorCode::RecordDeleted,
     }
   }
 }
@@ -403,6 +407,7 @@ pub enum ErrorCode {
   Unhandled = -1,
   RecordNotFound = -2,
   RecordAlreadyExists = -3,
+  RecordDeleted = -4,
   InvalidEmail = 1001,
   InvalidPassword = 1002,
   OAuthError = 1003,

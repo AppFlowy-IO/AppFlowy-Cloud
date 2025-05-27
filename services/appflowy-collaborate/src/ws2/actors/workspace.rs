@@ -9,7 +9,7 @@ use actix::{
 };
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_proto::{ObjectId, Rid, ServerMessage, UpdateFlags, WorkspaceId};
+use appflowy_proto::{AccessChangedReason, ObjectId, Rid, ServerMessage, UpdateFlags, WorkspaceId};
 use chrono::DateTime;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncoderVersion;
@@ -113,6 +113,18 @@ impl Workspace {
                 collab_type,
                 last_message_id: Rid::default(),
                 state_vector: StateVector::default().encode_v1(),
+              },
+            });
+          },
+          Err(AppError::RecordDeleted(_)) => {
+            tracing::trace!("sending manifest for new collab {}", msg.object_id);
+            sender.conn.do_send(WsOutput {
+              message: ServerMessage::AccessChanges {
+                object_id: msg.object_id,
+                collab_type,
+                can_read: false,
+                can_write: false,
+                reason: AccessChangedReason::ObjectDeleted,
               },
             });
           },

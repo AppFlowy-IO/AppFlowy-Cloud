@@ -1,16 +1,34 @@
 use crate::pb;
 use crate::pb::collab_message::Data;
 use crate::pb::message::Payload;
-use crate::pb::{SyncRequest, UserProfileChange, message};
+use crate::pb::notification::{PermissionChanged, UserProfileChange};
+use crate::pb::{SyncRequest, message};
 use crate::shared::{Error, ObjectId, Rid, UpdateFlags};
 use bytes::Bytes;
 use collab::preclude::sync::AwarenessUpdate;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{StateVector, Update};
 use collab_entity::CollabType;
+use pb::notification::workspace_notification::Payload as NotificationPayload;
 use prost::Message;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use uuid::Uuid;
+
+#[derive(Clone, Debug)]
+#[repr(u8)]
+pub enum AccessChangedReason {
+  PermissionDenied = 0,
+  ObjectDeleted = 1,
+}
+
+impl Display for AccessChangedReason {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      AccessChangedReason::PermissionDenied => write!(f, "PermissionDenied"),
+      AccessChangedReason::ObjectDeleted => write!(f, "ObjectDeleted"),
+    }
+  }
+}
 
 #[derive(Clone)]
 pub enum ServerMessage {
@@ -37,10 +55,10 @@ pub enum ServerMessage {
     collab_type: CollabType,
     can_read: bool,
     can_write: bool,
-    reason: String,
+    reason: AccessChangedReason,
   },
-  UserProfileChange {
-    uid: i64,
+  Notification {
+    notification: WorkspaceNotification,
   },
 }
 
@@ -119,9 +137,9 @@ impl Debug for ServerMessage {
         .field("can_write", &can_write)
         .field("reason", &reason)
         .finish(),
-      ServerMessage::UserProfileChange { uid } => f
-        .debug_struct("UserProfileChange")
-        .field("uid", &uid)
+      ServerMessage::Notification { notification } => f
+        .debug_struct("WorkspaceNotification")
+        .field("notification", &notification)
         .finish(),
     }
   }
@@ -194,16 +212,32 @@ impl From<ServerMessage> for pb::Message {
           data: Some(Data::AccessChanged(pb::AccessChanged {
             can_read,
             can_write,
-            reason,
+            reason: reason as i32,
           })),
         })),
       },
-      ServerMessage::UserProfileChange { uid } => pb::Message {
-        payload: Some(message::Payload::UserMessage(pb::UserMessage {
-          payload: Some(pb::user_message::Payload::ProfileChange(
-            UserProfileChange { uid },
+      ServerMessage::Notification { notification } => match notification {
+        WorkspaceNotification::UserProfileChange { uid, email, name } => pb::Message {
+          payload: Some(message::Payload::Notification(
+            pb::notification::WorkspaceNotification {
+              payload: Some(NotificationPayload::ProfileChange(UserProfileChange {
+                uid,
+                name,
+                email,
+              })),
+            },
           )),
-        })),
+        },
+        WorkspaceNotification::ObjectAccessChanged { object_id, reason } => pb::Message {
+          payload: Some(message::Payload::Notification(
+            pb::notification::WorkspaceNotification {
+              payload: Some(NotificationPayload::PermissionChanged(PermissionChanged {
+                object_id: object_id.to_string(),
+                reason: reason as u32,
+              })),
+            },
+          )),
+        },
       },
     }
   }
@@ -256,16 +290,29 @@ impl TryFrom<pb::Message> for ServerMessage {
               collab_type,
               can_read: proto.can_read,
               can_write: proto.can_write,
-              reason: proto.reason,
+              reason: AccessChangedReason::from(proto.reason),
             }),
             _ => Err(Error::MissingFields),
           }
         },
-        Payload::UserMessage(user) => match user.payload {
+        Payload::Notification(notification) => match notification.payload {
           None => Err(Error::MissingFields),
-          Some(value) => match value {
-            pb::user_message::Payload::ProfileChange(change) => {
-              Ok(ServerMessage::UserProfileChange { uid: change.uid })
+          Some(payload) => match payload {
+            NotificationPayload::ProfileChange(value) => Ok(ServerMessage::Notification {
+              notification: WorkspaceNotification::UserProfileChange {
+                uid: value.uid,
+                email: value.email,
+                name: value.name,
+              },
+            }),
+            NotificationPayload::PermissionChanged(value) => {
+              let object_id = Uuid::parse_str(&value.object_id)?;
+              Ok(ServerMessage::Notification {
+                notification: WorkspaceNotification::ObjectAccessChanged {
+                  object_id,
+                  reason: value.reason.into(),
+                },
+              })
             },
           },
         },
@@ -276,5 +323,39 @@ impl TryFrom<pb::Message> for ServerMessage {
 
 #[derive(Debug, Clone)]
 pub enum WorkspaceNotification {
-  UserProfileChange { uid: i64, workspace_id: Uuid },
+  UserProfileChange {
+    uid: i64,
+    email: Option<String>,
+    name: Option<String>,
+  },
+  ObjectAccessChanged {
+    object_id: Uuid,
+    reason: AccessChangedReason,
+  },
+}
+
+impl From<AccessChangedReason> for i32 {
+  fn from(value: AccessChangedReason) -> Self {
+    value as i32
+  }
+}
+
+impl From<i32> for AccessChangedReason {
+  fn from(value: i32) -> Self {
+    match value {
+      0 => AccessChangedReason::PermissionDenied,
+      1 => AccessChangedReason::ObjectDeleted,
+      _ => AccessChangedReason::PermissionDenied,
+    }
+  }
+}
+
+impl From<u32> for AccessChangedReason {
+  fn from(value: u32) -> Self {
+    match value {
+      0 => AccessChangedReason::PermissionDenied,
+      1 => AccessChangedReason::ObjectDeleted,
+      _ => AccessChangedReason::PermissionDenied,
+    }
+  }
 }

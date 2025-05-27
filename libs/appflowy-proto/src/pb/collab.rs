@@ -70,7 +70,7 @@ pub struct AwarenessUpdate {
 /// *
 /// AccessChanged message is sent only by the server when we recognise, that
 /// connected client has lost the access to a corresponding collab.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct AccessChanged {
   /// Flag indicating if user has read access to corresponding collab.
   #[prost(bool, tag = "1")]
@@ -79,8 +79,8 @@ pub struct AccessChanged {
   #[prost(bool, tag = "2")]
   pub can_write: bool,
   /// (Optional) human readable comment about the reason for access change.
-  #[prost(string, tag = "3")]
-  pub reason: ::prost::alloc::string::String,
+  #[prost(int32, tag = "3")]
+  pub reason: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CollabMessage {

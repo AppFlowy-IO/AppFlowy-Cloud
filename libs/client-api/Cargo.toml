@@ -30,8 +30,8 @@ client-websocket = { workspace = true, features = ["native-tls"] }
 semver = "1.0.22"
 zstd = { version = "0.13.2" }
 
-collab = { workspace = true, optional = true }
-yrs = { workspace = true, optional = true }
+collab = { workspace = true }
+yrs = { workspace = true }
 collab-rt-protocol = { workspace = true }
 workspace-template = { workspace = true, optional = true }
 serde_json.workspace = true
@@ -88,7 +88,6 @@ again = { version = "0.1.2" }
 
 [features]
 default = ["verbose_log"]
-collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
 template = ["workspace-template"]
 sync_verbose_log = ["collab-rt-protocol/verbose_log"]

@@ -29,7 +29,6 @@ use tokio_stream::StreamExt;
 use tracing::trace;
 use uuid::Uuid;
 
-#[cfg(feature = "collab-sync")]
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::entity::id::user_awareness_object_id;
 use client_api::entity::{
@@ -849,7 +848,6 @@ impl TestClient {
 
     let collab = Arc::new(RwLock::from(collab));
     let collab_ref = collab.clone() as CollabRef;
-    #[cfg(feature = "collab-sync")]
     {
       let handler = self
         .ws_client
@@ -919,7 +917,6 @@ impl TestClient {
     let collab = Arc::new(RwLock::from(collab));
     let collab_ref = collab.clone() as CollabRef;
 
-    #[cfg(feature = "collab-sync")]
     {
       let handler = self
         .ws_client

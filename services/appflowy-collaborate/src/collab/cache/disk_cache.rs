@@ -191,7 +191,10 @@ impl CollabDiskCache {
             match self.is_collab_deleted(&oid).await {
               Ok(true) => {
                 // Record was deleted, remove it from results
-                tracing::warn!("Collab {} was deleted after initial query, removing from results", oid);
+                tracing::warn!(
+                  "Collab {} was deleted after initial query, removing from results",
+                  oid
+                );
                 collabs.remove(&oid);
               },
               Ok(false) => {
@@ -201,7 +204,11 @@ impl CollabDiskCache {
               },
               Err(err) => {
                 // Error checking deletion status, remove from results to be safe
-                tracing::warn!("Error checking deletion status for collab {}: {}, removing from results", oid, err);
+                tracing::warn!(
+                  "Error checking deletion status for collab {}: {}, removing from results",
+                  oid,
+                  err
+                );
                 collabs.remove(&oid);
               },
             }
@@ -423,10 +430,10 @@ impl CollabDiskCache {
   }
 
   /// Batch retrieves collaboration data for multiple queries.
-  /// 
+  ///
   /// This method first checks if any of the requested collaborations have been deleted
   /// and filters them out before attempting to retrieve data from S3 or PostgreSQL.
-  /// This is important because when a collaboration is deleted, it's only marked as 
+  /// This is important because when a collaboration is deleted, it's only marked as
   /// deleted in PostgreSQL (deleted_at field), but the S3 blob might still exist.
   pub async fn batch_get_collab(
     &self,
@@ -436,7 +443,7 @@ impl CollabDiskCache {
     // Filter out deleted collabs before processing
     let mut valid_queries = Vec::new();
     let mut results = HashMap::new();
-    
+
     // Batch check deletion status for all queries
     let object_ids: Vec<Uuid> = queries.iter().map(|q| q.object_id).collect();
     let deletion_status = match self.batch_is_collab_deleted(&object_ids).await {
@@ -452,9 +459,9 @@ impl CollabDiskCache {
           );
         }
         return results;
-      }
+      },
     };
-    
+
     for query in queries {
       let is_deleted = deletion_status.get(&query.object_id).unwrap_or(&false);
       if *is_deleted {
@@ -474,7 +481,8 @@ impl CollabDiskCache {
       }
     }
 
-    let not_found = batch_get_collab_from_s3(&self.s3, workspace_id, valid_queries, &mut results).await;
+    let not_found =
+      batch_get_collab_from_s3(&self.s3, workspace_id, valid_queries, &mut results).await;
     let s3_fetch = results.len() as u64;
     batch_select_collab_blob(&self.pg_pool, not_found, &mut results).await;
     let pg_fetch = results.len() as u64 - s3_fetch;
@@ -519,7 +527,10 @@ impl CollabDiskCache {
     Ok(result.is_deleted.unwrap_or(false))
   }
 
-  pub async fn batch_is_collab_deleted(&self, object_ids: &[Uuid]) -> AppResult<HashMap<Uuid, bool>> {
+  pub async fn batch_is_collab_deleted(
+    &self,
+    object_ids: &[Uuid],
+  ) -> AppResult<HashMap<Uuid, bool>> {
     if object_ids.is_empty() {
       return Ok(HashMap::new());
     }

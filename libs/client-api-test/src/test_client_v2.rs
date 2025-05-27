@@ -949,7 +949,6 @@ impl TestClient {
 
     let collab = Arc::new(RwLock::from(collab));
     let collab_ref = collab.clone() as CollabRef;
-    #[cfg(feature = "collab-sync")]
     {
       let workspace = self.workspace_controller_for(workspace_id).await;
       workspace
@@ -1019,7 +1018,6 @@ impl TestClient {
     let collab = Arc::new(RwLock::from(collab));
     let collab_ref = collab.clone() as CollabRef;
 
-    #[cfg(feature = "collab-sync")]
     {
       let workspace = self.workspace_controller_for(workspace_id).await;
       workspace

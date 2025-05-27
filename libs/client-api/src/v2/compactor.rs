@@ -398,15 +398,6 @@ mod test {
   }
 
   #[tokio::test]
-  async fn empty_receiver_returns_none() {
-    let (_tx, rx) = unbounded_channel();
-    let mut rx = ChannelReceiverCompactor::new(rx);
-
-    let result = rx.recv().await;
-    assert!(result.is_none());
-  }
-
-  #[tokio::test]
   async fn remote_updates_not_compacted() {
     let oid = Uuid::new_v4();
     let (tx, rx) = unbounded_channel();

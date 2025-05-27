@@ -18,7 +18,7 @@ use std::ops::{Deref, DerefMut};
 /// If a message goes over this size, it won't be processed and will trigger a parser error.
 /// This limit helps prevent server issues like overloads and denial-of-service attacks by rejecting
 /// overly large messages.
-pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 1024 * 1024; // 1 MB
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MessageByObjectId(pub HashMap<String, Vec<ClientCollabMessage>>);

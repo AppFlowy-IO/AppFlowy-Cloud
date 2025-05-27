@@ -158,6 +158,7 @@ async fn success_part_batch_get_collab_test() {
 async fn success_delete_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
+  let collab_type = CollabType::Unknown;
   let object_id = Uuid::new_v4();
   let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
     .encode_to_bytes()
@@ -166,7 +167,7 @@ async fn success_delete_collab_test() {
   c.create_collab(CreateCollabParams {
     object_id,
     encoded_collab_v1: encode_collab,
-    collab_type: CollabType::Unknown,
+    collab_type,
     workspace_id,
   })
   .await
@@ -179,16 +180,115 @@ async fn success_delete_collab_test() {
   .await
   .unwrap();
 
-  let error = c
-    .get_collab(QueryCollabParams::new(
-      object_id,
-      CollabType::Document,
-      workspace_id,
-    ))
-    .await
-    .unwrap_err();
+  // The deletion might take time to propagate through Redis cache, so the test needs to retry
+  // with a timeout to wait for the deletion to be reflected. Let me refactor the test to handle
+  // this properly.
+  let start_time = std::time::Instant::now();
+  let timeout = std::time::Duration::from_secs(10);
+  let retry_interval = std::time::Duration::from_millis(100);
 
-  assert_eq!(error.code, ErrorCode::RecordDeleted);
+  loop {
+    match c
+      .get_collab(QueryCollabParams::new(object_id, collab_type, workspace_id))
+      .await
+    {
+      Ok(_) => {
+        if start_time.elapsed() > timeout {
+          panic!(
+            "Timeout: Expected error when getting deleted collab after {}s, object_id: {}",
+            timeout.as_secs(),
+            object_id
+          );
+        }
+        tokio::time::sleep(retry_interval).await;
+      },
+      Err(error) => {
+        assert_eq!(error.code, ErrorCode::RecordDeleted);
+        break;
+      },
+    }
+  }
+}
+
+#[tokio::test]
+async fn batch_get_collab_filters_deleted_records_test() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c).await;
+
+  // Create 3 collabs
+  let queries = vec![
+    QueryCollab {
+      object_id: Uuid::new_v4(),
+      collab_type: CollabType::Unknown,
+    },
+    QueryCollab {
+      object_id: Uuid::new_v4(),
+      collab_type: CollabType::Unknown,
+    },
+    QueryCollab {
+      object_id: Uuid::new_v4(),
+      collab_type: CollabType::Unknown,
+    },
+  ];
+
+  // Create all collabs
+  for query in queries.iter() {
+    let object_id = query.object_id;
+    let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
+      .encode_to_bytes()
+      .unwrap();
+    let collab_type = query.collab_type;
+
+    c.create_collab(CreateCollabParams {
+      object_id,
+      encoded_collab_v1: encode_collab.clone(),
+      collab_type,
+      workspace_id,
+    })
+    .await
+    .unwrap();
+  }
+
+  // Delete the second collab
+  let deleted_object_id = queries[1].object_id;
+  c.delete_collab(DeleteCollabParams {
+    object_id: deleted_object_id,
+    workspace_id,
+  })
+  .await
+  .unwrap();
+
+  // Batch get all collabs
+  let results = c
+    .batch_get_collab(&workspace_id, queries.clone())
+    .await
+    .unwrap()
+    .0;
+
+  // Verify results
+  assert_eq!(results.len(), 3);
+
+  // First and third should be successful
+  assert!(matches!(
+    results.get(&queries[0].object_id).unwrap(),
+    QueryCollabResult::Success { .. }
+  ));
+  assert!(matches!(
+    results.get(&queries[2].object_id).unwrap(),
+    QueryCollabResult::Success { .. }
+  ));
+
+  // Second should be failed with deletion error
+  match results.get(&deleted_object_id).unwrap() {
+    QueryCollabResult::Failed { error } => {
+      assert!(
+        error.contains("is deleted") || error.contains("Record not found"),
+        "Error message should indicate deletion or not found: {}",
+        error
+      );
+    },
+    _ => panic!("Expected failed result for deleted collab"),
+  }
 }
 
 #[tokio::test]

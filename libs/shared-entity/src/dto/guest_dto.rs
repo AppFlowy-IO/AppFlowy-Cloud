@@ -51,6 +51,10 @@ pub struct ShareViewWithGuestRequest {
   pub view_id: Uuid,
   pub emails: Vec<String>,
   pub access_level: AFAccessLevel,
+  // If false, the guest will need to accept the invitation before being added officially.
+  // to the workspace.
+  #[serde(default)]
+  pub auto_confirm: bool,
 }
 
 #[derive(Serialize, Deserialize)]

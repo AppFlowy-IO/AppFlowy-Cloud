@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 import "collab.proto";
-import "user.proto";
+import "notification.proto";
 
 package messages;
 
@@ -11,6 +11,6 @@ package messages;
 message Message {
     oneof payload {
         collab.CollabMessage collab_message = 1;
-        user.UserMessage user_message = 2;
+        notification.WorkspaceNotification notification = 2;
     }
 }

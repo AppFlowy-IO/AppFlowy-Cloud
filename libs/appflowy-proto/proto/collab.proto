@@ -80,7 +80,7 @@ message AccessChanged {
     // Flag indicating if user has write access to corresponding collab.
     bool can_write = 2;
     // (Optional) human readable comment about the reason for access change.
-    string reason = 3;
+    int32 reason = 3;
 }
 
 message CollabMessage {

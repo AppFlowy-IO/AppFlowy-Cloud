@@ -4,7 +4,9 @@ use crate::v2::db::Db;
 use crate::v2::ObjectId;
 use crate::{sync_debug, sync_error, sync_info, sync_trace, sync_warn};
 use app_error::AppError;
-use appflowy_proto::{ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification};
+use appflowy_proto::{
+  AccessChangedReason, ClientMessage, Rid, ServerMessage, UpdateFlags, WorkspaceNotification,
+};
 use arc_swap::ArcSwap;
 use bytes::BytesMut;
 use client_api_entity::CollabType;
@@ -175,6 +177,30 @@ impl WorkspaceControllerActor {
       object_id,
       CachedCollab::new(Arc::downgrade(collab_ref), collab_type),
     );
+  }
+
+  pub async fn unbind(&self, object_id: &ObjectId) {
+    if let Some(collab) = self.get_collab(object_id) {
+      sync_trace!("unbind collab {}/{}", self.workspace_id(), object_id);
+      let mut guard = collab.write().await;
+      let collab = (*guard).borrow_mut();
+      let awareness = collab.get_awareness();
+      if let Err(err) = unobserve_update(object_id, awareness) {
+        sync_error!(
+          "failed to unobserve {}/{} update: {}",
+          self.workspace_id(),
+          object_id,
+          err
+        );
+      }
+
+      sync_trace!(
+        "unobserve awareness for collab {}/{}",
+        self.workspace_id(),
+        object_id
+      );
+      unobserve_awareness(awareness);
+    }
   }
 
   #[instrument(level = "trace", skip_all, err)]
@@ -649,18 +675,25 @@ impl WorkspaceControllerActor {
         );
         self.delete_collab(&object_id)?;
       },
-      ServerMessage::UserProfileChange { uid } => {
-        self.send_notification(WorkspaceNotification::UserProfileChange {
-          uid,
-          workspace_id: self.options.workspace_id,
-        });
+      ServerMessage::Notification { notification } => {
+        sync_info!("received notification: {:?}", notification);
+        self.send_notification(notification).await;
       },
     }
     Ok(())
   }
 
-  fn send_notification(&self, notification: WorkspaceNotification) {
+  async fn send_notification(&self, notification: WorkspaceNotification) {
     sync_trace!("Receive server notification: {:?}", notification);
+    match &notification {
+      WorkspaceNotification::UserProfileChange { .. } => {},
+      WorkspaceNotification::ObjectAccessChanged { object_id, reason } => {
+        if matches!(reason, AccessChangedReason::ObjectDeleted) {
+          self.unbind(object_id).await;
+        }
+      },
+    }
+
     if let Err(err) = self.notification_tx.send(notification) {
       sync_error!("Failed to send server notification, error: {:?}", err);
     }
@@ -1172,6 +1205,12 @@ impl std::borrow::Borrow<ObjectId> for ChangedCollab {
   }
 }
 
+const OBSERVER_KEY: &str = "af";
+
+fn unobserve_awareness(awareness: &Awareness) {
+  awareness.unobserve_change(OBSERVER_KEY);
+}
+
 #[inline]
 fn observe_awareness(
   actor: &Arc<WorkspaceControllerActor>,
@@ -1181,7 +1220,7 @@ fn observe_awareness(
   awareness: &Awareness,
 ) {
   let weak_inner = Arc::downgrade(actor);
-  awareness.on_change_with("af", move |awareness, e, origin| {
+  awareness.on_change_with(OBSERVER_KEY, move |awareness, e, origin| {
     if let Some(inner) = weak_inner.upgrade() {
       if origin.map(|o| o.as_ref()) != Some(WorkspaceControllerActor::REMOTE_ORIGIN.as_bytes()) {
         match awareness.update_with_clients(e.all_changes()) {
@@ -1196,6 +1235,12 @@ fn observe_awareness(
   });
 }
 
+fn unobserve_update(object_id: &ObjectId, awareness: &Awareness) -> anyhow::Result<()> {
+  awareness.doc().unobserve_update_v1(OBSERVER_KEY)?;
+  sync_trace!("unobserve update for {}", object_id);
+  Ok(())
+}
+
 #[inline]
 fn observe_update(
   collab_type: CollabType,
@@ -1206,33 +1251,35 @@ fn observe_update(
   client_id: ClientID,
   awareness: &Awareness,
 ) -> anyhow::Result<()> {
-  awareness.doc().observe_update_v1_with("af", move |tx, e| {
-    if let Some(inner) = weak_inner.upgrade() {
-      let rid: ActionSource = tx
-        .origin()
-        .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok())
-        .into();
-      sync_trace!(
-        "[{}] emit collab update {:?} {:#?} ",
-        client_id,
-        rid,
-        Update::decode_v1(&e.update).unwrap()
-      );
-      if let ActionSource::Remote(rid) = rid {
-        sync_trace!("[{}] {} received collab from remote", client_id, object_id);
-        last_message_id.rcu(|old| {
-          if rid > **old {
-            Arc::new(rid)
-          } else {
-            old.clone()
-          }
-        });
-      } else {
-        sync_state.set_sync_state(SyncState::Syncing);
+  awareness
+    .doc()
+    .observe_update_v1_with(OBSERVER_KEY, move |tx, e| {
+      if let Some(inner) = weak_inner.upgrade() {
+        let rid: ActionSource = tx
+          .origin()
+          .and_then(|origin| Rid::from_bytes(origin.as_ref()).ok())
+          .into();
+        sync_trace!(
+          "[{}] emit collab update {:?} {:#?} ",
+          client_id,
+          rid,
+          Update::decode_v1(&e.update).unwrap()
+        );
+        if let ActionSource::Remote(rid) = rid {
+          sync_trace!("[{}] {} received collab from remote", client_id, object_id);
+          last_message_id.rcu(|old| {
+            if rid > **old {
+              Arc::new(rid)
+            } else {
+              old.clone()
+            }
+          });
+        } else {
+          sync_state.set_sync_state(SyncState::Syncing);
+        }
+        inner.publish_update(object_id, collab_type, rid, e.update.clone());
       }
-      inner.publish_update(object_id, collab_type, rid, e.update.clone());
-    }
-  })?;
+    })?;
   Ok(())
 }
 

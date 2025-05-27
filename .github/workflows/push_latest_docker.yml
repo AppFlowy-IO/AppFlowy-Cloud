@@ -194,6 +194,8 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-${{ matrix.job.name }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
+          build-args: |
+            PROFILE=release
 
       - name: Logout from Docker Hub
         if: always()

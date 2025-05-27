@@ -24,6 +24,7 @@ ENV CARGO_BUILD_JOBS=4
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 # Reduce memory usage during compilation
+RUN echo "Building appflowy cloud with profile: ${PROFILE}"
 RUN if [ "$PROFILE" = "release" ]; then \
       cargo chef cook --release --recipe-path recipe.json; \
     else \

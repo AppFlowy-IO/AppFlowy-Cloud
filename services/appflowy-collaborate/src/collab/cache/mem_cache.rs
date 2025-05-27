@@ -16,6 +16,12 @@ use uuid::Uuid;
 
 const SEVEN_DAYS: u64 = 604800;
 const ONE_MONTH: u64 = 2592000;
+
+/// Threshold for spawning blocking tasks for encoding operations.
+/// Data smaller than this will be processed on the current thread for efficiency.
+/// Data larger than this will be spawned to avoid blocking the current thread.
+const ENCODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
+
 #[derive(Clone)]
 pub struct CollabMemCache {
   connection_manager: redis::aio::ConnectionManager,
@@ -156,9 +162,26 @@ impl CollabMemCache {
     expiration_seconds: u64,
   ) {
     trace!("Inserting encode collab into cache: {}", object_id);
-    let result = tokio::task::spawn_blocking(move || encoded_collab.encode_to_bytes()).await;
-    match result {
-      Ok(Ok(bytes)) => {
+    
+    // Estimate the size of the encoded data to decide whether to spawn a blocking task
+    let estimated_size = encoded_collab.state_vector.len() + encoded_collab.doc_state.len();
+    
+    let bytes_result = if estimated_size <= ENCODE_SPAWN_THRESHOLD {
+      // For small data, encode on current thread for efficiency
+      encoded_collab.encode_to_bytes()
+    } else {
+      // For large data, spawn a blocking task to avoid blocking current thread
+      match tokio::task::spawn_blocking(move || encoded_collab.encode_to_bytes()).await {
+        Ok(result) => result,
+        Err(e) => {
+          error!("Failed to spawn blocking task for encoding: {}", e);
+          return;
+        }
+      }
+    };
+    
+    match bytes_result {
+      Ok(bytes) => {
         if let Err(err) = self
           .insert_data_with_timestamp(
             object_id,
@@ -171,11 +194,8 @@ impl CollabMemCache {
           error!("Failed to cache encoded collab: {}", err);
         }
       },
-      Ok(Err(err)) => {
+      Err(err) => {
         error!("Failed to encode collab to bytes: {}", err);
-      },
-      Err(e) => {
-        error!("Failed to encode collab to bytes: {}", e);
       },
     }
   }

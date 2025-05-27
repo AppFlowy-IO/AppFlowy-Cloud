@@ -399,7 +399,7 @@ impl WorkspaceControllerActor {
   async fn send_message(&self, msg: ClientMessage) -> anyhow::Result<()> {
     let sync_state = match &msg {
       ClientMessage::Manifest { object_id, .. } => Some((*object_id, SyncState::InitSyncBegin)),
-      ClientMessage::Update { object_id, .. } => Some((*object_id, SyncState::Syncing)),
+      ClientMessage::Update { object_id, .. } => Some((*object_id, SyncState::SyncFinished)),
       ClientMessage::AwarenessUpdate { .. } => None,
     };
     if let Some(sink) = self.ws_sink() {

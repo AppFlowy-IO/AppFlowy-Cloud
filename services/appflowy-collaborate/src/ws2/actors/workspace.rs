@@ -145,6 +145,21 @@ impl Workspace {
           tracing::trace!("skipping empty update {}", msg.object_id);
           return;
         }
+
+        // Check if the user has permission to write to the collab
+        if sender
+          .can_write_collab(&store, &msg.object_id)
+          .await
+          .is_err()
+        {
+          tracing::trace!(
+            "user {} lack of permission to write to collab {}",
+            sender.uid,
+            msg.object_id,
+          );
+          return;
+        }
+
         if let Err(err) = store
           .publish_update(
             msg.workspace_id,
@@ -639,7 +654,7 @@ pub struct PermissionUpdate {
   pub permission_type: PermissionType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PermissionType {
   NoAccess,
   Read,
@@ -652,6 +667,16 @@ impl PermissionType {
   }
   pub fn can_write(&self) -> bool {
     matches!(self, PermissionType::Write)
+  }
+
+  /// Check if this permission is higher than another permission
+  pub fn is_higher_than(&self, other: &PermissionType) -> bool {
+    self > other
+  }
+
+  /// Check if this permission is at least as high as another permission
+  pub fn is_at_least(&self, other: &PermissionType) -> bool {
+    self >= other
   }
 }
 
@@ -705,33 +730,69 @@ impl WorkspaceSessionHandle {
     }
   }
 
-  /// Check if user has read permission for object, using cache when possible
+  async fn can_write_collab(
+    &self,
+    store: &Arc<CollabStore>,
+    object_id: &ObjectId,
+  ) -> Result<bool, AppError> {
+    let now = Instant::now();
+    if let Some((permission, cached_at)) = self.permission_cache.read().await.get(object_id) {
+      if now.duration_since(*cached_at) < self.cache_ttl {
+        return Ok(permission.can_write());
+      }
+    }
+
+    // Cache miss or expired, check permission and update cache
+    let has_permission = store
+      .enforce_write_collab(&self.workspace_id, &self.uid, object_id)
+      .await
+      .is_ok();
+
+    // Update cache with the actual permission state
+    let permission_type = if has_permission {
+      PermissionType::Write
+    } else {
+      PermissionType::NoAccess
+    };
+
+    self
+      .permission_cache
+      .write()
+      .await
+      .insert(*object_id, (permission_type, now));
+
+    Ok(has_permission)
+  }
+
   async fn can_read_collab(
     &self,
     store: &Arc<CollabStore>,
     object_id: &ObjectId,
   ) -> Result<bool, AppError> {
     let now = Instant::now();
-
-    // Check cache first
     if let Some((permission, cached_at)) = self.permission_cache.read().await.get(object_id) {
       if now.duration_since(*cached_at) < self.cache_ttl {
         return Ok(permission.can_read());
       }
     }
 
-    // Cache miss or expired, check permission and update cache
     let has_permission = store
       .enforce_read_collab(&self.workspace_id, &self.uid, object_id)
       .await
       .is_ok();
 
-    // Update cache
-    self
-      .permission_cache
-      .write()
-      .await
-      .insert(*object_id, (PermissionType::Read, now));
+    let mut cache = self.permission_cache.write().await;
+    if has_permission {
+      // Check if there's already a higher permission cached
+      if let Some((existing_permission, _)) = cache.get(object_id) {
+        if existing_permission.is_higher_than(&PermissionType::Read) {
+          return Ok(true);
+        }
+      }
+      cache.insert(*object_id, (PermissionType::Read, now));
+    } else {
+      cache.insert(*object_id, (PermissionType::NoAccess, now));
+    }
 
     Ok(has_permission)
   }
@@ -741,7 +802,20 @@ impl WorkspaceSessionHandle {
     let mut cache = self.permission_cache.write().await;
     let now = Instant::now();
     for update in updates {
-      cache.insert(update.object_id, (update.permission_type, now));
+      // Always allow updates from NoAccess, but prevent downgrades from higher permissions
+      if let Some((existing_permission, _)) = cache.get(&update.object_id) {
+        // Allow update if:
+        // 1. Current permission is NoAccess (always allow upgrade from no access)
+        // 2. New permission is at least as high as existing permission
+        if *existing_permission == PermissionType::NoAccess
+          || update.permission_type.is_at_least(existing_permission)
+        {
+          cache.insert(update.object_id, (update.permission_type, now));
+        }
+      } else {
+        // No existing permission, insert the new one
+        cache.insert(update.object_id, (update.permission_type, now));
+      }
     }
   }
 

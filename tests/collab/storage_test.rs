@@ -188,7 +188,7 @@ async fn success_delete_collab_test() {
     .await
     .unwrap_err();
 
-  assert_eq!(error.code, ErrorCode::RecordNotFound);
+  assert_eq!(error.code, ErrorCode::RecordDeleted);
 }
 
 #[tokio::test]

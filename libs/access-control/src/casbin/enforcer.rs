@@ -114,11 +114,7 @@ impl AFEnforcer {
       config.max_retries,
       start_time.elapsed()
     );
-    Err(AppError::RetryLater(anyhow!(
-      "Failed to acquire write lock after {} retries within {:?}",
-      config.max_retries,
-      config.timeout
-    )))
+    Err(AppError::RetryLater(anyhow!("Please try again later")))
   }
 
   /// Update policy for a user.
@@ -146,13 +142,13 @@ impl AFEnforcer {
 
     // DEADLOCK PREVENTION:
     // We use retry_write() instead of self.enforcer.write().await to prevent deadlocks.
-    // 
+    //
     // Problem with write().await:
     // 1. write().await can block indefinitely waiting for the lock
     // 2. If the lock is held while calling .await on add_policies(), the task yields to the runtime
     // 3. Other tasks on the same thread may then try to acquire the same write lock
     // 4. If casbin internally uses synchronous locks that depend on this operation completing,
-    //    we get a circular dependency: Task A holds async lock → waits for sync lock → 
+    //    we get a circular dependency: Task A holds async lock → waits for sync lock →
     //    Task B holds sync lock → waits for async lock → DEADLOCK
     let mut enforcer = self.retry_write().await?;
 
@@ -185,13 +181,13 @@ impl AFEnforcer {
 
     // DEADLOCK PREVENTION:
     // We use retry_write() instead of self.enforcer.write().await to prevent deadlocks.
-    // 
+    //
     // Problem with write().await:
     // 1. write().await can block indefinitely waiting for the lock
     // 2. If the lock is held while calling .await on add_policies(), the task yields to the runtime
     // 3. Other tasks on the same thread may then try to acquire the same write lock
     // 4. If casbin internally uses synchronous locks that depend on this operation completing,
-    //    we get a circular dependency: Task A holds async lock → waits for sync lock → 
+    //    we get a circular dependency: Task A holds async lock → waits for sync lock →
     //    Task B holds sync lock → waits for async lock → DEADLOCK
     let mut enforcer = self.retry_write().await?;
     enforcer

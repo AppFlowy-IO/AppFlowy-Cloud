@@ -92,7 +92,7 @@ pub async fn get_user_favorite_folder_views(
 ) -> Result<Vec<FavoriteFolderView>, AppError> {
   let folder =
     get_latest_collab_folder(collab_storage, GetCollabOrigin::User { uid }, workspace_id).await?;
-  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, &workspace_id).await?;
   let publish_view_ids: HashSet<String> = publish_view_ids
     .into_iter()
     .map(|id| id.to_string())
@@ -132,7 +132,7 @@ pub async fn get_user_recent_folder_views(
     .into_iter()
     .filter(|s| !deleted_section_item_ids.contains(&s.id))
     .collect();
-  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, &workspace_id).await?;
   let publish_view_ids: HashSet<String> = publish_view_ids
     .into_iter()
     .map(|id| id.to_string())
@@ -264,7 +264,7 @@ pub async fn get_user_workspace_structure(
   let patched_folder =
     fix_old_workspace_folder(appflowy_web_metrics, server, user, folder, workspace_id).await?;
 
-  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, &workspace_id).await?;
   let publish_view_ids: HashSet<_> = publish_view_ids.into_iter().collect();
   collab_folder_to_folder_view(
     workspace_id,

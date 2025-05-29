@@ -688,7 +688,7 @@ pub async fn select_workspace_id_for_publish_namespace<'a, E: Executor<'a, Datab
 
 pub async fn select_published_view_ids_for_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  workspace_id: Uuid,
+  workspace_id: &Uuid,
 ) -> Result<Vec<Uuid>, AppError> {
   let res = sqlx::query_scalar!(
     r#"

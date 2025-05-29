@@ -303,7 +303,7 @@ pub struct AFWorkspaceInvitationMinimal {
 pub struct AFCollabRowMeta {
   pub oid: String,
   pub workspace_id: Uuid,
-
+  pub owner_uid: i64,
   pub deleted_at: Option<DateTime<Utc>>,
   pub created_at: Option<DateTime<Utc>>,
   pub updated_at: DateTime<Utc>,

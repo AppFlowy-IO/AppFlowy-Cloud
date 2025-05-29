@@ -43,9 +43,11 @@ use collab_document::document::{Document, DocumentBody};
 use collab_document::document_data::default_document_data;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
-use collab_folder::{timestamp, CollabOrigin, Folder, SectionItem, SpaceInfo};
+use collab_folder::{timestamp, CollabOrigin, Folder, SectionItem, SpaceInfo, View};
 use collab_rt_entity::user::RealtimeUser;
-use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
+use database::collab::{
+  select_collab_meta_from_af_collab, select_workspace_database_oid, CollabStorage, GetCollabOrigin,
+};
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
 use database_entity::dto::{
@@ -1998,13 +2000,82 @@ pub async fn get_page_view_collab(
     default_client_id(),
   )
   .await?;
-  let view = folder
-    .get_view(&view_id.to_string())
-    .ok_or(AppError::InvalidFolderView(format!(
-      "View {} not found",
-      view_id
-    )))?;
+  let view = folder.get_view(&view_id.to_string());
+  if let Some(view) = view {
+    get_page_view_collab_for_view_with_parent(
+      &folder,
+      &view,
+      pg_pool,
+      collab_access_control_storage,
+      &workspace_id,
+      &view_id,
+      uid,
+    )
+    .await
+  } else {
+    get_page_view_collab_for_orphaned_view(
+      pg_pool,
+      collab_access_control_storage,
+      &view_id,
+      uid,
+      &workspace_id,
+    )
+    .await
+  }
+}
 
+async fn get_page_view_collab_for_orphaned_view(
+  pg_pool: &PgPool,
+  collab_access_control_storage: &CollabAccessControlStorage,
+  view_id: &Uuid,
+  uid: i64,
+  workspace_id: &Uuid,
+) -> Result<PageCollab, AppError> {
+  let data =
+    get_page_collab_data_for_document(collab_access_control_storage, uid, workspace_id, view_id)
+      .await?;
+  let metadata = select_collab_meta_from_af_collab(pg_pool, view_id, &CollabType::Document)
+    .await?
+    .ok_or(AppError::Internal(anyhow::anyhow!(
+      "unable to find collab metadata"
+    )))?;
+  let owner = select_web_user_from_uid(pg_pool, metadata.owner_uid).await?;
+
+  Ok(PageCollab {
+    view: FolderView {
+      view_id: *view_id,
+      parent_view_id: None,
+      prev_view_id: None,
+      name: "".to_string(),
+      icon: None,
+      is_space: false,
+      is_private: false,
+      is_published: false,
+      is_favorite: false,
+      layout: ViewLayout::Document,
+      created_at: metadata.created_at.unwrap_or_default(),
+      created_by: Some(metadata.owner_uid),
+      last_edited_by: None,
+      last_edited_time: Default::default(),
+      is_locked: Some(false),
+      extra: None,
+      children: vec![],
+    },
+    data,
+    owner: owner.clone(),
+    last_editor: None,
+  })
+}
+
+async fn get_page_view_collab_for_view_with_parent(
+  folder: &Folder,
+  view: &View,
+  pg_pool: &PgPool,
+  collab_access_control_storage: &CollabAccessControlStorage,
+  workspace_id: &Uuid,
+  view_id: &Uuid,
+  uid: i64,
+) -> Result<PageCollab, AppError> {
   let owner = match view.created_by {
     Some(uid) => select_web_user_from_uid(pg_pool, uid).await?,
     None => None,
@@ -2013,7 +2084,7 @@ pub async fn get_page_view_collab(
     Some(uid) => select_web_user_from_uid(pg_pool, uid).await?,
     None => None,
   };
-  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id)
+  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, *workspace_id)
     .await
     .map_err(|err| {
       AppError::Internal(anyhow::anyhow!(
@@ -2025,18 +2096,18 @@ pub async fn get_page_view_collab(
   let publish_view_ids: HashSet<_> = publish_view_ids.into_iter().collect();
   let parent_view_id = Uuid::parse_str(&view.parent_view_id).ok();
   let folder_view = FolderView {
-    view_id,
+    view_id: *view_id,
     parent_view_id,
-    prev_view_id: get_prev_view_id(&folder, &view_id),
+    prev_view_id: get_prev_view_id(folder, view_id),
     name: view.name.clone(),
     icon: view
       .icon
       .as_ref()
       .map(|icon| to_dto_view_icon(icon.clone())),
-    is_space: check_if_view_is_space(&view),
+    is_space: check_if_view_is_space(view),
     is_private: false,
     is_favorite: view.is_favorite,
-    is_published: publish_view_ids.contains(&view_id),
+    is_published: publish_view_ids.contains(view_id),
     layout: to_dto_view_layout(&view.layout),
     created_at: DateTime::from_timestamp(view.created_at, 0).unwrap_or_default(),
     created_by: view.created_by,
@@ -2082,10 +2153,10 @@ async fn get_page_collab_data_for_database(
   pg_pool: &PgPool,
   collab_access_control_storage: &CollabAccessControlStorage,
   uid: i64,
-  workspace_id: Uuid,
-  view_id: Uuid,
+  workspace_id: &Uuid,
+  view_id: &Uuid,
 ) -> Result<PageCollabData, AppError> {
-  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id)
+  let ws_db_oid = select_workspace_database_oid(pg_pool, workspace_id)
     .await
     .map_err(|err| {
       AppError::Internal(anyhow::anyhow!(
@@ -2097,7 +2168,7 @@ async fn get_page_collab_data_for_database(
   let ws_db = get_latest_collab_encoded(
     collab_access_control_storage,
     GetCollabOrigin::User { uid },
-    workspace_id,
+    *workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,
   )
@@ -2134,7 +2205,7 @@ async fn get_page_collab_data_for_database(
   let db = get_latest_collab_encoded(
     collab_access_control_storage,
     GetCollabOrigin::User { uid },
-    workspace_id,
+    *workspace_id,
     Uuid::parse_str(&db_oid)?,
     CollabType::Database,
   )
@@ -2183,7 +2254,7 @@ async fn get_page_collab_data_for_database(
     })
     .collect();
   let row_query_collab_results = collab_access_control_storage
-    .batch_get_collab(&uid, workspace_id, queries, true)
+    .batch_get_collab(&uid, *workspace_id, queries, true)
     .await;
   let row_data = tokio::task::spawn_blocking(move || {
     let row_collabs: HashMap<_, _> = row_query_collab_results
@@ -2225,14 +2296,14 @@ async fn get_page_collab_data_for_database(
 async fn get_page_collab_data_for_document(
   collab_access_control_storage: &CollabAccessControlStorage,
   uid: i64,
-  workspace_id: Uuid,
-  view_id: Uuid,
+  workspace_id: &Uuid,
+  view_id: &Uuid,
 ) -> Result<PageCollabData, AppError> {
   let collab = get_latest_collab_encoded(
     collab_access_control_storage,
     GetCollabOrigin::User { uid },
-    workspace_id,
-    view_id,
+    *workspace_id,
+    *view_id,
     CollabType::Document,
   )
   .await

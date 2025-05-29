@@ -266,7 +266,7 @@ where
   sqlx::query_as!(
     AFCollabRowMeta,
     r#"
-        SELECT oid,workspace_id,deleted_at,created_at,updated_at
+        SELECT oid,workspace_id,owner_uid,deleted_at,created_at,updated_at
         FROM af_collab
         WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;
         "#,

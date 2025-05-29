@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id, updated_at)\n      VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) ON CONFLICT (oid)\n      DO UPDATE SET blob = $2, len = $3, owner_uid = $5, updated_at = COALESCE($7, NOW()) WHERE excluded.workspace_id = af_collab.workspace_id;\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Int4",
+        "Int4",
+        "Int8",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "852c729791d5b5eb2dde5772ccbcd24579486e43886d95a11481991fdf28efa8"
+}

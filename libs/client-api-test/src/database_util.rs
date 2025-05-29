@@ -1,7 +1,8 @@
 use async_trait::async_trait;
+use collab::core::collab::CollabOptions;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
-use collab::preclude::Collab;
+use collab::preclude::{ClientID, Collab};
 use collab_database::error::DatabaseError;
 use collab_database::workspace_database::{
   DatabaseCollabPersistenceService, DatabaseCollabService, EncodeCollabByOid,
@@ -16,10 +17,15 @@ use uuid::Uuid;
 pub struct TestDatabaseCollabService {
   pub api_client: client_api::Client,
   pub workspace_id: Uuid,
+  pub client_id: ClientID,
 }
 
 #[async_trait]
 impl DatabaseCollabService for TestDatabaseCollabService {
+  async fn client_id(&self) -> ClientID {
+    self.client_id
+  }
+
   async fn build_collab(
     &self,
     object_id: &str,
@@ -44,16 +50,18 @@ impl DatabaseCollabService for TestDatabaseCollabService {
       },
       Some((encoded_collab, _)) => encoded_collab,
     };
-    Ok(
-      Collab::new_with_source(
-        CollabOrigin::Empty,
-        object_id,
-        encoded_collab.into(),
-        vec![],
-        false,
-      )
-      .unwrap(),
-    )
+    let options = CollabOptions::new(object_id.to_string(), self.client_id)
+      .with_data_source(encoded_collab.into());
+    Ok(Collab::new_with_options(CollabOrigin::Empty, options).unwrap())
+  }
+
+  async fn finalize_collab(
+    &self,
+    _object_id: Uuid,
+    _collab_type: CollabType,
+    _collab: &mut Collab,
+  ) -> Result<(), DatabaseError> {
+    Ok(())
   }
 
   async fn get_collabs(

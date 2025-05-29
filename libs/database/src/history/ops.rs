@@ -9,7 +9,7 @@ use tracing::trace;
 use uuid::Uuid;
 
 #[allow(clippy::too_many_arguments)]
-pub async fn insert_history<'a>(
+pub async fn insert_history(
   workspace_id: &Uuid,
   oid: &Uuid,
   doc_state: Vec<u8>,
@@ -94,7 +94,7 @@ async fn insert_snapshot_meta<'a, E: Executor<'a, Database = Postgres>>(
 /// # Returns
 /// Returns a vector of `AFSnapshotMetaPbRow` struct instances containing the snapshot data.
 /// This vector is empty if no records match the criteria.
-pub async fn get_snapshot_meta_list<'a>(
+pub async fn get_snapshot_meta_list(
   oid: &Uuid,
   collab_type: &CollabType,
   pool: &PgPool,

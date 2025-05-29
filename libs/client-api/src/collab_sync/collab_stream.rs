@@ -32,6 +32,7 @@ pub type CollabRef = Weak<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>
 
 /// Use to continuously receive updates from remote.
 pub struct ObserveCollab<Sink, Stream> {
+  #[allow(dead_code)]
   object_id: Uuid,
   #[allow(dead_code)]
   weak_collab: CollabRef,

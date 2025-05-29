@@ -2,24 +2,42 @@ use super::disk_cache::CollabDiskCache;
 use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
 use crate::CollabMetrics;
 use app_error::AppError;
+use appflowy_proto::{Rid, UpdateFlags};
 use bytes::Bytes;
-use collab::entity::EncodedCollab;
+use chrono::{DateTime, Utc};
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
+use collab::core::origin::CollabOrigin;
+use collab::entity::{EncodedCollab, EncoderVersion};
+use collab::preclude::Collab;
 use collab_entity::CollabType;
+use collab_stream::model::UpdateStreamMessage;
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
-use database_entity::dto::{CollabParams, PendingCollabWrite, QueryCollab, QueryCollabResult};
+use database_entity::dto::{
+  CollabParams, CollabUpdateData, PendingCollabWrite, QueryCollab, QueryCollabResult,
+};
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{error, event, Level};
+use tracing::error;
 use uuid::Uuid;
+use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
+use yrs::{ReadTxn, StateVector, Update};
+
+/// Threshold for spawning background tasks for memory cache operations.
+const MEM_CACHE_SPAWN_THRESHOLD: usize = 4096; // 4KB
 
 #[derive(Clone)]
 pub struct CollabCache {
   disk_cache: CollabDiskCache,
   mem_cache: CollabMemCache,
   s3_collab_threshold: usize,
+  /// Threshold for spawning background tasks for memory cache operations.
+  /// Data smaller than this will be processed on the current thread.
+  /// Data larger than this will be spawned to avoid blocking.
+  mem_cache_spawn_threshold: usize,
   metrics: Arc<CollabMetrics>,
 }
 
@@ -38,6 +56,7 @@ impl CollabCache {
       disk_cache,
       mem_cache,
       s3_collab_threshold,
+      mem_cache_spawn_threshold: MEM_CACHE_SPAWN_THRESHOLD,
       metrics,
     }
   }
@@ -57,29 +76,55 @@ impl CollabCache {
       .bulk_insert_collab(workspace_id, uid, params_list.clone())
       .await?;
 
-    // update the mem cache without blocking the current task
-    let mem_cache = self.mem_cache.clone();
-    tokio::spawn(async move {
-      let timestamp = chrono::Utc::now().timestamp();
-      for params in params_list {
-        if let Err(err) = mem_cache
-          .insert_encode_collab_data(
-            &params.object_id,
-            &params.encoded_collab_v1,
-            timestamp,
-            Some(cache_exp_secs_from_collab_type(&params.collab_type)),
-          )
-          .await
-          .map_err(|err| AppError::Internal(err.into()))
-        {
-          tracing::warn!(
-            "Failed to insert collab `{}` into memory cache: {}",
-            params.object_id,
-            err
-          );
-        }
+    // Separate small and large data for different processing strategies
+    let (small_params, large_params): (Vec<_>, Vec<_>) = params_list
+      .into_iter()
+      .partition(|params| params.encoded_collab_v1.len() <= self.mem_cache_spawn_threshold);
+
+    let timestamp = chrono::Utc::now().timestamp();
+    for params in small_params {
+      if let Err(err) = self
+        .mem_cache
+        .insert_encode_collab_data(
+          &params.object_id,
+          &params.encoded_collab_v1,
+          timestamp,
+          Some(cache_exp_secs_from_collab_type(&params.collab_type)),
+        )
+        .await
+        .map_err(|err| AppError::Internal(err.into()))
+      {
+        tracing::warn!(
+          "Failed to insert collab `{}` into memory cache: {}",
+          params.object_id,
+          err
+        );
       }
-    });
+    }
+
+    if !large_params.is_empty() {
+      let mem_cache = self.mem_cache.clone();
+      tokio::spawn(async move {
+        for params in large_params {
+          if let Err(err) = mem_cache
+            .insert_encode_collab_data(
+              &params.object_id,
+              &params.encoded_collab_v1,
+              timestamp,
+              Some(cache_exp_secs_from_collab_type(&params.collab_type)),
+            )
+            .await
+            .map_err(|err| AppError::Internal(err.into()))
+          {
+            tracing::warn!(
+              "Failed to insert collab `{}` into memory cache: {}",
+              params.object_id,
+              err
+            );
+          }
+        }
+      });
+    }
 
     Ok(())
   }
@@ -88,13 +133,13 @@ impl CollabCache {
     &self,
     workspace_id: &Uuid,
     query: QueryCollab,
-  ) -> Result<EncodedCollab, AppError> {
+  ) -> Result<(Rid, EncodedCollab), AppError> {
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
-      event!(
-        Level::DEBUG,
-        "Did get encode collab:{} from cache",
-        query.object_id
+      tracing::debug!(
+        "Did get encode collab: {} from cache at {}",
+        query.object_id,
+        encoded_collab.0
       );
       return Ok(encoded_collab);
     }
@@ -102,7 +147,7 @@ impl CollabCache {
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
     let object_id = query.object_id;
     let expiration_secs = cache_exp_secs_from_collab_type(&query.collab_type);
-    let encode_collab = self
+    let (rid, encode_collab) = self
       .disk_cache
       .get_collab_encoded_from_disk(workspace_id, query)
       .await?;
@@ -110,13 +155,121 @@ impl CollabCache {
     // spawn a task to insert the encoded collab into the memory cache
     let cloned_encode_collab = encode_collab.clone();
     let mem_cache = self.mem_cache.clone();
-    let timestamp = chrono::Utc::now().timestamp();
-    tokio::spawn(async move {
+    let data_size = cloned_encode_collab.doc_state.len();
+
+    if data_size <= self.mem_cache_spawn_threshold {
+      // For small data, process on current thread for efficiency
       mem_cache
-        .insert_encode_collab(&object_id, cloned_encode_collab, timestamp, expiration_secs)
+        .insert_encode_collab(
+          &object_id,
+          cloned_encode_collab,
+          rid.timestamp,
+          expiration_secs,
+        )
         .await;
-    });
-    Ok(encode_collab)
+    } else {
+      // For large data, spawn a task to avoid blocking current thread
+      tokio::spawn(async move {
+        mem_cache
+          .insert_encode_collab(
+            &object_id,
+            cloned_encode_collab,
+            rid.timestamp,
+            expiration_secs,
+          )
+          .await;
+      });
+    }
+    Ok((rid, encode_collab))
+  }
+
+  pub async fn get_full_collab(
+    &self,
+    workspace_id: &Uuid,
+    query: QueryCollab,
+    from: &StateVector,
+    encoding: EncoderVersion,
+  ) -> Result<(Rid, EncodedCollab), AppError> {
+    let object_id = query.object_id;
+    let (rid, mut encoded_collab) = match self.get_encode_collab(workspace_id, query).await {
+      Ok((rid, encoded_collab)) => (rid, Some(encoded_collab)),
+      Err(AppError::RecordNotFound(_)) => (Rid::default(), None),
+      Err(err) => return Err(err),
+    };
+    let updates = self
+      .get_workspace_updates(workspace_id, Some(&object_id), Some(rid), None)
+      .await?;
+    tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
+    if !updates.is_empty() {
+      let mut collab = match encoded_collab {
+        Some(encoded_collab) => {
+          let options = CollabOptions::new(object_id.to_string(), default_client_id())
+            .with_data_source(match encoded_collab.version {
+              EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
+              EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
+            });
+          Collab::new_with_options(CollabOrigin::Server, options)
+            .map_err(|err| AppError::Internal(err.into()))?
+        },
+        None => {
+          let options = CollabOptions::new(object_id.to_string(), default_client_id());
+          Collab::new_with_options(CollabOrigin::Server, options)
+            .map_err(|err| AppError::Internal(err.into()))?
+        },
+      };
+      {
+        let mut tx = collab.transact_mut();
+        for msg in updates {
+          if msg.object_id == object_id {
+            let update = match msg.update_flags {
+              UpdateFlags::Lib0v1 => Update::decode_v1(&msg.update),
+              UpdateFlags::Lib0v2 => Update::decode_v2(&msg.update),
+            }
+            .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
+            tx.apply_update(update)
+              .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
+          }
+        }
+      }
+      let tx = collab.transact();
+      let state_vector = tx.state_vector().encode_v1();
+      encoded_collab = Some(match encoding {
+        EncoderVersion::V1 => EncodedCollab::new_v1(state_vector, tx.encode_diff_v1(from)),
+        EncoderVersion::V2 => EncodedCollab::new_v2(state_vector, tx.encode_diff_v2(from)),
+      });
+    }
+    match encoded_collab {
+      Some(encoded_collab) => Ok((rid, encoded_collab)),
+      None => Err(AppError::RecordNotFound(format!(
+        "Collab not found for object_id: {}",
+        object_id
+      ))),
+    }
+  }
+
+  pub async fn get_collabs_created_since(
+    &self,
+    workspace_id: Uuid,
+    since: DateTime<Utc>,
+    limit: usize,
+  ) -> Result<Vec<CollabUpdateData>, AppError> {
+    self
+      .disk_cache
+      .get_collabs_created_since(workspace_id, since, limit)
+      .await
+  }
+
+  pub async fn get_workspace_updates(
+    &self,
+    workspace_id: &Uuid,
+    object_id: Option<&Uuid>,
+    from: Option<Rid>,
+    to: Option<Rid>,
+  ) -> Result<Vec<UpdateStreamMessage>, AppError> {
+    self
+      .mem_cache
+      .get_workspace_updates(workspace_id, object_id, from, to)
+      .await
   }
 
   /// Batch get the encoded collab data from the cache.
@@ -134,16 +287,16 @@ impl CollabCache {
       .then(|params| async move {
         match self
           .mem_cache
-          .get_encode_collab_data(&params.object_id)
+          .get_data_with_timestamp(&params.object_id)
           .await
         {
-          None => Either::Left(params),
-          Some(data) => Either::Right((
+          Ok(Some((_ts, data))) => Either::Right((
             params.object_id,
             QueryCollabResult::Success {
               encode_collab_v1: data,
             },
           )),
+          _ => Either::Left(params),
         }
       })
       .collect::<Vec<_>>()
@@ -175,6 +328,10 @@ impl CollabCache {
     let object_id = params.object_id;
     let encode_collab_data = params.encoded_collab_v1.clone();
     let s3 = self.disk_cache.s3_client();
+    let timestamp = params
+      .updated_at
+      .unwrap_or_else(chrono::Utc::now)
+      .timestamp_millis();
     CollabDiskCache::upsert_collab_with_transaction(
       workspace_id,
       uid,
@@ -188,28 +345,49 @@ impl CollabCache {
 
     // when the data is written to the disk cache but fails to be written to the memory cache
     // we log the error and continue.
-    self.cache_collab(object_id, collab_type, encode_collab_data);
+    self
+      .cache_collab(object_id, collab_type, encode_collab_data, timestamp)
+      .await;
     Ok(())
   }
 
-  fn cache_collab(&self, object_id: Uuid, collab_type: CollabType, encode_collab_data: Bytes) {
+  async fn cache_collab(
+    &self,
+    object_id: Uuid,
+    collab_type: CollabType,
+    encode_collab_data: Bytes,
+    timestamp: i64,
+  ) {
+    let data_size = encode_collab_data.len();
     let mem_cache = self.mem_cache.clone();
-    tokio::spawn(async move {
+    let expiration_secs = cache_exp_secs_from_collab_type(&collab_type);
+    if data_size <= self.mem_cache_spawn_threshold {
       if let Err(err) = mem_cache
         .insert_encode_collab_data(
           &object_id,
           &encode_collab_data,
-          chrono::Utc::now().timestamp(),
-          Some(cache_exp_secs_from_collab_type(&collab_type)),
+          timestamp,
+          Some(expiration_secs),
         )
         .await
       {
-        error!(
-          "Failed to insert encode collab into memory cache: {:?}",
-          err
-        );
+        error!("Failed to insert encode collab into memory cache: {}", err);
       }
-    });
+    } else {
+      tokio::spawn(async move {
+        if let Err(err) = mem_cache
+          .insert_encode_collab_data(
+            &object_id,
+            &encode_collab_data,
+            timestamp,
+            Some(expiration_secs),
+          )
+          .await
+        {
+          error!("Failed to insert encode collab into memory cache: {}", err);
+        }
+      });
+    }
   }
 
   pub async fn insert_encode_collab_to_disk(
@@ -223,7 +401,13 @@ impl CollabCache {
       .disk_cache
       .upsert_collab(workspace_id, uid, params)
       .await?;
-    self.cache_collab(p.object_id, p.collab_type, p.encoded_collab_v1);
+    let timestamp = p
+      .updated_at
+      .unwrap_or_else(chrono::Utc::now)
+      .timestamp_millis();
+    self
+      .cache_collab(p.object_id, p.collab_type, p.encoded_collab_v1, timestamp)
+      .await;
     Ok(())
   }
 
@@ -263,28 +447,40 @@ impl CollabCache {
       .collect();
 
     self.disk_cache.batch_insert_collab(records).await?;
+    let (small_params, large_params): (Vec<_>, Vec<_>) = mem_cache_params
+      .into_iter()
+      .partition(|(_, data, _)| data.len() <= self.mem_cache_spawn_threshold);
 
-    // We'll update cache in the background. The reason is that Redis
-    // doesn't have a good way to do batch insert, so we'll do it one
-    // by one which may take time if there are many records.
-    //
-    // Most of the code doesn't rely on the cache being the only source
-    // of truth and accepts possibility that its update may fail.
-    let mem_cache = self.mem_cache.clone();
-    tokio::spawn(async move {
-      let now = chrono::Utc::now().timestamp();
-      for (oid, data, expire) in mem_cache_params {
-        if let Err(err) = mem_cache
-          .insert_encode_collab_data(&oid, &data, now, Some(expire))
-          .await
-        {
-          error!(
-            "Failed to insert collab `{}` into memory cache: {}",
-            oid, err
-          );
-        }
+    let now = chrono::Utc::now().timestamp();
+    for (oid, data, expire) in small_params {
+      if let Err(err) = self
+        .mem_cache
+        .insert_encode_collab_data(&oid, &data, now, Some(expire))
+        .await
+      {
+        error!(
+          "Failed to insert collab `{}` into memory cache: {}",
+          oid, err
+        );
       }
-    });
+    }
+
+    if !large_params.is_empty() {
+      let mem_cache = self.mem_cache.clone();
+      tokio::spawn(async move {
+        for (oid, data, expire) in large_params {
+          if let Err(err) = mem_cache
+            .insert_encode_collab_data(&oid, &data, now, Some(expire))
+            .await
+          {
+            error!(
+              "Failed to insert collab `{}` into memory cache: {}",
+              oid, err
+            );
+          }
+        }
+      });
+    }
 
     Ok(())
   }

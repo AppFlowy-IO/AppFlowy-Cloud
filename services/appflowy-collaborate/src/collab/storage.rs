@@ -1,10 +1,17 @@
 #![allow(unused_imports)]
 
+use crate::collab::access_control::CollabStorageAccessControlImpl;
+use crate::collab::cache::CollabCache;
+use crate::collab::validator::CollabValidator;
 use crate::command::{CLCommandSender, CollaborationCommand};
+use crate::metrics::CollabMetrics;
+use crate::snapshot::SnapshotControl;
+use crate::ws2::CollabStore;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
+use appflowy_proto::UpdateFlags;
 use async_trait::async_trait;
-use collab::entity::EncodedCollab;
+use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use database::collab::{
@@ -28,13 +35,7 @@ use tracing::warn;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
-use yrs::Update;
-
-use crate::collab::access_control::CollabStorageAccessControlImpl;
-use crate::collab::cache::CollabCache;
-use crate::collab::validator::CollabValidator;
-use crate::metrics::CollabMetrics;
-use crate::snapshot::SnapshotControl;
+use yrs::{StateVector, Update};
 
 pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessControlImpl>;
 
@@ -130,46 +131,6 @@ where
       .enforce_write_collab(workspace_id, uid, object_id)
       .await?;
     Ok(())
-  }
-  async fn get_encode_collab_from_editing(&self, object_id: Uuid) -> Option<EncodedCollab> {
-    let (ret, rx) = tokio::sync::oneshot::channel();
-    let timeout_duration = Duration::from_secs(5);
-
-    // Attempt to send the command to the realtime server
-    if let Err(err) = self
-      .rt_cmd_sender
-      .send(CollaborationCommand::GetEncodeCollab { object_id, ret })
-      .await
-    {
-      error!(
-        "Failed to send get encode collab command to realtime server: {}",
-        err
-      );
-      return None;
-    }
-
-    // Await the response from the realtime server with a timeout
-    match timeout(timeout_duration, rx).await {
-      Ok(Ok(Some(encode_collab))) => Some(encode_collab),
-      Ok(Ok(None)) => {
-        trace!("Editing collab not found: `{}`", object_id);
-        None
-      },
-      Ok(Err(err)) => {
-        error!(
-          "Failed to get collab from realtime server `{}`: {}",
-          object_id, err
-        );
-        None
-      },
-      Err(_) => {
-        error!(
-          "Timeout trying to read collab `{}` from realtime server",
-          object_id
-        );
-        None
-      },
-    }
   }
 
   async fn batch_get_encode_collab_from_editing(
@@ -399,42 +360,34 @@ where
     }
   }
 
-  #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, from_editing_collab = %from_editing_collab))]
+  #[instrument(level = "trace", skip_all, fields(oid = %params.object_id))]
   async fn get_encode_collab(
     &self,
     origin: GetCollabOrigin,
     params: QueryCollabParams,
-    from_editing_collab: bool,
+    _from_editing_collab: bool,
   ) -> AppResult<EncodedCollab> {
     params.validate()?;
-    match origin {
-      GetCollabOrigin::User { uid } => {
-        // Check if the user has enough permissions to access the collab
-        self
-          .access_control
-          .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)
-          .await?;
-      },
-      GetCollabOrigin::Server => {},
+
+    if let GetCollabOrigin::User { uid } = origin {
+      // Check if the user has enough permissions to access the collab
+      self
+        .access_control
+        .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)
+        .await?;
     }
 
-    // Early return if editing collab is initialized, as it indicates no need to query further.
-    if from_editing_collab {
-      // Attempt to retrieve encoded collab from the editing collab
-      if let Some(value) = self.get_encode_collab_from_editing(params.object_id).await {
-        trace!(
-          "Did get encode collab {} from editing collab",
-          params.object_id
-        );
-        return Ok(value);
-      }
-    }
-
-    let encode_collab = self
+    let (_, encoded_collab) = self
       .cache
-      .get_encode_collab(&params.workspace_id, params.inner)
+      .get_full_collab(
+        &params.workspace_id.clone(),
+        QueryCollab::new(params.object_id, params.collab_type),
+        &StateVector::default(),
+        EncoderVersion::V1,
+      )
       .await?;
-    Ok(encode_collab)
+
+    Ok(encoded_collab)
   }
 
   async fn batch_get_collab(

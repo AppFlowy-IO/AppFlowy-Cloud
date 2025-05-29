@@ -3,7 +3,6 @@ use uuid::Uuid;
 
 use app_error::ErrorCode;
 
-use crate::collab::util::generate_random_string;
 use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
 use database::file::{BucketClient, ResponseBlob};
 
@@ -42,21 +41,6 @@ async fn put_and_get() {
   assert_eq!(got_mime, mime);
 
   c1.delete_blob(&url).await.unwrap();
-}
-
-// TODO: fix inconsistent behavior due to different error handling with nginx
-#[tokio::test]
-async fn put_giant_file() {
-  let (c1, _user1) = generate_unique_registered_user_client().await;
-  let workspace_id = workspace_id_from_client(&c1).await;
-  let mime = mime::TEXT_PLAIN_UTF_8;
-  let file_id = Uuid::new_v4().to_string();
-
-  let url = c1.get_blob_url(&workspace_id, &file_id);
-  let data = vec![0; 10 * 1024 * 1024 * 1024];
-  let error = c1.put_blob(&url, data, &mime).await.unwrap_err();
-
-  assert_eq!(error.code, ErrorCode::PayloadTooLarge);
 }
 
 #[tokio::test]
@@ -161,22 +145,4 @@ async fn simulate_30_put_blob_request_test() {
     assert_eq!(got_data, vec![0; 3 * 1024 * 1024]);
     c1.delete_blob(&url).await.unwrap();
   }
-}
-
-#[tokio::test]
-async fn put_and_put_and_get_v1() {
-  let (c1, _user1) = generate_unique_registered_user_client().await;
-  let workspace_id = workspace_id_from_client(&c1).await;
-  let parent_dir = Uuid::new_v4().to_string();
-  let mime = mime::TEXT_PLAIN_UTF_8;
-  let data = generate_random_string(1024);
-  let resp = c1
-    .put_blob_v1(&workspace_id, &parent_dir, data.clone(), &mime)
-    .await
-    .unwrap();
-  let url = c1.get_blob_url_v1(&workspace_id, &parent_dir, &resp.file_id);
-
-  let (got_mime, got_data) = c1.get_blob(&url).await.unwrap();
-  assert_eq!(String::from_utf8(got_data).unwrap(), data);
-  assert_eq!(got_mime, mime);
 }

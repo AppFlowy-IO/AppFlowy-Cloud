@@ -1,12 +1,12 @@
-use std::sync::Arc;
-
 use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
 use access_control::workspace::WorkspaceAccessControl;
+use actix::Addr;
 use anyhow::anyhow;
 use dashmap::DashMap;
 use gotrue_entity::gotrue_jwt::GoTrueServiceRoleClaims;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -17,6 +17,7 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::metrics::CollabMetrics;
+use appflowy_collaborate::ws2::WsServer;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
@@ -59,6 +60,7 @@ pub struct AppState {
   pub mailer: AFCloudMailer,
   pub ai_client: AppFlowyAIClient,
   pub indexer_scheduler: Arc<IndexerScheduler>,
+  pub ws_server: Addr<WsServer>,
 }
 
 impl AppState {

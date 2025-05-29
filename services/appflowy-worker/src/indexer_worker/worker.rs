@@ -140,7 +140,7 @@ async fn process_upcoming_tasks(
             tasks.retain(|task| {
               indexed_collabs
                 .get(&task.object_id)
-                .map_or(true, |indexed_at| task.created_at > indexed_at.timestamp())
+                .is_none_or(|indexed_at| task.created_at > indexed_at.timestamp())
             });
           }
 

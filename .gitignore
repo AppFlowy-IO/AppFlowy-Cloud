@@ -20,3 +20,5 @@ flake.lock
 
 **/.DS_Store
 **/.env.*
+
+docker-compose.override.yml

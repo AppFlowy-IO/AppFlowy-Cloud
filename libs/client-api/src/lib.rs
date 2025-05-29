@@ -14,7 +14,6 @@ mod http_template;
 mod http_view;
 pub use http::*;
 
-#[cfg(feature = "collab-sync")]
 pub mod collab_sync;
 
 mod http_chat;
@@ -23,6 +22,9 @@ mod http_settings;
 pub mod notify;
 mod ping;
 mod retry;
+
+pub mod log;
+pub mod v2;
 pub mod ws;
 
 pub mod error {
@@ -34,6 +36,7 @@ pub mod error {
 pub mod entity {
   #[cfg(not(target_arch = "wasm32"))]
   pub use crate::http_chat::*;
+  pub use appflowy_proto::WorkspaceNotification;
   pub use client_api_entity::*;
 }
 

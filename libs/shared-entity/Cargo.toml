@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow.workspace = true
-serde = "1.0.195"
+serde = "1.0"
 serde_json.workspace = true
 serde_repr = "0.1.18"
 thiserror = "1.0.56"

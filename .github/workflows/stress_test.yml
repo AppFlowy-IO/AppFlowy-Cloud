@@ -8,7 +8,7 @@ concurrency:
 
 env:
   SQLX_OFFLINE: true
-  RUST_TOOLCHAIN: "1.80"
+  RUST_TOOLCHAIN: "1.86.0"
   POSTGRES_HOST: localhost
   REDIS_HOST: localhost
   LOCALHOST_GOTRUE: http://localhost/gotrue

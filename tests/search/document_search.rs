@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use appflowy_ai_client::dto::CalculateSimilarityParams;
 use client_api_test::{ai_test_enabled, collect_answer, TestClient};
+use collab::core::collab::{default_client_id, CollabOptions};
+use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::importer::md_importer::MDImporter;
@@ -36,7 +38,8 @@ async fn test_embedding_when_create_document() {
   let query = "Overcoming the Five Dysfunctions";
   let items = test_client
     .wait_unit_get_search_result(&workspace_id, query, 5, 100, Some(0.2))
-    .await;
+    .await
+    .unwrap();
   dbg!("search result: {:?}", &items);
 
   // Test search summary
@@ -124,18 +127,26 @@ async fn test_document_indexing_and_search() {
   let collab_type = CollabType::Document;
   let encoded_collab = {
     let document_data = getting_started_document_data().unwrap();
-    let collab = Collab::new(
-      test_client.uid().await,
-      object_id.to_string(),
-      test_client.device_id.clone(),
-      vec![],
-      false,
-    );
+    let options = CollabOptions::new(object_id.to_string(), default_client_id());
+    let collab = Collab::new_with_options(
+      CollabOrigin::Client(CollabClient::new(
+        test_client.uid().await,
+        test_client.device_id.clone(),
+      )),
+      options,
+    )
+    .unwrap();
     let document = Document::create_with_data(collab, document_data).unwrap();
     document.encode_collab().unwrap()
   };
   test_client
-    .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, Some(encoded_collab))
+    .create_and_edit_collab_with_data(
+      object_id,
+      workspace_id,
+      collab_type,
+      Some(encoded_collab),
+      true,
+    )
     .await;
   test_client
     .open_collab(workspace_id, object_id, collab_type)
@@ -162,7 +173,7 @@ async fn create_document_collab(document_id: &str, file_name: &str) -> Document 
   let md = std::fs::read_to_string(file_path).unwrap();
   let importer = MDImporter::new(None);
   let document_data = importer.import(document_id, md).unwrap();
-  Document::create(document_id, document_data).unwrap()
+  Document::create(document_id, document_data, default_client_id()).unwrap()
 }
 
 async fn add_document_collab(
@@ -174,6 +185,7 @@ async fn add_document_collab(
 ) -> Uuid {
   let object_id = Uuid::new_v4();
   let collab = create_document_collab(&object_id.to_string(), file_name).await;
+  println!("create document with content: {:?}", collab.paragraphs());
   let encoded = collab.encode_collab().unwrap();
   client
     .create_collab_with_data(*workspace_id, object_id, CollabType::Document, encoded)
@@ -190,7 +202,8 @@ async fn add_document_collab(
   if wait_embedding {
     client
       .wait_until_get_embedding(workspace_id, &object_id)
-      .await;
+      .await
+      .unwrap();
   }
   object_id
 }

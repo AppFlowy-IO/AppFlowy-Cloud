@@ -1,10 +1,12 @@
 use app_error::ErrorCode;
 use assert_json_diff::assert_json_include;
+use collab::core::collab::default_client_id;
 use collab::entity::EncodedCollab;
 use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
+  CollabParams, CreateCollabData, CreateCollabParams, QueryCollab, QueryCollabParams,
+  QueryCollabResult,
 };
 
 use reqwest::Method;
@@ -52,7 +54,7 @@ async fn batch_insert_collab_with_empty_payload_test() {
 async fn create_collab_params_compatibility_serde_test() {
   // This test is to make sure that the CreateCollabParams is compatible with the old InsertCollabParams
   let object_id = uuid::Uuid::new_v4();
-  let encoded_collab_v1 = default_document_collab_data(&object_id.to_string())
+  let encoded_collab_v1 = default_document_collab_data(&object_id.to_string(), default_client_id())
     .unwrap()
     .encode_to_bytes()
     .unwrap();
@@ -100,7 +102,7 @@ async fn create_collab_compatibility_with_json_params_test() {
 
   let encoded_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   let params = OldCreateCollabParams {
-    inner: CollabParams {
+    inner: CreateCollabData {
       object_id,
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Unknown,
@@ -163,6 +165,7 @@ async fn batch_insert_document_collab_test() {
       object_id: *object_id,
       encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap().into(),
       collab_type: CollabType::Document,
+      updated_at: None,
     })
     .collect::<Vec<_>>();
 
@@ -204,6 +207,6 @@ async fn batch_insert_document_collab_test() {
 #[derive(Debug, Clone, Serialize)]
 pub struct OldCreateCollabParams {
   #[serde(flatten)]
-  inner: CollabParams,
+  inner: CreateCollabData,
   pub workspace_id: Uuid,
 }

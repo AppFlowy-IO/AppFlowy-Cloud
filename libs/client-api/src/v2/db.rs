@@ -88,7 +88,7 @@ impl Db {
     let workspace_id = self.workspace_id.to_string();
     let object_id = object_id.to_string();
 
-    if ops.is_exist(self.uid, &workspace_id, &object_id) {
+    if !ops.is_exist(self.uid, &workspace_id, &object_id) {
       match ops.create_new_doc(self.uid, &workspace_id, &object_id, &tx) {
         Ok(_) => {
           ops.commit_transaction()?;

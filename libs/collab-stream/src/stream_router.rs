@@ -402,25 +402,32 @@ mod test {
     const ROUTES_COUNT: usize = 200;
     const MSG_PER_ROUTE: usize = 10;
 
-    let mut client = Client::open("redis://127.0.0.1/").unwrap();
-    let keys = init_streams(&mut client, ROUTES_COUNT, MSG_PER_ROUTE);
-    let metrics = Arc::new(CollabStreamMetrics::default());
+    let test_future = async {
+      let mut client = Client::open("redis://127.0.0.1/").unwrap();
+      let keys = init_streams(&mut client, ROUTES_COUNT, MSG_PER_ROUTE);
+      let metrics = Arc::new(CollabStreamMetrics::default());
 
-    let router = StreamRouter::new(&client, metrics).unwrap();
-    let mut join_set = JoinSet::new();
-    for key in keys {
-      let mut observer = router.observe(key.clone(), None);
-      join_set.spawn(async move {
-        for i in 0..MSG_PER_ROUTE {
-          let msg: TestMessage = observer.next().await.unwrap().unwrap();
-          assert_eq!(msg.data, format!("{}-{}", key, i));
-        }
-      });
-    }
+      let router = StreamRouter::new(&client, metrics).unwrap();
+      let mut join_set = JoinSet::new();
+      for key in keys {
+        let mut observer = router.observe(key.clone(), None);
+        join_set.spawn(async move {
+          for i in 0..MSG_PER_ROUTE {
+            let msg: TestMessage = observer.next().await.unwrap().unwrap();
+            assert_eq!(msg.data, format!("{}-{}", key, i));
+          }
+        });
+      }
 
-    while let Some(t) = join_set.join_next().await {
-      t.unwrap();
-    }
+      while let Some(t) = join_set.join_next().await {
+        t.unwrap();
+      }
+    };
+
+    // Add timeout to prevent infinite execution
+    tokio::time::timeout(tokio::time::Duration::from_secs(30), test_future)
+      .await
+      .expect("Test timed out after 30 seconds");
   }
 
   #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

@@ -208,6 +208,9 @@ pub enum AppError {
 
   #[error("paid plan workspace guest limit exceeded")]
   PaidPlanGuestLimitExceeded,
+
+  #[error("{0}")]
+  RetryLater(anyhow::Error),
 }
 
 impl AppError {
@@ -296,6 +299,7 @@ impl AppError {
       AppError::FreePlanGuestLimitExceeded => ErrorCode::FreePlanGuestLimitExceeded,
       AppError::PaidPlanGuestLimitExceeded => ErrorCode::PaidPlanGuestLimitExceeded,
       AppError::RecordDeleted(_) => ErrorCode::RecordDeleted,
+      AppError::RetryLater(_) => ErrorCode::RetryLater,
     }
   }
 }
@@ -408,6 +412,7 @@ pub enum ErrorCode {
   RecordNotFound = -2,
   RecordAlreadyExists = -3,
   RecordDeleted = -4,
+  RetryLater = -5,
   InvalidEmail = 1001,
   InvalidPassword = 1002,
   OAuthError = 1003,

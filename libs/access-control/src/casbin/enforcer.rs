@@ -7,8 +7,34 @@ use anyhow::anyhow;
 use app_error::AppError;
 use casbin::{CoreApi, Enforcer, MgmtApi};
 use std::sync::atomic::Ordering;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{event, instrument, trace};
+use tokio::time::sleep;
+use tracing::{event, instrument, trace, warn};
+
+/// Configuration for retry logic with exponential backoff
+#[derive(Clone, Debug)]
+struct RetryConfig {
+  /// Initial delay between retries
+  pub initial_delay: Duration,
+  /// Maximum delay between retries (cap for exponential backoff)
+  pub max_delay: Duration,
+  /// Maximum number of retry attempts
+  pub max_retries: usize,
+  /// Total timeout for all retry attempts
+  pub timeout: Duration,
+}
+
+impl Default for RetryConfig {
+  fn default() -> Self {
+    Self {
+      initial_delay: Duration::from_millis(10),
+      max_delay: Duration::from_millis(1000),
+      max_retries: 10,
+      timeout: Duration::from_secs(5),
+    }
+  }
+}
 
 pub struct AFEnforcer {
   enforcer: RwLock<Enforcer>,
@@ -22,6 +48,73 @@ impl AFEnforcer {
       enforcer: RwLock::new(enforcer),
       metrics_state: MetricsCalState::new(),
     })
+  }
+
+  /// Retry acquiring a write lock with default configuration
+  async fn retry_write(&self) -> Result<tokio::sync::RwLockWriteGuard<'_, Enforcer>, AppError> {
+    self.retry_write_with_config(RetryConfig::default()).await
+  }
+
+  /// Retry acquiring a write lock with custom configuration
+  /// Uses exponential backoff with jitter to prevent thundering herd
+  #[instrument(level = "debug", skip_all)]
+  async fn retry_write_with_config(
+    &self,
+    config: RetryConfig,
+  ) -> Result<tokio::sync::RwLockWriteGuard<'_, Enforcer>, AppError> {
+    let start_time = Instant::now();
+    let mut delay = config.initial_delay;
+
+    for attempt in 0..config.max_retries {
+      // Check if we've exceeded the total timeout
+      if start_time.elapsed() >= config.timeout {
+        warn!(
+          "Timeout while acquiring write lock after {} attempts in {:?}",
+          attempt,
+          start_time.elapsed()
+        );
+        return Err(AppError::RetryLater(anyhow!(
+          "Timeout while acquiring write lock after {} attempts",
+          attempt
+        )));
+      }
+
+      match self.enforcer.try_write() {
+        Ok(guard) => {
+          if attempt > 0 {
+            trace!(
+              "Successfully acquired write lock after {} attempts in {:?}",
+              attempt + 1,
+              start_time.elapsed()
+            );
+          }
+          return Ok(guard);
+        },
+        Err(_) => {
+          if attempt < config.max_retries - 1 {
+            // Add some simple jitter to prevent thundering herd (±10% of delay)
+            let jitter_ms = delay.as_millis() as u64 / 10;
+            let jitter = Duration::from_millis((attempt as u64 * 17) % (jitter_ms.max(1) * 2));
+            let actual_delay = delay + jitter;
+            trace!(
+              "Failed to acquire write lock on attempt {}, retrying after {:?}",
+              attempt + 1,
+              actual_delay
+            );
+
+            sleep(actual_delay).await;
+            delay = std::cmp::min(delay.saturating_mul(2), config.max_delay);
+          }
+        },
+      }
+    }
+
+    warn!(
+      "Failed to acquire write lock after {} retries within {:?}",
+      config.max_retries,
+      start_time.elapsed()
+    );
+    Err(AppError::RetryLater(anyhow!("Please try again later")))
   }
 
   /// Update policy for a user.
@@ -46,10 +139,20 @@ impl AFEnforcer {
       .collect::<Vec<Vec<_>>>();
 
     trace!("[access control]: add policy:{:?}", policies);
-    self
-      .enforcer
-      .write()
-      .await
+
+    // DEADLOCK PREVENTION:
+    // We use retry_write() instead of self.enforcer.write().await to prevent deadlocks.
+    //
+    // Problem with write().await:
+    // 1. write().await can block indefinitely waiting for the lock
+    // 2. If the lock is held while calling .await on add_policies(), the task yields to the runtime
+    // 3. Other tasks on the same thread may then try to acquire the same write lock
+    // 4. If casbin internally uses synchronous locks that depend on this operation completing,
+    //    we get a circular dependency: Task A holds async lock → waits for sync lock →
+    //    Task B holds sync lock → waits for async lock → DEADLOCK
+    let mut enforcer = self.retry_write().await?;
+
+    enforcer
       .add_policies(policies)
       .await
       .map_err(|e| AppError::Internal(anyhow!("fail to add policy: {e:?}")))?;
@@ -63,10 +166,36 @@ impl AFEnforcer {
     sub: SubjectType,
     object_type: ObjectType,
   ) -> Result<(), AppError> {
-    let mut enforcer = self.enforcer.write().await;
-    self
-      .remove_with_enforcer(sub, object_type, &mut enforcer)
+    let policies_for_user_on_object = {
+      let enforcer = self.enforcer.read().await;
+      policies_for_subject_with_given_object(sub.clone(), object_type.clone(), &enforcer).await
+    };
+
+    event!(
+      tracing::Level::INFO,
+      "[access control]: remove policy:subject={}, object={}, policies={:?}",
+      sub.policy_subject(),
+      object_type.policy_object(),
+      policies_for_user_on_object
+    );
+
+    // DEADLOCK PREVENTION:
+    // We use retry_write() instead of self.enforcer.write().await to prevent deadlocks.
+    //
+    // Problem with write().await:
+    // 1. write().await can block indefinitely waiting for the lock
+    // 2. If the lock is held while calling .await on add_policies(), the task yields to the runtime
+    // 3. Other tasks on the same thread may then try to acquire the same write lock
+    // 4. If casbin internally uses synchronous locks that depend on this operation completing,
+    //    we get a circular dependency: Task A holds async lock → waits for sync lock →
+    //    Task B holds sync lock → waits for async lock → DEADLOCK
+    let mut enforcer = self.retry_write().await?;
+    enforcer
+      .remove_policies(policies_for_user_on_object)
       .await
+      .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
+
+    Ok(())
   }
 
   /// ## Parameters:
@@ -103,32 +232,6 @@ impl AFEnforcer {
       .enforce(policy)
       .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
     Ok(result)
-  }
-
-  #[inline]
-  async fn remove_with_enforcer(
-    &self,
-    sub: SubjectType,
-    object_type: ObjectType,
-    enforcer: &mut Enforcer,
-  ) -> Result<(), AppError> {
-    let policies_for_user_on_object =
-      policies_for_subject_with_given_object(sub.clone(), object_type.clone(), enforcer).await;
-
-    event!(
-      tracing::Level::INFO,
-      "[access control]: remove policy:subject={}, object={}, policies={:?}",
-      sub.policy_subject(),
-      object_type.policy_object(),
-      policies_for_user_on_object
-    );
-
-    enforcer
-      .remove_policies(policies_for_user_on_object)
-      .await
-      .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
-
-    Ok(())
   }
 }
 

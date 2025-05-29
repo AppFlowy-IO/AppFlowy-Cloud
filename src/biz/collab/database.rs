@@ -4,8 +4,7 @@ use super::utils::{batch_get_latest_collab_encoded, get_latest_collab_encoded};
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use async_trait::async_trait;
-use collab::core::collab::CollabOptions;
-use collab::preclude::Collab;
+use collab_database::workspace_database::DatabaseCollabReader;
 use collab_database::{
   database::{gen_database_group_id, gen_field_id},
   entity::FieldType,
@@ -18,12 +17,9 @@ use collab_database::{
     BoardLayoutSetting, CalendarLayoutSetting, DatabaseLayout, FieldSettingsByFieldIdMap, Group,
     GroupSetting, GroupSettingMap, LayoutSettings,
   },
-  workspace_database::{
-    DatabaseCollabPersistenceService, DatabaseCollabService, EncodeCollabByOid,
-  },
+  workspace_database::EncodeCollabByOid,
 };
 use collab_entity::{CollabType, EncodedCollab};
-use collab_folder::CollabOrigin;
 use database::collab::GetCollabOrigin;
 use uuid::Uuid;
 use yrs::block::ClientID;
@@ -178,7 +174,7 @@ pub struct PostgresDatabaseCollabService {
 }
 
 impl PostgresDatabaseCollabService {
-  pub async fn get_collab(&self, oid: Uuid, collab_type: CollabType) -> EncodedCollab {
+  pub async fn get_latest_collab(&self, oid: Uuid, collab_type: CollabType) -> EncodedCollab {
     get_latest_collab_encoded(
       &self.collab_storage,
       GetCollabOrigin::Server,
@@ -192,45 +188,22 @@ impl PostgresDatabaseCollabService {
 }
 
 #[async_trait]
-impl DatabaseCollabService for PostgresDatabaseCollabService {
+impl DatabaseCollabReader for PostgresDatabaseCollabService {
   async fn client_id(&self) -> ClientID {
     self.client_id
   }
 
-  async fn build_collab(
+  async fn get_collab(
     &self,
     object_id: &str,
-    object_type: CollabType,
-    encoded_collab: Option<(EncodedCollab, bool)>,
-  ) -> Result<Collab, DatabaseError> {
+    collab_type: CollabType,
+  ) -> Result<EncodedCollab, DatabaseError> {
     let object_id = Uuid::parse_str(object_id)?;
-    match encoded_collab {
-      None => {
-        let collab_data = self.get_collab(object_id, object_type).await;
-        let options = CollabOptions::new(object_id.to_string(), self.client_id)
-          .with_data_source(collab_data.into());
-        Collab::new_with_options(CollabOrigin::Empty, options)
-          .map_err(|err| DatabaseError::Internal(err.into()))
-      },
-      Some((encoded_collab, _)) => {
-        let options = CollabOptions::new(object_id.to_string(), self.client_id)
-          .with_data_source(encoded_collab.into());
-        Collab::new_with_options(CollabOrigin::Empty, options)
-          .map_err(|err| DatabaseError::Internal(err.into()))
-      },
-    }
+    let collab_data = self.get_latest_collab(object_id, collab_type).await;
+    Ok(collab_data)
   }
 
-  async fn finalize_collab(
-    &self,
-    _object_id: Uuid,
-    _collab_type: CollabType,
-    _collab: &mut Collab,
-  ) -> Result<(), DatabaseError> {
-    Ok(())
-  }
-
-  async fn get_collabs(
+  async fn batch_get_collabs(
     &self,
     object_ids: Vec<String>,
     collab_type: CollabType,
@@ -252,10 +225,6 @@ impl DatabaseCollabService for PostgresDatabaseCollabService {
     .map(|(k, v)| (k.to_string(), v))
     .collect();
     Ok(encoded_collabs)
-  }
-
-  fn persistence(&self) -> Option<Arc<dyn DatabaseCollabPersistenceService>> {
-    None
   }
 }
 

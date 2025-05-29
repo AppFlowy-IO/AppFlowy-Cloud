@@ -107,7 +107,7 @@ impl WsSession {
     match ClientMessage::from_bytes(&bytes) {
       Ok(message) => {
         tracing::trace!(
-          "received message from session `{}`: {:?}",
+          "received message from session `{}`: {:#?}",
           self.id(),
           message
         );
@@ -213,7 +213,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
   fn handle(&mut self, item: Result<ws::Message, ProtocolError>, ctx: &mut Self::Context) {
     match item {
       Ok(message) => {
-        tracing::trace!("received message: {:?}", message);
         self.hb = Instant::now();
         match message {
           ws::Message::Ping(bytes) => {

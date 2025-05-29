@@ -2,7 +2,7 @@ use crate::pb;
 use crate::pb::collab_message::Data;
 use crate::pb::message::Payload;
 use crate::pb::notification::{PermissionChanged, UserProfileChange};
-use crate::pb::{SyncRequest, message};
+use crate::pb::{message, SyncRequest};
 use crate::shared::{Error, ObjectId, Rid, UpdateFlags};
 use bytes::Bytes;
 use collab::preclude::sync::AwarenessUpdate;

@@ -407,7 +407,6 @@ mod test {
     let metrics = Arc::new(CollabStreamMetrics::default());
 
     let router = StreamRouter::new(&client, metrics).unwrap();
-
     let mut join_set = JoinSet::new();
     for key in keys {
       let mut observer = router.observe(key.clone(), None);

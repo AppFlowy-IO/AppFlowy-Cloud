@@ -50,6 +50,8 @@ use crate::biz::collab::utils::get_latest_collab_encoded;
 use super::ops::broadcast_update;
 use super::ops::broadcast_update_with_timeout;
 
+use collab::core::collab::default_client_id;
+
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
   pg_pool: &PgPool,
@@ -160,6 +162,7 @@ impl PublishCollabDuplicator {
     // new view after deep copy
     // this is the root of the document/database duplicated
     let root_view_id = gen_view_id();
+    let client_id = default_client_id();
     let mut root_view = match self.deep_copy(root_view_id, publish_view_id).await? {
       Some(v) => v,
       None => {
@@ -197,6 +200,7 @@ impl PublishCollabDuplicator {
         object_id: oid,
         encoded_collab_v1: encoded_collab.into(),
         collab_type,
+        updated_at: None,
       };
       let action = format!("duplicate collab: {}", params);
       collab_storage
@@ -224,7 +228,7 @@ impl PublishCollabDuplicator {
           CollabType::WorkspaceDatabase,
         )
         .await?;
-        collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid)?
+        collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid, client_id)?
       };
 
       let mut ws_db = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
@@ -271,6 +275,7 @@ impl PublishCollabDuplicator {
             object_id: ws_db_oid,
             encoded_collab_v1: Bytes::from(updated_ws_w_db_collab),
             collab_type: CollabType::WorkspaceDatabase,
+            updated_at: None,
           },
           &mut txn,
           "duplicate workspace database collab",
@@ -296,7 +301,7 @@ impl PublishCollabDuplicator {
         CollabOrigin::Server,
         collab_folder_encoded.into(),
         &dest_workspace_id.to_string(),
-        vec![],
+        client_id,
       )
       .map_err(|e| AppError::Unhandled(e.to_string()))
     })
@@ -361,6 +366,7 @@ impl PublishCollabDuplicator {
           object_id: dest_workspace_id,
           encoded_collab_v1: updated_encoded_collab.await?.into(),
           collab_type: CollabType::Folder,
+          updated_at: None,
         },
         &mut txn,
         "duplicate folder collab",
@@ -427,7 +433,8 @@ impl PublishCollabDuplicator {
 
     match metadata.view.layout {
       ViewLayout::Document => {
-        let doc_collab = collab_from_doc_state(published_blob, &Uuid::default())?;
+        let doc_collab =
+          collab_from_doc_state(published_blob, &Uuid::default(), default_client_id())?;
         let doc = Document::open(doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
         let new_doc_view = self
           .deep_copy_doc(publish_view_id, new_view_id, doc, metadata)
@@ -449,7 +456,7 @@ impl PublishCollabDuplicator {
     }
   }
 
-  async fn deep_copy_doc<'a>(
+  async fn deep_copy_doc(
     &mut self,
     pub_view_id: Uuid,
     dup_view_id: Uuid,
@@ -475,7 +482,7 @@ impl PublishCollabDuplicator {
 
     {
       // write modified doc_data back to storage
-      let empty_collab = collab_from_doc_state(vec![], &dup_view_id)?;
+      let empty_collab = collab_from_doc_state(vec![], &dup_view_id, default_client_id())?;
       let new_doc = tokio::task::spawn_blocking(move || {
         Document::create_with_data(empty_collab, doc_data)
           .map_err(|e| AppError::Unhandled(e.to_string()))
@@ -513,9 +520,9 @@ impl PublishCollabDuplicator {
           .flat_map(|js_val| js_val.get_mut("attributes"))
           .flat_map(|attributes| attributes.get_mut("mention"))
           .filter(|mention| {
-            mention.get("type").map_or(false, |type_| {
-              type_.as_str().map_or(false, |type_| type_ == "page")
-            })
+            mention
+              .get("type")
+              .is_some_and(|type_| type_.as_str() == Some("page"))
           })
           .flat_map(|mention| mention.get_mut("page_id"));
 
@@ -650,7 +657,7 @@ impl PublishCollabDuplicator {
   /// deep copy inline database for doc
   /// returns new view_id
   /// parent_view_id is assumed to be doc itself
-  async fn deep_copy_inline_database_in_doc<'a>(
+  async fn deep_copy_inline_database_in_doc(
     &mut self,
     view_id: Uuid,
     doc_view_id: &str,
@@ -678,7 +685,7 @@ impl PublishCollabDuplicator {
 
   /// deep copy referenced database for doc
   /// returns new (view_id, parent_id)
-  async fn deep_copy_ref_database_in_doc<'a>(
+  async fn deep_copy_ref_database_in_doc(
     &mut self,
     view_id: Uuid,
     parent_id: Uuid,
@@ -726,18 +733,22 @@ impl PublishCollabDuplicator {
   /// attempts to use `new_view_id` for `published_view_id` if not already published
   /// stores all view_id references in `duplicated_refs`
   /// returns (published_db_id, new_db_id, is_already_duplicated)
-  async fn deep_copy_database<'a>(
+  async fn deep_copy_database(
     &mut self,
     published_db: &PublishDatabaseData,
     pub_view_id: &Uuid,
     new_view_id: Uuid,
   ) -> Result<(Uuid, Uuid, bool), AppError> {
     // collab of database
-    let mut db_collab =
-      collab_from_doc_state(published_db.database_collab.clone(), &Uuid::default())?;
+    let client_id = default_client_id();
+    let mut db_collab = collab_from_doc_state(
+      published_db.database_collab.clone(),
+      &Uuid::default(),
+      client_id,
+    )?;
     let db_body = DatabaseBody::from_collab(
       &db_collab,
-      Arc::new(NoPersistenceDatabaseCollabService),
+      Arc::new(NoPersistenceDatabaseCollabService { client_id }),
       None,
     )
     .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
@@ -818,7 +829,7 @@ impl PublishCollabDuplicator {
                   };
                 };
               }
-            };
+            }
           }
         }
       }
@@ -831,7 +842,8 @@ impl PublishCollabDuplicator {
         .get(pub_row_id)
         .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", pub_row_id)))?;
 
-      let mut db_row_collab = collab_from_doc_state(row_bin_data.clone(), &dup_row_id)?;
+      let mut db_row_collab =
+        collab_from_doc_state(row_bin_data.clone(), &dup_row_id, default_client_id())?;
       let mut db_row_body = DatabaseRowBody::open((*pub_row_id).into(), &mut db_row_collab)
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
@@ -859,7 +871,11 @@ impl PublishCollabDuplicator {
             .database_row_document_collabs
             .get(&pub_row_doc_id)
           {
-            match collab_from_doc_state(row_doc_doc_state.to_vec(), &pub_row_doc_id) {
+            match collab_from_doc_state(
+              row_doc_doc_state.to_vec(),
+              &pub_row_doc_id,
+              default_client_id(),
+            ) {
               Ok(pub_doc_collab) => {
                 let pub_doc =
                   Document::open(pub_doc_collab).map_err(|e| AppError::Unhandled(e.to_string()))?;
@@ -1007,7 +1023,7 @@ impl PublishCollabDuplicator {
   /// Deep copy a published database to the destination workspace.
   /// Returns the Folder view for main view (`new_view_id`) and map from old to new view_id.
   /// If the database is already duplicated before, does not return the view with `new_view_id`
-  async fn deep_copy_database_view<'a>(
+  async fn deep_copy_database_view(
     &mut self,
     new_view_id: Uuid,
     published_db: PublishDatabaseData,

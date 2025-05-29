@@ -208,6 +208,7 @@ pub async fn summarize_documents<C: Config>(
     .and_then(|content| serde_json::from_str::<SummarySearchSchema>(&content).ok())
     .ok_or_else(|| AppError::Unhandled("No response from OpenAI".to_string()))?;
 
+  trace!("AI summary search document response: {:?}", response);
   if response.answer.is_empty() {
     return Ok(SummarySearchResponse { summaries: vec![] });
   }

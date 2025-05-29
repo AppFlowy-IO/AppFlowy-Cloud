@@ -3,6 +3,7 @@ use client_api_test::TestClient;
 use collab_document::importer::define::{BlockType, URL_FIELD};
 use collab_folder::ViewLayout;
 
+use collab_database::database::get_inline_view_id;
 use std::path::PathBuf;
 use std::time::Duration;
 use uuid::Uuid;
@@ -121,7 +122,7 @@ async fn import_project_and_task_zip_test() {
       let database = client
         .get_database(imported_workspace_id, &database_id)
         .await;
-      let inline_views = database.get_inline_view_id();
+      let inline_views = get_inline_view_id(&database).unwrap();
       let fields = database.get_fields_in_view(&inline_views, None);
       let rows = database.collect_all_rows().await;
       assert_eq!(rows.len(), 4);
@@ -142,7 +143,7 @@ async fn import_project_and_task_zip_test() {
       let database = client
         .get_database(imported_workspace_id, &database_id)
         .await;
-      let inline_views = database.get_inline_view_id();
+      let inline_views = get_inline_view_id(&database).unwrap();
       let fields = database.get_fields_in_view(&inline_views, None);
       let rows = database.collect_all_rows().await;
       assert_eq!(rows.len(), 17);

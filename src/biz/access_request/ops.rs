@@ -11,6 +11,7 @@ use access_control::workspace::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use collab::core::collab::default_client_id;
 use database::{
   access_request::{
     insert_new_access_request, select_access_request_by_request_id, update_access_request_status,
@@ -85,6 +86,7 @@ pub async fn get_access_request(
     collab_storage,
     GetCollabOrigin::Server,
     access_request_with_view_id.workspace.workspace_id,
+    default_client_id(),
   )
   .await?;
   let view = folder.get_view(&access_request_with_view_id.view_id.to_string());

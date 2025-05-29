@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Using cargo-chef to manage Rust build cache effectively
-FROM lukemathwalker/cargo-chef:latest-rust-1.81 as chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.86 as chef
 
 WORKDIR /app
 RUN apt update && apt install lld clang -y
@@ -20,16 +20,27 @@ ARG FEATURES=""
 ARG PROFILE="release"
 
 COPY --from=planner /app/recipe.json recipe.json
-# Build our project dependencies
 ENV CARGO_BUILD_JOBS=4
-RUN cargo chef cook --release --recipe-path recipe.json
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+# Reduce memory usage during compilation
+RUN echo "Building appflowy cloud with profile: ${PROFILE}"
+RUN if [ "$PROFILE" = "release" ]; then \
+      cargo chef cook --release --recipe-path recipe.json; \
+    else \
+      cargo chef cook --recipe-path recipe.json; \
+    fi
 
 COPY . .
 ENV SQLX_OFFLINE true
 
 # Build the project
 RUN echo "Building with profile: ${PROFILE}, features: ${FEATURES}, "
-RUN cargo build --profile=${PROFILE} --features "${FEATURES}" --bin appflowy_cloud
+RUN if [ "$PROFILE" = "release" ]; then \
+      cargo build --release --features "${FEATURES}" --bin appflowy_cloud; \
+    else \
+      cargo build --features "${FEATURES}" --bin appflowy_cloud; \
+    fi
 
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
@@ -41,7 +52,15 @@ RUN apt-get update -y \
   && apt-get clean -y \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/appflowy_cloud /usr/local/bin/appflowy_cloud
+# Copy the binary from the appropriate target directory
+ARG PROFILE="release"
+RUN echo "Building with profile: ${PROFILE}"
+RUN if [ "$PROFILE" = "release" ]; then \
+      echo "Using release binary"; \
+    else \
+      echo "Using debug binary"; \
+    fi
+COPY --from=builder /app/target/$PROFILE/appflowy_cloud /usr/local/bin/appflowy_cloud
 ENV APP_ENVIRONMENT production
 ENV RUST_BACKTRACE 1
 

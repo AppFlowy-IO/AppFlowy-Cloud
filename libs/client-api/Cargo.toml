@@ -29,10 +29,9 @@ chrono = "0.4"
 client-websocket = { workspace = true, features = ["native-tls"] }
 semver = "1.0.22"
 zstd = { version = "0.13.2" }
-tokio-tungstenite.workspace = true
 
-collab = { workspace = true, optional = true }
-yrs = { workspace = true, optional = true }
+collab = { workspace = true }
+yrs = { workspace = true }
 collab-rt-protocol = { workspace = true }
 workspace-template = { workspace = true, optional = true }
 serde_json.workspace = true
@@ -50,6 +49,20 @@ pin-project.workspace = true
 percent-encoding = "2.3.1"
 lazy_static = { workspace = true }
 mime_guess = "2.0.5"
+appflowy-proto = { path = "../appflowy-proto" }
+dashmap.workspace = true
+tokio-tungstenite = { workspace = true, features = ["stream"] }
+rand = "0.8.5"
+smallvec = { workspace = true, features = [
+  "serde",
+  "const_generics",
+  "const_new",
+  "write",
+] }
+collab-plugins = { workspace = true, features = [] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "time", "rt"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"
@@ -74,9 +87,10 @@ tokio = { workspace = true, features = ["sync"] }
 again = { version = "0.1.2" }
 
 [features]
-collab-sync = ["collab", "yrs"]
+default = ["verbose_log"]
 test_util = ["scraper"]
 template = ["workspace-template"]
 sync_verbose_log = ["collab-rt-protocol/verbose_log"]
 test_fast_sync = []
 enable_brotli = ["brotli"]
+verbose_log = []

@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package collab;
+
+/**
+ * Rid represents Redis stream message Id, which is a unique identifier
+ * in scope of individual Redis stream - here workspace scope - assigned
+ * to each update stored in Redis.
+ *
+ * Default: "0-0"
+ */
+message Rid {
+    // UNIX epoch timestamp in milliseconds.
+    fixed64 timestamp = 1;
+
+    // In case when timestamps duplicate, this monotonically increasing
+    // sequence number is incremented and assigned.
+    uint32 counter = 2;
+}
+
+/**
+ * SyncRequest message is send by either a server or a client, which informs about the
+ * last collab state known to either party.
+ *
+ * If other side has more recent data, it should send `Update` message in the response.
+ * If other side has missing data, it should send its own `SyncRequest` in the response.
+ */
+message SyncRequest {
+    // Last Redis stream ID of the update received from the server, concerning corresponding
+    // collab, this message refers to.It
+    //
+    // The `Rid.timestamp` field can be used to notify clients when was the last time,
+    // collab has been synchronised.
+    Rid last_message_id = 1;
+
+    // Yjs Doc state vector encoded using lib0 v1 encoding.
+    bytes state_vector = 2;
+}
+
+/**
+ * Update message is send either in response to `SyncRequest` or independently by
+ * the client/server. It contains the Yjs doc update that can represent incremental
+ * changes made over corresponding collab, or full document state.
+ */
+message Update {
+    // Redis stream message ID assigned to this update, after it has been stored by
+    // server in Redis.
+    //
+    // For updates send by client, this field is not set.
+    Rid message_id = 1;
+
+    // Flags used to inform about encoding details:
+    // - 0x00 - `payload` encoded using lib0 v1 encoding.
+    // - 0x01 - `payload` encoded using lib0 v2 encoding.
+    //
+    // NOTE: in the future we could also include `payload` compression.
+    uint32 flags = 2;
+
+    // Binary update representing incremental changes over the collab,
+    // or entire collab state delta.
+    bytes payload = 3;
+}
+
+/**
+ * AwarenessUpdate message is send to inform about the latest changes in the
+ * Yjs doc awareness state.
+ */
+message AwarenessUpdate {
+    // Yjs awareness update encoded using lib0 v1 encoding.
+    bytes payload = 1;
+}
+
+/**
+ * AccessChanged message is sent only by the server when we recognise, that
+ * connected client has lost the access to a corresponding collab.
+ */
+message AccessChanged {
+    // Flag indicating if user has read access to corresponding collab.
+    bool can_read = 1;
+    // Flag indicating if user has write access to corresponding collab.
+    bool can_write = 2;
+    // (Optional) human readable comment about the reason for access change.
+    int32 reason = 3;
+}
+
+message CollabMessage {
+    // Unique collab identifier (UUID), which this message is related to.
+    // We're using string here, since it's easier to represent in web browser client.
+    string object_id = 1;
+    // Collab type - required by some of the collab read operations on the server.
+    // NOTE: hopefully we'll be able to get rid of it in the future.
+    int32 collab_type = 2;
+    oneof data {
+        SyncRequest sync_request = 3;
+        Update update = 4;
+        AwarenessUpdate awareness_update = 5;
+        AccessChanged access_changed = 6;
+    }
+}

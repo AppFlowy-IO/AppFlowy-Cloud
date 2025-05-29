@@ -53,7 +53,7 @@ fancy-regex = "0.11.0"
 bytes.workspace = true
 validator.workspace = true
 mime = "0.3.17"
-aws-sdk-s3 = { version = "1.63.0", features = [
+aws-sdk-s3 = { version = "1.88.0", features = [
   "behavior-version-latest",
   "rt-tokio",
 ] }
@@ -61,6 +61,9 @@ redis = { workspace = true, features = [
   "json",
   "tokio-comp",
   "connection-manager",
+  "aio",
+  "bytes",
+  "uuid"
 ] }
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = { version = "0.3.19", features = [
@@ -141,13 +144,13 @@ nanoid = "0.4.0"
 indexer.workspace = true
 llm-client.workspace = true
 async-openai.workspace = true
+appflowy-proto.workspace = true
 
 [dev-dependencies]
 flate2 = "1.0"
 assert-json-diff = "2.0.2"
-client-api-test = { path = "libs/client-api-test", features = ["collab-sync"] }
+client-api-test = { path = "libs/client-api-test", features = ["v2"] }
 client-api = { path = "libs/client-api", features = [
-  "collab-sync",
   "test_util",
   "sync_verbose_log",
   "test_fast_sync",
@@ -199,6 +202,7 @@ members = [
   "libs/mailer",
   "libs/indexer",
   "libs/llm-client",
+  "libs/appflowy-proto",
 ]
 
 [workspace.dependencies]
@@ -211,6 +215,7 @@ shared-entity = { path = "libs/shared-entity" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 access-control = { path = "libs/access-control" }
 llm-client = { path = "libs/llm-client" }
+appflowy-proto = { path = "libs/appflowy-proto" }
 mailer = { path = "libs/mailer" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
@@ -220,7 +225,7 @@ collab-stream = { path = "libs/collab-stream" }
 dotenvy = "0.15.7"
 serde_json = "1.0.111"
 serde_repr = "0.1.18"
-serde = { version = "1.0.195", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 bytes = "1.9.0"
 workspace-template = { path = "libs/workspace-template" }
 uuid = { version = "1.6.1", features = ["v4", "v5"] }
@@ -241,7 +246,7 @@ client-websocket = { path = "libs/client-websocket" }
 infra = { path = "libs/infra" }
 tracing = { version = "0.1", features = ["log"] }
 gotrue = { path = "libs/gotrue" }
-redis = "0.25.2"
+redis = "0.29"
 sqlx = { version = "0.8.1", default-features = false }
 dashmap = "5.5.3"
 futures = "0.3.30"
@@ -269,8 +274,9 @@ chrono = { version = "0.4.39", features = [
 http = "0.2.12"
 tokio-tungstenite = "0.20"
 secrecy = { version = "0.8.0", features = ["serde"] }
+thiserror = "2.0"
 # collaboration
-yrs = { version = "0.21.3", features = ["sync"] }
+yrs = { version = "0.23.3", features = ["sync"] }
 collab = { version = "0.2.0" }
 collab-entity = { version = "0.2.0" }
 collab-folder = { version = "0.2.0" }
@@ -279,6 +285,8 @@ collab-database = { version = "0.2.0" }
 collab-user = { version = "0.2.0" }
 collab-importer = { version = "0.1.0" }
 async-openai = "0.28.0"
+collab-plugins = { version = "0.2.0" }
+smallvec = "1.15.0"
 
 [profile.release]
 lto = true
@@ -298,13 +306,14 @@ lto = false
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a0e2cc07f50f17d1b6605c579e622a431e94998" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a0e2cc07f50f17d1b6605c579e622a431e94998" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a0e2cc07f50f17d1b6605c579e622a431e94998" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a0e2cc07f50f17d1b6605c579e622a431e94998" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a0e2cc07f50f17d1b6605c579e622a431e94998" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a0e2cc07f50f17d1b6605c579e622a431e94998" }
-collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a0e2cc07f50f17d1b6605c579e622a431e94998" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0ecd070e4c4c23f8b93df0f7b42367baba60baaf" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0ecd070e4c4c23f8b93df0f7b42367baba60baaf" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0ecd070e4c4c23f8b93df0f7b42367baba60baaf" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0ecd070e4c4c23f8b93df0f7b42367baba60baaf" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0ecd070e4c4c23f8b93df0f7b42367baba60baaf" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0ecd070e4c4c23f8b93df0f7b42367baba60baaf" }
+collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0ecd070e4c4c23f8b93df0f7b42367baba60baaf" }
+collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0ecd070e4c4c23f8b93df0f7b42367baba60baaf" }
 
 [features]
 history = []
@@ -320,3 +329,4 @@ ai-test-enabled = ["client-api-test/ai-test-enabled"]
 # 3. Open a new terminal and start the Tokio Console:
 #      tokio-console
 tokio-runtime-profile = ["console-subscriber", "tokio/tracing"]
+sync-v2 = ["client-api-test/v2"]

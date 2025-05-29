@@ -200,6 +200,7 @@ services:
       - AI_MINIO_URL=${AI_MINIO_URL}
       - AI_APPFLOWY_HOST=${AI_APPFLOWY_HOST}
       - SUPPORT_OPENAI_V3_IMAGE_MODEL=false
+      - LOG_LEVEL=DEBUG
     networks:
       - shared_network
 

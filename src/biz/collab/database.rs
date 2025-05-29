@@ -174,7 +174,7 @@ pub struct PostgresDatabaseCollabService {
 }
 
 impl PostgresDatabaseCollabService {
-  pub async fn get_collab(&self, oid: Uuid, collab_type: CollabType) -> EncodedCollab {
+  pub async fn get_latest_collab(&self, oid: Uuid, collab_type: CollabType) -> EncodedCollab {
     get_latest_collab_encoded(
       &self.collab_storage,
       GetCollabOrigin::Server,
@@ -199,7 +199,7 @@ impl DatabaseCollabReader for PostgresDatabaseCollabService {
     collab_type: CollabType,
   ) -> Result<EncodedCollab, DatabaseError> {
     let object_id = Uuid::parse_str(object_id)?;
-    let collab_data = self.get_collab(object_id, collab_type).await;
+    let collab_data = self.get_latest_collab(object_id, collab_type).await;
     Ok(collab_data)
   }
 

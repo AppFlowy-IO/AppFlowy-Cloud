@@ -528,9 +528,11 @@ pub async fn select_workspace_member_list(
     FROM public.af_workspace_member
         JOIN public.af_user ON af_workspace_member.uid = af_user.uid
     WHERE af_workspace_member.workspace_id = $1
+    AND role_id != $2
     ORDER BY af_workspace_member.created_at ASC;
     "#,
-    workspace_id
+    workspace_id,
+    AFRole::Guest as i32,
   )
   .fetch_all(pg_pool)
   .await?;

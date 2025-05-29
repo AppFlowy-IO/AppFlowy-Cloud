@@ -634,6 +634,8 @@ async fn post_workspace_settings_handler(
   Ok(AppResponse::Ok().with_data(settings).into())
 }
 
+/// A workspace member/owner can view all members of the workspace, except for guests.
+/// A guest can only view their own information.
 #[instrument(skip_all, err)]
 async fn get_workspace_members_handler(
   user_uuid: UserUuid,

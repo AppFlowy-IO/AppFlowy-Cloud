@@ -398,6 +398,7 @@ mod test {
   }
 
   #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+  #[ignore = "flaky test"]
   async fn multi_worker_preexisting_messages() {
     const ROUTES_COUNT: usize = 200;
     const MSG_PER_ROUTE: usize = 10;

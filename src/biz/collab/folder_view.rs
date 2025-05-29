@@ -367,25 +367,21 @@ fn get_view_and_children_recursive(
   })
 }
 
-pub fn check_if_view_ancestors_fulfil_condition(
-  view_id: &str,
-  collab_folder: &Folder,
-  condition: impl Fn(&collab_folder::View) -> bool,
-) -> bool {
+pub fn get_ancestor_views(folder: &Folder, view_id: &str) -> Result<Vec<View>, AppError> {
+  let mut views = Vec::new();
   let mut current_view_id = view_id.to_string();
-  loop {
-    let view = match collab_folder.get_view(&current_view_id) {
-      Some(view) => view,
-      None => return false,
-    };
-    if condition(&view) {
-      return true;
+  let mut visited: HashSet<String> = HashSet::new();
+
+  while let Some(view) = folder.get_view(&current_view_id) {
+    views.push(View::clone(&view));
+    visited.insert(view.id.clone());
+    if view.parent_view_id.is_empty() || visited.contains(&view.parent_view_id) {
+      break;
     }
     current_view_id = view.parent_view_id.clone();
-    if current_view_id.is_empty() || current_view_id == view.id {
-      return false;
-    }
   }
+
+  Ok(views)
 }
 
 pub fn check_if_view_is_space(view: &collab_folder::View) -> bool {

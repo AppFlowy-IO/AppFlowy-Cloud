@@ -112,6 +112,7 @@ pub struct BlobMetadata {
 #[derive(Serialize, Deserialize)]
 pub struct CreateWorkspaceParam {
   pub workspace_name: Option<String>,
+  pub workspace_icon: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

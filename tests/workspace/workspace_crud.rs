@@ -145,6 +145,7 @@ async fn add_and_delete_workspace_for_user() {
   let newly_added_workspace = c
     .create_workspace(CreateWorkspaceParam {
       workspace_name: Some("my_workspace".to_string()),
+      workspace_icon: Some("🏡".to_string()),
     })
     .await
     .unwrap();
@@ -154,7 +155,9 @@ async fn add_and_delete_workspace_for_user() {
   let _ = workspaces
     .iter()
     .find(|w| {
-      w.workspace_name == "my_workspace" && w.workspace_id == newly_added_workspace.workspace_id
+      w.workspace_name == "my_workspace"
+        && w.icon == "🏡"
+        && w.workspace_id == newly_added_workspace.workspace_id
     })
     .unwrap();
 

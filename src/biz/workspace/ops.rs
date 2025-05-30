@@ -70,7 +70,8 @@ pub async fn create_empty_workspace(
   user_uid: i64,
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name, false).await?;
+  let new_workspace_row =
+    insert_user_workspace(pg_pool, user_uuid, workspace_name, "", false).await?;
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
     .await?;
@@ -116,8 +117,10 @@ pub async fn create_workspace_for_user(
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,
+  workspace_icon: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name, true).await?;
+  let new_workspace_row =
+    insert_user_workspace(pg_pool, user_uuid, workspace_name, workspace_icon, true).await?;
 
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)

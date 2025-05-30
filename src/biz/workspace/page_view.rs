@@ -2308,10 +2308,9 @@ async fn get_page_collab_data_for_document(
   )
   .await
   .map_err(|err| {
-    AppError::Internal(anyhow::anyhow!(
-      "Unable to get page collab data for {}: {}",
-      view_id,
-      err
+    AppError::InvalidFolderView(format!(
+      "Unable to get latest collab for view {}: {}",
+      view_id, err
     ))
   })?;
   Ok(PageCollabData {

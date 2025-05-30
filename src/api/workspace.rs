@@ -421,10 +421,13 @@ async fn create_workspace_handler(
   state: Data<AppState>,
   create_workspace_param: Json<CreateWorkspaceParam>,
 ) -> Result<Json<AppResponse<AFWorkspace>>> {
+  let create_workspace_param = create_workspace_param.into_inner();
+
   let workspace_name = create_workspace_param
-    .into_inner()
     .workspace_name
     .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
+
+  let workspace_icon = create_workspace_param.workspace_icon.unwrap_or_default();
 
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let new_workspace = workspace::ops::create_workspace_for_user(
@@ -434,6 +437,7 @@ async fn create_workspace_handler(
     &uuid,
     uid,
     &workspace_name,
+    &workspace_icon,
   )
   .await?;
 

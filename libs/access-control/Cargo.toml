@@ -18,9 +18,10 @@ database-entity.workspace = true
 futures-util.workspace = true
 lazy_static.workspace = true
 prometheus-client.workspace = true
+rand = "0.8"
 sqlx = { workspace = true, default-features = false, features = ["postgres"] }
 tracing.workspace = true
-tokio = { workspace = true, features = ["macros", "time"] }
+tokio = { workspace = true, features = ["macros", "time", "rt-multi-thread"] }
 tokio-stream.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 serde = { version = "1.0.200", features = ["derive"] }

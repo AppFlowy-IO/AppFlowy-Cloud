@@ -707,8 +707,16 @@ impl WorkspaceControllerActor {
       .map(|e| (*e.key(), e.value().collab_type))
       .collect();
 
-    sync_info!("Publishing pending collabs: {}", pending.len());
-    sync_debug!("pending collabs: {:?}", pending);
+    if pending.is_empty() {
+      return Ok(());
+    }
+
+    sync_info!(
+      "[{}] Publishing pending collabs: {}",
+      self.client_id(),
+      pending.len()
+    );
+    sync_debug!("[{}] has pending collabs: {:?}", self.client_id(), pending);
     // Sort by collab_type: Document > Database > Folder
     pending.sort_by_key(|(_, collab_type)| match collab_type {
       CollabType::Document => 0,
@@ -735,7 +743,12 @@ impl WorkspaceControllerActor {
 
         // Collabs not in memory are considered inactive. We need to sync these when
         // connection is established to handle changes made while offline.
-        sync_trace!("the pending collab {} is inactive", object_id);
+        sync_trace!(
+          "[{}] pending collab {}/{} is inactive",
+          self.client_id(),
+          object_id,
+          collab_type
+        );
         inactive_collab.push((object_id, collab_type));
       }
     }
@@ -866,9 +879,10 @@ impl WorkspaceControllerActor {
   ) -> anyhow::Result<()> {
     if let Some(collab_ref) = self.get_collab(&object_id) {
       sync_debug!(
-        "[{}] applying remote update for active collab {}: {:#?}",
+        "[{}] applying remote update for collab {}/{} active: {:#?}",
         self.db.client_id(),
         object_id,
+        collab_type,
         update
       );
 
@@ -903,8 +917,9 @@ impl WorkspaceControllerActor {
       }
     } else {
       sync_trace!(
-        "storing remote update for inactive collab {}: {:#?}",
+        "storing remote update for collab {}/{} inactive: {:#?}",
         object_id,
+        collab_type,
         update
       );
       let bytes = update.encode_v1();

@@ -172,16 +172,17 @@ mod tests {
   use database_entity::dto::AFRole;
   use uuid::Uuid;
 
+  use crate::casbin::util::tests::test_enforcer_v2;
   use crate::{
     act::Action,
-    casbin::{access::AccessControl, enforcer::tests::test_enforcer},
+    casbin::access::AccessControl,
     collab::CollabAccessControl,
     entity::{ObjectType, SubjectType},
   };
 
   #[tokio::test]
   pub async fn test_collab_access_control() {
-    let enforcer = test_enforcer().await;
+    let enforcer = test_enforcer_v2().await;
     let uid = 1;
     let workspace_id = Uuid::new_v4();
     let oid = Uuid::new_v4();

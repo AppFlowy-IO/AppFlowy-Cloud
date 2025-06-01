@@ -1,5 +1,4 @@
 use super::adapter::PgAdapter;
-use super::enforcer::AFEnforcer;
 use crate::act::{Action, Acts};
 use crate::entity::{ObjectType, SubjectType};
 use crate::metrics::{tick_metric, AccessControlMetrics};
@@ -8,11 +7,12 @@ use anyhow::anyhow;
 use app_error::AppError;
 use casbin::function_map::OperatorFunction;
 use casbin::rhai::{Dynamic, ImmutableString};
-use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
+use casbin::{CachedEnforcer, CoreApi, DefaultModel, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
 
 use sqlx::PgPool;
 
+use crate::casbin::enforcer_v2::AFEnforcerV2;
 use std::sync::Arc;
 use tracing::trace;
 
@@ -30,7 +30,7 @@ use tracing::trace;
 /// according to the model defined.
 #[derive(Clone)]
 pub struct AccessControl {
-  enforcer: Arc<AFEnforcer>,
+  enforcer: Arc<AFEnforcerV2>,
   #[allow(dead_code)]
   access_control_metrics: Arc<AccessControlMetrics>,
 }
@@ -42,12 +42,14 @@ impl AccessControl {
   ) -> Result<Self, AppError> {
     let model = casbin_model().await?;
     let adapter = PgAdapter::new(pg_pool.clone(), access_control_metrics.clone());
-    let mut enforcer = casbin::Enforcer::new(model, adapter).await.map_err(|e| {
-      AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
-    })?;
+    let mut enforcer = casbin::CachedEnforcer::new(model, adapter)
+      .await
+      .map_err(|e| {
+        AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
+      })?;
     enforcer.add_function("cmpRoleOrLevel", OperatorFunction::Arg2(cmp_role_or_level));
 
-    let enforcer = Arc::new(AFEnforcer::new(enforcer).await?);
+    let enforcer = Arc::new(AFEnforcerV2::new(enforcer).await?);
     tick_metric(
       enforcer.metrics_state.clone(),
       access_control_metrics.clone(),
@@ -59,7 +61,7 @@ impl AccessControl {
   }
 
   #[cfg(test)]
-  pub fn with_enforcer(enforcer: AFEnforcer) -> Self {
+  pub fn with_enforcer(enforcer: AFEnforcerV2) -> Self {
     let access_control_metrics = Arc::new(AccessControlMetrics::init());
     Self {
       enforcer: Arc::new(enforcer),
@@ -225,7 +227,7 @@ const GROUPING_FIELD_INDEX_ROLE: usize = 0;
 #[allow(dead_code)]
 const GROUPING_FIELD_INDEX_ACTION: usize = 1;
 
-pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), AppError> {
+pub(crate) async fn load_group_policies(enforcer: &mut CachedEnforcer) -> Result<(), AppError> {
   // Grouping definition of access level to action.
   let af_access_levels = [
     AFAccessLevel::ReadOnly,

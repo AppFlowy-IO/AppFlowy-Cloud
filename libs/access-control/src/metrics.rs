@@ -13,6 +13,9 @@ pub struct AccessControlMetrics {
   load_all_policies: Gauge,
   total_read_enforce_count: Gauge,
   read_enforce_from_cache_count: Gauge,
+  policy_send_attempts: Gauge,
+  policy_send_failures: Gauge,
+  policy_channel_full_events: Gauge,
 }
 
 impl AccessControlMetrics {
@@ -21,6 +24,9 @@ impl AccessControlMetrics {
       load_all_policies: Gauge::default(),
       total_read_enforce_count: Gauge::default(),
       read_enforce_from_cache_count: Gauge::default(),
+      policy_send_attempts: Gauge::default(),
+      policy_send_failures: Gauge::default(),
+      policy_channel_full_events: Gauge::default(),
     }
   }
 
@@ -45,6 +51,24 @@ impl AccessControlMetrics {
       metrics.read_enforce_from_cache_count.clone(),
     );
 
+    realtime_registry.register(
+      "policy_send_attempts",
+      "total policy channel send attempts",
+      metrics.policy_send_attempts.clone(),
+    );
+
+    realtime_registry.register(
+      "policy_send_failures",
+      "policy channel send failures (timeout or closed)",
+      metrics.policy_send_failures.clone(),
+    );
+
+    realtime_registry.register(
+      "policy_channel_full_events",
+      "times policy channel was full (would block)",
+      metrics.policy_channel_full_events.clone(),
+    );
+
     metrics
   }
 
@@ -56,12 +80,21 @@ impl AccessControlMetrics {
     self.total_read_enforce_count.set(total);
     self.read_enforce_from_cache_count.set(from_cache);
   }
+
+  pub fn record_policy_send_metrics(&self, attempts: i64, failures: i64, channel_full: i64) {
+    self.policy_send_attempts.set(attempts);
+    self.policy_send_failures.set(failures);
+    self.policy_channel_full_events.set(channel_full);
+  }
 }
 
 #[derive(Clone)]
 pub(crate) struct MetricsCalState {
   pub(crate) total_read_enforce_result: Arc<AtomicI64>,
   pub(crate) read_enforce_result_from_cache: Arc<AtomicI64>,
+  pub(crate) policy_send_attempts: Arc<AtomicI64>,
+  pub(crate) policy_send_failures: Arc<AtomicI64>,
+  pub(crate) policy_channel_full_events: Arc<AtomicI64>,
 }
 
 impl MetricsCalState {
@@ -69,6 +102,9 @@ impl MetricsCalState {
     Self {
       total_read_enforce_result: Arc::new(Default::default()),
       read_enforce_result_from_cache: Arc::new(Default::default()),
+      policy_send_attempts: Arc::new(Default::default()),
+      policy_send_failures: Arc::new(Default::default()),
+      policy_channel_full_events: Arc::new(Default::default()),
     }
   }
 }
@@ -83,6 +119,12 @@ pub(crate) fn tick_metric(state: MetricsCalState, metrics: Arc<AccessControlMetr
       metrics.record_enforce_count(
         state.total_read_enforce_result.load(Ordering::Relaxed),
         state.read_enforce_result_from_cache.load(Ordering::Relaxed),
+      );
+
+      metrics.record_policy_send_metrics(
+        state.policy_send_attempts.load(Ordering::Relaxed),
+        state.policy_send_failures.load(Ordering::Relaxed),
+        state.policy_channel_full_events.load(Ordering::Relaxed),
       );
     }
   });

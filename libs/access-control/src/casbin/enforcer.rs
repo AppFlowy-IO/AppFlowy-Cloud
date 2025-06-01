@@ -1,11 +1,12 @@
-use super::access::{load_group_policies, POLICY_FIELD_INDEX_OBJECT, POLICY_FIELD_INDEX_SUBJECT};
+use super::access::load_group_policies;
 use crate::act::Acts;
+use crate::casbin::util::policies_for_subject_with_given_object;
 use crate::entity::{ObjectType, SubjectType};
 use crate::metrics::MetricsCalState;
 use crate::request::PolicyRequest;
 use anyhow::anyhow;
 use app_error::AppError;
-use casbin::{CoreApi, Enforcer, MgmtApi};
+use casbin::{CachedEnforcer, CoreApi, MgmtApi};
 use rand::Rng;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -40,13 +41,15 @@ impl Default for RetryConfig {
   }
 }
 
+#[cfg(test)]
 pub struct AFEnforcer {
-  enforcer: RwLock<Enforcer>,
+  enforcer: RwLock<CachedEnforcer>,
   pub(crate) metrics_state: MetricsCalState,
 }
 
+#[cfg(test)]
 impl AFEnforcer {
-  pub async fn new(mut enforcer: Enforcer) -> Result<Self, AppError> {
+  pub async fn new(mut enforcer: CachedEnforcer) -> Result<Self, AppError> {
     load_group_policies(&mut enforcer).await?;
     Ok(Self {
       enforcer: RwLock::new(enforcer),
@@ -55,7 +58,9 @@ impl AFEnforcer {
   }
 
   /// Retry acquiring a write lock with default configuration
-  async fn retry_write(&self) -> Result<tokio::sync::RwLockWriteGuard<'_, Enforcer>, AppError> {
+  async fn retry_write(
+    &self,
+  ) -> Result<tokio::sync::RwLockWriteGuard<'_, CachedEnforcer>, AppError> {
     self.retry_write_with_config(RetryConfig::default()).await
   }
 
@@ -90,7 +95,7 @@ impl AFEnforcer {
   pub(crate) async fn retry_write_with_config(
     &self,
     config: RetryConfig,
-  ) -> Result<tokio::sync::RwLockWriteGuard<'_, Enforcer>, AppError> {
+  ) -> Result<tokio::sync::RwLockWriteGuard<'_, CachedEnforcer>, AppError> {
     let start_time = Instant::now();
 
     // Add initial random delay to prevent immediate thundering herd
@@ -220,6 +225,7 @@ impl AFEnforcer {
   }
 
   /// Returns policies that match the filter.
+  #[allow(dead_code)]
   pub async fn remove_policy(
     &self,
     sub: SubjectType,
@@ -294,23 +300,6 @@ impl AFEnforcer {
   }
 }
 
-#[inline]
-async fn policies_for_subject_with_given_object(
-  subject: SubjectType,
-  object_type: ObjectType,
-  enforcer: &Enforcer,
-) -> Vec<Vec<String>> {
-  let subject_id = subject.policy_subject();
-  let object_type_id = object_type.policy_object();
-  let policies_related_to_object =
-    enforcer.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![object_type_id]);
-
-  policies_related_to_object
-    .into_iter()
-    .filter(|p| p[POLICY_FIELD_INDEX_SUBJECT] == subject_id)
-    .collect::<Vec<_>>()
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
   use crate::{
@@ -329,7 +318,7 @@ pub(crate) mod tests {
 
   pub async fn test_enforcer() -> AFEnforcer {
     let model = casbin_model().await.unwrap();
-    let mut enforcer = casbin::Enforcer::new(model, MemoryAdapter::default())
+    let mut enforcer = casbin::CachedEnforcer::new(model, MemoryAdapter::default())
       .await
       .unwrap();
 
@@ -1087,8 +1076,8 @@ pub(crate) mod tests {
       let max_allowed_write_clustering = (write_times.len() * 60) / 100; // 60% threshold for write operations
 
       assert!(*max_same_write_timing <= max_allowed_write_clustering,
-                    "Too many write operations completed at the same time: {} out of {} (jitter should distribute writes better)",
-                    max_same_write_timing, write_times.len());
+              "Too many write operations completed at the same time: {} out of {} (jitter should distribute writes better)",
+              max_same_write_timing, write_times.len());
     }
 
     println!(

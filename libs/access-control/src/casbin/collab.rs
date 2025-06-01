@@ -42,7 +42,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
 
     let result = self
       .access_control
-      .enforce(
+      .enforce_immediately(
         uid,
         ObjectType::Workspace(workspace_id.to_string()),
         workspace_action,
@@ -74,7 +74,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
 
     let result = self
       .access_control
-      .enforce(
+      .enforce_immediately(
         uid,
         ObjectType::Workspace(workspace_id.to_string()),
         workspace_action,
@@ -133,7 +133,7 @@ impl RealtimeCollabAccessControlImpl {
 
     self
       .access_control
-      .enforce(
+      .enforce_immediately(
         uid,
         ObjectType::Workspace(workspace_id.to_string()),
         workspace_action,

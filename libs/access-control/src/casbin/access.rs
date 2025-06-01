@@ -12,7 +12,7 @@ use database_entity::dto::{AFAccessLevel, AFRole};
 
 use sqlx::PgPool;
 
-use crate::casbin::enforcer_v2::AFEnforcerV2;
+use crate::casbin::enforcer_v2::{AFEnforcerV2, ConsistencyMode};
 use std::sync::Arc;
 use tracing::trace;
 
@@ -87,11 +87,40 @@ impl AccessControl {
     Ok(())
   }
 
-  pub async fn enforce<T>(&self, uid: &i64, obj: ObjectType, act: T) -> Result<bool, AppError>
+  /// Enforces access control policy with eventual consistency.
+  ///
+  /// This method provides fast policy checks by evaluating against the current state
+  /// without waiting for pending policy updates to be applied. Use this when:
+  /// - Performance is critical
+  /// - Slight inconsistency is acceptable
+  /// - You need immediate responses
+  pub async fn enforce_immediately<T>(
+    &self,
+    uid: &i64,
+    obj: ObjectType,
+    act: T,
+  ) -> Result<bool, AppError>
   where
     T: Acts,
   {
     self.enforcer.enforce_policy(uid, obj, act).await
+  }
+
+  /// Enforces access control policy with strong consistency.
+  ///
+  /// This method ensures all pending policy updates are applied before evaluation,
+  /// guaranteeing the most up-to-date permissions check. Use this when:
+  /// - Consistency is critical (e.g., security-sensitive operations)
+  /// - After policy changes that must be immediately reflected
+  /// - You can afford to wait for pending updates
+  pub async fn enforce<T>(&self, uid: &i64, obj: ObjectType, act: T) -> Result<bool, AppError>
+  where
+    T: Acts,
+  {
+    self
+      .enforcer
+      .enforce_policy_with_consistency(uid, obj, act, ConsistencyMode::Strong)
+      .await
   }
 }
 

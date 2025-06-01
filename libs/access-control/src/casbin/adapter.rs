@@ -72,7 +72,7 @@ impl PgAdapter {
 ///   `Member` implicitly has `Guest` permissions.
 /// - The policy object is derived from the `ObjectType::Workspace`, and actions are derived from
 ///   member roles (`Owner`, `Member`, `Guest`) using the `to_action` method.
-async fn load_workspace_policies(
+pub async fn load_workspace_policies(
   mut stream: BoxStream<'_, sqlx::Result<AFWorkspaceMemberPermRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();

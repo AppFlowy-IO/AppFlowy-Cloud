@@ -252,8 +252,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     "Setting up access controls, is_enable: {}",
     &config.access_control.is_enabled
   );
-  let access_control =
-    AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
+  let access_control = AccessControl::new(
+    pg_pool.clone(),
+    Some(config.redis_uri.expose_secret()),
+    metrics.access_control_metrics.clone(),
+  )
+  .await?;
 
   let user_cache = UserCache::new(pg_pool.clone()).await;
   let collab_access_control: Arc<dyn CollabAccessControl> =

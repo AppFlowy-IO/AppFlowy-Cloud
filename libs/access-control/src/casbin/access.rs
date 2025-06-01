@@ -38,6 +38,7 @@ pub struct AccessControl {
 impl AccessControl {
   pub async fn new(
     pg_pool: PgPool,
+    redis_uri: Option<&str>,
     access_control_metrics: Arc<AccessControlMetrics>,
   ) -> Result<Self, AppError> {
     let model = casbin_model().await?;
@@ -49,13 +50,17 @@ impl AccessControl {
       })?;
     enforcer.add_function("cmpRoleOrLevel", OperatorFunction::Arg2(cmp_role_or_level));
 
-    let enforcer = Arc::new(AFEnforcerV2::new(enforcer).await?);
+    let enforcer = match redis_uri {
+      None => AFEnforcerV2::new(enforcer).await?,
+      Some(redis_uri) => AFEnforcerV2::new_with_redis(enforcer, redis_uri).await?,
+    };
+
     tick_metric(
       enforcer.metrics_state.clone(),
       access_control_metrics.clone(),
     );
     Ok(Self {
-      enforcer,
+      enforcer: Arc::new(enforcer),
       access_control_metrics,
     })
   }

@@ -6,14 +6,14 @@ use crate::metrics::MetricsCalState;
 use crate::request::PolicyRequest;
 use anyhow::anyhow;
 use app_error::AppError;
-use casbin::{CachedEnforcer, CoreApi, MgmtApi};
+use casbin::{CachedApi, CachedEnforcer, CoreApi, MgmtApi};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Notify, RwLock};
 use tokio::time::timeout;
-use tracing::{event, instrument, trace, warn};
+use tracing::{event, info, instrument, trace, warn};
 
 /// Consistency mode for policy enforcement
 #[derive(Debug, Clone, Default, Copy)]
@@ -60,7 +60,32 @@ pub struct AFEnforcerV2 {
 }
 
 impl AFEnforcerV2 {
-  pub async fn new(mut enforcer: CachedEnforcer) -> Result<Self, AppError> {
+  pub async fn new(enforcer: CachedEnforcer) -> Result<Self, AppError> {
+    Self::new_internal(enforcer).await
+  }
+
+  pub async fn new_with_redis(
+    mut enforcer: CachedEnforcer,
+    redis_uri: &str,
+  ) -> Result<Self, AppError> {
+    use super::redis_cache::RedisCache;
+    match RedisCache::new(redis_uri) {
+      Ok(redis_cache) => {
+        info!("[access control v2]: Using Redis cache at {}", redis_uri);
+        enforcer.set_cache(Box::new(redis_cache));
+        Self::new_internal(enforcer).await
+      },
+      Err(e) => {
+        warn!(
+          "[access control v2]: Failed to connect to Redis cache: {}. Using in-memory cache.",
+          e
+        );
+        Self::new_internal(enforcer).await
+      },
+    }
+  }
+
+  async fn new_internal(mut enforcer: CachedEnforcer) -> Result<Self, AppError> {
     load_group_policies(&mut enforcer).await?;
 
     // Create command channel with bounded capacity

@@ -248,13 +248,24 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
   // let collab_member_listener = pg_listeners.subscribe_collab_member_change();
 
+  let use_redis_ac_cache = get_env_var("APPFLOWY_ACCESS_CONTROL_REDIS_CACHE_ENABLED", "false")
+    .parse::<bool>()
+    .unwrap_or(false);
+
   info!(
-    "Setting up access controls, is_enable: {}",
-    &config.access_control.is_enabled
+    "Setting up access controls, is_enable: {}, use redis cache: {}",
+    &config.access_control.is_enabled, use_redis_ac_cache,
   );
+
+  let redis_uri = if use_redis_ac_cache {
+    Some(config.redis_uri.expose_secret().as_str())
+  } else {
+    None
+  };
+
   let access_control = AccessControl::new(
     pg_pool.clone(),
-    Some(config.redis_uri.expose_secret()),
+    redis_uri,
     metrics.access_control_metrics.clone(),
   )
   .await?;

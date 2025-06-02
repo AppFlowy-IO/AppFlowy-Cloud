@@ -136,17 +136,19 @@ impl AFEnforcerV2 {
     pending_operations: Arc<RwLock<HashSet<(String, String)>>>,
     generation_notify: Arc<Notify>,
   ) {
-    trace!("[access control v2]: Policy update processor started");
+    info!("[access control v2]: Policy update processor started");
     let buffer_size = 5;
     let mut buf = Vec::with_capacity(buffer_size);
 
     loop {
+      trace!("[access control v2]: Waiting for policy commands...");
       let n = rx.recv_many(&mut buf, buffer_size).await;
       if n == 0 {
-        trace!("[access control v2]: Channel closed, exiting processor");
+        info!("[access control v2]: Channel closed, exiting processor");
         break;
       }
 
+      trace!("[access control v2]: Received {} policy commands", n);
       let mut enforcer = enforcer.write().await;
       let mut max_generation = 0u64;
       let mut processed_keys = Vec::new();
@@ -170,6 +172,7 @@ impl AFEnforcerV2 {
               Ok(())
             }
             .await;
+            trace!("[access control v2]: AddPolicies result: {:?}", result);
             let _ = response.send(result);
           },
           PolicyCommand::RemovePolicies {
@@ -189,6 +192,7 @@ impl AFEnforcerV2 {
               Ok(())
             }
             .await;
+            trace!("[access control v2]: RemovePolicies result: {:?}", result);
             let _ = response.send(result);
           },
           PolicyCommand::Shutdown => {
@@ -198,8 +202,14 @@ impl AFEnforcerV2 {
         }
       }
       drop(enforcer);
+      trace!("[access control v2]: Finished processing {} commands", n);
       // Update consistency tracking
       if max_generation > 0 {
+        trace!(
+          "[access control v2]: Updating processed generation from {} to {}",
+          processed_generation.load(Ordering::Relaxed),
+          max_generation
+        );
         processed_generation.store(max_generation, Ordering::Release);
         if !processed_keys.is_empty() {
           let mut pending = pending_operations.write().await;
@@ -209,6 +219,10 @@ impl AFEnforcerV2 {
         }
 
         // Notify waiters
+        trace!(
+          "[access control v2]: Notifying waiters after processing generation {}",
+          max_generation
+        );
         generation_notify.notify_waiters();
       }
     }
@@ -224,7 +238,10 @@ impl AFEnforcerV2 {
 
     // First try to send without blocking to detect if channel is full
     match self.policy_cmd_tx.try_send(cmd) {
-      Ok(()) => Ok(()),
+      Ok(()) => {
+        trace!("[access control v2]: Command sent successfully");
+        Ok(())
+      },
       Err(mpsc::error::TrySendError::Full(cmd)) => {
         self
           .metrics_state
@@ -234,7 +251,10 @@ impl AFEnforcerV2 {
         warn!("[access control v2]: Policy channel is full, waiting to send...");
         let send_timeout = Duration::from_secs(5);
         match timeout(send_timeout, self.policy_cmd_tx.send(cmd)).await {
-          Ok(Ok(())) => Ok(()),
+          Ok(Ok(())) => {
+            trace!("[access control v2]: Command sent successfully after waiting");
+            Ok(())
+          },
           Ok(Err(_)) => {
             self
               .metrics_state
@@ -310,8 +330,14 @@ impl AFEnforcerV2 {
       })
       .await?;
 
-    rx.await
-      .map_err(|_| AppError::Internal(anyhow!("Policy update response dropped")))?
+    let result = rx
+      .await
+      .map_err(|_| AppError::Internal(anyhow!("Policy update response dropped")))?;
+    trace!(
+      "[access control v2]: Received policy update response: {:?}",
+      result
+    );
+    result
   }
 
   /// Remove policies for a subject and object type.
@@ -362,8 +388,14 @@ impl AFEnforcerV2 {
       })
       .await?;
 
-    rx.await
-      .map_err(|_| AppError::Internal(anyhow!("Policy update response dropped")))?
+    let result = rx
+      .await
+      .map_err(|_| AppError::Internal(anyhow!("Policy update response dropped")))?;
+    trace!(
+      "[access control v2]: Received policy removal response: {:?}",
+      result
+    );
+    result
   }
 
   /// Enforces an access control policy with eventual consistency.
@@ -455,12 +487,13 @@ impl AFEnforcerV2 {
     let timeout_duration = timeout_duration.unwrap_or(Duration::from_secs(5));
     let wait_future = async {
       loop {
+        let notified = self.generation_notify.notified();
         let processed = self.processed_generation.load(Ordering::Acquire);
         if processed >= target_generation {
           return Ok(());
         }
-        // Wait for notification
-        self.generation_notify.notified().await;
+
+        notified.await;
       }
     };
 

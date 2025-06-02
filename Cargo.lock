@@ -750,6 +750,8 @@ dependencies = [
  "prost 0.13.5",
  "prost-build 0.13.5",
  "protoc-bin-vendored",
+ "serde",
+ "serde_repr",
  "thiserror 2.0.12",
  "uuid",
 ]

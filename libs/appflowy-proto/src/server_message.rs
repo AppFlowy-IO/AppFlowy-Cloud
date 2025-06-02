@@ -11,10 +11,11 @@ use collab::preclude::{StateVector, Update};
 use collab_entity::CollabType;
 use pb::notification::workspace_notification::Payload as NotificationPayload;
 use prost::Message;
+use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 use uuid::Uuid;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
 #[repr(u8)]
 pub enum AccessChangedReason {
   PermissionDenied = 0,
@@ -321,7 +322,7 @@ impl TryFrom<pb::Message> for ServerMessage {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WorkspaceNotification {
   UserProfileChange {
     uid: i64,

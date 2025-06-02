@@ -1,4 +1,3 @@
-use crate::collab::cache::encode_collab_from_bytes;
 use crate::CollabMetrics;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
@@ -17,6 +16,7 @@ use database_entity::dto::{
   CollabParams, CollabUpdateData, PendingCollabWrite, QueryCollab, QueryCollabResult,
   ZSTD_COMPRESSION_LEVEL,
 };
+use infra::thread_pool::ThreadPoolNoAbort;
 use sqlx::{Error, PgPool, Transaction};
 use std::collections::HashMap;
 use std::ops::DerefMut;
@@ -29,6 +29,7 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct CollabDiskCache {
+  thread_pool: Arc<ThreadPoolNoAbort>,
   pg_pool: PgPool,
   s3: AwsS3BucketClientImpl,
   s3_collab_threshold: usize,
@@ -37,12 +38,14 @@ pub struct CollabDiskCache {
 
 impl CollabDiskCache {
   pub fn new(
+    thread_pool: Arc<ThreadPoolNoAbort>,
     pg_pool: PgPool,
     s3: AwsS3BucketClientImpl,
     s3_collab_threshold: usize,
     metrics: Arc<CollabMetrics>,
   ) -> Self {
     Self {
+      thread_pool,
       pg_pool,
       s3,
       s3_collab_threshold,
@@ -293,7 +296,17 @@ impl CollabDiskCache {
         Ok((updated_at, data)) => {
           self.metrics.pg_read_collab_count.inc();
           let rid = Rid::new(updated_at.timestamp_millis() as u64, 0);
-          let encoded_collab = encode_collab_from_bytes(data).await?;
+          let encoded_collab = self
+            .thread_pool
+            .install(|| match EncodedCollab::decode_from_bytes(&data) {
+              Ok(encoded_collab) => Ok(encoded_collab),
+              Err(err) => Err(AppError::Internal(anyhow::anyhow!(
+                "Failed to decode collab from bytes: {:?}",
+                err
+              ))),
+            })
+            .map_err(|err| AppError::Internal(anyhow::anyhow!(err)))??;
+
           return Ok((rid, encoded_collab));
         },
         Err(e) => {

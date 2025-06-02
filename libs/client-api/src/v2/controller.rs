@@ -22,6 +22,7 @@ use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::error::ProtocolError;
 use tokio_tungstenite::tungstenite::{Error, Message};
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 use yrs::block::ClientID;
 
 #[derive(Clone)]
@@ -188,6 +189,7 @@ pub enum DisconnectedReason {
   MessageLoopEnd(Arc<str>),
   CannotHandleReceiveMessage(Arc<str>),
   UserDisconnect(Arc<str>),
+  ServerForceClose,
   Unauthorized(Arc<str>),
 }
 
@@ -206,6 +208,7 @@ impl Display for DisconnectedReason {
       },
       DisconnectedReason::UserDisconnect(reason) => write!(f, "user disconnect: {}", reason),
       DisconnectedReason::Unauthorized(reason) => write!(f, "unauthorized: {}", reason),
+      DisconnectedReason::ServerForceClose => write!(f, "server force close"),
     }
   }
 }
@@ -345,6 +348,7 @@ impl ReconnectTarget for WorkspaceControllerActor {
     WorkspaceControllerActor::handle_connect(&self, token).await
   }
 
+  #[instrument(level = "trace", skip_all)]
   fn set_disconnected(&self, reason: DisconnectedReason) {
     self.set_connection_status(ConnectionStatus::Disconnected {
       reason: Some(reason),

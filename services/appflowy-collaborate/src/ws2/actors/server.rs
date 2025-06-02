@@ -6,7 +6,9 @@ use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
 use appflowy_proto::{Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::sync::Arc;
+use tracing::info;
 use yrs::block::ClientID;
 
 pub struct WsServer {
@@ -44,6 +46,7 @@ impl Handler<Join> for WsServer {
       .workspaces
       .entry(msg.workspace_id)
       .or_insert_with(|| Self::init_workspace(server, msg.workspace_id, self.store.clone()));
+    info!("{} joined", msg);
     workspace.do_send(msg);
   }
 }
@@ -92,6 +95,16 @@ pub struct Join {
   pub addr: Addr<WsSession>,
   /// Workspace to join.
   pub workspace_id: WorkspaceId,
+}
+
+impl Display for Join {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "Join(uid: {}, session_id: {}, workspace_id: {})",
+      self.uid, self.session_id, self.workspace_id
+    )
+  }
 }
 
 #[derive(actix::Message)]

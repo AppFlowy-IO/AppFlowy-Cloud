@@ -1,5 +1,4 @@
 use crate::collab::cache::CollabCache;
-use crate::thread_pool_no_abort::{ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
@@ -18,6 +17,7 @@ use collab_stream::stream_router::StreamRouter;
 use database::collab::{AppResult, CollabStorageAccessControl};
 use database_entity::dto::{CollabParams, CollabUpdateData, QueryCollab};
 use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
+use infra::thread_pool::ThreadPoolNoAbort;
 use itertools::Itertools;
 use rayon::prelude::*;
 use redis::aio::ConnectionManager;
@@ -46,6 +46,7 @@ pub struct CollabStore {
 
 impl CollabStore {
   pub fn new<AC: CollabStorageAccessControl + Send + Sync + 'static>(
+    thread_pool: Arc<ThreadPoolNoAbort>,
     access_control: AC,
     collab_cache: Arc<CollabCache>,
     connection_manager: ConnectionManager,
@@ -53,13 +54,6 @@ impl CollabStore {
     awareness_broadcast: Arc<AwarenessGossip>,
     indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Arc<Self> {
-    // Create the thread pool for snapshot processing
-    let thread_pool = ThreadPoolNoAbortBuilder::new()
-      .thread_name(|idx| format!("snapshot-worker-{}", idx))
-      .num_threads(4)
-      .build()
-      .expect("Failed to create snapshot thread pool");
-
     Arc::new(Self {
       access_control: Arc::new(access_control),
       collab_cache,
@@ -67,7 +61,7 @@ impl CollabStore {
       awareness_broadcast,
       connection_manager,
       indexer_scheduler,
-      snapshot_thread_pool: Arc::new(thread_pool),
+      snapshot_thread_pool: thread_pool,
     })
   }
 

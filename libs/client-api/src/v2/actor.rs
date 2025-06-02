@@ -256,6 +256,7 @@ impl WorkspaceControllerActor {
     Ok(())
   }
 
+  #[instrument(level = "trace", skip_all)]
   pub(crate) fn set_connection_status(&self, status: ConnectionStatus) {
     sync_trace!("set connection status: {:?}", status);
     self.status_tx.send_replace(status);
@@ -305,6 +306,7 @@ impl WorkspaceControllerActor {
     }
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn handle_action(actor: &Arc<Self>, action: WorkspaceAction) {
     let id = actor.db.client_id();
     sync_trace!("[{}] action {:?}", id, action);
@@ -358,6 +360,7 @@ impl WorkspaceControllerActor {
     }
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn handle_send(&self, msg: ClientMessage, source: ActionSource) -> anyhow::Result<()> {
     if let ClientMessage::Update {
       object_id,
@@ -441,6 +444,7 @@ impl WorkspaceControllerActor {
     }
   }
 
+  #[instrument(level = "trace", skip_all)]
   pub(crate) async fn handle_connect(
     actor: &Arc<Self>,
     access_token: String,
@@ -469,7 +473,12 @@ impl WorkspaceControllerActor {
 
     match result {
       None => {
-        actor.set_connection_status(ConnectionStatus::Disconnected { reason: None });
+        sync_info!("[{}] connection established failed", actor.db.client_id());
+        actor.set_connection_status(ConnectionStatus::Disconnected {
+          reason: Some(DisconnectedReason::Unexpected(
+            "Establish connect failed".into(),
+          )),
+        });
       },
       Some(connection) => {
         sync_debug!("[{}] connected to {}", client_id, actor.options.url);
@@ -502,6 +511,7 @@ impl WorkspaceControllerActor {
     let reason = Self::remote_receiver_loop(weak_actor.clone(), stream, cancel.clone())
       .await
       .err();
+
     if let Some(actor) = weak_actor.upgrade() {
       if reason.is_some() {
         sync_error!("failed to receive messages from server: {:?}", reason);
@@ -521,7 +531,9 @@ impl WorkspaceControllerActor {
     while let Some(res) = stream.next().await {
       if cancel.is_cancelled() {
         sync_trace!("remote receiver loop cancelled");
-        break;
+        return Err(DisconnectedReason::MessageLoopEnd(
+          "remote receiver loop cancelled".into(),
+        ));
       }
       let actor = match weak_actor.upgrade() {
         Some(inner) => inner,
@@ -580,8 +592,7 @@ impl WorkspaceControllerActor {
               frame.reason
             ),
           }
-          cancel.cancel();
-          break;
+          return Err(DisconnectedReason::ServerForceClose);
         },
       }
     }
@@ -1112,17 +1123,17 @@ impl WorkspaceControllerActor {
       res = fut => {
         match res {
           Ok((stream, _resp)) => {
-            info!("establishing WebSocket successfully");
+            sync_info!("establishing WebSocket successfully");
             Ok(Some(stream))
           },
           Err(err) => {
-            error!("establishing WebSocket failed");
+            sync_error!("establishing WebSocket failed");
             Err(AppError::from(err).into())
           }
         }
       }
       _ = cancel.cancelled() => {
-        tracing::debug!("connection cancelled");
+        tracing::debug!("establishing connection cancelled");
         Ok(None)
       }
     }

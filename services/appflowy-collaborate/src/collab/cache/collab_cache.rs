@@ -16,6 +16,7 @@ use database_entity::dto::{
   CollabParams, CollabUpdateData, PendingCollabWrite, QueryCollab, QueryCollabResult,
 };
 use futures_util::{stream, StreamExt};
+use infra::thread_pool::ThreadPoolNoAbort;
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
@@ -31,6 +32,7 @@ const MEM_CACHE_SPAWN_THRESHOLD: usize = 4096; // 4KB
 
 #[derive(Clone)]
 pub struct CollabCache {
+  thread_pool: Arc<ThreadPoolNoAbort>,
   disk_cache: CollabDiskCache,
   mem_cache: CollabMemCache,
   s3_collab_threshold: usize,
@@ -43,16 +45,27 @@ pub struct CollabCache {
 
 impl CollabCache {
   pub fn new(
+    thread_pool: Arc<ThreadPoolNoAbort>,
     redis_conn_manager: redis::aio::ConnectionManager,
     pg_pool: PgPool,
     s3: AwsS3BucketClientImpl,
     metrics: Arc<CollabMetrics>,
     s3_collab_threshold: usize,
   ) -> Self {
-    let mem_cache = CollabMemCache::new(redis_conn_manager.clone(), metrics.clone());
-    let disk_cache =
-      CollabDiskCache::new(pg_pool.clone(), s3, s3_collab_threshold, metrics.clone());
+    let mem_cache = CollabMemCache::new(
+      thread_pool.clone(),
+      redis_conn_manager.clone(),
+      metrics.clone(),
+    );
+    let disk_cache = CollabDiskCache::new(
+      thread_pool.clone(),
+      pg_pool.clone(),
+      s3,
+      s3_collab_threshold,
+      metrics.clone(),
+    );
     Self {
+      thread_pool,
       disk_cache,
       mem_cache,
       s3_collab_threshold,
@@ -199,45 +212,54 @@ impl CollabCache {
     let updates = self
       .get_workspace_updates(workspace_id, Some(&object_id), Some(rid), None)
       .await?;
-    tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
-    if !updates.is_empty() {
-      let mut collab = match encoded_collab {
-        Some(encoded_collab) => {
-          let options = CollabOptions::new(object_id.to_string(), default_client_id())
-            .with_data_source(match encoded_collab.version {
-              EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
-              EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
-            });
-          Collab::new_with_options(CollabOrigin::Server, options)
-            .map_err(|err| AppError::Internal(err.into()))?
-        },
-        None => {
-          let options = CollabOptions::new(object_id.to_string(), default_client_id());
-          Collab::new_with_options(CollabOrigin::Server, options)
-            .map_err(|err| AppError::Internal(err.into()))?
-        },
-      };
-      {
-        let mut tx = collab.transact_mut();
-        for msg in updates {
-          if msg.object_id == object_id {
-            let update = match msg.update_flags {
-              UpdateFlags::Lib0v1 => Update::decode_v1(&msg.update),
-              UpdateFlags::Lib0v2 => Update::decode_v2(&msg.update),
+
+    // Get the encoded collab and then apply the updates from redis stream.
+    encoded_collab = self
+      .thread_pool
+      .install(|| {
+        tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
+        if !updates.is_empty() {
+          let mut collab = match encoded_collab {
+            Some(encoded_collab) => {
+              let options = CollabOptions::new(object_id.to_string(), default_client_id())
+                .with_data_source(match encoded_collab.version {
+                  EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
+                  EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
+                });
+              Collab::new_with_options(CollabOrigin::Server, options)
+                .map_err(|err| AppError::Internal(err.into()))?
+            },
+            None => {
+              let options = CollabOptions::new(object_id.to_string(), default_client_id());
+              Collab::new_with_options(CollabOrigin::Server, options)
+                .map_err(|err| AppError::Internal(err.into()))?
+            },
+          };
+          {
+            let mut tx = collab.transact_mut();
+            for msg in updates {
+              if msg.object_id == object_id {
+                let update = match msg.update_flags {
+                  UpdateFlags::Lib0v1 => Update::decode_v1(&msg.update),
+                  UpdateFlags::Lib0v2 => Update::decode_v2(&msg.update),
+                }
+                .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
+                tx.apply_update(update)
+                  .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
+              }
             }
-            .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
-            tx.apply_update(update)
-              .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
           }
+          let tx = collab.transact();
+          let state_vector = tx.state_vector().encode_v1();
+          encoded_collab = Some(match encoding {
+            EncoderVersion::V1 => EncodedCollab::new_v1(state_vector, tx.encode_diff_v1(from)),
+            EncoderVersion::V2 => EncodedCollab::new_v2(state_vector, tx.encode_diff_v2(from)),
+          });
         }
-      }
-      let tx = collab.transact();
-      let state_vector = tx.state_vector().encode_v1();
-      encoded_collab = Some(match encoding {
-        EncoderVersion::V1 => EncodedCollab::new_v1(state_vector, tx.encode_diff_v1(from)),
-        EncoderVersion::V2 => EncodedCollab::new_v2(state_vector, tx.encode_diff_v2(from)),
-      });
-    }
+        Ok::<Option<EncodedCollab>, AppError>(encoded_collab)
+      })
+      .map_err(|err| AppError::Internal(err.into()))??;
+
     match encoded_collab {
       Some(encoded_collab) => Ok((rid, encoded_collab)),
       None => Err(AppError::RecordNotFound(format!(

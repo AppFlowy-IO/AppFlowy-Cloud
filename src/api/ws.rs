@@ -180,7 +180,7 @@ async fn start_connect(
   match result {
     Ok(uid) => {
       debug!(
-        "🚀new websocket connect: uid={}, device_id={}, client_version:{}",
+        "🚀new websocket connecting: uid={}, device_id={}, client_version:{}",
         uid, device_id, client_app_version
       );
 
@@ -210,7 +210,10 @@ async fn start_connect(
         .frame_size(MAX_FRAME_SIZE * 2)
         .start()
       {
-        Ok(response) => Ok(response),
+        Ok(response) => {
+          trace!("🔵ws connection established: uid={}", uid);
+          Ok(response)
+        },
         Err(e) => {
           error!("🔴ws connection error: {:?}", e);
           Err(e)

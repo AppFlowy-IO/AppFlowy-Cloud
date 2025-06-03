@@ -125,6 +125,7 @@ where
       .handle_user_connect(connected_user, new_client_router)
     {
       // Remove the old user from all collaboration groups.
+      trace!("[realtime] remove old user: {}", old_user);
       self.group_manager.remove_user(&old_user);
     }
     self
@@ -377,11 +378,7 @@ where
   }
 
   pub fn get_user_by_device(&self, user_device: &UserDevice) -> Option<RealtimeUser> {
-    self
-      .connect_state
-      .user_by_device
-      .get(user_device)
-      .map(|entry| entry.value().clone())
+    self.connect_state.get_user_by_device(user_device)
   }
 }
 

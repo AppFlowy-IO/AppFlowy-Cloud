@@ -108,10 +108,16 @@ impl CollabMemCache {
   pub async fn get_encode_collab(&self, object_id: &Uuid) -> Option<(Rid, EncodedCollab)> {
     match self.get_data_with_timestamp(object_id).await {
       Ok(Some((timestamp, bytes))) => {
-        let encoded_collab = self
-          .thread_pool
-          .install(|| EncodedCollab::decode_from_bytes(&bytes).ok())
-          .ok()??;
+        let encoded_collab = if bytes.len() < ENCODE_SPAWN_THRESHOLD {
+          tokio::task::spawn_blocking(move || EncodedCollab::decode_from_bytes(&bytes).ok())
+            .await
+            .ok()??
+        } else {
+          self
+            .thread_pool
+            .install(|| EncodedCollab::decode_from_bytes(&bytes).ok())
+            .ok()??
+        };
 
         let rid = Rid::new(timestamp, 0);
         Some((rid, encoded_collab))

@@ -181,10 +181,16 @@ impl CollabStore {
   ) -> anyhow::Result<Rid> {
     let key = UpdateStreamMessage::stream_key(&workspace_id);
     let mut conn = self.connection_manager.clone();
-    let items: String =
-      UpdateStreamMessage::prepare_command(&key, &object_id, collab_type, sender, update)
-        .query_async(&mut conn)
-        .await?;
+    let items: String = UpdateStreamMessage::prepare_command(
+      &key,
+      &object_id,
+      collab_type,
+      sender,
+      update,
+      UpdateFlags::Lib0v1.into(),
+    )
+    .query_async(&mut conn)
+    .await?;
     let rid = Rid::from_str(&items).map_err(|err| anyhow!("failed to parse rid: {}", err))?;
     trace!(
       "publishing update to '{}' (object id: {}), rid:{}",
@@ -327,7 +333,7 @@ impl CollabStore {
               update_snapshot,
               updates,
             )| {
-              match process_collab_with_snapshot(
+              match apply_updates_to_snapshot(
                 client_id,
                 object_id,
                 collab_type,
@@ -430,7 +436,7 @@ pub struct CollabState {
   pub state_vector: Vec<u8>,
 }
 
-pub fn process_collab_with_snapshot(
+pub fn apply_updates_to_snapshot(
   client_id: ClientID,
   object_id: ObjectId,
   collab_type: CollabType,

@@ -71,6 +71,11 @@ where
 
   fn handle(&mut self, new_conn: Connect, _ctx: &mut Context<Self>) -> Self::Result {
     let conn_sink = RealtimeClientWebsocketSinkImpl(new_conn.socket);
+    trace!(
+      "New connection from user: {}, device: {}",
+      new_conn.user.uid,
+      new_conn.user.device_id
+    );
     self.handle_new_connection(new_conn.user, conn_sink)
   }
 }

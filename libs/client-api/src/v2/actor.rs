@@ -531,9 +531,7 @@ impl WorkspaceControllerActor {
     while let Some(res) = stream.next().await {
       if cancel.is_cancelled() {
         sync_trace!("remote receiver loop cancelled");
-        return Err(DisconnectedReason::MessageLoopEnd(
-          "remote receiver loop cancelled".into(),
-        ));
+        return Err(DisconnectedReason::UserDisconnect("User disconnect".into()));
       }
       let actor = match weak_actor.upgrade() {
         Some(inner) => inner,

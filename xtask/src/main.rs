@@ -32,6 +32,8 @@ async fn main() -> Result<()> {
     &["run", "--features", "history"],
     appflowy_cloud_bin_name,
     disable_log,
+    None,
+    // Some(vec![("RUSTFLAGS", "--cfg tokio_unstable")]),
   )?;
   wait_for_readiness(appflowy_cloud_bin_name).await?;
 
@@ -45,6 +47,7 @@ async fn main() -> Result<()> {
     ],
     worker_bin_name,
     disable_log,
+    None,
   )?;
   wait_for_readiness(worker_bin_name).await?;
 
@@ -94,6 +97,7 @@ fn spawn_server(
   args: &[&str],
   name: &str,
   suppress_output: bool,
+  env_vars: Option<Vec<(&str, &str)>>,
 ) -> Result<tokio::process::Child> {
   println!(
     "Spawning {} process..., log enabled:{}",
@@ -101,6 +105,13 @@ fn spawn_server(
   );
   let mut cmd = Command::new(command);
   cmd.args(args);
+
+  // Set environment variables if provided
+  if let Some(vars) = env_vars {
+    for (key, value) in vars {
+      cmd.env(key, value);
+    }
+  }
 
   if suppress_output {
     cmd.stdout(Stdio::null()).stderr(Stdio::null());

@@ -1,5 +1,6 @@
 use crate::error::StreamError;
 use crate::model::AwarenessStreamUpdate;
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use redis::aio::MultiplexedConnection;
 use redis::{AsyncCommands, Client, RedisError, Value};
@@ -64,21 +65,18 @@ impl AwarenessGossip {
     awareness_update: AwarenessStreamUpdate,
   ) {
     // try new per-workspace awareness stream
-    if let Some(channel) = workspaces.get(&workspace_id) {
-      let channel = channel.value();
+    if let Entry::Occupied(e) = workspaces.entry(workspace_id) {
+      let channel = e.get();
       if channel.send((object_id, awareness_update)).is_err() {
-        workspaces.remove(&workspace_id);
+        e.remove();
       }
     } else {
       // fallback to per-collab awareness stream
-      let dropped = if let Some(channel) = collabs.get(&object_id) {
-        let channel = channel.value();
-        channel.send(awareness_update).is_err()
-      } else {
-        false
-      };
-      if dropped {
-        collabs.remove(&object_id);
+      if let Entry::Occupied(e) = collabs.entry(object_id) {
+        let channel = e.get();
+        if channel.send(awareness_update).is_err() {
+          collabs.remove(&object_id);
+        }
       }
     }
   }

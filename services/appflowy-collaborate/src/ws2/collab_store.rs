@@ -133,7 +133,7 @@ impl CollabStore {
     object_id: ObjectId,
     collab_type: CollabType,
     user_id: i64,
-    state_vector: &StateVector,
+    state_vector: StateVector,
   ) -> AppResult<CollabState> {
     let params = QueryCollab::new(object_id, collab_type);
     self
@@ -143,7 +143,12 @@ impl CollabStore {
 
     let (rid, encoded_collab) = self
       .collab_cache
-      .get_full_collab(&workspace_id, params, state_vector, EncoderVersion::V1)
+      .get_full_collab(
+        &workspace_id,
+        params,
+        Some(state_vector),
+        EncoderVersion::V1,
+      )
       .await?;
 
     Ok(CollabState {

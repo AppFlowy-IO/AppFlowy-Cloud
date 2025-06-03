@@ -69,7 +69,7 @@ impl Workspace {
             msg.object_id,
             collab_type,
             sender.collab_origin.client_user_id().unwrap(),
-            &state_vector,
+            state_vector,
           )
           .await
         {

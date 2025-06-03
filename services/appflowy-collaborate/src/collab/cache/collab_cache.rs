@@ -201,7 +201,7 @@ impl CollabCache {
     &self,
     workspace_id: &Uuid,
     query: QueryCollab,
-    from: &StateVector,
+    from: Option<StateVector>,
     encoding: EncoderVersion,
   ) -> Result<(Rid, EncodedCollab), AppError> {
     let object_id = query.object_id;
@@ -214,6 +214,20 @@ impl CollabCache {
     let updates = self
       .get_workspace_updates(workspace_id, Some(&object_id), Some(rid), None)
       .await?;
+
+    // Determine the state vector to use for generating the diff:
+    // 1. If provided in the query, use it directly
+    // 2. Otherwise, try to decode from the existing encoded collab
+    // 3. Fall back to empty state vector if decoding fails or no collab exists
+    let from = from.unwrap_or_else(|| {
+      encoded_collab
+        .as_ref()
+        .and_then(|ec| match ec.version {
+          EncoderVersion::V1 => StateVector::decode_v1(&ec.state_vector).ok(),
+          EncoderVersion::V2 => StateVector::decode_v2(&ec.state_vector).ok(),
+        })
+        .unwrap_or_default()
+    });
 
     if !updates.is_empty() {
       encoded_collab = self
@@ -251,10 +265,13 @@ impl CollabCache {
             }
           }
           let tx = collab.transact();
-          let state_vector = tx.state_vector().encode_v1();
           encoded_collab = Some(match encoding {
-            EncoderVersion::V1 => EncodedCollab::new_v1(state_vector, tx.encode_diff_v1(from)),
-            EncoderVersion::V2 => EncodedCollab::new_v2(state_vector, tx.encode_diff_v2(from)),
+            EncoderVersion::V1 => {
+              EncodedCollab::new_v1(tx.state_vector().encode_v1(), tx.encode_diff_v1(&from))
+            },
+            EncoderVersion::V2 => {
+              EncodedCollab::new_v2(tx.state_vector().encode_v2(), tx.encode_diff_v2(&from))
+            },
           });
           Ok::<Option<EncodedCollab>, AppError>(encoded_collab)
         })

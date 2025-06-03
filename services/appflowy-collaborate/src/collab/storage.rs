@@ -387,7 +387,7 @@ where
       .get_full_collab(
         &params.workspace_id.clone(),
         QueryCollab::new(params.object_id, params.collab_type),
-        &StateVector::default(),
+        None,
         EncoderVersion::V1,
       )
       .await?;

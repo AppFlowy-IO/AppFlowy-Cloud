@@ -10,7 +10,7 @@ use std::sync::Arc;
 /// Threshold for spawning blocking tasks for decoding operations.
 /// Data smaller than this will be processed on the current thread for efficiency.
 /// Data larger than this will be spawned to avoid blocking the current thread.
-const DECODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
+pub const DECODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
 
 #[inline]
 pub(crate) async fn encode_collab_from_bytes(

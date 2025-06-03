@@ -1,5 +1,7 @@
 use super::disk_cache::CollabDiskCache;
 use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
+use crate::collab::cache::DECODE_SPAWN_THRESHOLD;
+use crate::config::get_env_var;
 use crate::CollabMetrics;
 use app_error::AppError;
 use appflowy_proto::{Rid, UpdateFlags};
@@ -27,9 +29,6 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Update};
 
-/// Threshold for spawning background tasks for memory cache operations.
-const MEM_CACHE_SPAWN_THRESHOLD: usize = 4096; // 4KB
-
 #[derive(Clone)]
 pub struct CollabCache {
   thread_pool: Arc<ThreadPoolNoAbort>,
@@ -39,7 +38,7 @@ pub struct CollabCache {
   /// Threshold for spawning background tasks for memory cache operations.
   /// Data smaller than this will be processed on the current thread.
   /// Data larger than this will be spawned to avoid blocking.
-  mem_cache_spawn_threshold: usize,
+  small_collab_size: usize,
   metrics: Arc<CollabMetrics>,
 }
 
@@ -64,12 +63,16 @@ impl CollabCache {
       s3_collab_threshold,
       metrics.clone(),
     );
+
+    let small_collab_size = get_env_var("APPFLOWY_SMALL_COLLAB_SIZE", "4096")
+      .parse::<usize>()
+      .unwrap_or(DECODE_SPAWN_THRESHOLD);
     Self {
       thread_pool,
       disk_cache,
       mem_cache,
       s3_collab_threshold,
-      mem_cache_spawn_threshold: MEM_CACHE_SPAWN_THRESHOLD,
+      small_collab_size,
       metrics,
     }
   }
@@ -92,7 +95,7 @@ impl CollabCache {
     // Separate small and large data for different processing strategies
     let (small_params, large_params): (Vec<_>, Vec<_>) = params_list
       .into_iter()
-      .partition(|params| params.encoded_collab_v1.len() <= self.mem_cache_spawn_threshold);
+      .partition(|params| params.encoded_collab_v1.len() <= self.small_collab_size);
 
     let timestamp = chrono::Utc::now().timestamp();
     for params in small_params {
@@ -170,7 +173,7 @@ impl CollabCache {
     let mem_cache = self.mem_cache.clone();
     let data_size = cloned_encode_collab.doc_state.len();
 
-    if data_size <= self.mem_cache_spawn_threshold {
+    if data_size <= self.small_collab_size {
       // For small data, process on current thread for efficiency
       mem_cache
         .insert_encode_collab(
@@ -215,54 +218,23 @@ impl CollabCache {
       .get_workspace_updates(workspace_id, Some(&object_id), Some(rid), None)
       .await?;
 
+    let size = encoded_collab
+      .as_ref()
+      .map(|v| v.doc_state.len())
+      .unwrap_or(0)
+      + updates.iter().map(|u| u.update.len()).sum::<usize>();
+
     let from = from.unwrap_or_default();
     if !updates.is_empty() {
-      encoded_collab = self
-        .thread_pool
-        .install(|| {
-          tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
-          let mut collab = match encoded_collab {
-            Some(encoded_collab) => {
-              let options = CollabOptions::new(object_id.to_string(), default_client_id())
-                .with_data_source(match encoded_collab.version {
-                  EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
-                  EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
-                });
-              Collab::new_with_options(CollabOrigin::Server, options)
-                .map_err(|err| AppError::Internal(err.into()))?
-            },
-            None => {
-              let options = CollabOptions::new(object_id.to_string(), default_client_id());
-              Collab::new_with_options(CollabOrigin::Server, options)
-                .map_err(|err| AppError::Internal(err.into()))?
-            },
-          };
-          {
-            let mut tx = collab.transact_mut();
-            for msg in updates {
-              if msg.object_id == object_id {
-                let update = match msg.update_flags {
-                  UpdateFlags::Lib0v1 => Update::decode_v1(&msg.update),
-                  UpdateFlags::Lib0v2 => Update::decode_v2(&msg.update),
-                }
-                .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
-                tx.apply_update(update)
-                  .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
-              }
-            }
-          }
-          let tx = collab.transact();
-          encoded_collab = Some(match encoding {
-            EncoderVersion::V1 => {
-              EncodedCollab::new_v1(tx.state_vector().encode_v1(), tx.encode_diff_v1(&from))
-            },
-            EncoderVersion::V2 => {
-              EncodedCollab::new_v2(tx.state_vector().encode_v2(), tx.encode_diff_v2(&from))
-            },
-          });
-          Ok::<Option<EncodedCollab>, AppError>(encoded_collab)
-        })
-        .map_err(|err| AppError::Internal(err.into()))??;
+      encoded_collab = if size <= self.small_collab_size {
+        // For small collab, replaying updates on the current thread
+        replaying_updates(encoding, object_id, encoded_collab, updates, &from)?
+      } else {
+        self
+          .thread_pool
+          .install(|| replaying_updates(encoding, object_id, encoded_collab, updates, &from))
+          .map_err(|err| AppError::Internal(err.into()))??
+      }
     }
 
     match encoded_collab {
@@ -388,7 +360,7 @@ impl CollabCache {
     let data_size = encode_collab_data.len();
     let mem_cache = self.mem_cache.clone();
     let expiration_secs = cache_exp_secs_from_collab_type(&collab_type);
-    if data_size <= self.mem_cache_spawn_threshold {
+    if data_size <= self.small_collab_size {
       if let Err(err) = mem_cache
         .insert_encode_collab_data(
           &object_id,
@@ -477,7 +449,7 @@ impl CollabCache {
     self.disk_cache.batch_insert_collab(records).await?;
     let (small_params, large_params): (Vec<_>, Vec<_>) = mem_cache_params
       .into_iter()
-      .partition(|(_, data, _)| data.len() <= self.mem_cache_spawn_threshold);
+      .partition(|(_, data, _)| data.len() <= self.small_collab_size);
 
     let now = chrono::Utc::now().timestamp();
     for (oid, data, expire) in small_params {
@@ -512,4 +484,56 @@ impl CollabCache {
 
     Ok(())
   }
+}
+
+#[inline]
+fn replaying_updates(
+  encoding: EncoderVersion,
+  object_id: Uuid,
+  mut encoded_collab: Option<EncodedCollab>,
+  updates: Vec<UpdateStreamMessage>,
+  from: &StateVector,
+) -> Result<Option<EncodedCollab>, AppError> {
+  tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
+  let mut collab = match encoded_collab {
+    Some(encoded_collab) => {
+      let options = CollabOptions::new(object_id.to_string(), default_client_id())
+        .with_data_source(match encoded_collab.version {
+          EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
+          EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
+        });
+      Collab::new_with_options(CollabOrigin::Server, options)
+        .map_err(|err| AppError::Internal(err.into()))?
+    },
+    None => {
+      let options = CollabOptions::new(object_id.to_string(), default_client_id());
+      Collab::new_with_options(CollabOrigin::Server, options)
+        .map_err(|err| AppError::Internal(err.into()))?
+    },
+  };
+  {
+    let mut tx = collab.transact_mut();
+    for msg in updates {
+      if msg.object_id == object_id {
+        let update = match msg.update_flags {
+          UpdateFlags::Lib0v1 => Update::decode_v1(&msg.update),
+          UpdateFlags::Lib0v2 => Update::decode_v2(&msg.update),
+        }
+        .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
+        tx.apply_update(update)
+          .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
+      }
+    }
+  }
+  let tx = collab.transact();
+  encoded_collab = Some(match encoding {
+    EncoderVersion::V1 => {
+      EncodedCollab::new_v1(tx.state_vector().encode_v1(), tx.encode_diff_v1(from))
+    },
+    EncoderVersion::V2 => {
+      EncodedCollab::new_v2(tx.state_vector().encode_v2(), tx.encode_diff_v2(from))
+    },
+  });
+
+  Ok(encoded_collab)
 }

@@ -1,3 +1,4 @@
+use crate::collab::cache::encode_collab_from_bytes;
 use crate::CollabMetrics;
 use anyhow::anyhow;
 use app_error::AppError;
@@ -108,17 +109,9 @@ impl CollabMemCache {
   pub async fn get_encode_collab(&self, object_id: &Uuid) -> Option<(Rid, EncodedCollab)> {
     match self.get_data_with_timestamp(object_id).await {
       Ok(Some((timestamp, bytes))) => {
-        let encoded_collab = if bytes.len() < ENCODE_SPAWN_THRESHOLD {
-          tokio::task::spawn_blocking(move || EncodedCollab::decode_from_bytes(&bytes).ok())
-            .await
-            .ok()??
-        } else {
-          self
-            .thread_pool
-            .install(|| EncodedCollab::decode_from_bytes(&bytes).ok())
-            .ok()??
-        };
-
+        let encoded_collab = encode_collab_from_bytes(&self.thread_pool, bytes)
+          .await
+          .ok()?;
         let rid = Rid::new(timestamp, 0);
         Some((rid, encoded_collab))
       },

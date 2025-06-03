@@ -86,6 +86,7 @@ where
         break;
       }
       let pending = buf.drain(..n);
+      trace!("Persisting {} collabs to disk", n);
       if let Err(e) = cache.batch_insert_collab(pending.collect()).await {
         error!("failed to persist {} collabs: {}", n, e);
       }

@@ -215,20 +215,7 @@ impl CollabCache {
       .get_workspace_updates(workspace_id, Some(&object_id), Some(rid), None)
       .await?;
 
-    // Determine the state vector to use for generating the diff:
-    // 1. If provided in the query, use it directly
-    // 2. Otherwise, try to decode from the existing encoded collab
-    // 3. Fall back to empty state vector if decoding fails or no collab exists
-    let from = from.unwrap_or_else(|| {
-      encoded_collab
-        .as_ref()
-        .and_then(|ec| match ec.version {
-          EncoderVersion::V1 => StateVector::decode_v1(&ec.state_vector).ok(),
-          EncoderVersion::V2 => StateVector::decode_v2(&ec.state_vector).ok(),
-        })
-        .unwrap_or_default()
-    });
-
+    let from = from.unwrap_or_default();
     if !updates.is_empty() {
       encoded_collab = self
         .thread_pool
@@ -471,6 +458,7 @@ impl CollabCache {
     Ok(is_exist)
   }
 
+  #[instrument(level = "debug", skip_all)]
   pub async fn batch_insert_collab(
     &self,
     records: Vec<PendingCollabWrite>,

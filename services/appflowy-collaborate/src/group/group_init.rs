@@ -208,48 +208,48 @@ impl CollabGroup {
   }
 
   async fn handle_inbound_update(state: &CollabGroupState, update: CollabStreamUpdate) {
-    // update state vector based on incoming message
-    match Update::decode_v1(&update.data) {
-      Ok(update) => state
-        .state_vector
-        .write()
-        .await
-        .merge(update.state_vector()),
+    let sender = update.sender.clone();
+    match update.into_update() {
+      Ok(update) => {
+        state
+          .state_vector
+          .write()
+          .await
+          .merge(update.state_vector());
+
+        let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
+        tracing::trace!(
+          "broadcasting collab update from {} - seq_num: {}",
+          sender,
+          seq_num
+        );
+        let payload = update.encode_v1();
+        let message = BroadcastSync::new(sender, state.object_id.to_string(), payload, seq_num);
+        for mut e in state.subscribers.iter_mut() {
+          let subscription = e.value_mut();
+          if message.origin == subscription.collab_origin {
+            continue; // don't send update to its sender
+          }
+
+          if let Err(err) = subscription.sink.send(message.clone().into()).await {
+            tracing::debug!(
+              "failed to send collab `{}` update to `{}`: {}",
+              state.object_id,
+              subscription.collab_origin,
+              err
+            );
+          }
+
+          state.last_activity.store(Arc::new(Instant::now()));
+        }
+      },
       Err(err) => {
         tracing::error!(
           "received malformed update for collab `{}`: {}",
           state.object_id,
           err
         );
-        return;
       },
-    }
-
-    let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
-    tracing::trace!(
-      "broadcasting collab update from {} ({} bytes) - seq_num: {}",
-      update.sender,
-      update.data.len(),
-      seq_num
-    );
-    let payload = Message::Sync(SyncMessage::Update(update.data)).encode_v1();
-    let message = BroadcastSync::new(update.sender, state.object_id.to_string(), payload, seq_num);
-    for mut e in state.subscribers.iter_mut() {
-      let subscription = e.value_mut();
-      if message.origin == subscription.collab_origin {
-        continue; // don't send update to its sender
-      }
-
-      if let Err(err) = subscription.sink.send(message.clone().into()).await {
-        tracing::debug!(
-          "failed to send collab `{}` update to `{}`: {}",
-          state.object_id,
-          subscription.collab_origin,
-          err
-        );
-      }
-
-      state.last_activity.store(Arc::new(Instant::now()));
     }
   }
 

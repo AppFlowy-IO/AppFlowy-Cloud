@@ -86,6 +86,7 @@ where
         break;
       }
       let pending = buf.drain(..n);
+      trace!("Persisting {} collabs to disk", n);
       if let Err(e) = cache.batch_insert_collab(pending.collect()).await {
         error!("failed to persist {} collabs: {}", n, e);
       }
@@ -371,6 +372,11 @@ where
 
     if let GetCollabOrigin::User { uid } = origin {
       // Check if the user has enough permissions to access the collab
+      trace!(
+        "enforce read collab for user: {}, object_id: {}",
+        uid,
+        params.object_id
+      );
       self
         .access_control
         .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)
@@ -382,7 +388,7 @@ where
       .get_full_collab(
         &params.workspace_id.clone(),
         QueryCollab::new(params.object_id, params.collab_type),
-        &StateVector::default(),
+        None,
         EncoderVersion::V1,
       )
       .await?;

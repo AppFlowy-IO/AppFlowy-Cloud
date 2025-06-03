@@ -8,6 +8,7 @@ use collab_entity::CollabType;
 use collab_stream::model::UpdateStreamMessage;
 use collab_stream::stream_router::FromRedisStream;
 use database::collab::CollabMetadata;
+use infra::thread_pool::ThreadPoolNoAbort;
 use redis::streams::StreamRangeReply;
 use redis::{pipe, AsyncCommands, FromRedisValue};
 use std::sync::Arc;
@@ -24,16 +25,19 @@ const ENCODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
 
 #[derive(Clone)]
 pub struct CollabMemCache {
+  thread_pool: Arc<ThreadPoolNoAbort>,
   connection_manager: redis::aio::ConnectionManager,
   metrics: Arc<CollabMetrics>,
 }
 
 impl CollabMemCache {
   pub fn new(
+    thread_pool: Arc<ThreadPoolNoAbort>,
     connection_manager: redis::aio::ConnectionManager,
     metrics: Arc<CollabMetrics>,
   ) -> Self {
     Self {
+      thread_pool,
       connection_manager,
       metrics,
     }
@@ -105,7 +109,9 @@ impl CollabMemCache {
   pub async fn get_encode_collab(&self, object_id: &Uuid) -> Option<(Rid, EncodedCollab)> {
     match self.get_data_with_timestamp(object_id).await {
       Ok(Some((timestamp, bytes))) => {
-        let encoded_collab = encode_collab_from_bytes(bytes).await.ok()?;
+        let encoded_collab = encode_collab_from_bytes(&self.thread_pool, bytes)
+          .await
+          .ok()?;
         let rid = Rid::new(timestamp, 0);
         Some((rid, encoded_collab))
       },

@@ -10,8 +10,10 @@ use database::collab::CollabMetadata;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
+use infra::thread_pool::{ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 use sqlx::types::Uuid;
 use std::collections::HashMap;
+use std::sync::Arc;
 use workspace_template::document::getting_started::GettingStartedTemplate;
 use workspace_template::WorkspaceTemplateBuilder;
 
@@ -332,7 +334,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
 #[tokio::test]
 async fn collab_mem_cache_read_write_test() {
   let conn = redis_connection_manager().await;
-  let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
+  let mem_cache = CollabMemCache::new(pool(), conn, CollabMetrics::default().into());
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
 
   let object_id = Uuid::new_v4();
@@ -355,7 +357,7 @@ async fn collab_mem_cache_read_write_test() {
 #[tokio::test]
 async fn collab_mem_cache_insert_override_test() {
   let conn = redis_connection_manager().await;
-  let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
+  let mem_cache = CollabMemCache::new(pool(), conn, CollabMetrics::default().into());
   let object_id = Uuid::new_v4();
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
   let mut timestamp = chrono::Utc::now().timestamp();
@@ -413,7 +415,7 @@ async fn collab_mem_cache_insert_override_test() {
 #[tokio::test]
 async fn collab_meta_redis_cache_test() {
   let conn = redis_connection_manager().await;
-  let mem_cache = CollabMemCache::new(conn, CollabMetrics::default().into());
+  let mem_cache = CollabMemCache::new(pool(), conn, CollabMetrics::default().into());
   mem_cache
     .get_collab_meta(&Uuid::new_v4())
     .await
@@ -527,4 +529,13 @@ async fn insert_folder_data_success_test() {
     };
     test_client.api_client.create_collab(params).await.unwrap();
   }
+}
+
+fn pool() -> Arc<ThreadPoolNoAbort> {
+  let thread_pool = ThreadPoolNoAbortBuilder::new()
+    .thread_name(|idx| format!("af-collab-worker-{}", idx))
+    .num_threads(1)
+    .build()
+    .expect("Failed to create collab thread pool");
+  Arc::new(thread_pool)
 }

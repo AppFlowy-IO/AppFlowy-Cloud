@@ -22,7 +22,7 @@ uuid.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
-infra.workspace = true
+infra = { workspace = true }
 prometheus-client = "0.22.3"
 chrono = "0.4.39"
 serde.workspace = true

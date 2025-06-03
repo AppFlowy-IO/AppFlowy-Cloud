@@ -4,12 +4,13 @@ use dashmap::DashMap;
 
 use crate::client::client_msg_router::ClientMessageRouter;
 use dashmap::mapref::entry::Entry;
+use dashmap::try_result::TryResult;
 use std::sync::Arc;
-use tracing::{info, trace};
+use tracing::{info, instrument, trace, warn};
 
 #[derive(Clone, Default)]
 pub struct ConnectState {
-  pub(crate) user_by_device: Arc<DashMap<UserDevice, RealtimeUser>>,
+  user_by_device: Arc<DashMap<UserDevice, RealtimeUser>>,
   /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
   /// 1. User disconnection.
   /// 2. Server closes the connection due to a ping/pong timeout.
@@ -21,6 +22,15 @@ impl ConnectState {
     Self::default()
   }
 
+  pub fn get_user_by_device(&self, device: &UserDevice) -> Option<RealtimeUser> {
+    let result = self.user_by_device.try_get(device);
+    match result {
+      TryResult::Present(entry) => Some(entry.value().clone()),
+      TryResult::Absent => None,
+      TryResult::Locked => None,
+    }
+  }
+
   /// Handles a new user connection, updating the connection state accordingly.
   ///
   /// This function checks if there is already a connection from the same user device. If an existing
@@ -30,15 +40,16 @@ impl ConnectState {
   /// - Removing the old user's client stream, if present, and sending a `DuplicateConnection` system message.
   /// - Inserting the new user connection into the `user_by_device` and `client_stream_by_user` maps.
   ///
+  #[instrument(level = "trace", skip_all)]
   pub fn handle_user_connect(
     &self,
     new_user: RealtimeUser,
     client_message_router: ClientMessageRouter,
   ) -> Option<RealtimeUser> {
     let user_device = UserDevice::from(&new_user);
-    let entry = self.user_by_device.entry(user_device);
+    let entry = self.user_by_device.try_entry(user_device);
     match entry {
-      Entry::Occupied(mut e) => {
+      Some(Entry::Occupied(mut e)) => {
         if e.get().connect_at <= new_user.connect_at {
           let old_user = e.insert(new_user.clone());
           trace!("[realtime]: new connection replaces old => {}", new_user);
@@ -57,12 +68,16 @@ impl ConnectState {
           None
         }
       },
-      Entry::Vacant(e) => {
+      Some(Entry::Vacant(e)) => {
         trace!("[realtime]: new connection => {}", new_user);
         e.insert(new_user.clone());
         self
           .client_message_routers
           .insert(new_user, client_message_router);
+        None
+      },
+      None => {
+        warn!("[realtime] failed to insert user connection: {}", new_user);
         None
       },
     }
@@ -99,11 +114,6 @@ impl ConnectState {
 
   pub fn number_of_connected_users(&self) -> usize {
     self.user_by_device.len()
-  }
-
-  #[allow(dead_code)]
-  fn get_user_by_device(&self, user_device: &UserDevice) -> Option<RealtimeUser> {
-    self.user_by_device.get(user_device).map(|v| v.clone())
   }
 }
 

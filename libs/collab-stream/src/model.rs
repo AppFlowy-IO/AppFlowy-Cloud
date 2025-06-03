@@ -492,6 +492,7 @@ impl UpdateStreamMessage {
     collab_type: CollabType,
     sender: &CollabOrigin,
     update: Vec<u8>,
+    flag: UpdateFlags,
   ) -> Cmd {
     let mut cmd = cmd("XADD");
     cmd
@@ -504,7 +505,9 @@ impl UpdateStreamMessage {
       .arg("sender")
       .arg(sender.to_string())
       .arg("data")
-      .arg(update.to_vec());
+      .arg(update.to_vec())
+      .arg("flags")
+      .arg(flag);
     cmd
   }
 }

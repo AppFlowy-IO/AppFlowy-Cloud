@@ -35,6 +35,7 @@ impl CollabUpdateSink {
       self.collab_type,
       &msg.sender,
       msg.data.clone(),
+      msg.flags,
     )
     .query_async(&mut *lock)
     .await?;

@@ -371,6 +371,11 @@ where
 
     if let GetCollabOrigin::User { uid } = origin {
       // Check if the user has enough permissions to access the collab
+      trace!(
+        "enforce read collab for user: {}, object_id: {}",
+        uid,
+        params.object_id
+      );
       self
         .access_control
         .enforce_read_collab(&params.workspace_id, &uid, &params.object_id)

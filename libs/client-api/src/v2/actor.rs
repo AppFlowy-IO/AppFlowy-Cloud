@@ -425,7 +425,7 @@ impl WorkspaceControllerActor {
         .borrow()
         .disconnected_reason()
         .as_ref()
-        .map(|v| v.retriable() || matches!(v, DisconnectedReason::ReachMaximumRetry))
+        .map(|v| v.retriable_when_editing())
         .unwrap_or(false);
 
       if should_retry {

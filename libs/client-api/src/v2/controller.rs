@@ -250,6 +250,16 @@ impl DisconnectedReason {
       Self::Unexpected(..) | Self::ResetWithoutClosingHandshake
     )
   }
+
+  pub fn retriable_when_editing(&self) -> bool {
+    matches!(
+      self,
+      Self::Unexpected(..)
+        | Self::ResetWithoutClosingHandshake
+        | DisconnectedReason::Unauthorized(_)
+        | DisconnectedReason::ReachMaximumRetry
+    )
+  }
 }
 
 #[derive(Debug, Clone)]

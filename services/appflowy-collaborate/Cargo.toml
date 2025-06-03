@@ -79,7 +79,7 @@ validator.workspace = true
 rayon.workspace = true
 zstd.workspace = true
 indexer.workspace = true
-infra.workspace = true
+infra = { workspace = true, features = ["rayon_util"] }
 
 [dev-dependencies]
 rand = "0.8.5"

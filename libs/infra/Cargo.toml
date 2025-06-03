@@ -16,9 +16,10 @@ tokio = { workspace = true, optional = true }
 pin-project.workspace = true
 futures = "0.3.30"
 validator = { workspace = true, features = ["validator_derive", "derive"] }
-thiserror.workspace = true
-rayon.workspace = true
+thiserror = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
 
 [features]
 file_util = ["tokio/fs"]
 request_util = ["reqwest"]
+rayon_util = ["rayon", "thiserror"]

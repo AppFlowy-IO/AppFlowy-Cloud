@@ -21,7 +21,7 @@ use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::error;
+use tracing::{error, instrument};
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -196,6 +196,7 @@ impl CollabCache {
     Ok((rid, encode_collab))
   }
 
+  #[instrument(level = "debug", skip_all)]
   pub async fn get_full_collab(
     &self,
     workspace_id: &Uuid,

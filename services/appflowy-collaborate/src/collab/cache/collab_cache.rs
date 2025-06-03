@@ -210,16 +210,16 @@ impl CollabCache {
       Err(AppError::RecordNotFound(_)) => (Rid::default(), None),
       Err(err) => return Err(err),
     };
+
     let updates = self
       .get_workspace_updates(workspace_id, Some(&object_id), Some(rid), None)
       .await?;
 
-    // Get the encoded collab and then apply the updates from redis stream.
-    encoded_collab = self
-      .thread_pool
-      .install(|| {
-        tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
-        if !updates.is_empty() {
+    if !updates.is_empty() {
+      encoded_collab = self
+        .thread_pool
+        .install(|| {
+          tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
           let mut collab = match encoded_collab {
             Some(encoded_collab) => {
               let options = CollabOptions::new(object_id.to_string(), default_client_id())
@@ -256,10 +256,10 @@ impl CollabCache {
             EncoderVersion::V1 => EncodedCollab::new_v1(state_vector, tx.encode_diff_v1(from)),
             EncoderVersion::V2 => EncodedCollab::new_v2(state_vector, tx.encode_diff_v2(from)),
           });
-        }
-        Ok::<Option<EncodedCollab>, AppError>(encoded_collab)
-      })
-      .map_err(|err| AppError::Internal(err.into()))??;
+          Ok::<Option<EncodedCollab>, AppError>(encoded_collab)
+        })
+        .map_err(|err| AppError::Internal(err.into()))??;
+    }
 
     match encoded_collab {
       Some(encoded_collab) => Ok((rid, encoded_collab)),

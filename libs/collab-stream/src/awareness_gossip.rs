@@ -75,7 +75,7 @@ impl AwarenessGossip {
       if let Entry::Occupied(e) = collabs.entry(object_id) {
         let channel = e.get();
         if channel.send(awareness_update).is_err() {
-          collabs.remove(&object_id);
+          e.remove();
         }
       }
     }

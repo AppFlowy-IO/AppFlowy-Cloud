@@ -27,7 +27,7 @@ pub struct SharedViewDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QuerySharedViewDetailsParams {
+pub struct SharedViewDetailsRequest {
   pub ancestor_view_ids: Vec<Uuid>,
 }
 

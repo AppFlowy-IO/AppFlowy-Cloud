@@ -1,6 +1,6 @@
 use client_api_entity::guest_dto::{
-  ListSharedViewResponse, QuerySharedViewDetailsParams, RevokeSharedViewAccessRequest,
-  ShareViewWithGuestRequest, SharedViewDetails,
+  ListSharedViewResponse, RevokeSharedViewAccessRequest, ShareViewWithGuestRequest,
+  SharedViewDetails, SharedViewDetailsRequest,
 };
 use reqwest::Method;
 use shared_entity::response::AppResponseError;
@@ -73,9 +73,9 @@ impl Client {
       self.base_url, workspace_id, view_id,
     );
     let resp = self
-      .http_client_with_auth(Method::GET, &url)
+      .http_client_with_auth(Method::POST, &url)
       .await?
-      .query(&QuerySharedViewDetailsParams {
+      .json(&SharedViewDetailsRequest {
         ancestor_view_ids: ancestor_view_ids.to_vec(),
       })
       .send()

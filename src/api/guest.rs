@@ -1,9 +1,12 @@
-use actix_web::{web::Data, Result};
+use actix_web::{
+  web::{Data, Json},
+  Result,
+};
 use app_error::ErrorCode;
 use shared_entity::{
   dto::guest_dto::{
-    ListSharedViewResponse, QuerySharedViewDetailsParams, RevokeSharedViewAccessRequest,
-    ShareViewWithGuestRequest, SharedViewDetails,
+    ListSharedViewResponse, RevokeSharedViewAccessRequest, ShareViewWithGuestRequest,
+    SharedViewDetails, SharedViewDetailsRequest,
   },
   response::{AppResponseError, JsonAppResponse},
 };
@@ -25,7 +28,8 @@ pub fn sharing_scope() -> Scope {
         .route(web::put().to(put_shared_view_handler)),
     )
     .service(
-      web::resource("{workspace_id}/view/{view_id}").route(web::get().to(get_shared_view_handler)),
+      web::resource("{workspace_id}/view/{view_id}/access-details")
+        .route(web::post().to(shared_view_access_details_handler)),
     )
     .service(
       web::resource("{workspace_id}/view/{view_id}/revoke-access")
@@ -62,10 +66,10 @@ async fn put_shared_view_handler(
   )
 }
 
-async fn get_shared_view_handler(
+async fn shared_view_access_details_handler(
   _user_uuid: UserUuid,
   _state: Data<AppState>,
-  _query: web::Query<QuerySharedViewDetailsParams>,
+  _json: Json<SharedViewDetailsRequest>,
   _path: web::Path<(Uuid, Uuid)>,
 ) -> Result<JsonAppResponse<SharedViewDetails>> {
   Err(

@@ -1,4 +1,4 @@
-use crate::collab::cache::encode_collab_from_bytes;
+use crate::collab::cache::decode_encoded_collab;
 use crate::CollabMetrics;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
@@ -297,7 +297,15 @@ impl CollabDiskCache {
         Ok((updated_at, data)) => {
           self.metrics.pg_read_collab_count.inc();
           let rid = Rid::new(updated_at.timestamp_millis() as u64, 0);
-          let encoded_collab = encode_collab_from_bytes(&self.thread_pool, data).await?;
+          let encoded_collab = decode_encoded_collab(&self.thread_pool, data)
+            .await
+            .map_err(|err| {
+              AppError::Internal(anyhow!(
+                "Failed to decode encode collab {} from Postgres: {}",
+                query.object_id,
+                err
+              ))
+            })?;
           return Ok((rid, encoded_collab));
         },
         Err(e) => {

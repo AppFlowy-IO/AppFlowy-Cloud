@@ -10,10 +10,10 @@ use std::sync::Arc;
 /// Threshold for spawning blocking tasks for decoding operations.
 /// Data smaller than this will be processed on the current thread for efficiency.
 /// Data larger than this will be spawned to avoid blocking the current thread.
-pub const DECODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
+pub const DECODE_SPAWN_THRESHOLD: usize = 64 * 1024; // 64KiB
 
 #[inline]
-pub(crate) async fn encode_collab_from_bytes(
+pub(crate) async fn decode_encoded_collab(
   thread_pool: &Arc<ThreadPoolNoAbort>,
   bytes: Vec<u8>,
 ) -> Result<EncodedCollab, AppError> {

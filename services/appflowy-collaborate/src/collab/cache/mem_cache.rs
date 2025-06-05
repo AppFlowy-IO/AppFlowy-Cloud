@@ -1,4 +1,4 @@
-use crate::collab::cache::encode_collab_from_bytes;
+use crate::collab::cache::decode_encoded_collab;
 use crate::CollabMetrics;
 use anyhow::anyhow;
 use app_error::AppError;
@@ -109,9 +109,7 @@ impl CollabMemCache {
   pub async fn get_encode_collab(&self, object_id: &Uuid) -> Option<(Rid, EncodedCollab)> {
     match self.get_data_with_timestamp(object_id).await {
       Ok(Some((timestamp, bytes))) => {
-        let encoded_collab = encode_collab_from_bytes(&self.thread_pool, bytes)
-          .await
-          .ok()?;
+        let encoded_collab = decode_encoded_collab(&self.thread_pool, bytes).await.ok()?;
         let rid = Rid::new(timestamp, 0);
         Some((rid, encoded_collab))
       },

@@ -69,7 +69,7 @@ impl Client {
     ancestor_view_ids: &[Uuid],
   ) -> Result<SharedViewDetails, AppResponseError> {
     let url = format!(
-      "{}/api/sharing/workspace/{}/view/{}",
+      "{}/api/sharing/workspace/{}/view/{}/access-details",
       self.base_url, workspace_id, view_id,
     );
     let resp = self

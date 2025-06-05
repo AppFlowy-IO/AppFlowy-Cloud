@@ -618,7 +618,7 @@ impl CollabGroup {
               }
             },
             Err(err) => {
-              tracing::warn!("[realtime]: failed to handled message: {}", msg_id);
+              tracing::warn!("[realtime]: failed to handled message: {}", err);
               state.metrics.apply_update_failed_count.inc();
 
               let code = Self::ack_code_from_error(&err);
@@ -646,7 +646,7 @@ impl CollabGroup {
           }
         },
         Err(e) => {
-          error!("{} => parse sync message failed: {:?}", state.object_id, e);
+          error!("{} => parse sync message failed: {}", state.object_id, e);
           break;
         },
       }

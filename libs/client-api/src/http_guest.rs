@@ -1,6 +1,6 @@
 use client_api_entity::guest_dto::{
-  ListSharedViewResponse, RevokeSharedViewAccessRequest, ShareViewWithGuestRequest,
-  SharedViewDetails, SharedViewDetailsRequest,
+  RevokeSharedViewAccessRequest, ShareViewWithGuestRequest, SharedViewDetails,
+  SharedViewDetailsRequest, SharedViews,
 };
 use reqwest::Method;
 use shared_entity::response::AppResponseError;
@@ -49,7 +49,7 @@ impl Client {
   pub async fn get_shared_views(
     &self,
     workspace_id: &Uuid,
-  ) -> Result<ListSharedViewResponse, AppResponseError> {
+  ) -> Result<SharedViews, AppResponseError> {
     let url = format!(
       "{}/api/sharing/workspace/{}/view",
       self.base_url, workspace_id,

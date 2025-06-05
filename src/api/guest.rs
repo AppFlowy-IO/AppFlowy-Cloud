@@ -5,8 +5,8 @@ use actix_web::{
 use app_error::ErrorCode;
 use shared_entity::{
   dto::guest_dto::{
-    ListSharedViewResponse, RevokeSharedViewAccessRequest, ShareViewWithGuestRequest,
-    SharedViewDetails, SharedViewDetailsRequest,
+    RevokeSharedViewAccessRequest, ShareViewWithGuestRequest, SharedViewDetails,
+    SharedViewDetailsRequest, SharedViews,
   },
   response::{AppResponseError, JsonAppResponse},
 };
@@ -41,7 +41,7 @@ async fn list_shared_views_handler(
   _user_uuid: UserUuid,
   _state: Data<AppState>,
   _path: web::Path<Uuid>,
-) -> Result<JsonAppResponse<ListSharedViewResponse>> {
+) -> Result<JsonAppResponse<SharedViews>> {
   Err(
     AppResponseError::new(
       ErrorCode::FeatureNotAvailable,

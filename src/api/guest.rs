@@ -2,8 +2,8 @@ use actix_web::{web::Data, Result};
 use app_error::ErrorCode;
 use shared_entity::{
   dto::guest_dto::{
-    ListSharedViewResponse, RevokeSharedViewAccessRequest, ShareViewWithGuestRequest,
-    SharedViewDetails,
+    ListSharedViewResponse, QuerySharedViewDetailsParams, RevokeSharedViewAccessRequest,
+    ShareViewWithGuestRequest, SharedViewDetails,
   },
   response::{AppResponseError, JsonAppResponse},
 };
@@ -65,6 +65,7 @@ async fn put_shared_view_handler(
 async fn get_shared_view_handler(
   _user_uuid: UserUuid,
   _state: Data<AppState>,
+  _query: web::Query<QuerySharedViewDetailsParams>,
   _path: web::Path<(Uuid, Uuid)>,
 ) -> Result<JsonAppResponse<SharedViewDetails>> {
   Err(

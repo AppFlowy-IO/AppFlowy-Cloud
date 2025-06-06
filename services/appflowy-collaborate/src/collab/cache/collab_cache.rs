@@ -13,6 +13,7 @@ use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_stream::model::UpdateStreamMessage;
+use dashmap::DashSet;
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database_entity::dto::{
   CollabParams, CollabUpdateData, PendingCollabWrite, QueryCollab, QueryCollabResult,
@@ -40,6 +41,8 @@ pub struct CollabCache {
   /// Data larger than this will be spawned to avoid blocking.
   small_collab_size: usize,
   metrics: Arc<CollabMetrics>,
+  /// List of dirty collabs that have pending updates in Redis and need to be flushed to disk.
+  dirty_collabs: DashSet<Uuid>,
 }
 
 impl CollabCache {
@@ -74,7 +77,16 @@ impl CollabCache {
       s3_collab_threshold,
       small_collab_size,
       metrics,
+      dirty_collabs: DashSet::new(),
     }
+  }
+
+  pub fn mark_as_dirty(&self, object_id: Uuid) {
+    self.dirty_collabs.insert(object_id);
+  }
+
+  pub fn mark_as_clean(&self, object_id: &Uuid) {
+    self.dirty_collabs.remove(object_id);
   }
 
   pub fn metrics(&self) -> &CollabMetrics {
@@ -214,6 +226,50 @@ impl CollabCache {
       Err(err) => return Err(err),
     };
 
+    let from = from.unwrap_or_default();
+    if !self.dirty_collabs.contains(&object_id) {
+      // there are no pending updates for this collab, so we can return the cached value directly
+      tracing::trace!(
+        "no pending updates for collab: {}, returning cached value",
+        object_id
+      );
+      match encoded_collab {
+        Some(encoded_collab) if encoded_collab.doc_state.len() <= self.small_collab_size => {
+          return Ok((rid, encoded_collab));
+        },
+        Some(encoded_collab) => {
+          // If the collab is large, we do not replay updates and return the snapshot only.
+          let options = CollabOptions::new(object_id.to_string(), default_client_id())
+            .with_data_source(match encoded_collab.version {
+              EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
+              EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
+            });
+          let collab = Collab::new_with_options(CollabOrigin::Server, options)
+            .map_err(|err| AppError::Internal(err.into()))?;
+          let tx = collab.transact();
+          let doc_state: Bytes = match encoded_collab.version {
+            EncoderVersion::V1 => tx.encode_diff_v1(&from),
+            EncoderVersion::V2 => tx.encode_diff_v2(&from),
+          }
+          .into();
+          return Ok((
+            rid,
+            EncodedCollab {
+              version: encoded_collab.version,
+              state_vector: encoded_collab.state_vector,
+              doc_state,
+            },
+          ));
+        },
+        None => {
+          return Err(AppError::RecordNotFound(format!(
+            "Collab not found for object_id: {}",
+            object_id
+          )));
+        },
+      }
+    }
+
     let updates = self
       .get_workspace_updates(workspace_id, Some(&object_id), Some(rid), None)
       .await?;
@@ -224,7 +280,6 @@ impl CollabCache {
       .unwrap_or(0)
       + updates.iter().map(|u| u.update.len()).sum::<usize>();
 
-    let from = from.unwrap_or_default();
     if !updates.is_empty() {
       encoded_collab = if size <= self.small_collab_size {
         // For small collab, replaying updates on the current thread
@@ -387,6 +442,7 @@ impl CollabCache {
         }
       });
     }
+    self.mark_as_clean(&object_id);
   }
 
   pub async fn insert_encode_collab_to_disk(
@@ -416,6 +472,7 @@ impl CollabCache {
       .disk_cache
       .delete_collab(workspace_id, object_id)
       .await?;
+    self.mark_as_clean(object_id);
     Ok(())
   }
 

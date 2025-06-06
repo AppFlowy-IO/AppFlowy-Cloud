@@ -191,6 +191,7 @@ impl CollabStore {
     )
     .query_async(&mut conn)
     .await?;
+    self.mark_as_dirty(object_id);
     let rid = Rid::from_str(&items).map_err(|err| anyhow!("failed to parse rid: {}", err))?;
     trace!(
       "publishing update to '{}' (object id: {}), rid:{}",
@@ -199,6 +200,10 @@ impl CollabStore {
       rid
     );
     Ok(rid)
+  }
+
+  pub fn mark_as_dirty(&self, object_id: ObjectId) {
+    self.collab_cache.mark_as_dirty(object_id);
   }
 
   #[instrument(level = "trace", skip_all, err)]

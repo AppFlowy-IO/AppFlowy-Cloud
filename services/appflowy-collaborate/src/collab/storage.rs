@@ -527,4 +527,8 @@ where
       .get_collab_snapshot_list(workspace_id, oid)
       .await
   }
+
+  fn mark_as_editing(&self, oid: Uuid) {
+    self.cache.mark_as_dirty(oid);
+  }
 }

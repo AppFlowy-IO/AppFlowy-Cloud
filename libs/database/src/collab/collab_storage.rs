@@ -172,6 +172,8 @@ pub trait CollabStorage: Send + Sync + 'static {
     workspace_id: &Uuid,
     oid: &Uuid,
   ) -> AppResult<AFSnapshotMetas>;
+
+  fn mark_as_editing(&self, oid: Uuid);
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

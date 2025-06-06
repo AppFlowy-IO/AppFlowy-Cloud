@@ -191,6 +191,7 @@ impl CollabGroup {
           match res {
             Some(Ok((message_id, update))) => {
               state.metrics.observe_collab_stream_latency(message_id.timestamp_ms);
+              state.persister.storage.mark_as_editing(state.object_id);
               Self::handle_inbound_update(&state, update).await;
             },
             Some(Err(err)) => {
@@ -918,6 +919,7 @@ impl CollabPersister {
     // send updates to redis queue
     let update = CollabStreamUpdate::new(update, sender, UpdateFlags::default());
     let msg_id = self.update_sink.send(&update).await?;
+    self.storage.mark_as_editing(self.object_id);
     tracing::trace!(
       "persisted update for {} from {} ({} bytes) - msg id: {}",
       self.object_id,

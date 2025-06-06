@@ -361,6 +361,7 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
     let update_flags = msg.update_flags;
     let last_message_id = msg.last_message_id;
     let update = msg.update.clone();
+    store.mark_as_dirty(object_id);
 
     let sessions: Vec<WorkspaceSessionHandle> = self
       .sessions_by_client_id

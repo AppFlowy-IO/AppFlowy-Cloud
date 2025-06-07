@@ -15,7 +15,7 @@ if [ ! -f .env ]; then
 fi
 
 # Stop and remove any existing containers to avoid conflicts
-docker compose --file ./docker-compose-dev.yml down
+docker compose --file ./compose.dev.yaml down
 
 # Start the Docker Compose setup
 export GOTRUE_MAILER_AUTOCONFIRM=true
@@ -23,7 +23,7 @@ export GOTRUE_MAILER_AUTOCONFIRM=true
 # Enable Google OAuth when running locally
 export GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
 
-docker compose --file ./docker-compose-dev.yml up -d --build
+docker compose --file ./compose.dev.yaml up -d --build
 
 # Keep pinging Postgres until it's ready to accept commands
 ATTEMPTS=0
@@ -69,4 +69,4 @@ fi
 
 # revert to require signup email verification
 export GOTRUE_MAILER_AUTOCONFIRM=false
-docker compose --file ./docker-compose-dev.yml up -d
+docker compose --file ./compose.dev.yaml up -d

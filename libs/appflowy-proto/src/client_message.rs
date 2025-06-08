@@ -1,6 +1,7 @@
 use crate::pb;
 use crate::pb::collab_message::Data;
 use crate::pb::message::Payload;
+#[rustfmt::skip]
 use crate::pb::{message, SyncRequest};
 use crate::shared::{Error, ObjectId, Rid, UpdateFlags};
 use collab::preclude::sync::AwarenessUpdate;

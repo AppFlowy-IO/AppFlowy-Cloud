@@ -78,7 +78,7 @@ pub struct StreamRouter {
   #[allow(dead_code)]
   workers: Vec<Worker>,
   metrics: Arc<CollabStreamMetrics>,
-  channels: DashMap<StreamKey, StreamSender>,
+  channels: Arc<DashMap<StreamKey, WeakStreamSender>>,
   buffer_capacity: usize,
 }
 
@@ -94,6 +94,7 @@ impl StreamRouter {
   ) -> Result<Self, RedisError> {
     let alive = Arc::new(AtomicBool::new(true));
     let (tx, rx) = loole::unbounded();
+    let channels = Arc::new(DashMap::new());
     let mut workers = Vec::with_capacity(options.worker_count);
     for worker_id in 0..options.worker_count {
       let conn = client.get_connection()?;
@@ -105,6 +106,7 @@ impl StreamRouter {
         alive.clone(),
         &options,
         metrics.clone(),
+        channels.clone(),
       );
       workers.push(worker);
     }
@@ -114,7 +116,7 @@ impl StreamRouter {
       workers,
       alive,
       metrics,
-      channels: DashMap::new(),
+      channels,
       buffer_capacity: options.xread_count.unwrap_or(10_000),
     })
   }
@@ -128,16 +130,28 @@ impl StreamRouter {
       Entry::Vacant(e) => {
         tracing::trace!("creating new stream channel for {}", e.key());
         let (tx, rx) = tokio::sync::broadcast::channel(self.buffer_capacity);
+        e.insert(tx.downgrade());
         let last_id = last_id.unwrap_or_else(|| "0".to_string());
-        let h = StreamHandle::new(stream_key.clone(), last_id, tx.clone());
+        let h = StreamHandle::new(stream_key.clone(), last_id, tx);
         self.buf.send(h).unwrap();
         self.metrics.reads_enqueued.inc();
-        e.insert(tx);
         rx
       },
-      Entry::Occupied(e) => {
-        tracing::trace!("reusing existing stream channel for {}", e.key());
-        e.get().subscribe()
+      Entry::Occupied(mut e) => {
+        let sender = e.get();
+        if let Some(sender) = sender.upgrade() {
+          tracing::trace!("reusing existing stream channel for {}", e.key());
+          sender.subscribe()
+        } else {
+          tracing::trace!("creating new stream channel for {}", e.key());
+          let (tx, rx) = tokio::sync::broadcast::channel(self.buffer_capacity);
+          e.insert(tx.downgrade());
+          let last_id = last_id.unwrap_or_else(|| "0".to_string());
+          let h = StreamHandle::new(stream_key.clone(), last_id, tx);
+          self.buf.send(h).unwrap();
+          self.metrics.reads_enqueued.inc();
+          rx
+        }
       },
     };
     StreamReader::new(rx)
@@ -188,6 +202,7 @@ struct Worker {
 }
 
 impl Worker {
+  #[allow(clippy::too_many_arguments)]
   fn new(
     worker_id: usize,
     conn: Connection,
@@ -196,6 +211,7 @@ impl Worker {
     alive: Arc<AtomicBool>,
     options: &StreamRouterOptions,
     metrics: Arc<CollabStreamMetrics>,
+    channels: Arc<DashMap<StreamKey, WeakStreamSender>>,
   ) -> Self {
     let mut xread_options = StreamReadOptions::default();
     if let Some(block_millis) = options.xread_block_millis {
@@ -206,13 +222,16 @@ impl Worker {
     }
     let count = options.xread_streams;
     let handle = std::thread::spawn(move || {
-      if let Err(err) = Self::process_streams(conn, tx, rx, alive, xread_options, count, metrics) {
+      if let Err(err) =
+        Self::process_streams(conn, tx, rx, alive, xread_options, count, metrics, channels)
+      {
         tracing::error!("worker {} failed: {}", worker_id, err);
       }
     });
     Self { _handle: handle }
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn process_streams(
     mut conn: Connection,
     tx: Sender<StreamHandle>,
@@ -221,6 +240,7 @@ impl Worker {
     options: StreamReadOptions,
     count: usize,
     metrics: Arc<CollabStreamMetrics>,
+    channels: Arc<DashMap<StreamKey, WeakStreamSender>>,
   ) -> RedisResult<()> {
     let mut stream_keys = Vec::with_capacity(count);
     let mut message_ids = Vec::with_capacity(count);
@@ -259,6 +279,7 @@ impl Worker {
         }
 
         if remove_sender {
+          channels.remove(&stream.key);
           senders.remove(stream.key.as_str());
         }
       }
@@ -270,7 +291,13 @@ impl Worker {
           key_count
         );
       }
-      let scheduled = Self::schedule_back(&tx, &mut stream_keys, &mut message_ids, &mut senders);
+      let scheduled = Self::schedule_back(
+        &tx,
+        &mut stream_keys,
+        &mut message_ids,
+        &mut senders,
+        &channels,
+      );
       metrics.reads_enqueued.inc_by(scheduled as u64);
     }
     Ok(())
@@ -281,6 +308,7 @@ impl Worker {
     keys: &mut Vec<StreamKey>,
     ids: &mut Vec<String>,
     senders: &mut HashMap<&str, (StreamSender, usize)>,
+    channels: &DashMap<StreamKey, WeakStreamSender>,
   ) -> usize {
     let keys = keys.drain(..);
     let mut ids = ids.drain(..);
@@ -289,6 +317,8 @@ impl Worker {
       if let Some(last_id) = ids.next() {
         if let Some((sender, _)) = senders.remove(key.as_str()) {
           if sender.receiver_count() == 0 {
+            channels.remove(key.as_str());
+            tracing::trace!("no subscribers for {}, removing channel", key);
             continue; // sender is already closed
           }
           let h = StreamHandle::new(key, last_id, sender);
@@ -345,6 +375,7 @@ impl Worker {
 }
 
 pub type RedisMap = HashMap<String, Value>;
+type WeakStreamSender = tokio::sync::broadcast::WeakSender<Arc<(String, RedisMap)>>;
 type StreamSender = tokio::sync::broadcast::Sender<Arc<(String, RedisMap)>>;
 type StreamReceiver = tokio::sync::broadcast::Receiver<Arc<(String, RedisMap)>>;
 
@@ -372,7 +403,9 @@ mod test {
   use rand::random;
   use redis::{Client, Commands, FromRedisValue};
   use std::sync::Arc;
+  use std::time::Duration;
   use tokio::task::JoinSet;
+  use tokio::time::timeout;
 
   struct TestMessage {
     id: String,
@@ -524,6 +557,52 @@ mod test {
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     assert_eq!(metrics.reads_enqueued.get(), enqueued, "unchanged enqueues");
     assert_eq!(metrics.reads_dequeued.get(), dequeued, "unchanged dequeues");
+
+    assert!(router.channels.get(&key).is_none());
+  }
+
+  #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+  async fn observe_unobserve_observe_again() {
+    const ROUTES_COUNT: usize = 1;
+    const MSG_PER_ROUTE: usize = 10;
+
+    let mut client = Client::open("redis://127.0.0.1/").unwrap();
+    let mut keys = init_streams(&mut client, ROUTES_COUNT, MSG_PER_ROUTE);
+    let metrics = Arc::new(CollabStreamMetrics::default());
+
+    let router = StreamRouter::with_options(
+      &client,
+      metrics.clone(),
+      StreamRouterOptions {
+        worker_count: 2,
+        xread_streams: 100,
+        xread_block_millis: Some(50),
+        xread_count: Some(MSG_PER_ROUTE / 2),
+      },
+    )
+    .unwrap();
+
+    let key = keys.pop().unwrap();
+    let mut observer = router.observe(key.clone(), None);
+    // read half of the messages
+    for i in 0..MSG_PER_ROUTE {
+      let msg: TestMessage = observer.next().await.unwrap().unwrap();
+      assert_eq!(msg.data, format!("{}-{}", key, i));
+    }
+    drop(observer);
+
+    // try to overflow the tokio broadcast buffer by producing more messages
+    for i in 0..MSG_PER_ROUTE {
+      let data = format!("{}-{}", key, i);
+      let _: String = client.xadd(&key, "*", &[("data", data)]).unwrap();
+    }
+
+    let mut observer = router.observe(key.clone(), None);
+    let t = Duration::from_millis(100);
+    for i in 0..MSG_PER_ROUTE {
+      let msg: TestMessage = timeout(t, observer.next()).await.unwrap().unwrap().unwrap();
+      assert_eq!(msg.data, format!("{}-{}", key, i));
+    }
   }
 
   fn init_streams(client: &mut Client, stream_count: usize, msgs_per_stream: usize) -> Vec<String> {

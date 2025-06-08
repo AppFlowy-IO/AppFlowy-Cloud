@@ -202,6 +202,7 @@ struct Worker {
 }
 
 impl Worker {
+  #[allow(clippy::too_many_arguments)]
   fn new(
     worker_id: usize,
     conn: Connection,
@@ -230,6 +231,7 @@ impl Worker {
     Self { _handle: handle }
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn process_streams(
     mut conn: Connection,
     tx: Sender<StreamHandle>,

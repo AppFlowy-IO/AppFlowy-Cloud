@@ -41,7 +41,6 @@ pub struct CollaborationServer<S> {
   group_sender_by_object_id: Arc<DashMap<Uuid, GroupCommandSender>>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
-  enable_custom_runtime: bool,
 }
 
 impl<S> CollaborationServer<S>
@@ -60,16 +59,6 @@ where
     group_persistence_interval: Duration,
     indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
-    let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
-      .parse::<bool>()
-      .unwrap_or(false);
-
-    if enable_custom_runtime {
-      info!("CollaborationServer with custom runtime");
-    } else {
-      info!("CollaborationServer with actix-web runtime");
-    }
-
     let connect_state = ConnectState::new();
     let collab_stream = CollabRedisStream::new_with_connection_manager(
       redis_connection_manager,
@@ -103,7 +92,6 @@ where
       connect_state,
       group_sender_by_object_id,
       metrics,
-      enable_custom_runtime,
     })
   }
 
@@ -336,12 +324,7 @@ where
           };
 
           let object_id = *entry.key();
-          if self.enable_custom_runtime {
-            COLLAB_RUNTIME.spawn(runner.run(object_id));
-          } else {
-            tokio::spawn(runner.run(object_id));
-          }
-
+          tokio::spawn(runner.run(object_id));
           entry.insert(new_sender.clone());
           new_sender
         },

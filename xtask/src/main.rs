@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
   println!("Starting {} server...", appflowy_cloud_bin_name);
   let mut appflowy_cloud_cmd = spawn_server(
     "cargo",
-    &["run", "--features", "history"],
+    &["run", "--features", "history, use_actix_cors"],
     appflowy_cloud_bin_name,
     disable_log,
     None,

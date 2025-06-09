@@ -13,6 +13,8 @@ use access_control::noops::collab::{
 use access_control::noops::workspace::WorkspaceAccessControlImpl as NoOpsWorkspaceAccessControlImpl;
 use access_control::workspace::WorkspaceAccessControl;
 use actix::{Actor, Supervisor};
+#[cfg(feature = "use_actix_cors")]
+use actix_cors::Cors;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -142,7 +144,7 @@ pub async fn run_actix_server(
 
   let realtime_server_actor = Supervisor::start(|_| RealtimeServerActor(realtime_server));
   let mut server = HttpServer::new(move || {
-    App::new()
+    let app = App::new()
       .wrap(NormalizePath::trim())
        // Middleware is registered for each App, scope, or Resource and executed in opposite order as registration
       .wrap(MetricsMiddleware)
@@ -151,7 +153,12 @@ pub async fn run_actix_server(
         SessionMiddleware::builder(redis_store.clone(), Key::generate())
           .build(),
       )
-      .wrap(RequestIdMiddleware)
+      .wrap(RequestIdMiddleware);
+
+    #[cfg(feature = "use_actix_cors")]
+    let app = app.wrap(actix_cors_scope());
+
+    app
       .service(server_info_scope())
       .service(user_scope())
       .service(workspace_scope())
@@ -562,4 +569,23 @@ async fn get_gotrue_client(setting: &GoTrueSetting) -> Result<gotrue::api::Clien
 
 async fn health_check() -> impl Responder {
   HttpResponse::Ok().body("OK")
+}
+
+#[cfg(feature = "use_actix_cors")]
+fn actix_cors_scope() -> actix_cors::Cors {
+  Cors::default()
+    .allowed_origin(&get_env_var(
+      "APPFLOWY_CORS_ALLOWED_ORIGIN",
+      "http://localhost:3000",
+    ))
+    .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+    .allowed_headers(vec![
+      "Content-Type",
+      "Authorization",
+      "Accept",
+      "Client-Version",
+      "Device-Id",
+      "X-Request-Id",
+    ])
+    .max_age(3600)
 }

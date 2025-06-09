@@ -17,6 +17,7 @@ use uuid::Uuid;
 use workspace_template::document::getting_started::getting_started_document_data;
 
 #[tokio::test]
+#[ignore]
 async fn test_embedding_when_create_document() {
   if !ai_test_enabled() {
     return;

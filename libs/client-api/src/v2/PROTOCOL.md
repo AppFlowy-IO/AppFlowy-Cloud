@@ -291,3 +291,86 @@ pbjs -t status-module -w es6 -o ./path/to/output.js ./libs/appflowy-proto/proto/
 # generate TypeScript definitions from protobuf definitions
 pbts -o ./path/to/output.d.ts ./path/to/output.js
 ```
+
+Once this is done, we can import the generated code in our web client:
+
+```javascript
+import {messages} from './path/to/output';
+import * as Y from 'yjs';
+import * as awarenessProtocol from 'y-protocols/awareness.js'
+
+const ws = new WebSocket(`ws://localhost:8000/ws/v2/{workspaceId}?clientId={clientId}&deviceId={deviceId}&token={token}`);
+ws.binaryType = 'arraybuffer';
+ws.onmessage = (event) => {
+    const msg = messages.Message.decode(new Uint8Array(event.data));
+    if (msg.collabMessage) {
+        const origin = 'remote'
+        const msg = msg.collabMessage;
+        const {ydoc, awareness} = getYDoc(msg.objectId); // get Y.Doc instance by objectId
+        if (msg.syncRequest) {
+            // handle sync request
+            const diff = Y.encodeStateAsUpdateV2(ydoc, msg.syncRequest.stateVector);
+            ws.send(messages.Message.encode({
+                collabMessage: {
+                    objectId: msg.objectId,
+                    collabType: msg.collabType,
+                    update: {
+                        flags: 0x01, // lib0 v2 encoding
+                        payload: diff,
+                    }
+                }
+            }).finish());
+        } else if (msg.update) {
+            // handle update message
+            const update = msg.update.payload;
+            // check if update is encoded using lib0 v2 encoding
+            const isV2 = msg.update.flags & 0x01 !== 0;
+            if (isV2) {
+                // apply decoded update to Y.Doc
+                Y.applyUpdateV2(ydoc, decodedUpdate, origin);
+            } else {
+                // apply update directly if it's in lib0 v1 encoding
+                Y.applyUpdate(ydoc, update, origin);
+            }
+        } else if (msg.awarenessUpdate) {
+            // handle awareness update
+            awarenessProtocol.applyAwarenessUpdate(awareness, msg.awarenessUpdate.payload, origin);
+        } else if (msg.accessChanged) {
+            // handle access changed message
+        }
+    } else if (msg.notification) {
+        // handle notification
+    }
+};
+
+// sending a message
+let syncReq = messages.Message.encode({
+    collabMessage: {
+        objectId: ydoc.guid, // ie. 'a573443f-d5c4-4533-a2ac-060af7e0',
+        collabType: 0,
+        syncRequest: {
+            stateVector: Y.encodeStateVector(ydoc),
+        }
+    }
+}).finish();
+ws.send(syncReq);
+
+// sending incremental updates
+ydoc.on('update', (update, origin) => {
+    if (isRemote(update)) {
+        // don't resend updates received from the server
+        return;
+    }
+    let updateMsg = messages.Message.encode({
+        collabMessage: {
+            objectId: ydoc.guid,
+            collabType: 0, // Document collab type
+            update: {
+                flags: 0x00, // lib0 v1 encoding
+                payload: update,
+            }
+        }
+    }).finish();
+    ws.send(updateMsg);
+})
+```

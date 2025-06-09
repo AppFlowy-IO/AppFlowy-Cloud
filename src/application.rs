@@ -355,7 +355,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let collab_store = CollabStore::new(
     thread_pool.clone(),
     collab_storage_access_control.clone(),
-    collab_cache.clone().into(),
+    collab_cache.clone(),
     redis_conn_manager.clone(),
     redis_stream_router.clone(),
     awareness_gossip.clone(),

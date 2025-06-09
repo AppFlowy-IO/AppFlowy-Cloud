@@ -1099,7 +1099,8 @@ impl CollabPersister {
       match self.collab_type {
         CollabType::Document => {
           let txn = collab.transact();
-          if let Some(text) = DocumentBody::from_collab(&collab).map(|body| body.paragraphs(txn)) {
+          if let Some(text) = DocumentBody::from_collab(&collab).map(|body| body.to_plain_text(txn))
+          {
             self.index_collab_content(text);
           }
         },

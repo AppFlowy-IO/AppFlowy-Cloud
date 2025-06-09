@@ -101,9 +101,9 @@ admin/debug tasks.
 We include all services in the file `docker-compose.yml`. It is easier to start all services and remove orphan containers warning message.
 
 - `pgadmin` (Web UI to visualize the provided postgres database)
-- `portainer`/`portainer_init` (Web UI to provide some monitoring and ease of container management)
 - `tunnel` (Cloudflare tunnel to provide a secure way to connect AppFlowy to Cloudflare without a publicly routable IP
   address)
+
 ```
 docker compose --file docker-compose-extras.yml up -d
 ```

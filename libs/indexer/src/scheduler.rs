@@ -242,7 +242,7 @@ impl IndexerScheduler {
       CollabType::Document => {
         let txn = collab.transact();
         let text = DocumentBody::from_collab(collab)
-          .map(|body| body.paragraphs(txn))
+          .map(|body| body.to_plain_text(txn))
           .unwrap_or_default();
 
         if !text.is_empty() {

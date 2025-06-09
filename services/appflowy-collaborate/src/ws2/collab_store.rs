@@ -481,7 +481,7 @@ pub fn apply_updates_to_snapshot(
   let paragraphs = if collab_type == CollabType::Document {
     let tx = collab.transact();
     DocumentBody::from_collab(&collab)
-      .map(|body| body.paragraphs(tx))
+      .map(|body| body.to_plain_text(tx))
       .unwrap_or_default()
   } else {
     vec![]

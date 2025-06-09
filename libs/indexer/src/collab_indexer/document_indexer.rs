@@ -32,7 +32,7 @@ impl Indexer for DocumentIndexer {
       )
     })?;
 
-    let paragraphs = document.paragraphs(collab.transact());
+    let paragraphs = document.to_plain_text(collab.transact());
     self.create_embedded_chunks_from_text(object_id, paragraphs, model)
   }
 

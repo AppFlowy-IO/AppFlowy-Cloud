@@ -17,23 +17,22 @@
 #   - PostgreSQL client (psql)
 #   - Rust & Cargo toolchain
 #   - .env file (copy from dev.env)
+#   - sqlx-cli (will be installed automatically if missing)
 #
 # INTERACTIVE PROMPTS:
 #   - Stop existing containers? (default: no, data is preserved)
-#   - Setup database? (default: no, will reset schema and affected data)
+#   - Install sqlx-cli? (if missing, default: yes)
 #
 # COMMAND LINE FLAGS:
 #   --sqlx     Prepare SQLx metadata (takes a few minutes)
 #   --reset    Reset database schema and data (no prompt)
 #
+# NOTE: Database setup (reset) only runs if --reset is provided.
+#
 # KEY ENVIRONMENT VARIABLES:
 #   SKIP_SQLX_PREPARE=true     # Skip SQLx preparation (faster restarts)
 #   SKIP_APPFLOWY_CLOUD=true   # Skip AppFlowy Cloud build
 #   SQLX_OFFLINE=false         # Connect to DB during build (default: true)
-#
-# INTERACTIVE PROMPTS:
-#   - Remove existing containers/data? (default: no)
-#   - Prepare SQLx metadata? (default: no, takes a few minutes if enabled)
 #
 # TROUBLESHOOTING:
 #   - Missing .env: cp dev.env .env
@@ -75,6 +74,26 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Interactive prompt functions
+check_sqlx_cli() {
+    if ! command -v sqlx &> /dev/null; then
+        set +x
+        echo -e "${RED}⚠️  sqlx-cli is not installed${NC}"
+        echo -e "${YELLOW}sqlx-cli is required for database operations.${NC}"
+        if prompt_yes_no "Install sqlx-cli now? (cargo install sqlx-cli)" "y"; then
+            echo -e "${BLUE}Installing sqlx-cli...${NC}"
+            set -x
+            cargo install sqlx-cli
+            set +x
+            echo -e "${GREEN}✓ sqlx-cli installed successfully${NC}"
+            set -x
+            return 0
+        else
+            echo -e "${RED}Cannot proceed without sqlx-cli. Exiting.${NC}"
+            exit 1
+        fi
+    fi
+}
+
 prompt_yes_no() {
     local message="$1"
     local default="$2"
@@ -126,8 +145,13 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Interactive prompt for removing existing containers
-if prompt_yes_no "Stop and remove existing containers? (Data will be preserved)" "n"; then
+# Stop and remove existing containers
+if [[ "$RESET_DB" == "true" ]]; then
+    # When --reset is used, automatically stop and remove containers
+    echo -e "${YELLOW}Stopping and removing existing containers (--reset used)...${NC}"
+    docker compose --file ./docker-compose-dev.yml down
+    echo -e "${GREEN}✓ Containers stopped and removed (database data is preserved in Docker volume)${NC}"
+elif prompt_yes_no "Stop and remove existing containers? (Data will be preserved)" "n"; then
     echo -e "${YELLOW}Stopping and removing existing containers...${NC}"
     docker compose --file ./docker-compose-dev.yml down
     echo -e "${GREEN}✓ Containers stopped and removed (database data is preserved in Docker volume)${NC}"
@@ -171,6 +195,7 @@ done
 
 echo ""
 if [[ "$RESET_DB" == "true" ]]; then
+    check_sqlx_cli
     set +x
     echo -e "${YELLOW}Setting up database...${NC}"
     echo -e "${RED}Warning: This will reset the database schema and clear existing data in affected tables${NC}"
@@ -186,14 +211,23 @@ echo ""
 # Interactive prompt for SQLx preparation (unless explicitly skipped)
 if [[ -z "${SKIP_SQLX_PREPARE+x}" ]]; then
     if [[ "$PREPARE_SQLX" == "true" ]]; then
+        check_sqlx_cli
+        set +x
         echo -e "${BLUE}Preparing SQLx metadata...${NC}"
+        set -x
         cargo sqlx prepare --workspace
+        set +x
         echo -e "${GREEN}✓ SQLx preparation completed${NC}"
+        set -x
     else
+        set +x
         echo -e "${YELLOW}Skipping SQLx preparation. Use --sqlx flag to prepare SQLx metadata.${NC}"
+        set -x
     fi
 else
+    set +x
     echo -e "${YELLOW}SQLx preparation skipped (SKIP_SQLX_PREPARE is set)${NC}"
+    set -x
 fi
 
 echo ""

@@ -47,78 +47,115 @@ You'll need to install:
 - copy the configurations from `dev.env` to `.env`
 - edit the `.env` as required (such as SMTP configurations)
 
-### Run with all dependencies
+Run the following command to start the AppFlowy Cloud server locally:
 
 ```bash
+# Basic run (interactive prompts for container management)
 ./script/run_local_server.sh
+
+# With SQLx metadata preparation (useful for clean builds)
+./script/run_local_server.sh --sqlx
+
+# With database reset (resets schema and data)
+./script/run_local_server.sh --reset
+
+# Combined: reset database and prepare SQLx metadata
+./script/run_local_server.sh --reset --sqlx
 ```
 
-This process will execute all the dependencies and start the AppFlowy-Cloud server. Alternatively,
-you have the option to run the AppFlowy-Cloud server independently
+**Interactive Features:**
 
-### Run the AppFlowy-Cloud
+- Prompts before stopping existing containers (data is preserved)
+- Automatically checks for sqlx-cli and offers to install if missing
+- Color-coded output for better visibility
+- Clear warnings about data-affecting operations
 
-1. Run the dependency servers
+**Command Line Flags:**
+
+- `--sqlx`: Prepare SQLx metadata (takes a few minutes, required for clean builds)
+- `--reset`: Reset database schema and data (no prompt)
+
+**Environment Variables:**
+
+- `SKIP_SQLX_PREPARE=true`: Skip SQLx preparation (faster restarts)
+- `SKIP_APPFLOWY_CLOUD=true`: Skip AppFlowy Cloud build
+- `SQLX_OFFLINE=false`: Connect to DB during build (default: true)
+
+This process will execute all dependencies and start the AppFlowy-Cloud server with an interactive setup experience.
+
+### Manual Setup (Step-by-Step)
+
+If you cannot run the `run_local_server.sh` script, follow these manual steps:
+
+#### 1. Prerequisites Check
+
+Ensure you have installed:
+
+- [Rust](https://www.rust-lang.org/tools/install) and Cargo toolchain
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- PostgreSQL client (psql)
+- sqlx-cli: `cargo install sqlx-cli`
+
+#### 2. Configuration Setup
 
 ```bash
-docker compose --file docker-compose-dev.yml up -d
+# Copy the configuration template
+cp dev.env .env
+
+# Edit the .env file as required (such as SMTP configurations)
 ```
 
-2. Install sqlx-cli
+#### 3. Start Docker Services
 
 ```bash
-cargo install sqlx-cli
+# Set environment variables
+export GOTRUE_MAILER_AUTOCONFIRM=true
+export GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
+
+# Start Docker Compose services
+docker compose --file ./docker-compose-dev.yml up -d --build
 ```
 
-3. Run sqlx migration
+#### 4. Wait for Services to Start
 
 ```bash
-sqlx database create
-sqlx migrate run
+# Wait for PostgreSQL to be ready (adjust connection details as needed)
+# Keep trying until connection succeeds
+PGPASSWORD="password" psql -h "localhost" -U "postgres" -p "5432" -d "postgres" -c '\q'
+
+# Wait for AppFlowy Cloud health check
+# Keep trying until health endpoint responds
+curl localhost:9999/health
+```
+
+#### 5. Database Setup (Optional)
+
+If you need to reset/setup the database:
+
+```bash
+# Generate protobuf files for collab-rt-entity crate
+./script/code_gen.sh
+
+# Create database and run migrations
+cargo sqlx database create
+cargo sqlx migrate run
+```
+
+#### 6. SQLx Preparation (Optional)
+
+If you need to prepare SQLx metadata:
+
+```bash
+# Prepare SQLx metadata (takes a few minutes)
 cargo sqlx prepare --workspace
 ```
 
-4. Run the server
+#### 7. Build AppFlowy Cloud
 
 ```bash
-cargo run
+# Build and run AppFlowy Cloud
+cargo run --package xtask
 ```
-
-### Run the tests
-
-After the server is running, you can run the tests with:
-
-```bash
-cargo test
-```
-
-## 🐞Debugging
-
-Effective debugging is essential for maintaining a healthy application. Here are some tools and commands to help you
-troubleshoot issues in various components of the AppFlowy cloud server:
-
-### Postgres
-
-A web-based administration tool for PostgreSQL. Access it at [PgAdmin](http://localhost:5400)
-
-- OR command line:
-
-```bash
-    export PGPASSWORD=password
-    psql --host=localhost --username=postgres --port=5432
-```
-
-- Redis
-
-Redis offers a powerful command line interface for managing your Redis instance. Connect using the following command:
-
-```bash
-    redis-cli -p 6379
-```
-
-### Minio
-
-Minio provides a Web UI for easy management of your files and buckets. Access it at [Web UI](http://localhost:9001)
 
 ## ⚙️ Contributing
 

@@ -1,9 +1,10 @@
 use anyhow::Error;
 use client_api_test::TestClient;
-use collab_document::importer::define::{BlockType, URL_FIELD};
+use collab_document::importer::define::URL_FIELD;
 use collab_folder::ViewLayout;
 
 use collab_database::database::get_inline_view_id;
+use collab_document::blocks::BlockType;
 use std::path::PathBuf;
 use std::time::Duration;
 use uuid::Uuid;

@@ -120,12 +120,6 @@ Redis offers a powerful command line interface for managing your Redis instance.
 
 Minio provides a Web UI for easy management of your files and buckets. Access it at [Web UI](http://localhost:9001)
 
-### Portainer
-
-For managing Docker containers, Portainer's Web UI is an excellent tool. Access it at Web UI to easily manage Docker
-environments, including container deployment, networking, volume management, and more. Access it
-at [Web UI](http://localhost:9442)
-
 ## ⚙️ Contributing
 
 Any new contribution is more than welcome in this project!

@@ -77,7 +77,7 @@ services:
       - GOTRUE_ADMIN_PASSWORD=${GOTRUE_ADMIN_PASSWORD}
       - GOTRUE_DISABLE_SIGNUP=${GOTRUE_DISABLE_SIGNUP:-false}
       - GOTRUE_SITE_URL=appflowy-flutter://                           # redirected to AppFlowy application
-      - URI_ALLOW_LIST=*                                              # adjust restrict if necessary
+      - GOTRUE_URI_ALLOW_LIST=**                                      # adjust restrict if necessary
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_JWT_EXP=${GOTRUE_JWT_EXP}
       # Without this environment variable, the createuser command will create an admin

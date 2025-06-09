@@ -70,7 +70,7 @@ impl WorkspaceTemplate for VaultTemplate {
          .with_view_id(general_view_uuid.clone())
          .with_name("General")
          .with_extra(&format!(
-             "{{\"is_space\":true,\"space_icon\":\"interface_essential/home-3\",\"space_icon_color\":\"0xFFA34AFD\",\"space_permission\":0,\"space_created_at\":{}}}",
+             "{{\"is_space\":true,\"space_icon\":\"interface_essential/home-3\",\"space_icon_color\":\"0xFFA34AFD\",\"space_permission\":1,\"space_created_at\":{}}}",
              created_at
          ));
 

@@ -42,7 +42,7 @@ pub type CollabAccessControlStorage = CollabStorageImpl<CollabStorageAccessContr
 /// A wrapper around the actual storage implementation that provides access control and caching.
 #[derive(Clone)]
 pub struct CollabStorageImpl<AC> {
-  cache: CollabCache,
+  cache: Arc<CollabCache>,
   /// access control for collab object. Including read/write
   access_control: AC,
   snapshot_control: SnapshotControl,
@@ -55,7 +55,7 @@ where
   AC: CollabStorageAccessControl,
 {
   pub fn new(
-    cache: CollabCache,
+    cache: Arc<CollabCache>,
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: CLCommandSender,
@@ -76,7 +76,7 @@ where
   }
 
   const PENDING_WRITE_BUF_CAPACITY: usize = 20;
-  async fn periodic_write_task(cache: CollabCache, mut reader: Receiver<PendingCollabWrite>) {
+  async fn periodic_write_task(cache: Arc<CollabCache>, mut reader: Receiver<PendingCollabWrite>) {
     let mut buf = Vec::with_capacity(Self::PENDING_WRITE_BUF_CAPACITY);
     loop {
       let n = reader
@@ -526,5 +526,9 @@ where
       .snapshot_control
       .get_collab_snapshot_list(workspace_id, oid)
       .await
+  }
+
+  fn mark_as_editing(&self, oid: Uuid) {
+    self.cache.mark_as_dirty(oid);
   }
 }

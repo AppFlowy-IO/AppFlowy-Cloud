@@ -30,7 +30,6 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Update};
 
-#[derive(Clone)]
 pub struct CollabCache {
   thread_pool: Arc<ThreadPoolNoAbort>,
   disk_cache: CollabDiskCache,
@@ -53,7 +52,7 @@ impl CollabCache {
     s3: AwsS3BucketClientImpl,
     metrics: Arc<CollabMetrics>,
     s3_collab_threshold: usize,
-  ) -> Self {
+  ) -> Arc<Self> {
     let mem_cache = CollabMemCache::new(
       thread_pool.clone(),
       redis_conn_manager.clone(),
@@ -70,7 +69,7 @@ impl CollabCache {
     let small_collab_size = get_env_var("APPFLOWY_SMALL_COLLAB_SIZE", "4096")
       .parse::<usize>()
       .unwrap_or(DECODE_SPAWN_THRESHOLD);
-    Self {
+    Arc::new(Self {
       thread_pool,
       disk_cache,
       mem_cache,
@@ -78,14 +77,16 @@ impl CollabCache {
       small_collab_size,
       metrics,
       dirty_collabs: DashSet::new(),
-    }
+    })
   }
 
   pub fn mark_as_dirty(&self, object_id: Uuid) {
+    tracing::trace!("marking collab {} as dirty", object_id);
     self.dirty_collabs.insert(object_id);
   }
 
   pub fn mark_as_clean(&self, object_id: &Uuid) {
+    tracing::trace!("marking collab {} as clean", object_id);
     self.dirty_collabs.remove(object_id);
   }
 
@@ -229,10 +230,7 @@ impl CollabCache {
     let from = from.unwrap_or_default();
     if !self.dirty_collabs.contains(&object_id) {
       // there are no pending updates for this collab, so we can return the cached value directly
-      tracing::trace!(
-        "no pending updates for collab: {}, returning cached value",
-        object_id
-      );
+      tracing::trace!("no pending updates for collab: {}", object_id);
       match encoded_collab {
         Some(encoded_collab) if encoded_collab.doc_state.len() <= self.small_collab_size => {
           return Ok((rid, encoded_collab));

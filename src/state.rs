@@ -46,7 +46,7 @@ pub struct AppState {
   pub redis_stream_router: Arc<StreamRouter>,
   pub awareness_gossip: Arc<AwarenessGossip>,
   pub redis_connection_manager: RedisConnectionManager,
-  pub collab_cache: CollabCache,
+  pub collab_cache: Arc<CollabCache>,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
   pub collab_access_control: Arc<dyn CollabAccessControl>,
   pub workspace_access_control: Arc<dyn WorkspaceAccessControl>,

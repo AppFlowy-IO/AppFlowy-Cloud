@@ -13,7 +13,7 @@ use uuid::Uuid;
 pub struct CollabStorageAccessControlImpl {
   pub collab_access_control: Arc<dyn CollabAccessControl>,
   pub workspace_access_control: Arc<dyn WorkspaceAccessControl>,
-  pub cache: CollabCache,
+  pub cache: Arc<CollabCache>,
 }
 
 #[async_trait]

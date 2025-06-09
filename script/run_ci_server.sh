@@ -1,22 +1,64 @@
 #!/usr/bin/env bash
 
-# build only the cloud service, version v1.2.3
-# ./run_ci_server.sh cloud v1.2.3
-# build only the worker service, defaulting to "latest"
-# ./run_ci_server.sh worker
-# build only the admin_frontend service, defaulting to "latest"
-# ./run_ci_server.sh admin_frontend
+#===============================================================================
+# AppFlowy Cloud CI Server Runner
+#===============================================================================
 #
-# build both cloud and worker services, version v1.2.3
-# ./run_ci_server.sh all v1.2.3
-# build all three services, version v1.2.3
-# ./run_ci_server.sh full v1.2.3
+# DESCRIPTION:
+#   This script builds and runs AppFlowy Cloud services using Docker Compose.
+#   It supports building individual services or combinations of services,
+#   with options for development or production builds.
 #
-# skip build and pull images instead
-# SKIP_BUILD=1 ./run_ci_server.sh cloud v1.2.3
+# PREREQUISITES:
+#   - Docker and Docker Compose installed
+#   - .env file exists (copy from deploy.env and customize)
 #
-# build with release profile (optimized, slower build)
-# RELEASE_BUILD=1 ./run_ci_server.sh cloud v1.2.3
+# USAGE:
+#   ./run_ci_server.sh [SERVICE] [VERSION] [OPTIONS]
+#
+# SERVICES:
+#   cloud           - Build only the cloud service
+#   worker          - Build only the worker service  
+#   admin_frontend  - Build only the admin frontend service
+#   all             - Build cloud + worker services (default)
+#   full            - Build all three services
+#
+# VERSION:
+#   [version-tag]   - Docker image tag (default: "latest")
+#
+# ENVIRONMENT VARIABLES:
+#   SKIP_BUILD=1    - Skip building, pull existing images instead
+#   RELEASE_BUILD=1 - Build with release profile (optimized, slower)
+#
+# EXAMPLES:
+#   # Build all services with latest tag (development mode)
+#   ./run_ci_server.sh
+#   ./run_ci_server.sh all
+#
+#   # Build specific service with custom version
+#   ./run_ci_server.sh cloud v1.2.3
+#   ./run_ci_server.sh worker v2.0.0
+#   ./run_ci_server.sh admin_frontend latest
+#
+#   # Build all services including admin frontend
+#   ./run_ci_server.sh full v1.2.3
+#
+#   # Skip build and use existing images
+#   SKIP_BUILD=1 ./run_ci_server.sh cloud v1.2.3
+#
+#   # Build with production optimizations (slower but optimized)
+#   RELEASE_BUILD=1 ./run_ci_server.sh full v1.2.3
+#
+#   # Combine options
+#   SKIP_BUILD=1 ./run_ci_server.sh all latest
+#
+# NOTES:
+#   - Script automatically updates .env with localhost URLs for testing
+#   - Original .env is backed up as .env.backup
+#   - Use 'cp .env.backup .env' to restore original settings
+#   - Services are accessible via nginx proxy at http://localhost
+#
+#===============================================================================
 
 set -eo pipefail
 set -x

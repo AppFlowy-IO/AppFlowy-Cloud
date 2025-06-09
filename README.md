@@ -42,22 +42,58 @@ You'll need to install:
 - [Rust](https://www.rust-lang.org/tools/install)
 - [Docker](https://docs.docker.com/get-docker/)
 
-### Configuration
+### Environment Configuration
 
-- copy the configurations from `dev.env` to `.env`
-- edit the `.env` as required (such as SMTP configurations)
-
-Run the following command to start the AppFlowy Cloud server locally:
+To get started, you need to set up your environment variables. We've made this easy with an interactive script:
 
 ```bash
+./script/generate_env.sh
+```
+
+The script will ask you to choose between development (`dev.env`) or production (`deploy.env`) settings, then generate a
+`.env` file for you. If you have sensitive values like API keys, you can put them in environment-specific secret files
+and the script will safely merge them in.
+
+#### Quick Setup with Secrets (Recommended)
+
+**You don't need to understand all the environment variables.** For most development setups, simply:
+
+1. Copy the development secrets template:
+   ```bash
+   cp env.dev.secret.example .env.dev.secret
+   ```
+
+2. Edit `.env.dev.secret` and fill in only the values you need (like API keys, passwords, etc.)
+
+3. Run the generator:
+   ```bash
+   ./script/generate_env.sh
+   ```
+
+The script will automatically use your secrets file and generate a complete `.env` with sensible defaults for everything
+else.
+
+#### Manual Setup
+
+If you prefer doing it manually, just copy one of the template files:
+
+```bash
+cp dev.env .env    # for development
+```
+
+Then edit the `.env` file with your specific settings. **Choose ONE of the following commands** to start the AppFlowy
+Cloud server
+locally(make sure you are in the root directory of the project):
+
+```bash
+# For new setup - RECOMMENDED FOR FIRST TIME
+./script/run_local_server.sh --reset
+
 # Basic run (interactive prompts for container management)
 ./script/run_local_server.sh
 
 # With SQLx metadata preparation (useful for clean builds)
 ./script/run_local_server.sh --sqlx
-
-# With database reset (resets schema and data)
-./script/run_local_server.sh --reset
 
 # Combined: reset database and prepare SQLx metadata
 ./script/run_local_server.sh --reset --sqlx

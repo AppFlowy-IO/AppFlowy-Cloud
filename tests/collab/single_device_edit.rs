@@ -124,7 +124,7 @@ async fn write_big_chunk_data_init_sync_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = Uuid::new_v4();
-  let big_text = generate_random_string((MAXIMUM_REALTIME_MESSAGE_SIZE / 2) as usize);
+  let big_text = generate_random_string(MAXIMUM_REALTIME_MESSAGE_SIZE / 2);
   let collab_type = CollabType::Unknown;
   let doc_state = make_collab_with_key_value(&object_id, "text", big_text.clone());
 

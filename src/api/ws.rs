@@ -16,7 +16,7 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::ws2::{SessionInfo, WsSession};
 use appflowy_proto::{ServerMessage, WorkspaceNotification};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
-use collab_rt_entity::RealtimeMessage;
+use collab_rt_entity::{max_sync_message_size, RealtimeMessage};
 use collab_stream::model::MessageId;
 use secrecy::Secret;
 use semver::Version;
@@ -156,7 +156,7 @@ pub async fn establish_ws_connection_v2(
     &request,
     payload,
   )
-  .frame_size(10 * 1024 * 1024)
+  .frame_size(max_sync_message_size())
   .start()
 }
 

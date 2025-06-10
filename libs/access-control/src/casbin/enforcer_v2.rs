@@ -984,8 +984,7 @@ mod tests {
     let barrier = Arc::new(Barrier::new(40));
     let mut handles = Vec::new();
 
-    // 20 writers and 20 readers running concurrently
-    for i in 0..40 {
+    for i in 0..1000 {
       let enforcer_clone = Arc::clone(&enforcer);
       let barrier_clone = Arc::clone(&barrier);
       let ws_id = workspace_id.to_string();
@@ -1007,7 +1006,12 @@ mod tests {
         } else {
           // Reader: check current permissions
           let can_delete = enforcer_clone
-            .enforce_policy(&uid, ObjectType::Workspace(ws_id), Action::Delete)
+            .enforce_policy_with_consistency(
+              &uid,
+              ObjectType::Workspace(ws_id),
+              Action::Delete,
+              ConsistencyMode::Strong,
+            )
             .await?;
           Ok(format!("Read {}: can_delete={}", i, can_delete))
         }
@@ -1026,8 +1030,7 @@ mod tests {
     }
 
     // All operations should complete successfully
-    assert_eq!(results.len(), 40, "All operations should complete");
-
+    assert_eq!(results.len(), 1000, "All operations should complete");
     enforcer.shutdown().await.unwrap();
   }
 

@@ -83,7 +83,7 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            appflowyinc/gotrue:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}
+            appflowyinc/gotrue:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}-internal
 
       - name: Logout from Docker Hub
         if: always()
@@ -120,7 +120,7 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}-internal
           provenance: false
           build-args: |
             PROFILE=release
@@ -161,7 +161,7 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}-internal
           provenance: false
           build-args: |
             PROFILE=release
@@ -202,7 +202,7 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_worker:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_worker:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}-internal
           provenance: false
           build-args: |
             PROFILE=release

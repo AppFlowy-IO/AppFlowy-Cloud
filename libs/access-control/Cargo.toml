@@ -31,6 +31,7 @@ tokio = { workspace = true, features = ["macros", "time", "rt-multi-thread"] }
 tokio-stream.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 serde = { version = "1.0.200", features = ["derive"] }
+infra.workspace = true
 
 [features]
 default = ["casbin"]

@@ -14,6 +14,7 @@ dependencies = [
  "database",
  "database-entity",
  "futures-util",
+ "infra",
  "lazy_static",
  "prometheus-client",
  "rand 0.8.5",

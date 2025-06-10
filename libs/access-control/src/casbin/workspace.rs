@@ -22,7 +22,7 @@ impl WorkspaceAccessControlImpl {
 
 #[async_trait]
 impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
-  async fn enforce_role(
+  async fn enforce_role_strong(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
@@ -30,8 +30,27 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   ) -> Result<(), AppError> {
     let result = self
       .access_control
-      .enforce(uid, ObjectType::Workspace(workspace_id.to_string()), role)
+      .enforce_strong(uid, ObjectType::Workspace(workspace_id.to_string()), role)
       .await;
+
+    match result {
+      Ok(true) => Ok(()),
+      Ok(false) => Err(AppError::NotEnoughPermissions),
+      Err(e) => Err(e),
+    }
+  }
+
+  async fn enforce_role_weak(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    role: AFRole,
+  ) -> Result<(), AppError> {
+    let result = self
+      .access_control
+      .enforce_weak(uid, ObjectType::Workspace(workspace_id.to_string()), role)
+      .await;
+
     match result {
       Ok(true) => Ok(()),
       Ok(false) => Err(AppError::NotEnoughPermissions),
@@ -138,7 +157,7 @@ mod tests {
     let workspace_access_control = super::WorkspaceAccessControlImpl::new(access_control);
     for uid in [member_uid, owner_uid] {
       workspace_access_control
-        .enforce_role(&uid, &workspace_id, AFRole::Member)
+        .enforce_role_strong(&uid, &workspace_id, AFRole::Member)
         .await
         .unwrap_or_else(|_| panic!("Failed to enforce role for {}", uid));
       workspace_access_control

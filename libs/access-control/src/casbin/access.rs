@@ -118,13 +118,28 @@ impl AccessControl {
   /// - Consistency is critical (e.g., security-sensitive operations)
   /// - After policy changes that must be immediately reflected
   /// - You can afford to wait for pending updates
-  pub async fn enforce<T>(&self, uid: &i64, obj: ObjectType, act: T) -> Result<bool, AppError>
+  pub async fn enforce_strong<T>(
+    &self,
+    uid: &i64,
+    obj: ObjectType,
+    act: T,
+  ) -> Result<bool, AppError>
   where
     T: Acts,
   {
     self
       .enforcer
       .enforce_policy_with_consistency(uid, obj, act, ConsistencyMode::Strong)
+      .await
+  }
+
+  pub async fn enforce_weak<T>(&self, uid: &i64, obj: ObjectType, act: T) -> Result<bool, AppError>
+  where
+    T: Acts,
+  {
+    self
+      .enforcer
+      .enforce_policy_with_consistency(uid, obj, act, ConsistencyMode::Eventual)
       .await
   }
 }

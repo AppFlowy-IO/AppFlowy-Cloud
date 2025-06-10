@@ -1,4 +1,4 @@
-name: Manually Build All Docker Images
+name: Manually Build Selected Docker Images
 
 on:
   workflow_dispatch:
@@ -8,16 +8,55 @@ on:
         required: true
         default: "main"
       debug_version:
-        description: "Enter the release version tag (e.g. 0.9.30). The built image will be tagged as xxx:0.9.30-test."
+        description: "Enter the release version tag (e.g. 0.9.30). The built image will be tagged as xxx:0.9.30-amd64."
         required: true
       archs:
         description: "Target architectures (comma separated), e.g. linux/amd64,linux/arm64"
         required: false
         default: "linux/amd64"
+      build_gotrue:
+        description: "Build GoTrue image"
+        type: boolean
+        required: false
+        default: false
+      build_appflowy_cloud:
+        description: "Build AppFlowy Cloud image"
+        type: boolean
+        required: false
+        default: true
+      build_admin_frontend:
+        description: "Build Admin Frontend image"
+        type: boolean
+        required: false
+        default: false
+      build_appflowy_worker:
+        description: "Build AppFlowy Worker image"
+        type: boolean
+        required: false
+        default: true
 
 jobs:
+  setup:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set up architecture matrix
+        id: set-matrix
+        run: |
+          # Convert comma-separated archs to JSON array and extract arch names
+          archs="${{ github.event.inputs.archs }}"
+          # Replace linux/ prefix and convert to JSON array
+          matrix_archs=$(echo "$archs" | sed 's/linux\///g' | sed 's/,/","/g' | sed 's/^/["/' | sed 's/$/"]/')
+          echo "matrix={\"arch\":$matrix_archs}" >> $GITHUB_OUTPUT
+          echo "Generated matrix: {\"arch\":$matrix_archs}"
+
   gotrue:
     runs-on: ubuntu-22.04
+    needs: setup
+    if: ${{ github.event.inputs.build_gotrue == 'true' }}
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -41,9 +80,10 @@ jobs:
         with:
           context: .
           file: ./docker/gotrue/Dockerfile
+          platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            appflowyinc/gotrue:${{ github.event.inputs.debug_version }}-test
+            appflowyinc/gotrue:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}-internal
 
       - name: Logout from Docker Hub
         if: always()
@@ -51,6 +91,10 @@ jobs:
 
   appflowy_cloud:
     runs-on: ubuntu-22.04
+    needs: setup
+    if: ${{ github.event.inputs.build_appflowy_cloud == 'true' }}
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -73,10 +117,13 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: ${{ github.event.inputs.archs }}
+          platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ github.event.inputs.debug_version }}-test
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}-internal
+          provenance: false
+          build-args: |
+            PROFILE=release
 
       - name: Logout from Docker Hub
         if: always()
@@ -84,6 +131,10 @@ jobs:
 
   admin_frontend:
     runs-on: ubuntu-22.04
+    needs: setup
+    if: ${{ github.event.inputs.build_admin_frontend == 'true' }}
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -107,10 +158,13 @@ jobs:
         with:
           context: .
           file: ./admin_frontend/Dockerfile
-          platforms: ${{ github.event.inputs.archs }}
+          platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ github.event.inputs.debug_version }}-test
+            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}-internal
+          provenance: false
+          build-args: |
+            PROFILE=release
 
       - name: Logout from Docker Hub
         if: always()
@@ -118,6 +172,10 @@ jobs:
 
   appflowy_worker:
     runs-on: ubuntu-22.04
+    needs: setup
+    if: ${{ github.event.inputs.build_appflowy_worker == 'true' }}
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -141,10 +199,13 @@ jobs:
         with:
           context: .
           file: ./services/appflowy-worker/Dockerfile
-          platforms: ${{ github.event.inputs.archs }}
+          platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_worker:${{ github.event.inputs.debug_version }}-test
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_worker:${{ github.event.inputs.debug_version }}-${{ matrix.arch }}-internal
+          provenance: false
+          build-args: |
+            PROFILE=release
 
       - name: Logout from Docker Hub
         if: always()

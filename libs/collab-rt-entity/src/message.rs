@@ -18,7 +18,18 @@ use std::ops::{Deref, DerefMut};
 /// If a message goes over this size, it won't be processed and will trigger a parser error.
 /// This limit helps prevent server issues like overloads and denial-of-service attacks by rejecting
 /// overly large messages.
-pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 1024 * 1024; // 1 MB
+pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+
+/// Get the maximum realtime message size from environment variable or use default.
+/// 
+/// Reads from the `APPFLOWY_REALTIME_MESSAGE_SIZE` environment variable.
+/// If not set or invalid, falls back to `MAXIMUM_REALTIME_MESSAGE_SIZE`.
+fn get_max_message_size() -> u64 {
+  std::env::var("APPFLOWY_REALTIME_MESSAGE_SIZE")
+    .ok()
+    .and_then(|s| s.parse().ok())
+    .unwrap_or(MAXIMUM_REALTIME_MESSAGE_SIZE)
+}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MessageByObjectId(pub HashMap<String, Vec<ClientCollabMessage>>);
@@ -105,7 +116,7 @@ impl RealtimeMessage {
     let data = DefaultOptions::new()
       .with_fixint_encoding()
       .allow_trailing_bytes()
-      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
+      .with_limit(get_max_message_size())
       .serialize(self)
       .map_err(|e| {
         anyhow!(
@@ -121,7 +132,7 @@ impl RealtimeMessage {
     let message = DefaultOptions::new()
       .with_fixint_encoding()
       .allow_trailing_bytes()
-      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
+      .with_limit(get_max_message_size())
       .deserialize(data)?;
     Ok(message)
   }

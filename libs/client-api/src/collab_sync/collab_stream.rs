@@ -11,7 +11,7 @@ use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, instrument, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 use uuid::Uuid;
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
@@ -325,10 +325,14 @@ where
 
     // workaround for panic when applying updates. It can be removed in the future
     let result = tokio::spawn(async move {
+      info!("Before decoder {}", sync_object.object_id);
       let mut decoder = DecoderV1::new(Cursor::new(&payload));
+      info!("After decoder");
       let reader = MessageReader::new(&mut decoder);
+      info!("After reader");
       for yrs_message in reader {
         let msg = yrs_message?;
+        info!("After yrs message");
 
         // When the client receives a SyncStep1 message, it indicates that the server is requesting
         // the client to send updates that the server is missing. This typically occurs when the client
@@ -342,6 +346,7 @@ where
           let lock = collab.read().await;
           validate_data_for_folder((*lock).borrow(), &sync_object.workspace_id.to_string())
             .map_err(|err| SyncError::OverrideWithIncorrectData(err.to_string()))?;
+          info!("After validate data for folder");
         }
 
         if let Some(return_payload) = ClientSyncProtocol

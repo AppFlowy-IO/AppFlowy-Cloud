@@ -11,7 +11,7 @@ use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, instrument, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 use uuid::Uuid;
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
@@ -246,9 +246,11 @@ where
     if cfg!(feature = "sync_verbose_log") {
       trace!("handle server: {}", msg);
     }
-
+    info!("{} receive message: {}", object.object_id, msg);
     if let ServerCollabMessage::ClientAck(ack) = &msg {
+      info!("is server ack: {}", ack);
       let ack_code = ack.get_code();
+      info!("ack code: {}", ack_code.clone() as u8);
       // if the server can not apply the update, we start the init sync.
       if ack_code == AckCode::CannotApplyUpdate {
         return Err(SyncError::CannotApplyUpdate);
@@ -314,6 +316,7 @@ where
     collab: &Arc<RwLock<dyn BorrowMut<Collab> + Send + Sync + 'static>>,
     sink: &Arc<CollabSink<Sink>>,
   ) -> Result<(), SyncError> {
+    info!("processing message {}", sync_object.object_id);
     if msg.payload().is_empty() {
       return Ok(());
     }
@@ -326,8 +329,11 @@ where
 
     // workaround for panic when applying updates. It can be removed in the future
     let result = tokio::spawn(async move {
+      info!("before decoder");
       let mut decoder = DecoderV1::new(Cursor::new(&payload));
+      info!("after decoder");
       let reader = MessageReader::new(&mut decoder);
+      info!("after reader");
       for yrs_message in reader {
         let msg = yrs_message?;
 

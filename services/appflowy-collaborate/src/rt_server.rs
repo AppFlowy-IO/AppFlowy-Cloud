@@ -389,29 +389,3 @@ fn spawn_period_check_inactive_group<S>(
     }
   });
 }
-
-/// When the CollaborationServer operates within an actix-web actor, utilizing tokio::spawn for
-/// task execution confines all tasks to the same thread, attributable to the actor's reliance on a
-/// single-threaded Tokio runtime. To circumvent this limitation and enable task execution across
-/// multiple threads, we've incorporated a multi-thread feature.
-///
-/// When appflowy-collaborate is deployed as a standalone service, we can use tokio multi-thread.
-mod collaboration_runtime {
-  use std::io;
-
-  use lazy_static::lazy_static;
-  use tokio::runtime;
-  use tokio::runtime::Runtime;
-
-  lazy_static! {
-    pub(crate) static ref COLLAB_RUNTIME: Runtime = default_tokio_runtime().unwrap();
-  }
-
-  pub fn default_tokio_runtime() -> io::Result<Runtime> {
-    runtime::Builder::new_multi_thread()
-      .thread_name("collab-rt")
-      .enable_io()
-      .enable_time()
-      .build()
-  }
-}

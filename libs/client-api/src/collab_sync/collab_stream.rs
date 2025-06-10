@@ -244,7 +244,7 @@ where
     seq_num_counter: &Arc<SeqNumCounter>,
   ) -> Result<(), SyncError> {
     if cfg!(feature = "sync_verbose_log") {
-      trace!("handle server: {}", msg);
+      trace!("handle server: {:?}", msg);
     }
 
     if let ServerCollabMessage::ClientAck(ack) = &msg {

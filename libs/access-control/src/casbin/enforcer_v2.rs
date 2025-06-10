@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Notify, RwLock};
 use tokio::time::timeout;
-use tracing::{event, info, instrument, trace, warn};
+use tracing::{error, event, info, instrument, trace, warn};
 
 /// Consistency mode for policy enforcement
 #[derive(Debug, Clone, Default, Copy)]
@@ -137,7 +137,7 @@ impl AFEnforcerV2 {
     generation_notify: Arc<Notify>,
   ) {
     info!("[access control v2]: Policy update processor started");
-    let buffer_size = 5;
+    let buffer_size = 2;
     let mut buf = Vec::with_capacity(buffer_size);
 
     loop {
@@ -148,11 +148,10 @@ impl AFEnforcerV2 {
         break;
       }
 
-      trace!("[access control v2]: Received {} policy commands", n);
+      info!("[access control v2]: Received {} policy commands", n);
       let mut enforcer = enforcer.write().await;
       let mut max_generation = 0u64;
       let mut processed_keys = Vec::new();
-
       for cmd in buf.drain(..) {
         match cmd {
           PolicyCommand::AddPolicies {
@@ -163,7 +162,6 @@ impl AFEnforcerV2 {
           } => {
             max_generation = max_generation.max(generation);
             processed_keys.extend(subject_object_keys);
-
             let result = async {
               enforcer
                 .add_policies(policies)
@@ -183,7 +181,6 @@ impl AFEnforcerV2 {
           } => {
             max_generation = max_generation.max(generation);
             processed_keys.extend(subject_object_keys);
-
             let result = async {
               enforcer
                 .remove_policies(policies)
@@ -207,10 +204,10 @@ impl AFEnforcerV2 {
       if max_generation > 0 {
         trace!(
           "[access control v2]: Updating processed generation from {} to {}",
-          processed_generation.load(Ordering::Relaxed),
+          processed_generation.load(Ordering::SeqCst),
           max_generation
         );
-        processed_generation.store(max_generation, Ordering::Release);
+        processed_generation.store(max_generation, Ordering::SeqCst);
         if !processed_keys.is_empty() {
           let mut pending = pending_operations.write().await;
           for key in processed_keys {
@@ -302,8 +299,7 @@ impl AFEnforcerV2 {
       .map(|act| vec![sub.policy_subject(), obj.policy_object(), act])
       .collect::<Vec<Vec<_>>>();
 
-    trace!("[access control v2]: queuing add policy:{:?}", policies);
-
+    info!("[access control v2]: queuing add policy:{:?}", policies);
     // Generate new generation number
     let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
 
@@ -499,10 +495,19 @@ impl AFEnforcerV2 {
 
     match timeout(timeout_duration, wait_future).await {
       Ok(result) => result,
-      Err(_) => Err(AppError::Internal(anyhow!(
-        "Timed out waiting for policy consistency after {}ms",
-        timeout_duration.as_millis()
-      ))),
+      Err(_) => {
+        error!(
+          "[access control v2]: target_generation={}, current_generation={}, pending_operation={}",
+          target_generation,
+          self.processed_generation.load(Ordering::Acquire),
+          self.pending_operations.read().await.len(),
+        );
+
+        Err(AppError::Internal(anyhow!(
+          "Timed out waiting for policy consistency after {}ms",
+          timeout_duration.as_millis()
+        )))
+      },
     }
   }
 

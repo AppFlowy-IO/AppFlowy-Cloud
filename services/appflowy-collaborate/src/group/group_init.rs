@@ -224,7 +224,7 @@ impl CollabGroup {
           sender,
           seq_num
         );
-        let payload = update.encode_v1();
+        let payload = Message::Sync(SyncMessage::Update(update.encode_v1())).encode_v1();
         let message = BroadcastSync::new(sender, state.object_id.to_string(), payload, seq_num);
         for mut e in state.subscribers.iter_mut() {
           let subscription = e.value_mut();

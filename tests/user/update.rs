@@ -1,5 +1,4 @@
 use app_error::ErrorCode;
-use appflowy_proto::WorkspaceNotification;
 use client_api::ws::{WSClient, WSClientConfig};
 use client_api_test::*;
 use serde_json::json;
@@ -187,8 +186,10 @@ async fn user_change_notify_test() {
   }
 }
 
+#[cfg(feature = "sync-v2")]
 #[tokio::test]
 async fn user_change_notify_test_v2() {
+  use appflowy_proto::WorkspaceNotification;
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let mut workspace_changed = test_client.subscribe_workspace_notification(&workspace_id);

@@ -270,7 +270,7 @@ impl CollabGroup {
         res = updates.recv() => {
           match res {
             Some(awareness_update) => {
-              Self::handle_inbound_awareness(&state, awareness_update).await;
+              Self::handle_inbound_awareness(&state, &awareness_update).await;
             },
             None => {
               break;
@@ -282,13 +282,13 @@ impl CollabGroup {
     Ok(())
   }
 
-  async fn handle_inbound_awareness(state: &CollabGroupState, update: AwarenessStreamUpdate) {
+  async fn handle_inbound_awareness(state: &CollabGroupState, update: &AwarenessStreamUpdate) {
     tracing::trace!(
       "broadcasting awareness update from {} (contains {} clients)",
       update.sender,
       update.data.clients.len()
     );
-    let sender = update.sender;
+    let sender = &update.sender;
     let message = AwarenessSync::new(
       state.object_id.to_string(),
       Message::Awareness(update.data.encode_v1()).encode_v1(),
@@ -296,7 +296,7 @@ impl CollabGroup {
     );
     for mut e in state.subscribers.iter_mut() {
       let subscription = e.value_mut();
-      if sender == subscription.collab_origin {
+      if sender == &subscription.collab_origin {
         continue; // don't send update to its sender
       }
 

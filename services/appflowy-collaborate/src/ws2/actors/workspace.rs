@@ -404,8 +404,12 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
   }
 }
 
-impl StreamHandler<(ObjectId, AwarenessStreamUpdate)> for Workspace {
-  fn handle(&mut self, (object_id, msg): (ObjectId, AwarenessStreamUpdate), _: &mut Self::Context) {
+impl StreamHandler<(ObjectId, Arc<AwarenessStreamUpdate>)> for Workspace {
+  fn handle(
+    &mut self,
+    (object_id, msg): (ObjectId, Arc<AwarenessStreamUpdate>),
+    _: &mut Self::Context,
+  ) {
     tracing::trace!(
       "received awareness update for {}/{}",
       self.workspace_id,

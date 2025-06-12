@@ -164,7 +164,10 @@ impl CollabRedisStream {
     }
   }
 
-  pub fn awareness_updates(&self, object_id: &Uuid) -> UnboundedReceiver<AwarenessStreamUpdate> {
+  pub fn awareness_updates(
+    &self,
+    object_id: &Uuid,
+  ) -> UnboundedReceiver<Arc<AwarenessStreamUpdate>> {
     self.awareness_gossip.collab_awareness_stream(object_id)
   }
 

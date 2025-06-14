@@ -35,12 +35,8 @@ env:
 
 jobs:
   setup:
-    name: Setup Environment
+    name: Setup Environment and Build Images
     runs-on: ubuntu-latest
-    outputs:
-      worker_version: ${{ steps.push_images.outputs.worker_version }}
-      cloud_version: ${{ steps.push_images.outputs.cloud_version }}
-      admin_frontend_version: ${{ steps.push_images.outputs.admin_frontend_version }}
     steps:
       - uses: actions/checkout@v4
       - name: Install prerequisites
@@ -54,12 +50,6 @@ jobs:
         with:
           driver-opts: network=host
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
       - name: Build Docker Images
         run: |
           export DOCKER_DEFAULT_PLATFORM=linux/amd64
@@ -70,18 +60,21 @@ jobs:
             --build-arg PROFILE=debug \
             appflowy_cloud appflowy_worker admin_frontend
 
-      - name: Push docker images to docker hub
-        id: push_images
+      - name: Save Docker Images
         run: |
-          docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
-          docker tag appflowyinc/appflowy_worker appflowyinc/appflowy_worker:${GITHUB_SHA}
-          docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:${GITHUB_SHA}
-          docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
-          docker push appflowyinc/appflowy_worker:${GITHUB_SHA}
-          docker push appflowyinc/admin_frontend:${GITHUB_SHA}
-          echo "worker_version=${GITHUB_SHA}" >> $GITHUB_OUTPUT
-          echo "cloud_version=${GITHUB_SHA}" >> $GITHUB_OUTPUT
-          echo "admin_frontend_version=${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          docker save appflowyinc/appflowy_cloud:latest | gzip > appflowy_cloud.tar.gz
+          docker save appflowyinc/appflowy_worker:latest | gzip > appflowy_worker.tar.gz
+          docker save appflowyinc/admin_frontend:latest | gzip > admin_frontend.tar.gz
+
+      - name: Upload Docker Images as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: |
+            appflowy_cloud.tar.gz
+            appflowy_worker.tar.gz
+            admin_frontend.tar.gz
+          retention-days: 1
 
   test:
     name: Integration Tests
@@ -104,6 +97,17 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           workspaces: "AppFlowy-Cloud"
+
+      - name: Download Docker Images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Load Docker Images
+        run: |
+          docker load < appflowy_cloud.tar.gz
+          docker load < appflowy_worker.tar.gz
+          docker load < admin_frontend.tar.gz
 
       - name: Copy and rename deploy.env to .env
         run: cp deploy.env .env
@@ -143,9 +147,9 @@ jobs:
 
       - name: Run Docker-Compose
         run: |
-          export APPFLOWY_WORKER_VERSION=${{ needs.setup.outputs.worker_version }}
-          export APPFLOWY_CLOUD_VERSION=${{ needs.setup.outputs.cloud_version }}
-          export APPFLOWY_ADMIN_FRONTEND_VERSION=${{ needs.setup.outputs.admin_frontend_version }}
+          export APPFLOWY_WORKER_VERSION=latest
+          export APPFLOWY_CLOUD_VERSION=latest
+          export APPFLOWY_ADMIN_FRONTEND_VERSION=latest
           export APPFLOWY_AI_VERSION=${{ env.APPFLOWY_AI_VERSION }}
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
@@ -175,28 +179,3 @@ jobs:
         if: failure()
         run: |
           docker logs appflowy-cloud-ai-1
-
-  cleanup:
-    name: Cleanup Docker Images
-    if: always()
-    needs: test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        image_name: [ "appflowy_cloud", "appflowy_worker", "admin_frontend" ]
-    steps:
-      - name: Remove Docker Images from Docker Hub
-        continue-on-error: true
-        run: |
-          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "appflowyinc", "password": "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "Error: Failed to get Docker Hub token"
-            exit 1
-          fi
-          IMAGE_NAME="${{ matrix.image_name }}"
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/${IMAGE_NAME}/tags/${GITHUB_SHA}/)
-          if [ "$RESPONSE" -ne 204 ] && [ "$RESPONSE" -ne 404 ]; then
-            echo "Warning: Failed to delete Docker image tag. HTTP response code: $RESPONSE"
-          else
-            echo "Successfully deleted Docker image tag for $IMAGE_NAME:${GITHUB_SHA}"
-          fi

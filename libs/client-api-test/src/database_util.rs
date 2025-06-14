@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab::preclude::ClientID;
+use collab_database::database_trait::{DatabaseCollabReader, EncodeCollabByOid};
 use collab_database::error::DatabaseError;
-use collab_database::workspace_database::{DatabaseCollabReader, EncodeCollabByOid};
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabResult::{Failed, Success};
 use database_entity::dto::{QueryCollab, QueryCollabParams};

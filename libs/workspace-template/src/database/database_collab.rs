@@ -1,8 +1,8 @@
 use anyhow::Error;
 use collab::core::collab::default_client_id;
 use collab_database::database::{Database, DatabaseContext};
+use collab_database::database_trait::NoPersistenceDatabaseCollabService;
 use collab_database::entity::{CreateDatabaseParams, EncodedDatabase};
-use collab_database::workspace_database::NoPersistenceDatabaseCollabService;
 use std::sync::Arc;
 
 pub async fn create_database_collab(

@@ -11,7 +11,7 @@ use collab_database::rows::RowMetaKey;
 use collab_database::rows::CELL_FIELD_TYPE;
 use collab_database::rows::ROW_CELLS;
 use collab_database::template::entity::CELL_DATA;
-use collab_database::workspace_database::{NoPersistenceDatabaseCollabService, WorkspaceDatabase};
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
@@ -51,6 +51,7 @@ use super::ops::broadcast_update;
 use super::ops::broadcast_update_with_timeout;
 
 use collab::core::collab::default_client_id;
+use collab_database::database_trait::NoPersistenceDatabaseCollabService;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(

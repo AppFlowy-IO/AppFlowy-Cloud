@@ -4,7 +4,7 @@ use super::utils::{batch_get_latest_collab_encoded, get_latest_collab_encoded};
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use async_trait::async_trait;
-use collab_database::workspace_database::DatabaseCollabReader;
+use collab_database::database_trait::{DatabaseCollabReader, EncodeCollabByOid};
 use collab_database::{
   database::{gen_database_group_id, gen_field_id},
   entity::FieldType,
@@ -17,7 +17,6 @@ use collab_database::{
     BoardLayoutSetting, CalendarLayoutSetting, DatabaseLayout, FieldSettingsByFieldIdMap, Group,
     GroupSetting, GroupSettingMap, LayoutSettings,
   },
-  workspace_database::EncodeCollabByOid,
 };
 use collab_entity::{CollabType, EncodedCollab};
 use database::collab::GetCollabOrigin;

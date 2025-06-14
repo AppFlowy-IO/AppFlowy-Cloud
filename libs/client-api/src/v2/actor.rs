@@ -13,11 +13,11 @@ use client_api_entity::CollabType;
 use collab::core::collab_state::{InitState, State, SyncState};
 use collab::preclude::Collab;
 use collab_rt_protocol::{CollabRef, WeakCollabRef};
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use shared_entity::response::AppResponseError;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicBool;
@@ -52,7 +52,7 @@ pub(super) struct WorkspaceControllerActor {
   db: Db,
   notification_tx: tokio::sync::broadcast::Sender<WorkspaceNotification>,
   /// Used to record recently changed collabs
-  latest_changed_collabs: DashSet<ChangedCollab>,
+  changed_collab_sender: tokio::sync::broadcast::Sender<ChangedCollab>,
   #[cfg(debug_assertions)]
   pub skip_realtime_message: AtomicBool,
 }
@@ -62,6 +62,7 @@ impl WorkspaceControllerActor {
   const REMOTE_ORIGIN: &'static str = "af";
 
   pub fn new(db: Db, options: Options, last_message_id: Rid) -> Arc<Self> {
+    let (changed_collab_sender, _) = tokio::sync::broadcast::channel(10);
     let (status_tx, status_rx) = tokio::sync::watch::channel(ConnectionStatus::default());
     let (message_tx, message_rx) = tokio::sync::mpsc::unbounded_channel();
     let (notification_tx, _) = tokio::sync::broadcast::channel(100);
@@ -76,7 +77,7 @@ impl WorkspaceControllerActor {
       #[cfg(debug_assertions)]
       skip_realtime_message: AtomicBool::new(false),
       notification_tx,
-      latest_changed_collabs: DashSet::new(),
+      changed_collab_sender,
     });
     tokio::spawn(Self::actor_loop(
       Arc::downgrade(&actor),
@@ -85,18 +86,8 @@ impl WorkspaceControllerActor {
     actor
   }
 
-  /// Return current changed collab ids and clear the set.
-  pub fn consume_latest_changed_collabs(&self) -> HashSet<ChangedCollab> {
-    let result: HashSet<_> = self
-      .latest_changed_collabs
-      .iter()
-      .map(|item| ChangedCollab {
-        id: item.id,
-        collab_type: item.collab_type,
-      })
-      .collect();
-    self.latest_changed_collabs.clear();
-    result
+  pub fn subscribe_changed_collab(&self) -> tokio::sync::broadcast::Receiver<ChangedCollab> {
+    self.changed_collab_sender.subscribe()
   }
 
   pub fn subscribe_notification(&self) -> tokio::sync::broadcast::Receiver<WorkspaceNotification> {
@@ -366,18 +357,10 @@ impl WorkspaceControllerActor {
       object_id,
       flags,
       update,
-      collab_type,
       ..
     } = &msg
     {
       let rid = source.into();
-      if !self.latest_changed_collabs.contains(object_id) {
-        self.latest_changed_collabs.insert(ChangedCollab {
-          id: *object_id,
-          collab_type: *collab_type,
-        });
-      }
-
       // persist
       match flags {
         UpdateFlags::Lib0v1 => self.db.save_update(object_id, rid, update, source),
@@ -960,8 +943,8 @@ impl WorkspaceControllerActor {
     update_bytes: Vec<u8>,
     action_source: ActionSource,
   ) -> anyhow::Result<()> {
-    if !self.latest_changed_collabs.contains(&object_id) {
-      self.latest_changed_collabs.insert(ChangedCollab {
+    if matches!(action_source, ActionSource::Remote(_)) {
+      let _ = self.changed_collab_sender.send(ChangedCollab {
         id: object_id,
         collab_type,
       });

@@ -12,7 +12,6 @@ use collab_rt_protocol::CollabRef;
 use futures_core::Stream;
 use futures_util::stream::SplitSink;
 use shared_entity::response::AppResponseError;
-use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
@@ -56,8 +55,8 @@ impl WorkspaceController {
     })
   }
 
-  pub fn consume_latest_changed_collab(&self) -> HashSet<ChangedCollab> {
-    self.actor.consume_latest_changed_collabs()
+  pub fn subscribe_changed_collab(&self) -> tokio::sync::broadcast::Receiver<ChangedCollab> {
+    self.actor.subscribe_changed_collab()
   }
 
   pub fn is_connected(&self) -> bool {

@@ -749,7 +749,7 @@ impl PublishCollabDuplicator {
     )?;
     let db_body = DatabaseBody::from_collab(
       &db_collab,
-      Arc::new(NoPersistenceDatabaseCollabService { client_id }),
+      Arc::new(NoPersistenceDatabaseCollabService::new(client_id)),
       None,
     )
     .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;

@@ -1444,9 +1444,9 @@ async fn duplicate_to_workspace_db_with_relation() {
 
       let rel_col_db_body = DatabaseBody::from_collab(
         &db_with_rel_col_collab,
-        Arc::new(NoPersistenceDatabaseCollabService {
-          client_id: client_2.client_id(&workspace_id_2).await,
-        }),
+        Arc::new(NoPersistenceDatabaseCollabService::new(
+          client_2.client_id(&workspace_id_2).await,
+        )),
         None,
       )
       .unwrap();
@@ -1526,9 +1526,9 @@ async fn duplicate_to_workspace_db_row_with_doc() {
 
       let db_body = DatabaseBody::from_collab(
         &db_collab,
-        Arc::new(NoPersistenceDatabaseCollabService {
-          client_id: client_2.client_id(&workspace_id_2).await,
-        }),
+        Arc::new(NoPersistenceDatabaseCollabService::new(
+          client_2.client_id(&workspace_id_2).await,
+        )),
         None,
       )
       .unwrap();
@@ -1614,9 +1614,9 @@ async fn duplicate_to_workspace_db_rel_self() {
     let txn = db_rel_self_collab.transact();
     let db_rel_self_body = DatabaseBody::from_collab(
       &db_rel_self_collab,
-      Arc::new(NoPersistenceDatabaseCollabService {
-        client_id: client_2.client_id(&workspace_id_2).await,
-      }),
+      Arc::new(NoPersistenceDatabaseCollabService::new(
+        client_2.client_id(&workspace_id_2).await,
+      )),
       None,
     )
     .unwrap();

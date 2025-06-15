@@ -236,9 +236,7 @@ pub async fn get_latest_collab_database_body(
   .await?;
   let db_body = DatabaseBody::from_collab(
     &db_collab,
-    Arc::new(NoPersistenceDatabaseCollabService {
-      client_id: default_client_id(),
-    }),
+    Arc::new(NoPersistenceDatabaseCollabService::new(default_client_id())),
     None,
   )
   .ok_or_else(|| {

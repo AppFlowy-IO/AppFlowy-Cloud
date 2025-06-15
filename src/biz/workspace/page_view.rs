@@ -416,9 +416,8 @@ async fn prepare_new_encoded_database(
   group_settings: Vec<GroupSettingMap>,
 ) -> Result<EncodedDatabase, AppError> {
   let timestamp = collab_database::database::timestamp();
-  let context = DatabaseContext::new(Arc::new(NoPersistenceDatabaseCollabService {
-    client_id: default_client_id(),
-  }));
+  let service = Arc::new(NoPersistenceDatabaseCollabService::new(default_client_id()));
+  let context = DatabaseContext::new(service.clone(), service);
   let field_settings = default_field_settings_for_fields(&fields, database_layout);
   let mut layout_settings = LayoutSettings::default();
   if let Some(layout_setting) = layout_setting {
@@ -2230,7 +2229,7 @@ async fn get_page_collab_data_for_database(
   })?;
   let db_body = DatabaseBody::from_collab(
     &db_collab,
-    Arc::new(NoPersistenceDatabaseCollabService { client_id }),
+    Arc::new(NoPersistenceDatabaseCollabService::new(client_id)),
     None,
   )
   .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;
@@ -2378,7 +2377,7 @@ pub async fn create_database_view(
 
   let database_body = DatabaseBody::from_collab(
     &database_collab,
-    Arc::new(NoPersistenceDatabaseCollabService { client_id }),
+    Arc::new(NoPersistenceDatabaseCollabService::new(client_id)),
     None,
   )
   .ok_or_else(|| AppError::RecordNotFound("no database body found".to_string()))?;

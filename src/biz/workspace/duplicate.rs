@@ -211,11 +211,11 @@ async fn duplicate_database(
   client_id: ClientID,
 ) -> Result<(), AppError> {
   let uid = user.uid;
-  let collab_service = Arc::new(PostgresDatabaseCollabService {
+  let collab_service = Arc::new(PostgresDatabaseCollabService::new(
     workspace_id,
-    collab_storage: collab_storage.clone(),
+    collab_storage.clone(),
     client_id,
-  });
+  ));
   let mut database_id_list: HashSet<String> = HashSet::new();
 
   for database_view_id in &duplicate_context.database_view_ids {
@@ -229,21 +229,19 @@ async fn duplicate_database(
     database_id_list.insert(database_id);
   }
 
+  let database_context = DatabaseContext {
+    database_collab_service: collab_service.clone(),
+    notifier: Default::default(),
+    database_row_collab_service: collab_service,
+  };
+
   for database_id in &database_id_list {
-    let database_context = DatabaseContext {
-      collab_service: collab_service.clone(),
-      notifier: Default::default(),
-    };
-    let database = Database::open(database_id, database_context)
+    let database = Database::open(database_id, database_context.clone())
       .await
       .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to open database: {}", err)))?;
     let database_data = database.get_database_data().await;
     let params = duplicate_database_data_with_context(duplicate_context, &database_data);
-    let database_context = DatabaseContext {
-      collab_service: collab_service.clone(),
-      notifier: Default::default(),
-    };
-    let duplicated_database = Database::create_with_view(params, database_context)
+    let duplicated_database = Database::create_with_view(params, database_context.clone())
       .await
       .map_err(|err| {
         AppError::Internal(anyhow::anyhow!("Failed to duplicate database: {}", err))

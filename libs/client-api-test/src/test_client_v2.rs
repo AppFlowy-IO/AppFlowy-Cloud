@@ -276,12 +276,12 @@ impl TestClient {
 
   pub async fn get_database(&self, workspace_id: Uuid, database_id: &str) -> Database {
     let client_id = self.client_id(&workspace_id).await;
-    let service = TestDatabaseCollabService {
-      api_client: self.api_client.clone(),
+    let service = Arc::new(TestDatabaseCollabService::new(
+      self.api_client.clone(),
       workspace_id,
       client_id,
-    };
-    let context = DatabaseContext::new(Arc::new(service));
+    ));
+    let context = DatabaseContext::new(service.clone(), service);
     Database::open(database_id, context).await.unwrap()
   }
 

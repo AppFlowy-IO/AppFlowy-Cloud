@@ -1,11 +1,15 @@
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
+use collab::lock::RwLock;
 use collab::preclude::ClientID;
 use collab_database::database_trait::{DatabaseCollabReader, EncodeCollabByOid};
 use collab_database::error::DatabaseError;
+use collab_database::rows::{DatabaseRow, RowId};
 use collab_entity::CollabType;
+use dashmap::DashMap;
 use database_entity::dto::QueryCollabResult::{Failed, Success};
 use database_entity::dto::{QueryCollab, QueryCollabParams};
+use std::sync::Arc;
 use tracing::error;
 use uuid::Uuid;
 
@@ -13,15 +17,27 @@ pub struct TestDatabaseCollabService {
   pub api_client: client_api::Client,
   pub workspace_id: Uuid,
   pub client_id: ClientID,
+  cache: Arc<DashMap<RowId, Arc<RwLock<DatabaseRow>>>>,
+}
+
+impl TestDatabaseCollabService {
+  pub fn new(api_client: client_api::Client, workspace_id: Uuid, client_id: ClientID) -> Self {
+    Self {
+      api_client,
+      workspace_id,
+      client_id,
+      cache: Arc::new(DashMap::new()),
+    }
+  }
 }
 
 #[async_trait]
 impl DatabaseCollabReader for TestDatabaseCollabService {
-  async fn client_id(&self) -> ClientID {
+  async fn reader_client_id(&self) -> ClientID {
     self.client_id
   }
 
-  async fn get_collab(
+  async fn reader_get_collab(
     &self,
     object_id: &str,
     collab_type: CollabType,
@@ -42,7 +58,7 @@ impl DatabaseCollabReader for TestDatabaseCollabService {
     Ok(resp.encode_collab)
   }
 
-  async fn batch_get_collabs(
+  async fn reader_batch_get_collabs(
     &self,
     object_ids: Vec<String>,
     collab_type: CollabType,
@@ -79,5 +95,9 @@ impl DatabaseCollabReader for TestDatabaseCollabService {
         })
         .collect::<EncodeCollabByOid>(),
     )
+  }
+
+  fn database_row_cache(&self) -> Option<Arc<DashMap<RowId, Arc<RwLock<DatabaseRow>>>>> {
+    Some(self.cache.clone())
   }
 }

@@ -2,6 +2,7 @@
 
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use crate::collab::cache::CollabCache;
+use crate::collab::update_publish::CollabUpdateWriter;
 use crate::collab::validator::CollabValidator;
 use crate::command::{CLCommandSender, CollaborationCommand};
 use crate::metrics::CollabMetrics;
@@ -132,41 +133,6 @@ where
       .enforce_write_collab(workspace_id, uid, object_id)
       .await?;
     Ok(())
-  }
-
-  #[allow(dead_code)]
-  async fn batch_get_encode_collab_from_editing(
-    &self,
-    object_ids: Vec<Uuid>,
-  ) -> HashMap<Uuid, EncodedCollab> {
-    let (ret, rx) = tokio::sync::oneshot::channel();
-    let timeout_duration = Duration::from_secs(10);
-
-    // Attempt to send the command to the realtime server
-    if let Err(err) = self
-      .rt_cmd_sender
-      .send(CollaborationCommand::BatchGetEncodeCollab { object_ids, ret })
-      .await
-    {
-      error!(
-        "Failed to send get encode collab command to realtime server: {}",
-        err
-      );
-      return HashMap::new();
-    }
-
-    // Await the response from the realtime server with a timeout
-    match timeout(timeout_duration, rx).await {
-      Ok(Ok(batch_encoded_collab)) => batch_encoded_collab,
-      Ok(Err(err)) => {
-        error!("Failed to get encode collab from realtime server: {}", err);
-        HashMap::new()
-      },
-      Err(_) => {
-        error!("Timeout waiting for batch encode collab from realtime server");
-        HashMap::new()
-      },
-    }
   }
 
   async fn queue_insert_collab(

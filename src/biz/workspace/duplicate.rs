@@ -3,17 +3,19 @@ use std::{
   sync::Arc,
 };
 
+use super::page_view::{update_workspace_database_data, update_workspace_folder_data};
+use crate::state::AppState;
 use crate::{
-  api::{metrics::AppFlowyWebMetrics, ws::RealtimeServerAddr},
+  api::metrics::AppFlowyWebMetrics,
   biz::collab::{
     database::PostgresDatabaseCollabService,
     utils::{collab_from_doc_state, get_latest_collab_encoded, get_latest_collab_folder},
   },
 };
-use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
 use collab::core::collab::default_client_id;
 use collab_database::{
   database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
@@ -29,23 +31,20 @@ use collab_rt_entity::user::RealtimeUser;
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use itertools::Itertools;
-use sqlx::PgPool;
 use uuid::Uuid;
 use yrs::block::ClientID;
 
-use super::page_view::{update_workspace_database_data, update_workspace_folder_data};
-
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_view_tree_and_collab(
-  appflowy_web_metrics: &AppFlowyWebMetrics,
-  server: Data<RealtimeServerAddr>,
+  state: &AppState,
   user: RealtimeUser,
-  collab_storage: Arc<CollabAccessControlStorage>,
-  pg_pool: &PgPool,
   workspace_id: Uuid,
   view_id: Uuid,
   suffix: &str,
 ) -> Result<(), AppError> {
+  let collab_storage = state.collab_access_control_storage.clone();
+  let appflowy_web_metrics = &state.metrics.appflowy_web_metrics;
+
   let uid = user.uid;
   let client_id = default_client_id();
   let mut folder: Folder = get_latest_collab_folder(
@@ -67,7 +66,7 @@ pub async fn duplicate_view_tree_and_collab(
     .collect();
   let duplicate_context = duplicate_views(&views, suffix)?;
 
-  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id)
+  let ws_db_oid = select_workspace_database_oid(&state.pg_pool, &workspace_id)
     .await
     .map_err(|err| {
       AppError::Internal(anyhow::anyhow!(
@@ -108,7 +107,7 @@ pub async fn duplicate_view_tree_and_collab(
 
   duplicate_database(
     appflowy_web_metrics,
-    server.clone(),
+    &state.collab_update_writer,
     user.clone(),
     collab_storage.clone(),
     workspace_id,
@@ -136,7 +135,7 @@ pub async fn duplicate_view_tree_and_collab(
   };
   update_workspace_folder_data(
     appflowy_web_metrics,
-    server,
+    &state.collab_update_writer,
     user,
     workspace_id,
     encoded_folder_update,
@@ -202,7 +201,7 @@ fn duplicate_database_data_with_context(
 #[allow(clippy::too_many_arguments)]
 async fn duplicate_database(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  server: Data<RealtimeServerAddr>,
+  collab_update_writer: &Arc<CollabUpdateWriter>,
   user: RealtimeUser,
   collab_storage: Arc<CollabAccessControlStorage>,
   workspace_id: Uuid,
@@ -296,7 +295,7 @@ async fn duplicate_database(
     let workspace_database_id = Uuid::parse_str(workspace_database.collab.object_id())?;
     update_workspace_database_data(
       appflowy_web_metrics,
-      server.clone(),
+      collab_update_writer,
       user.clone(),
       workspace_id,
       workspace_database_id,

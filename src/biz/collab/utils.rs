@@ -387,20 +387,25 @@ pub async fn get_latest_collab_folder(
       err
     ))
   })?;
-  let folder = Folder::from_collab_doc_state(
-    folder_uid,
-    CollabOrigin::Server,
-    encoded_collab.into(),
-    &workspace_id.to_string(),
-    client_id,
-  )
-  .map_err(|e| {
-    AppError::Internal(anyhow::anyhow!(
-      "Unable to decode workspace folder {}: {}",
-      workspace_id,
-      e
-    ))
-  })?;
+
+  let folder = tokio::task::spawn_blocking(move || {
+    Folder::from_collab_doc_state(
+      folder_uid,
+      CollabOrigin::Server,
+      encoded_collab.into(),
+      &workspace_id.to_string(),
+      client_id,
+    )
+    .map_err(|e| {
+      AppError::Internal(anyhow::anyhow!(
+        "Unable to decode workspace folder {}: {}",
+        workspace_id,
+        e
+      ))
+    })
+  })
+  .await??;
+
   Ok(folder)
 }
 

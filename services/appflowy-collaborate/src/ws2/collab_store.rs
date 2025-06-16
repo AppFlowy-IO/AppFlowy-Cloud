@@ -1,4 +1,5 @@
 use crate::collab::cache::CollabCache;
+use crate::collab::update_publish::CollabUpdateWriter;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
@@ -21,9 +22,6 @@ use infra::thread_pool::ThreadPoolNoAbort;
 use itertools::Itertools;
 use rayon::prelude::*;
 use redis::aio::ConnectionManager;
-use redis::streams::{StreamTrimOptions, StreamTrimmingMode};
-use redis::AsyncCommands;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinSet;
@@ -42,9 +40,11 @@ pub struct CollabStore {
   connection_manager: ConnectionManager,
   indexer_scheduler: Arc<IndexerScheduler>,
   snapshot_thread_pool: Arc<ThreadPoolNoAbort>,
+  update_writer: Arc<CollabUpdateWriter>,
 }
 
 impl CollabStore {
+  #[allow(clippy::too_many_arguments)]
   pub fn new<AC: CollabStorageAccessControl + Send + Sync + 'static>(
     thread_pool: Arc<ThreadPoolNoAbort>,
     access_control: AC,
@@ -53,6 +53,7 @@ impl CollabStore {
     update_streams: Arc<StreamRouter>,
     awareness_broadcast: Arc<AwarenessGossip>,
     indexer_scheduler: Arc<IndexerScheduler>,
+    update_writer: Arc<CollabUpdateWriter>,
   ) -> Arc<Self> {
     Arc::new(Self {
       access_control: Arc::new(access_control),
@@ -62,6 +63,7 @@ impl CollabStore {
       connection_manager,
       indexer_scheduler,
       snapshot_thread_pool: thread_pool,
+      update_writer,
     })
   }
 
@@ -179,27 +181,10 @@ impl CollabStore {
     sender: &CollabOrigin,
     update: Vec<u8>,
   ) -> anyhow::Result<Rid> {
-    let key = UpdateStreamMessage::stream_key(&workspace_id);
-    let mut conn = self.connection_manager.clone();
-    let items: String = UpdateStreamMessage::prepare_command(
-      &key,
-      &object_id,
-      collab_type,
-      sender,
-      update,
-      UpdateFlags::Lib0v1.into(),
-    )
-    .query_async(&mut conn)
-    .await?;
-    self.mark_as_dirty(object_id);
-    let rid = Rid::from_str(&items).map_err(|err| anyhow!("failed to parse rid: {}", err))?;
-    trace!(
-      "publishing update to '{}' (object id: {}), rid:{}",
-      key,
-      object_id,
-      rid
-    );
-    Ok(rid)
+    self
+      .update_writer
+      .publish_update(workspace_id, object_id, collab_type, sender, update)
+      .await
   }
 
   pub fn mark_as_dirty(&self, object_id: ObjectId) {
@@ -419,17 +404,11 @@ impl CollabStore {
 
       // drop the messages from redis stream
       up_to.seq_no += 1; // we want to include the last message in pruned updates
-      self.prune_updates(workspace_id, up_to).await?;
+      self
+        .update_writer
+        .prune_updates(workspace_id, up_to)
+        .await?;
     }
-    Ok(())
-  }
-
-  pub async fn prune_updates(&self, workspace_id: WorkspaceId, up_to: Rid) -> anyhow::Result<()> {
-    let key = UpdateStreamMessage::stream_key(&workspace_id);
-    let mut conn = self.connection_manager.clone();
-    let options = StreamTrimOptions::minid(StreamTrimmingMode::Exact, up_to.to_string());
-    let _: redis::Value = conn.xtrim_options(key, &options).await?;
-    tracing::info!("pruned updates from workspace {}", workspace_id);
     Ok(())
   }
 }

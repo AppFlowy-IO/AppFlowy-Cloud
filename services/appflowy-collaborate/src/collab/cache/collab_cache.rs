@@ -21,10 +21,11 @@ use database_entity::dto::{
 use futures_util::{stream, StreamExt};
 use infra::thread_pool::ThreadPoolNoAbort;
 use itertools::{Either, Itertools};
+use rayon::prelude::*;
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{error, instrument};
+use tracing::{debug, error, instrument};
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -158,7 +159,8 @@ impl CollabCache {
     Ok(())
   }
 
-  pub async fn get_encode_collab(
+  #[instrument(level = "trace", skip_all)]
+  pub async fn get_snapshot_collab(
     &self,
     workspace_id: &Uuid,
     query: QueryCollab,
@@ -221,9 +223,18 @@ impl CollabCache {
     encoding: EncoderVersion,
   ) -> Result<(Rid, EncodedCollab), AppError> {
     let object_id = query.object_id;
-    let (rid, mut encoded_collab) = match self.get_encode_collab(workspace_id, query).await {
-      Ok((rid, encoded_collab)) => (rid, Some(encoded_collab)),
-      Err(AppError::RecordNotFound(_)) => (Rid::default(), None),
+    let (rid, mut encoded_collab) = match self.get_snapshot_collab(workspace_id, query).await {
+      Ok((rid, encoded_collab)) => {
+        debug!("Snapshot Collab:{} found in cache", object_id);
+        (rid, Some(encoded_collab))
+      },
+      Err(AppError::RecordNotFound(_)) => {
+        debug!(
+          "Snapshot Collab:{} not found in cache, returning default state",
+          object_id
+        );
+        (Rid::default(), None)
+      },
       Err(err) => return Err(err),
     };
 
@@ -231,41 +242,20 @@ impl CollabCache {
     if !self.dirty_collabs.contains(&object_id) {
       // there are no pending updates for this collab, so we can return the cached value directly
       tracing::trace!("no pending updates for collab: {}", object_id);
-      match encoded_collab {
+      return match encoded_collab {
         Some(encoded_collab) if encoded_collab.doc_state.len() <= self.small_collab_size => {
-          return Ok((rid, encoded_collab));
+          Ok((rid, encoded_collab))
         },
         Some(encoded_collab) => {
           // If the collab is large, we do not replay updates and return the snapshot only.
-          let options = CollabOptions::new(object_id.to_string(), default_client_id())
-            .with_data_source(match encoded_collab.version {
-              EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
-              EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
-            });
-          let collab = Collab::new_with_options(CollabOrigin::Server, options)
-            .map_err(|err| AppError::Internal(err.into()))?;
-          let tx = collab.transact();
-          let doc_state: Bytes = match encoded_collab.version {
-            EncoderVersion::V1 => tx.encode_diff_v1(&from),
-            EncoderVersion::V2 => tx.encode_diff_v2(&from),
-          }
-          .into();
-          return Ok((
-            rid,
-            EncodedCollab {
-              version: encoded_collab.version,
-              state_vector: encoded_collab.state_vector,
-              doc_state,
-            },
-          ));
+          let diff_encoded = self.encode_diff_for_large_collab(object_id, encoded_collab, &from)?;
+          Ok((rid, diff_encoded))
         },
-        None => {
-          return Err(AppError::RecordNotFound(format!(
-            "Collab not found for object_id: {}",
-            object_id
-          )));
-        },
-      }
+        None => Err(AppError::RecordNotFound(format!(
+          "Collab not found for object_id: {}",
+          object_id
+        ))),
+      };
     }
 
     let updates = self
@@ -324,9 +314,11 @@ impl CollabCache {
       .await
   }
 
-  /// Batch get the encoded collab data from the cache.
-  /// returns a hashmap of the object_id to the encoded collab data.
-  pub async fn batch_get_encode_collab<T: Into<QueryCollab>>(
+  /// Batch get the encoded collab **SNAPSHOT** data from the cache.
+  /// This function only returns cached/stored data and does NOT apply pending updates.
+  /// Use batch_get_full_collab() if you need current state with updates applied.
+  /// Returns a hashmap of the object_id to the encoded collab data.
+  pub async fn batch_get_snapshot_collab<T: Into<QueryCollab>>(
     &self,
     workspace_id: &Uuid,
     queries: Vec<T>,
@@ -364,6 +356,89 @@ impl CollabCache {
       .batch_get_collab(workspace_id, disk_queries)
       .await;
     results.extend(values_from_disk_cache);
+    results
+  }
+
+  /// Batch get the encoded collab data from the cache (DEPRECATED).
+  /// This function is deprecated - use batch_get_snapshot_collab() or batch_get_full_collab() instead.
+  /// Returns a hashmap of the object_id to the encoded collab data.
+  #[deprecated(
+    note = "Use batch_get_snapshot_collab() for snapshots or batch_get_full_collab() for current state"
+  )]
+  pub async fn batch_get_encode_collab<T: Into<QueryCollab>>(
+    &self,
+    workspace_id: &Uuid,
+    queries: Vec<T>,
+  ) -> HashMap<Uuid, QueryCollabResult> {
+    self.batch_get_snapshot_collab(workspace_id, queries).await
+  }
+
+  /// Batch get the FULL/CURRENT collab data (applying pending updates for dirty collabs).
+  /// This function is consistent with get_full_collab - it applies pending updates.
+  /// Returns a hashmap of the object_id to the encoded collab data.
+  #[instrument(level = "debug", skip_all)]
+  pub async fn batch_get_full_collab<T: Into<QueryCollab>>(
+    &self,
+    workspace_id: &Uuid,
+    queries: Vec<T>,
+    from: Option<StateVector>,
+    encoding: EncoderVersion,
+  ) -> HashMap<Uuid, QueryCollabResult> {
+    let queries = queries.into_iter().map(Into::into).collect::<Vec<_>>();
+    let mut results = HashMap::new();
+
+    // For batch efficiency, separate dirty and clean collabs
+    let mut clean_queries = Vec::new();
+    let mut dirty_queries = Vec::new();
+
+    for query in queries {
+      if self.dirty_collabs.contains(&query.object_id) {
+        dirty_queries.push(query);
+      } else {
+        clean_queries.push(query);
+      }
+    }
+
+    debug!(
+      "Batch processing collabs: {} clean, {} dirty",
+      clean_queries.len(),
+      dirty_queries.len()
+    );
+
+    if !clean_queries.is_empty() {
+      let clean_results = self
+        .batch_get_snapshot_collab(workspace_id, clean_queries)
+        .await;
+      results.extend(clean_results);
+    }
+
+    let mut encoded_collab_by_object_id: HashMap<Uuid, EncodedCollab> =
+      HashMap::with_capacity(dirty_queries.len());
+    for query in dirty_queries {
+      let object_id = query.object_id;
+      if let Ok((_, encoded_collab)) = self
+        .get_full_collab(workspace_id, query, from.clone(), encoding.clone())
+        .await
+      {
+        encoded_collab_by_object_id.insert(object_id, encoded_collab);
+      }
+    }
+
+    if let Ok(entries) = self.thread_pool.install(|| {
+      encoded_collab_by_object_id
+        .into_par_iter()
+        .map(|(object_id, encoded_collab)| {
+          (
+            object_id,
+            QueryCollabResult::Success {
+              encode_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+            },
+          )
+        })
+        .collect::<HashMap<_, _>>()
+    }) {
+      results.extend(entries);
+    }
     results
   }
 
@@ -538,6 +613,37 @@ impl CollabCache {
     }
 
     Ok(())
+  }
+
+  /// Encode diff for a large collab without full replay (optimization for clean large collabs)
+  fn encode_diff_for_large_collab(
+    &self,
+    object_id: Uuid,
+    encoded_collab: EncodedCollab,
+    from: &StateVector,
+  ) -> Result<EncodedCollab, AppError> {
+    let options = CollabOptions::new(object_id.to_string(), default_client_id()).with_data_source(
+      match encoded_collab.version {
+        EncoderVersion::V1 => DataSource::DocStateV1(encoded_collab.doc_state.into()),
+        EncoderVersion::V2 => DataSource::DocStateV2(encoded_collab.doc_state.into()),
+      },
+    );
+
+    let collab = Collab::new_with_options(CollabOrigin::Server, options)
+      .map_err(|err| AppError::Internal(err.into()))?;
+
+    let tx = collab.transact();
+    let doc_state: Bytes = match encoded_collab.version {
+      EncoderVersion::V1 => tx.encode_diff_v1(from),
+      EncoderVersion::V2 => tx.encode_diff_v2(from),
+    }
+    .into();
+
+    Ok(EncodedCollab {
+      version: encoded_collab.version,
+      state_vector: encoded_collab.state_vector,
+      doc_state,
+    })
   }
 }
 

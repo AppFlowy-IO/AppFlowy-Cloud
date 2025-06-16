@@ -924,7 +924,7 @@ pub async fn list_database_row_details(
     })
     .collect();
   let mut db_row_details = collab_storage
-    .batch_get_collab(&uid, workspace_uuid, query_collabs, true)
+    .batch_get_collab(&uid, workspace_uuid, query_collabs)
     .await
     .into_iter()
     .flat_map(|(id, result)| match result {
@@ -994,7 +994,7 @@ pub async fn list_database_row_details(
       })
       .collect::<Vec<_>>();
     let mut query_res = collab_storage
-      .batch_get_collab(&uid, workspace_uuid, query_db_docs, true)
+      .batch_get_collab(&uid, workspace_uuid, query_db_docs)
       .await;
     for row_detail in &mut db_row_details {
       if let Err(err) = fill_in_db_row_doc(client_id, row_detail, &doc_id_by_row_id, &mut query_res)

@@ -1963,7 +1963,7 @@ async fn batch_get_collab_handler(
   let result = BatchQueryCollabResult(
     state
       .collab_access_control_storage
-      .batch_get_collab(&uid, workspace_id, payload.into_inner().0, false)
+      .batch_get_collab(&uid, workspace_id, payload.into_inner().0)
       .await,
   );
   Ok(Json(AppResponse::Ok().with_data(result)))

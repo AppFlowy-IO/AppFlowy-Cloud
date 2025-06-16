@@ -59,12 +59,18 @@ impl AwarenessGossip {
   }
 
   fn dispatch_collab_awareness_update(
-    collabs: &DashMap<Uuid, UnboundedSender<Arc<AwarenessStreamUpdate>>>,
-    workspaces: &DashMap<Uuid, UnboundedSender<(Uuid, Arc<AwarenessStreamUpdate>)>>,
+    collabs: &DashMap<Uuid, AwarenessSender>,
+    workspaces: &DashMap<Uuid, ScopedAwarenessSender>,
     workspace_id: Uuid,
     object_id: Uuid,
     awareness_update: Arc<AwarenessStreamUpdate>,
   ) {
+    tracing::trace!(
+      "dispatch awareness update for {}/{} from {}",
+      workspace_id,
+      object_id,
+      awareness_update.sender
+    );
     if let Entry::Occupied(e) = workspaces.entry(workspace_id) {
       // dispatch awareness update to workspace group (sync v2)
       let channel = e.get();

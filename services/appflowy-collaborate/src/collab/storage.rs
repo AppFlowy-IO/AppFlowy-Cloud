@@ -134,6 +134,7 @@ where
     Ok(())
   }
 
+  #[allow(dead_code)]
   async fn batch_get_encode_collab_from_editing(
     &self,
     object_ids: Vec<Uuid>,
@@ -401,68 +402,14 @@ where
     _uid: &i64,
     workspace_id: Uuid,
     queries: Vec<QueryCollab>,
-    from_editing_collab: bool,
   ) -> HashMap<Uuid, QueryCollabResult> {
     if queries.is_empty() {
       return HashMap::new();
     }
-
-    // Partition queries based on validation into valid queries and errors (with associated error messages).
-    let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
-      queries
-        .into_iter()
-        .partition_map(|params| match params.validate() {
-          Ok(_) => Either::Left(params),
-          Err(err) => Either::Right((
-            params.object_id,
-            QueryCollabResult::Failed {
-              error: err.to_string(),
-            },
-          )),
-        });
-    let cache_queries = if from_editing_collab {
-      let editing_queries = valid_queries.clone();
-      let editing_results = self
-        .batch_get_encode_collab_from_editing(editing_queries.iter().map(|q| q.object_id).collect())
-        .await;
-      let editing_query_collab_results: HashMap<Uuid, QueryCollabResult> =
-        tokio::task::spawn_blocking(move || {
-          let par_iter = editing_results.into_par_iter();
-          par_iter
-            .map(|(object_id, encoded_collab)| {
-              let encoding_result = encoded_collab.encode_to_bytes();
-              let query_collab_result = match encoding_result {
-                Ok(encoded_collab_bytes) => QueryCollabResult::Success {
-                  encode_collab_v1: encoded_collab_bytes,
-                },
-                Err(err) => QueryCollabResult::Failed {
-                  error: err.to_string(),
-                },
-              };
-
-              (object_id, query_collab_result)
-            })
-            .collect()
-        })
-        .await
-        .unwrap();
-      let editing_object_ids: Vec<_> = editing_query_collab_results.keys().cloned().collect();
-      results.extend(editing_query_collab_results);
-      valid_queries
-        .into_iter()
-        .filter(|q| !editing_object_ids.contains(&q.object_id))
-        .collect()
-    } else {
-      valid_queries
-    };
-
-    results.extend(
-      self
-        .cache
-        .batch_get_encode_collab(&workspace_id, cache_queries)
-        .await,
-    );
-    results
+    self
+      .cache
+      .batch_get_full_collab(&workspace_id, queries, None, EncoderVersion::V1)
+      .await
   }
 
   async fn delete_collab(&self, workspace_id: &Uuid, uid: &i64, object_id: &Uuid) -> AppResult<()> {

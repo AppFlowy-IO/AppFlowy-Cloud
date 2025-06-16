@@ -289,7 +289,7 @@ pub async fn batch_get_latest_collab_encoded(
     })
     .collect();
   let query_collab_results = collab_storage
-    .batch_get_collab(&uid, workspace_id, queries, true)
+    .batch_get_collab(&uid, workspace_id, queries)
     .await;
   let encoded_collabs = tokio::task::spawn_blocking(move || {
     let collabs: HashMap<_, EncodedCollab> = query_collab_results

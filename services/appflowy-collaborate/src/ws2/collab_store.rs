@@ -81,7 +81,7 @@ impl CollabStore {
   ) -> AppResult<(Rid, Bytes)> {
     match self
       .collab_cache
-      .get_encode_collab(&workspace_id, QueryCollab::new(object_id, collab_type))
+      .get_snapshot_collab(&workspace_id, QueryCollab::new(object_id, collab_type))
       .await
     {
       Ok((rid, collab)) => Ok((rid, collab.doc_state)),

@@ -2254,7 +2254,7 @@ async fn get_page_collab_data_for_database(
     })
     .collect();
   let row_query_collab_results = collab_access_control_storage
-    .batch_get_collab(&uid, *workspace_id, queries, true)
+    .batch_get_collab(&uid, *workspace_id, queries)
     .await;
   let row_data = tokio::task::spawn_blocking(move || {
     let row_collabs: HashMap<_, _> = row_query_collab_results

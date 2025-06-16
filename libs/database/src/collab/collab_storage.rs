@@ -132,7 +132,6 @@ pub trait CollabStorage: Send + Sync + 'static {
     uid: &i64,
     workspace_id: Uuid,
     queries: Vec<QueryCollab>,
-    from_editing_collab: bool,
   ) -> HashMap<Uuid, QueryCollabResult>;
 
   /// Deletes a collaboration from the storage.

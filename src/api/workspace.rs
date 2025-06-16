@@ -1102,7 +1102,7 @@ async fn get_collab_handler(
   let object_id = params.object_id;
   let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, params, true)
+    .get_full_encode_collab(GetCollabOrigin::User { uid }, params, true)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -1137,7 +1137,7 @@ async fn v1_get_collab_handler(
 
   let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
+    .get_full_encode_collab(GetCollabOrigin::User { uid }, param, true)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -1173,7 +1173,7 @@ async fn get_collab_json_handler(
 
   let doc_state = state
     .collab_access_control_storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, param, true)
+    .get_full_encode_collab(GetCollabOrigin::User { uid }, param, true)
     .await
     .map_err(AppResponseError::from)?
     .doc_state;
@@ -1783,7 +1783,7 @@ async fn create_collab_snapshot_handler(
     .map_err(AppResponseError::from)?;
   let data = state
     .collab_access_control_storage
-    .get_encode_collab(
+    .get_full_encode_collab(
       GetCollabOrigin::User { uid },
       QueryCollabParams::new(object_id, collab_type, workspace_id),
       true,
@@ -2530,17 +2530,9 @@ async fn post_database_row_handler(
 
   let AddDatatabaseRow { cells, document } = add_database_row.into_inner();
 
-  let new_db_row_id = biz::collab::ops::insert_database_row(
-    state.collab_access_control_storage.clone(),
-    &state.pg_pool,
-    workspace_id,
-    db_id,
-    uid,
-    None,
-    cells,
-    document,
-  )
-  .await?;
+  let new_db_row_id =
+    biz::collab::ops::insert_database_row(&state, workspace_id, db_id, uid, None, cells, document)
+      .await?;
   Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
 }
 
@@ -2576,17 +2568,8 @@ async fn put_database_row_handler(
     ])
   };
 
-  biz::collab::ops::upsert_database_row(
-    state.collab_access_control_storage.clone(),
-    &state.pg_pool,
-    workspace_id,
-    db_id,
-    uid,
-    row_id,
-    cells,
-    document,
-  )
-  .await?;
+  biz::collab::ops::upsert_database_row(&state, workspace_id, db_id, uid, row_id, cells, document)
+    .await?;
   Ok(Json(AppResponse::Ok().with_data(row_id.to_string())))
 }
 
@@ -2625,15 +2608,8 @@ async fn post_database_fields_handler(
     .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
 
-  let field_id = biz::collab::ops::add_database_field(
-    uid,
-    state.collab_access_control_storage.clone(),
-    &state.pg_pool,
-    workspace_id,
-    db_id,
-    field.into_inner(),
-  )
-  .await?;
+  let field_id =
+    biz::collab::ops::add_database_field(&state, workspace_id, db_id, field.into_inner()).await?;
 
   Ok(Json(AppResponse::Ok().with_data(field_id)))
 }

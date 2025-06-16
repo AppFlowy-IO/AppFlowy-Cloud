@@ -21,10 +21,11 @@ use database_entity::dto::{
 use futures_util::{stream, StreamExt};
 use infra::thread_pool::ThreadPoolNoAbort;
 use itertools::{Either, Itertools};
+use rayon::prelude::*;
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{error, instrument};
+use tracing::{debug, error, instrument};
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -223,8 +224,17 @@ impl CollabCache {
   ) -> Result<(Rid, EncodedCollab), AppError> {
     let object_id = query.object_id;
     let (rid, mut encoded_collab) = match self.get_snapshot_collab(workspace_id, query).await {
-      Ok((rid, encoded_collab)) => (rid, Some(encoded_collab)),
-      Err(AppError::RecordNotFound(_)) => (Rid::default(), None),
+      Ok((rid, encoded_collab)) => {
+        debug!("Snapshot Collab:{} found in cache", object_id);
+        (rid, Some(encoded_collab))
+      },
+      Err(AppError::RecordNotFound(_)) => {
+        debug!(
+          "Snapshot Collab:{} not found in cache, returning default state",
+          object_id
+        );
+        (Rid::default(), None)
+      },
       Err(err) => return Err(err),
     };
 
@@ -366,6 +376,7 @@ impl CollabCache {
   /// Batch get the FULL/CURRENT collab data (applying pending updates for dirty collabs).
   /// This function is consistent with get_full_collab - it applies pending updates.
   /// Returns a hashmap of the object_id to the encoded collab data.
+  #[instrument(level = "debug", skip_all)]
   pub async fn batch_get_full_collab<T: Into<QueryCollab>>(
     &self,
     workspace_id: &Uuid,
@@ -388,7 +399,12 @@ impl CollabCache {
       }
     }
 
-    // Process clean collabs in batch (more efficient)
+    debug!(
+      "Batch processing collabs: {} clean, {} dirty",
+      clean_queries.len(),
+      dirty_queries.len()
+    );
+
     if !clean_queries.is_empty() {
       let clean_results = self
         .batch_get_snapshot_collab(workspace_id, clean_queries)
@@ -396,22 +412,33 @@ impl CollabCache {
       results.extend(clean_results);
     }
 
-    // Process dirty collabs individually (need to apply updates)
+    let mut encoded_collab_by_object_id: HashMap<Uuid, EncodedCollab> =
+      HashMap::with_capacity(dirty_queries.len());
     for query in dirty_queries {
       let object_id = query.object_id;
       if let Ok((_, encoded_collab)) = self
         .get_full_collab(workspace_id, query, from.clone(), encoding.clone())
         .await
       {
-        results.insert(
-          object_id,
-          QueryCollabResult::Success {
-            encode_collab_v1: encoded_collab.doc_state.to_vec(),
-          },
-        );
+        encoded_collab_by_object_id.insert(object_id, encoded_collab);
       }
     }
 
+    if let Ok(entries) = self.thread_pool.install(|| {
+      encoded_collab_by_object_id
+        .into_par_iter()
+        .map(|(object_id, encoded_collab)| {
+          (
+            object_id,
+            QueryCollabResult::Success {
+              encode_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+            },
+          )
+        })
+        .collect::<HashMap<_, _>>()
+    }) {
+      results.extend(entries);
+    }
     results
   }
 

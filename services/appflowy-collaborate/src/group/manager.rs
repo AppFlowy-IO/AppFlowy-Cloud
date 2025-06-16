@@ -119,7 +119,7 @@ where
     let params = QueryCollabParams::new(object_id, collab_type, workspace_id);
     let res = self
       .storage
-      .get_encode_collab(GetCollabOrigin::Server, params, false)
+      .get_full_encode_collab(GetCollabOrigin::Server, params, false)
       .await;
     let state_vector = match res {
       Ok(collab) => {
@@ -171,7 +171,7 @@ where
   S: CollabStorage,
 {
   let encode_collab = storage
-    .get_encode_collab(GetCollabOrigin::User { uid }, params.clone(), false)
+    .get_full_encode_collab(GetCollabOrigin::User { uid }, params.clone(), false)
     .await?;
   let options = CollabOptions::new(object_id.to_string(), default_client_id())
     .with_data_source(DataSource::DocStateV1(encode_collab.doc_state.to_vec()));

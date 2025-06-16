@@ -1,4 +1,5 @@
-use crate::collab::cache::encode_collab_from_bytes;
+use crate::collab::cache::{encode_collab_from_bytes, DECODE_SPAWN_THRESHOLD};
+use crate::config::get_env_var;
 use crate::CollabMetrics;
 use anyhow::anyhow;
 use app_error::AppError;
@@ -23,11 +24,38 @@ const ONE_MONTH: u64 = 2592000;
 /// Data larger than this will be spawned to avoid blocking the current thread.
 const ENCODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
 
+pub struct MillisSeconds(pub u64);
+
+impl From<&Rid> for MillisSeconds {
+  fn from(rid: &Rid) -> Self {
+    Self(rid.timestamp)
+  }
+}
+
+impl From<u64> for MillisSeconds {
+  fn from(value: u64) -> Self {
+    Self(value)
+  }
+}
+
+impl MillisSeconds {
+  pub fn now() -> Self {
+    Self(chrono::Utc::now().timestamp_millis() as u64)
+  }
+
+  pub fn into_inner(self) -> u64 {
+    self.0
+  }
+}
 #[derive(Clone)]
 pub struct CollabMemCache {
   thread_pool: Arc<ThreadPoolNoAbort>,
   connection_manager: redis::aio::ConnectionManager,
   metrics: Arc<CollabMetrics>,
+  /// Threshold for spawning background tasks for memory cache operations.
+  /// Data smaller than this will be processed on the current thread.
+  /// Data larger than this will be spawned to avoid blocking.
+  small_collab_size: usize,
 }
 
 impl CollabMemCache {
@@ -36,10 +64,14 @@ impl CollabMemCache {
     connection_manager: redis::aio::ConnectionManager,
     metrics: Arc<CollabMetrics>,
   ) -> Self {
+    let small_collab_size = get_env_var("APPFLOWY_SMALL_COLLAB_SIZE", "4096")
+      .parse::<usize>()
+      .unwrap_or(DECODE_SPAWN_THRESHOLD);
     Self {
       thread_pool,
       connection_manager,
       metrics,
+      small_collab_size,
     }
   }
 
@@ -164,14 +196,12 @@ impl CollabMemCache {
     &self,
     object_id: &Uuid,
     encoded_collab: EncodedCollab,
-    timestamp: u64,
+    seconds: MillisSeconds,
     expiration_seconds: u64,
   ) {
     trace!("Inserting encode collab into cache: {}", object_id);
-
     // Estimate the size of the encoded data to decide whether to spawn a blocking task
     let estimated_size = encoded_collab.state_vector.len() + encoded_collab.doc_state.len();
-
     let bytes_result = if estimated_size <= ENCODE_SPAWN_THRESHOLD {
       // For small data, encode on current thread for efficiency
       encoded_collab.encode_to_bytes()
@@ -189,12 +219,7 @@ impl CollabMemCache {
     match bytes_result {
       Ok(bytes) => {
         if let Err(err) = self
-          .insert_data_with_timestamp(
-            object_id,
-            &bytes,
-            timestamp as i64,
-            Some(expiration_seconds),
-          )
+          .insert_data_with_timestamp(object_id, &bytes, seconds, Some(expiration_seconds))
           .await
         {
           error!("Failed to cache encoded collab: {}", err);
@@ -212,17 +237,16 @@ impl CollabMemCache {
     &self,
     object_id: &Uuid,
     data: &[u8],
-    timestamp: i64,
+    millis_secs: MillisSeconds,
     expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
     trace!(
-      "insert collab {}, data:{} to memory cache at {}",
+      "insert collab {}, data:{} to memory cache",
       object_id,
       data.len(),
-      timestamp
     );
     self
-      .insert_data_with_timestamp(object_id, data, timestamp, expiration_seconds)
+      .insert_data_with_timestamp(object_id, data, millis_secs, expiration_seconds)
       .await
   }
 
@@ -231,6 +255,8 @@ impl CollabMemCache {
   /// inserts data associated with an `object_id` into Redis only if the new timestamp is greater than the timestamp
   /// currently stored in Redis for the same `object_id`. It uses Redis transactions to ensure that the operation is atomic.
   /// the data will be expired after 7 days.
+  ///
+  /// For large data (bigger than small_collab_size), the insertion is spawned as an async task to avoid blocking the caller.
   ///
   /// # Arguments
   /// * `object_id` - A string identifier for the data object.
@@ -243,7 +269,38 @@ impl CollabMemCache {
     &self,
     object_id: &Uuid,
     data: &[u8],
-    timestamp: i64,
+    millis_secs: MillisSeconds,
+    expiration_seconds: Option<u64>,
+  ) -> redis::RedisResult<()> {
+    // Check if data size is larger than threshold
+    if data.len() > self.small_collab_size {
+      // For large data, spawn an async task to avoid blocking the caller
+      let cache = self.clone();
+      let object_id = *object_id;
+      let data = data.to_vec();
+      tokio::spawn(async move {
+        if let Err(err) = cache
+          .insert_data_with_timestamp_impl(&object_id, &data, millis_secs, expiration_seconds)
+          .await
+        {
+          error!("Failed to insert large data into cache: {}", err);
+        }
+      });
+      // Return immediately for large data
+      return Ok(());
+    }
+
+    self
+      .insert_data_with_timestamp_impl(object_id, data, millis_secs, expiration_seconds)
+      .await
+  }
+
+  /// Internal implementation of data insertion with timestamp.
+  async fn insert_data_with_timestamp_impl(
+    &self,
+    object_id: &Uuid,
+    data: &[u8],
+    seconds: MillisSeconds,
     expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
     let cache_object_id = encode_collab_key(object_id);
@@ -263,7 +320,7 @@ impl CollabMemCache {
 
     let result = async {
       // Retrieve the current data, if exists
-      let current_value: Option<(i64, Vec<u8>)> = if key_exists {
+      let current_value: Option<(u64, Vec<u8>)> = if key_exists {
         let val: Option<Vec<u8>> = conn.get(&cache_object_id).await?;
         val.and_then(|data| {
           if data.len() < 8 {
@@ -271,7 +328,7 @@ impl CollabMemCache {
           } else {
             match data[0..8].try_into() {
               Ok(ts_bytes) => {
-                let ts = i64::from_be_bytes(ts_bytes);
+                let ts = u64::from_be_bytes(ts_bytes);
                 Some((ts, data[8..].to_vec()))
               },
               Err(_) => None,
@@ -285,10 +342,10 @@ impl CollabMemCache {
       // Perform update only if the new timestamp is greater than the existing one
       if current_value
         .as_ref()
-        .is_none_or(|(ts, _)| timestamp >= *ts)
+        .is_none_or(|(ts, _)| seconds.0 >= *ts)
       {
         let mut pipeline = pipe();
-        let data = [timestamp.to_be_bytes().as_ref(), data].concat();
+        let data = [seconds.0.to_be_bytes().as_ref(), data].concat();
         pipeline
             .atomic()
             .set(&cache_object_id, data)
@@ -303,7 +360,6 @@ impl CollabMemCache {
 
     // Always reset Watch State
     let _: redis::Value = redis::cmd("UNWATCH").query_async(&mut conn).await?;
-
     self.metrics.redis_write_collab_count.inc();
     result
   }

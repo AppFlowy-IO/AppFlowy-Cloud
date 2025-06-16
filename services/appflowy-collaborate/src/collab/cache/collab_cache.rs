@@ -1,5 +1,5 @@
 use super::disk_cache::CollabDiskCache;
-use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache};
+use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache, MillisSeconds};
 use crate::collab::cache::DECODE_SPAWN_THRESHOLD;
 use crate::config::get_env_var;
 use crate::CollabMetrics;
@@ -13,7 +13,7 @@ use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_stream::model::UpdateStreamMessage;
-use dashmap::DashSet;
+use dashmap::DashMap;
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database_entity::dto::{
   CollabParams, CollabUpdateData, PendingCollabWrite, QueryCollab, QueryCollabResult,
@@ -41,8 +41,7 @@ pub struct CollabCache {
   /// Data larger than this will be spawned to avoid blocking.
   small_collab_size: usize,
   metrics: Arc<CollabMetrics>,
-  /// List of dirty collabs that have pending updates in Redis and need to be flushed to disk.
-  dirty_collabs: DashSet<Uuid>,
+  dirty_collabs: DashMap<Uuid, u64>,
 }
 
 impl CollabCache {
@@ -77,18 +76,49 @@ impl CollabCache {
       s3_collab_threshold,
       small_collab_size,
       metrics,
-      dirty_collabs: DashSet::new(),
+      dirty_collabs: DashMap::new(),
     })
   }
 
-  pub fn mark_as_dirty(&self, object_id: Uuid) {
-    tracing::trace!("marking collab {} as dirty", object_id);
-    self.dirty_collabs.insert(object_id);
+  pub fn mark_as_dirty(&self, object_id: Uuid, millis_secs: MillisSeconds) {
+    let millis_secs = millis_secs.into_inner();
+    match self.dirty_collabs.entry(object_id) {
+      dashmap::mapref::entry::Entry::Occupied(mut entry) => {
+        // Only update if the new timestamp is newer
+        if millis_secs > *entry.get() {
+          tracing::trace!(
+            "marking collab {} as dirty at timestamp {}",
+            object_id,
+            millis_secs
+          );
+          entry.insert(millis_secs);
+        }
+      },
+      dashmap::mapref::entry::Entry::Vacant(entry) => {
+        tracing::trace!(
+          "marking collab {} as dirty at timestamp {}",
+          object_id,
+          millis_secs
+        );
+        entry.insert(millis_secs);
+      },
+    }
   }
 
-  pub fn mark_as_clean(&self, object_id: &Uuid) {
-    tracing::trace!("marking collab {} as clean", object_id);
-    self.dirty_collabs.remove(object_id);
+  pub fn is_dirty_since(&self, object_id: &Uuid, millis_seconds: MillisSeconds) -> bool {
+    let millis_secs = millis_seconds.into_inner();
+    if let Some(value) = self.dirty_collabs.get(object_id) {
+      let is_dirty = *value > millis_secs;
+      tracing::trace!(
+        "collab {} is dirty:{} since {}: current timestamp is {}",
+        object_id,
+        is_dirty,
+        millis_secs,
+        *value
+      );
+      return is_dirty;
+    }
+    false
   }
 
   pub fn metrics(&self) -> &CollabMetrics {
@@ -106,19 +136,13 @@ impl CollabCache {
       .bulk_insert_collab(workspace_id, uid, params_list.clone())
       .await?;
 
-    // Separate small and large data for different processing strategies
-    let (small_params, large_params): (Vec<_>, Vec<_>) = params_list
-      .into_iter()
-      .partition(|params| params.encoded_collab_v1.len() <= self.small_collab_size);
-
-    let timestamp = chrono::Utc::now().timestamp();
-    for params in small_params {
+    for params in params_list {
       if let Err(err) = self
         .mem_cache
         .insert_encode_collab_data(
           &params.object_id,
           &params.encoded_collab_v1,
-          timestamp,
+          MillisSeconds::now(),
           Some(cache_exp_secs_from_collab_type(&params.collab_type)),
         )
         .await
@@ -130,30 +154,6 @@ impl CollabCache {
           err
         );
       }
-    }
-
-    if !large_params.is_empty() {
-      let mem_cache = self.mem_cache.clone();
-      tokio::spawn(async move {
-        for params in large_params {
-          if let Err(err) = mem_cache
-            .insert_encode_collab_data(
-              &params.object_id,
-              &params.encoded_collab_v1,
-              timestamp,
-              Some(cache_exp_secs_from_collab_type(&params.collab_type)),
-            )
-            .await
-            .map_err(|err| AppError::Internal(err.into()))
-          {
-            tracing::warn!(
-              "Failed to insert collab `{}` into memory cache: {}",
-              params.object_id,
-              err
-            );
-          }
-        }
-      });
     }
 
     Ok(())
@@ -186,31 +186,15 @@ impl CollabCache {
     // spawn a task to insert the encoded collab into the memory cache
     let cloned_encode_collab = encode_collab.clone();
     let mem_cache = self.mem_cache.clone();
-    let data_size = cloned_encode_collab.doc_state.len();
 
-    if data_size <= self.small_collab_size {
-      // For small data, process on current thread for efficiency
-      mem_cache
-        .insert_encode_collab(
-          &object_id,
-          cloned_encode_collab,
-          rid.timestamp,
-          expiration_secs,
-        )
-        .await;
-    } else {
-      // For large data, spawn a task to avoid blocking current thread
-      tokio::spawn(async move {
-        mem_cache
-          .insert_encode_collab(
-            &object_id,
-            cloned_encode_collab,
-            rid.timestamp,
-            expiration_secs,
-          )
-          .await;
-      });
-    }
+    mem_cache
+      .insert_encode_collab(
+        &object_id,
+        cloned_encode_collab,
+        MillisSeconds::from(&rid),
+        expiration_secs,
+      )
+      .await;
     Ok((rid, encode_collab))
   }
 
@@ -223,9 +207,13 @@ impl CollabCache {
     encoding: EncoderVersion,
   ) -> Result<(Rid, EncodedCollab), AppError> {
     let object_id = query.object_id;
+    let collab_type = query.collab_type;
     let (rid, mut encoded_collab) = match self.get_snapshot_collab(workspace_id, query).await {
       Ok((rid, encoded_collab)) => {
-        debug!("Snapshot Collab:{} found in cache", object_id);
+        debug!(
+          "Snapshot Collab:{} at {} found in cache",
+          object_id, rid.timestamp
+        );
         (rid, Some(encoded_collab))
       },
       Err(AppError::RecordNotFound(_)) => {
@@ -239,7 +227,7 @@ impl CollabCache {
     };
 
     let from = from.unwrap_or_default();
-    if !self.dirty_collabs.contains(&object_id) {
+    if !self.is_dirty_since(&object_id, MillisSeconds::from(&rid)) {
       // there are no pending updates for this collab, so we can return the cached value directly
       tracing::trace!("no pending updates for collab: {}", object_id);
       return match encoded_collab {
@@ -271,11 +259,27 @@ impl CollabCache {
     if !updates.is_empty() {
       encoded_collab = if size <= self.small_collab_size {
         // For small collab, replaying updates on the current thread
-        replaying_updates(encoding, object_id, encoded_collab, updates, &from)?
+        replaying_updates(
+          encoding,
+          object_id,
+          collab_type,
+          encoded_collab,
+          updates,
+          &from,
+        )?
       } else {
         self
           .thread_pool
-          .install(|| replaying_updates(encoding, object_id, encoded_collab, updates, &from))
+          .install(|| {
+            replaying_updates(
+              encoding,
+              object_id,
+              collab_type,
+              encoded_collab,
+              updates,
+              &from,
+            )
+          })
           .map_err(|err| AppError::Internal(err.into()))??
       }
     }
@@ -392,7 +396,7 @@ impl CollabCache {
     let mut dirty_queries = Vec::new();
 
     for query in queries {
-      if self.dirty_collabs.contains(&query.object_id) {
+      if self.is_dirty_since(&query.object_id, MillisSeconds::now()) {
         dirty_queries.push(query);
       } else {
         clean_queries.push(query);
@@ -455,10 +459,6 @@ impl CollabCache {
     let object_id = params.object_id;
     let encode_collab_data = params.encoded_collab_v1.clone();
     let s3 = self.disk_cache.s3_client();
-    let timestamp = params
-      .updated_at
-      .unwrap_or_else(chrono::Utc::now)
-      .timestamp_millis();
     CollabDiskCache::upsert_collab_with_transaction(
       workspace_id,
       uid,
@@ -470,10 +470,13 @@ impl CollabCache {
     )
     .await?;
 
-    // when the data is written to the disk cache but fails to be written to the memory cache
-    // we log the error and continue.
     self
-      .cache_collab(object_id, collab_type, encode_collab_data, timestamp)
+      .cache_collab(
+        object_id,
+        collab_type,
+        encode_collab_data,
+        MillisSeconds::now(),
+      )
       .await;
     Ok(())
   }
@@ -483,39 +486,21 @@ impl CollabCache {
     object_id: Uuid,
     collab_type: CollabType,
     encode_collab_data: Bytes,
-    timestamp: i64,
+    seconds: MillisSeconds,
   ) {
-    let data_size = encode_collab_data.len();
     let mem_cache = self.mem_cache.clone();
     let expiration_secs = cache_exp_secs_from_collab_type(&collab_type);
-    if data_size <= self.small_collab_size {
-      if let Err(err) = mem_cache
-        .insert_encode_collab_data(
-          &object_id,
-          &encode_collab_data,
-          timestamp,
-          Some(expiration_secs),
-        )
-        .await
-      {
-        error!("Failed to insert encode collab into memory cache: {}", err);
-      }
-    } else {
-      tokio::spawn(async move {
-        if let Err(err) = mem_cache
-          .insert_encode_collab_data(
-            &object_id,
-            &encode_collab_data,
-            timestamp,
-            Some(expiration_secs),
-          )
-          .await
-        {
-          error!("Failed to insert encode collab into memory cache: {}", err);
-        }
-      });
+    if let Err(err) = mem_cache
+      .insert_encode_collab_data(
+        &object_id,
+        &encode_collab_data,
+        seconds,
+        Some(expiration_secs),
+      )
+      .await
+    {
+      error!("Failed to insert encode collab into memory cache: {}", err);
     }
-    self.mark_as_clean(&object_id);
   }
 
   pub async fn insert_encode_collab_to_disk(
@@ -529,12 +514,14 @@ impl CollabCache {
       .disk_cache
       .upsert_collab(workspace_id, uid, params)
       .await?;
-    let timestamp = p
-      .updated_at
-      .unwrap_or_else(chrono::Utc::now)
-      .timestamp_millis();
+
     self
-      .cache_collab(p.object_id, p.collab_type, p.encoded_collab_v1, timestamp)
+      .cache_collab(
+        p.object_id,
+        p.collab_type,
+        p.encoded_collab_v1,
+        MillisSeconds::now(),
+      )
       .await;
     Ok(())
   }
@@ -545,7 +532,6 @@ impl CollabCache {
       .disk_cache
       .delete_collab(workspace_id, object_id)
       .await?;
-    self.mark_as_clean(object_id);
     Ok(())
   }
 
@@ -577,15 +563,10 @@ impl CollabCache {
       .collect();
 
     self.disk_cache.batch_insert_collab(records).await?;
-    let (small_params, large_params): (Vec<_>, Vec<_>) = mem_cache_params
-      .into_iter()
-      .partition(|(_, data, _)| data.len() <= self.small_collab_size);
-
-    let now = chrono::Utc::now().timestamp();
-    for (oid, data, expire) in small_params {
+    for (oid, data, expire) in mem_cache_params {
       if let Err(err) = self
         .mem_cache
-        .insert_encode_collab_data(&oid, &data, now, Some(expire))
+        .insert_encode_collab_data(&oid, &data, MillisSeconds::now(), Some(expire))
         .await
       {
         error!(
@@ -593,23 +574,6 @@ impl CollabCache {
           oid, err
         );
       }
-    }
-
-    if !large_params.is_empty() {
-      let mem_cache = self.mem_cache.clone();
-      tokio::spawn(async move {
-        for (oid, data, expire) in large_params {
-          if let Err(err) = mem_cache
-            .insert_encode_collab_data(&oid, &data, now, Some(expire))
-            .await
-          {
-            error!(
-              "Failed to insert collab `{}` into memory cache: {}",
-              oid, err
-            );
-          }
-        }
-      });
     }
 
     Ok(())
@@ -651,11 +615,17 @@ impl CollabCache {
 fn replaying_updates(
   encoding: EncoderVersion,
   object_id: Uuid,
+  collab_type: CollabType,
   mut encoded_collab: Option<EncodedCollab>,
   updates: Vec<UpdateStreamMessage>,
   from: &StateVector,
 ) -> Result<Option<EncodedCollab>, AppError> {
-  tracing::trace!("replaying {} updates for {}", updates.len(), object_id);
+  tracing::trace!(
+    "replaying {} updates for {}/{}",
+    updates.len(),
+    object_id,
+    collab_type
+  );
   let mut collab = match encoded_collab {
     Some(encoded_collab) => {
       let options = CollabOptions::new(object_id.to_string(), default_client_id())
@@ -681,6 +651,13 @@ fn replaying_updates(
           UpdateFlags::Lib0v2 => Update::decode_v2(&msg.update),
         }
         .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
+
+        tracing::trace!(
+          "replaying update for {}/{}: {:#?}",
+          object_id,
+          collab_type,
+          update,
+        );
         tx.apply_update(update)
           .map_err(|err| AppError::ApplyUpdateError(err.to_string()))?;
       }

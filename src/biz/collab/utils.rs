@@ -38,6 +38,7 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
+use tracing::{instrument, trace};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::Map;
@@ -45,6 +46,7 @@ use yrs::Map;
 pub const DEFAULT_SPACE_ICON: &str = "interface_essential/home-3";
 pub const DEFAULT_SPACE_ICON_COLOR: &str = "0xFFA34AFD";
 
+#[instrument(level = "debug", skip_all)]
 pub fn get_row_details_serde(
   row_detail: RowDetail,
   field_by_id_name_uniq: &HashMap<String, Field>,
@@ -53,6 +55,13 @@ pub fn get_row_details_serde(
   let mut cells = row_detail.row.cells;
   let mut row_details_serde: HashMap<String, serde_json::Value> =
     HashMap::with_capacity(cells.len());
+
+  trace!(
+    "get_row_details_serde: row_id: {}, cells: {:#?}, field_by_id_name_uniq: {:#?}",
+    row_detail.row.id,
+    cells,
+    field_by_id_name_uniq
+  );
   for (field_id, field) in field_by_id_name_uniq {
     let cell: Cell = match cells.remove(field_id) {
       Some(cell) => cell.clone(),
@@ -234,18 +243,22 @@ pub async fn get_latest_collab_database_body(
     CollabType::Database,
   )
   .await?;
-  let db_body = DatabaseBody::from_collab(
-    &db_collab,
-    Arc::new(NoPersistenceDatabaseCollabService::new(default_client_id())),
-    None,
-  )
-  .ok_or_else(|| {
-    AppError::Internal(anyhow::anyhow!(
-      "Failed to create database body from collab, db_collab_id: {}",
-      database_id,
-    ))
-  })?;
-  Ok((db_collab, db_body))
+
+  tokio::task::spawn_blocking(move || {
+    let db_body = DatabaseBody::from_collab(
+      &db_collab,
+      Arc::new(NoPersistenceDatabaseCollabService::new(default_client_id())),
+      None,
+    )
+    .ok_or_else(|| {
+      AppError::Internal(anyhow::anyhow!(
+        "Failed to create database body from collab, db_collab_id: {}",
+        database_id,
+      ))
+    })?;
+    Ok((db_collab, db_body))
+  })
+  .await?
 }
 
 pub async fn get_latest_collab_encoded(
@@ -256,7 +269,7 @@ pub async fn get_latest_collab_encoded(
   collab_type: CollabType,
 ) -> Result<EncodedCollab, AppError> {
   collab_storage
-    .get_encode_collab(
+    .get_full_encode_collab(
       collab_origin,
       QueryCollabParams {
         workspace_id,
@@ -472,6 +485,7 @@ pub fn collab_from_doc_state(
 
 /// Base on values given by [cell_value_by_id], write to fields of DatabaseRowBody.
 /// Returns encoded collab updates to the database row
+#[instrument(level = "debug", skip_all)]
 pub async fn write_to_database_row(
   db_body: &DatabaseBody,
   db_row_txn: &mut yrs::TransactionMut<'_>,
@@ -492,6 +506,12 @@ pub async fn write_to_database_row(
     row_update.set_last_modified(modified_ts);
   });
 
+  trace!(
+    "insert {} cells, {} fields. values: {:#?}",
+    cell_value_by_id.len(),
+    field_by_id.len(),
+    cell_value_by_id
+  );
   // for each field given by user input, overwrite existing data
   for (id, serde_val) in cell_value_by_id {
     let field = match field_by_id.get(&id) {
@@ -513,6 +533,11 @@ pub async fn write_to_database_row(
       },
     };
     let new_cell: Cell = cell_writer.convert_json_to_cell(serde_val);
+    trace!(
+      "Writing cell for field: {}, value: {:?}",
+      field.id,
+      new_cell,
+    );
     db_row_body.update(db_row_txn, |row_update| {
       row_update.update_cells(|cells_update| {
         cells_update.insert_cell(&field.id, new_cell);

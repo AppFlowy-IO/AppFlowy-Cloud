@@ -120,7 +120,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
-  async fn get_encode_collab(
+  async fn get_full_encode_collab(
     &self,
     origin: GetCollabOrigin,
     params: QueryCollabParams,

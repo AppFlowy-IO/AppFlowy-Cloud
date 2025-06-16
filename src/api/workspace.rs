@@ -1192,7 +1192,6 @@ async fn post_web_update_handler(
   path: web::Path<(Uuid, Uuid)>,
   payload: Json<UpdateCollabWebParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state
@@ -1212,8 +1211,7 @@ async fn post_web_update_handler(
   let collab_type = payload.collab_type;
 
   update_page_collab_data(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
     workspace_id,
     object_id,
@@ -1229,18 +1227,14 @@ async fn post_space_handler(
   path: web::Path<Uuid>,
   payload: Json<CreateSpaceParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<Space>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_uuid = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   let space = create_space(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.pg_pool,
-    &state.collab_access_control_storage,
     workspace_uuid,
     &payload.space_permission,
     &payload.name,
@@ -1257,17 +1251,15 @@ async fn update_space_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<UpdateSpaceParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<Space>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   update_space(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.collab_access_control_storage,
     workspace_uuid,
     &view_id,
     &payload.space_permission,
@@ -1284,18 +1276,15 @@ async fn post_folder_view_handler(
   path: web::Path<Uuid>,
   payload: Json<CreateFolderViewParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<Page>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_uuid = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   let page = create_folder_view(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.collab_access_control_storage,
-    &state.pg_pool,
     workspace_uuid,
     &payload.parent_view_id,
     payload.layout.clone(),
@@ -1312,18 +1301,15 @@ async fn post_page_view_handler(
   path: web::Path<Uuid>,
   payload: Json<CreatePageParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<Page>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_uuid = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   let page = create_page(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.pg_pool,
-    &state.collab_access_control_storage,
     workspace_uuid,
     &payload.parent_view_id,
     &payload.layout,
@@ -1360,7 +1346,7 @@ async fn append_block_to_page_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<AppendBlockToPageParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
@@ -1376,16 +1362,7 @@ async fn append_block_to_page_handler(
   let serde_blocks = serde_blocks
     .into_iter()
     .collect::<Result<Vec<SerdeBlock>, AppError>>()?;
-  append_block_at_the_end_of_page(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    &view_id,
-    &serde_blocks,
-  )
-  .await?;
+  append_block_at_the_end_of_page(&state, user, workspace_uuid, &view_id, &serde_blocks).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1394,17 +1371,15 @@ async fn move_page_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<MovePageParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   move_page(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.collab_access_control_storage,
     workspace_uuid,
     &view_id,
     &payload.new_parent_view_id,
@@ -1419,17 +1394,15 @@ async fn reorder_favorite_page_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<ReorderFavoritePageParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   reorder_favorite_page(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.collab_access_control_storage,
     workspace_uuid,
     &view_id,
     payload.prev_view_id.as_deref(),
@@ -1443,24 +1416,14 @@ async fn duplicate_page_handler(
   path: web::Path<(Uuid, Uuid)>,
   payload: Json<DuplicatePageParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   let suffix = payload.suffix.as_deref().unwrap_or(" (Copy)").to_string();
-  duplicate_view_tree_and_collab(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    state.collab_access_control_storage.clone(),
-    &state.pg_pool,
-    workspace_uuid,
-    view_id,
-    &suffix,
-  )
-  .await?;
+  duplicate_view_tree_and_collab(&state, user, workspace_uuid, view_id, &suffix).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1468,21 +1431,13 @@ async fn move_page_to_trash_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, String)>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  move_page_to_trash(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    &view_id,
-  )
-  .await?;
+  move_page_to_trash(&state, user, workspace_uuid, &view_id).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1490,21 +1445,13 @@ async fn restore_page_from_trash_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, String)>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  restore_page_from_trash(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    &view_id,
-  )
-  .await?;
+  restore_page_from_trash(&state, user, workspace_uuid, &view_id).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1513,22 +1460,14 @@ async fn add_recent_pages_handler(
   path: web::Path<Uuid>,
   payload: Json<AddRecentPagesParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_uuid = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   let AddRecentPagesParams { recent_view_ids } = payload.into_inner();
-  add_recent_pages(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    recent_view_ids,
-  )
-  .await?;
+  add_recent_pages(&state, user, workspace_uuid, recent_view_ids).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1536,20 +1475,13 @@ async fn restore_all_pages_from_trash_handler(
   user_uuid: UserUuid,
   path: web::Path<Uuid>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_uuid = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  restore_all_pages_from_trash(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-  )
-  .await?;
+  restore_all_pages_from_trash(&state, user, workspace_uuid).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1557,7 +1489,7 @@ async fn delete_page_from_trash_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, String)>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state
@@ -1571,15 +1503,7 @@ async fn delete_page_from_trash_handler(
     .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  delete_trash(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_id,
-    &view_id,
-  )
-  .await?;
+  delete_trash(&state, user, workspace_id, &view_id).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1587,7 +1511,7 @@ async fn delete_all_pages_from_trash_handler(
   user_uuid: UserUuid,
   path: web::Path<Uuid>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state
@@ -1601,14 +1525,7 @@ async fn delete_all_pages_from_trash_handler(
     .enforce_action(&uid, &workspace_id, Action::Write)
     .await?;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  delete_all_pages_from_trash(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_id,
-  )
-  .await?;
+  delete_all_pages_from_trash(&state, user, workspace_id).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1635,9 +1552,7 @@ async fn publish_page_handler(
     duplicate_enabled,
   } = payload.into_inner();
   publish_page(
-    &state.pg_pool,
-    &state.collab_access_control_storage,
-    state.published_collab_store.as_ref(),
+    &state,
     uid,
     *user_uuid,
     workspace_id,
@@ -1681,18 +1596,15 @@ async fn post_page_database_view_handler(
   path: web::Path<(Uuid, Uuid)>,
   payload: Json<CreatePageDatabaseViewParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   let (workspace_uuid, view_id) = path.into_inner();
   create_database_view(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.pg_pool,
-    &state.collab_access_control_storage,
     workspace_uuid,
     &view_id,
     &payload.layout,
@@ -1707,7 +1619,7 @@ async fn update_page_view_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<UpdatePageParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
@@ -1720,10 +1632,8 @@ async fn update_page_view_handler(
     .map(|json_value| json_value.to_string());
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   update_page(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.collab_access_control_storage,
     workspace_uuid,
     &view_id,
     &payload.name,
@@ -1740,22 +1650,13 @@ async fn update_page_name_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<UpdatePageNameParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  update_page_name(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    &view_id,
-    &payload.name,
-  )
-  .await?;
+  update_page_name(&state, user, workspace_uuid, &view_id, &payload.name).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1764,23 +1665,14 @@ async fn update_page_icon_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<UpdatePageIconParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let icon = &payload.icon;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  update_page_icon(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    &view_id,
-    Some(icon),
-  )
-  .await?;
+  update_page_icon(&state, user, workspace_uuid, &view_id, Some(icon)).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1789,22 +1681,13 @@ async fn update_page_extra_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<UpdatePageExtraParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  update_page_extra(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    &view_id,
-    &payload.extra,
-  )
-  .await?;
+  update_page_extra(&state, user, workspace_uuid, &view_id, &payload.extra).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1812,22 +1695,13 @@ async fn remove_page_icon_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, String)>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
-  update_page_icon(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    user,
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    &view_id,
-    None,
-  )
-  .await?;
+  update_page_icon(&state, user, workspace_uuid, &view_id, None).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -1859,17 +1733,15 @@ async fn favorite_page_view_handler(
   path: web::Path<(Uuid, String)>,
   payload: Json<FavoritePageParams>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let (workspace_uuid, view_id) = path.into_inner();
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   favorite_page(
-    &state.metrics.appflowy_web_metrics,
-    server,
+    &state,
     user,
-    &state.collab_access_control_storage,
     workspace_uuid,
     &view_id,
     payload.is_favorite,
@@ -2500,7 +2372,7 @@ async fn get_workspace_folder_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
-  server: Data<RealtimeServerAddr>,
+
   query: web::Query<QueryWorkspaceFolder>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<FolderView>>> {
@@ -2514,10 +2386,7 @@ async fn get_workspace_folder_handler(
     .await?;
   let root_view_id = query.root_view_id.unwrap_or(workspace_id);
   let folder_view = biz::collab::ops::get_user_workspace_structure(
-    &state.metrics.appflowy_web_metrics,
-    server,
-    &state.collab_access_control_storage,
-    &state.pg_pool,
+    &state,
     user,
     workspace_id,
     depth,

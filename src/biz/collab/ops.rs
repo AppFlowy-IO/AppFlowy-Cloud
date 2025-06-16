@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use actix_web::web::Data;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
@@ -75,11 +74,12 @@ use super::utils::DocChanges;
 use super::utils::DEFAULT_SPACE_ICON;
 use super::utils::DEFAULT_SPACE_ICON_COLOR;
 use crate::api::metrics::AppFlowyWebMetrics;
-use crate::api::ws::RealtimeServerAddr;
 use crate::biz::collab::folder_view::check_if_view_is_space;
 use crate::biz::collab::utils::get_database_row_doc_changes;
 use crate::biz::workspace::ops::broadcast_update_with_timeout;
 use crate::biz::workspace::page_view::update_workspace_folder_data;
+use crate::state::AppState;
+use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
 use collab::core::collab::{default_client_id, CollabOptions};
 use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
@@ -218,7 +218,7 @@ fn patch_old_workspace_folder(
 
 async fn fix_old_workspace_folder(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  server: Data<RealtimeServerAddr>,
+  collab_update_writer: &Arc<CollabUpdateWriter>,
   user: RealtimeUser,
   mut folder: Folder,
   workspace_id: Uuid,
@@ -247,7 +247,7 @@ async fn fix_old_workspace_folder(
     )?;
     update_workspace_folder_data(
       appflowy_web_metrics,
-      server,
+      collab_update_writer,
       user,
       workspace_id,
       folder_update,
@@ -259,15 +259,14 @@ async fn fix_old_workspace_folder(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn get_user_workspace_structure(
-  appflowy_web_metrics: &AppFlowyWebMetrics,
-  server: Data<RealtimeServerAddr>,
-  collab_storage: &CollabAccessControlStorage,
-  pg_pool: &PgPool,
+  state: &AppState,
   user: RealtimeUser,
   workspace_id: Uuid,
   depth: u32,
   root_view_id: &Uuid,
 ) -> Result<FolderView, AppError> {
+  let collab_storage = &state.collab_access_control_storage;
+  let appflowy_web_metrics = &state.metrics.appflowy_web_metrics;
   let depth_limit = 10;
   let client_id = default_client_id();
   if depth > depth_limit {
@@ -283,10 +282,17 @@ pub async fn get_user_workspace_structure(
     client_id,
   )
   .await?;
-  let patched_folder =
-    fix_old_workspace_folder(appflowy_web_metrics, server, user, folder, workspace_id).await?;
+  let patched_folder = fix_old_workspace_folder(
+    appflowy_web_metrics,
+    &state.collab_update_writer,
+    user,
+    folder,
+    workspace_id,
+  )
+  .await?;
 
-  let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
+  let publish_view_ids =
+    select_published_view_ids_for_workspace(&state.pg_pool, workspace_id).await?;
   let publish_view_ids: HashSet<_> = publish_view_ids.into_iter().collect();
   collab_folder_to_folder_view(
     workspace_id,

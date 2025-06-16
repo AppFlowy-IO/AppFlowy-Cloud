@@ -1,3 +1,4 @@
+use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
 use crate::collab::update_publish::CollabUpdateWriter;
 use anyhow::anyhow;
@@ -188,7 +189,9 @@ impl CollabStore {
   }
 
   pub fn mark_as_dirty(&self, object_id: ObjectId) {
-    self.collab_cache.mark_as_dirty(object_id);
+    self
+      .collab_cache
+      .mark_as_dirty(object_id, MillisSeconds::now());
   }
 
   #[instrument(level = "trace", skip_all, err)]

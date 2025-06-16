@@ -338,12 +338,12 @@ async fn collab_mem_cache_read_write_test() {
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
 
   let object_id = Uuid::new_v4();
-  let timestamp = chrono::Utc::now().timestamp();
+  let timestamp = chrono::Utc::now().timestamp_millis() as u64;
   mem_cache
     .insert_encode_collab_data(
       &object_id,
       &encode_collab.encode_to_bytes().unwrap(),
-      timestamp,
+      timestamp.into(),
       None,
     )
     .await
@@ -360,12 +360,12 @@ async fn collab_mem_cache_insert_override_test() {
   let mem_cache = CollabMemCache::new(pool(), conn, CollabMetrics::default().into());
   let object_id = Uuid::new_v4();
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
-  let mut timestamp = chrono::Utc::now().timestamp();
+  let mut timestamp = chrono::Utc::now().timestamp_millis() as u64;
   mem_cache
     .insert_encode_collab_data(
       &object_id,
       &encode_collab.encode_to_bytes().unwrap(),
-      timestamp,
+      timestamp.into(),
       None,
     )
     .await
@@ -380,7 +380,7 @@ async fn collab_mem_cache_insert_override_test() {
       &EncodedCollab::new_v1(vec![6, 7, 8], vec![9, 10, 11])
         .encode_to_bytes()
         .unwrap(),
-      timestamp,
+      timestamp.into(),
       None,
     )
     .await
@@ -400,7 +400,7 @@ async fn collab_mem_cache_insert_override_test() {
       &EncodedCollab::new_v1(vec![12, 13, 14], vec![15, 16, 17])
         .encode_to_bytes()
         .unwrap(),
-      timestamp,
+      timestamp.into(),
       None,
     )
     .await

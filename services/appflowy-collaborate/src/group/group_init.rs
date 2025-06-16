@@ -1177,7 +1177,7 @@ impl CollabPersister {
     let params = QueryCollabParams::new(self.object_id, self.collab_type, self.workspace_id);
     let result = self
       .storage
-      .get_encode_collab(GetCollabOrigin::Server, params, false)
+      .get_full_encode_collab(GetCollabOrigin::Server, params, false)
       .await;
     let doc_state = match result {
       Ok(encoded_collab) => encoded_collab.doc_state,

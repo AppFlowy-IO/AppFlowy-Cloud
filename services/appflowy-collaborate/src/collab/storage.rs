@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 
 use crate::collab::access_control::CollabStorageAccessControlImpl;
+use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
 use crate::collab::update_publish::CollabUpdateWriter;
 use crate::collab::validator::CollabValidator;
@@ -12,6 +13,7 @@ use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_proto::UpdateFlags;
 use async_trait::async_trait;
+use chrono::Timelike;
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
@@ -309,7 +311,7 @@ where
       .await?;
 
     match tokio::time::timeout(
-      Duration::from_secs(120),
+      Duration::from_secs(30),
       self
         .cache
         .insert_encode_collab_data(&workspace_id, uid, params, transaction),
@@ -329,7 +331,7 @@ where
   }
 
   #[instrument(level = "trace", skip_all, fields(oid = %params.object_id))]
-  async fn get_encode_collab(
+  async fn get_full_encode_collab(
     &self,
     origin: GetCollabOrigin,
     params: QueryCollabParams,
@@ -442,6 +444,6 @@ where
   }
 
   fn mark_as_editing(&self, oid: Uuid) {
-    self.cache.mark_as_dirty(oid);
+    self.cache.mark_as_dirty(oid, MillisSeconds::now());
   }
 }

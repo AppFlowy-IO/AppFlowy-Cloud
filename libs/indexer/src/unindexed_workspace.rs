@@ -138,7 +138,7 @@ async fn stream_unindexed_collabs(
           Ok(cid) => match cid.collab_type {
             CollabType::Document => {
               let collab = storage
-                .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
+                .get_full_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
                 .await?;
 
               Ok(Some(UnindexedCollab {

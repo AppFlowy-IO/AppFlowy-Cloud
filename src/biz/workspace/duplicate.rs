@@ -323,7 +323,7 @@ async fn duplicate_document(
     })
     .collect();
   let query_results = collab_storage
-    .batch_get_collab(&uid, workspace_id, queries, true)
+    .batch_get_collab(&uid, workspace_id, queries)
     .await;
   let mut collab_params_list = vec![];
   for (collab_id, query_result) in query_results {

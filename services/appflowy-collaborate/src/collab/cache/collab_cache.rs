@@ -25,7 +25,7 @@ use rayon::prelude::*;
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, trace};
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -229,7 +229,7 @@ impl CollabCache {
     let from = from.unwrap_or_default();
     if !self.is_dirty_since(&object_id, MillisSeconds::from(&rid)) {
       // there are no pending updates for this collab, so we can return the cached value directly
-      tracing::trace!("no pending updates for collab: {}", object_id);
+      trace!("no pending updates for collab: {}", object_id);
       return match encoded_collab {
         Some(encoded_collab) if encoded_collab.doc_state.len() <= self.small_collab_size => {
           Ok((rid, encoded_collab))

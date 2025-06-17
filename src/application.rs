@@ -39,7 +39,6 @@ use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
-use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::ws2::{CollabStore, WsServer};
 use appflowy_collaborate::CollaborationServer;
@@ -87,16 +86,12 @@ pub struct Application {
 }
 
 impl Application {
-  pub async fn build(
-    config: Config,
-    state: AppState,
-    rt_cmd_recv: CLCommandReceiver,
-  ) -> Result<Self, Error> {
+  pub async fn build(config: Config, state: AppState) -> Result<Self, Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
     info!("Server started at {}", listener.local_addr().unwrap());
-    let actix_server = run_actix_server(listener, state, config, rt_cmd_recv).await?;
+    let actix_server = run_actix_server(listener, state, config).await?;
 
     Ok(Self { port, actix_server })
   }
@@ -114,7 +109,6 @@ pub async fn run_actix_server(
   listener: TcpListener,
   state: AppState,
   config: Config,
-  rt_cmd_recv: CLCommandReceiver,
 ) -> Result<Server, Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
@@ -133,7 +127,6 @@ pub async fn run_actix_server(
     storage.clone(),
     state.realtime_access_control.clone(),
     state.metrics.realtime_metrics.clone(),
-    rt_cmd_recv,
     state.redis_stream_router.clone(),
     state.awareness_gossip.clone(),
     state.redis_connection_manager.clone(),
@@ -192,7 +185,7 @@ pub async fn run_actix_server(
   Ok(server.run())
 }
 
-pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<AppState, Error> {
+pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   // Print the feature flags
 
   let metrics = AppMetrics::new();
@@ -337,7 +330,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_cache.clone(),
     collab_storage_access_control.clone(),
     snapshot_control,
-    rt_cmd_tx,
   ));
 
   let mailer = get_mailer(&config.mailer).await?;

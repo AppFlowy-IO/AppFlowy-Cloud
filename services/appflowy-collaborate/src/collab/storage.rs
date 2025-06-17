@@ -5,7 +5,6 @@ use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
 use crate::collab::update_publish::CollabUpdateWriter;
 use crate::collab::validator::CollabValidator;
-use crate::command::{CLCommandSender, CollaborationCommand};
 use crate::metrics::CollabMetrics;
 use crate::snapshot::SnapshotControl;
 use crate::ws2::CollabStore;
@@ -49,7 +48,6 @@ pub struct CollabStorageImpl<AC> {
   /// access control for collab object. Including read/write
   access_control: AC,
   snapshot_control: SnapshotControl,
-  rt_cmd_sender: CLCommandSender,
   queue: Sender<PendingCollabWrite>,
 }
 
@@ -61,7 +59,6 @@ where
     cache: Arc<CollabCache>,
     access_control: AC,
     snapshot_control: SnapshotControl,
-    rt_cmd_sender: CLCommandSender,
   ) -> Self {
     let (queue, reader) = channel(1000);
     tokio::spawn(Self::periodic_write_task(cache.clone(), reader));
@@ -69,7 +66,6 @@ where
       cache,
       access_control,
       snapshot_control,
-      rt_cmd_sender,
       queue,
     }
   }
@@ -172,45 +168,6 @@ where
       .cache
       .bulk_insert_collab(workspace_id, uid, params_list)
       .await
-  }
-
-  /// Sends a collab message to all connected clients.
-  /// # Arguments
-  /// * `object_id` - The ID of the collaboration object.
-  /// * `collab_messages` - The list of collab messages to broadcast.
-  pub async fn broadcast_encode_collab(
-    &self,
-    object_id: Uuid,
-    collab_messages: Vec<ClientCollabMessage>,
-  ) -> Result<(), AppError> {
-    let (sender, recv) = tokio::sync::oneshot::channel();
-
-    self
-      .rt_cmd_sender
-      .send(CollaborationCommand::ServerSendCollabMessage {
-        object_id,
-        collab_messages,
-        ret: sender,
-      })
-      .await
-      .map_err(|err| {
-        AppError::Unhandled(format!(
-          "Failed to send encode collab command to realtime server: {}",
-          err
-        ))
-      })?;
-
-    match recv.await {
-      Ok(res) =>
-        if let Err(err) = res {
-          error!("Failed to broadcast encode collab: {}", err);
-        }
-      ,
-      // caller may have dropped the receiver
-      Err(err) => warn!("Failed to receive response from realtime server: {}", err),
-    }
-
-    Ok(())
   }
 }
 

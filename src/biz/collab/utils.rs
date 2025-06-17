@@ -587,14 +587,11 @@ pub async fn create_row_document(
     folder_txn.encode_update_v1()
   };
 
-  let updated_folder = collab_to_bin(folder.collab, CollabType::Folder).await?;
-
   let doc_ec_bytes = doc_ec
     .encode_to_bytes()
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode db doc: {:?}", e)))?;
 
   Ok(CreatedRowDocument {
-    updated_folder,
     folder_updates,
     doc_ec_bytes,
   })
@@ -698,7 +695,7 @@ pub async fn get_database_row_doc_changes(
 }
 
 pub struct CreatedRowDocument {
-  pub updated_folder: Vec<u8>,
+  // pub updated_folder: Vec<u8>,
   pub folder_updates: Vec<u8>,
   pub doc_ec_bytes: Vec<u8>,
 }

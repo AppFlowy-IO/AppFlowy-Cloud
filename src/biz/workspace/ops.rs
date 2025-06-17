@@ -1,6 +1,3 @@
-use collab_folder::CollabOrigin;
-use collab_rt_entity::{ClientCollabMessage, UpdateSync};
-use collab_rt_protocol::{Message, SyncMessage};
 use database_entity::dto::AFWorkspaceSettingsChange;
 use std::collections::HashMap;
 
@@ -10,10 +7,9 @@ use serde_json::json;
 use sqlx::{types::uuid, PgPool};
 use std::ops::DerefMut;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
-use yrs::updates::encoder::Encode;
 
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
@@ -710,56 +706,4 @@ pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppErro
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to query pending tasks: {:?}", e)))?;
 
   Ok(count)
-}
-
-/// broadcast updates to collab group if exists
-pub async fn broadcast_update(
-  collab_storage: &CollabAccessControlStorage,
-  oid: Uuid,
-  encoded_update: Vec<u8>,
-) -> Result<(), AppError> {
-  tracing::trace!("broadcasting update to group: {}", oid);
-  let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
-  let msg = ClientCollabMessage::ClientUpdateSync {
-    data: UpdateSync {
-      origin: CollabOrigin::Server,
-      object_id: oid.to_string(),
-      msg_id: chrono::Utc::now().timestamp_millis() as u64,
-      payload: payload.into(),
-    },
-  };
-
-  collab_storage
-    .broadcast_encode_collab(oid, vec![msg])
-    .await?;
-
-  Ok(())
-}
-
-/// like [broadcast_update] but in separate tokio task
-/// waits for a maximum of 30 seconds for the broadcast to complete
-pub async fn broadcast_update_with_timeout(
-  collab_storage: Arc<CollabAccessControlStorage>,
-  oid: Uuid,
-  encoded_update: Vec<u8>,
-) -> tokio::task::JoinHandle<()> {
-  tokio::spawn(async move {
-    tracing::info!("broadcasting update to group: {}", oid);
-    let res = match tokio::time::timeout(
-      Duration::from_secs(30),
-      broadcast_update(&collab_storage, oid, encoded_update),
-    )
-    .await
-    {
-      Ok(res) => res,
-      Err(err) => {
-        tracing::error!("Error while broadcasting the updates: {:?}", err);
-        return;
-      },
-    };
-    match res {
-      Ok(()) => tracing::info!("broadcasted update to group: {}", oid),
-      Err(err) => tracing::error!("Error while broadcasting the updates: {:?}", err),
-    }
-  })
 }

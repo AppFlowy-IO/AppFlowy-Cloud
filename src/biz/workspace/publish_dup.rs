@@ -1,8 +1,6 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 
-use anyhow::anyhow;
-use bytes::Bytes;
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::meta_id_from_row_id;
@@ -47,26 +45,24 @@ use yrs::{Map, MapRef};
 use crate::biz::collab::utils::collab_to_bin;
 use crate::biz::collab::utils::get_latest_collab_encoded;
 
-use super::ops::broadcast_update;
-use super::ops::broadcast_update_with_timeout;
-
+use crate::state::AppState;
+use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
 use collab::core::collab::default_client_id;
 use collab_database::database_trait::NoPersistenceDatabaseCollabService;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
-  pg_pool: &PgPool,
-  bucket_client: AwsS3BucketClientImpl,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  state: &AppState,
   dest_uid: i64,
   publish_view_id: Uuid,
   dest_workspace_id: Uuid,
   dest_view_id: Uuid,
 ) -> Result<Uuid, AppError> {
   let copier = PublishCollabDuplicator::new(
-    pg_pool.clone(),
-    bucket_client,
-    collab_storage.clone(),
+    state.pg_pool.clone(),
+    state.bucket_client.clone(),
+    state.collab_access_control_storage.clone(),
+    state.collab_update_writer.clone(),
     dest_uid,
     dest_workspace_id,
     dest_view_id,
@@ -115,6 +111,7 @@ pub struct PublishCollabDuplicator {
   dest_workspace_id: Uuid,
   /// view of workspace to duplicate into
   dest_view_id: Uuid,
+  collab_update_writer: Arc<CollabUpdateWriter>,
 }
 
 fn deserialize_publish_database_data(
@@ -136,6 +133,7 @@ impl PublishCollabDuplicator {
     pg_pool: PgPool,
     bucket_client: AwsS3BucketClientImpl,
     collab_storage: Arc<CollabAccessControlStorage>,
+    collab_update_writer: Arc<CollabUpdateWriter>,
     dest_uid: i64,
     dest_workspace_id: Uuid,
     dest_view_id: Uuid,
@@ -156,6 +154,7 @@ impl PublishCollabDuplicator {
       duplicator_uid: dest_uid,
       dest_workspace_id,
       dest_view_id,
+      collab_update_writer,
     }
   }
 
@@ -190,6 +189,7 @@ impl PublishCollabDuplicator {
       duplicator_uid,
       dest_workspace_id,
       dest_view_id,
+      collab_update_writer,
     } = self;
 
     // insert all collab object accumulated
@@ -214,6 +214,18 @@ impl PublishCollabDuplicator {
         )
         .await?;
     }
+    match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
+      Ok(result) => {
+        collab_storage.metrics().observe_pg_tx(start.elapsed());
+        result.map_err(AppError::from)
+      },
+      Err(_) => {
+        error!("Timeout waiting for duplicating collabs");
+        Err(AppError::RequestTimeout(
+          "timeout while duplicating".to_string(),
+        ))
+      },
+    }?;
 
     // update database if any
     if !workspace_databases.is_empty() {
@@ -235,54 +247,32 @@ impl PublishCollabDuplicator {
       let mut ws_db = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
         AppError::Unhandled(format!("failed to open workspace database: {}", err))
       })?;
-      let (ws_db_updates, updated_ws_w_db_collab) = tokio::task::spawn_blocking(move || {
-        let ws_db_updates = {
-          let view_ids_by_database_id = workspace_databases
-            .into_iter()
-            .map(|(database_id, view_ids)| {
-              (
-                database_id.to_string(),
-                view_ids
-                  .into_iter()
-                  .map(|view_id| view_id.to_string())
-                  .collect(),
-              )
-            })
-            .collect::<HashMap<_, _>>();
 
-          ws_db
-            .batch_add_database(view_ids_by_database_id)
-            .encode_update_v1()
-        };
+      let view_ids_by_database_id = workspace_databases
+        .into_iter()
+        .map(|(database_id, view_ids)| {
+          (
+            database_id.to_string(),
+            view_ids
+              .into_iter()
+              .map(|view_id| view_id.to_string())
+              .collect(),
+          )
+        })
+        .collect::<HashMap<_, _>>();
 
-        let updated_ws_w_db_collab = ws_db
-          .encode_collab_v1()
-          .map(|encoded_collab| encoded_collab.encode_to_bytes().unwrap())
-          .map_err(|err| {
-            AppError::Internal(anyhow!("failed to encode workspace database: {}", err))
-          });
-
-        (ws_db_updates, updated_ws_w_db_collab)
-      })
-      .await?;
-
-      let updated_ws_w_db_collab = updated_ws_w_db_collab?;
-
-      collab_storage
-        .upsert_new_collab_with_transaction(
+      let workspace_database_update = ws_db
+        .batch_add_database(view_ids_by_database_id)
+        .encode_update_v1();
+      collab_update_writer
+        .publish_update(
           dest_workspace_id,
-          &duplicator_uid,
-          CollabParams {
-            object_id: ws_db_oid,
-            encoded_collab_v1: Bytes::from(updated_ws_w_db_collab),
-            collab_type: CollabType::WorkspaceDatabase,
-            updated_at: None,
-          },
-          &mut txn,
-          "duplicate workspace database collab",
+          ws_db_oid,
+          CollabType::WorkspaceDatabase,
+          &CollabOrigin::Server,
+          workspace_database_update,
         )
         .await?;
-      broadcast_update(&collab_storage, ws_db_oid, ws_db_updates).await?;
     }
 
     let collab_folder_encoded = get_latest_collab_encoded(
@@ -308,91 +298,58 @@ impl PublishCollabDuplicator {
     })
     .await??;
 
-    let (encoded_update, updated_encoded_collab) = tokio::task::spawn_blocking(move || {
-      let encoded_update = {
-        let mut folder_txn = folder.collab.transact_mut();
-
-        let mut duplicated_view_ids = HashSet::new();
-        duplicated_view_ids.insert(dest_view_id);
-        duplicated_view_ids.insert(root_view.id.parse().unwrap());
-        folder.body.views.insert(&mut folder_txn, root_view, None);
-
-        // when child views are added, it must have a parent view that is previously added
-        // TODO: if there are too many child views, consider using topological sort
-        loop {
-          if views_to_add.is_empty() {
-            break;
-          }
-
-          let mut inserted = vec![];
-          for (view_id, view) in views_to_add.iter() {
-            let parent_view_id = Uuid::parse_str(&view.parent_view_id).unwrap();
-            // allow to insert if parent view is already inserted
-            // or if view is standalone (view_id == parent_view_id)
-            if duplicated_view_ids.contains(&parent_view_id) || *view_id == parent_view_id {
-              folder
-                .body
-                .views
-                .insert(&mut folder_txn, view.clone(), None);
-              duplicated_view_ids.insert(*view_id);
-              inserted.push(*view_id);
-            }
-          }
-          if inserted.is_empty() {
-            tracing::error!(
-              "views not inserted because parent_id does not exists: {:?}",
-              views_to_add.keys()
-            );
-            break;
-          }
-          for view_id in inserted {
-            views_to_add.remove(&view_id);
-          }
+    let folder_updates = tokio::task::spawn_blocking(move || {
+      let mut folder_txn = folder.collab.transact_mut();
+      let mut duplicated_view_ids = HashSet::new();
+      duplicated_view_ids.insert(dest_view_id);
+      duplicated_view_ids.insert(root_view.id.parse().unwrap());
+      folder.body.views.insert(&mut folder_txn, root_view, None);
+      // when child views are added, it must have a parent view that is previously added
+      // TODO: if there are too many child views, consider using topological sort
+      loop {
+        if views_to_add.is_empty() {
+          break;
         }
 
-        folder_txn.encode_update_v1()
-      };
+        let mut inserted = vec![];
+        for (view_id, view) in views_to_add.iter() {
+          let parent_view_id = Uuid::parse_str(&view.parent_view_id).unwrap();
+          // allow to insert if parent view is already inserted
+          // or if view is standalone (view_id == parent_view_id)
+          if duplicated_view_ids.contains(&parent_view_id) || *view_id == parent_view_id {
+            folder
+              .body
+              .views
+              .insert(&mut folder_txn, view.clone(), None);
+            duplicated_view_ids.insert(*view_id);
+            inserted.push(*view_id);
+          }
+        }
+        if inserted.is_empty() {
+          tracing::error!(
+            "views not inserted because parent_id does not exists: {:?}",
+            views_to_add.keys()
+          );
+          break;
+        }
+        for view_id in inserted {
+          views_to_add.remove(&view_id);
+        }
+      }
 
-      // update folder collab
-      let updated_encoded_collab = collab_to_bin(folder.collab, CollabType::Folder);
-      (encoded_update, updated_encoded_collab)
+      folder_txn.encode_update_v1()
     })
     .await?;
-
-    collab_storage
-      .upsert_new_collab_with_transaction(
+    collab_update_writer
+      .publish_update(
         dest_workspace_id,
-        &duplicator_uid,
-        CollabParams {
-          object_id: dest_workspace_id,
-          encoded_collab_v1: updated_encoded_collab.await?.into(),
-          collab_type: CollabType::Folder,
-          updated_at: None,
-        },
-        &mut txn,
-        "duplicate folder collab",
+        dest_workspace_id,
+        CollabType::Folder,
+        &CollabOrigin::Server,
+        folder_updates,
       )
       .await?;
 
-    match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
-      Ok(result) => {
-        collab_storage.metrics().observe_pg_tx(start.elapsed());
-        result.map_err(AppError::from)
-      },
-      Err(_) => {
-        error!("Timeout waiting for duplicating collabs");
-        Err(AppError::RequestTimeout(
-          "timeout while duplicating".to_string(),
-        ))
-      },
-    }?;
-
-    // broadcast folder changes
-    tokio::spawn(broadcast_update_with_timeout(
-      collab_storage,
-      dest_workspace_id,
-      encoded_update,
-    ));
     Ok(root_view_id)
   }
 

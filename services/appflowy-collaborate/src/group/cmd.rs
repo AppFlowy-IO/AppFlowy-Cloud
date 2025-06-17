@@ -5,10 +5,8 @@ use crate::group::null_sender::NullSender;
 use async_stream::stream;
 use bytes::Bytes;
 use collab::core::origin::{CollabClient, CollabOrigin};
-use collab::entity::EncodedCollab;
 use dashmap::DashMap;
 use futures_util::StreamExt;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use collab_entity::CollabType;
@@ -20,7 +18,7 @@ use collab_rt_entity::{
 use collab_rt_protocol::{Message, SyncMessage};
 use dashmap::mapref::entry::Entry;
 use database::collab::CollabStorage;
-use tracing::{error, instrument, trace, warn};
+use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 use yrs::updates::encoder::Encode;
 use yrs::StateVector;
@@ -42,15 +40,6 @@ pub enum GroupCommand {
     object_id: Uuid,
     update: Bytes,
     collab_type: CollabType,
-    ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
-  },
-  EncodeCollab {
-    object_id: Uuid,
-    ret: tokio::sync::oneshot::Sender<Option<EncodedCollab>>,
-  },
-  HandleServerCollabMessage {
-    object_id: Uuid,
-    collab_messages: Vec<ClientCollabMessage>,
     ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
   },
   GenerateCollabEmbedding {
@@ -105,27 +94,6 @@ where
               .await;
             if let Err(err) = ret.send(result) {
               warn!("Send handle client collab message result fail: {:?}", err);
-            }
-          },
-          GroupCommand::EncodeCollab { object_id, ret } => {
-            let group = self.group_manager.get_group(&object_id).await;
-            if let Err(_err) = match group {
-              None => ret.send(None),
-              Some(group) => ret.send(group.encode_collab().await.ok()),
-            } {
-              warn!("Send encode collab fail");
-            }
-          },
-          GroupCommand::HandleServerCollabMessage {
-            object_id,
-            collab_messages,
-            ret,
-          } => {
-            let res = self
-              .handle_server_collab_messages(object_id, collab_messages)
-              .await;
-            if let Err(err) = ret.send(res) {
-              warn!("Send handle server collab message result fail: {:?}", err);
             }
           },
           GroupCommand::HandleClientHttpUpdate {
@@ -303,46 +271,6 @@ where
         client_stream.remove();
       }
     }
-    Ok(())
-  }
-
-  /// similar to `handle_client_collab_message`, but the messages are sent from the server instead.
-  #[instrument(level = "trace", skip_all)]
-  async fn handle_server_collab_messages(
-    &self,
-    object_id: Uuid,
-    messages: Vec<ClientCollabMessage>,
-  ) -> Result<(), RealtimeError> {
-    if messages.is_empty() {
-      warn!("Unexpected empty collab messages sent from server");
-      return Ok(());
-    }
-
-    let server_rt_user = RealtimeUser {
-      uid: 0,
-      device_id: "server".to_string(),
-      connect_at: chrono::Utc::now().timestamp_millis(),
-      session_id: uuid::Uuid::new_v4().to_string(),
-      app_version: "".to_string(),
-    };
-
-    if let Some(group) = self.group_manager.get_group(&object_id).await {
-      let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
-      group.subscribe(
-        &server_rt_user,
-        CollabOrigin::Server,
-        NullSender::default(),
-        message_by_oid_receiver,
-      );
-      let message = HashMap::from([(object_id.to_string(), messages)]);
-      if let Err(err) = message_by_oid_sender.try_send(MessageByObjectId(message)) {
-        error!(
-          "failed to send message to group: {}, object_id: {}",
-          err, object_id
-        );
-      }
-    };
-
     Ok(())
   }
 

@@ -3,7 +3,6 @@
 use crate::collab::access_control::CollabStorageAccessControlImpl;
 use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
-use crate::collab::update_publish::CollabUpdateWriter;
 use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
 use crate::snapshot::SnapshotControl;

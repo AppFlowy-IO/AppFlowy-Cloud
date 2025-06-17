@@ -1,6 +1,7 @@
 use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
-use crate::ws2::collab_store::CollabStore;
+use crate::collab::collab_store::CollabStore;
+use crate::collab::snapshot_scheduler::SnapshotScheduler;
 use crate::ws2::{BroadcastPermissionChanges, UpdateUserPermissions};
 use actix::ActorFutureExt;
 use actix::{
@@ -30,6 +31,7 @@ pub struct Workspace {
   workspace_id: WorkspaceId,
   last_message_id: Rid,
   store: Arc<CollabStore>,
+  snapshot_scheduler: SnapshotScheduler,
   sessions_by_client_id: HashMap<ClientID, WorkspaceSessionHandle>,
   updates_handle: Option<SpawnHandle>,
   awareness_handle: Option<SpawnHandle>,
@@ -46,11 +48,13 @@ impl Workspace {
     server: Recipient<Terminate>,
     workspace_id: WorkspaceId,
     store: Arc<CollabStore>,
+    snapshot_scheduler: SnapshotScheduler,
   ) -> Self {
     Self {
       server,
       workspace_id,
       store,
+      snapshot_scheduler,
       last_message_id: Rid::default(),
       sessions_by_client_id: HashMap::new(),
       updates_handle: None,
@@ -132,16 +136,17 @@ impl Workspace {
             tracing::error!(
               "failed to resolve state of {}/{}/{}: {}",
               msg.workspace_id,
-              msg.client_id,
+              msg.reply_to,
               msg.object_id,
               err
             );
           },
         };
       },
-      InputMessage::Update(collab_type, update) => {
-        let update = update.encode_v1();
-        if update == Update::EMPTY_V1 {
+      InputMessage::Update(collab_type, flags, update) => {
+        if (flags == UpdateFlags::Lib0v1 && update == Update::EMPTY_V1)
+          || (flags == UpdateFlags::Lib0v2 && update == Update::EMPTY_V2)
+        {
           tracing::trace!("skipping empty update {}", msg.object_id);
           return;
         }
@@ -330,22 +335,10 @@ impl Actor for Workspace {
     }
     if let Some(handle) = self.snapshot_handle.take() {
       ctx.cancel_future(handle);
-      let store = self.store.clone();
-      let workspace_id = self.workspace_id;
-      let last_message_id = self.last_message_id;
-      actix::spawn(async move {
-        match store
-          .snapshot_workspace(workspace_id, last_message_id)
-          .await
-        {
-          Ok(_) => tracing::debug!(
-            "snapshotted workspace {} up to {} on actor shutdown",
-            workspace_id,
-            last_message_id
-          ),
-          Err(err) => tracing::error!("failed to snapshot workspace {}: {}", workspace_id, err),
-        }
-      });
+
+      self
+        .snapshot_scheduler
+        .schedule_snapshot(self.workspace_id, self.last_message_id);
     }
     if let Some(handle) = self.permission_cache_cleanup_handle.take() {
       ctx.cancel_future(handle);
@@ -535,7 +528,7 @@ impl Handler<WsInput> for Workspace {
   type Result = AtomicResponse<Self, ()>;
   fn handle(&mut self, msg: WsInput, _: &mut Self::Context) -> Self::Result {
     let store = self.store.clone();
-    if let Some(sender) = self.sessions_by_client_id.get(&msg.client_id) {
+    if let Some(sender) = self.sessions_by_client_id.get(&msg.reply_to) {
       AtomicResponse::new(Box::pin(
         Self::hande_ws_input(store, sender.clone(), msg).into_actor(self),
       ))

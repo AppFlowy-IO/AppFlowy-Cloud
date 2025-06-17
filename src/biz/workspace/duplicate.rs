@@ -1,8 +1,3 @@
-use std::{
-  collections::{HashMap, HashSet},
-  sync::Arc,
-};
-
 use super::page_view::{update_workspace_database_data, update_workspace_folder_data};
 use crate::state::AppState;
 use crate::{
@@ -12,10 +7,11 @@ use crate::{
     utils::{collab_from_doc_state, get_latest_collab_encoded, get_latest_collab_folder},
   },
 };
+use actix::Addr;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
+use appflowy_collaborate::ws2::WsServer;
 use collab::core::collab::default_client_id;
 use collab_database::{
   database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
@@ -31,6 +27,10 @@ use collab_rt_entity::user::RealtimeUser;
 use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use itertools::Itertools;
+use std::{
+  collections::{HashMap, HashSet},
+  sync::Arc,
+};
 use uuid::Uuid;
 use yrs::block::ClientID;
 
@@ -107,7 +107,7 @@ pub async fn duplicate_view_tree_and_collab(
 
   duplicate_database(
     appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user.clone(),
     collab_storage.clone(),
     workspace_id,
@@ -135,7 +135,7 @@ pub async fn duplicate_view_tree_and_collab(
   };
   update_workspace_folder_data(
     appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     encoded_folder_update,
@@ -201,7 +201,7 @@ fn duplicate_database_data_with_context(
 #[allow(clippy::too_many_arguments)]
 async fn duplicate_database(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Arc<CollabUpdateWriter>,
+  collab_update_writer: &Addr<WsServer>,
   user: RealtimeUser,
   collab_storage: Arc<CollabAccessControlStorage>,
   workspace_id: Uuid,

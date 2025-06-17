@@ -14,10 +14,11 @@ use crate::biz::collab::utils::{
   get_latest_collab_database_body, get_latest_collab_encoded, get_latest_collab_folder,
 };
 use crate::state::AppState;
+use actix::Addr;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
+use appflowy_collaborate::ws2::{PublishUpdate, WsServer};
 use chrono::DateTime;
 use collab::core::collab::{default_client_id, Collab, CollabOptions};
 use collab::core::origin::CollabClient;
@@ -103,7 +104,7 @@ pub async fn update_space(
   .await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -161,7 +162,7 @@ pub async fn create_space(
     .await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -226,7 +227,7 @@ pub async fn create_folder_view(
 
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user.clone(),
     workspace_id,
     folder_update,
@@ -238,7 +239,7 @@ pub async fn create_folder_view(
   {
     update_workspace_database_data(
       &state.metrics.appflowy_web_metrics,
-      &state.collab_update_writer,
+      &state.ws_server,
       user,
       workspace_id,
       workspace_database_id,
@@ -1067,7 +1068,7 @@ async fn create_document_page(
 
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1241,7 +1242,7 @@ async fn create_database_page(
 
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user.clone(),
     workspace_id,
     folder_update,
@@ -1249,7 +1250,7 @@ async fn create_database_page(
   .await?;
   update_workspace_database_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     workspace_database_id,
@@ -1324,7 +1325,7 @@ async fn create_chat_page(
   .await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user.clone(),
     workspace_id,
     folder_update,
@@ -1353,7 +1354,7 @@ pub async fn move_page(
   let folder_update = move_view(view_id, new_parent_view_id, prev_view_id, &mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1381,7 +1382,7 @@ pub async fn reorder_favorite_page(
   let folder_update = reorder_favorite_section(view_id, prev_view_id, &mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1411,7 +1412,7 @@ pub async fn move_page_to_trash(
   let folder_update = move_view_to_trash(view_id, &mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1437,7 +1438,7 @@ pub async fn restore_page_from_trash(
   let folder_update = move_view_out_from_trash(view_id, &mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1463,7 +1464,7 @@ pub async fn add_recent_pages(
   let folder_update = extend_recent_views(&recent_view_ids, &mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1488,7 +1489,7 @@ pub async fn restore_all_pages_from_trash(
   let folder_update = move_all_views_out_from_trash(&mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1515,7 +1516,7 @@ pub async fn delete_trash(
   let update = delete_view_from_trash(view_id, &mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     update,
@@ -1541,7 +1542,7 @@ pub async fn delete_all_pages_from_trash(
   let update = delete_all_views_from_trash(&mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     update,
@@ -1573,7 +1574,7 @@ pub async fn update_page(
     update_view_properties(view_id, &mut folder, name, icon, is_locked, extra).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1601,7 +1602,7 @@ pub async fn update_page_name(
   let folder_update = update_view_name(view_id, &mut folder, name).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1629,7 +1630,7 @@ pub async fn update_page_icon(
   let folder_update = update_view_icon(view_id, &mut folder, icon).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1657,7 +1658,7 @@ pub async fn update_page_extra(
   let folder_update = update_view_extra(view_id, &mut folder, extra).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -1687,7 +1688,7 @@ pub async fn favorite_page(
   let folder_update = update_favorite_view(view_id, &mut folder, is_favorite, is_pinned).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -2403,7 +2404,7 @@ pub async fn create_database_view(
 
   update_database_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user.clone(),
     workspace_id,
     database_id,
@@ -2412,7 +2413,7 @@ pub async fn create_database_view(
   .await?;
   update_workspace_database_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user.clone(),
     workspace_id,
     workspace_database_id,
@@ -2421,7 +2422,7 @@ pub async fn create_database_view(
   .await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     workspace_id,
     folder_update,
@@ -2435,7 +2436,7 @@ pub async fn create_database_view(
 #[allow(clippy::too_many_arguments)]
 async fn update_collab_data_with_timeout(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Arc<CollabUpdateWriter>,
+  collab_update_writer: &Addr<WsServer>,
   user: RealtimeUser,
   workspace_id: Uuid,
   object_id: Uuid,
@@ -2489,8 +2490,8 @@ pub async fn update_page_collab_data(
     .appflowy_web_metrics
     .record_update_size_bytes(doc_state.len());
   let origin = CollabOrigin::Client(CollabClient::new(user.uid, user.device_id.clone()));
-  let _ = state
-    .collab_update_writer
+  state
+    .ws_server
     .publish_update(workspace_id, object_id, collab_type, &origin, doc_state)
     .await?;
 
@@ -2500,7 +2501,7 @@ pub async fn update_page_collab_data(
 #[instrument(level = "debug", skip_all)]
 pub async fn update_workspace_folder_data(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  update_writer: &Arc<CollabUpdateWriter>,
+  update_writer: &Addr<WsServer>,
   user: RealtimeUser,
   workspace_id: Uuid,
   update: Vec<u8>,
@@ -2521,7 +2522,7 @@ pub async fn update_workspace_folder_data(
 #[instrument(level = "debug", skip_all)]
 pub async fn update_workspace_database_data(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Arc<CollabUpdateWriter>,
+  collab_update_writer: &Addr<WsServer>,
   user: RealtimeUser,
   workspace_id: Uuid,
   workspace_database_id: Uuid,
@@ -2543,7 +2544,7 @@ pub async fn update_workspace_database_data(
 #[instrument(level = "debug", skip_all)]
 pub async fn update_database_data(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Arc<CollabUpdateWriter>,
+  collab_update_writer: &Addr<WsServer>,
   user: RealtimeUser,
   workspace_id: Uuid,
   database_id: Uuid,

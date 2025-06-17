@@ -1,10 +1,12 @@
 use super::session::{WsInput, WsSession};
 use super::workspace::{Terminate, Workspace};
-use crate::ws2::collab_store::CollabStore;
-use crate::ws2::{BulkPermissionUpdate, PermissionUpdate};
+use crate::collab::collab_store::CollabStore;
+use crate::collab::snapshot_scheduler::SnapshotScheduler;
+use crate::ws2::{BulkPermissionUpdate, InputMessage, PermissionUpdate};
 use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
-use appflowy_proto::{Rid, ServerMessage, WorkspaceId};
+use appflowy_proto::{ObjectId, Rid, ServerMessage, UpdateFlags, WorkspaceId};
 use collab::core::origin::CollabOrigin;
+use collab_entity::CollabType;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -13,13 +15,16 @@ use yrs::block::ClientID;
 
 pub struct WsServer {
   store: Arc<CollabStore>,
+  snapshot_scheduler: SnapshotScheduler,
   workspaces: HashMap<WorkspaceId, Addr<Workspace>>,
 }
 
 impl WsServer {
   pub fn new(store: Arc<CollabStore>) -> Self {
+    let snapshot_scheduler = SnapshotScheduler::new(store.clone());
     Self {
       store,
+      snapshot_scheduler,
       workspaces: HashMap::new(),
     }
   }
@@ -28,8 +33,9 @@ impl WsServer {
     server: Recipient<Terminate>,
     workspace_id: WorkspaceId,
     store: Arc<CollabStore>,
+    snapshot_scheduler: SnapshotScheduler,
   ) -> Addr<Workspace> {
-    Workspace::new(server, workspace_id, store).start()
+    Workspace::new(server, workspace_id, store, snapshot_scheduler).start()
   }
 }
 
@@ -42,10 +48,14 @@ impl Handler<Join> for WsServer {
 
   fn handle(&mut self, msg: Join, ctx: &mut Self::Context) -> Self::Result {
     let server = ctx.address().recipient();
-    let workspace = self
-      .workspaces
-      .entry(msg.workspace_id)
-      .or_insert_with(|| Self::init_workspace(server, msg.workspace_id, self.store.clone()));
+    let workspace = self.workspaces.entry(msg.workspace_id).or_insert_with(|| {
+      Self::init_workspace(
+        server,
+        msg.workspace_id,
+        self.store.clone(),
+        self.snapshot_scheduler.clone(),
+      )
+    });
     info!("{} joined", msg);
     workspace.do_send(msg);
   }
@@ -66,10 +76,14 @@ impl Handler<WsInput> for WsServer {
 
   fn handle(&mut self, msg: WsInput, ctx: &mut Self::Context) -> Self::Result {
     let server = ctx.address().recipient();
-    let workspace = self
-      .workspaces
-      .entry(msg.workspace_id)
-      .or_insert_with(|| Self::init_workspace(server, msg.workspace_id, self.store.clone()));
+    let workspace = self.workspaces.entry(msg.workspace_id).or_insert_with(|| {
+      Self::init_workspace(
+        server,
+        msg.workspace_id,
+        self.store.clone(),
+        self.snapshot_scheduler.clone(),
+      )
+    });
     workspace.do_send(msg);
   }
 }
@@ -134,4 +148,39 @@ pub struct UpdateUserPermissions {
 pub struct BroadcastPermissionChanges {
   pub changes: BulkPermissionUpdate,
   pub exclude_uid: Option<i64>, // Don't send to the user who made the change
+}
+
+#[async_trait::async_trait]
+pub trait PublishUpdate {
+  async fn publish_update(
+    &self,
+    workspace_id: WorkspaceId,
+    object_id: ObjectId,
+    collab_type: CollabType,
+    sender: &CollabOrigin,
+    update_v1: Vec<u8>,
+  ) -> anyhow::Result<()>;
+}
+
+#[async_trait::async_trait]
+impl PublishUpdate for Addr<WsServer> {
+  async fn publish_update(
+    &self,
+    workspace_id: WorkspaceId,
+    object_id: ObjectId,
+    collab_type: CollabType,
+    sender: &CollabOrigin,
+    update_v1: Vec<u8>,
+  ) -> anyhow::Result<()> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    self.do_send(WsInput {
+      message: InputMessage::Update(collab_type, UpdateFlags::Lib0v1, update_v1),
+      workspace_id,
+      object_id,
+      sender: sender.clone(),
+      reply_to: 0,
+    });
+    rx.await?;
+    Ok(())
+  }
 }

@@ -109,16 +109,15 @@ impl CollabRedisStream {
     let mut conn = self.connection_manager.clone();
     let mut result = Vec::new();
     let mut reply: StreamReadReply = conn.xread(&[&stream_key], &[&since]).await?;
-    let oid = object_id.to_string();
     if let Some(key) = reply.keys.pop() {
       if key.key == stream_key {
         for stream_id in key.ids {
           let msg_oid = stream_id
             .map
             .get("oid")
-            .and_then(|v| String::from_redis_value(v).ok())
+            .and_then(|v| Uuid::from_redis_value(v).ok())
             .unwrap_or_default();
-          if msg_oid != oid {
+          if &msg_oid != object_id {
             continue; // this is not the object we are looking for
           }
           let message = UpdateStreamMessage::from_redis_stream(&stream_id.id, &stream_id.map)

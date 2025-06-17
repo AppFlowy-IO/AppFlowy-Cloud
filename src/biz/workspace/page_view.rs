@@ -125,7 +125,8 @@ pub async fn create_space(
 ) -> Result<Space, AppError> {
   let view_id = view_id_override.unwrap_or(Uuid::new_v4());
   let client_id = default_client_id();
-  let default_document_collab_params = prepare_default_document_collab_param(client_id, view_id)?;
+  let default_document_collab_params =
+    prepare_default_document_collab_param(client_id, view_id).await?;
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
   let mut folder = get_latest_collab_folder(
     &state.collab_access_control_storage,
@@ -284,52 +285,60 @@ pub async fn create_page(
   }
 }
 
-fn prepare_document_collab_param_with_initial_data(
+async fn prepare_document_collab_param_with_initial_data(
   client_id: ClientID,
   page_data: serde_json::Value,
   collab_id: Uuid,
 ) -> Result<CollabParams, AppError> {
-  let options = CollabOptions::new(collab_id.to_string(), client_id);
-  let collab = Collab::new_with_options(CollabOrigin::Empty, options)
-    .map_err(|e| AppError::Internal(e.into()))?;
-  let document_data = JsonToDocumentParser::json_to_document(page_data)?;
-  let document = Document::create_with_data(collab, document_data)
-    .map_err(|err| AppError::InvalidPageData(err.to_string()))?;
-  let encoded_collab_v1 = document
-    .encode_collab()
-    .map_err(|err| {
-      AppError::Internal(anyhow!(
-        "Failed to encode document with initial data: {}",
-        err
-      ))
-    })?
-    .encode_to_bytes()?;
-  Ok(CollabParams {
-    object_id: collab_id,
-    encoded_collab_v1: encoded_collab_v1.into(),
-    collab_type: CollabType::Document,
-    updated_at: None,
+  let params = tokio::task::spawn_blocking(move || {
+    let options = CollabOptions::new(collab_id.to_string(), client_id);
+    let collab = Collab::new_with_options(CollabOrigin::Empty, options)
+      .map_err(|e| AppError::Internal(e.into()))?;
+    let document_data = JsonToDocumentParser::json_to_document(page_data)?;
+    let document = Document::create_with_data(collab, document_data)
+      .map_err(|err| AppError::InvalidPageData(err.to_string()))?;
+    let encoded_collab_v1 = document
+      .encode_collab()
+      .map_err(|err| {
+        AppError::Internal(anyhow!(
+          "Failed to encode document with initial data: {}",
+          err
+        ))
+      })?
+      .encode_to_bytes()?;
+    Ok::<_, AppError>(CollabParams {
+      object_id: collab_id,
+      encoded_collab_v1: encoded_collab_v1.into(),
+      collab_type: CollabType::Document,
+      updated_at: None,
+    })
   })
+  .await??;
+  Ok(params)
 }
 
-fn prepare_default_document_collab_param(
+async fn prepare_default_document_collab_param(
   client_id: ClientID,
   collab_id: Uuid,
 ) -> Result<CollabParams, AppError> {
-  let object_id = collab_id.to_string();
-  let document_data = default_document_data(&object_id);
-  let document = Document::create(&object_id, document_data, client_id)
-    .map_err(|err| AppError::Internal(anyhow!("Failed to create default document: {}", err)))?;
-  let encoded_collab_v1 = document
-    .encode_collab()
-    .map_err(|err| AppError::Internal(anyhow!("Failed to encode default document: {}", err)))?
-    .encode_to_bytes()?;
-  Ok(CollabParams {
-    object_id: collab_id,
-    encoded_collab_v1: encoded_collab_v1.into(),
-    collab_type: CollabType::Document,
-    updated_at: None,
+  let params = tokio::task::spawn_blocking(move || {
+    let object_id = collab_id.to_string();
+    let document_data = default_document_data(&object_id);
+    let document = Document::create(&object_id, document_data, client_id)
+      .map_err(|err| AppError::Internal(anyhow!("Failed to create default document: {}", err)))?;
+    let encoded_collab_v1 = document
+      .encode_collab()
+      .map_err(|err| AppError::Internal(anyhow!("Failed to encode default document: {}", err)))?
+      .encode_to_bytes()?;
+    Ok::<_, AppError>(CollabParams {
+      object_id: collab_id,
+      encoded_collab_v1: encoded_collab_v1.into(),
+      collab_type: CollabType::Document,
+      updated_at: None,
+    })
   })
+  .await??;
+  Ok(params)
 }
 
 pub async fn create_orphaned_view(
@@ -340,7 +349,7 @@ pub async fn create_orphaned_view(
   document_id: Uuid,
 ) -> Result<(), AppError> {
   let default_document_collab_params =
-    prepare_default_document_collab_param(default_client_id(), document_id)?;
+    prepare_default_document_collab_param(default_client_id(), document_id).await?;
   let mut transaction = pg_pool.begin().await?;
   let action = format!("Create new orphaned view: {}", document_id);
   collab_storage
@@ -1019,9 +1028,9 @@ async fn create_document_page(
 
   let new_document_collab_params = match page_data {
     Some(page_data) => {
-      prepare_document_collab_param_with_initial_data(client_id, page_data.clone(), collab_id)
+      prepare_document_collab_param_with_initial_data(client_id, page_data.clone(), collab_id).await
     },
-    None => prepare_default_document_collab_param(client_id, collab_id),
+    None => prepare_default_document_collab_param(client_id, collab_id).await,
   }?;
   let view_id = view_id_override.unwrap_or(collab_id);
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
@@ -1054,6 +1063,8 @@ async fn create_document_page(
       &action,
     )
     .await?;
+  transaction.commit().await?;
+
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.collab_update_writer,
@@ -1062,7 +1073,6 @@ async fn create_document_page(
     folder_update,
   )
   .await?;
-  transaction.commit().await?;
   state
     .collab_access_control_storage
     .metrics()
@@ -1225,6 +1235,10 @@ async fn create_database_page(
     .collab_access_control_storage
     .batch_insert_new_collab(workspace_id, &user.uid, row_collab_params_list)
     .await?;
+  // Commit transaction before updating folder and workspace database.
+  // the collab object is persisted even if the subsequent Redis stream updates fail.
+  transaction.commit().await?;
+
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.collab_update_writer,
@@ -1242,7 +1256,6 @@ async fn create_database_page(
     workspace_database_update,
   )
   .await?;
-  transaction.commit().await?;
   state
     .collab_access_control_storage
     .metrics()

@@ -2,7 +2,6 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use crate::client::client_msg_router::ClientMessageRouter;
-use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
@@ -50,7 +49,6 @@ where
     storage: Arc<S>,
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
-    command_recv: CLCommandReceiver,
     redis_stream_router: Arc<StreamRouter>,
     awareness_gossip: Arc<AwarenessGossip>,
     redis_connection_manager: ConnectionManager,
@@ -78,12 +76,6 @@ where
       Arc::new(Default::default());
 
     spawn_period_check_inactive_group(Arc::downgrade(&group_manager), &group_sender_by_object_id);
-
-    spawn_collaboration_command(
-      command_recv,
-      &group_sender_by_object_id,
-      Arc::downgrade(&group_manager),
-    );
 
     Ok(Self {
       group_manager,

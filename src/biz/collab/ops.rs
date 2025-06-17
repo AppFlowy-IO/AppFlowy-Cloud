@@ -76,7 +76,6 @@ use super::utils::DEFAULT_SPACE_ICON_COLOR;
 use crate::api::metrics::AppFlowyWebMetrics;
 use crate::biz::collab::folder_view::check_if_view_is_space;
 use crate::biz::collab::utils::get_database_row_doc_changes;
-use crate::biz::workspace::ops::broadcast_update_with_timeout;
 use crate::biz::workspace::page_view::update_workspace_folder_data;
 use crate::state::AppState;
 use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
@@ -554,16 +553,35 @@ pub async fn insert_database_row(
     for view in db_views {
       db_body.views.insert_view(&mut txn, view);
     }
-
     txn.encode_update_v1()
   };
-  let updated_db_collab = collab_to_bin(db_collab, CollabType::Database).await?;
+
+  state
+    .collab_update_writer
+    .publish_update(
+      workspace_uuid,
+      database_uuid,
+      CollabType::Database,
+      &CollabOrigin::Server,
+      db_collab_update.clone(),
+    )
+    .await?;
 
   let collab_storage = state.collab_access_control_storage.clone();
   let mut db_txn = state.pg_pool.begin().await?;
-
   // handle row document (if provided)
   if let Some((doc_id, created_doc)) = new_row_doc_creation {
+    state
+      .collab_update_writer
+      .publish_update(
+        workspace_uuid,
+        workspace_uuid,
+        CollabType::Folder,
+        &CollabOrigin::Server,
+        created_doc.folder_updates,
+      )
+      .await?;
+
     // insert document
     collab_storage
       .upsert_new_collab_with_transaction(
@@ -579,28 +597,6 @@ pub async fn insert_database_row(
         "inserting new database row document from server",
       )
       .await?;
-
-    // update folder and broadcast
-    collab_storage
-      .upsert_new_collab_with_transaction(
-        workspace_uuid,
-        &uid,
-        CollabParams {
-          object_id: workspace_uuid,
-          encoded_collab_v1: created_doc.updated_folder.into(),
-          collab_type: CollabType::Folder,
-          updated_at: None,
-        },
-        &mut db_txn,
-        "inserting updated folder from server",
-      )
-      .await?;
-    broadcast_update_with_timeout(
-      collab_storage.clone(),
-      workspace_uuid,
-      created_doc.folder_updates,
-    )
-    .await;
   };
 
   // insert row
@@ -619,24 +615,7 @@ pub async fn insert_database_row(
     )
     .await?;
 
-  // update database
-  collab_storage
-    .upsert_new_collab_with_transaction(
-      workspace_uuid,
-      &uid,
-      CollabParams {
-        object_id: database_uuid,
-        encoded_collab_v1: updated_db_collab.into(),
-        collab_type: CollabType::Database,
-        updated_at: None,
-      },
-      &mut db_txn,
-      "inserting updated database from server",
-    )
-    .await?;
-
   db_txn.commit().await?;
-  broadcast_update_with_timeout(collab_storage, database_uuid, db_collab_update).await;
   Ok(new_db_row_id.to_string())
 }
 
@@ -702,8 +681,18 @@ pub async fn upsert_database_row(
   // finalize update for database row
   let db_row_collab_updates = db_row_txn.encode_update_v1();
   drop(db_row_txn);
-  let db_row_ec_v1 = collab_to_bin(db_row_collab, CollabType::DatabaseRow).await?;
+  state
+    .collab_update_writer
+    .publish_update(
+      workspace_uuid,
+      row_id,
+      CollabType::DatabaseRow,
+      &CollabOrigin::Server,
+      db_row_collab_updates,
+    )
+    .await?;
 
+  let db_row_ec_v1 = collab_to_bin(db_row_collab, CollabType::DatabaseRow).await?;
   // write to disk and broadcast changes
   let mut db_txn = state.pg_pool.begin().await?;
   collab_storage
@@ -720,7 +709,6 @@ pub async fn upsert_database_row(
       "inserting new database row from server",
     )
     .await?;
-  broadcast_update_with_timeout(collab_storage.clone(), row_id, db_row_collab_updates).await;
 
   // handle document changes
   if let Some((doc_id, doc_changes)) = doc_changes {
@@ -740,14 +728,34 @@ pub async fn upsert_database_row(
             "updating database row document from server",
           )
           .await?;
-        broadcast_update_with_timeout(collab_storage.clone(), doc_id, doc_update).await;
+
+        state
+          .collab_update_writer
+          .publish_update(
+            workspace_uuid,
+            doc_id,
+            CollabType::Document,
+            &CollabOrigin::Server,
+            doc_update,
+          )
+          .await?;
       },
       DocChanges::Insert(created_doc) => {
         let CreatedRowDocument {
-          updated_folder,
           folder_updates,
           doc_ec_bytes,
         } = created_doc;
+
+        state
+          .collab_update_writer
+          .publish_update(
+            workspace_uuid,
+            workspace_uuid,
+            CollabType::Folder,
+            &CollabOrigin::Server,
+            folder_updates,
+          )
+          .await?;
 
         // insert document
         collab_storage
@@ -764,23 +772,6 @@ pub async fn upsert_database_row(
             "inserting new database row document from server",
           )
           .await?;
-
-        // update folder and broadcast
-        collab_storage
-          .upsert_new_collab_with_transaction(
-            workspace_uuid,
-            &uid,
-            CollabParams {
-              object_id: workspace_uuid,
-              encoded_collab_v1: updated_folder.into(),
-              collab_type: CollabType::Folder,
-              updated_at: None,
-            },
-            &mut db_txn,
-            "inserting updated folder from server",
-          )
-          .await?;
-        broadcast_update_with_timeout(collab_storage.clone(), workspace_uuid, folder_updates).await;
       },
     }
   }

@@ -2064,9 +2064,7 @@ async fn post_published_duplicate_handler(
   let params = params.into_inner();
   let root_view_id_for_duplicate =
     biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
-      &state.pg_pool,
-      state.bucket_client.clone(),
-      state.collab_access_control_storage.clone(),
+      &state,
       uid,
       params.published_view_id,
       workspace_id,

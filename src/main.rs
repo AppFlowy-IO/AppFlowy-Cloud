@@ -15,11 +15,10 @@ async fn main() -> anyhow::Result<()> {
 
   init_subscriber(&conf.app_env);
 
-  let (tx, rx) = tokio::sync::mpsc::channel(1000);
-  let state = init_state(&conf, tx)
+  let state = init_state(&conf)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to initialize application state: {}", e))?;
-  let application = Application::build(conf, state, rx).await?;
+  let application = Application::build(conf, state).await?;
   application.run_until_stopped().await?;
 
   Ok(())

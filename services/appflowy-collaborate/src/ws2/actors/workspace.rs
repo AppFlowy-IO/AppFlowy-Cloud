@@ -330,6 +330,22 @@ impl Actor for Workspace {
     }
     if let Some(handle) = self.snapshot_handle.take() {
       ctx.cancel_future(handle);
+      let store = self.store.clone();
+      let workspace_id = self.workspace_id;
+      let last_message_id = self.last_message_id;
+      actix::spawn(async move {
+        match store
+          .snapshot_workspace(workspace_id, last_message_id)
+          .await
+        {
+          Ok(_) => tracing::debug!(
+            "snapshotted workspace {} up to {} on actor shutdown",
+            workspace_id,
+            last_message_id
+          ),
+          Err(err) => tracing::error!("failed to snapshot workspace {}: {}", workspace_id, err),
+        }
+      });
     }
     if let Some(handle) = self.permission_cache_cleanup_handle.take() {
       ctx.cancel_future(handle);

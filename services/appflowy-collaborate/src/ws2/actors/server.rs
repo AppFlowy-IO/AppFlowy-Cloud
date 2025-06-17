@@ -2,9 +2,9 @@ use super::session::{WsInput, WsSession};
 use super::workspace::{Terminate, Workspace};
 use crate::collab::collab_store::CollabStore;
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
-use crate::ws2::{BulkPermissionUpdate, InputMessage, PermissionUpdate};
+use crate::ws2::{BulkPermissionUpdate, PermissionUpdate};
 use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
-use appflowy_proto::{ObjectId, Rid, ServerMessage, UpdateFlags, WorkspaceId};
+use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use std::collections::HashMap;
@@ -97,6 +97,23 @@ impl Handler<Terminate> for WsServer {
   }
 }
 
+impl Handler<PublishUpdate> for WsServer {
+  type Result = ();
+
+  fn handle(&mut self, msg: PublishUpdate, ctx: &mut Self::Context) -> Self::Result {
+    let server = ctx.address().recipient();
+    let workspace = self.workspaces.entry(msg.workspace_id).or_insert_with(|| {
+      Self::init_workspace(
+        server,
+        msg.workspace_id,
+        self.store.clone(),
+        self.snapshot_scheduler.clone(),
+      )
+    });
+    workspace.do_send(msg);
+  }
+}
+
 #[derive(actix::Message)]
 #[rtype(result = "()")]
 pub struct Join {
@@ -150,20 +167,19 @@ pub struct BroadcastPermissionChanges {
   pub exclude_uid: Option<i64>, // Don't send to the user who made the change
 }
 
-#[async_trait::async_trait]
-pub trait PublishUpdate {
-  async fn publish_update(
-    &self,
-    workspace_id: WorkspaceId,
-    object_id: ObjectId,
-    collab_type: CollabType,
-    sender: &CollabOrigin,
-    update_v1: Vec<u8>,
-  ) -> anyhow::Result<()>;
+#[derive(actix::Message)]
+#[rtype(result = "()")]
+pub struct PublishUpdate {
+  pub workspace_id: WorkspaceId,
+  pub object_id: ObjectId,
+  pub collab_type: CollabType,
+  pub sender: CollabOrigin,
+  pub update_v1: Vec<u8>,
+  pub ack: tokio::sync::oneshot::Sender<anyhow::Result<Rid>>,
 }
 
 #[async_trait::async_trait]
-impl PublishUpdate for Addr<WsServer> {
+pub trait CollabUpdatePublisher {
   async fn publish_update(
     &self,
     workspace_id: WorkspaceId,
@@ -171,16 +187,28 @@ impl PublishUpdate for Addr<WsServer> {
     collab_type: CollabType,
     sender: &CollabOrigin,
     update_v1: Vec<u8>,
-  ) -> anyhow::Result<()> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    self.do_send(WsInput {
-      message: InputMessage::Update(collab_type, UpdateFlags::Lib0v1, update_v1),
+  ) -> anyhow::Result<Rid>;
+}
+
+#[async_trait::async_trait]
+impl CollabUpdatePublisher for Addr<WsServer> {
+  async fn publish_update(
+    &self,
+    workspace_id: WorkspaceId,
+    object_id: ObjectId,
+    collab_type: CollabType,
+    sender: &CollabOrigin,
+    update_v1: Vec<u8>,
+  ) -> anyhow::Result<Rid> {
+    let (ack, rx) = tokio::sync::oneshot::channel();
+    self.do_send(PublishUpdate {
       workspace_id,
       object_id,
+      collab_type,
       sender: sender.clone(),
-      reply_to: 0,
+      update_v1,
+      ack,
     });
-    rx.await?;
-    Ok(())
+    rx.await?
   }
 }

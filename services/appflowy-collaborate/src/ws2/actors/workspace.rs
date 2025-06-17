@@ -2,7 +2,7 @@ use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
 use crate::collab::collab_store::CollabStore;
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
-use crate::ws2::{BroadcastPermissionChanges, UpdateUserPermissions};
+use crate::ws2::{BroadcastPermissionChanges, PublishUpdate, UpdateUserPermissions};
 use actix::ActorFutureExt;
 use actix::{
   fut, Actor, ActorContext, Addr, AsyncContext, AtomicResponse, Handler, Recipient,
@@ -62,6 +62,19 @@ impl Workspace {
       snapshot_handle: None,
       permission_cache_cleanup_handle: None,
     }
+  }
+
+  async fn publish_update(store: Arc<CollabStore>, workspace_id: WorkspaceId, msg: PublishUpdate) {
+    let result = store
+      .publish_update(
+        workspace_id,
+        msg.object_id,
+        msg.collab_type,
+        &msg.sender,
+        msg.update_v1,
+      )
+      .await;
+    let _ = msg.ack.send(result);
   }
 
   async fn hande_ws_input(store: Arc<CollabStore>, sender: WorkspaceSessionHandle, msg: WsInput) {
@@ -136,7 +149,7 @@ impl Workspace {
             tracing::error!(
               "failed to resolve state of {}/{}/{}: {}",
               msg.workspace_id,
-              msg.reply_to,
+              msg.client_id,
               msg.object_id,
               err
             );
@@ -528,13 +541,24 @@ impl Handler<WsInput> for Workspace {
   type Result = AtomicResponse<Self, ()>;
   fn handle(&mut self, msg: WsInput, _: &mut Self::Context) -> Self::Result {
     let store = self.store.clone();
-    if let Some(sender) = self.sessions_by_client_id.get(&msg.reply_to) {
+    if let Some(sender) = self.sessions_by_client_id.get(&msg.client_id) {
       AtomicResponse::new(Box::pin(
         Self::hande_ws_input(store, sender.clone(), msg).into_actor(self),
       ))
     } else {
       AtomicResponse::new(Box::pin(fut::ready(())))
     }
+  }
+}
+
+impl Handler<PublishUpdate> for Workspace {
+  type Result = AtomicResponse<Self, ()>;
+  fn handle(&mut self, msg: PublishUpdate, _: &mut Self::Context) -> Self::Result {
+    let store = self.store.clone();
+    let workspace_id = self.workspace_id;
+    AtomicResponse::new(Box::pin(
+      Self::publish_update(store, workspace_id, msg).into_actor(self),
+    ))
   }
 }
 

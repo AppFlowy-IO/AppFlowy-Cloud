@@ -78,7 +78,7 @@ use crate::biz::collab::utils::get_database_row_doc_changes;
 use crate::biz::workspace::page_view::update_workspace_folder_data;
 use crate::state::AppState;
 use actix::Addr;
-use appflowy_collaborate::ws2::{PublishUpdate, WsServer};
+use appflowy_collaborate::ws2::{CollabUpdatePublisher, WsServer};
 use collab::core::collab::{default_client_id, CollabOptions};
 use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;

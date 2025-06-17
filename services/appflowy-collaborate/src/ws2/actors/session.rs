@@ -120,7 +120,7 @@ impl WsSession {
           message,
           workspace_id: self.current_workspace,
           object_id,
-          reply_to: self.id(),
+          client_id: self.id(),
           sender: self.info.collab_origin(),
         });
       },
@@ -279,7 +279,7 @@ pub struct WsInput {
   pub workspace_id: ObjectId,
   pub object_id: ObjectId,
   pub sender: CollabOrigin,
-  pub reply_to: ClientID,
+  pub client_id: ClientID,
 }
 
 #[derive(actix::Message)]

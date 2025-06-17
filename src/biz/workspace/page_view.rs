@@ -18,7 +18,7 @@ use actix::Addr;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::ws2::{PublishUpdate, WsServer};
+use appflowy_collaborate::ws2::{CollabUpdatePublisher, WsServer};
 use chrono::DateTime;
 use collab::core::collab::{default_client_id, Collab, CollabOptions};
 use collab::core::origin::CollabClient;

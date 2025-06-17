@@ -118,7 +118,9 @@ impl CollabCache {
       );
       return is_dirty;
     }
-    false
+    //FIXME: this is a temporary fix to avoid false positives - after server restart,
+    // we should assume all collabs are dirty, in order to avoid skipping updates.
+    true
   }
 
   pub fn metrics(&self) -> &CollabMetrics {

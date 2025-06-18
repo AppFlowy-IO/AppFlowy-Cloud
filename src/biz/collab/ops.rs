@@ -557,7 +557,7 @@ pub async fn insert_database_row(
   };
 
   state
-    .collab_update_writer
+    .ws_server
     .publish_update(
       workspace_uuid,
       database_uuid,
@@ -572,7 +572,7 @@ pub async fn insert_database_row(
   // handle row document (if provided)
   if let Some((doc_id, created_doc)) = new_row_doc_creation {
     state
-      .collab_update_writer
+      .ws_server
       .publish_update(
         workspace_uuid,
         workspace_uuid,
@@ -682,7 +682,7 @@ pub async fn upsert_database_row(
   let db_row_collab_updates = db_row_txn.encode_update_v1();
   drop(db_row_txn);
   state
-    .collab_update_writer
+    .ws_server
     .publish_update(
       workspace_uuid,
       row_id,
@@ -730,7 +730,7 @@ pub async fn upsert_database_row(
           .await?;
 
         state
-          .collab_update_writer
+          .ws_server
           .publish_update(
             workspace_uuid,
             doc_id,
@@ -747,7 +747,7 @@ pub async fn upsert_database_row(
         } = created_doc;
 
         state
-          .collab_update_writer
+          .ws_server
           .publish_update(
             workspace_uuid,
             workspace_uuid,

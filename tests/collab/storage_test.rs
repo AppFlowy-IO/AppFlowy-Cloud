@@ -129,7 +129,10 @@ async fn success_part_batch_get_collab_test() {
       expected_results.insert(
         object_id,
         QueryCollabResult::Failed {
-          error: "Record not found".to_string(),
+          error: format!(
+            "Record not found:Collab not found for object_id: {}",
+            object_id
+          ),
         },
       );
     } else {

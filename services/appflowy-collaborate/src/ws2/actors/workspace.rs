@@ -19,7 +19,6 @@ use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::os::unix::raw::mode_t;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;

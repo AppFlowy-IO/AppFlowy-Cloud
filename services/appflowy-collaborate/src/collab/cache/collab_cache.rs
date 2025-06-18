@@ -109,18 +109,21 @@ impl CollabCache {
     let millis_secs = millis_seconds.into_inner();
     if let Some(value) = self.dirty_collabs.get(object_id) {
       let is_dirty = *value > millis_secs;
-      tracing::trace!(
+      trace!(
         "collab {} is dirty:{} since {}: current timestamp is {}",
         object_id,
         is_dirty,
         millis_secs,
         *value
       );
-      return is_dirty;
+      is_dirty
+    } else {
+      // Mark the collab as dirty if it is not found in the cache. Any upcoming read with millis_secs
+      // less than the current timestamp will be considered dirty. When snapshot schedule write a new snapshot.
+      // The snapshot rid will bigger then stored time. then it will return false.
+      self.mark_as_dirty(*object_id, (millis_secs + 1).into());
+      true
     }
-    //FIXME: this is a temporary fix to avoid false positives - after server restart,
-    // we should assume all collabs are dirty, in order to avoid skipping updates.
-    true
   }
 
   pub fn metrics(&self) -> &CollabMetrics {
@@ -422,11 +425,21 @@ impl CollabCache {
       HashMap::with_capacity(dirty_queries.len());
     for query in dirty_queries {
       let object_id = query.object_id;
-      if let Ok((_, encoded_collab)) = self
+      match self
         .get_full_collab(workspace_id, query, from.clone(), encoding.clone())
         .await
       {
-        encoded_collab_by_object_id.insert(object_id, encoded_collab);
+        Ok((_, encoded_collab)) => {
+          encoded_collab_by_object_id.insert(object_id, encoded_collab);
+        },
+        Err(err) => {
+          results.insert(
+            object_id,
+            QueryCollabResult::Failed {
+              error: err.to_string(),
+            },
+          );
+        },
       }
     }
 

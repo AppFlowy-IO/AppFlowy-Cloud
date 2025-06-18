@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
@@ -78,7 +77,8 @@ use crate::biz::collab::folder_view::check_if_view_is_space;
 use crate::biz::collab::utils::get_database_row_doc_changes;
 use crate::biz::workspace::page_view::update_workspace_folder_data;
 use crate::state::AppState;
-use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
+use actix::Addr;
+use appflowy_collaborate::ws2::{CollabUpdatePublisher, WsServer};
 use collab::core::collab::{default_client_id, CollabOptions};
 use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
@@ -217,7 +217,7 @@ fn patch_old_workspace_folder(
 
 async fn fix_old_workspace_folder(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Arc<CollabUpdateWriter>,
+  collab_update_writer: &Addr<WsServer>,
   user: RealtimeUser,
   mut folder: Folder,
   workspace_id: Uuid,
@@ -283,7 +283,7 @@ pub async fn get_user_workspace_structure(
   .await?;
   let patched_folder = fix_old_workspace_folder(
     appflowy_web_metrics,
-    &state.collab_update_writer,
+    &state.ws_server,
     user,
     folder,
     workspace_id,
@@ -557,7 +557,7 @@ pub async fn insert_database_row(
   };
 
   state
-    .collab_update_writer
+    .ws_server
     .publish_update(
       workspace_uuid,
       database_uuid,
@@ -572,7 +572,7 @@ pub async fn insert_database_row(
   // handle row document (if provided)
   if let Some((doc_id, created_doc)) = new_row_doc_creation {
     state
-      .collab_update_writer
+      .ws_server
       .publish_update(
         workspace_uuid,
         workspace_uuid,
@@ -682,7 +682,7 @@ pub async fn upsert_database_row(
   let db_row_collab_updates = db_row_txn.encode_update_v1();
   drop(db_row_txn);
   state
-    .collab_update_writer
+    .ws_server
     .publish_update(
       workspace_uuid,
       row_id,
@@ -730,7 +730,7 @@ pub async fn upsert_database_row(
           .await?;
 
         state
-          .collab_update_writer
+          .ws_server
           .publish_update(
             workspace_uuid,
             doc_id,
@@ -747,7 +747,7 @@ pub async fn upsert_database_row(
         } = created_doc;
 
         state
-          .collab_update_writer
+          .ws_server
           .publish_update(
             workspace_uuid,
             workspace_uuid,
@@ -854,8 +854,8 @@ pub async fn add_database_field(
     yrs_txn.encode_update_v1()
   };
 
-  let _ = state
-    .collab_update_writer
+  state
+    .ws_server
     .publish_update(
       workspace_id,
       database_id,

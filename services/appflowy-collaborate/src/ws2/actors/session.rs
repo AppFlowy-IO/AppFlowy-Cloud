@@ -15,7 +15,7 @@ use tracing::error;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
-use yrs::{StateVector, Update};
+use yrs::StateVector;
 
 pub const HEARTBEAT: Duration = Duration::from_secs(5);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -288,7 +288,7 @@ pub struct GetUid;
 
 pub enum InputMessage {
   Manifest(CollabType, Rid, StateVector),
-  Update(CollabType, Update),
+  Update(CollabType, UpdateFlags, Vec<u8>),
   AwarenessUpdate(AwarenessUpdate),
 }
 
@@ -315,14 +315,7 @@ impl TryFrom<ClientMessage> for InputMessage {
         update,
         collab_type,
         ..
-      } => {
-        let update = match flags {
-          UpdateFlags::Lib0v1 => Update::decode_v1(&update),
-          UpdateFlags::Lib0v2 => Update::decode_v2(&update),
-        }
-        .map_err(|err| err.to_string())?;
-        Ok(InputMessage::Update(collab_type, update))
-      },
+      } => Ok(InputMessage::Update(collab_type, flags, update)),
       ClientMessage::AwarenessUpdate { awareness, .. } => {
         let awareness = AwarenessUpdate::decode_v1(&awareness).map_err(|err| err.to_string())?;
         Ok(InputMessage::AwarenessUpdate(awareness))

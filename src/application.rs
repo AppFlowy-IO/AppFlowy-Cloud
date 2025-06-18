@@ -38,7 +38,6 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
-use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::ws2::{CollabStore, WsServer};
 use appflowy_collaborate::CollaborationServer;
@@ -322,10 +321,6 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   )
   .await;
 
-  let collab_update_writer = Arc::new(CollabUpdateWriter::new(
-    redis_conn_manager.clone(),
-    collab_cache.clone(),
-  ));
   let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
     collab_cache.clone(),
     collab_storage_access_control.clone(),
@@ -365,7 +360,6 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     redis_stream_router.clone(),
     awareness_gossip.clone(),
     indexer_scheduler.clone(),
-    collab_update_writer.clone(),
   );
   let ws_server = WsServer::new(collab_store).start();
 
@@ -394,7 +388,6 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     ai_client: appflowy_ai_client,
     indexer_scheduler,
     ws_server,
-    collab_update_writer,
   })
 }
 

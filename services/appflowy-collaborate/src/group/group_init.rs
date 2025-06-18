@@ -746,13 +746,13 @@ impl CollabGroup {
         None => {
           // None marks concurrent state vectors, meaning that current collab group
           // has some of the updates that the client didn't see and vice versa
-          tracing::trace!("missing updates found for {}", state.object_id);
+          tracing::info!("missing updates found for {}", state.object_id);
           Some(Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1())
         },
-        Some(std::cmp::Ordering::Greater) if decoded_update.delete_set().is_empty() => {
-          // This update has no new data. In fact server is more up to date, that this
-          // update suggests, so we'll discard it and send sync step back to the client
-          // to let it know that we have new data, that client needs to know about.
+        Some(std::cmp::Ordering::Less) if !decoded_update.extends(&current_sv) => {
+          // server is behind client, but the update doesn't extend current server state
+          // which means that we must have missed some updates, that must be integrated
+          // before current update can be fully applied
           return Ok(Some(
             Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1(),
           ));

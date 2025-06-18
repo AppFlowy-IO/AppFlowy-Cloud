@@ -15,7 +15,7 @@ use collab::entity::EncodedCollab;
 use collab::lock::{Mutex, RwLock};
 use collab::preclude::{ClientID, Collab, Prelim};
 use collab_database::database::{Database, DatabaseContext};
-use collab_database::workspace_database::{CollabRef, WorkspaceDatabase};
+use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::hierarchy_builder::NestedChildViewBuilder;
@@ -58,6 +58,7 @@ use crate::{
 };
 
 use collab::core::collab::CollabOptions;
+use collab_database::database_trait::CollabRef;
 use rand::random;
 
 pub struct TestClient {
@@ -227,12 +228,12 @@ impl TestClient {
   }
 
   pub async fn get_database(&self, workspace_id: Uuid, database_id: &str) -> Database {
-    let service = TestDatabaseCollabService {
-      api_client: self.api_client.clone(),
+    let service = Arc::new(TestDatabaseCollabService::new(
+      self.api_client.clone(),
       workspace_id,
-      client_id: Self::random_client_id(),
-    };
-    let context = DatabaseContext::new(Arc::new(service));
+      Self::random_client_id(),
+    ));
+    let context = DatabaseContext::new(service.clone(), service);
     Database::open(database_id, context).await.unwrap()
   }
 

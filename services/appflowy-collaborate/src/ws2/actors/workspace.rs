@@ -1,7 +1,8 @@
 use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
-use crate::ws2::collab_store::CollabStore;
-use crate::ws2::{BroadcastPermissionChanges, UpdateUserPermissions};
+use crate::collab::collab_store::CollabStore;
+use crate::collab::snapshot_scheduler::SnapshotScheduler;
+use crate::ws2::{BroadcastPermissionChanges, PublishUpdate, UpdateUserPermissions};
 use actix::ActorFutureExt;
 use actix::{
   fut, Actor, ActorContext, Addr, AsyncContext, AtomicResponse, Handler, Recipient,
@@ -30,10 +31,12 @@ pub struct Workspace {
   workspace_id: WorkspaceId,
   last_message_id: Rid,
   store: Arc<CollabStore>,
+  snapshot_scheduler: SnapshotScheduler,
   sessions_by_client_id: HashMap<ClientID, WorkspaceSessionHandle>,
   updates_handle: Option<SpawnHandle>,
   awareness_handle: Option<SpawnHandle>,
   snapshot_handle: Option<SpawnHandle>,
+  termination_handle: Option<SpawnHandle>,
   permission_cache_cleanup_handle: Option<SpawnHandle>,
 }
 
@@ -46,18 +49,34 @@ impl Workspace {
     server: Recipient<Terminate>,
     workspace_id: WorkspaceId,
     store: Arc<CollabStore>,
+    snapshot_scheduler: SnapshotScheduler,
   ) -> Self {
     Self {
       server,
       workspace_id,
       store,
+      snapshot_scheduler,
       last_message_id: Rid::default(),
       sessions_by_client_id: HashMap::new(),
       updates_handle: None,
       awareness_handle: None,
       snapshot_handle: None,
+      termination_handle: None,
       permission_cache_cleanup_handle: None,
     }
+  }
+
+  async fn publish_update(store: Arc<CollabStore>, workspace_id: WorkspaceId, msg: PublishUpdate) {
+    let result = store
+      .publish_update(
+        workspace_id,
+        msg.object_id,
+        msg.collab_type,
+        &msg.sender,
+        msg.update_v1,
+      )
+      .await;
+    let _ = msg.ack.send(result);
   }
 
   async fn hande_ws_input(store: Arc<CollabStore>, sender: WorkspaceSessionHandle, msg: WsInput) {
@@ -139,9 +158,10 @@ impl Workspace {
           },
         };
       },
-      InputMessage::Update(collab_type, update) => {
-        let update = update.encode_v1();
-        if update == Update::EMPTY_V1 {
+      InputMessage::Update(collab_type, flags, update) => {
+        if (flags == UpdateFlags::Lib0v1 && update == Update::EMPTY_V1)
+          || (flags == UpdateFlags::Lib0v2 && update == Update::EMPTY_V2)
+        {
           tracing::trace!("skipping empty update {}", msg.object_id);
           return;
         }
@@ -292,6 +312,21 @@ impl Workspace {
 
     Ok(())
   }
+
+  /// Schedules a termination signal for the workspace in 1min.
+  /// If there was a previous termination handle, it will be canceled.
+  fn schedule_terminate(&mut self, ctx: &mut actix::Context<Self>) {
+    if let Some(handle) = self.termination_handle.take() {
+      ctx.cancel_future(handle);
+    }
+    let handle = ctx.notify_later(
+      Terminate {
+        workspace_id: self.workspace_id,
+      },
+      std::time::Duration::from_secs(60),
+    );
+    self.termination_handle = Some(handle);
+  }
 }
 
 impl Actor for Workspace {
@@ -329,6 +364,14 @@ impl Actor for Workspace {
       ctx.cancel_future(handle);
     }
     if let Some(handle) = self.snapshot_handle.take() {
+      ctx.cancel_future(handle);
+
+      // when closing the workspace, we should schedule a snapshot
+      self
+        .snapshot_scheduler
+        .schedule_snapshot(self.workspace_id, self.last_message_id);
+    }
+    if let Some(handle) = self.termination_handle.take() {
       ctx.cancel_future(handle);
     }
     if let Some(handle) = self.permission_cache_cleanup_handle.take() {
@@ -494,12 +537,7 @@ impl Handler<Leave> for Workspace {
       );
 
       if self.sessions_by_client_id.is_empty() {
-        ctx.notify_later(
-          Terminate {
-            workspace_id: self.workspace_id,
-          },
-          std::time::Duration::from_secs(60),
-        );
+        self.schedule_terminate(ctx);
       }
     }
   }
@@ -526,6 +564,22 @@ impl Handler<WsInput> for Workspace {
     } else {
       AtomicResponse::new(Box::pin(fut::ready(())))
     }
+  }
+}
+
+impl Handler<PublishUpdate> for Workspace {
+  type Result = AtomicResponse<Self, ()>;
+  fn handle(&mut self, msg: PublishUpdate, ctx: &mut Self::Context) -> Self::Result {
+    let store = self.store.clone();
+    let workspace_id = self.workspace_id;
+    if self.sessions_by_client_id.is_empty() {
+      // this is a single call message (i.e. called from a non-session context like HTTP request)
+      // so if there are no active sessions, we should schedule a termination
+      self.schedule_terminate(ctx);
+    }
+    AtomicResponse::new(Box::pin(
+      Self::publish_update(store, workspace_id, msg).into_actor(self),
+    ))
   }
 }
 

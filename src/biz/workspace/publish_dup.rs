@@ -46,7 +46,7 @@ use crate::biz::collab::utils::collab_to_bin;
 use crate::biz::collab::utils::get_latest_collab_encoded;
 
 use crate::state::AppState;
-use appflowy_collaborate::collab::update_publish::CollabUpdateWriter;
+use appflowy_collaborate::ws2::CollabUpdatePublisher;
 use collab::core::collab::default_client_id;
 use collab_database::database_trait::NoPersistenceDatabaseCollabService;
 
@@ -62,7 +62,7 @@ pub async fn duplicate_published_collab_to_workspace(
     state.pg_pool.clone(),
     state.bucket_client.clone(),
     state.collab_access_control_storage.clone(),
-    state.collab_update_writer.clone(),
+    Box::new(state.ws_server.clone()),
     dest_uid,
     dest_workspace_id,
     dest_view_id,
@@ -111,7 +111,7 @@ pub struct PublishCollabDuplicator {
   dest_workspace_id: Uuid,
   /// view of workspace to duplicate into
   dest_view_id: Uuid,
-  collab_update_writer: Arc<CollabUpdateWriter>,
+  collab_update_publisher: Box<dyn CollabUpdatePublisher>,
 }
 
 fn deserialize_publish_database_data(
@@ -133,7 +133,7 @@ impl PublishCollabDuplicator {
     pg_pool: PgPool,
     bucket_client: AwsS3BucketClientImpl,
     collab_storage: Arc<CollabAccessControlStorage>,
-    collab_update_writer: Arc<CollabUpdateWriter>,
+    collab_update_publisher: Box<dyn CollabUpdatePublisher>,
     dest_uid: i64,
     dest_workspace_id: Uuid,
     dest_view_id: Uuid,
@@ -154,7 +154,7 @@ impl PublishCollabDuplicator {
       duplicator_uid: dest_uid,
       dest_workspace_id,
       dest_view_id,
-      collab_update_writer,
+      collab_update_publisher,
     }
   }
 
@@ -189,7 +189,7 @@ impl PublishCollabDuplicator {
       duplicator_uid,
       dest_workspace_id,
       dest_view_id,
-      collab_update_writer,
+      collab_update_publisher: collab_update_writer,
     } = self;
 
     // insert all collab object accumulated

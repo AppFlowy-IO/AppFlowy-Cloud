@@ -19,6 +19,7 @@ use collab_stream::model::{AwarenessStreamUpdate, UpdateStreamMessage};
 use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::os::unix::raw::mode_t;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -36,6 +37,7 @@ pub struct Workspace {
   updates_handle: Option<SpawnHandle>,
   awareness_handle: Option<SpawnHandle>,
   snapshot_handle: Option<SpawnHandle>,
+  termination_handle: Option<SpawnHandle>,
   permission_cache_cleanup_handle: Option<SpawnHandle>,
 }
 
@@ -60,6 +62,7 @@ impl Workspace {
       updates_handle: None,
       awareness_handle: None,
       snapshot_handle: None,
+      termination_handle: None,
       permission_cache_cleanup_handle: None,
     }
   }
@@ -310,6 +313,21 @@ impl Workspace {
 
     Ok(())
   }
+
+  /// Schedules a termination signal for the workspace in 1min.
+  /// If there was a previous termination handle, it will be canceled.
+  fn schedule_terminate(&mut self, ctx: &mut actix::Context<Self>) {
+    if let Some(handle) = self.termination_handle.take() {
+      ctx.cancel_future(handle);
+    }
+    let handle = ctx.notify_later(
+      Terminate {
+        workspace_id: self.workspace_id,
+      },
+      std::time::Duration::from_secs(60),
+    );
+    self.termination_handle = Some(handle);
+  }
 }
 
 impl Actor for Workspace {
@@ -349,9 +367,13 @@ impl Actor for Workspace {
     if let Some(handle) = self.snapshot_handle.take() {
       ctx.cancel_future(handle);
 
+      // when closing the workspace, we should schedule a snapshot
       self
         .snapshot_scheduler
         .schedule_snapshot(self.workspace_id, self.last_message_id);
+    }
+    if let Some(handle) = self.termination_handle.take() {
+      ctx.cancel_future(handle);
     }
     if let Some(handle) = self.permission_cache_cleanup_handle.take() {
       ctx.cancel_future(handle);
@@ -516,12 +538,7 @@ impl Handler<Leave> for Workspace {
       );
 
       if self.sessions_by_client_id.is_empty() {
-        ctx.notify_later(
-          Terminate {
-            workspace_id: self.workspace_id,
-          },
-          std::time::Duration::from_secs(60),
-        );
+        self.schedule_terminate(ctx);
       }
     }
   }
@@ -553,9 +570,14 @@ impl Handler<WsInput> for Workspace {
 
 impl Handler<PublishUpdate> for Workspace {
   type Result = AtomicResponse<Self, ()>;
-  fn handle(&mut self, msg: PublishUpdate, _: &mut Self::Context) -> Self::Result {
+  fn handle(&mut self, msg: PublishUpdate, ctx: &mut Self::Context) -> Self::Result {
     let store = self.store.clone();
     let workspace_id = self.workspace_id;
+    if self.sessions_by_client_id.is_empty() {
+      // this is a single call message (i.e. called from a non-session context like HTTP request)
+      // so if there are no active sessions, we should schedule a termination
+      self.schedule_terminate(ctx);
+    }
     AtomicResponse::new(Box::pin(
       Self::publish_update(store, workspace_id, msg).into_actor(self),
     ))

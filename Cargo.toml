@@ -307,14 +307,14 @@ lto = false
 [patch.crates-io]
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4222c8148950f8d0154c3cd32e0872af3f33f0" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4222c8148950f8d0154c3cd32e0872af3f33f0" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4222c8148950f8d0154c3cd32e0872af3f33f0" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4222c8148950f8d0154c3cd32e0872af3f33f0" }
-collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4222c8148950f8d0154c3cd32e0872af3f33f0" }
-collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4222c8148950f8d0154c3cd32e0872af3f33f0" }
-collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4222c8148950f8d0154c3cd32e0872af3f33f0" }
-collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4222c8148950f8d0154c3cd32e0872af3f33f0" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "21cda3bd0da5dcaaa8abea377c4dafc6bba3b04a" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "21cda3bd0da5dcaaa8abea377c4dafc6bba3b04a" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "21cda3bd0da5dcaaa8abea377c4dafc6bba3b04a" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "21cda3bd0da5dcaaa8abea377c4dafc6bba3b04a" }
+collab-user = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "21cda3bd0da5dcaaa8abea377c4dafc6bba3b04a" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "21cda3bd0da5dcaaa8abea377c4dafc6bba3b04a" }
+collab-importer = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "21cda3bd0da5dcaaa8abea377c4dafc6bba3b04a" }
+collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "21cda3bd0da5dcaaa8abea377c4dafc6bba3b04a" }
 
 [features]
 history = []

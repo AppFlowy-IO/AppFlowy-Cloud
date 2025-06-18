@@ -166,8 +166,8 @@ impl CreateCollabData {
     }
   }
 
-  pub fn to_proto(&self) -> proto::collab::CollabParams {
-    proto::collab::CollabParams {
+  pub fn to_proto(&self) -> proto::CollabParams {
+    proto::CollabParams {
       object_id: self.object_id.to_string(),
       encoded_collab: self.encoded_collab_v1.to_vec(),
       collab_type: self.collab_type.to_proto() as i32,
@@ -180,7 +180,7 @@ impl CreateCollabData {
   }
 
   pub fn from_protobuf_bytes(bytes: &[u8]) -> Result<Self, EntityError> {
-    match proto::collab::CollabParams::decode(bytes) {
+    match proto::CollabParams::decode(bytes) {
       Ok(proto) => Self::try_from(proto),
       Err(err) => Err(DeserializationError(err.to_string())),
     }
@@ -208,11 +208,11 @@ impl From<CreateCollabData> for CollabParams {
   }
 }
 
-impl TryFrom<proto::collab::CollabParams> for CreateCollabData {
+impl TryFrom<proto::CollabParams> for CreateCollabData {
   type Error = EntityError;
 
-  fn try_from(proto: proto::collab::CollabParams) -> Result<Self, Self::Error> {
-    let collab_type_proto = proto::collab::CollabType::try_from(proto.collab_type).unwrap();
+  fn try_from(proto: proto::CollabParams) -> Result<Self, Self::Error> {
+    let collab_type_proto = proto::CollabType::try_from(proto.collab_type).unwrap();
     let collab_type = CollabType::from_proto(&collab_type_proto);
     Ok(Self {
       object_id: Uuid::from_str(&proto.object_id)
@@ -826,19 +826,19 @@ pub enum EmbeddingContentType {
 }
 
 impl EmbeddingContentType {
-  pub fn from_proto(proto: proto::collab::EmbeddingContentType) -> Result<Self, EntityError> {
+  pub fn from_proto(proto: proto::EmbeddingContentType) -> Result<Self, EntityError> {
     match proto {
-      proto::collab::EmbeddingContentType::PlainText => Ok(EmbeddingContentType::PlainText),
-      proto::collab::EmbeddingContentType::Unknown => Err(InvalidData(format!(
+      proto::EmbeddingContentType::PlainText => Ok(EmbeddingContentType::PlainText),
+      proto::EmbeddingContentType::Unknown => Err(InvalidData(format!(
         "{} is not a supported embedding type",
         proto.as_str_name()
       ))),
     }
   }
 
-  pub fn to_proto(&self) -> proto::collab::EmbeddingContentType {
+  pub fn to_proto(&self) -> proto::EmbeddingContentType {
     match self {
-      EmbeddingContentType::PlainText => proto::collab::EmbeddingContentType::PlainText,
+      EmbeddingContentType::PlainText => proto::EmbeddingContentType::PlainText,
     }
   }
 }

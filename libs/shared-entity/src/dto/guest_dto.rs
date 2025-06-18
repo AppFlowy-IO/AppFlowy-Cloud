@@ -18,6 +18,7 @@ pub struct SharedUser {
   pub access_level: AFAccessLevel,
   pub role: AFRole,
   pub avatar_url: Option<String>,
+  pub pending_invitation: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

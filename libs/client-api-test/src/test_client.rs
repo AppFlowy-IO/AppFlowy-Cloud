@@ -6,13 +6,14 @@ use anyhow::{anyhow, Error};
 use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
 };
+use async_trait::async_trait;
 use bytes::Bytes;
 use collab::core::collab::DataSource;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
 use collab::lock::{Mutex, RwLock};
-use collab::preclude::{Collab, Prelim};
+use collab::preclude::{ClientID, Collab, Prelim};
 use collab_database::database::{Database, DatabaseContext};
 use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::document::Document;
@@ -52,9 +53,13 @@ use shared_entity::response::AppResponseError;
 
 use crate::database_util::TestDatabaseCollabService;
 use crate::user::{generate_unique_registered_user, User};
-use crate::{load_env, localhost_client_with_device_id, setup_log};
+use crate::{
+  load_env, localhost_client_with_device_id, setup_log, JsonAssertable, TestClientConstants,
+};
 
 use collab::core::collab::CollabOptions;
+use collab_database::database_trait::CollabRef;
+use rand::random;
 
 pub struct TestClient {
   pub user: User,
@@ -84,6 +89,14 @@ impl TestClient {
     setup_log();
     let device_id = Uuid::new_v4().to_string();
     Self::new_with_device_id(&device_id, registered_user, start_ws_conn).await
+  }
+
+  fn random_client_id() -> ClientID {
+    random::<u32>() as ClientID
+  }
+
+  pub async fn client_id(&self, _workspace_id: &Uuid) -> ClientID {
+    Self::random_client_id()
   }
 
   pub async fn insert_into<S: Prelim>(&self, object_id: &Uuid, key: &str, value: S) {
@@ -209,16 +222,18 @@ impl TestClient {
       CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone())),
       folder_collab.into(),
       &workspace_id.to_string(),
+      Self::random_client_id(),
     )
     .unwrap()
   }
 
   pub async fn get_database(&self, workspace_id: Uuid, database_id: &str) -> Database {
-    let service = TestDatabaseCollabService {
-      api_client: self.api_client.clone(),
+    let service = Arc::new(TestDatabaseCollabService::new(
+      self.api_client.clone(),
       workspace_id,
-    };
-    let context = DatabaseContext::new(Arc::new(service));
+      Self::random_client_id(),
+    ));
+    let context = DatabaseContext::new(service.clone(), service);
     Database::open(database_id, context).await.unwrap()
   }
 
@@ -252,6 +267,7 @@ impl TestClient {
       &workspace_database_id.to_string(),
       CollabOrigin::Empty,
       collab.encode_collab.into(),
+      Self::random_client_id(),
     )
     .unwrap()
   }
@@ -288,6 +304,12 @@ impl TestClient {
     let mut lock = test_collab.collab.write().await;
     let collab = (*lock).borrow_mut();
     collab.emit_awareness_state();
+    tracing::info!(
+      "emit awareness state for collab: {} (client id: {}): {:#?}",
+      object_id,
+      collab.doc().client_id(),
+      collab.get_awareness().update().unwrap()
+    );
   }
 
   pub async fn user_with_new_device(registered_user: User) -> Self {
@@ -320,6 +342,7 @@ impl TestClient {
       CollabOrigin::Empty,
       data.encode_collab.into(),
       &workspace_id.to_string(),
+      Self::random_client_id(),
     )
     .unwrap()
   }
@@ -330,7 +353,7 @@ impl TestClient {
       .get_collab(workspace_id, db_storage_id, CollabType::WorkspaceDatabase)
       .await
       .unwrap();
-    let options = CollabOptions::new(db_storage_id.to_string())
+    let options = CollabOptions::new(db_storage_id.to_string(), Self::random_client_id())
       .with_data_source(collab_resp.encode_collab.into());
     Collab::new_with_options(CollabOrigin::Server, options).unwrap()
   }
@@ -340,8 +363,8 @@ impl TestClient {
       .get_collab(workspace_id, object_id, CollabType::Document)
       .await
       .unwrap();
-    let options =
-      CollabOptions::new(object_id.to_string()).with_data_source(collab_resp.encode_collab.into());
+    let options = CollabOptions::new(object_id.to_string(), Self::random_client_id())
+      .with_data_source(collab_resp.encode_collab.into());
     let collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
     Document::open(collab).unwrap()
   }
@@ -361,7 +384,7 @@ impl TestClient {
       .get_collab(workspace_id, db_id, CollabType::Database)
       .await
       .unwrap();
-    let options = CollabOptions::new(db_id.to_string())
+    let options = CollabOptions::new(db_id.to_string(), Self::random_client_id())
       .with_data_source(db_collab_collab_resp.encode_collab.into());
     Collab::new_with_options(CollabOrigin::Server, options).unwrap()
   }
@@ -379,9 +402,10 @@ impl TestClient {
       ))
       .await
       .unwrap();
-    let options = CollabOptions::new(awareness_object_id.to_string()).with_data_source(
-      DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
-    );
+    let options = CollabOptions::new(awareness_object_id.to_string(), Self::random_client_id())
+      .with_data_source(DataSource::DocStateV1(
+        data.encode_collab.doc_state.to_vec(),
+      ));
     let collab = Collab::new_with_options(CollabOrigin::Empty, options).unwrap();
 
     UserAwareness::open(collab, None).unwrap()
@@ -574,7 +598,7 @@ impl TestClient {
     &self,
     workspace_id: &Uuid,
     query: Vec<EmbeddedCollabQuery>,
-  ) -> Vec<AFCollabEmbedInfo> {
+  ) -> Result<Vec<AFCollabEmbedInfo>, AppResponseError> {
     let timeout_duration = Duration::from_secs(60);
     let poll_interval = Duration::from_millis(2000);
     let poll_fut = async {
@@ -592,14 +616,18 @@ impl TestClient {
 
     // Enforce timeout
     match timeout(timeout_duration, poll_fut).await {
-      Ok(Ok(items)) => items,
-      Ok(Err(e)) => panic!("Test failed: {}", e),
-      Err(_) => panic!("Test failed: Timeout after 30 seconds. {:?}", query),
+      Ok(Ok(items)) => Ok(items),
+      Ok(Err(e)) => Err(e.into()),
+      Err(_) => Err(anyhow!("Test failed: Timeout after 30 seconds. {:?}", query).into()),
     }
   }
 
-  pub async fn wait_until_get_embedding(&self, workspace_id: &Uuid, object_id: &Uuid) {
-    let result = timeout(Duration::from_secs(30), async {
+  pub async fn wait_until_get_embedding(
+    &self,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
+  ) -> Result<(), AppResponseError> {
+    timeout(Duration::from_secs(30), async {
       while self
         .api_client
         .get_collab_embed_info(workspace_id, object_id)
@@ -613,13 +641,9 @@ impl TestClient {
         .get_collab_embed_info(workspace_id, object_id)
         .await
     })
-    .await;
-
-    match result {
-      Ok(Ok(_)) => {},
-      Ok(Err(e)) => panic!("Test failed: API returned an error: {:?}", e),
-      Err(_) => panic!("Test failed: Timeout after 30 seconds."),
-    }
+    .await
+    .unwrap()?;
+    Ok(())
   }
 
   pub async fn wait_unit_get_search_result(
@@ -629,8 +653,8 @@ impl TestClient {
     limit: u32,
     preview: u32,
     score_limit: Option<f32>,
-  ) -> Vec<SearchDocumentResponseItem> {
-    timeout(Duration::from_secs(30), async {
+  ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
+    let res = timeout(Duration::from_secs(30), async {
       loop {
         let response = self
           .api_client
@@ -647,7 +671,8 @@ impl TestClient {
       }
     })
     .await
-    .unwrap()
+    .unwrap();
+    Ok(res)
   }
 
   pub async fn assert_similarity(
@@ -779,8 +804,8 @@ impl TestClient {
     let resp = self
       .get_collab(workspace_id, object_id, collab_type)
       .await?;
-    let options =
-      CollabOptions::new(object_id.to_string()).with_data_source(resp.encode_collab.into());
+    let options = CollabOptions::new(object_id.to_string(), Self::random_client_id())
+      .with_data_source(resp.encode_collab.into());
     let collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
     Ok(collab)
   }
@@ -819,16 +844,23 @@ impl TestClient {
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let mut collab = match encoded_collab_v1 {
       None => {
-        let options = CollabOptions::new(object_id.to_string());
+        let options = CollabOptions::new(object_id.to_string(), Self::random_client_id());
         Collab::new_with_options(origin.clone(), options).unwrap()
       },
       Some(data) => {
-        let options = CollabOptions::new(object_id.to_string()).with_data_source(data.into());
+        let options = CollabOptions::new(object_id.to_string(), Self::random_client_id())
+          .with_data_source(data.into());
         Collab::new_with_options(origin.clone(), options).unwrap()
       },
     };
 
     collab.emit_awareness_state();
+    tracing::info!(
+      "emit awareness state for collab: {} (client id: {}) on collab created: {:#?}",
+      object_id,
+      collab.doc().client_id(),
+      collab.get_awareness().update().unwrap()
+    );
     let encoded_collab_v1 = collab
       .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
       .unwrap()
@@ -910,10 +942,16 @@ impl TestClient {
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let options =
-      CollabOptions::new(object_id.to_string()).with_data_source(DataSource::DocStateV1(doc_state));
-    let mut collab = Collab::new_with_options(CollabOrigin::Server, options).unwrap();
+    let options = CollabOptions::new(object_id.to_string(), Self::random_client_id())
+      .with_data_source(DataSource::DocStateV1(doc_state));
+    let mut collab = Collab::new_with_options(origin.clone(), options).unwrap();
     collab.emit_awareness_state();
+    tracing::info!(
+      "emit awareness state for collab: {} (client id: {}) on collab open: {:#?}",
+      object_id,
+      collab.doc().client_id(),
+      collab.get_awareness().update().unwrap()
+    );
     let collab = Arc::new(RwLock::from(collab));
     let collab_ref = collab.clone() as CollabRef;
 
@@ -959,8 +997,8 @@ impl TestClient {
   ) -> Result<(), AppResponseError> {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let options =
-      CollabOptions::new(object_id.to_string()).with_data_source(encoded_collab_v1.into());
+    let options = CollabOptions::new(object_id.to_string(), Self::random_client_id())
+      .with_data_source(encoded_collab_v1.into());
     let collab = Collab::new_with_options(origin.clone(), options).unwrap();
 
     let encoded_collab_v1 = collab
@@ -1078,7 +1116,7 @@ pub async fn assert_server_snapshot(
           Ok(snapshot_data) => {
           let encoded_collab_v1 =
             EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
-          let options = CollabOptions::new(object_id.to_string())
+          let options = CollabOptions::new(object_id.to_string(), TestClient::random_client_id())
             .with_data_source(DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()));
           let json = Collab::new_with_options(
             CollabOrigin::Empty,
@@ -1108,6 +1146,32 @@ pub async fn assert_server_snapshot(
   }
 }
 
+pub async fn assert_client_collab_value(
+  client: &mut TestClient,
+  object_id: &Uuid,
+  expected: Value,
+) -> Result<(), Error> {
+  let test_collab = client
+    .collabs
+    .get(object_id)
+    .ok_or_else(|| anyhow!("Collab not found for object_id: {}", object_id))?;
+
+  let config = crate::test_client_config::AssertionConfig {
+    timeout: Duration::from_secs(TestClientConstants::SYNC_TIMEOUT_SECS),
+    ..Default::default()
+  };
+
+  test_collab.assert_json_eventually(expected, config).await
+}
+
+#[async_trait]
+impl JsonAssertable for TestCollab {
+  async fn get_json(&self) -> Result<Value, Error> {
+    let lock = self.collab.read().await;
+    Ok(lock.to_json_value())
+  }
+}
+
 pub async fn assert_server_collab(
   workspace_id: Uuid,
   client: &mut client_api::Client,
@@ -1130,9 +1194,10 @@ pub async fn assert_server_collab(
 
       match &result {
         Ok(data) => {
-          let options = CollabOptions::new(object_id.to_string()).with_data_source(
-            DataSource::DocStateV1(data.encode_collab.doc_state.clone().to_vec()),
-          );
+          let options = CollabOptions::new(object_id.to_string(), TestClient::random_client_id())
+            .with_data_source(DataSource::DocStateV1(
+              data.encode_collab.doc_state.clone().to_vec(),
+            ));
           let json = Collab::new_with_options(CollabOrigin::Empty, options)
             .unwrap()
             .to_json_value();

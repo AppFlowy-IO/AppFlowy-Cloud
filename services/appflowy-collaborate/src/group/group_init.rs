@@ -214,19 +214,19 @@ impl CollabGroup {
     match update.into_update() {
       Ok(update) => {
         trace!(
-          "receive inbound {}/{} update {:#?}, current state vector: {:#?}, update state vector: {:#?}",
+          "receive inbound {}/{} update {:#?}, state vector: {:#?}, server state vector: {:#?}",
           state.object_id,
           state.collab_type,
           update,
+          update.state_vector_higher(),
           state.state_vector.read().await,
-          update.state_vector(),
         );
 
         state
           .state_vector
           .write()
           .await
-          .merge(update.state_vector());
+          .merge(update.state_vector_higher());
 
         let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
         let payload = Message::Sync(SyncMessage::Update(update.encode_v1())).encode_v1();
@@ -651,7 +651,7 @@ impl CollabGroup {
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     if let Ok(sv) = state.state_vector.try_read() {
       trace!(
-        "Sync step1: {}/{} current state vector: {:#?}, client state vector: {:#?}",
+        "Sync step1: {}/{} server state vector: {:#?}, client state vector: {:#?}",
         state.object_id,
         state.collab_type,
         sv,
@@ -662,7 +662,7 @@ impl CollabGroup {
       match sv.partial_cmp(client_sv) {
         Some(std::cmp::Ordering::Equal) => {
           trace!(
-            "Sync step1: {}/{} client and server are in sync, no need to send anything",
+            "Sync step1: {}/{} client and server are synced, no need to send anything",
             state.object_id,
             state.collab_type
           );
@@ -741,14 +741,14 @@ impl CollabGroup {
 
     let (should_apply_update, missing_updates) = {
       let current_sv = state.state_vector.read().await;
-      let update_sv = decoded_update.state_vector();
+      let update_sv = decoded_update.state_vector_lower();
       trace!(
-        "Sync step2: {}/{} current state vector: {:#?}, update state vector: {:#?}, new update: {:#?}",
+        "Sync step2: {}/{} new update: {:#?}, state vector: {:#?}, server state vector: {:#?}",
         state.object_id,
         state.collab_type,
-        current_sv,
-        update_sv,
         decoded_update,
+        update_sv,
+        current_sv,
       );
       match current_sv.partial_cmp(&update_sv) {
         None => {
@@ -761,9 +761,8 @@ impl CollabGroup {
             current_sv,
             update_sv
           );
-          // Apply the update first, then send our state vector so client can sync back
           (
-            true,
+            false,
             Some(Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1()),
           )
         },
@@ -784,7 +783,15 @@ impl CollabGroup {
             (true, None)
           }
         },
-        Some(std::cmp::Ordering::Equal) | Some(std::cmp::Ordering::Greater) => {
+        Some(std::cmp::Ordering::Equal) => {
+          trace!(
+            "Sync step2: {}/{} server and client are synced",
+            state.object_id,
+            state.collab_type,
+          );
+          (true, None)
+        },
+        Some(std::cmp::Ordering::Greater) => {
           trace!(
             "Sync step2: {}/{} server is ahead of client",
             state.object_id,

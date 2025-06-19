@@ -767,13 +767,22 @@ impl CollabGroup {
             Some(Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1()),
           )
         },
-        Some(std::cmp::Ordering::Greater) if decoded_update.delete_set().is_empty() => {
-          // This update has no new data. In fact server is more up to date, that this
-          // update suggests, so we'll discard it and send sync step back to the client
-          // to let it know that we have new data, that client needs to know about.
-          return Ok(Some(
-            Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1(),
-          ));
+        Some(std::cmp::Ordering::Less) => {
+          if !decoded_update.extends(&current_sv) {
+            // server is behind client, but the update doesn't extend current server state
+            // which means that we must have missed some updates, that must be integrated
+            // before current update can be fully applied
+            trace!(
+              "Sync step2: server {}/{} is behind client",
+              state.object_id,
+              state.collab_type,
+            );
+            return Ok(Some(
+              Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1(),
+            ));
+          } else {
+            (true, None)
+          }
         },
         Some(std::cmp::Ordering::Equal) | Some(std::cmp::Ordering::Greater) => {
           trace!(

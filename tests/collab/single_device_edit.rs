@@ -676,7 +676,7 @@ async fn offline_and_then_sync_through_http_request() {
     &mut test_client.api_client,
     object_id,
     &CollabType::Unknown,
-    10,
+    30,
     json!({"1": small_text, "2": medium_text}),
   )
   .await

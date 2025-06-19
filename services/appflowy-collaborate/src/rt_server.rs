@@ -1,11 +1,13 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
+use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 use access_control::collab::RealtimeAccessControl;
 use anyhow::{anyhow, Result};
 use app_error::AppError;
@@ -23,9 +25,8 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::interval;
 use tracing::{error, trace, warn};
 use uuid::Uuid;
-
-use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
-use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
+use yrs::updates::decoder::Decode;
+use yrs::StateVector;
 
 #[derive(Clone)]
 pub struct CollaborationServer<S> {
@@ -231,8 +232,43 @@ where
             );
           }
 
-          if let Some(tx) = return_tx {
-            let _ = tx.send(Ok(None));
+          if let Some(return_rx) = return_tx {
+            if let Some(state_vector) = message
+              .state_vector
+              .and_then(|data| StateVector::decode_v1(&data).ok())
+            {
+              let (tx, rx) = tokio::sync::oneshot::channel();
+              let _ = group_cmd_sender
+                .send(GroupCommand::CalculateMissingUpdate {
+                  object_id,
+                  state_vector,
+                  ret: tx,
+                })
+                .await;
+
+              match rx.await {
+                Ok(missing_update_result) => {
+                  let _ = group_cmd_sender
+                    .send(GroupCommand::GenerateCollabEmbedding { object_id })
+                    .await;
+
+                  let result = missing_update_result
+                    .map_err(|err| {
+                      AppError::Internal(anyhow!("fail to calculate missing update: {}", err))
+                    })
+                    .map(Some);
+                  let _ = return_rx.send(result);
+                },
+                Err(err) => {
+                  let _ = return_rx.send(Err(AppError::Internal(anyhow!(
+                    "fail to calculate missing update: {}",
+                    err
+                  ))));
+                },
+              }
+            } else {
+              let _ = return_rx.send(Ok(None));
+            }
           }
         },
         Ok(Err(err)) => {

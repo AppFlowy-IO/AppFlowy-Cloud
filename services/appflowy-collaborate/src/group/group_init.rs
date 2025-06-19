@@ -347,6 +347,26 @@ impl CollabGroup {
     }
   }
 
+  pub async fn calculate_missing_update(
+    &self,
+    state_vector: StateVector,
+  ) -> Result<Vec<u8>, RealtimeError> {
+    {
+      // first check if we need to send any updates
+      let collab_sv = self.state.state_vector.read().await;
+      if *collab_sv <= state_vector {
+        return Ok(vec![]);
+      }
+    }
+
+    let encoded_collab = self.encode_collab().await?;
+    let options = CollabOptions::new(self.object_id().to_string(), default_client_id())
+      .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.into()));
+    let collab = Collab::new_with_options(CollabOrigin::Server, options)?;
+    let update = collab.transact().encode_state_as_update_v1(&state_vector);
+    Ok(update)
+  }
+
   /// Generate embedding for the current Collab immediately
   ///
   pub async fn generate_embeddings(&self) -> Result<(), AppError> {
@@ -762,7 +782,7 @@ impl CollabGroup {
             update_sv
           );
           (
-            false,
+            true,
             Some(Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1()),
           )
         },

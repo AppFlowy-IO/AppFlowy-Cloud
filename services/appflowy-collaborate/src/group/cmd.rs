@@ -21,6 +21,7 @@ use database::collab::CollabStorage;
 use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 use yrs::updates::encoder::Encode;
+use yrs::StateVector;
 
 /// Using [GroupCommand] to interact with the group
 /// - HandleClientCollabMessage: Handle the client message
@@ -43,6 +44,11 @@ pub enum GroupCommand {
   },
   GenerateCollabEmbedding {
     object_id: Uuid,
+  },
+  CalculateMissingUpdate {
+    object_id: Uuid,
+    state_vector: StateVector,
+    ret: tokio::sync::oneshot::Sender<Result<Vec<u8>, RealtimeError>>,
   },
 }
 
@@ -111,6 +117,22 @@ where
                 Ok(_) => trace!("successfully created embeddings for {}", object_id),
                 Err(err) => trace!("failed to create embeddings for {}: {}", object_id, err),
               }
+            }
+          },
+          GroupCommand::CalculateMissingUpdate {
+            object_id,
+            state_vector,
+            ret,
+          } => {
+            let group = self.group_manager.get_group(&object_id).await;
+            match group {
+              None => {
+                let _ = ret.send(Err(RealtimeError::GroupNotFound(object_id.to_string())));
+              },
+              Some(group) => {
+                let result = group.calculate_missing_update(state_vector).await;
+                let _ = ret.send(result);
+              },
             }
           },
         }

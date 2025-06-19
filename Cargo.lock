@@ -9052,7 +9052,7 @@ dependencies = [
 [[package]]
 name = "yrs"
 version = "0.23.4"
-source = "git+https://github.com/appflowy/y-crdt.git?rev=c0be216997197ab774894be0f9aca996138ab8c8#c0be216997197ab774894be0f9aca996138ab8c8"
+source = "git+https://github.com/appflowy/y-crdt.git?rev=9cb217fc9a11c4a6cce99455cc6e977bd9c9b6fc#9cb217fc9a11c4a6cce99455cc6e977bd9c9b6fc"
 dependencies = [
  "arc-swap",
  "async-lock",

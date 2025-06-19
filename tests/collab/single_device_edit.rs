@@ -670,6 +670,14 @@ async fn offline_and_then_sync_through_http_request() {
     .await
     .unwrap();
 
+  assert_client_collab_value(
+    &mut test_client,
+    &object_id,
+    json!({"1": small_text, "2": medium_text}),
+  )
+  .await
+  .unwrap();
+
   // Verify medium text was synced
   assert_server_collab(
     workspace_id,

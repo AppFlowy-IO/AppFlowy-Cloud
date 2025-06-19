@@ -21,7 +21,6 @@ use database::collab::CollabStorage;
 use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 use yrs::updates::encoder::Encode;
-use yrs::StateVector;
 
 /// Using [GroupCommand] to interact with the group
 /// - HandleClientCollabMessage: Handle the client message
@@ -44,11 +43,6 @@ pub enum GroupCommand {
   },
   GenerateCollabEmbedding {
     object_id: Uuid,
-  },
-  CalculateMissingUpdate {
-    object_id: Uuid,
-    state_vector: StateVector,
-    ret: tokio::sync::oneshot::Sender<Result<Vec<u8>, RealtimeError>>,
   },
 }
 
@@ -117,22 +111,6 @@ where
                 Ok(_) => trace!("successfully created embeddings for {}", object_id),
                 Err(err) => trace!("failed to create embeddings for {}: {}", object_id, err),
               }
-            }
-          },
-          GroupCommand::CalculateMissingUpdate {
-            object_id,
-            state_vector,
-            ret,
-          } => {
-            let group = self.group_manager.get_group(&object_id).await;
-            match group {
-              None => {
-                let _ = ret.send(Err(RealtimeError::GroupNotFound(object_id.to_string())));
-              },
-              Some(group) => {
-                let result = group.calculate_missing_update(state_vector).await;
-                let _ = ret.send(result);
-              },
             }
           },
         }
@@ -355,16 +333,6 @@ pub async fn forward_message_to_group(
   client_msg_router: &Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
 ) {
   if let Entry::Occupied(client_stream) = client_msg_router.entry(user.clone()) {
-    trace!(
-      "[realtime]: receive client:{} device:{} oid:{} msg ids: {:?}",
-      user.uid,
-      user.device_id,
-      object_id,
-      collab_messages
-        .iter()
-        .map(|v| v.msg_id())
-        .collect::<Vec<_>>()
-    );
     let message = MessageByObjectId::new_with_message(object_id.to_string(), collab_messages);
     let err = client_stream.get().stream_tx.send(message);
     if let Err(err) = err {

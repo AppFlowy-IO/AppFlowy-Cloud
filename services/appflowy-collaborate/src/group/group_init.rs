@@ -36,7 +36,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 use uuid::Uuid;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::{Decode, DecoderV1};
@@ -208,22 +208,27 @@ impl CollabGroup {
     Ok(())
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn handle_inbound_update(state: &CollabGroupState, update: CollabStreamUpdate) {
     let sender = update.sender.clone();
     match update.into_update() {
       Ok(update) => {
+        trace!(
+          "receive inbound {}/{} update {:#?}, state vector: {:#?}, server state vector: {:#?}",
+          state.object_id,
+          state.collab_type,
+          update,
+          update.state_vector_higher(),
+          state.state_vector.read().await,
+        );
+
         state
           .state_vector
           .write()
           .await
-          .merge(update.state_vector());
+          .merge(update.state_vector_higher());
 
         let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
-        tracing::trace!(
-          "broadcasting collab update from {} - seq_num: {}",
-          sender,
-          seq_num
-        );
         let payload = Message::Sync(SyncMessage::Update(update.encode_v1())).encode_v1();
         let message = BroadcastSync::new(sender, state.object_id.to_string(), payload, seq_num);
         for mut e in state.subscribers.iter_mut() {
@@ -283,11 +288,7 @@ impl CollabGroup {
   }
 
   async fn handle_inbound_awareness(state: &CollabGroupState, update: &AwarenessStreamUpdate) {
-    tracing::trace!(
-      "broadcasting awareness update from {} (contains {} clients)",
-      update.sender,
-      update.data.clients.len()
-    );
+    tracing::trace!("broadcast awareness {:#?}", update.data,);
     let sender = &update.sender;
     let message = AwarenessSync::new(
       state.object_id.to_string(),
@@ -346,6 +347,26 @@ impl CollabGroup {
     }
   }
 
+  pub async fn calculate_missing_update(
+    &self,
+    state_vector: StateVector,
+  ) -> Result<Vec<u8>, RealtimeError> {
+    {
+      // first check if we need to send any updates
+      let collab_sv = self.state.state_vector.read().await;
+      if *collab_sv <= state_vector {
+        return Ok(vec![]);
+      }
+    }
+
+    let encoded_collab = self.encode_collab().await?;
+    let options = CollabOptions::new(self.object_id().to_string(), default_client_id())
+      .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.into()));
+    let collab = Collab::new_with_options(CollabOrigin::Server, options)?;
+    let update = collab.transact().encode_state_as_update_v1(&state_vector);
+    Ok(update)
+  }
+
   /// Generate embedding for the current Collab immediately
   ///
   pub async fn generate_embeddings(&self) -> Result<(), AppError> {
@@ -366,26 +387,6 @@ impl CollabGroup {
       .indexer_scheduler
       .index_collab_immediately(workspace_id, object_id, &collab, collab_type)
       .await
-  }
-
-  pub async fn calculate_missing_update(
-    &self,
-    state_vector: StateVector,
-  ) -> Result<Vec<u8>, RealtimeError> {
-    {
-      // first check if we need to send any updates
-      let collab_sv = self.state.state_vector.read().await;
-      if *collab_sv <= state_vector {
-        return Ok(vec![]);
-      }
-    }
-
-    let encoded_collab = self.encode_collab().await?;
-    let options = CollabOptions::new(self.object_id().to_string(), default_client_id())
-      .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.into()));
-    let collab = Collab::new_with_options(CollabOrigin::Server, options)?;
-    let update = collab.transact().encode_state_as_update_v1(&state_vector);
-    Ok(update)
   }
 
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
@@ -522,15 +523,12 @@ impl CollabGroup {
       }
       for message in messages {
         match Self::handle_client_message(state, message).await {
-          Ok(response) => {
-            trace!("[realtime]: sending response: {}", response);
-            match sink.send(response.into()).await {
-              Ok(()) => {},
-              Err(err) => {
-                trace!("[realtime]: send failed: {}", err);
-                break;
-              },
-            }
+          Ok(response) => match sink.send(response.into()).await {
+            Ok(()) => {},
+            Err(err) => {
+              trace!("[realtime]: send failed: {}", err);
+              break;
+            },
           },
           Err(err) => {
             error!(
@@ -566,12 +564,6 @@ impl CollabGroup {
         state.seq_no.load(Ordering::SeqCst),
       ));
     }
-
-    trace!(
-      "Applying client updates: {}, origin:{}",
-      collab_msg,
-      message_origin
-    );
 
     let payload = collab_msg.payload();
 
@@ -675,19 +667,45 @@ impl CollabGroup {
 
   async fn handle_sync_step1(
     state: &CollabGroupState,
-    remote_sv: &StateVector,
+    client_sv: &StateVector,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     if let Ok(sv) = state.state_vector.try_read() {
+      trace!(
+        "Sync step1: {}/{} server state vector: {:#?}, client state vector: {:#?}",
+        state.object_id,
+        state.collab_type,
+        sv,
+        client_sv
+      );
       // we optimistically try to obtain state vector lock for a fast track:
       // if we remote sv is up-to-date with current one, we don't need to do anything
-      match sv.partial_cmp(remote_sv) {
-        Some(std::cmp::Ordering::Equal) => return Ok(None), // client and server are in sync
+      match sv.partial_cmp(client_sv) {
+        Some(std::cmp::Ordering::Equal) => {
+          trace!(
+            "Sync step1: {}/{} client and server are synced, no need to send anything",
+            state.object_id,
+            state.collab_type
+          );
+          return Ok(None);
+        }, // client and server are in sync
         Some(std::cmp::Ordering::Less) => {
           // server is behind client
+          trace!(
+            "Sync step1: server {}/{} is behind client, sending sync step 1 with state vector: {:#?}",
+            state.object_id, state.collab_type,
+            sv
+          );
           let msg = Message::Sync(SyncMessage::SyncStep1(sv.clone()));
           return Ok(Some(msg.encode_v1()));
         },
-        Some(std::cmp::Ordering::Greater) | None => { /* server has some new updates */ },
+        Some(std::cmp::Ordering::Greater) | None => {
+          // server has some new updates
+          trace!(
+            "Sync step1: server has some new updates for {}/{}",
+            state.object_id,
+            state.collab_type
+          );
+        },
       }
     }
 
@@ -701,7 +719,7 @@ impl CollabGroup {
 
     // prepare document state update and state vector
     let tx = snapshot.collab.transact();
-    let doc_state = tx.encode_diff_v1(remote_sv);
+    let doc_state = tx.encode_diff_v1(client_sv);
     let local_sv = tx.state_vector();
     drop(tx);
 
@@ -735,37 +753,82 @@ impl CollabGroup {
       .await
       .map_err(|err| RTProtocolError::Internal(err.into()))??
     };
+
     state
       .metrics
       .load_collab_time
       .observe(start.elapsed().as_millis() as f64);
-    let missing_updates = {
+
+    let (should_apply_update, missing_updates) = {
       let current_sv = state.state_vector.read().await;
-      let update_sv = decoded_update.state_vector();
+      let update_sv = decoded_update.state_vector_lower();
+      trace!(
+        "Sync step2: {}/{} new update: {:#?}, state vector: {:#?}, server state vector: {:#?}",
+        state.object_id,
+        state.collab_type,
+        decoded_update,
+        update_sv,
+        current_sv,
+      );
       match current_sv.partial_cmp(&update_sv) {
         None => {
-          // None marks concurrent state vectors, meaning that current collab group
-          // has some of the updates that the client didn't see and vice versa
-          tracing::trace!("missing updates found for {}", state.object_id);
-          Some(Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1())
+          // Concurrent state vectors: both server and client have updates the other hasn't seen
+          // We should apply the update to merge the states, then inform the client of our state
+          trace!(
+            "Sync step2: {}/{} concurrent state vectors, current: {:#?}, update: {:#?}",
+            state.object_id,
+            state.collab_type,
+            current_sv,
+            update_sv
+          );
+          (
+            true,
+            Some(Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1()),
+          )
         },
-        Some(std::cmp::Ordering::Greater) if decoded_update.delete_set().is_empty() => {
-          // This update has no new data. In fact server is more up to date, that this
-          // update suggests, so we'll discard it and send sync step back to the client
-          // to let it know that we have new data, that client needs to know about.
-          return Ok(Some(
-            Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1(),
-          ));
+        Some(std::cmp::Ordering::Less) => {
+          if !decoded_update.extends(&current_sv) {
+            // server is behind client, but the update doesn't extend current server state
+            // which means that we must have missed some updates, that must be integrated
+            // before current update can be fully applied
+            trace!(
+              "Sync step2: server {}/{} is behind client",
+              state.object_id,
+              state.collab_type,
+            );
+            return Ok(Some(
+              Message::Sync(SyncMessage::SyncStep1(current_sv.clone())).encode_v1(),
+            ));
+          } else {
+            (true, None)
+          }
         },
-        _ => None,
+        Some(std::cmp::Ordering::Equal) => {
+          trace!(
+            "Sync step2: {}/{} server and client are synced",
+            state.object_id,
+            state.collab_type,
+          );
+          (true, None)
+        },
+        Some(std::cmp::Ordering::Greater) => {
+          trace!(
+            "Sync step2: {}/{} server is ahead of client",
+            state.object_id,
+            state.collab_type,
+          );
+          (true, None)
+        },
       }
     };
 
-    state
-      .persister
-      .send_update(origin.clone(), update)
-      .await
-      .map_err(|err| RTProtocolError::Internal(err.into()))?;
+    if should_apply_update {
+      state
+        .persister
+        .send_update(origin.clone(), update)
+        .await
+        .map_err(|err| RTProtocolError::Internal(err.into()))?;
+    }
 
     Ok(missing_updates)
   }
@@ -784,6 +847,7 @@ impl CollabGroup {
     update: Vec<u8>,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     let awareness_update = AwarenessUpdate::decode_v1(&update)?;
+    trace!("awareness updates: {:#?}", awareness_update);
     state
       .persister
       .send_awareness(origin, awareness_update)
@@ -940,7 +1004,7 @@ impl CollabPersister {
       sender: sender_session.clone(),
     };
     self.awareness_sink.send(&update).await?;
-    tracing::trace!("broadcasted awareness from {}", update.sender);
+    trace!("broadcast awareness {:#?}", update);
     Ok(())
   }
 

@@ -2,7 +2,7 @@ use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_proto::{ObjectId, Rid, UpdateFlags, WorkspaceId};
+use appflowy_proto::{ObjectId, Rid, TimestampedEncodedCollab, UpdateFlags, WorkspaceId};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use collab::core::collab::{default_client_id, CollabOptions};
@@ -165,7 +165,10 @@ impl CollabStore {
       .enforce_read_collab(&workspace_id, &user_id, &object_id)
       .await?;
 
-    let (rid, encoded_collab) = self
+    let TimestampedEncodedCollab {
+      encoded_collab,
+      rid,
+    } = self
       .collab_cache
       .get_full_collab(
         &workspace_id,
@@ -279,8 +282,9 @@ impl CollabStore {
       collab_type,
       updated_at,
     };
+    let millis_secs = MillisSeconds::from(last_message_id.timestamp);
     collab_cache
-      .insert_encode_collab_to_disk(&workspace_id, &uid, params)
+      .insert_encode_collab_to_disk(&workspace_id, &uid, params, millis_secs)
       .await?;
     Ok(())
   }

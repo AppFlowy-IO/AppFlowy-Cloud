@@ -703,7 +703,7 @@ pub async fn upsert_database_row(
         object_id: row_id,
         encoded_collab_v1: db_row_ec_v1.into(),
         collab_type: CollabType::DatabaseRow,
-        updated_at: Some(Utc::now()),
+        updated_at: None,
       },
       &mut db_txn,
       "inserting new database row from server",

@@ -51,9 +51,10 @@ pub async fn insert_into_af_collab(
 ) -> Result<(), AppError> {
   let partition_key = crate::collab::partition_key_from_collab_type(&params.collab_type);
   tracing::trace!(
-    "upsert collab:{}, len:{}",
+    "upsert collab:{}, len:{}, update_at:{:?}",
     params.object_id,
     params.encoded_collab_v1.len(),
+    params.updated_at.map(|v| v.timestamp_millis())
   );
 
   sqlx::query!(

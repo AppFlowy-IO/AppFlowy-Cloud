@@ -9,7 +9,7 @@ use crate::snapshot::SnapshotControl;
 use crate::ws2::CollabStore;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
-use appflowy_proto::{ObjectId, UpdateFlags, WorkspaceId};
+use appflowy_proto::{ObjectId, Rid, TimestampedEncodedCollab, UpdateFlags, WorkspaceId};
 use async_trait::async_trait;
 use chrono::Timelike;
 use collab::entity::{EncodedCollab, EncoderVersion};
@@ -80,7 +80,8 @@ where
     // Otherwise, check if the user has enough permissions to create collab.
     if is_exist {
       self
-        .check_write_collab_permission(workspace_id, uid, object_id)
+        .access_control
+        .enforce_write_collab(workspace_id, uid, object_id)
         .await?;
     } else {
       self
@@ -122,20 +123,6 @@ where
     }
   }
 
-  #[instrument(level = "trace", skip_all)]
-  async fn insert_collab(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-    params: CollabParams,
-  ) -> AppResult<()> {
-    self
-      .cache
-      .insert_encode_collab_to_disk(workspace_id, uid, params)
-      .await?;
-    Ok(())
-  }
-
   async fn check_write_workspace_permission(
     &self,
     workspace_id: &Uuid,
@@ -147,45 +134,6 @@ where
       .access_control
       .enforce_write_workspace(uid, workspace_id)
       .await?;
-    Ok(())
-  }
-
-  async fn check_write_collab_permission(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-    object_id: &Uuid,
-  ) -> Result<(), AppError> {
-    // If the collab already exists, check if the user has enough permissions to update collab
-    self
-      .access_control
-      .enforce_write_collab(workspace_id, uid, object_id)
-      .await?;
-    Ok(())
-  }
-
-  async fn queue_insert_collab(
-    &self,
-    workspace_id: Uuid,
-    uid: &i64,
-    params: CollabParams,
-  ) -> Result<(), AppError> {
-    trace!(
-      "Queue insert collab:{}:{}",
-      params.object_id,
-      params.collab_type
-    );
-    if let Err(err) = params.check_encode_collab().await {
-      return Err(AppError::NoRequiredData(format!(
-        "Invalid collab doc state detected for workspace_id: {}, uid: {}, object_id: {} collab_type:{}. Error details: {}",
-        workspace_id, uid, params.object_id, params.collab_type, err
-      )));
-    }
-
-    let pending = PendingCollabWrite::new(workspace_id, *uid, params);
-    if let Err(e) = self.queue.send(pending).await {
-      error!("Failed to queue insert collab doc state: {}", e);
-    }
     Ok(())
   }
 
@@ -214,7 +162,7 @@ where
     params: CollabParams,
   ) -> AppResult<()> {
     self
-      .check_write_collab_permission(&workspace_id, uid, &params.object_id)
+      .check_or_update_permission(uid, &workspace_id, &params.object_id)
       .await?;
     self
       .cache
@@ -230,7 +178,7 @@ where
     params: CollabParams,
   ) -> AppResult<()> {
     self
-      .check_write_collab_permission(&workspace_id, uid, &params.object_id)
+      .check_or_update_permission(uid, &workspace_id, &params.object_id)
       .await?;
     trace!(
       "Queue insert collab:{}:{}",
@@ -328,7 +276,7 @@ where
     workspace_id: &Uuid,
     object_id: &Uuid,
     collab_type: CollabType,
-  ) -> AppResult<EncodedCollab> {
+  ) -> AppResult<TimestampedEncodedCollab> {
     if let GetCollabOrigin::User { uid } = origin {
       // Check if the user has enough permissions to access the collab
       trace!(
@@ -342,7 +290,7 @@ where
         .await?;
     }
 
-    let (_, encoded_collab) = self
+    self
       .cache
       .get_full_collab(
         workspace_id,
@@ -350,9 +298,7 @@ where
         None,
         EncoderVersion::V1,
       )
-      .await?;
-
-    Ok(encoded_collab)
+      .await
   }
 
   async fn batch_get_collab(

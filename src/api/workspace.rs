@@ -1112,7 +1112,8 @@ async fn get_collab_handler(
       params.collab_type,
     )
     .await
-    .map_err(AppResponseError::from)?;
+    .map_err(AppResponseError::from)?
+    .encoded_collab;
 
   let resp = CollabResponse {
     encode_collab,
@@ -1144,7 +1145,8 @@ async fn v1_get_collab_handler(
       query.collab_type,
     )
     .await
-    .map_err(AppResponseError::from)?;
+    .map_err(AppResponseError::from)?
+    .encoded_collab;
 
   let resp = CollabResponse {
     encode_collab,
@@ -1179,6 +1181,7 @@ async fn get_collab_json_handler(
     )
     .await
     .map_err(AppResponseError::from)?
+    .encoded_collab
     .doc_state;
   let collab = collab_from_doc_state(doc_state.to_vec(), &object_id, default_client_id())?;
 
@@ -1793,6 +1796,7 @@ async fn create_collab_snapshot_handler(
       collab_type,
     )
     .await?
+    .encoded_collab
     .doc_state;
 
   let meta = state

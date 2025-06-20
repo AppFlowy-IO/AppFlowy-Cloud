@@ -3,8 +3,9 @@ use super::mem_cache::{cache_exp_secs_from_collab_type, CollabMemCache, MillisSe
 use crate::collab::cache::DECODE_SPAWN_THRESHOLD;
 use crate::config::get_env_var;
 use crate::CollabMetrics;
+use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_proto::{Rid, UpdateFlags};
+use appflowy_proto::{Rid, TimestampedEncodedCollab, UpdateFlags};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use collab::core::collab::{default_client_id, CollabOptions, DataSource};
@@ -211,7 +212,7 @@ impl CollabCache {
     query: QueryCollab,
     from: Option<StateVector>,
     encoding: EncoderVersion,
-  ) -> Result<(Rid, EncodedCollab), AppError> {
+  ) -> Result<TimestampedEncodedCollab, AppError> {
     let object_id = query.object_id;
     let collab_type = query.collab_type;
     let (rid, mut encoded_collab) = match self.get_snapshot_collab(workspace_id, query).await {
@@ -238,12 +239,18 @@ impl CollabCache {
       trace!("no pending updates for collab: {}", object_id);
       return match encoded_collab {
         Some(encoded_collab) if encoded_collab.doc_state.len() <= self.small_collab_size => {
-          Ok((rid, encoded_collab))
+          Ok(TimestampedEncodedCollab {
+            encoded_collab,
+            rid,
+          })
         },
         Some(encoded_collab) => {
           // If the collab is large, we do not replay updates and return the snapshot only.
           let diff_encoded = self.encode_diff_for_large_collab(object_id, encoded_collab, &from)?;
-          Ok((rid, diff_encoded))
+          Ok(TimestampedEncodedCollab {
+            encoded_collab: diff_encoded,
+            rid,
+          })
         },
         None => Err(AppError::RecordNotFound(format!(
           "Collab not found for object_id: {}",
@@ -297,7 +304,10 @@ impl CollabCache {
     }
 
     match encoded_collab {
-      Some(encoded_collab) => Ok((rid, encoded_collab)),
+      Some(encoded_collab) => Ok(TimestampedEncodedCollab {
+        encoded_collab,
+        rid,
+      }),
       None => Err(AppError::RecordNotFound(format!(
         "Collab not found for object_id: {}",
         object_id
@@ -436,8 +446,8 @@ impl CollabCache {
         .get_full_collab(workspace_id, query, from.clone(), encoding.clone())
         .await
       {
-        Ok((_, encoded_collab)) => {
-          encoded_collab_by_object_id.insert(object_id, encoded_collab);
+        Ok(value) => {
+          encoded_collab_by_object_id.insert(object_id, value.encoded_collab);
         },
         Err(err) => {
           results.insert(
@@ -510,7 +520,7 @@ impl CollabCache {
     object_id: Uuid,
     collab_type: CollabType,
     encode_collab_data: Bytes,
-    seconds: MillisSeconds,
+    mills_secs: MillisSeconds,
   ) {
     let mem_cache = self.mem_cache.clone();
     let expiration_secs = cache_exp_secs_from_collab_type(&collab_type);
@@ -518,7 +528,7 @@ impl CollabCache {
       .insert_encode_collab_data(
         &object_id,
         &encode_collab_data,
-        seconds,
+        mills_secs,
         Some(expiration_secs),
       )
       .await
@@ -534,6 +544,12 @@ impl CollabCache {
     uid: &i64,
     params: CollabParams,
   ) -> Result<(), AppError> {
+    let mills_secs = params
+      .updated_at
+      .as_ref()
+      .map(|v| v.timestamp_millis() as u64)
+      .ok_or_else(|| AppError::Internal(anyhow!("Update_at should not be None")))?;
+
     let p = params.clone();
     self
       .disk_cache
@@ -545,7 +561,7 @@ impl CollabCache {
         p.object_id,
         p.collab_type,
         p.encoded_collab_v1,
-        MillisSeconds::now(),
+        MillisSeconds::from(mills_secs),
       )
       .await;
     Ok(())

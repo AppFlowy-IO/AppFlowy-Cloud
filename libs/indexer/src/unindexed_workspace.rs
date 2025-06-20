@@ -145,7 +145,8 @@ async fn stream_unindexed_collabs(
                   &cid.object_id,
                   cid.collab_type,
                 )
-                .await?;
+                .await?
+                .encoded_collab;
 
               Ok(Some(UnindexedCollab {
                 workspace_id: cid.workspace_id,

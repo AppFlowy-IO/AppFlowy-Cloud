@@ -30,7 +30,6 @@ use database::collab::select_workspace_database_oid;
 use database::collab::CollabStorage;
 use database::collab::GetCollabOrigin;
 use database_entity::dto::QueryCollab;
-use database_entity::dto::QueryCollabParams;
 use database_entity::dto::QueryCollabResult;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -261,6 +260,7 @@ pub async fn get_latest_collab_database_body(
   .await?
 }
 
+#[instrument(level = "trace", skip_all)]
 pub async fn get_latest_collab_encoded(
   collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
@@ -269,17 +269,7 @@ pub async fn get_latest_collab_encoded(
   collab_type: CollabType,
 ) -> Result<EncodedCollab, AppError> {
   collab_storage
-    .get_full_encode_collab(
-      collab_origin,
-      QueryCollabParams {
-        workspace_id,
-        inner: QueryCollab {
-          object_id,
-          collab_type,
-        },
-      },
-      true,
-    )
+    .get_full_encode_collab(collab_origin, &workspace_id, &object_id, collab_type)
     .await
 }
 

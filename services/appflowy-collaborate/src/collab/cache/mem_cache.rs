@@ -265,6 +265,7 @@ impl CollabMemCache {
   ///
   /// # Returns
   /// A Redis result indicating the success or failure of the operation.
+  #[instrument(level = "trace", skip_all)]
   async fn insert_data_with_timestamp(
     &self,
     object_id: &Uuid,

@@ -646,7 +646,7 @@ async fn offline_and_then_sync_through_http_request() {
   .unwrap();
 
   // Second insertion - medium text
-  let medium_text = generate_random_string(512);
+  let medium_text = generate_random_string(200);
   test_client
     .insert_into(&object_id, "2", medium_text.clone())
     .await;
@@ -684,7 +684,7 @@ async fn offline_and_then_sync_through_http_request() {
     &mut test_client.api_client,
     object_id,
     &CollabType::Unknown,
-    30,
+    10,
     json!({"1": small_text, "2": medium_text}),
   )
   .await

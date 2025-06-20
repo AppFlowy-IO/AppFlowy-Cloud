@@ -130,6 +130,7 @@ impl CollabCache {
     &self.metrics
   }
 
+  #[instrument(level = "trace", skip_all)]
   pub async fn bulk_insert_collab(
     &self,
     workspace_id: Uuid,
@@ -261,6 +262,12 @@ impl CollabCache {
       .unwrap_or(0)
       + updates.iter().map(|u| u.update.len()).sum::<usize>();
 
+    trace!(
+      "found {} pending updates for collab: {}/{}",
+      updates.len(),
+      object_id,
+      collab_type
+    );
     if !updates.is_empty() {
       encoded_collab = if size <= self.small_collab_size {
         // For small collab, replaying updates on the current thread
@@ -463,6 +470,7 @@ impl CollabCache {
 
   /// Insert the encoded collab data into the cache.
   /// The data is inserted into both the memory and disk cache.
+  #[instrument(level = "trace", skip_all)]
   pub async fn insert_encode_collab_data(
     &self,
     workspace_id: &Uuid,
@@ -496,6 +504,7 @@ impl CollabCache {
     Ok(())
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn cache_collab(
     &self,
     object_id: Uuid,
@@ -518,6 +527,7 @@ impl CollabCache {
     }
   }
 
+  #[instrument(level = "trace", skip_all)]
   pub async fn insert_encode_collab_to_disk(
     &self,
     workspace_id: &Uuid,
@@ -669,7 +679,8 @@ fn replaying_updates(
         .map_err(|err| AppError::DecodeUpdateError(err.to_string()))?;
 
         tracing::trace!(
-          "replaying update for {}/{}: {:#?}",
+          "replaying {} update for {}/{}: {:#?}",
+          msg.last_message_id,
           object_id,
           collab_type,
           update,

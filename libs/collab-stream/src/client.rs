@@ -13,6 +13,7 @@ use redis::{AsyncCommands, FromRedisValue};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedReceiver;
+use tracing::trace;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -175,6 +176,15 @@ impl CollabRedisStream {
     stream_key: &str,
     message_ids: &[MessageId],
   ) -> Result<(), StreamError> {
+    trace!(
+      "deleting messages from stream `{}`: {}",
+      stream_key,
+      message_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<String>>()
+        .join(", ")
+    );
     let mut conn = self.connection_manager.clone();
     let _: redis::Value = conn.xdel(stream_key, message_ids).await?;
     Ok(())

@@ -1099,16 +1099,24 @@ async fn get_collab_handler(
     .await
     .map_err(AppResponseError::from)?;
   let params = payload.into_inner();
-  let object_id = params.object_id;
+  params
+    .validate()
+    .map_err(|err| AppError::InvalidRequest(err.to_string()))?;
+
   let encode_collab = state
     .collab_access_control_storage
-    .get_full_encode_collab(GetCollabOrigin::User { uid }, params, true)
+    .get_full_encode_collab(
+      GetCollabOrigin::User { uid },
+      &params.workspace_id,
+      &params.object_id,
+      params.collab_type,
+    )
     .await
     .map_err(AppResponseError::from)?;
 
   let resp = CollabResponse {
     encode_collab,
-    object_id,
+    object_id: params.object_id,
   };
 
   Ok(Json(AppResponse::Ok().with_data(resp)))
@@ -1127,17 +1135,14 @@ async fn v1_get_collab_handler(
     .await
     .map_err(AppResponseError::from)?;
 
-  let param = QueryCollabParams {
-    workspace_id,
-    inner: QueryCollab {
-      object_id,
-      collab_type: query.collab_type,
-    },
-  };
-
   let encode_collab = state
     .collab_access_control_storage
-    .get_full_encode_collab(GetCollabOrigin::User { uid }, param, true)
+    .get_full_encode_collab(
+      GetCollabOrigin::User { uid },
+      &workspace_id,
+      &object_id,
+      query.collab_type,
+    )
     .await
     .map_err(AppResponseError::from)?;
 
@@ -1149,6 +1154,7 @@ async fn v1_get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(resp)))
 }
 
+#[instrument(level = "trace", skip_all)]
 async fn get_collab_json_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, Uuid)>,
@@ -1163,17 +1169,14 @@ async fn get_collab_json_handler(
     .await
     .map_err(AppResponseError::from)?;
 
-  let param = QueryCollabParams {
-    workspace_id,
-    inner: QueryCollab {
-      object_id,
-      collab_type,
-    },
-  };
-
   let doc_state = state
     .collab_access_control_storage
-    .get_full_encode_collab(GetCollabOrigin::User { uid }, param, true)
+    .get_full_encode_collab(
+      GetCollabOrigin::User { uid },
+      &workspace_id,
+      &object_id,
+      collab_type,
+    )
     .await
     .map_err(AppResponseError::from)?
     .doc_state;
@@ -1785,8 +1788,9 @@ async fn create_collab_snapshot_handler(
     .collab_access_control_storage
     .get_full_encode_collab(
       GetCollabOrigin::User { uid },
-      QueryCollabParams::new(object_id, collab_type, workspace_id),
-      true,
+      &workspace_id,
+      &object_id,
+      collab_type,
     )
     .await?
     .doc_state;
@@ -1899,7 +1903,7 @@ async fn update_collab_handler(
 
   state
     .collab_access_control_storage
-    .queue_insert_or_update_collab(workspace_id, &uid, params, false)
+    .upsert_collab_background(workspace_id, &uid, params)
     .await?;
   Ok(AppResponse::Ok().into())
 }

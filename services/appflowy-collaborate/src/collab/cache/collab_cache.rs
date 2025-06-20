@@ -636,10 +636,11 @@ fn replaying_updates(
   from: &StateVector,
 ) -> Result<Option<EncodedCollab>, AppError> {
   tracing::trace!(
-    "replaying {} updates for {}/{}",
+    "replaying {} updates for {}/{}, from: {:#?}",
     updates.len(),
     object_id,
-    collab_type
+    collab_type,
+    from,
   );
   let mut collab = match encoded_collab {
     Some(encoded_collab) => {

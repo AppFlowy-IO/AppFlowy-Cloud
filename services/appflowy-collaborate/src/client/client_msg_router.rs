@@ -112,7 +112,7 @@ impl ClientMessageRouter {
           // before applying user messages, we need to check if the user has the permission
           // valid_messages contains the messages that the user is allowed to apply
           // invalid_message contains the messages that the user is not allowed to apply
-          let (valid_messages, invalid_message) = Self::access_control(
+          let (valid_messages, _) = Self::access_control(
             &workspace_id,
             &user.uid,
             &object_id,
@@ -120,15 +120,6 @@ impl ClientMessageRouter {
             original_messages,
           )
           .await;
-          trace!(
-            "{} receive client:{}, device:{}, message: valid:{} invalid:{}",
-            message_object_id,
-            user.uid,
-            user.device_id,
-            valid_messages.len(),
-            invalid_message.len()
-          );
-
           if valid_messages.is_empty() {
             continue;
           }

@@ -1,11 +1,13 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
+use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 use access_control::collab::RealtimeAccessControl;
 use anyhow::{anyhow, Result};
 use app_error::AppError;
@@ -20,15 +22,11 @@ use database::collab::CollabStorage;
 use indexer::scheduler::IndexerScheduler;
 use redis::aio::ConnectionManager;
 use tokio::sync::mpsc::Sender;
-use tokio::task::yield_now;
 use tokio::time::interval;
 use tracing::{error, trace, warn};
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::StateVector;
-
-use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
-use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
 pub struct CollaborationServer<S> {
@@ -184,7 +182,6 @@ where
     Ok(())
   }
 
-  #[inline]
   pub fn handle_client_http_update(
     &self,
     message: ClientHttpUpdateMessage,
@@ -192,6 +189,20 @@ where
     let group_cmd_sender = self.create_group_if_not_exist(message.object_id);
     tokio::spawn(async move {
       let object_id = message.object_id;
+      let return_tx = message.return_tx;
+
+      // Helper closure to handle error responses and logging
+      let handle_result = |app_error: AppError,
+                           return_tx: Option<
+        tokio::sync::oneshot::Sender<Result<Option<Vec<u8>>, AppError>>,
+      >| {
+        if let Some(tx) = return_tx {
+          let _ = tx.send(Err(app_error));
+        } else {
+          error!("{}", app_error);
+        }
+      };
+
       let (tx, rx) = tokio::sync::oneshot::channel();
       let result = group_cmd_sender
         .send(GroupCommand::HandleClientHttpUpdate {
@@ -204,17 +215,12 @@ where
         })
         .await;
 
-      let return_tx = message.return_tx;
       if let Err(err) = result {
-        if let Some(return_rx) = return_tx {
-          let _ = return_rx.send(Err(AppError::Internal(anyhow!(
-            "send update to group fail: {}",
-            err
-          ))));
-          return;
-        } else {
-          error!("send http update to group fail: {}", err);
-        }
+        handle_result(
+          AppError::Internal(anyhow!("send update to group fail: {}", err)),
+          return_tx,
+        );
+        return;
       }
 
       match rx.await {
@@ -231,10 +237,6 @@ where
               .state_vector
               .and_then(|data| StateVector::decode_v1(&data).ok())
             {
-              // yield
-              yield_now().await;
-
-              // Calculate missing update
               let (tx, rx) = tokio::sync::oneshot::channel();
               let _ = group_cmd_sender
                 .send(GroupCommand::CalculateMissingUpdate {
@@ -243,6 +245,7 @@ where
                   ret: tx,
                 })
                 .await;
+
               match rx.await {
                 Ok(missing_update_result) => {
                   let _ = group_cmd_sender
@@ -269,24 +272,16 @@ where
           }
         },
         Ok(Err(err)) => {
-          if let Some(return_rx) = return_tx {
-            let _ = return_rx.send(Err(AppError::Internal(anyhow!(
-              "apply http update to group fail: {}",
-              err
-            ))));
-          } else {
-            error!("apply http update to group fail: {}", err);
-          }
+          handle_result(
+            AppError::Internal(anyhow!("apply http update to group fail: {}", err)),
+            return_tx,
+          );
         },
         Err(err) => {
-          if let Some(return_rx) = return_tx {
-            let _ = return_rx.send(Err(AppError::Internal(anyhow!(
-              "fail to receive applied result: {}",
-              err
-            ))));
-          } else {
-            error!("fail to receive applied result: {}", err);
-          }
+          handle_result(
+            AppError::Internal(anyhow!("fail to receive applied result: {}", err)),
+            return_tx,
+          );
         },
       }
     });

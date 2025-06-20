@@ -3,11 +3,11 @@ use async_trait::async_trait;
 
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
-  QueryCollabParams, QueryCollabResult, SnapshotData,
+  QueryCollabResult, SnapshotData,
 };
 
-use crate::collab::CollabType;
 use collab::entity::EncodedCollab;
+use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 use std::collections::HashMap;
@@ -69,28 +69,18 @@ pub enum GetCollabOrigin {
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
-  /// Insert/update the collaboration object in the storage.
-  /// # Arguments
-  /// * `workspace_id` - The ID of the workspace.
-  /// * `uid` - The ID of the user.
-  /// * `params` - The parameters containing the data of the collaboration.
-  /// * `flush_to_disk` - A boolean value that indicates whether the data should be written immediately.
-  /// if write_immediately is true, the data will be written to disk immediately. Otherwise, the data will
-  /// be scheduled to be written to disk later.
-  ///
-  async fn queue_insert_or_update_collab(
+  async fn upsert_collab(
     &self,
     workspace_id: Uuid,
     uid: &i64,
     params: CollabParams,
-    flush_to_disk: bool,
   ) -> AppResult<()>;
 
-  async fn batch_insert_new_collab(
+  async fn upsert_collab_background(
     &self,
     workspace_id: Uuid,
     uid: &i64,
-    params: Vec<CollabParams>,
+    params: CollabParams,
   ) -> AppResult<()>;
 
   /// Insert a new collaboration in the storage.
@@ -111,6 +101,13 @@ pub trait CollabStorage: Send + Sync + 'static {
     action_description: &str,
   ) -> AppResult<()>;
 
+  async fn batch_insert_new_collab(
+    &self,
+    workspace_id: Uuid,
+    uid: &i64,
+    params: Vec<CollabParams>,
+  ) -> AppResult<()>;
+
   /// Retrieves a collaboration from the storage.
   ///
   /// # Arguments
@@ -123,8 +120,9 @@ pub trait CollabStorage: Send + Sync + 'static {
   async fn get_full_encode_collab(
     &self,
     origin: GetCollabOrigin,
-    params: QueryCollabParams,
-    from_editing_collab: bool,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
+    collab_type: CollabType,
   ) -> AppResult<EncodedCollab>;
 
   async fn batch_get_collab(
@@ -157,13 +155,6 @@ pub trait CollabStorage: Send + Sync + 'static {
     object_id: Uuid,
     snapshot_id: &i64,
   ) -> AppResult<SnapshotData>;
-
-  async fn get_latest_snapshot(
-    &self,
-    workspace_id: Uuid,
-    object_id: Uuid,
-    collab_type: CollabType,
-  ) -> AppResult<Option<SnapshotData>>;
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
   async fn get_collab_snapshot_list(

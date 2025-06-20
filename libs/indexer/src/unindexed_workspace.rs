@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinSet;
-use tracing::{error, info, trace};
+use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
 /// # index given workspace
@@ -122,6 +122,7 @@ async fn _index_then_write_embedding_to_disk(
   }
 }
 
+#[instrument(level = "trace", skip_all)]
 async fn stream_unindexed_collabs(
   conn: &mut PoolConnection<Postgres>,
   workspace_id: Uuid,
@@ -138,7 +139,12 @@ async fn stream_unindexed_collabs(
           Ok(cid) => match cid.collab_type {
             CollabType::Document => {
               let collab = storage
-                .get_full_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
+                .get_full_encode_collab(
+                  GetCollabOrigin::Server,
+                  &cid.workspace_id,
+                  &cid.object_id,
+                  cid.collab_type,
+                )
                 .await?;
 
               Ok(Some(UnindexedCollab {

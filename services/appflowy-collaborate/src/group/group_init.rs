@@ -27,7 +27,7 @@ use collab_stream::model::{
 };
 use dashmap::DashMap;
 use database::collab::{CollabStorage, GetCollabOrigin};
-use database_entity::dto::{CollabParams, QueryCollabParams};
+use database_entity::dto::CollabParams;
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
 use indexer::scheduler::{IndexerScheduler, UnindexedCollabTask, UnindexedData};
@@ -1212,7 +1212,7 @@ impl CollabPersister {
     };
     self
       .storage
-      .queue_insert_or_update_collab(self.workspace_id, &self.uid, params, true)
+      .upsert_collab(self.workspace_id, &self.uid, params)
       .await
       .map_err(|err| RealtimeError::Internal(err.into()))?;
     Ok(())
@@ -1236,12 +1236,17 @@ impl CollabPersister {
     }
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn load_collab_full(&self) -> Result<Option<Collab>, RealtimeError> {
     // we didn't find a snapshot, or we want a lightweight collab version
-    let params = QueryCollabParams::new(self.object_id, self.collab_type, self.workspace_id);
     let result = self
       .storage
-      .get_full_encode_collab(GetCollabOrigin::Server, params, false)
+      .get_full_encode_collab(
+        GetCollabOrigin::Server,
+        &self.workspace_id,
+        &self.object_id,
+        self.collab_type,
+      )
       .await;
     let doc_state = match result {
       Ok(encoded_collab) => encoded_collab.doc_state,

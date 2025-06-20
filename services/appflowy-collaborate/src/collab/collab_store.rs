@@ -261,6 +261,7 @@ impl CollabStore {
     Ok(())
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn save_snapshot(
     collab_cache: Arc<CollabCache>,
     workspace_id: WorkspaceId,
@@ -284,6 +285,7 @@ impl CollabStore {
     Ok(())
   }
 
+  #[instrument(level = "trace", skip_all)]
   pub async fn snapshot_workspace(
     &self,
     workspace_id: WorkspaceId,

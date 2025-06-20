@@ -282,9 +282,8 @@ impl CollabStore {
       collab_type,
       updated_at,
     };
-    let millis_secs = MillisSeconds::from(last_message_id.timestamp);
     collab_cache
-      .insert_encode_collab_to_disk(&workspace_id, &uid, params, millis_secs)
+      .insert_encode_collab_to_disk(&workspace_id, &uid, params)
       .await?;
     Ok(())
   }

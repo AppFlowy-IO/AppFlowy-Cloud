@@ -80,7 +80,8 @@ where
     // Otherwise, check if the user has enough permissions to create collab.
     if is_exist {
       self
-        .check_write_collab_permission(workspace_id, uid, object_id)
+        .access_control
+        .enforce_write_collab(workspace_id, uid, object_id)
         .await?;
     } else {
       self
@@ -122,21 +123,6 @@ where
     }
   }
 
-  #[instrument(level = "trace", skip_all)]
-  async fn insert_collab(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-    params: CollabParams,
-    millis_seconds: MillisSeconds,
-  ) -> AppResult<()> {
-    self
-      .cache
-      .insert_encode_collab_to_disk(workspace_id, uid, params, millis_seconds)
-      .await?;
-    Ok(())
-  }
-
   async fn check_write_workspace_permission(
     &self,
     workspace_id: &Uuid,
@@ -147,20 +133,6 @@ where
     self
       .access_control
       .enforce_write_workspace(uid, workspace_id)
-      .await?;
-    Ok(())
-  }
-
-  async fn check_write_collab_permission(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-    object_id: &Uuid,
-  ) -> Result<(), AppError> {
-    // If the collab already exists, check if the user has enough permissions to update collab
-    self
-      .access_control
-      .enforce_write_collab(workspace_id, uid, object_id)
       .await?;
     Ok(())
   }
@@ -188,14 +160,13 @@ where
     workspace_id: Uuid,
     uid: &i64,
     params: CollabParams,
-    mills_secs: u64,
   ) -> AppResult<()> {
     self
-      .check_write_collab_permission(&workspace_id, uid, &params.object_id)
+      .check_or_update_permission(uid, &workspace_id, &params.object_id)
       .await?;
     self
       .cache
-      .insert_encode_collab_to_disk(&workspace_id, uid, params, MillisSeconds::from(mills_secs))
+      .insert_encode_collab_to_disk(&workspace_id, uid, params)
       .await?;
     Ok(())
   }
@@ -207,7 +178,7 @@ where
     params: CollabParams,
   ) -> AppResult<()> {
     self
-      .check_write_collab_permission(&workspace_id, uid, &params.object_id)
+      .check_or_update_permission(uid, &workspace_id, &params.object_id)
       .await?;
     trace!(
       "Queue insert collab:{}:{}",

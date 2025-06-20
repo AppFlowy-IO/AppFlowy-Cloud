@@ -74,7 +74,6 @@ pub trait CollabStorage: Send + Sync + 'static {
     workspace_id: Uuid,
     uid: &i64,
     params: CollabParams,
-    mills_secs: u64,
   ) -> AppResult<()>;
 
   async fn upsert_collab_background(

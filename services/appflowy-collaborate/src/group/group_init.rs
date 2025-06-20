@@ -1223,7 +1223,7 @@ impl CollabPersister {
     };
     self
       .storage
-      .upsert_collab(self.workspace_id, &self.uid, params, mills_secs)
+      .upsert_collab(self.workspace_id, &self.uid, params)
       .await
       .map_err(|err| RealtimeError::Internal(err.into()))?;
     Ok(())

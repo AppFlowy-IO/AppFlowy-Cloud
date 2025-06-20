@@ -43,7 +43,7 @@ use uuid::Uuid;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::{Decode, DecoderV1};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::{ReadTxn, StateVector, Update};
+use yrs::{DeleteSet, ReadTxn, StateVector, Update};
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
@@ -215,20 +215,26 @@ impl CollabGroup {
     let sender = update.sender.clone();
     match update.into_update() {
       Ok(update) => {
+        let mut update_sv = StateVector::default();
+        let insertions = update.insertions(true);
+        let del_set = DeleteSet::from(insertions);
+        for (&client, blocks) in del_set.iter() {
+          if blocks.is_empty() {
+            continue;
+          }
+          let upper = blocks.iter().map(|b| b.end).max().unwrap();
+          update_sv.set_max(client, upper);
+        }
+
         trace!(
           "receive inbound {}/{} update {:#?}, state vector: {:#?}, server state vector: {:#?}",
           state.object_id,
           state.collab_type,
           update,
-          update.state_vector_higher(),
+          update_sv,
           state.state_vector.read().await,
         );
-
-        state
-          .state_vector
-          .write()
-          .await
-          .merge(update.state_vector_higher());
+        state.state_vector.write().await.merge(update_sv);
 
         let seq_num = state.seq_no.fetch_add(1, Ordering::SeqCst) + 1;
         let payload = Message::Sync(SyncMessage::Update(update.encode_v1())).encode_v1();

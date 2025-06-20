@@ -18,7 +18,9 @@ use collab_stream::client::CollabRedisStream;
 use collab_stream::collab_update_sink::CollabUpdateSink;
 
 use crate::metrics::CollabRealtimeMetrics;
+use appflowy_proto::Rid;
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 use collab_document::document::DocumentBody;
 use collab_stream::awareness_gossip::AwarenessUpdateSink;
 use collab_stream::error::StreamError;
@@ -1013,25 +1015,23 @@ impl CollabPersister {
     tracing::trace!("requested to load compact collab {}", self.object_id);
     // 1. Try to load the latest snapshot from storage
     let start = Instant::now();
-    let mut collab = match self.load_collab_full().await? {
-      Some(collab) => collab,
+    let (rid, mut collab) = match self.load_collab_full().await? {
+      Some((rid, collab)) => (rid, collab),
       None => {
         let options = CollabOptions::new(self.object_id.to_string(), default_client_id());
-        Collab::new_with_options(CollabOrigin::Server, options)?
+        let collab = Collab::new_with_options(CollabOrigin::Server, options)?;
+        (Rid::default(), collab)
       },
     };
     self.metrics.load_collab_count.inc();
+    let since = MessageId::new(rid.timestamp, rid.seq_no);
 
     // 2. consume all Redis updates on top of it (keep redis msg id)
     let mut applied_messages = Vec::new();
     let mut tx = collab.transact_mut();
     let updates = self
       .collab_redis_stream
-      .current_collab_updates(
-        &self.workspace_id,
-        &self.object_id,
-        None, //TODO: store Redis last msg id somewhere in doc state snapshot and replay from there
-      )
+      .current_collab_updates(&self.workspace_id, &self.object_id, Some(since))
       .await?;
     let mut i = 0;
     for (message_id, update) in updates {
@@ -1043,6 +1043,7 @@ impl CollabPersister {
       applied_messages.push(message_id); //TODO: shouldn't this happen before decoding?
       self.metrics.apply_update_count.inc();
     }
+
     drop(tx);
     tracing::trace!(
       "loaded collab compact state: {} replaying {} updates",
@@ -1057,6 +1058,7 @@ impl CollabPersister {
     // now we have the most recent version of the document
     let snapshot = CollabSnapshot {
       collab,
+      rid,
       applied_messages,
     };
     Ok(snapshot)
@@ -1076,11 +1078,12 @@ impl CollabPersister {
       return Ok(None);
     }
 
-    let mut collab = match self.load_collab_full().await? {
+    let (rid, mut collab) = match self.load_collab_full().await? {
       Some(collab) => collab,
       None => {
         let options = CollabOptions::new(self.object_id.to_string(), default_client_id());
-        Collab::new_with_options(CollabOrigin::Server, options)?
+        let collab = Collab::new_with_options(CollabOrigin::Server, options)?;
+        (Rid::default(), collab)
       },
     };
     let start = Instant::now();
@@ -1121,6 +1124,7 @@ impl CollabPersister {
     }
     Ok(Some(CollabSnapshot {
       collab,
+      rid,
       applied_messages,
     }))
   }
@@ -1160,7 +1164,9 @@ impl CollabPersister {
       // encode_diff doesn't include pending updates
       let doc_state_light = collab.transact().encode_diff_v1(&StateVector::default());
       let light_len = doc_state_light.len();
-      self.write_collab(doc_state_light).await?;
+      self
+        .write_collab(doc_state_light, snapshot.rid.timestamp)
+        .await?;
 
       match self.collab_type {
         CollabType::Document => {
@@ -1195,7 +1201,12 @@ impl CollabPersister {
     Ok(())
   }
 
-  async fn write_collab(&self, doc_state_v1: Vec<u8>) -> Result<(), RealtimeError> {
+  async fn write_collab(
+    &self,
+    doc_state_v1: Vec<u8>,
+    mills_secs: u64,
+  ) -> Result<(), RealtimeError> {
+    let updated_at = DateTime::<Utc>::from_timestamp_millis(mills_secs as i64);
     let encoded_collab = EncodedCollab::new_v1(Default::default(), doc_state_v1)
       .encode_to_bytes()
       .map(Bytes::from)
@@ -1208,7 +1219,7 @@ impl CollabPersister {
       object_id: self.object_id,
       encoded_collab_v1: encoded_collab,
       collab_type: self.collab_type,
-      updated_at: None,
+      updated_at,
     };
     self
       .storage
@@ -1237,7 +1248,7 @@ impl CollabPersister {
   }
 
   #[instrument(level = "trace", skip_all)]
-  async fn load_collab_full(&self) -> Result<Option<Collab>, RealtimeError> {
+  async fn load_collab_full(&self) -> Result<Option<(Rid, Collab)>, RealtimeError> {
     // we didn't find a snapshot, or we want a lightweight collab version
     let result = self
       .storage
@@ -1248,8 +1259,8 @@ impl CollabPersister {
         self.collab_type,
       )
       .await;
-    let doc_state = match result {
-      Ok(encoded_collab) => encoded_collab.doc_state,
+    let (rid, doc_state) = match result {
+      Ok(value) => (value.rid, value.encoded_collab.doc_state),
       Err(AppError::RecordNotFound(_)) => return Ok(None),
       Err(err) => return Err(RealtimeError::Internal(err.into())),
     };
@@ -1259,11 +1270,12 @@ impl CollabPersister {
         .with_data_source(DataSource::DocStateV1(doc_state.into()));
       Collab::new_with_options(CollabOrigin::Server, options)?
     };
-    Ok(Some(collab))
+    Ok(Some((rid, collab)))
   }
 }
 
 pub struct CollabSnapshot {
   pub collab: Collab,
+  pub rid: Rid,
   pub applied_messages: Vec<MessageId>,
 }

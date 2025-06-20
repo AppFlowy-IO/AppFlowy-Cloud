@@ -1,3 +1,4 @@
+use collab::entity::EncodedCollab;
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 use uuid::Uuid;
@@ -99,4 +100,9 @@ pub enum Error {
   UnknownCollabType(u8),
   #[error("Message does not match expected client message")]
   UnsupportedClientMessage,
+}
+
+pub struct TimestampedEncodedCollab {
+  pub encoded_collab: EncodedCollab,
+  pub rid: Rid,
 }

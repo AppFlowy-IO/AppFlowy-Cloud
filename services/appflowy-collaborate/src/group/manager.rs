@@ -123,9 +123,11 @@ where
       )
       .await;
     let state_vector = match res {
-      Ok(collab) => {
+      Ok(value) => {
         let options = CollabOptions::new(object_id.to_string(), default_client_id())
-          .with_data_source(DataSource::DocStateV1(collab.doc_state.into()));
+          .with_data_source(DataSource::DocStateV1(
+            value.encoded_collab.doc_state.into(),
+          ));
         Collab::new_with_options(CollabOrigin::Server, options)?
           .transact()
           .state_vector()

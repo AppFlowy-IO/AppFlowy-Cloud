@@ -271,6 +271,7 @@ pub async fn get_latest_collab_encoded(
   collab_storage
     .get_full_encode_collab(collab_origin, &workspace_id, &object_id, collab_type)
     .await
+    .map(|v| v.encoded_collab)
 }
 
 pub async fn batch_get_latest_collab_encoded(

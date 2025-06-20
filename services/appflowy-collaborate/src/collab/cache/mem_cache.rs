@@ -12,6 +12,7 @@ use database::collab::CollabMetadata;
 use infra::thread_pool::ThreadPoolNoAbort;
 use redis::streams::StreamRangeReply;
 use redis::{pipe, AsyncCommands, FromRedisValue};
+use std::fmt::Display;
 use std::sync::Arc;
 use tracing::{error, instrument, trace};
 use uuid::Uuid;
@@ -25,6 +26,12 @@ const ONE_MONTH: u64 = 2592000;
 const ENCODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
 
 pub struct MillisSeconds(pub u64);
+
+impl Display for MillisSeconds {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.0)
+  }
+}
 
 impl From<&Rid> for MillisSeconds {
   fn from(rid: &Rid) -> Self {
@@ -196,10 +203,14 @@ impl CollabMemCache {
     &self,
     object_id: &Uuid,
     encoded_collab: EncodedCollab,
-    seconds: MillisSeconds,
+    mills_secs: MillisSeconds,
     expiration_seconds: u64,
   ) {
-    trace!("Inserting encode collab into cache: {}", object_id);
+    trace!(
+      "Inserting encode collab into cache: {} at {}",
+      object_id,
+      mills_secs
+    );
     // Estimate the size of the encoded data to decide whether to spawn a blocking task
     let estimated_size = encoded_collab.state_vector.len() + encoded_collab.doc_state.len();
     let bytes_result = if estimated_size <= ENCODE_SPAWN_THRESHOLD {
@@ -219,7 +230,7 @@ impl CollabMemCache {
     match bytes_result {
       Ok(bytes) => {
         if let Err(err) = self
-          .insert_data_with_timestamp(object_id, &bytes, seconds, Some(expiration_seconds))
+          .insert_data_with_timestamp(object_id, &bytes, mills_secs, Some(expiration_seconds))
           .await
         {
           error!("Failed to cache encoded collab: {}", err);
@@ -241,8 +252,9 @@ impl CollabMemCache {
     expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
     trace!(
-      "insert collab {}, data:{} to memory cache",
+      "insert collab {} at {}, data:{} to memory cache",
       object_id,
+      millis_secs,
       data.len(),
     );
     self

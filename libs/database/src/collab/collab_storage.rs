@@ -6,7 +6,7 @@ use database_entity::dto::{
   QueryCollabResult, SnapshotData,
 };
 
-use collab::entity::EncodedCollab;
+use appflowy_proto::TimestampedEncodedCollab;
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
@@ -123,7 +123,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     workspace_id: &Uuid,
     object_id: &Uuid,
     collab_type: CollabType,
-  ) -> AppResult<EncodedCollab>;
+  ) -> AppResult<TimestampedEncodedCollab>;
 
   async fn batch_get_collab(
     &self,

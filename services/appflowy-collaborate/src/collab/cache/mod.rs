@@ -13,7 +13,18 @@ use std::sync::Arc;
 pub const DECODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
 
 #[inline]
-pub(crate) async fn encode_collab_from_bytes(
+pub(crate) fn encode_collab_from_bytes(bytes: Vec<u8>) -> Result<EncodedCollab, AppError> {
+  match EncodedCollab::decode_from_bytes(&bytes) {
+    Ok(encoded_collab) => Ok(encoded_collab),
+    Err(err) => Err(AppError::Internal(anyhow::anyhow!(
+      "Failed to decode collab from bytes: {:?}",
+      err
+    ))),
+  }
+}
+
+#[inline]
+pub(crate) async fn encode_collab_from_bytes_with_thread_pool(
   thread_pool: &Arc<ThreadPoolNoAbort>,
   bytes: Vec<u8>,
 ) -> Result<EncodedCollab, AppError> {

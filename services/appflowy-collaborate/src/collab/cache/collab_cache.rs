@@ -344,6 +344,7 @@ impl CollabCache {
   /// This function only returns cached/stored data and does NOT apply pending updates.
   /// Use batch_get_full_collab() if you need current state with updates applied.
   /// Returns a hashmap of the object_id to the encoded collab data.
+  #[instrument(level = "debug", skip_all)]
   pub async fn batch_get_snapshot_collab<T: Into<QueryCollab>>(
     &self,
     workspace_id: &Uuid,
@@ -351,52 +352,113 @@ impl CollabCache {
   ) -> HashMap<Uuid, QueryCollabResult> {
     let queries = queries.into_iter().map(Into::into).collect::<Vec<_>>();
     let mut results = HashMap::new();
-    // 1. Processes valid queries against the in-memory cache to retrieve cached values.
-    //    - Queries not found in the cache are earmarked for disk retrieval.
-    let (disk_queries, values_from_mem_cache): (Vec<_>, HashMap<_, _>) = stream::iter(queries)
-      .then(|params| async move {
-        match self
-          .mem_cache
-          .get_data_with_timestamp(&params.object_id)
-          .await
-        {
-          Ok(Some((_ts, data))) => Either::Right((
-            params.object_id,
-            QueryCollabResult::Success {
-              encode_collab_v1: data,
-            },
-          )),
-          _ => Either::Left(params),
-        }
-      })
-      .collect::<Vec<_>>()
-      .await
-      .into_iter()
-      .partition_map(|either| either);
+
+    // Group queries by collab_type for optimal batch sizing
+    let mut db_row_queries = Vec::new();
+    let mut other_queries = Vec::new();
+
+    for query in queries {
+      if matches!(query.collab_type, CollabType::DatabaseRow) {
+        db_row_queries.push(query);
+      } else {
+        other_queries.push(query);
+      }
+    }
+
+    if !db_row_queries.is_empty() {
+      let size = get_env_var("APPFLOWY_REDIS_BATCH_DB_ROW_COLLAB_SIZE", "50")
+        .parse::<usize>()
+        .unwrap_or(50);
+      for chunk in db_row_queries.chunks(size) {
+        let batch_results = self.process_query_batch(workspace_id, chunk.to_vec()).await;
+        results.extend(batch_results);
+      }
+    }
+
+    // Process other queries in batches of 20
+    if !other_queries.is_empty() {
+      let size = get_env_var("APPFLOWY_REDIS_BATCH_COLLAB_SIZE", "10")
+        .parse::<usize>()
+        .unwrap_or(10);
+      for chunk in other_queries.chunks(size) {
+        let batch_results = self.process_query_batch(workspace_id, chunk.to_vec()).await;
+        results.extend(batch_results);
+      }
+    }
+
+    results
+  }
+
+  async fn process_query_batch(
+    &self,
+    workspace_id: &Uuid,
+    queries: Vec<QueryCollab>,
+  ) -> HashMap<Uuid, QueryCollabResult> {
+    let mut results = HashMap::new();
+    let object_ids: Vec<Uuid> = queries.iter().map(|q| q.object_id).collect();
+    let (disk_queries, values_from_mem_cache) =
+      match self.mem_cache.batch_get_data(&object_ids).await {
+        Ok(mem_cache_results) => {
+          let mem_cache_map: HashMap<Uuid, QueryCollabResult> = mem_cache_results
+            .into_iter()
+            .map(|(object_id, data)| {
+              (
+                object_id,
+                QueryCollabResult::Success {
+                  encode_collab_v1: data,
+                },
+              )
+            })
+            .collect();
+
+          let found_in_cache: std::collections::HashSet<Uuid> =
+            mem_cache_map.keys().copied().collect();
+          let disk_queries: Vec<QueryCollab> = queries
+            .into_iter()
+            .filter(|q| !found_in_cache.contains(&q.object_id))
+            .collect();
+
+          (disk_queries, mem_cache_map)
+        },
+        Err(err) => {
+          error!(
+            "Batch get from memory cache failed: {}, falling back to individual calls",
+            err
+          );
+          let (disk_queries, values_from_mem_cache): (Vec<_>, HashMap<_, _>) =
+            stream::iter(queries)
+              .then(|params| async move {
+                match self
+                  .mem_cache
+                  .get_data_with_timestamp(&params.object_id)
+                  .await
+                {
+                  Ok(Some((_ts, data))) => Either::Right((
+                    params.object_id,
+                    QueryCollabResult::Success {
+                      encode_collab_v1: data,
+                    },
+                  )),
+                  _ => Either::Left(params),
+                }
+              })
+              .collect::<Vec<_>>()
+              .await
+              .into_iter()
+              .partition_map(|either| either);
+          (disk_queries, values_from_mem_cache)
+        },
+      };
+
     results.extend(values_from_mem_cache);
 
     // 2. Retrieves remaining values from the disk cache for queries not satisfied by the memory cache.
-    //    - These values are then merged into the final result set.
     let values_from_disk_cache = self
       .disk_cache
       .batch_get_collab(workspace_id, disk_queries)
       .await;
     results.extend(values_from_disk_cache);
     results
-  }
-
-  /// Batch get the encoded collab data from the cache (DEPRECATED).
-  /// This function is deprecated - use batch_get_snapshot_collab() or batch_get_full_collab() instead.
-  /// Returns a hashmap of the object_id to the encoded collab data.
-  #[deprecated(
-    note = "Use batch_get_snapshot_collab() for snapshots or batch_get_full_collab() for current state"
-  )]
-  pub async fn batch_get_encode_collab<T: Into<QueryCollab>>(
-    &self,
-    workspace_id: &Uuid,
-    queries: Vec<T>,
-  ) -> HashMap<Uuid, QueryCollabResult> {
-    self.batch_get_snapshot_collab(workspace_id, queries).await
   }
 
   /// Batch get the FULL/CURRENT collab data (applying pending updates for dirty collabs).

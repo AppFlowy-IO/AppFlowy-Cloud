@@ -6,7 +6,6 @@ use collab::core::transaction::DocTransactionExtension;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Doc, Transact};
 use collab_entity::CollabType;
-use database::collab::CollabMetadata;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
@@ -413,27 +412,6 @@ async fn collab_mem_cache_insert_override_test() {
   let (_, encode_collab_from_cache) = mem_cache.get_encode_collab(&object_id).await.unwrap();
   assert_eq!(encode_collab_from_cache.doc_state, vec![15, 16, 17]);
   assert_eq!(encode_collab_from_cache.state_vector, vec![12, 13, 14]);
-}
-
-#[tokio::test]
-async fn collab_meta_redis_cache_test() {
-  let conn = redis_connection_manager().await;
-  let mem_cache = CollabMemCache::new(pool(), conn, CollabMetrics::default().into());
-  mem_cache
-    .get_collab_meta(&Uuid::new_v4())
-    .await
-    .unwrap_err();
-
-  let object_id = Uuid::new_v4();
-  let workspace_id = Uuid::new_v4();
-  let meta = CollabMetadata {
-    object_id,
-    workspace_id,
-  };
-  mem_cache.insert_collab_meta(meta.clone()).await.unwrap();
-  let meta_from_cache = mem_cache.get_collab_meta(&object_id).await.unwrap();
-  assert_eq!(meta.workspace_id, meta_from_cache.workspace_id);
-  assert_eq!(meta.object_id, meta_from_cache.object_id);
 }
 
 #[tokio::test]

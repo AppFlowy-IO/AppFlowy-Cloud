@@ -1,4 +1,4 @@
-use crate::collab::cache::encode_collab_from_bytes;
+use crate::collab::cache::encode_collab_from_bytes_with_thread_pool;
 use crate::CollabMetrics;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
@@ -297,7 +297,8 @@ impl CollabDiskCache {
         Ok((updated_at, data)) => {
           self.metrics.pg_read_collab_count.inc();
           let rid = Rid::new(updated_at.timestamp_millis() as u64, 0);
-          let encoded_collab = encode_collab_from_bytes(&self.thread_pool, data).await?;
+          let encoded_collab =
+            encode_collab_from_bytes_with_thread_pool(&self.thread_pool, data).await?;
           return Ok((rid, encoded_collab));
         },
         Err(e) => {

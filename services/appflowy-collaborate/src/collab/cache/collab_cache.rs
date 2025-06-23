@@ -131,6 +131,8 @@ impl CollabCache {
     &self.metrics
   }
 
+  /// **Note: This function will override any existing values without timestamp comparison.**
+  /// Use the single insert methods if you need conditional insertion based on timestamps.
   #[instrument(level = "trace", skip_all)]
   pub async fn bulk_insert_collab(
     &self,
@@ -143,21 +145,57 @@ impl CollabCache {
       .bulk_insert_collab(workspace_id, uid, params_list.clone())
       .await?;
 
+    // Group params by collab type for different batch sizes
+    let mut database_rows = Vec::new();
+    let mut other_types = Vec::new();
+    let mills_secs = MillisSeconds::now();
     for params in params_list {
+      let batch_item = (
+        params.object_id,
+        params.encoded_collab_v1,
+        mills_secs,
+        Some(cache_exp_secs_from_collab_type(&params.collab_type)),
+      );
+
+      match params.collab_type {
+        CollabType::DatabaseRow => database_rows.push(batch_item),
+        _ => other_types.push(batch_item),
+      }
+    }
+
+    let batch_row_size = get_env_var("APPFLOWY_REDIS_BATCH_DB_ROW_COLLAB_SIZE", "50")
+      .parse::<usize>()
+      .unwrap_or(50);
+
+    // Process database rows in batches of 50
+    for batch in database_rows.chunks(batch_row_size) {
       if let Err(err) = self
         .mem_cache
-        .insert_encode_collab_data(
-          &params.object_id,
-          &params.encoded_collab_v1,
-          MillisSeconds::now(),
-          Some(cache_exp_secs_from_collab_type(&params.collab_type)),
-        )
+        .batch_insert_raw_data(batch)
         .await
         .map_err(|err| AppError::Internal(err.into()))
       {
         tracing::warn!(
-          "Failed to insert collab `{}` into memory cache: {}",
-          params.object_id,
+          "Failed to batch insert {} database row collabs into memory cache: {}",
+          batch.len(),
+          err
+        );
+      }
+    }
+
+    let size = get_env_var("APPFLOWY_REDIS_BATCH_COLLAB_SIZE", "10")
+      .parse::<usize>()
+      .unwrap_or(10);
+    for batch in other_types.chunks(size) {
+      if let Err(err) = self
+        .mem_cache
+        .batch_insert_raw_data(batch)
+        .await
+        .map_err(|err| AppError::Internal(err.into()))
+      {
+        tracing::warn!(
+          "Failed to batch insert {} collabs into memory cache: {}",
+          batch.len(),
           err
         );
       }

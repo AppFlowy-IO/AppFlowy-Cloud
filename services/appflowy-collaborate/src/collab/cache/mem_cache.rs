@@ -6,6 +6,7 @@ use crate::CollabMetrics;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::Rid;
+use bytes::Bytes;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use collab_stream::model::UpdateStreamMessage;
@@ -27,6 +28,7 @@ const ONE_MONTH: u64 = 2592000;
 /// Data larger than this will be spawned to avoid blocking the current thread.
 const ENCODE_SPAWN_THRESHOLD: usize = 4096; // 4KB
 
+#[derive(Debug, Clone, Copy)]
 pub struct MillisSeconds(pub u64);
 
 impl Display for MillisSeconds {
@@ -341,6 +343,55 @@ impl CollabMemCache {
     self
       .insert_data_with_timestamp(object_id, data, millis_secs, expiration_seconds)
       .await
+  }
+
+  /// Batch inserts multiple raw data items efficiently using Redis pipeline.
+  ///
+  /// **Note: This function will override any existing values without timestamp comparison.**
+  /// Use the single insert methods if you need conditional insertion based on timestamps.
+  #[instrument(level = "trace", skip_all, fields(count = items.len()))]
+  pub async fn batch_insert_raw_data(
+    &self,
+    items: &[(Uuid, Bytes, MillisSeconds, Option<u64>)],
+  ) -> redis::RedisResult<()> {
+    if items.is_empty() {
+      return Ok(());
+    }
+
+    trace!("Batch inserting {} raw data items", items.len());
+    let mut conn = self.connection_manager.clone();
+    let mut pipeline = pipe();
+    pipeline.atomic();
+
+    // Prepare all data with timestamps and add to pipeline
+    for (object_id, data, timestamp, expiration_seconds) in items {
+      let cache_key = encode_collab_key(object_id);
+      let mut timestamped_data = Vec::with_capacity(8 + data.len());
+      timestamped_data.extend_from_slice(&timestamp.0.to_be_bytes());
+      timestamped_data.extend_from_slice(data);
+      pipeline.set(&cache_key, timestamped_data).ignore();
+
+      let expiration = expiration_seconds.unwrap_or(SEVEN_DAYS);
+      pipeline.expire(&cache_key, expiration as i64).ignore();
+    }
+
+    // Execute the batch insert
+    match pipeline.query_async::<()>(&mut conn).await {
+      Ok(()) => {
+        self
+          .metrics
+          .redis_write_collab_count
+          .inc_by(items.len() as u64);
+        Ok(())
+      },
+      Err(err) => {
+        error!("Failed to execute batch insert pipeline: {}", err);
+        Err(redis::RedisError::from((
+          redis::ErrorKind::IoError,
+          "Failed to execute batch insert pipeline",
+        )))
+      },
+    }
   }
 
   /// Inserts data into Redis with a conditional timestamp.

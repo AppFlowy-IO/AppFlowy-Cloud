@@ -64,7 +64,7 @@ pub async fn create_database_from_params(
       .encoded_row_collabs
       .into_iter()
       .map(|encoded_row_collab| TemplateData {
-        template_id: TemplateObjectId::DatabaseRow(encoded_row_collab.object_id),
+        template_id: TemplateObjectId::DatabaseRow(encoded_row_collab.object_id.to_string()),
         collab_type: CollabType::DatabaseRow,
         encoded_collab: encoded_row_collab.encoded_collab,
       });

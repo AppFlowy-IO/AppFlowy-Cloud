@@ -125,7 +125,7 @@ async fn import_project_and_task_zip_test() {
         .await;
       let inline_views = get_inline_view_id(&database).unwrap();
       let fields = database.get_fields_in_view(&inline_views, None);
-      let rows = database.collect_all_rows().await;
+      let rows = database.collect_all_rows(false).await;
       assert_eq!(rows.len(), 4);
       assert_eq!(fields.len(), 13);
 
@@ -146,7 +146,7 @@ async fn import_project_and_task_zip_test() {
         .await;
       let inline_views = get_inline_view_id(&database).unwrap();
       let fields = database.get_fields_in_view(&inline_views, None);
-      let rows = database.collect_all_rows().await;
+      let rows = database.collect_all_rows(false).await;
       assert_eq!(rows.len(), 17);
       assert_eq!(fields.len(), 13);
       continue;

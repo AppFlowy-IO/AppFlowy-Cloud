@@ -238,7 +238,7 @@ async fn duplicate_database(
     let database = Database::open(database_id, database_context.clone())
       .await
       .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to open database: {}", err)))?;
-    let database_data = database.get_database_data().await;
+    let database_data = database.get_database_data(20, true).await;
     let params = duplicate_database_data_with_context(duplicate_context, &database_data);
     let duplicated_database = Database::create_with_view(params, database_context.clone())
       .await
@@ -272,9 +272,8 @@ async fn duplicate_database(
       updated_at: None,
     });
     for row in encoded_database.encoded_row_collabs {
-      let row_id = Uuid::parse_str(&row.object_id.clone())?;
       collab_params_list.push(CollabParams {
-        object_id: row_id,
+        object_id: row.object_id,
         encoded_collab_v1: row.encoded_collab.encode_to_bytes()?.into(),
         collab_type: CollabType::DatabaseRow,
         updated_at: None,

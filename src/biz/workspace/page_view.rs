@@ -1193,7 +1193,7 @@ async fn create_database_page(
     workspace_id,
   )
   .await?;
-  let database_id: Uuid = encoded_database.encoded_database_collab.object_id.parse()?;
+  let database_id = encoded_database.encoded_database_collab.object_id;
   let workspace_database_update =
     add_new_database_to_workspace(&mut workspace_database, &database_id, view_id).await?;
   let database_collab_params = CollabParams {
@@ -1211,7 +1211,7 @@ async fn create_database_page(
     .iter()
     .flat_map(|row_collab| {
       Some(CollabParams {
-        object_id: Uuid::parse_str(&row_collab.object_id).ok()?,
+        object_id: row_collab.object_id,
         encoded_collab_v1: row_collab.encoded_collab.encode_to_bytes().unwrap().into(),
         collab_type: CollabType::DatabaseRow,
         updated_at: None,

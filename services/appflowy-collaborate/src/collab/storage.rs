@@ -137,6 +137,8 @@ where
     Ok(())
   }
 
+  /// **Note: This function will override any existing values without timestamp comparison.**
+  /// Use the single insert methods if you need conditional insertion based on timestamps.
   async fn batch_insert_collabs(
     &self,
     workspace_id: Uuid,

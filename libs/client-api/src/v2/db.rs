@@ -185,7 +185,7 @@ impl Db {
         &mut txn,
       ) {
         Ok(updates_applied) => {
-          tracing::trace!(
+          sync_trace!(
             "restored collab {}, apply updates:{}, state: {:#?}",
             object_id,
             updates_applied,
@@ -193,7 +193,7 @@ impl Db {
           );
         },
         Err(PersistenceError::RecordNotFound(_)) => {
-          tracing::debug!("collab {} not found in local db", object_id);
+          sync_debug!("collab {} not found in local db", object_id);
         },
         Err(err) => return Err(err),
       }

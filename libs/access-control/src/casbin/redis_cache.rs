@@ -98,6 +98,7 @@ mod tests {
   use super::*;
 
   #[test]
+  #[ignore]
   fn test_set_has_get_clear() {
     // Skip test if Redis is not available
     let cache = match RedisCache::new("redis://localhost:6379") {
@@ -126,6 +127,7 @@ mod tests {
   }
 
   #[test]
+  #[ignore]
   fn test_ttl_expiration() {
     let cache = match RedisCache::new("redis://localhost:6379") {
       Ok(cache) => cache,

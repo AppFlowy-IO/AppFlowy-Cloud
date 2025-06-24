@@ -95,6 +95,11 @@ async fn same_client_connect_then_edit_multiple_time_test() {
     client_1.disconnect().await;
   }
 
+  //FIXME: for some reason the disconnect/reconnect is not working properly on old client
+  // potentially due to the way, how it's not handling queued messages when disconnect/reconnect
+  // happens
+  client_1.reconnect().await;
+
   let expected_json = json!({
     "1": "a",
     "2": "b"

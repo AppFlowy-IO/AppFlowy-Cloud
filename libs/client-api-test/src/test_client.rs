@@ -304,7 +304,7 @@ impl TestClient {
     let mut lock = test_collab.collab.write().await;
     let collab = (*lock).borrow_mut();
     collab.emit_awareness_state();
-    tracing::info!(
+    tracing::trace!(
       "emit awareness state for collab: {} (client id: {}): {:#?}",
       object_id,
       collab.doc().client_id(),
@@ -830,7 +830,7 @@ impl TestClient {
     };
 
     collab.emit_awareness_state();
-    tracing::info!(
+    tracing::trace!(
       "emit awareness state for collab: {} (client id: {}) on collab created: {:#?}",
       object_id,
       collab.doc().client_id(),
@@ -921,7 +921,7 @@ impl TestClient {
       .with_data_source(DataSource::DocStateV1(doc_state));
     let mut collab = Collab::new_with_options(origin.clone(), options).unwrap();
     collab.emit_awareness_state();
-    tracing::info!(
+    tracing::trace!(
       "emit awareness state for collab: {} (client id: {}) on collab open: {:#?}",
       object_id,
       collab.doc().client_id(),

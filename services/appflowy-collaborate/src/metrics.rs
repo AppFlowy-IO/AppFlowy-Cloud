@@ -153,6 +153,10 @@ pub struct CollabMetrics {
   pub redis_read_collab_count: Counter,
   pub success_queue_collab_count: Counter,
   pg_tx_collab_millis: Histogram,
+  /// Duration of workspace snapshot operations in milliseconds
+  pub snapshot_duration: Histogram,
+  /// Number of updates processed in each workspace snapshot
+  pub snapshot_updates_count: Histogram,
 }
 
 impl CollabMetrics {
@@ -214,6 +218,16 @@ impl CollabMetrics {
       "total time (in milliseconds) spend in transaction writing collab to postgres",
       metrics.pg_tx_collab_millis.clone(),
     );
+    realtime_registry.register(
+      "snapshot_duration",
+      "duration of workspace snapshot operations in milliseconds",
+      metrics.snapshot_duration.clone(),
+    );
+    realtime_registry.register(
+      "snapshot_updates_count",
+      "number of updates processed in each workspace snapshot",
+      metrics.snapshot_updates_count.clone(),
+    );
 
     metrics
   }
@@ -222,6 +236,14 @@ impl CollabMetrics {
     self
       .pg_tx_collab_millis
       .observe(duration.as_millis() as f64);
+  }
+
+  pub fn observe_snapshot_duration(&self, duration: std::time::Duration) {
+    self.snapshot_duration.observe(duration.as_millis() as f64);
+  }
+
+  pub fn observe_snapshot_updates_count(&self, count: usize) {
+    self.snapshot_updates_count.observe(count as f64);
   }
 }
 
@@ -241,6 +263,20 @@ impl Default for CollabMetrics {
       pg_tx_collab_millis: Histogram::new(
         [
           100.0, 300.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 30000.0, 60000.0,
+        ]
+        .into_iter(),
+      ),
+      // Snapshot duration buckets: 100ms, 500ms, 1s, 5s, 10s, 30s, 60s, 120s, 300s
+      snapshot_duration: Histogram::new(
+        [
+          100.0, 500.0, 1000.0, 5000.0, 10000.0, 30000.0, 60000.0, 120000.0, 300000.0,
+        ]
+        .into_iter(),
+      ),
+      // Snapshot updates count buckets: 1, 10, 50, 100, 500, 1000, 5000, 10000, 50000
+      snapshot_updates_count: Histogram::new(
+        [
+          1.0, 10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0, 50000.0,
         ]
         .into_iter(),
       ),

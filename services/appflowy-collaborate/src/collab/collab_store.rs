@@ -29,7 +29,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tracing::{error, instrument, trace, warn};
+/// Represents a snapshot task to be processed
+use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -292,9 +293,18 @@ impl CollabStore {
     }
 
     if let Some(_lease) = self.acquire_workspace_lock(workspace_id).await? {
-      tracing::info!(
-        "snapshotting {} collabs for workspace {}",
+      let snapshot_start = std::time::Instant::now();
+
+      // Count total updates for metrics
+      let total_updates: usize = all_object_updates
+        .values()
+        .map(|updates| updates.len())
+        .sum();
+
+      tracing::debug!(
+        "snapshotting {} collabs ({} total updates) for workspace {}",
         all_object_updates.len(),
+        total_updates,
         workspace_id
       );
 
@@ -314,12 +324,29 @@ impl CollabStore {
       // Cleanup: prune processed updates from Redis stream
       up_to.seq_no += 1;
       self.prune_updates(workspace_id, up_to).await?;
+
+      // Record metrics for the completed snapshot operation
+      let snapshot_duration = snapshot_start.elapsed();
+      self
+        .collab_cache
+        .metrics()
+        .observe_snapshot_duration(snapshot_duration);
+      self
+        .collab_cache
+        .metrics()
+        .observe_snapshot_updates_count(total_updates);
+
+      tracing::debug!(
+        "completed snapshot for workspace {} in {:?} (processed {} updates)",
+        workspace_id,
+        snapshot_duration,
+        total_updates
+      );
     }
     Ok(())
   }
 
   /// Acquires a distributed lock for workspace snapshotting
-  #[inline]
   async fn acquire_workspace_lock(
     &self,
     workspace_id: WorkspaceId,
@@ -340,24 +367,12 @@ impl CollabStore {
   }
 
   /// Collects all snapshot tasks for the workspace
-  #[inline]
   async fn collect_snapshot_tasks(
     &self,
     workspace_id: WorkspaceId,
     all_object_updates: HashMap<Uuid, Vec<UpdateStreamMessage>>,
-  ) -> anyhow::Result<
-    Vec<(
-      WorkspaceId,
-      ObjectId,
-      CollabType,
-      i64,
-      Rid,
-      Bytes,
-      Vec<UpdateStreamMessage>,
-    )>,
-  > {
+  ) -> anyhow::Result<Vec<SnapshotTask>> {
     let mut snapshot_tasks = Vec::new();
-
     for (object_id, updates) in all_object_updates {
       if updates.is_empty() {
         continue;
@@ -376,7 +391,7 @@ impl CollabStore {
         .get_snapshot(workspace_id, object_id, collab_type)
         .await?;
 
-      snapshot_tasks.push((
+      snapshot_tasks.push(SnapshotTask {
         workspace_id,
         object_id,
         collab_type,
@@ -384,36 +399,17 @@ impl CollabStore {
         rid_snapshot,
         update_snapshot,
         updates,
-      ));
+      });
     }
 
     Ok(snapshot_tasks)
   }
 
   /// Processes snapshot tasks in parallel to generate full states
-  #[inline]
   fn process_snapshot_tasks(
     &self,
-    snapshot_tasks: Vec<(
-      WorkspaceId,
-      ObjectId,
-      CollabType,
-      i64,
-      Rid,
-      Bytes,
-      Vec<UpdateStreamMessage>,
-    )>,
-  ) -> anyhow::Result<
-    Vec<(
-      WorkspaceId,
-      ObjectId,
-      CollabType,
-      i64,
-      Rid,
-      Bytes,
-      Vec<String>,
-    )>,
-  > {
+    snapshot_tasks: Vec<SnapshotTask>,
+  ) -> anyhow::Result<Vec<ProcessedSnapshot>> {
     let thread_pool = self.snapshot_thread_pool.clone();
     let client_id = default_client_id();
 
@@ -421,62 +417,47 @@ impl CollabStore {
       .install(|| {
         snapshot_tasks
           .into_par_iter()
-          .filter_map(
-            |(
-              workspace_id,
-              object_id,
-              collab_type,
-              user_id,
-              rid_snapshot,
-              update_snapshot,
-              updates,
-            )| {
-              match apply_updates_to_snapshot(
-                client_id,
-                object_id,
-                collab_type,
-                rid_snapshot,
-                update_snapshot,
-                updates,
-              ) {
-                Ok((rid, full_state, paragraphs)) => Some((
-                  workspace_id,
-                  object_id,
-                  collab_type,
-                  user_id,
-                  rid,
-                  full_state,
-                  paragraphs,
-                )),
-                Err(err) => {
-                  warn!("Failed to process collab {} snapshot: {}", object_id, err);
-                  None
-                },
-              }
-            },
-          )
+          .filter_map(|task| {
+            match apply_updates_to_snapshot(
+              client_id,
+              task.object_id,
+              task.collab_type,
+              task.rid_snapshot,
+              task.update_snapshot,
+              task.updates,
+            ) {
+              Ok((rid, full_state, paragraphs)) => Some(ProcessedSnapshot {
+                workspace_id: task.workspace_id,
+                object_id: task.object_id,
+                collab_type: task.collab_type,
+                user_id: task.user_id,
+                rid,
+                full_state,
+                paragraphs,
+              }),
+              Err(err) => {
+                warn!(
+                  "Failed to process collab {} snapshot: {}",
+                  task.object_id, err
+                );
+                None
+              },
+            }
+          })
           .collect::<Vec<_>>()
       })
       .map_err(|err| anyhow!("Thread pool panic during snapshot processing: {}", err))
   }
 
   /// Encodes collabs in parallel and saves them in batches grouped by user ID
-  #[inline]
   async fn encode_and_save_snapshots(
     &self,
     workspace_id: WorkspaceId,
-    processing_results: Vec<(
-      WorkspaceId,
-      ObjectId,
-      CollabType,
-      i64,
-      Rid,
-      Bytes,
-      Vec<String>,
-    )>,
+    processing_results: Vec<ProcessedSnapshot>,
   ) -> anyhow::Result<()> {
     const BATCH_SIZE: usize = 20;
     let mut indexed_collabs = vec![];
+
     for chunk in processing_results.chunks(BATCH_SIZE) {
       trace!(
         "processing batch of {} collabs when snapshotting workspace {}",
@@ -484,15 +465,17 @@ impl CollabStore {
         workspace_id
       );
 
-      let (params_by_uid, indexing_tasks) = self.encode_collab_chunk(chunk)?;
+      let encoded_result = self.encode_collab_chunk(chunk)?;
 
       // Collect indexing tasks
-      for task in indexing_tasks.into_iter().flatten() {
+      for task in encoded_result.indexing_tasks {
         indexed_collabs.push(task);
       }
 
       // Batch insert snapshots for each user
-      self.batch_insert_by_user(workspace_id, params_by_uid).await;
+      self
+        .batch_insert_by_user(workspace_id, encoded_result.params_by_uid)
+        .await;
 
       // Batch index collabs periodically
       if !indexed_collabs.is_empty() {
@@ -504,38 +487,21 @@ impl CollabStore {
   }
 
   /// Encodes a chunk of collabs in parallel
-  #[inline]
-  fn encode_collab_chunk(
-    &self,
-    chunk: &[(
-      WorkspaceId,
-      ObjectId,
-      CollabType,
-      i64,
-      Rid,
-      Bytes,
-      Vec<String>,
-    )],
-  ) -> anyhow::Result<(
-    HashMap<i64, Vec<CollabParams>>,
-    Vec<Option<UnindexedCollabTask>>,
-  )> {
+  fn encode_collab_chunk(&self, chunk: &[ProcessedSnapshot]) -> anyhow::Result<EncodedChunkResult> {
     // Prepare data for parallel encoding
     let encode_data: Vec<_> = chunk
       .iter()
-      .map(
-        |(ws_id, object_id, collab_type, uid, rid, full_state, paragraphs)| {
-          (
-            *ws_id,
-            *object_id,
-            *collab_type,
-            *uid,
-            *rid,
-            full_state.clone(),
-            paragraphs.clone(),
-          )
-        },
-      )
+      .map(|snapshot| {
+        (
+          snapshot.workspace_id,
+          snapshot.object_id,
+          snapshot.collab_type,
+          snapshot.user_id,
+          snapshot.rid,
+          snapshot.full_state.clone(),
+          snapshot.paragraphs.clone(),
+        )
+      })
       .collect();
 
     // Use thread pool to encode all collabs in parallel
@@ -580,10 +546,7 @@ impl CollabStore {
       .map_err(|err| anyhow!("Thread pool panic during encoding: {}", err))??;
 
     // Separate params with uid and indexing data
-    let (params_with_uid, indexing_tasks): (Vec<_>, Vec<_>) = batch_results
-      .into_iter()
-      .map(|((uid, params), indexing_data)| ((uid, params), indexing_data))
-      .unzip();
+    let (params_with_uid, indexing_tasks): (Vec<_>, Vec<_>) = batch_results.into_iter().unzip();
 
     // Group batch params by uid
     let mut batch_params_by_uid: HashMap<i64, Vec<CollabParams>> = HashMap::new();
@@ -591,11 +554,15 @@ impl CollabStore {
       batch_params_by_uid.entry(uid).or_default().push(params);
     }
 
-    Ok((batch_params_by_uid, indexing_tasks))
+    // Collect non-None indexing tasks
+    let indexing_tasks: Vec<UnindexedCollabTask> = indexing_tasks.into_iter().flatten().collect();
+    Ok(EncodedChunkResult {
+      params_by_uid: batch_params_by_uid,
+      indexing_tasks,
+    })
   }
 
   /// Batch inserts snapshots grouped by user ID
-  #[inline]
   async fn batch_insert_by_user(
     &self,
     workspace_id: WorkspaceId,
@@ -609,7 +576,7 @@ impl CollabStore {
           .bulk_insert_collab(workspace_id, &uid, batch_params)
           .await
         {
-          error!(
+          warn!(
             "Failed to batch insert {} snapshots for user {}: {}",
             batch_len, uid, err
           );
@@ -725,4 +692,30 @@ pub fn decode_update(update: &[u8]) -> AppResult<Update> {
     },
     Err(e) => Err(AppError::DecodeUpdateError(e.to_string())),
   }
+}
+
+struct SnapshotTask {
+  workspace_id: WorkspaceId,
+  object_id: ObjectId,
+  collab_type: CollabType,
+  user_id: i64,
+  rid_snapshot: Rid,
+  update_snapshot: Bytes,
+  updates: Vec<UpdateStreamMessage>,
+}
+
+struct ProcessedSnapshot {
+  workspace_id: WorkspaceId,
+  object_id: ObjectId,
+  collab_type: CollabType,
+  user_id: i64,
+  rid: Rid,
+  full_state: Bytes,
+  paragraphs: Vec<String>,
+}
+struct EncodedChunkResult {
+  /// Collab parameters grouped by user ID for batch insertion
+  params_by_uid: HashMap<i64, Vec<CollabParams>>,
+  /// Indexing tasks for search engine updates
+  indexing_tasks: Vec<UnindexedCollabTask>,
 }

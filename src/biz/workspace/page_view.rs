@@ -521,7 +521,10 @@ async fn prepare_default_board_encoded_database(
     rows.push(row);
   }
   let fields = vec![card_title_field, card_status_field];
-  let layout_setting = BoardLayoutSetting::new();
+  let layout_setting = BoardLayoutSetting {
+    hide_ungrouped_column: true,
+    collapse_hidden_groups: true,
+  };
 
   prepare_new_encoded_database(
     view_id,

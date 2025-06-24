@@ -24,11 +24,12 @@ use rayon::prelude::*;
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamTrimOptions, StreamTrimmingMode};
 use redis::AsyncCommands;
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::task::JoinSet;
-use tracing::{instrument, trace, warn};
+
+use tracing::{error, instrument, trace, warn};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
@@ -151,6 +152,7 @@ impl CollabStore {
   }
 
   /// Returns the latest full state of an object (including all updates).
+  #[instrument(level = "trace", skip_all)]
   pub async fn get_latest_state(
     &self,
     workspace_id: WorkspaceId,
@@ -264,30 +266,14 @@ impl CollabStore {
     Ok(())
   }
 
-  #[instrument(level = "trace", skip_all)]
-  async fn save_snapshot(
-    collab_cache: Arc<CollabCache>,
-    workspace_id: WorkspaceId,
-    object_id: ObjectId,
-    collab_type: CollabType,
-    uid: i64,
-    last_message_id: Rid,
-    update: Bytes,
-  ) -> anyhow::Result<()> {
-    let encoded_collab = EncodedCollab::new_v1(Bytes::default(), update);
-    let updated_at = DateTime::<Utc>::from_timestamp_millis(last_message_id.timestamp as i64);
-    let params = CollabParams {
-      object_id,
-      encoded_collab_v1: encoded_collab.encode_to_bytes()?.into(),
-      collab_type,
-      updated_at,
-    };
-    collab_cache
-      .insert_encode_collab_to_disk(&workspace_id, &uid, params)
-      .await?;
-    Ok(())
-  }
-
+  /// Snapshots all pending updates for a workspace into persistent storage.
+  ///
+  /// This operation:
+  /// - Acquires a distributed lock to prevent concurrent snapshots
+  /// - Processes collabs in parallel using the thread pool
+  /// - Groups and batch-inserts snapshots by user ID
+  /// - Schedules updated documents for search indexing
+  /// - Prunes processed updates from Redis streams
   #[instrument(level = "trace", skip_all)]
   pub async fn snapshot_workspace(
     &self,
@@ -305,6 +291,39 @@ impl CollabStore {
       return Ok(());
     }
 
+    if let Some(_lease) = self.acquire_workspace_lock(workspace_id).await? {
+      tracing::info!(
+        "snapshotting {} collabs for workspace {}",
+        all_object_updates.len(),
+        workspace_id
+      );
+
+      let snapshot_tasks = self
+        .collect_snapshot_tasks(workspace_id, all_object_updates)
+        .await?;
+      if snapshot_tasks.is_empty() {
+        tracing::info!("no collabs to snapshot for workspace {}", workspace_id);
+        return Ok(());
+      }
+
+      let processing_results = self.process_snapshot_tasks(snapshot_tasks)?;
+      self
+        .encode_and_save_snapshots(workspace_id, processing_results)
+        .await?;
+
+      // Cleanup: prune processed updates from Redis stream
+      up_to.seq_no += 1;
+      self.prune_updates(workspace_id, up_to).await?;
+    }
+    Ok(())
+  }
+
+  /// Acquires a distributed lock for workspace snapshotting
+  #[inline]
+  async fn acquire_workspace_lock(
+    &self,
+    workspace_id: WorkspaceId,
+  ) -> anyhow::Result<Option<impl Drop>> {
     let key = format!("af:lease:{}", workspace_id);
     // Acquire distributed lock for this workspace using Redis.
     // This ensures only one server can snapshot a workspace at a time, preventing:
@@ -313,59 +332,93 @@ impl CollabStore {
     // - Conflicts when pruning Redis streams
     //
     // The lock expires after 120 seconds if not released (fault tolerance).
-    if let Some(_lease) = self
+    self
       .connection_manager
       .lease(key, Duration::from_secs(120))
-      .await?
-    {
-      tracing::info!(
-        "snapshotting {} collabs for workspace {}",
-        all_object_updates.len(),
-        workspace_id
-      );
+      .await
+      .map_err(|e| anyhow!("Failed to acquire workspace lock: {}", e))
+  }
 
-      // Prepare workspace for processing
-      let mut snapshot_tasks = Vec::new();
+  /// Collects all snapshot tasks for the workspace
+  #[inline]
+  async fn collect_snapshot_tasks(
+    &self,
+    workspace_id: WorkspaceId,
+    all_object_updates: HashMap<Uuid, Vec<UpdateStreamMessage>>,
+  ) -> anyhow::Result<
+    Vec<(
+      WorkspaceId,
+      ObjectId,
+      CollabType,
+      i64,
+      Rid,
+      Bytes,
+      Vec<UpdateStreamMessage>,
+    )>,
+  > {
+    let mut snapshot_tasks = Vec::new();
 
-      // 1: Collect all necessary data
-      for (object_id, updates) in all_object_updates {
-        if updates.is_empty() {
-          continue;
-        }
-
-        let (collab_type, user_id) = {
-          let update = &updates[0];
-          (
-            update.collab_type,
-            update.sender.client_user_id().unwrap_or(0),
-          )
-        };
-
-        // Fetch the snapshot from database
-        let (rid_snapshot, update_snapshot) = self
-          .get_snapshot(workspace_id, object_id, collab_type)
-          .await?;
-
-        snapshot_tasks.push((
-          workspace_id,
-          object_id,
-          collab_type,
-          user_id,
-          rid_snapshot,
-          update_snapshot,
-          updates,
-        ));
+    for (object_id, updates) in all_object_updates {
+      if updates.is_empty() {
+        continue;
       }
 
-      if snapshot_tasks.is_empty() {
-        tracing::info!("no collabs to snapshot for workspace {}", workspace_id);
-        return Ok(());
-      }
+      let (collab_type, user_id) = {
+        let update = &updates[0];
+        (
+          update.collab_type,
+          update.sender.client_user_id().unwrap_or(0),
+        )
+      };
 
-      // 2: Process all collabs in parallel using the thread pool
-      let thread_pool = self.snapshot_thread_pool.clone();
-      let client_id = default_client_id();
-      let processing_results = thread_pool.install(|| {
+      // Fetch the snapshot from database
+      let (rid_snapshot, update_snapshot) = self
+        .get_snapshot(workspace_id, object_id, collab_type)
+        .await?;
+
+      snapshot_tasks.push((
+        workspace_id,
+        object_id,
+        collab_type,
+        user_id,
+        rid_snapshot,
+        update_snapshot,
+        updates,
+      ));
+    }
+
+    Ok(snapshot_tasks)
+  }
+
+  /// Processes snapshot tasks in parallel to generate full states
+  #[inline]
+  fn process_snapshot_tasks(
+    &self,
+    snapshot_tasks: Vec<(
+      WorkspaceId,
+      ObjectId,
+      CollabType,
+      i64,
+      Rid,
+      Bytes,
+      Vec<UpdateStreamMessage>,
+    )>,
+  ) -> anyhow::Result<
+    Vec<(
+      WorkspaceId,
+      ObjectId,
+      CollabType,
+      i64,
+      Rid,
+      Bytes,
+      Vec<String>,
+    )>,
+  > {
+    let thread_pool = self.snapshot_thread_pool.clone();
+    let client_id = default_client_id();
+
+    thread_pool
+      .install(|| {
         snapshot_tasks
           .into_par_iter()
           .filter_map(
@@ -403,65 +456,193 @@ impl CollabStore {
             },
           )
           .collect::<Vec<_>>()
-      })?;
+      })
+      .map_err(|err| anyhow!("Thread pool panic during snapshot processing: {}", err))
+  }
 
-      // 3: Save snapshots and schedule indexing in batches
-      const BATCH_SIZE: usize = 20;
-      let mut indexed_collabs = vec![];
-      for chunk in processing_results.chunks(BATCH_SIZE) {
-        trace!(
-          "processing batch of {} collabs when snapshotting workspace {}",
-          chunk.len(),
-          workspace_id
-        );
-        let mut join_set = JoinSet::new();
-        for (workspace_id, object_id, collab_type, user_id, rid, full_state, paragraphs) in chunk {
-          // Save snapshot asynchronously
-          join_set.spawn(Self::save_snapshot(
-            self.collab_cache.clone(),
-            *workspace_id,
-            *object_id,
-            *collab_type,
-            *user_id,
-            *rid,
-            full_state.clone(),
-          ));
+  /// Encodes collabs in parallel and saves them in batches grouped by user ID
+  #[inline]
+  async fn encode_and_save_snapshots(
+    &self,
+    workspace_id: WorkspaceId,
+    processing_results: Vec<(
+      WorkspaceId,
+      ObjectId,
+      CollabType,
+      i64,
+      Rid,
+      Bytes,
+      Vec<String>,
+    )>,
+  ) -> anyhow::Result<()> {
+    const BATCH_SIZE: usize = 20;
+    let mut indexed_collabs = vec![];
+    for chunk in processing_results.chunks(BATCH_SIZE) {
+      trace!(
+        "processing batch of {} collabs when snapshotting workspace {}",
+        chunk.len(),
+        workspace_id
+      );
 
-          // Schedule indexing if needed
-          if !paragraphs.is_empty() {
-            let indexed_collab = UnindexedCollabTask::new(
-              *workspace_id,
-              *object_id,
-              *collab_type,
-              UnindexedData::Paragraphs(paragraphs.clone()),
-            );
-            indexed_collabs.push(indexed_collab);
-          }
-        }
+      let (params_by_uid, indexing_tasks) = self.encode_collab_chunk(chunk)?;
 
-        trace!(
-          "batch indexing {} collabs when snapshotting workspace{}",
-          indexed_collabs.len(),
-          workspace_id
-        );
-        if let Err(err) = self
-          .indexer_scheduler
-          .index_pending_collabs(std::mem::take(&mut indexed_collabs))
-        {
-          warn!("failed to batch index {}, err: {}", workspace_id, err);
-        }
-
-        // Wait for this batch to complete before processing the next
-        while let Some(result) = join_set.join_next().await {
-          result??;
-        }
+      // Collect indexing tasks
+      for task in indexing_tasks.into_iter().flatten() {
+        indexed_collabs.push(task);
       }
 
-      // drop the messages from redis stream
-      up_to.seq_no += 1; // we want to include the last message in pruned updates
-      self.prune_updates(workspace_id, up_to).await?;
+      // Batch insert snapshots for each user
+      self.batch_insert_by_user(workspace_id, params_by_uid).await;
+
+      // Batch index collabs periodically
+      if !indexed_collabs.is_empty() {
+        self.batch_index_collabs(workspace_id, &mut indexed_collabs);
+      }
     }
+
     Ok(())
+  }
+
+  /// Encodes a chunk of collabs in parallel
+  #[inline]
+  fn encode_collab_chunk(
+    &self,
+    chunk: &[(
+      WorkspaceId,
+      ObjectId,
+      CollabType,
+      i64,
+      Rid,
+      Bytes,
+      Vec<String>,
+    )],
+  ) -> anyhow::Result<(
+    HashMap<i64, Vec<CollabParams>>,
+    Vec<Option<UnindexedCollabTask>>,
+  )> {
+    // Prepare data for parallel encoding
+    let encode_data: Vec<_> = chunk
+      .iter()
+      .map(
+        |(ws_id, object_id, collab_type, uid, rid, full_state, paragraphs)| {
+          (
+            *ws_id,
+            *object_id,
+            *collab_type,
+            *uid,
+            *rid,
+            full_state.clone(),
+            paragraphs.clone(),
+          )
+        },
+      )
+      .collect();
+
+    // Use thread pool to encode all collabs in parallel
+    let batch_results = self
+      .snapshot_thread_pool
+      .install(|| {
+        encode_data
+          .into_par_iter()
+          .map(
+            |(ws_id, object_id, collab_type, uid, rid, full_state, paragraphs)| {
+              // Create EncodedCollab and encode to bytes in parallel
+              let encoded_collab = EncodedCollab::new_v1(Bytes::default(), full_state);
+              let updated_at = DateTime::<Utc>::from_timestamp_millis(rid.timestamp as i64);
+              let encoded_bytes = encoded_collab
+                .encode_to_bytes()
+                .map_err(|e| anyhow!("Failed to encode collab {}: {}", object_id, e))?;
+
+              let params = CollabParams {
+                object_id,
+                encoded_collab_v1: encoded_bytes.into(),
+                collab_type,
+                updated_at,
+              };
+
+              // Return both params and indexing data
+              let indexing_data = if !paragraphs.is_empty() {
+                Some(UnindexedCollabTask::new(
+                  ws_id,
+                  object_id,
+                  collab_type,
+                  UnindexedData::Paragraphs(paragraphs),
+                ))
+              } else {
+                None
+              };
+
+              Ok(((uid, params), indexing_data))
+            },
+          )
+          .collect::<Result<Vec<_>, anyhow::Error>>()
+      })
+      .map_err(|err| anyhow!("Thread pool panic during encoding: {}", err))??;
+
+    // Separate params with uid and indexing data
+    let (params_with_uid, indexing_tasks): (Vec<_>, Vec<_>) = batch_results
+      .into_iter()
+      .map(|((uid, params), indexing_data)| ((uid, params), indexing_data))
+      .unzip();
+
+    // Group batch params by uid
+    let mut batch_params_by_uid: HashMap<i64, Vec<CollabParams>> = HashMap::new();
+    for (uid, params) in params_with_uid {
+      batch_params_by_uid.entry(uid).or_default().push(params);
+    }
+
+    Ok((batch_params_by_uid, indexing_tasks))
+  }
+
+  /// Batch inserts snapshots grouped by user ID
+  #[inline]
+  async fn batch_insert_by_user(
+    &self,
+    workspace_id: WorkspaceId,
+    batch_params_by_uid: HashMap<i64, Vec<CollabParams>>,
+  ) {
+    for (uid, batch_params) in batch_params_by_uid {
+      if !batch_params.is_empty() {
+        let batch_len = batch_params.len();
+        if let Err(err) = self
+          .collab_cache
+          .bulk_insert_collab(workspace_id, &uid, batch_params)
+          .await
+        {
+          error!(
+            "Failed to batch insert {} snapshots for user {}: {}",
+            batch_len, uid, err
+          );
+        } else {
+          trace!(
+            "Successfully batch inserted {} snapshots for user {}",
+            batch_len,
+            uid
+          );
+        }
+      }
+    }
+  }
+
+  /// Batch indexes collabs for search
+  fn batch_index_collabs(
+    &self,
+    workspace_id: WorkspaceId,
+    indexed_collabs: &mut Vec<UnindexedCollabTask>,
+  ) {
+    if !indexed_collabs.is_empty() {
+      trace!(
+        "batch indexing {} collabs when snapshotting workspace {}",
+        indexed_collabs.len(),
+        workspace_id
+      );
+      if let Err(err) = self
+        .indexer_scheduler
+        .index_pending_collabs(std::mem::take(indexed_collabs))
+      {
+        warn!("failed to batch index {}, err: {}", workspace_id, err);
+      }
+    }
   }
 }
 

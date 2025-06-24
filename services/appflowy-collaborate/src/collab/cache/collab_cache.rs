@@ -81,6 +81,7 @@ impl CollabCache {
     })
   }
 
+  #[instrument(level = "trace", skip_all)]
   pub fn mark_as_dirty(&self, object_id: Uuid, millis_secs: MillisSeconds) {
     let millis_secs = millis_secs.into_inner();
     match self.dirty_collabs.entry(object_id) {
@@ -111,11 +112,11 @@ impl CollabCache {
     if let Some(value) = self.dirty_collabs.get(object_id) {
       let is_dirty = *value > millis_secs;
       trace!(
-        "collab {} is dirty:{} since {}: current timestamp is {}",
+        "collab {} is {}/{}, id dirty:{}",
         object_id,
-        is_dirty,
         millis_secs,
-        *value
+        *value,
+        is_dirty,
       );
       is_dirty
     } else {

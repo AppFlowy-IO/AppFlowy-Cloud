@@ -159,9 +159,7 @@ impl Workspace {
         };
       },
       InputMessage::Update(collab_type, flags, update) => {
-        if (flags == UpdateFlags::Lib0v1 && update == Update::EMPTY_V1)
-          || (flags == UpdateFlags::Lib0v2 && update == Update::EMPTY_V2)
-        {
+        if is_empty_update(&update, &flags) {
           tracing::trace!("skipping empty update {}", msg.object_id);
           return;
         }
@@ -396,12 +394,16 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
       },
     };
 
-    self.last_message_id = self.last_message_id.max(msg.last_message_id);
+    let update_flags = msg.update_flags;
+    if is_empty_update(&msg.update, &update_flags) {
+      tracing::trace!("Receive empty update {}, skipping", msg.object_id);
+      return;
+    }
 
+    self.last_message_id = self.last_message_id.max(msg.last_message_id);
     let store = self.store.clone();
     let object_id = msg.object_id;
     let collab_type = msg.collab_type;
-    let update_flags = msg.update_flags;
     let last_message_id = msg.last_message_id;
     let update = msg.update.clone();
     store.mark_as_dirty(object_id);
@@ -890,4 +892,10 @@ impl WorkspaceSessionHandle {
     let mut cache = self.permission_cache.write().await;
     cache.retain(|_, (_, cached_at)| now.duration_since(*cached_at) < self.cache_ttl);
   }
+}
+
+#[inline]
+fn is_empty_update(update: &[u8], flag: &UpdateFlags) -> bool {
+  (flag == &UpdateFlags::Lib0v1 && update == Update::EMPTY_V1)
+    || (flag == &UpdateFlags::Lib0v2 && update == Update::EMPTY_V2)
 }

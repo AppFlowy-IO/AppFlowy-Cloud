@@ -26,7 +26,7 @@ use rayon::prelude::*;
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, error, instrument, trace};
+use tracing::{debug, error, instrument, trace, warn};
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
@@ -112,18 +112,18 @@ impl CollabCache {
     if let Some(value) = self.dirty_collabs.get(object_id) {
       let is_dirty = *value > millis_secs;
       trace!(
-        "collab {} is {}/{}, id dirty:{}",
+        "collab {} is dirty:{}, dirty ts:{}, get ts:{}, ",
         object_id,
-        millis_secs,
-        *value,
         is_dirty,
+        *value,
+        millis_secs,
       );
       is_dirty
     } else {
       // Mark the collab as dirty if it is not found in the cache. Any upcoming read with millis_secs
       // less than the current timestamp will be considered dirty. When snapshot schedule write a new snapshot.
       // The snapshot rid will bigger then stored time. then it will return false.
-      self.mark_as_dirty(*object_id, (millis_secs + 1).into());
+      self.mark_as_dirty(*object_id, millis_secs.into());
       true
     }
   }
@@ -149,8 +149,19 @@ impl CollabCache {
     // Group params by collab type for different batch sizes
     let mut database_rows = Vec::new();
     let mut other_types = Vec::new();
-    let mills_secs = MillisSeconds::now();
     for params in params_list {
+      let mills_secs = params
+        .updated_at
+        .as_ref()
+        .map(|v| MillisSeconds::from(v.timestamp_millis() as u64))
+        .unwrap_or_else(|| {
+          warn!(
+            "CollabParams updated_at should not be None for object_id: {}",
+            params.object_id
+          );
+          MillisSeconds::now()
+        });
+
       let batch_item = (
         params.object_id,
         params.encoded_collab_v1,

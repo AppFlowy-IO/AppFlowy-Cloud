@@ -112,7 +112,7 @@ impl CollabCache {
     if let Some(value) = self.dirty_collabs.get(object_id) {
       let is_dirty = *value > millis_secs;
       trace!(
-        "collab {} id dirty:{}, dirty ts:{}, get ts:{}, ",
+        "collab {} is dirty:{}, dirty ts:{}, get ts:{}, ",
         object_id,
         is_dirty,
         *value,

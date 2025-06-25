@@ -290,7 +290,7 @@ impl CollabMemCache {
     expiration_seconds: u64,
   ) {
     trace!(
-      "Inserting encode collab into cache: {} at {}",
+      "insert encode collab: {} updated_at: {}",
       object_id,
       mills_secs
     );
@@ -334,12 +334,6 @@ impl CollabMemCache {
     millis_secs: MillisSeconds,
     expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
-    trace!(
-      "insert collab {} at {}, data:{} to memory cache",
-      object_id,
-      millis_secs,
-      data.len(),
-    );
     self
       .insert_data_with_timestamp(object_id, data, millis_secs, expiration_seconds)
       .await
@@ -358,13 +352,14 @@ impl CollabMemCache {
       return Ok(());
     }
 
-    trace!("Batch inserting {} raw data items", items.len());
     let mut conn = self.connection_manager.clone();
     let mut pipeline = pipe();
     pipeline.atomic();
 
     // Prepare all data with timestamps and add to pipeline
     for (object_id, data, timestamp, expiration_seconds) in items {
+      trace!("insert collab: {} updated_at: {}", object_id, timestamp);
+
       let cache_key = encode_collab_key(object_id);
       let mut timestamped_data = Vec::with_capacity(8 + data.len());
       timestamped_data.extend_from_slice(&timestamp.0.to_be_bytes());
@@ -417,6 +412,7 @@ impl CollabMemCache {
     millis_secs: MillisSeconds,
     expiration_seconds: Option<u64>,
   ) -> redis::RedisResult<()> {
+    trace!("insert collab: {} updated_at: {}", object_id, millis_secs,);
     // Check if data size is larger than threshold
     if data.len() > self.small_collab_size {
       // For large data, spawn an async task to avoid blocking the caller

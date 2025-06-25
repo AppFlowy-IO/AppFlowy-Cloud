@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{debug, error, instrument, trace, warn};
 use uuid::Uuid;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::{Decode, DecoderV1};
@@ -886,7 +886,7 @@ impl CollabGroup {
     // the client will automatically send an initialization sync to reinitialize the group.
     const MAXIMUM_SECS: u64 = 3 * 60 * 60;
     if elapsed_secs > MAXIMUM_SECS {
-      info!(
+      debug!(
         "Group:{}:{} is inactive for {} seconds, subscribers: {}",
         self.state.object_id,
         self.state.collab_type,

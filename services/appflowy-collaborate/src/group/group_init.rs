@@ -1169,10 +1169,12 @@ impl CollabPersister {
     {
       let collab = snapshot.collab;
       // encode_diff doesn't include pending updates
-      let doc_state_light = collab.transact().encode_diff_v1(&StateVector::default());
+      let tx = collab.transact();
+      let doc_state_light = tx.encode_diff_v1(&StateVector::default());
+      let state_vector = tx.state_vector();
       let light_len = doc_state_light.len();
       self
-        .write_collab(doc_state_light, snapshot.rid.timestamp)
+        .write_collab(doc_state_light, state_vector, snapshot.rid.timestamp)
         .await?;
 
       match self.collab_type {
@@ -1211,10 +1213,11 @@ impl CollabPersister {
   async fn write_collab(
     &self,
     doc_state_v1: Vec<u8>,
+    state_vector: StateVector,
     mills_secs: u64,
   ) -> Result<(), RealtimeError> {
     let updated_at = DateTime::<Utc>::from_timestamp_millis(mills_secs as i64);
-    let encoded_collab = EncodedCollab::new_v1(Default::default(), doc_state_v1)
+    let encoded_collab = EncodedCollab::new_v1(state_vector.encode_v1(), doc_state_v1)
       .encode_to_bytes()
       .map(Bytes::from)
       .map_err(|err| RealtimeError::BincodeEncode(err.to_string()))?;

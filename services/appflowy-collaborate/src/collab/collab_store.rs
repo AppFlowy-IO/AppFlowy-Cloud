@@ -394,7 +394,7 @@ impl CollabStore {
       };
 
       // Fetch the snapshot from database
-      let (rid_snapshot, update_snapshot) = self
+      let (rid, update_snapshot) = self
         .get_snapshot(workspace_id, object_id, collab_type)
         .await?;
 
@@ -403,7 +403,7 @@ impl CollabStore {
         object_id,
         collab_type,
         user_id,
-        rid_snapshot,
+        rid,
         update_snapshot,
         updates,
       });
@@ -429,7 +429,7 @@ impl CollabStore {
               client_id,
               task.object_id,
               task.collab_type,
-              task.rid_snapshot,
+              task.rid,
               task.update_snapshot,
               task.updates,
             ) {
@@ -709,7 +709,7 @@ struct SnapshotTask {
   object_id: ObjectId,
   collab_type: CollabType,
   user_id: i64,
-  rid_snapshot: Rid,
+  rid: Rid,
   update_snapshot: Bytes,
   updates: Vec<UpdateStreamMessage>,
 }

@@ -123,7 +123,7 @@ impl CollabCache {
       // Mark the collab as dirty if it is not found in the cache. Any upcoming read with millis_secs
       // less than the current timestamp will be considered dirty. When snapshot schedule write a new snapshot.
       // The snapshot rid will bigger then stored time. then it will return false.
-      self.mark_as_dirty(*object_id, (millis_secs + 1).into());
+      self.mark_as_dirty(*object_id, millis_secs.into());
       true
     }
   }

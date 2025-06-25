@@ -982,6 +982,7 @@ impl CollabPersister {
     })
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn send_update(
     &self,
     sender: CollabOrigin,

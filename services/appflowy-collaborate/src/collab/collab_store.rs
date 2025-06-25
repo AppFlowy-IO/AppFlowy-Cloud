@@ -219,7 +219,6 @@ impl CollabStore {
 
     let key = UpdateStreamMessage::stream_key(&workspace_id);
     let mut conn = self.connection_manager.clone();
-    let millis_seconds = MillisSeconds::now();
     let rid: String = UpdateStreamMessage::prepare_command(
       &key,
       &object_id,
@@ -230,8 +229,10 @@ impl CollabStore {
     )
     .query_async(&mut conn)
     .await?;
-    self.collab_cache.mark_as_dirty(object_id, millis_seconds);
     let rid = Rid::from_str(&rid).map_err(|err| anyhow!("failed to parse rid: {}", err))?;
+    self
+      .collab_cache
+      .mark_as_dirty(object_id, MillisSeconds::from(rid.timestamp));
     trace!(
       "published update to '{}' (object id: {}), rid:{}",
       key,
@@ -241,10 +242,10 @@ impl CollabStore {
     Ok(rid)
   }
 
-  pub fn mark_as_dirty(&self, object_id: ObjectId) {
+  pub fn mark_as_dirty(&self, object_id: ObjectId, millis_secs: u64) {
     self
       .collab_cache
-      .mark_as_dirty(object_id, MillisSeconds::now());
+      .mark_as_dirty(object_id, MillisSeconds::from(millis_secs));
   }
 
   #[instrument(level = "trace", skip_all, err)]
@@ -289,6 +290,11 @@ impl CollabStore {
       .into_group_map_by(|msg| msg.object_id);
 
     if all_object_updates.is_empty() {
+      trace!(
+        "no updates to snapshot for workspace {} up to rid {}",
+        workspace_id,
+        up_to
+      );
       return Ok(());
     }
 

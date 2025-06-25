@@ -406,7 +406,7 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
     let collab_type = msg.collab_type;
     let last_message_id = msg.last_message_id;
     let update = msg.update.clone();
-    store.mark_as_dirty(object_id);
+    store.mark_as_dirty(object_id, msg.last_message_id.timestamp);
 
     let sessions: Vec<WorkspaceSessionHandle> = self
       .sessions_by_client_id

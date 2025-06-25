@@ -735,7 +735,7 @@ impl WorkspaceControllerActor {
 
         // Collabs not in memory are considered inactive. We need to sync these when
         // connection is established to handle changes made while offline.
-        sync_trace!(
+        sync_debug!(
           "[{}] pending collab {}/{} is inactive",
           self.client_id(),
           object_id,

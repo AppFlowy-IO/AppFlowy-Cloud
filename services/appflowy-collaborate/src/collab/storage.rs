@@ -369,6 +369,7 @@ where
       .await
   }
 
+  #[instrument(level = "trace", skip_all)]
   fn mark_as_editing(&self, oid: Uuid) {
     self.cache.mark_as_dirty(oid, MillisSeconds::now());
   }

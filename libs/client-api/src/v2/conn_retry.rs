@@ -130,7 +130,7 @@ impl ReconnectionManager {
       // Attempt to connect
       match target.clone().attempt_connect(token.clone()).await {
         Ok(()) => {
-          sync_info!(attempt, "reconnected successfully");
+          sync_info!(attempt, "reconnect successfully");
           return true;
         },
         Err(err) => {

@@ -32,7 +32,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, instrument};
+use tracing::{error, instrument};
 use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::{Awareness, AwarenessUpdate};
@@ -249,7 +249,7 @@ impl WorkspaceControllerActor {
 
   #[instrument(level = "trace", skip_all)]
   pub(crate) fn set_connection_status(&self, status: ConnectionStatus) {
-    sync_trace!("set connection status: {:?}", status);
+    sync_debug!("set connection status: {:?}", status);
     self.status_tx.send_replace(status);
   }
 
@@ -427,13 +427,26 @@ impl WorkspaceControllerActor {
     }
   }
 
-  #[instrument(level = "trace", skip_all)]
+  #[instrument(level = "debug", skip_all, err)]
   pub(crate) async fn handle_connect(
     actor: &Arc<Self>,
     access_token: String,
   ) -> Result<(), AppResponseError> {
     match &*actor.status_rx.borrow() {
-      ConnectionStatus::Connecting { .. } | ConnectionStatus::Connected { .. } => return Ok(()),
+      ConnectionStatus::Connecting { .. } => {
+        sync_info!(
+          "[{}] websocket already connecting, skipping connect",
+          actor.db.client_id()
+        );
+        return Ok(());
+      },
+      ConnectionStatus::Connected { .. } => {
+        sync_info!(
+          "[{}] websocket already connected, skipping connect",
+          actor.db.client_id()
+        );
+        return Ok(());
+      },
       ConnectionStatus::Disconnected { .. } => {},
       ConnectionStatus::StartReconnect => {},
     }
@@ -1088,7 +1101,7 @@ impl WorkspaceControllerActor {
       "{}/{}?clientId={}&deviceId={}",
       options.url, options.workspace_id, client_id, options.device_id
     );
-    info!("establishing WebSocket connection to: {}", url);
+    sync_info!("establishing WebSocket connection to: {}", url);
     // don't include auth token in the log message (or maybe it doesn't matter?)
     write!(url, "&token={}", access_token).unwrap();
     if options.sync_eagerly {
@@ -1114,7 +1127,7 @@ impl WorkspaceControllerActor {
         }
       }
       _ = cancel.cancelled() => {
-        tracing::debug!("establishing connection cancelled");
+        sync_debug!("establishing connection cancelled");
         Ok(None)
       }
     }

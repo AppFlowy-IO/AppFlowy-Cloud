@@ -35,6 +35,7 @@ use uuid::Uuid;
 use yrs::block::ClientID;
 use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Update};
 
 pub struct CollabStore {
@@ -432,13 +433,14 @@ impl CollabStore {
               task.update_snapshot,
               task.updates,
             ) {
-              Ok((rid, full_state, paragraphs)) => Some(ProcessedSnapshot {
+              Ok((rid, full_state, state_vector, paragraphs)) => Some(ProcessedSnapshot {
                 workspace_id: task.workspace_id,
                 object_id: task.object_id,
                 collab_type: task.collab_type,
                 user_id: task.user_id,
                 rid,
                 full_state,
+                state_vector: state_vector.encode_v1().into(),
                 paragraphs,
               }),
               Err(err) => {
@@ -505,6 +507,7 @@ impl CollabStore {
           snapshot.user_id,
           snapshot.rid,
           snapshot.full_state.clone(),
+          snapshot.state_vector.clone(),
           snapshot.paragraphs.clone(),
         )
       })
@@ -517,9 +520,9 @@ impl CollabStore {
         encode_data
           .into_par_iter()
           .map(
-            |(ws_id, object_id, collab_type, uid, rid, full_state, paragraphs)| {
+            |(ws_id, object_id, collab_type, uid, rid, full_state, state_vector, paragraphs)| {
               // Create EncodedCollab and encode to bytes in parallel
-              let encoded_collab = EncodedCollab::new_v1(Bytes::default(), full_state);
+              let encoded_collab = EncodedCollab::new_v1(state_vector, full_state);
               let updated_at = DateTime::<Utc>::from_timestamp_millis(rid.timestamp as i64);
               let encoded_bytes = encoded_collab
                 .encode_to_bytes()
@@ -633,7 +636,7 @@ pub fn apply_updates_to_snapshot(
   rid_snapshot: Rid,
   update_snapshot: Bytes,
   updates: Vec<UpdateStreamMessage>,
-) -> anyhow::Result<(Rid, Bytes, Vec<String>)> {
+) -> anyhow::Result<(Rid, Bytes, StateVector, Vec<String>)> {
   let options = CollabOptions::new(object_id.to_string(), client_id);
   let mut collab = Collab::new_with_options(CollabOrigin::Server, options)
     .map_err(|err| anyhow!("failed to create collab: {}", err))?;
@@ -667,9 +670,10 @@ pub fn apply_updates_to_snapshot(
     }
     drop(tx); // commit the transaction
   }
-  let full_state = collab.transact().encode_diff_v1(&StateVector::default());
+  let tx = collab.transact();
+  let full_state = tx.encode_diff_v1(&StateVector::default());
+  let state_vector = tx.state_vector();
   let paragraphs = if collab_type == CollabType::Document {
-    let tx = collab.transact();
     DocumentBody::from_collab(&collab)
       .map(|body| body.to_plain_text(tx))
       .unwrap_or_default()
@@ -677,7 +681,7 @@ pub fn apply_updates_to_snapshot(
     vec![]
   };
 
-  Ok((rid, full_state.into(), paragraphs))
+  Ok((rid, full_state.into(), state_vector, paragraphs))
 }
 
 pub fn decode_update(update: &[u8]) -> AppResult<Update> {
@@ -717,6 +721,7 @@ struct ProcessedSnapshot {
   user_id: i64,
   rid: Rid,
   full_state: Bytes,
+  state_vector: Bytes,
   paragraphs: Vec<String>,
 }
 struct EncodedChunkResult {

@@ -48,14 +48,8 @@ pub async fn duplicate_view_tree_and_collab(
 
   let uid = user.uid;
   let client_id = default_client_id();
-  let mut folder: Folder = get_latest_collab_folder(
-    &collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    client_id,
-    uid,
-  )
-  .await?;
+  let mut folder: Folder =
+    get_latest_collab_folder(&collab_storage, uid, workspace_id, client_id, uid).await?;
   let trash_sections: HashSet<String> = folder
     .get_all_trash_sections()
     .iter()

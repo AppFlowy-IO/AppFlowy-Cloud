@@ -59,7 +59,7 @@ use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::collab_from_encode_collab;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::CollabStorage;
 use database::user::select_uid_from_email;
 use database_entity::dto::PublishCollabItem;
 use database_entity::dto::PublishInfo;
@@ -1097,7 +1097,7 @@ async fn get_collab_handler(
   let encode_collab = state
     .collab_access_control_storage
     .get_full_encode_collab(
-      GetCollabOrigin::User { uid },
+      uid.into(),
       &params.workspace_id,
       &params.object_id,
       params.collab_type,
@@ -1129,12 +1129,7 @@ async fn v1_get_collab_handler(
 
   let encode_collab = state
     .collab_access_control_storage
-    .get_full_encode_collab(
-      GetCollabOrigin::User { uid },
-      &workspace_id,
-      &object_id,
-      query.collab_type,
-    )
+    .get_full_encode_collab(uid.into(), &workspace_id, &object_id, query.collab_type)
     .await
     .map_err(AppResponseError::from)?
     .encoded_collab;
@@ -1164,12 +1159,7 @@ async fn get_collab_json_handler(
 
   let doc_state = state
     .collab_access_control_storage
-    .get_full_encode_collab(
-      GetCollabOrigin::User { uid },
-      &workspace_id,
-      &object_id,
-      collab_type,
-    )
+    .get_full_encode_collab(uid.into(), &workspace_id, &object_id, collab_type)
     .await
     .map_err(AppResponseError::from)?
     .encoded_collab

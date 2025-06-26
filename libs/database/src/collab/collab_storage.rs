@@ -60,6 +60,12 @@ pub enum GetCollabOrigin {
   Server,
 }
 
+impl From<i64> for GetCollabOrigin {
+  fn from(uid: i64) -> Self {
+    GetCollabOrigin::User { uid }
+  }
+}
+
 /// Represents a storage mechanism for collaborations.
 ///
 /// This trait provides asynchronous methods for CRUD operations related to collaborations.

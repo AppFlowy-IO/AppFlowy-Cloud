@@ -357,14 +357,14 @@ pub async fn get_latest_collab_workspace_database_body(
 pub const DUMMY_UID: i64 = 0;
 pub async fn get_latest_collab_folder(
   collab_storage: &CollabAccessControlStorage,
-  collab_origin: GetCollabOrigin,
+  collab_origin: impl Into<GetCollabOrigin>,
   workspace_id: Uuid,
   client_id: ClientID,
   uid: i64,
 ) -> Result<Folder, AppError> {
   let encoded_collab = collab_storage
     .get_full_encode_collab(
-      collab_origin,
+      collab_origin.into(),
       &workspace_id,
       &workspace_id,
       CollabType::Folder,

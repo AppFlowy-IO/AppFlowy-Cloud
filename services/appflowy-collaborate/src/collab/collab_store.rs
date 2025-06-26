@@ -78,20 +78,7 @@ impl CollabStore {
     &self.awareness_broadcast
   }
 
-  pub async fn publish_create(
-    &self,
-    workspace_id: WorkspaceId,
-    object_id: ObjectId,
-    collab_type: CollabType,
-    sender: &CollabOrigin,
-    update: Vec<u8>,
-  ) -> anyhow::Result<Rid> {
-    self
-      .publish_update(workspace_id, object_id, collab_type, sender, update)
-      .await
-  }
-
-  pub async fn prune_updates(&self, workspace_id: WorkspaceId, up_to: Rid) -> anyhow::Result<()> {
+  async fn prune_updates(&self, workspace_id: WorkspaceId, up_to: Rid) -> anyhow::Result<()> {
     let key = UpdateStreamMessage::stream_key(&workspace_id);
     let mut conn = self.connection_manager.clone();
     let options = StreamTrimOptions::minid(StreamTrimmingMode::Exact, up_to.to_string());

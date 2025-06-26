@@ -8,7 +8,6 @@ use appflowy_ai_client::dto::EmbeddingModel;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::default_client_id;
 use collab_folder::{Folder, View};
-use database::collab::GetCollabOrigin;
 use database::index::{search_documents, SearchDocumentParams};
 use indexer::scheduler::IndexerScheduler;
 use indexer::vector::embedder::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFormat};
@@ -114,7 +113,7 @@ pub async fn search_document(
   // Obtain the latest collab folder and gather searchable view IDs.
   let folder = get_latest_collab_folder(
     collab_storage,
-    GetCollabOrigin::User { uid },
+    uid,
     workspace_uuid,
     default_client_id(),
     uid,

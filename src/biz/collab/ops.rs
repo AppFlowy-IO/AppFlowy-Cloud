@@ -92,14 +92,7 @@ pub async fn get_user_favorite_folder_views(
   workspace_id: Uuid,
 ) -> Result<Vec<FavoriteFolderView>, AppError> {
   let client_id = default_client_id();
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    client_id,
-    uid,
-  )
-  .await?;
+  let folder = get_latest_collab_folder(collab_storage, uid, workspace_id, client_id, uid).await?;
   let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
   let publish_view_ids: HashSet<String> = publish_view_ids
     .into_iter()
@@ -129,14 +122,7 @@ pub async fn get_user_recent_folder_views(
   workspace_id: Uuid,
 ) -> Result<Vec<RecentFolderView>, AppError> {
   let client_id = default_client_id();
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    client_id,
-    uid,
-  )
-  .await?;
+  let folder = get_latest_collab_folder(collab_storage, uid, workspace_id, client_id, uid).await?;
   let deleted_section_item_ids: Vec<String> = folder
     .get_my_trash_sections()
     .iter()
@@ -165,14 +151,7 @@ pub async fn get_user_trash_folder_views(
   workspace_id: Uuid,
 ) -> Result<Vec<TrashFolderView>, AppError> {
   let client_id = default_client_id();
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    client_id,
-    uid,
-  )
-  .await?;
+  let folder = get_latest_collab_folder(collab_storage, uid, workspace_id, client_id, uid).await?;
   let section_items = folder.get_my_trash_sections();
   Ok(section_items_to_trash_folder_view(&section_items, &folder))
 }
@@ -277,14 +256,8 @@ pub async fn get_user_workspace_structure(
       depth, depth_limit
     )));
   }
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::User { uid: user.uid },
-    workspace_id,
-    client_id,
-    user.uid,
-  )
-  .await?;
+  let folder =
+    get_latest_collab_folder(collab_storage, user.uid, workspace_id, client_id, user.uid).await?;
   let patched_folder = fix_old_workspace_folder(
     appflowy_web_metrics,
     &state.ws_server,
@@ -395,14 +368,8 @@ pub async fn list_database(
   })?;
   let db_metas = ws_body.get_all_meta(&ws_body_collab.transact());
 
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    default_client_id(),
-    uid,
-  )
-  .await?;
+  let folder =
+    get_latest_collab_folder(collab_storage, uid, workspace_id, default_client_id(), uid).await?;
 
   let trash = folder
     .get_all_trash_sections()

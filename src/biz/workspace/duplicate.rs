@@ -8,10 +8,9 @@ use crate::{
     utils::{collab_from_doc_state, get_latest_collab_folder},
   },
 };
-use actix::Addr;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::ws2::WsServer;
+use appflowy_collaborate::ws2::CollabUpdatePublisher;
 use collab::core::collab::default_client_id;
 use collab_database::{
   database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
@@ -182,7 +181,7 @@ fn duplicate_database_data_with_context(
 #[allow(clippy::too_many_arguments)]
 async fn duplicate_database(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Addr<WsServer>,
+  update_publisher: &impl CollabUpdatePublisher,
   user: RealtimeUser,
   collab_storage: Arc<dyn CollabStore>,
   workspace_id: Uuid,
@@ -275,7 +274,7 @@ async fn duplicate_database(
     let workspace_database_id = Uuid::parse_str(workspace_database.collab.object_id())?;
     update_workspace_database_data(
       appflowy_web_metrics,
-      collab_update_writer,
+      update_publisher,
       user.clone(),
       workspace_id,
       workspace_database_id,

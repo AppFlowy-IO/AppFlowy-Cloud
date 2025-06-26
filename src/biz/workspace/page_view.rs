@@ -14,10 +14,9 @@ use crate::biz::collab::utils::{
   get_latest_collab_database_body, get_latest_collab_folder,
 };
 use crate::state::AppState;
-use actix::Addr;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::ws2::{CollabUpdatePublisher, WsServer};
+use appflowy_collaborate::ws2::CollabUpdatePublisher;
 use chrono::DateTime;
 use collab::core::collab::{default_client_id, Collab, CollabOptions};
 use collab::core::origin::CollabClient;
@@ -2392,7 +2391,7 @@ pub async fn create_database_view(
 #[allow(clippy::too_many_arguments)]
 async fn update_collab_data_with_timeout(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Addr<WsServer>,
+  update_publisher: &impl CollabUpdatePublisher,
   user: RealtimeUser,
   workspace_id: Uuid,
   object_id: Uuid,
@@ -2404,7 +2403,7 @@ async fn update_collab_data_with_timeout(
 
   let origin = CollabOrigin::Client(CollabClient::new(user.uid, user.device_id.clone()));
   let result =
-    collab_update_writer.publish_update(workspace_id, object_id, collab_type, &origin, update);
+    update_publisher.publish_update(workspace_id, object_id, collab_type, &origin, update);
 
   let resp = timeout_at(
     tokio::time::Instant::now() + Duration::from_millis(2000),
@@ -2457,14 +2456,14 @@ pub async fn update_page_collab_data(
 #[instrument(level = "debug", skip_all)]
 pub async fn update_workspace_folder_data(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  update_writer: &Addr<WsServer>,
+  update_publisher: &impl CollabUpdatePublisher,
   user: RealtimeUser,
   workspace_id: Uuid,
   update: Vec<u8>,
 ) -> Result<(), AppError> {
   update_collab_data_with_timeout(
     appflowy_web_metrics,
-    update_writer,
+    update_publisher,
     user,
     workspace_id,
     workspace_id,
@@ -2478,7 +2477,7 @@ pub async fn update_workspace_folder_data(
 #[instrument(level = "debug", skip_all)]
 pub async fn update_workspace_database_data(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Addr<WsServer>,
+  update_publisher: &impl CollabUpdatePublisher,
   user: RealtimeUser,
   workspace_id: Uuid,
   workspace_database_id: Uuid,
@@ -2486,7 +2485,7 @@ pub async fn update_workspace_database_data(
 ) -> Result<(), AppError> {
   update_collab_data_with_timeout(
     appflowy_web_metrics,
-    collab_update_writer,
+    update_publisher,
     user,
     workspace_id,
     workspace_database_id,
@@ -2500,7 +2499,7 @@ pub async fn update_workspace_database_data(
 #[instrument(level = "debug", skip_all)]
 pub async fn update_database_data(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Addr<WsServer>,
+  update_publisher: &impl CollabUpdatePublisher,
   user: RealtimeUser,
   workspace_id: Uuid,
   database_id: Uuid,
@@ -2508,7 +2507,7 @@ pub async fn update_database_data(
 ) -> Result<(), AppError> {
   update_collab_data_with_timeout(
     appflowy_web_metrics,
-    collab_update_writer,
+    update_publisher,
     user,
     workspace_id,
     database_id,

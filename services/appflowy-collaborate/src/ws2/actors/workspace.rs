@@ -1,7 +1,7 @@
 use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
-use crate::collab::ws_collab_store::WSCollabStore;
+use crate::collab::ws_collab_manager::WSCollabManager;
 use crate::ws2::{BroadcastPermissionChanges, PublishUpdate, UpdateUserPermissions};
 use actix::ActorFutureExt;
 use actix::{
@@ -30,7 +30,7 @@ pub struct Workspace {
   server: Recipient<Terminate>,
   workspace_id: WorkspaceId,
   last_message_id: Rid,
-  store: Arc<WSCollabStore>,
+  store: Arc<WSCollabManager>,
   snapshot_scheduler: SnapshotScheduler,
   sessions_by_client_id: HashMap<ClientID, WorkspaceSessionHandle>,
   updates_handle: Option<SpawnHandle>,
@@ -48,7 +48,7 @@ impl Workspace {
   pub fn new(
     server: Recipient<Terminate>,
     workspace_id: WorkspaceId,
-    store: Arc<WSCollabStore>,
+    store: Arc<WSCollabManager>,
     snapshot_scheduler: SnapshotScheduler,
   ) -> Self {
     Self {
@@ -67,7 +67,7 @@ impl Workspace {
   }
 
   async fn publish_update(
-    store: Arc<WSCollabStore>,
+    store: Arc<WSCollabManager>,
     workspace_id: WorkspaceId,
     msg: PublishUpdate,
   ) {
@@ -83,7 +83,11 @@ impl Workspace {
     let _ = msg.ack.send(result);
   }
 
-  async fn hande_ws_input(store: Arc<WSCollabStore>, sender: WorkspaceSessionHandle, msg: WsInput) {
+  async fn hande_ws_input(
+    store: Arc<WSCollabManager>,
+    sender: WorkspaceSessionHandle,
+    msg: WsInput,
+  ) {
     match msg.message {
       InputMessage::Manifest(collab_type, rid, state_vector) => {
         match store
@@ -212,7 +216,7 @@ impl Workspace {
   }
 
   async fn publish_collabs_created_since(
-    store: Arc<WSCollabStore>,
+    store: Arc<WSCollabManager>,
     session_handle: WorkspaceSessionHandle,
     client_id: ClientID,
     workspace_id: WorkspaceId,
@@ -797,7 +801,7 @@ impl WorkspaceSessionHandle {
 
   async fn can_write_collab(
     &self,
-    store: &Arc<WSCollabStore>,
+    store: &Arc<WSCollabManager>,
     object_id: &ObjectId,
   ) -> Result<bool, AppError> {
     let now = Instant::now();
@@ -831,7 +835,7 @@ impl WorkspaceSessionHandle {
 
   async fn can_read_collab(
     &self,
-    store: &Arc<WSCollabStore>,
+    store: &Arc<WSCollabManager>,
     object_id: &ObjectId,
   ) -> Result<bool, AppError> {
     let now = Instant::now();

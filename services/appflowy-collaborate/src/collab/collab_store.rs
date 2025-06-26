@@ -4,7 +4,7 @@ use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
 use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
-use crate::ws2::WSCollabStore;
+use crate::ws2::WSCollabManager;
 use access_control::act::Action;
 use access_control::collab::CollabAccessControl;
 use access_control::workspace::WorkspaceAccessControl;

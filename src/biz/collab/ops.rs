@@ -76,8 +76,7 @@ use crate::biz::collab::folder_view::check_if_view_is_space;
 use crate::biz::collab::utils::get_database_row_doc_changes;
 use crate::biz::workspace::page_view::update_workspace_folder_data;
 use crate::state::AppState;
-use actix::Addr;
-use appflowy_collaborate::ws2::{CollabUpdatePublisher, WsServer};
+use appflowy_collaborate::ws2::CollabUpdatePublisher;
 use collab::core::collab::{default_client_id, CollabOptions};
 use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
@@ -199,7 +198,7 @@ fn patch_old_workspace_folder(
 
 async fn fix_old_workspace_folder(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Addr<WsServer>,
+  update_publisher: &impl CollabUpdatePublisher,
   user: RealtimeUser,
   mut folder: Folder,
   workspace_id: Uuid,
@@ -228,7 +227,7 @@ async fn fix_old_workspace_folder(
     )?;
     update_workspace_folder_data(
       appflowy_web_metrics,
-      collab_update_writer,
+      update_publisher,
       user,
       workspace_id,
       folder_update,

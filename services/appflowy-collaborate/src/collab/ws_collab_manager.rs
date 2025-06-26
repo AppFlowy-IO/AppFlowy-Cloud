@@ -40,7 +40,7 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Update};
 
-pub struct WSCollabStore {
+pub struct WSCollabManager {
   collab_cache: Arc<CollabCache>,
   access_control: Arc<dyn CollabAccessControl>,
   update_streams: Arc<StreamRouter>,
@@ -50,7 +50,7 @@ pub struct WSCollabStore {
   snapshot_thread_pool: Arc<ThreadPoolNoAbort>,
 }
 
-impl WSCollabStore {
+impl WSCollabManager {
   #[allow(clippy::too_many_arguments)]
   pub fn new(
     thread_pool: Arc<ThreadPoolNoAbort>,

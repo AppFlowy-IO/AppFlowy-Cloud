@@ -1,4 +1,4 @@
-use crate::ws2::WSCollabStore;
+use crate::ws2::WSCollabManager;
 use appflowy_proto::Rid;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ pub struct SnapshotScheduler {
 impl SnapshotScheduler {
   /// We limit number of concurrently running snapshot tasks to avoid overwhelming the system.
   const CONCURRENCY_LIMIT: usize = 10; // only 10 workspaces at a time
-  pub fn new(collab_store: Arc<WSCollabStore>) -> Self {
+  pub fn new(collab_store: Arc<WSCollabManager>) -> Self {
     let (schedule_queue, receiver) = tokio::sync::mpsc::unbounded_channel::<(Uuid, Rid)>();
     tokio::spawn(Self::snapshot_task(receiver, collab_store));
     Self { schedule_queue }
@@ -50,7 +50,7 @@ impl SnapshotScheduler {
 
   async fn snapshot_task(
     mut receiver: UnboundedReceiver<(Uuid, Rid)>,
-    collab_store: Arc<WSCollabStore>,
+    collab_store: Arc<WSCollabManager>,
   ) {
     while let Some(workspaces) = Self::get_workspaces(&mut receiver).await {
       tracing::trace!("snapshotting {} workspaces", workspaces.len());

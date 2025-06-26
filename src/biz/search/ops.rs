@@ -7,7 +7,7 @@ use app_error::AppError;
 use appflowy_ai_client::dto::EmbeddingModel;
 use collab::core::collab::default_client_id;
 use collab_folder::{Folder, View};
-use database::collab::CollabStorage;
+use database::collab::CollabStore;
 use database::index::{search_documents, SearchDocumentParams};
 use indexer::scheduler::IndexerScheduler;
 use indexer::vector::embedder::{CreateEmbeddingRequestArgs, EmbeddingInput, EncodingFormat};
@@ -75,7 +75,7 @@ fn populate_searchable_view_ids(
 #[allow(clippy::too_many_arguments)]
 pub async fn search_document(
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   indexer_scheduler: &Arc<IndexerScheduler>,
   uid: i64,
   workspace_uuid: Uuid,

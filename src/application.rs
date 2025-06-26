@@ -36,8 +36,8 @@ use tracing::{error, info};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::collab::collab_store::CollabStorageImpl;
-use appflowy_collaborate::ws2::{CollabStore, WsServer};
+use appflowy_collaborate::collab::collab_store::CollabStoreImpl;
+use appflowy_collaborate::ws2::{WSCollabStore, WsServer};
 use appflowy_collaborate::CollaborationServer;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
@@ -307,7 +307,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     config.collab.s3_collab_threshold as usize,
   );
 
-  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
+  let collab_access_control_storage = Arc::new(CollabStoreImpl::new(
     collab_cache.clone(),
     collab_access_control.clone(),
     workspace_access_control.clone(),
@@ -338,7 +338,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     embedder_config,
     redis_conn_manager.clone(),
   );
-  let collab_store = CollabStore::new(
+  let collab_store = WSCollabStore::new(
     thread_pool.clone(),
     collab_access_control.clone(),
     collab_cache.clone(),

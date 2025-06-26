@@ -28,7 +28,7 @@ use collab_folder::{CollabOrigin, SpaceInfo};
 use collab_rt_entity::user::RealtimeUser;
 use database::collab::select_last_updated_database_row_ids;
 use database::collab::select_workspace_database_oid;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::{CollabStore, GetCollabOrigin};
 use database::publish::select_published_view_ids_for_workspace;
 use database::publish::select_published_view_ids_with_publish_info_for_workspace;
 use database::publish::select_workspace_id_for_publish_namespace;
@@ -86,7 +86,7 @@ use std::sync::Arc;
 use yrs::block::ClientID;
 
 pub async fn get_user_favorite_folder_views(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -116,7 +116,7 @@ pub async fn get_user_favorite_folder_views(
 }
 
 pub async fn get_user_recent_folder_views(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -146,7 +146,7 @@ pub async fn get_user_recent_folder_views(
 }
 
 pub async fn get_user_trash_folder_views(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   uid: i64,
   workspace_id: Uuid,
 ) -> Result<Vec<TrashFolderView>, AppError> {
@@ -280,7 +280,7 @@ pub async fn get_user_workspace_structure(
 }
 
 pub async fn get_latest_workspace_database(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   pg_pool: &PgPool,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
@@ -302,7 +302,7 @@ pub async fn get_latest_workspace_database(
 }
 
 pub async fn get_published_view(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   publish_namespace: String,
   pg_pool: &PgPool,
 ) -> Result<PublishedView, AppError> {
@@ -344,7 +344,7 @@ pub async fn get_published_view(
 
 pub async fn list_database(
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   uid: i64,
   workspace_id: Uuid,
 ) -> Result<Vec<AFDatabase>, AppError> {
@@ -397,7 +397,7 @@ pub async fn list_database(
 }
 
 pub async fn list_database_row_ids(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
 ) -> Result<Vec<AFDatabaseRow>, AppError> {
@@ -752,7 +752,7 @@ pub async fn upsert_database_row(
 }
 
 pub async fn get_database_fields(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
 ) -> Result<Vec<AFDatabaseField>, AppError> {
@@ -836,7 +836,7 @@ pub async fn add_database_field(
 }
 
 pub async fn list_database_row_ids_updated(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   pg_pool: &PgPool,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
@@ -854,7 +854,7 @@ pub async fn list_database_row_ids_updated(
 }
 
 pub async fn list_database_row_details(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   uid: i64,
   workspace_uuid: Uuid,
   database_uuid: Uuid,

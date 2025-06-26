@@ -14,7 +14,7 @@ use uuid::Uuid;
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::CollabMetrics;
-use database::collab::CollabStorage;
+use database::collab::CollabStore;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
 
@@ -62,7 +62,7 @@ pub async fn delete_workspace_for_user(
 pub async fn create_empty_workspace(
   pg_pool: &PgPool,
   workspace_access_control: Arc<dyn WorkspaceAccessControl>,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   collab_metrics: &CollabMetrics,
   user_uuid: &Uuid,
   user_uid: i64,
@@ -112,7 +112,7 @@ pub async fn create_empty_workspace(
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
   workspace_access_control: Arc<dyn WorkspaceAccessControl>,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   collab_metrics: &CollabMetrics,
   user_uuid: &Uuid,
   user_uid: i64,

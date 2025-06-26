@@ -4,7 +4,7 @@ use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
 use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
-use crate::ws2::CollabStore;
+use crate::ws2::WSCollabStore;
 use access_control::act::Action;
 use access_control::collab::CollabAccessControl;
 use access_control::workspace::WorkspaceAccessControl;
@@ -17,7 +17,7 @@ use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
 use database::collab::{
-  insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStorage, GetCollabOrigin,
+  insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStore, GetCollabOrigin,
 };
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams,
@@ -40,7 +40,7 @@ use yrs::{StateVector, Update};
 
 /// A wrapper around the actual storage implementation that provides access control and caching.
 #[derive(Clone)]
-pub struct CollabStorageImpl {
+pub struct CollabStoreImpl {
   cache: Arc<CollabCache>,
   /// access control for collab object. Including read/write
   access_control: Arc<dyn CollabAccessControl>,
@@ -48,7 +48,7 @@ pub struct CollabStorageImpl {
   queue: Sender<PendingCollabWrite>,
 }
 
-impl CollabStorageImpl {
+impl CollabStoreImpl {
   pub fn new(
     cache: Arc<CollabCache>,
     access_control: Arc<dyn CollabAccessControl>,
@@ -148,7 +148,7 @@ impl CollabStorageImpl {
 }
 
 #[async_trait]
-impl CollabStorage for CollabStorageImpl {
+impl CollabStore for CollabStoreImpl {
   async fn upsert_collab(
     &self,
     workspace_id: Uuid,

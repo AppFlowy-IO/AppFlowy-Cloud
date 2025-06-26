@@ -11,7 +11,7 @@ use access_control::workspace::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab::default_client_id;
-use database::collab::CollabStorage;
+use database::collab::CollabStore;
 use database::{
   access_request::{
     insert_new_access_request, select_access_request_by_request_id, update_access_request_status,
@@ -72,7 +72,7 @@ pub async fn create_access_request(
 
 pub async fn get_access_request(
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   access_request_id: Uuid,
   user_uid: i64,
 ) -> Result<AccessRequest, AppError> {

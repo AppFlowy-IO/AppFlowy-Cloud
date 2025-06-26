@@ -18,7 +18,7 @@ use collab_stream::client::CollabRedisStream;
 use collab_stream::stream_router::StreamRouter;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use database::collab::CollabStorage;
+use database::collab::CollabStore;
 use indexer::scheduler::IndexerScheduler;
 use redis::aio::ConnectionManager;
 use tokio::sync::mpsc::Sender;
@@ -41,7 +41,7 @@ pub struct CollaborationServer {
 impl CollaborationServer {
   #[allow(clippy::too_many_arguments)]
   pub async fn new(
-    storage: Arc<dyn CollabStorage>,
+    storage: Arc<dyn CollabStore>,
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
     redis_stream_router: Arc<StreamRouter>,

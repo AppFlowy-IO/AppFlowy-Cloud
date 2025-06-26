@@ -1,7 +1,7 @@
 use super::session::{WsInput, WsSession};
 use super::workspace::{Terminate, Workspace};
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
-use crate::collab::ws_collab_store::CollabStore;
+use crate::collab::ws_collab_store::WSCollabStore;
 use crate::ws2::{BulkPermissionUpdate, PermissionUpdate};
 use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
@@ -14,13 +14,13 @@ use tracing::info;
 use yrs::block::ClientID;
 
 pub struct WsServer {
-  store: Arc<CollabStore>,
+  store: Arc<WSCollabStore>,
   snapshot_scheduler: SnapshotScheduler,
   workspaces: HashMap<WorkspaceId, Addr<Workspace>>,
 }
 
 impl WsServer {
-  pub fn new(store: Arc<CollabStore>) -> Self {
+  pub fn new(store: Arc<WSCollabStore>) -> Self {
     let snapshot_scheduler = SnapshotScheduler::new(store.clone());
     Self {
       store,
@@ -32,7 +32,7 @@ impl WsServer {
   fn init_workspace(
     server: Recipient<Terminate>,
     workspace_id: WorkspaceId,
-    store: Arc<CollabStore>,
+    store: Arc<WSCollabStore>,
     snapshot_scheduler: SnapshotScheduler,
   ) -> Addr<Workspace> {
     Workspace::new(server, workspace_id, store, snapshot_scheduler).start()

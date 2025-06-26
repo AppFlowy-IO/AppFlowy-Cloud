@@ -21,7 +21,7 @@ use collab_database::{
 };
 use collab_entity::{CollabType, EncodedCollab};
 use dashmap::DashMap;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::{CollabStore, GetCollabOrigin};
 use uuid::Uuid;
 use yrs::block::ClientID;
 
@@ -170,7 +170,7 @@ fn create_card_status_field() -> Field {
 #[derive(Clone)]
 pub struct PostgresDatabaseCollabService {
   pub workspace_id: Uuid,
-  pub collab_storage: Arc<dyn CollabStorage>,
+  pub collab_storage: Arc<dyn CollabStore>,
   pub client_id: ClientID,
   cache: Arc<DashMap<RowId, Arc<RwLock<DatabaseRow>>>>,
 }
@@ -178,7 +178,7 @@ pub struct PostgresDatabaseCollabService {
 impl PostgresDatabaseCollabService {
   pub fn new(
     workspace_id: Uuid,
-    collab_storage: Arc<dyn CollabStorage>,
+    collab_storage: Arc<dyn CollabStore>,
     client_id: ClientID,
   ) -> Self {
     Self {

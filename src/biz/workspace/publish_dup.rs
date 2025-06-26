@@ -13,7 +13,7 @@ use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, RepeatedViewIdentifier, View};
 use database::collab::GetCollabOrigin;
-use database::collab::{select_workspace_database_oid, CollabStorage};
+use database::collab::{select_workspace_database_oid, CollabStore};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::file::BucketClient;
 use database::file::ResponseBlob;
@@ -82,7 +82,7 @@ pub async fn duplicate_published_collab_to_workspace(
 pub struct PublishCollabDuplicator {
   /// for fetching and writing folder data
   /// of dest workspace
-  collab_storage: Arc<dyn CollabStorage>,
+  collab_storage: Arc<dyn CollabStore>,
   /// A map to store the old view_id that was duplicated and new view_id assigned.
   /// If value is none, it means the view_id is not published.
   duplicated_refs: HashMap<Uuid, Option<Uuid>>,
@@ -135,7 +135,7 @@ impl PublishCollabDuplicator {
   pub fn new(
     pg_pool: PgPool,
     bucket_client: AwsS3BucketClientImpl,
-    collab_storage: Arc<dyn CollabStorage>,
+    collab_storage: Arc<dyn CollabStore>,
     collab_update_publisher: Box<dyn CollabUpdatePublisher>,
     dest_uid: i64,
     dest_workspace_id: Uuid,

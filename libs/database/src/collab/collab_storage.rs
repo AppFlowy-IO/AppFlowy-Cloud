@@ -31,7 +31,7 @@ impl From<i64> for GetCollabOrigin {
 /// This trait provides asynchronous methods for CRUD operations related to collaborations.
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
-pub trait CollabStorage: Send + Sync + 'static {
+pub trait CollabStore: Send + Sync + 'static {
   async fn upsert_collab(
     &self,
     workspace_id: Uuid,

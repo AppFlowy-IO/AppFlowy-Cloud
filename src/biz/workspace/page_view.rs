@@ -47,7 +47,7 @@ use collab_folder::hierarchy_builder::NestedChildViewBuilder;
 use collab_folder::{timestamp, CollabOrigin, Folder, SectionItem, SpaceInfo, View};
 use collab_rt_entity::user::RealtimeUser;
 use database::collab::{
-  select_collab_meta_from_af_collab, select_workspace_database_oid, CollabStorage, GetCollabOrigin,
+  select_collab_meta_from_af_collab, select_workspace_database_oid, CollabStore, GetCollabOrigin,
 };
 use database::publish::select_published_view_ids_for_workspace;
 use database::user::select_web_user_from_uid;
@@ -344,7 +344,7 @@ async fn prepare_default_document_collab_param(
 pub async fn create_orphaned_view(
   uid: i64,
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   workspace_id: Uuid,
   document_id: Uuid,
 ) -> Result<(), AppError> {
@@ -556,7 +556,7 @@ pub async fn append_block_at_the_end_of_page(
 
 async fn append_block_to_document_collab(
   uid: i64,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   workspace_id: Uuid,
   oid: Uuid,
   serde_blocks: &[SerdeBlock],
@@ -1822,7 +1822,7 @@ pub async fn publish_page(
 }
 
 async fn generate_publish_data_for_document(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
@@ -1841,7 +1841,7 @@ async fn generate_publish_data_for_document(
 
 async fn generate_publish_data_for_database(
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
@@ -1937,7 +1937,7 @@ pub async fn unpublish_page(
 
 pub async fn get_page_view_collab(
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
@@ -1970,7 +1970,7 @@ pub async fn get_page_view_collab(
 
 async fn get_page_view_collab_for_orphaned_view(
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   view_id: &Uuid,
   uid: i64,
   workspace_id: &Uuid,
@@ -2013,7 +2013,7 @@ async fn get_page_view_collab_for_view_with_parent(
   folder: &Folder,
   view: &View,
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   workspace_id: &Uuid,
   view_id: &Uuid,
   uid: i64,
@@ -2085,7 +2085,7 @@ async fn get_page_view_collab_for_view_with_parent(
 
 async fn get_page_collab_data_for_database(
   pg_pool: &PgPool,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   uid: i64,
   workspace_id: &Uuid,
   view_id: &Uuid,
@@ -2206,7 +2206,7 @@ async fn get_page_collab_data_for_database(
 }
 
 async fn get_page_collab_data_for_document(
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
   uid: i64,
   workspace_id: &Uuid,
   view_id: &Uuid,

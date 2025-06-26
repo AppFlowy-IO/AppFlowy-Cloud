@@ -7,7 +7,7 @@ use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::{CollabStore, GetCollabOrigin};
 use database::index::{get_collab_embedding_fragment_ids, stream_collabs_without_embeddings};
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
@@ -126,7 +126,7 @@ async fn _index_then_write_embedding_to_disk(
 async fn stream_unindexed_collabs(
   conn: &mut PoolConnection<Postgres>,
   workspace_id: Uuid,
-  storage: Arc<dyn CollabStorage>,
+  storage: Arc<dyn CollabStore>,
   limit: i64,
 ) -> BoxStream<Result<UnindexedCollab, anyhow::Error>> {
   let cloned_storage = storage.clone();

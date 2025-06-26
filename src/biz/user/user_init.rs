@@ -6,7 +6,7 @@ use collab_database::workspace_database::WorkspaceDatabase;
 use collab_entity::CollabType;
 use collab_folder::{Folder, FolderData, Workspace};
 use collab_user::core::UserAwareness;
-use database::collab::CollabStorage;
+use database::collab::CollabStore;
 use database::pg_row::AFWorkspaceRow;
 use database_entity::dto::CollabParams;
 use sqlx::Transaction;
@@ -24,7 +24,7 @@ pub async fn initialize_workspace_for_user<T>(
   row: &AFWorkspaceRow,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   templates: Vec<T>,
-  collab_storage: &Arc<dyn CollabStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
 ) -> anyhow::Result<(), AppError>
 where
   T: WorkspaceTemplate + Send + Sync + 'static,
@@ -112,7 +112,7 @@ pub(crate) async fn create_user_awareness(
   uid: &i64,
   user_uuid: &Uuid,
   workspace_id: Uuid,
-  storage: &Arc<dyn CollabStorage>,
+  storage: &Arc<dyn CollabStore>,
   txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<Uuid, AppError> {
   let object_id = user_awareness_object_id(user_uuid, &workspace_id);
@@ -151,7 +151,7 @@ pub(crate) async fn create_workspace_collab(
   uid: i64,
   workspace_id: Uuid,
   name: &str,
-  storage: &Arc<dyn CollabStorage>,
+  storage: &Arc<dyn CollabStore>,
   txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<(), AppError> {
   let workspace = Workspace::new(workspace_id.to_string(), name.to_string(), uid);
@@ -190,7 +190,7 @@ pub(crate) async fn create_workspace_database_collab(
   workspace_id: Uuid,
   uid: &i64,
   object_id: Uuid,
-  storage: &Arc<dyn CollabStorage>,
+  storage: &Arc<dyn CollabStore>,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   initial_database_records: Vec<(String, String)>,
 ) -> Result<(), AppError> {

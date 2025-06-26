@@ -3,9 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
-use assert_json_diff::{
-  assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
-};
+use assert_json_diff::{assert_json_include, assert_json_matches_no_panic, CompareMode, Config};
 use async_trait::async_trait;
 use bytes::Bytes;
 use collab::core::collab::DataSource;
@@ -25,7 +23,7 @@ use mime::Mime;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use shared_entity::dto::publish_dto::PublishViewMetaData;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing::trace;
 use uuid::Uuid;
@@ -38,10 +36,9 @@ use client_api::entity::{
 };
 use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
-  AFCollabEmbedInfo, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo,
-  AFWorkspace, AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult,
-  CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams, QuerySnapshotParams,
-  SnapshotData,
+  AFCollabEmbedInfo, AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
+  AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult, CollabParams,
+  CreateCollabParams, QueryCollab, QueryCollabParams,
 };
 use shared_entity::dto::ai_dto::CalculateSimilarityParams;
 use shared_entity::dto::search_dto::SearchDocumentResponseItem;
@@ -700,47 +697,6 @@ impl TestClient {
     );
   }
 
-  pub async fn get_snapshot(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-    snapshot_id: &i64,
-  ) -> Result<SnapshotData, AppResponseError> {
-    self
-      .api_client
-      .get_snapshot(
-        workspace_id,
-        object_id,
-        QuerySnapshotParams {
-          snapshot_id: *snapshot_id,
-        },
-      )
-      .await
-  }
-
-  pub async fn create_snapshot(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-    collab_type: CollabType,
-  ) -> Result<AFSnapshotMeta, AppResponseError> {
-    self
-      .api_client
-      .create_snapshot(workspace_id, object_id, collab_type)
-      .await
-  }
-
-  pub async fn get_snapshot_list(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-  ) -> Result<AFSnapshotMetas, AppResponseError> {
-    self
-      .api_client
-      .get_snapshot_list(workspace_id, object_id)
-      .await
-  }
-
   pub async fn create_collab_list(
     &mut self,
     workspace_id: &Uuid,
@@ -1068,56 +1024,6 @@ impl TestClient {
 
     // wait a while for folder collab to be synced
     tokio::time::sleep(Duration::from_secs(1)).await;
-  }
-}
-
-pub async fn assert_server_snapshot(
-  client: &client_api::Client,
-  workspace_id: &Uuid,
-  object_id: &Uuid,
-  snapshot_id: &i64,
-  expected: Value,
-) {
-  let mut retry_count = 0;
-  loop {
-    tokio::select! {
-       _ = tokio::time::sleep(Duration::from_secs(10)) => {
-         panic!("Query snapshot timeout");
-       },
-       result = client.get_snapshot(workspace_id, object_id, QuerySnapshotParams {snapshot_id: *snapshot_id },
-        ) => {
-        retry_count += 1;
-        match &result {
-          Ok(snapshot_data) => {
-          let encoded_collab_v1 =
-            EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
-          let options = CollabOptions::new(object_id.to_string(), TestClient::random_client_id())
-            .with_data_source(DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()));
-          let json = Collab::new_with_options(
-            CollabOrigin::Empty,
-            options,
-          )
-          .unwrap()
-          .to_json_value();
-            if retry_count > 10 {
-              assert_json_eq!(json, expected);
-              break;
-            }
-
-            if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
-              break;
-            }
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-          },
-          Err(e) => {
-            if retry_count > 10 {
-              panic!("Query snapshot failed: {}", e);
-            }
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-          }
-        }
-       },
-    }
   }
 }
 

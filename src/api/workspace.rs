@@ -278,15 +278,6 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/usage").route(web::get().to(get_workspace_usage_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/{object_id}/snapshot")
-        .route(web::get().to(get_collab_snapshot_handler))
-        .route(web::post().to(create_collab_snapshot_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/{object_id}/snapshot/list")
-        .route(web::get().to(get_all_collab_snapshot_list_handler)),
-    )
-    .service(
       web::resource("/published/{publish_namespace}")
         .route(web::get().to(get_default_published_collab_info_meta_handler)),
     )
@@ -1755,76 +1746,6 @@ async fn favorite_page_view_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
-}
-
-#[instrument(level = "trace", skip_all, err)]
-async fn get_collab_snapshot_handler(
-  payload: Json<QuerySnapshotParams>,
-  path: web::Path<(Uuid, Uuid)>,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<SnapshotData>>> {
-  let (workspace_id, object_id) = path.into_inner();
-  let data = state
-    .collab_access_control_storage
-    .get_collab_snapshot(workspace_id, object_id, &payload.snapshot_id)
-    .await
-    .map_err(AppResponseError::from)?;
-
-  Ok(Json(AppResponse::Ok().with_data(data)))
-}
-
-#[instrument(level = "trace", skip_all, err)]
-async fn create_collab_snapshot_handler(
-  user_uuid: UserUuid,
-  state: Data<AppState>,
-  path: web::Path<(Uuid, Uuid)>,
-  payload: Json<CollabType>,
-) -> Result<Json<AppResponse<AFSnapshotMeta>>> {
-  let (workspace_id, object_id) = path.into_inner();
-  let collab_type = payload.into_inner();
-  let uid = state
-    .user_cache
-    .get_user_uid(&user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
-  let data = state
-    .collab_access_control_storage
-    .get_full_encode_collab(
-      GetCollabOrigin::User { uid },
-      &workspace_id,
-      &object_id,
-      collab_type,
-    )
-    .await?
-    .encoded_collab
-    .doc_state;
-
-  let meta = state
-    .collab_access_control_storage
-    .create_snapshot(InsertSnapshotParams {
-      object_id,
-      workspace_id,
-      doc_state: data,
-      collab_type,
-    })
-    .await?;
-
-  Ok(Json(AppResponse::Ok().with_data(meta)))
-}
-
-#[instrument(level = "trace", skip(path, state), err)]
-async fn get_all_collab_snapshot_list_handler(
-  _user_uuid: UserUuid,
-  path: web::Path<(Uuid, Uuid)>,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
-  let (workspace_id, object_id) = path.into_inner();
-  let data = state
-    .collab_access_control_storage
-    .get_collab_snapshot_list(&workspace_id, &object_id)
-    .await
-    .map_err(AppResponseError::from)?;
-  Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
 #[instrument(level = "debug", skip(payload, state), err)]

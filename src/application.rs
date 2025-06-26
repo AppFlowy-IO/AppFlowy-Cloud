@@ -38,7 +38,6 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
-use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::ws2::{CollabStore, WsServer};
 use appflowy_collaborate::CollaborationServer;
 use collab_stream::awareness_gossip::AwarenessGossip;
@@ -314,17 +313,10 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     workspace_access_control: workspace_access_control.clone(),
     cache: collab_cache.clone(),
   };
-  let snapshot_control = SnapshotControl::new(
-    pg_pool.clone(),
-    s3_client.clone(),
-    metrics.collab_metrics.clone(),
-  )
-  .await;
 
   let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
     collab_cache.clone(),
     collab_storage_access_control.clone(),
-    snapshot_control,
   ));
 
   let mailer = get_mailer(&config.mailer).await?;

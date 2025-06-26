@@ -9,7 +9,6 @@ pub mod group;
 pub mod metrics;
 mod permission;
 mod rt_server;
-pub mod snapshot;
 mod util;
 pub mod ws2;
 

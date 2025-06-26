@@ -21,9 +21,9 @@ use crate::group::state::GroupManagementState;
 use crate::metrics::CollabRealtimeMetrics;
 use indexer::scheduler::IndexerScheduler;
 
-pub struct GroupManager<S> {
+pub struct GroupManager {
   state: GroupManagementState,
-  storage: Arc<S>,
+  storage: Arc<dyn CollabStorage>,
   access_control: Arc<dyn RealtimeAccessControl>,
   metrics_calculate: Arc<CollabRealtimeMetrics>,
   collab_redis_stream: Arc<CollabRedisStream>,
@@ -31,13 +31,10 @@ pub struct GroupManager<S> {
   indexer_scheduler: Arc<IndexerScheduler>,
 }
 
-impl<S> GroupManager<S>
-where
-  S: CollabStorage,
-{
+impl GroupManager {
   #[allow(clippy::too_many_arguments)]
   pub async fn new(
-    storage: Arc<S>,
+    storage: Arc<dyn CollabStorage>,
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics_calculate: Arc<CollabRealtimeMetrics>,
     collab_stream: CollabRedisStream,

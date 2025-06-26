@@ -1,7 +1,7 @@
 use super::session::{WsInput, WsSession};
 use super::workspace::{Terminate, Workspace};
-use crate::collab::collab_store::CollabStore;
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
+use crate::collab::ws_collab_store::CollabStore;
 use crate::ws2::{BulkPermissionUpdate, PermissionUpdate};
 use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};

@@ -1,4 +1,3 @@
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::{
   collab::GetCollabOrigin,
   publish::{
@@ -44,6 +43,7 @@ use crate::{
 
 use crate::biz::collab::utils::DUMMY_UID;
 use collab::core::collab::default_client_id;
+use database::collab::CollabStorage;
 
 async fn check_workspace_owner_or_publisher(
   pg_pool: &PgPool,
@@ -206,7 +206,7 @@ pub async fn get_workspace_publish_namespace(
 
 pub async fn list_collab_publish_info(
   publish_collab_store: &dyn PublishedCollabStore,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   workspace_id: Uuid,
 ) -> Result<Vec<PublishInfoView>, AppError> {
   let folder = get_latest_collab_folder(

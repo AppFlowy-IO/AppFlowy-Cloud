@@ -1,7 +1,7 @@
 use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
-use crate::collab::collab_store::CollabStore;
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
+use crate::collab::ws_collab_store::CollabStore;
 use crate::ws2::{BroadcastPermissionChanges, PublishUpdate, UpdateUserPermissions};
 use actix::ActorFutureExt;
 use actix::{

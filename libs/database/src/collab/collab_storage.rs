@@ -1,7 +1,7 @@
 use app_error::AppError;
 use async_trait::async_trait;
 
-use database_entity::dto::{AFAccessLevel, CollabParams, QueryCollab, QueryCollabResult};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
 use appflowy_proto::TimestampedEncodedCollab;
 use collab_entity::CollabType;
@@ -13,46 +13,6 @@ use uuid::Uuid;
 pub const COLLAB_SNAPSHOT_LIMIT: i64 = 30;
 pub const SNAPSHOT_PER_HOUR: i64 = 6;
 pub type AppResult<T, E = AppError> = core::result::Result<T, E>;
-
-/// [CollabStorageAccessControl] is a trait that provides access control when accessing the storage
-/// of the Collab object.
-#[async_trait]
-pub trait CollabStorageAccessControl: Send + Sync + 'static {
-  /// Updates the cache of the access level of the user for given collab object.
-  async fn update_policy(
-    &self,
-    uid: &i64,
-    oid: &Uuid,
-    level: AFAccessLevel,
-  ) -> Result<(), AppError>;
-
-  /// Removes the access level of the user for given collab object.
-  async fn enforce_read_collab(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-    oid: &Uuid,
-  ) -> Result<(), AppError>;
-
-  /// Enforce the user's permission to write to the collab object.
-  async fn enforce_write_collab(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-    oid: &Uuid,
-  ) -> Result<(), AppError>;
-
-  /// Enforce the user's permission to write to the workspace.
-  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
-
-  /// Enforce the user's permission to delete the collab object.
-  async fn enforce_delete(
-    &self,
-    workspace_id: &Uuid,
-    uid: &i64,
-    oid: &Uuid,
-  ) -> Result<(), AppError>;
-}
 
 #[derive(Clone)]
 pub enum GetCollabOrigin {

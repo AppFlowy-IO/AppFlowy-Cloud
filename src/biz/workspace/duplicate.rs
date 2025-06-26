@@ -11,7 +11,6 @@ use crate::{
 use actix::Addr;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::ws2::WsServer;
 use collab::core::collab::default_client_id;
 use collab_database::{
@@ -43,7 +42,7 @@ pub async fn duplicate_view_tree_and_collab(
   view_id: Uuid,
   suffix: &str,
 ) -> Result<(), AppError> {
-  let collab_storage = state.collab_access_control_storage.clone();
+  let collab_storage = state.collab_storage.clone();
   let appflowy_web_metrics = &state.metrics.appflowy_web_metrics;
 
   let uid = user.uid;
@@ -185,7 +184,7 @@ async fn duplicate_database(
   appflowy_web_metrics: &AppFlowyWebMetrics,
   collab_update_writer: &Addr<WsServer>,
   user: RealtimeUser,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<dyn CollabStorage>,
   workspace_id: Uuid,
   duplicate_context: &DuplicateContext,
   workspace_database: &mut WorkspaceDatabase,
@@ -288,7 +287,7 @@ async fn duplicate_database(
 }
 
 async fn duplicate_document(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<dyn CollabStorage>,
   workspace_id: Uuid,
   uid: i64,
   duplicate_context: &DuplicateContext,

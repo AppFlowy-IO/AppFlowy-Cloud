@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use chrono::DateTime;
 use chrono::Utc;
 use collab::preclude::Collab;
@@ -83,10 +82,11 @@ use collab::core::collab::{default_client_id, CollabOptions};
 use shared_entity::dto::workspace_dto::{FolderView, PublishedView};
 use sqlx::types::Uuid;
 use std::collections::HashSet;
+use std::sync::Arc;
 use yrs::block::ClientID;
 
 pub async fn get_user_favorite_folder_views(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -116,7 +116,7 @@ pub async fn get_user_favorite_folder_views(
 }
 
 pub async fn get_user_recent_folder_views(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   pg_pool: &PgPool,
   uid: i64,
   workspace_id: Uuid,
@@ -146,7 +146,7 @@ pub async fn get_user_recent_folder_views(
 }
 
 pub async fn get_user_trash_folder_views(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   uid: i64,
   workspace_id: Uuid,
 ) -> Result<Vec<TrashFolderView>, AppError> {
@@ -246,7 +246,7 @@ pub async fn get_user_workspace_structure(
   depth: u32,
   root_view_id: &Uuid,
 ) -> Result<FolderView, AppError> {
-  let collab_storage = &state.collab_access_control_storage;
+  let collab_storage = &state.collab_storage;
   let appflowy_web_metrics = &state.metrics.appflowy_web_metrics;
   let depth_limit = 10;
   let client_id = default_client_id();
@@ -280,7 +280,7 @@ pub async fn get_user_workspace_structure(
 }
 
 pub async fn get_latest_workspace_database(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   pg_pool: &PgPool,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
@@ -302,7 +302,7 @@ pub async fn get_latest_workspace_database(
 }
 
 pub async fn get_published_view(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   publish_namespace: String,
   pg_pool: &PgPool,
 ) -> Result<PublishedView, AppError> {
@@ -344,7 +344,7 @@ pub async fn get_published_view(
 
 pub async fn list_database(
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   uid: i64,
   workspace_id: Uuid,
 ) -> Result<Vec<AFDatabase>, AppError> {
@@ -397,7 +397,7 @@ pub async fn list_database(
 }
 
 pub async fn list_database_row_ids(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
 ) -> Result<Vec<AFDatabaseRow>, AppError> {
@@ -470,7 +470,7 @@ pub async fn insert_database_row(
         workspace_uuid,
         uid,
         new_doc_id,
-        &state.collab_access_control_storage,
+        &state.collab_storage,
         row_doc_content,
       )
       .await?;
@@ -479,12 +479,8 @@ pub async fn insert_database_row(
     _ => None,
   };
 
-  let (mut db_collab, db_body) = get_latest_collab_database_body(
-    &state.collab_access_control_storage,
-    workspace_uuid,
-    database_uuid,
-  )
-  .await?;
+  let (mut db_collab, db_body) =
+    get_latest_collab_database_body(&state.collab_storage, workspace_uuid, database_uuid).await?;
   write_to_database_row(
     &db_body,
     &mut new_db_row_collab.transact_mut(),
@@ -542,7 +538,7 @@ pub async fn insert_database_row(
     )
     .await?;
 
-  let collab_storage = state.collab_access_control_storage.clone();
+  let collab_storage = state.collab_storage.clone();
   let mut db_txn = state.pg_pool.begin().await?;
   // handle row document (if provided)
   if let Some((doc_id, created_doc)) = new_row_doc_creation {
@@ -604,7 +600,7 @@ pub async fn upsert_database_row(
   cell_value_by_id: HashMap<String, serde_json::Value>,
   row_doc_content: Option<String>,
 ) -> Result<(), AppError> {
-  let collab_storage = &state.collab_access_control_storage;
+  let collab_storage = &state.collab_storage;
   let (mut db_row_collab, db_row_body) =
     match get_latest_collab_database_row_body(collab_storage, workspace_uuid, row_id).await {
       Ok(res) => res,
@@ -756,7 +752,7 @@ pub async fn upsert_database_row(
 }
 
 pub async fn get_database_fields(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
 ) -> Result<Vec<AFDatabaseField>, AppError> {
@@ -786,12 +782,8 @@ pub async fn add_database_field(
   database_id: Uuid,
   insert_field: AFInsertDatabaseField,
 ) -> Result<String, AppError> {
-  let (mut db_collab, db_body) = get_latest_collab_database_body(
-    &state.collab_access_control_storage,
-    workspace_id,
-    database_id,
-  )
-  .await?;
+  let (mut db_collab, db_body) =
+    get_latest_collab_database_body(&state.collab_storage, workspace_id, database_id).await?;
 
   let new_id = gen_field_id();
   let mut type_options = TypeOptions::new();
@@ -844,7 +836,7 @@ pub async fn add_database_field(
 }
 
 pub async fn list_database_row_ids_updated(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   pg_pool: &PgPool,
   workspace_uuid: Uuid,
   database_uuid: Uuid,
@@ -862,7 +854,7 @@ pub async fn list_database_row_ids_updated(
 }
 
 pub async fn list_database_row_details(
-  collab_storage: &CollabAccessControlStorage,
+  collab_storage: &Arc<dyn CollabStorage>,
   uid: i64,
   workspace_uuid: Uuid,
   database_uuid: Uuid,

@@ -63,7 +63,8 @@ async fn create_import_handler(
   let workspace = create_empty_workspace(
     &state.pg_pool,
     state.workspace_access_control.clone(),
-    &state.collab_access_control_storage,
+    &state.collab_storage,
+    &state.metrics.collab_metrics,
     &user_uuid,
     uid,
     &params.workspace_name,
@@ -209,7 +210,8 @@ async fn import_data_handler(
   let workspace = create_empty_workspace(
     &state.pg_pool,
     state.workspace_access_control.clone(),
-    &state.collab_access_control_storage,
+    &state.collab_storage,
+    &state.metrics.collab_metrics,
     &user_uuid,
     uid,
     &file.name,

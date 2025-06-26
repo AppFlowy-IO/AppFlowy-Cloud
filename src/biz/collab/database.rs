@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::utils::{batch_get_latest_collab_encoded, get_latest_collab_encoded};
+use super::utils::batch_get_latest_collab_encoded;
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use async_trait::async_trait;
@@ -22,7 +22,7 @@ use collab_database::{
 };
 use collab_entity::{CollabType, EncodedCollab};
 use dashmap::DashMap;
-use database::collab::GetCollabOrigin;
+use database::collab::{CollabStorage, GetCollabOrigin};
 use uuid::Uuid;
 use yrs::block::ClientID;
 
@@ -189,17 +189,6 @@ impl PostgresDatabaseCollabService {
       cache: Arc::new(DashMap::new()),
     }
   }
-  pub async fn get_latest_collab(&self, oid: Uuid, collab_type: CollabType) -> EncodedCollab {
-    get_latest_collab_encoded(
-      &self.collab_storage,
-      GetCollabOrigin::Server,
-      self.workspace_id,
-      oid,
-      collab_type,
-    )
-    .await
-    .unwrap()
-  }
 }
 
 #[async_trait]
@@ -214,7 +203,18 @@ impl DatabaseCollabReader for PostgresDatabaseCollabService {
     collab_type: CollabType,
   ) -> Result<EncodedCollab, DatabaseError> {
     let object_id = Uuid::parse_str(object_id)?;
-    let collab_data = self.get_latest_collab(object_id, collab_type).await;
+    let collab_data = self
+      .collab_storage
+      .get_full_encode_collab(
+        GetCollabOrigin::Server,
+        &self.workspace_id,
+        &object_id,
+        collab_type,
+      )
+      .await
+      .map(|v| v.encoded_collab)
+      .map_err(|err| DatabaseError::Internal(err.into()))?;
+
     Ok(collab_data)
   }
 

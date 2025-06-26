@@ -117,6 +117,7 @@ pub async fn search_document(
     GetCollabOrigin::User { uid },
     workspace_uuid,
     default_client_id(),
+    uid,
   )
   .await?;
   let private_views = private_space_and_trash_view_ids(&folder)?;

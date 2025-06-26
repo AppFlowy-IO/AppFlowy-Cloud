@@ -214,6 +214,7 @@ pub async fn get_latest_collab_database_row_body(
     workspace_id,
     db_row_id,
     CollabType::DatabaseRow,
+    default_client_id(),
   )
   .await?;
 
@@ -240,6 +241,7 @@ pub async fn get_latest_collab_database_body(
     workspace_id,
     database_id,
     CollabType::Database,
+    default_client_id(),
   )
   .await?;
 
@@ -261,17 +263,23 @@ pub async fn get_latest_collab_database_body(
 }
 
 #[instrument(level = "trace", skip_all)]
-pub async fn get_latest_collab_encoded(
+pub async fn get_latest_collab(
   collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
   object_id: Uuid,
   collab_type: CollabType,
-) -> Result<EncodedCollab, AppError> {
-  collab_storage
+  client_id: ClientID,
+) -> Result<Collab, AppError> {
+  let encode_collab = collab_storage
     .get_full_encode_collab(collab_origin, &workspace_id, &object_id, collab_type)
     .await
-    .map(|v| v.encoded_collab)
+    .map(|v| v.encoded_collab)?;
+  let options =
+    CollabOptions::new(object_id.to_string(), client_id).with_data_source(encode_collab.into());
+  let collab = Collab::new_with_options(CollabOrigin::Server, options)
+    .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok(collab)
 }
 
 pub async fn batch_get_latest_collab_encoded(
@@ -321,25 +329,6 @@ pub async fn batch_get_latest_collab_encoded(
   Ok(encoded_collabs)
 }
 
-pub async fn get_latest_collab(
-  storage: &CollabAccessControlStorage,
-  origin: GetCollabOrigin,
-  workspace_id: Uuid,
-  oid: Uuid,
-  collab_type: CollabType,
-) -> Result<Collab, AppError> {
-  let ec = get_latest_collab_encoded(storage, origin, workspace_id, oid, collab_type).await?;
-  let options =
-    CollabOptions::new(oid.to_string(), default_client_id()).with_data_source(ec.into());
-  let collab = Collab::new_with_options(CollabOrigin::Server, options).map_err(|e| {
-    AppError::Internal(anyhow::anyhow!(
-      "Failed to create collab from encoded collab: {:?}",
-      e
-    ))
-  })?;
-  Ok(collab)
-}
-
 pub async fn get_latest_collab_workspace_database_body(
   pg_pool: &PgPool,
   storage: &CollabAccessControlStorage,
@@ -353,6 +342,7 @@ pub async fn get_latest_collab_workspace_database_body(
     workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,
+    default_client_id(),
   )
   .await?;
   let ws_db = WorkspaceDatabaseBody::open(&mut collab).map_err(|err| {
@@ -364,37 +354,27 @@ pub async fn get_latest_collab_workspace_database_body(
   Ok(ws_db)
 }
 
+pub const DUMMY_UID: i64 = 0;
 pub async fn get_latest_collab_folder(
   collab_storage: &CollabAccessControlStorage,
   collab_origin: GetCollabOrigin,
   workspace_id: Uuid,
   client_id: ClientID,
+  uid: i64,
 ) -> Result<Folder, AppError> {
-  let folder_uid = if let GetCollabOrigin::User { uid } = collab_origin {
-    uid
-  } else {
-    // Dummy uid to open the collab folder if the request does not originate from user
-    0
-  };
-  let encoded_collab = get_latest_collab_encoded(
-    collab_storage,
-    collab_origin,
-    workspace_id,
-    workspace_id,
-    CollabType::Folder,
-  )
-  .await
-  .map_err(|err| {
-    AppError::Internal(anyhow::anyhow!(
-      "Unable to retrieve workspace folder {}: {}",
-      workspace_id,
-      err
-    ))
-  })?;
+  let encoded_collab = collab_storage
+    .get_full_encode_collab(
+      collab_origin,
+      &workspace_id,
+      &workspace_id,
+      CollabType::Folder,
+    )
+    .await
+    .map(|v| v.encoded_collab)?;
 
   let folder = tokio::task::spawn_blocking(move || {
     Folder::from_collab_doc_state(
-      folder_uid,
+      uid,
       CollabOrigin::Server,
       encoded_collab.into(),
       &workspace_id.to_string(),
@@ -425,6 +405,7 @@ pub async fn get_latest_collab_document(
     workspace_id,
     doc_oid,
     CollabType::Document,
+    default_client_id(),
   )
   .await?;
   Document::open(doc_collab).map_err(|e| {
@@ -562,6 +543,7 @@ pub async fn create_row_document(
     GetCollabOrigin::Server,
     workspace_id,
     client_id,
+    uid,
   )
   .await?;
   let folder_updates = {

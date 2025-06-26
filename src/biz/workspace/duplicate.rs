@@ -1,10 +1,11 @@
 use super::page_view::{update_workspace_database_data, update_workspace_folder_data};
+use crate::biz::collab::utils::get_latest_collab;
 use crate::state::AppState;
 use crate::{
   api::metrics::AppFlowyWebMetrics,
   biz::collab::{
     database::PostgresDatabaseCollabService,
-    utils::{collab_from_doc_state, get_latest_collab_encoded, get_latest_collab_folder},
+    utils::{collab_from_doc_state, get_latest_collab_folder},
   },
 };
 use actix::Addr;
@@ -52,6 +53,7 @@ pub async fn duplicate_view_tree_and_collab(
     GetCollabOrigin::User { uid },
     workspace_id,
     client_id,
+    uid,
   )
   .await?;
   let trash_sections: HashSet<String> = folder
@@ -75,29 +77,15 @@ pub async fn duplicate_view_tree_and_collab(
         err
       ))
     })?;
-  let encoded_ws_db = get_latest_collab_encoded(
+  let ws_db_collab = get_latest_collab(
     &collab_storage,
     GetCollabOrigin::User { uid },
     workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,
+    client_id,
   )
-  .await
-  .map_err(|err| {
-    AppError::Internal(anyhow::anyhow!(
-      "Unable to get latest workspace database collab {}: {}",
-      &ws_db_oid,
-      err
-    ))
-  })?;
-  let ws_db_collab = collab_from_doc_state(encoded_ws_db.doc_state.to_vec(), &ws_db_oid, client_id)
-    .map_err(|err| {
-      AppError::Internal(anyhow::anyhow!(
-        "Unable to decode workspace database collab {}: {}",
-        &ws_db_oid,
-        err
-      ))
-    })?;
+  .await?;
   let mut ws_db = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to open workspace database body: {}",

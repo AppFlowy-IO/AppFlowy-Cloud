@@ -10,8 +10,8 @@ use crate::biz::collab::folder_view::{
 };
 use crate::biz::collab::ops::get_latest_workspace_database;
 use crate::biz::collab::utils::{
-  batch_get_latest_collab_encoded, collab_from_doc_state, collab_to_doc_state,
-  get_latest_collab_database_body, get_latest_collab_encoded, get_latest_collab_folder,
+  batch_get_latest_collab_encoded, collab_to_doc_state, get_latest_collab,
+  get_latest_collab_database_body, get_latest_collab_folder,
 };
 use crate::state::AppState;
 use actix::Addr;
@@ -91,6 +91,7 @@ pub async fn update_space(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = update_space_properties(
@@ -134,6 +135,7 @@ pub async fn create_space(
     collab_origin,
     workspace_id,
     client_id,
+    user.uid,
   )
   .await?;
   let folder_update = add_new_space_to_folder(
@@ -195,6 +197,7 @@ pub async fn create_folder_view(
     collab_origin.clone(),
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = add_new_view_to_folder(
@@ -562,16 +565,16 @@ async fn append_block_to_document_collab(
   oid: Uuid,
   serde_blocks: &[SerdeBlock],
 ) -> Result<Vec<u8>, AppError> {
-  let original_doc_state = get_latest_collab_encoded(
+  let mut collab = get_latest_collab(
     collab_storage,
     GetCollabOrigin::User { uid },
     workspace_id,
     oid,
     CollabType::Document,
+    default_client_id(),
   )
-  .await?
-  .doc_state;
-  let mut collab = collab_from_doc_state(original_doc_state.to_vec(), &oid, default_client_id())?;
+  .await?;
+
   let document_body = DocumentBody::from_collab(&collab)
     .ok_or_else(|| AppError::Internal(anyhow::anyhow!("invalid document collab")))?;
   let document_data = {
@@ -1040,6 +1043,7 @@ async fn create_document_page(
     collab_origin,
     workspace_id,
     client_id,
+    user.uid,
   )
   .await?;
   let folder_update = add_new_view_to_folder(
@@ -1175,6 +1179,7 @@ async fn create_database_page(
     collab_origin.clone(),
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = add_new_view_to_folder(
@@ -1301,6 +1306,7 @@ async fn create_chat_page(
     collab_origin.clone(),
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let rag_ids = get_rag_ids(&folder, parent_view_id).await;
@@ -1349,6 +1355,7 @@ pub async fn move_page(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = move_view(view_id, new_parent_view_id, prev_view_id, &mut folder).await?;
@@ -1377,6 +1384,7 @@ pub async fn reorder_favorite_page(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = reorder_favorite_section(view_id, prev_view_id, &mut folder).await?;
@@ -1403,6 +1411,7 @@ pub async fn move_page_to_trash(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let trash_info = folder.get_my_trash_info();
@@ -1433,6 +1442,7 @@ pub async fn restore_page_from_trash(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = move_view_out_from_trash(view_id, &mut folder).await?;
@@ -1459,6 +1469,7 @@ pub async fn add_recent_pages(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = extend_recent_views(&recent_view_ids, &mut folder).await?;
@@ -1484,6 +1495,7 @@ pub async fn restore_all_pages_from_trash(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = move_all_views_out_from_trash(&mut folder).await?;
@@ -1511,6 +1523,7 @@ pub async fn delete_trash(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let update = delete_view_from_trash(view_id, &mut folder).await?;
@@ -1537,6 +1550,7 @@ pub async fn delete_all_pages_from_trash(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let update = delete_all_views_from_trash(&mut folder).await?;
@@ -1568,6 +1582,7 @@ pub async fn update_page(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update =
@@ -1597,6 +1612,7 @@ pub async fn update_page_name(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = update_view_name(view_id, &mut folder, name).await?;
@@ -1625,6 +1641,7 @@ pub async fn update_page_icon(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = update_view_icon(view_id, &mut folder, icon).await?;
@@ -1653,6 +1670,7 @@ pub async fn update_page_extra(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = update_view_extra(view_id, &mut folder, extra).await?;
@@ -1683,6 +1701,7 @@ pub async fn favorite_page(
     collab_origin,
     workspace_id,
     default_client_id(),
+    user.uid,
   )
   .await?;
   let folder_update = update_favorite_view(view_id, &mut folder, is_favorite, is_pinned).await?;
@@ -1737,6 +1756,7 @@ pub async fn publish_page(
     GetCollabOrigin::User { uid },
     workspace_id,
     default_client_id(),
+    uid,
   )
   .await?;
   let view = folder
@@ -1823,14 +1843,15 @@ async fn generate_publish_data_for_document(
   workspace_id: Uuid,
   view_id: Uuid,
 ) -> Result<Vec<u8>, AppError> {
-  let collab = get_latest_collab_encoded(
-    collab_access_control_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    view_id,
-    CollabType::Document,
-  )
-  .await?;
+  let collab = collab_access_control_storage
+    .get_full_encode_collab(
+      GetCollabOrigin::User { uid },
+      &workspace_id,
+      &view_id,
+      CollabType::Document,
+    )
+    .await
+    .map(|v| v.encoded_collab)?;
   Ok(collab.doc_state.to_vec())
 }
 
@@ -1942,6 +1963,7 @@ pub async fn get_page_view_collab(
     GetCollabOrigin::User { uid },
     workspace_id,
     default_client_id(),
+    uid,
   )
   .await?;
   let view = folder.get_view(&view_id.to_string());
@@ -2100,6 +2122,7 @@ async fn get_page_collab_data_for_database(
   workspace_id: &Uuid,
   view_id: &Uuid,
 ) -> Result<PageCollabData, AppError> {
+  let client_id = default_client_id();
   let ws_db_oid = select_workspace_database_oid(pg_pool, workspace_id)
     .await
     .map_err(|err| {
@@ -2109,31 +2132,15 @@ async fn get_page_collab_data_for_database(
         err
       ))
     })?;
-  let ws_db = get_latest_collab_encoded(
+  let ws_db_collab = get_latest_collab(
     collab_access_control_storage,
     GetCollabOrigin::User { uid },
     *workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,
+    client_id,
   )
-  .await
-  .map_err(|err| {
-    AppError::Internal(anyhow::anyhow!(
-      "Unable to get latest workspace database collab {}: {}",
-      &ws_db_oid,
-      err
-    ))
-  })?;
-  let ws_db_collab =
-    collab_from_doc_state(ws_db.doc_state.to_vec(), &ws_db_oid, default_client_id()).map_err(
-      |err| {
-        AppError::Internal(anyhow::anyhow!(
-          "Unable to decode workspace database collab {}: {}",
-          &ws_db_oid,
-          err
-        ))
-      },
-    )?;
+  .await?;
   let ws_db_body = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
     AppError::Internal(anyhow!("Failed to open workspace database body: {}", err))
   })?;
@@ -2146,22 +2153,15 @@ async fn get_page_collab_data_for_database(
       )))?
       .database_id
   };
-  let db = get_latest_collab_encoded(
-    collab_access_control_storage,
-    GetCollabOrigin::User { uid },
-    *workspace_id,
-    Uuid::parse_str(&db_oid)?,
-    CollabType::Database,
-  )
-  .await
-  .map_err(|err| {
-    AppError::Internal(anyhow::anyhow!(
-      "Unable to get latest database collab {}: {}",
-      &db_oid,
-      err
-    ))
-  })?;
-  let client_id = default_client_id();
+  let db = collab_access_control_storage
+    .get_full_encode_collab(
+      GetCollabOrigin::User { uid },
+      workspace_id,
+      &Uuid::parse_str(&db_oid)?,
+      CollabType::Database,
+    )
+    .await
+    .map(|v| v.encoded_collab)?;
   let options =
     CollabOptions::new(db_oid.to_string(), client_id).with_data_source(db.clone().into());
   let db_collab = Collab::new_with_options(CollabOrigin::Server, options).map_err(|err| {
@@ -2243,20 +2243,16 @@ async fn get_page_collab_data_for_document(
   workspace_id: &Uuid,
   view_id: &Uuid,
 ) -> Result<PageCollabData, AppError> {
-  let collab = get_latest_collab_encoded(
-    collab_access_control_storage,
-    GetCollabOrigin::User { uid },
-    *workspace_id,
-    *view_id,
-    CollabType::Document,
-  )
-  .await
-  .map_err(|err| {
-    AppError::InvalidFolderView(format!(
-      "Unable to get latest collab for view {}: {}",
-      view_id, err
-    ))
-  })?;
+  let collab = collab_access_control_storage
+    .get_full_encode_collab(
+      GetCollabOrigin::User { uid },
+      workspace_id,
+      view_id,
+      CollabType::Document,
+    )
+    .await
+    .map(|v| v.encoded_collab)?;
+
   Ok(PageCollabData {
     encoded_collab: collab.doc_state.clone().to_vec(),
     row_data: HashMap::default(),
@@ -2302,24 +2298,15 @@ pub async fn create_database_view(
     )))?
     .database_id
     .parse()?;
-  let encoded_collab = get_latest_collab_encoded(
+  let mut database_collab = get_latest_collab(
     &state.collab_access_control_storage,
     GetCollabOrigin::User { uid },
     workspace_id,
     database_id,
     CollabType::Database,
+    client_id,
   )
   .await?;
-  let options =
-    CollabOptions::new(database_id.to_string(), client_id).with_data_source(encoded_collab.into());
-  let mut database_collab =
-    Collab::new_with_options(CollabOrigin::Server, options).map_err(|err| {
-      AppError::Internal(anyhow!(
-        "Unable to create collab from object id {}: {}",
-        &database_id,
-        err
-      ))
-    })?;
 
   let database_body = DatabaseBody::from_collab(
     &database_collab,
@@ -2390,6 +2377,7 @@ pub async fn create_database_view(
     GetCollabOrigin::User { uid },
     workspace_id,
     client_id,
+    user.uid,
   )
   .await?;
   let folder_update = add_new_view_to_folder(

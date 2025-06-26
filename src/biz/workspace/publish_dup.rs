@@ -13,7 +13,7 @@ use collab_database::workspace_database::WorkspaceDatabase;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View};
+use collab_folder::{CollabOrigin, RepeatedViewIdentifier, View};
 use database::collab::GetCollabOrigin;
 use database::collab::{select_workspace_database_oid, CollabStorage};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
@@ -32,7 +32,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::biz::collab::folder_view::to_folder_view_icon;
 use crate::biz::collab::folder_view::to_folder_view_layout;
-use crate::biz::collab::utils::collab_from_doc_state;
+use crate::biz::collab::utils::{
+  collab_from_doc_state, get_latest_collab, get_latest_collab_folder,
+};
 use tracing::error;
 use uuid::Uuid;
 use workspace_template::gen_view_id;
@@ -43,7 +45,6 @@ use yrs::Out;
 use yrs::{Map, MapRef};
 
 use crate::biz::collab::utils::collab_to_bin;
-use crate::biz::collab::utils::get_latest_collab_encoded;
 
 use crate::state::AppState;
 use appflowy_collaborate::ws2::CollabUpdatePublisher;
@@ -231,7 +232,7 @@ impl PublishCollabDuplicator {
     if !workspace_databases.is_empty() {
       let ws_db_oid = select_workspace_database_oid(&pg_pool, &dest_workspace_id).await?;
       let ws_db_collab = {
-        let ws_database_ec = get_latest_collab_encoded(
+        get_latest_collab(
           &collab_storage,
           GetCollabOrigin::User {
             uid: duplicator_uid,
@@ -239,9 +240,9 @@ impl PublishCollabDuplicator {
           dest_workspace_id,
           ws_db_oid,
           CollabType::WorkspaceDatabase,
+          default_client_id(),
         )
-        .await?;
-        collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid, client_id)?
+        .await?
       };
 
       let mut ws_db = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
@@ -275,28 +276,16 @@ impl PublishCollabDuplicator {
         .await?;
     }
 
-    let collab_folder_encoded = get_latest_collab_encoded(
+    let mut folder = get_latest_collab_folder(
       &collab_storage,
       GetCollabOrigin::User {
         uid: duplicator_uid,
       },
       dest_workspace_id,
-      dest_workspace_id,
-      CollabType::Folder,
+      client_id,
+      duplicator_uid,
     )
     .await?;
-
-    let mut folder = tokio::task::spawn_blocking(move || {
-      Folder::from_collab_doc_state(
-        duplicator_uid,
-        CollabOrigin::Server,
-        collab_folder_encoded.into(),
-        &dest_workspace_id.to_string(),
-        client_id,
-      )
-      .map_err(|e| AppError::Unhandled(e.to_string()))
-    })
-    .await??;
 
     let folder_updates = tokio::task::spawn_blocking(move || {
       let mut folder_txn = folder.collab.transact_mut();

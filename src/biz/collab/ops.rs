@@ -57,7 +57,6 @@ use super::folder_view::section_items_to_recent_folder_view;
 use super::folder_view::section_items_to_trash_folder_view;
 use super::folder_view::to_dto_folder_view_miminal;
 use super::publish_outline::collab_folder_to_published_outline;
-use super::utils::collab_to_bin;
 use super::utils::create_row_document;
 use super::utils::field_by_id_name_uniq;
 use super::utils::get_latest_collab;
@@ -72,6 +71,7 @@ use super::utils::CreatedRowDocument;
 use super::utils::DocChanges;
 use super::utils::DEFAULT_SPACE_ICON;
 use super::utils::DEFAULT_SPACE_ICON_COLOR;
+use super::utils::{collab_to_bin, DUMMY_UID};
 use crate::api::metrics::AppFlowyWebMetrics;
 use crate::biz::collab::folder_view::check_if_view_is_space;
 use crate::biz::collab::utils::get_database_row_doc_changes;
@@ -97,6 +97,7 @@ pub async fn get_user_favorite_folder_views(
     GetCollabOrigin::User { uid },
     workspace_id,
     client_id,
+    uid,
   )
   .await?;
   let publish_view_ids = select_published_view_ids_for_workspace(pg_pool, workspace_id).await?;
@@ -133,6 +134,7 @@ pub async fn get_user_recent_folder_views(
     GetCollabOrigin::User { uid },
     workspace_id,
     client_id,
+    uid,
   )
   .await?;
   let deleted_section_item_ids: Vec<String> = folder
@@ -168,6 +170,7 @@ pub async fn get_user_trash_folder_views(
     GetCollabOrigin::User { uid },
     workspace_id,
     client_id,
+    uid,
   )
   .await?;
   let section_items = folder.get_my_trash_sections();
@@ -279,6 +282,7 @@ pub async fn get_user_workspace_structure(
     GetCollabOrigin::User { uid: user.uid },
     workspace_id,
     client_id,
+    user.uid,
   )
   .await?;
   let patched_folder = fix_old_workspace_folder(
@@ -315,6 +319,7 @@ pub async fn get_latest_workspace_database(
     workspace_id,
     workspace_database_oid,
     CollabType::WorkspaceDatabase,
+    default_client_id(),
   )
   .await?;
 
@@ -334,6 +339,7 @@ pub async fn get_published_view(
     GetCollabOrigin::Server,
     workspace_id,
     default_client_id(),
+    DUMMY_UID,
   )
   .await?;
   let publish_view_ids_with_publish_info =
@@ -377,6 +383,7 @@ pub async fn list_database(
     workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,
+    default_client_id(),
   )
   .await?;
 
@@ -393,6 +400,7 @@ pub async fn list_database(
     GetCollabOrigin::User { uid },
     workspace_id,
     default_client_id(),
+    uid,
   )
   .await?;
 

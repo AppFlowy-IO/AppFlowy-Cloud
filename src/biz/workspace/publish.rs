@@ -42,6 +42,7 @@ use crate::{
   biz::collab::{folder_view::to_dto_folder_view_miminal, utils::get_latest_collab_folder},
 };
 
+use crate::biz::collab::utils::DUMMY_UID;
 use collab::core::collab::default_client_id;
 
 async fn check_workspace_owner_or_publisher(
@@ -213,6 +214,7 @@ pub async fn list_collab_publish_info(
     GetCollabOrigin::Server,
     workspace_id,
     default_client_id(),
+    DUMMY_UID,
   )
   .await?;
 

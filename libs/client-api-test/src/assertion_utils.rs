@@ -13,7 +13,6 @@ use collab::core::origin::CollabOrigin;
 use collab::lock::RwLock;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use database_entity::dto::QuerySnapshotParams;
 use shared_entity::dto::workspace_dto::CollabResponse;
 use tracing::info;
 
@@ -124,54 +123,6 @@ pub async fn assert_server_collab_eventually(
       } else {
         Err(anyhow!(
           "Server collab assertion failed.\nExpected: {}\nActual: {}",
-          serde_json::to_string_pretty(&expected).unwrap_or_default(),
-          serde_json::to_string_pretty(&json).unwrap_or_default()
-        ))
-      }
-    },
-    RetryConfig {
-      timeout: config.timeout,
-      poll_interval: config.retry_interval,
-      max_retries: config.max_retries,
-    },
-  )
-  .await
-}
-
-/// Asserts that a server snapshot eventually matches the expected JSON
-pub async fn assert_server_snapshot_eventually(
-  client: &client_api::Client,
-  workspace_id: &Uuid,
-  object_id: &Uuid,
-  snapshot_id: i64,
-  expected: Value,
-  config: AssertionConfig,
-) -> Result<(), Error> {
-  retry_with_backoff(
-    || async {
-      let snapshot_data = client
-        .get_snapshot(workspace_id, object_id, QuerySnapshotParams { snapshot_id })
-        .await
-        .map_err(|e| anyhow!("Failed to get snapshot: {}", e))?;
-
-      let encoded_collab =
-        collab::entity::EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1)
-          .map_err(|e| anyhow!("Failed to decode collab: {}", e))?;
-
-      let options = CollabOptions::new(object_id.to_string(), default_client_id())
-        .with_data_source(DataSource::DocStateV1(encoded_collab.doc_state.to_vec()));
-
-      let collab = Collab::new_with_options(CollabOrigin::Empty, options)
-        .map_err(|e| anyhow!("Failed to create collab: {}", e))?;
-
-      let json = collab.to_json_value();
-
-      if assert_json_matches_no_panic(&json, &expected, Config::new(config.comparison_mode)).is_ok()
-      {
-        Ok(())
-      } else {
-        Err(anyhow!(
-          "Server snapshot assertion failed.\nExpected: {}\nActual: {}",
           serde_json::to_string_pretty(&expected).unwrap_or_default(),
           serde_json::to_string_pretty(&json).unwrap_or_default()
         ))

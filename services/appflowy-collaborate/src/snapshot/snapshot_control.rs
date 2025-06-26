@@ -3,20 +3,17 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use collab::entity::{EncodedCollab, EncoderVersion};
-use collab_entity::CollabType;
 use sqlx::PgPool;
-use tracing::{debug, error, trace};
+use tracing::debug;
 use uuid::Uuid;
 use validator::Validate;
 
 use app_error::AppError;
 use database::collab::{
-  get_all_collab_snapshot_meta, latest_snapshot_time, select_snapshot, AppResult,
-  COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
+  get_all_collab_snapshot_meta, select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT,
 };
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::file::{BucketClient, ResponseBlob};
-use database::history::ops::get_latest_snapshot;
 use database_entity::dto::{
   AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData, ZSTD_COMPRESSION_LEVEL,
 };
@@ -79,31 +76,6 @@ impl SnapshotControl {
       pg_pool,
       s3,
       collab_metrics,
-    }
-  }
-
-  pub async fn should_create_snapshot(
-    &self,
-    workspace_id: &Uuid,
-    oid: &Uuid,
-  ) -> Result<bool, AppError> {
-    let latest_created_at = self.latest_snapshot_time(workspace_id, oid).await?;
-    // Subtracting a fixed duration that is known not to cause underflow. If `checked_sub_signed` returns `None`,
-    // it indicates an error in calculation, thus defaulting to creating a snapshot just in case.
-    let threshold_time = Utc::now().checked_sub_signed(chrono::Duration::hours(SNAPSHOT_PER_HOUR));
-
-    match (latest_created_at, threshold_time) {
-      // Return true if the latest snapshot is older than the threshold time, indicating a new snapshot should be created.
-      (Some(time), Some(threshold_time)) => {
-        trace!(
-          "latest snapshot time: {}, threshold time: {}",
-          time,
-          threshold_time
-        );
-        Ok(time < threshold_time)
-      },
-      // If there's no latest snapshot time available, assume a snapshot should be created.
-      _ => Ok(true),
     }
   }
 
@@ -215,18 +187,6 @@ impl SnapshotControl {
     }
   }
 
-  pub async fn queue_snapshot(&self, params: InsertSnapshotParams) -> Result<(), AppError> {
-    params.validate()?;
-    trace!("Queuing snapshot for {}", params.object_id);
-    let ctrl = self.clone();
-    tokio::spawn(async move {
-      if let Err(err) = ctrl.create_snapshot(params).await {
-        error!("Failed to create snapshot: {}", err);
-      }
-    });
-    Ok(())
-  }
-
   pub async fn get_snapshot(
     &self,
     workspace_id: Uuid,
@@ -236,54 +196,5 @@ impl SnapshotControl {
     self
       .get_collab_snapshot(workspace_id, object_id, snapshot_id)
       .await
-  }
-
-  pub async fn get_latest_snapshot(
-    &self,
-    workspace_id: Uuid,
-    oid: Uuid,
-    collab_type: CollabType,
-  ) -> Result<Option<SnapshotData>, AppError> {
-    let snapshot_prefix = collab_snapshot_prefix(&workspace_id, &oid);
-    let mut resp = self.s3.list_dir(&snapshot_prefix, 1).await?;
-    if let Some(key) = resp.pop() {
-      let resp = self.s3.get_blob(&key).await?;
-      let decompressed = zstd::decode_all(&*resp.to_blob())?;
-      let encoded_collab = EncodedCollab {
-        state_vector: Default::default(),
-        doc_state: decompressed.into(),
-        version: EncoderVersion::V1,
-      };
-      Ok(Some(SnapshotData {
-        object_id: oid,
-        encoded_collab_v1: encoded_collab.encode_to_bytes()?,
-        workspace_id,
-      }))
-    } else {
-      let snapshot = get_latest_snapshot(&oid, &collab_type, &self.pg_pool).await?;
-      Ok(
-        snapshot
-          .and_then(|row| row.snapshot_meta)
-          .map(|meta| SnapshotData {
-            object_id: oid,
-            encoded_collab_v1: meta.snapshot,
-            workspace_id,
-          }),
-      )
-    }
-  }
-
-  async fn latest_snapshot_time(
-    &self,
-    workspace_id: &Uuid,
-    oid: &Uuid,
-  ) -> Result<Option<DateTime<Utc>>, AppError> {
-    let snapshot_prefix = collab_snapshot_prefix(workspace_id, oid);
-    let mut resp = self.s3.list_dir(&snapshot_prefix, 1).await?;
-    if let Some(key) = resp.pop() {
-      Ok(get_timestamp(&key))
-    } else {
-      Ok(latest_snapshot_time(oid, &self.pg_pool).await?)
-    }
   }
 }

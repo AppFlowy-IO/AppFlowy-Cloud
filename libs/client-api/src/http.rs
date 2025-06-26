@@ -8,7 +8,6 @@ use client_api_entity::workspace_dto::RecentSectionItems;
 use client_api_entity::workspace_dto::TrashSectionItems;
 use client_api_entity::workspace_dto::{FolderView, QueryWorkspaceFolder, QueryWorkspaceParam};
 use client_api_entity::AuthProvider;
-use client_api_entity::CollabType;
 use client_api_entity::GetInvitationCodeInfoQuery;
 use client_api_entity::InvitationCodeInfo;
 use client_api_entity::InvitedWorkspace;
@@ -34,10 +33,7 @@ use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use crate::ws::ConnectInfo;
 use anyhow::anyhow;
 use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
-use client_api_entity::{
-  AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
-  QuerySnapshotParams, SnapshotData,
-};
+use client_api_entity::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use semver::Version;
 use shared_entity::dto::auth_dto::UpdateUserParams;
@@ -995,61 +991,6 @@ impl Client {
       .await?;
 
     process_response_error(resp).await
-  }
-
-  pub async fn get_snapshot_list(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-  ) -> Result<AFSnapshotMetas, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/{}/snapshot/list",
-      self.base_url, workspace_id, object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-    process_response_data::<AFSnapshotMetas>(resp).await
-  }
-
-  pub async fn get_snapshot(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-    params: QuerySnapshotParams,
-  ) -> Result<SnapshotData, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/{}/snapshot",
-      self.base_url, workspace_id, object_id,
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    process_response_data::<SnapshotData>(resp).await
-  }
-
-  pub async fn create_snapshot(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-    collab_type: CollabType,
-  ) -> Result<AFSnapshotMeta, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/{}/snapshot",
-      self.base_url, workspace_id, object_id,
-    );
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&collab_type)
-      .send()
-      .await?;
-    process_response_data::<AFSnapshotMeta>(resp).await
   }
 
   pub async fn ws_connect_info(&self, auto_refresh: bool) -> Result<ConnectInfo, AppResponseError> {

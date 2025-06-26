@@ -41,7 +41,7 @@ async fn get_access_request_handler(
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let access_request = get_access_request(
     &state.pg_pool,
-    &state.collab_access_control_storage,
+    &state.collab_storage,
     access_request_id,
     uid,
   )

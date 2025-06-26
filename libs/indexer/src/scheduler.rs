@@ -10,7 +10,7 @@ use async_openai::types::{CreateEmbeddingRequest, CreateEmbeddingResponse};
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
-use database::collab::CollabStorage;
+use database::collab::CollabStore;
 use database::index::{
   get_collab_embedding_fragment_ids, update_collab_indexed_at, upsert_collab_embeddings,
 };
@@ -36,7 +36,7 @@ use uuid::Uuid;
 pub struct IndexerScheduler {
   pub(crate) indexer_provider: Arc<IndexerProvider>,
   pub(crate) pg_pool: PgPool,
-  pub(crate) storage: Arc<dyn CollabStorage>,
+  pub(crate) storage: Arc<dyn CollabStore>,
   #[allow(dead_code)]
   pub(crate) metrics: Arc<EmbeddingMetrics>,
   write_embedding_tx: UnboundedSender<EmbeddingRecord>,
@@ -58,7 +58,7 @@ impl IndexerScheduler {
   pub fn new(
     indexer_provider: Arc<IndexerProvider>,
     pg_pool: PgPool,
-    storage: Arc<dyn CollabStorage>,
+    storage: Arc<dyn CollabStore>,
     metrics: Arc<EmbeddingMetrics>,
     config: IndexerConfiguration,
     redis_client: ConnectionManager,

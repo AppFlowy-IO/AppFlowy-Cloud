@@ -1,6 +1,4 @@
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-
 use collab_database::database::DatabaseBody;
 use collab_database::entity::FieldType;
 use collab_database::rows::meta_id_from_row_id;
@@ -15,7 +13,7 @@ use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, RepeatedViewIdentifier, View};
 use database::collab::GetCollabOrigin;
-use database::collab::{select_workspace_database_oid, CollabStorage};
+use database::collab::{select_workspace_database_oid, CollabStore};
 use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::file::BucketClient;
 use database::file::ResponseBlob;
@@ -48,6 +46,7 @@ use crate::biz::collab::utils::collab_to_bin;
 
 use crate::state::AppState;
 use appflowy_collaborate::ws2::CollabUpdatePublisher;
+use appflowy_collaborate::CollabMetrics;
 use collab::core::collab::default_client_id;
 use collab_database::database_trait::NoPersistenceDatabaseCollabService;
 
@@ -62,11 +61,12 @@ pub async fn duplicate_published_collab_to_workspace(
   let copier = PublishCollabDuplicator::new(
     state.pg_pool.clone(),
     state.bucket_client.clone(),
-    state.collab_access_control_storage.clone(),
+    state.collab_storage.clone(),
     Box::new(state.ws_server.clone()),
     dest_uid,
     dest_workspace_id,
     dest_view_id,
+    state.metrics.collab_metrics.clone(),
   );
 
   let time_now = chrono::Utc::now().timestamp_millis();
@@ -82,7 +82,7 @@ pub async fn duplicate_published_collab_to_workspace(
 pub struct PublishCollabDuplicator {
   /// for fetching and writing folder data
   /// of dest workspace
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<dyn CollabStore>,
   /// A map to store the old view_id that was duplicated and new view_id assigned.
   /// If value is none, it means the view_id is not published.
   duplicated_refs: HashMap<Uuid, Option<Uuid>>,
@@ -113,6 +113,7 @@ pub struct PublishCollabDuplicator {
   /// view of workspace to duplicate into
   dest_view_id: Uuid,
   collab_update_publisher: Box<dyn CollabUpdatePublisher>,
+  collab_metrics: Arc<CollabMetrics>,
 }
 
 fn deserialize_publish_database_data(
@@ -130,14 +131,16 @@ fn deserialize_publish_database_data(
 }
 
 impl PublishCollabDuplicator {
+  #[allow(clippy::too_many_arguments)]
   pub fn new(
     pg_pool: PgPool,
     bucket_client: AwsS3BucketClientImpl,
-    collab_storage: Arc<CollabAccessControlStorage>,
+    collab_storage: Arc<dyn CollabStore>,
     collab_update_publisher: Box<dyn CollabUpdatePublisher>,
     dest_uid: i64,
     dest_workspace_id: Uuid,
     dest_view_id: Uuid,
+    collab_metrics: Arc<CollabMetrics>,
   ) -> Self {
     let ts_now = chrono::Utc::now().timestamp();
     Self {
@@ -156,6 +159,7 @@ impl PublishCollabDuplicator {
       dest_workspace_id,
       dest_view_id,
       collab_update_publisher,
+      collab_metrics,
     }
   }
 
@@ -191,6 +195,7 @@ impl PublishCollabDuplicator {
       dest_workspace_id,
       dest_view_id,
       collab_update_publisher: collab_update_writer,
+      collab_metrics,
     } = self;
 
     // insert all collab object accumulated
@@ -217,7 +222,7 @@ impl PublishCollabDuplicator {
     }
     match tokio::time::timeout(Duration::from_secs(60), txn.commit()).await {
       Ok(result) => {
-        collab_storage.metrics().observe_pg_tx(start.elapsed());
+        collab_metrics.observe_pg_tx(start.elapsed());
         result.map_err(AppError::from)
       },
       Err(_) => {

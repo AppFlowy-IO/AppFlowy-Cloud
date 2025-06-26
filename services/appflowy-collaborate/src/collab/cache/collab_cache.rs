@@ -223,13 +223,12 @@ impl CollabCache {
     query: QueryCollab,
   ) -> Result<(Rid, EncodedCollab), AppError> {
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
-    if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
-      tracing::debug!(
+    if let Some((rid, encoded_collab)) = self.mem_cache.get_encode_collab(&query.object_id).await {
+      debug!(
         "Did get encode collab: {} from cache at {}",
-        query.object_id,
-        encoded_collab.0
+        query.object_id, rid,
       );
-      return Ok(encoded_collab);
+      return Ok((rid, encoded_collab));
     }
 
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
@@ -237,17 +236,14 @@ impl CollabCache {
     let expiration_secs = cache_exp_secs_from_collab_type(&query.collab_type);
     let (rid, encode_collab) = self
       .disk_cache
-      .get_collab_encoded_from_disk(workspace_id, query)
+      .get_encoded_collab_from_disk(workspace_id, query)
       .await?;
 
-    // spawn a task to insert the encoded collab into the memory cache
-    let cloned_encode_collab = encode_collab.clone();
-    let mem_cache = self.mem_cache.clone();
-
-    mem_cache
+    self
+      .mem_cache
       .insert_encode_collab(
         &object_id,
-        cloned_encode_collab,
+        encode_collab.clone(),
         MillisSeconds::from(&rid),
         expiration_secs,
       )

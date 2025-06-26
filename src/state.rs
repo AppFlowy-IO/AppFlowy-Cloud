@@ -15,13 +15,13 @@ use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::ws2::WsServer;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::StreamRouter;
+use database::collab::CollabStore;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use indexer::metrics::EmbeddingMetrics;
@@ -47,7 +47,7 @@ pub struct AppState {
   pub awareness_gossip: Arc<AwarenessGossip>,
   pub redis_connection_manager: RedisConnectionManager,
   pub collab_cache: Arc<CollabCache>,
-  pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
+  pub collab_storage: Arc<dyn CollabStore>,
   pub collab_access_control: Arc<dyn CollabAccessControl>,
   pub workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   pub realtime_access_control: Arc<dyn RealtimeAccessControl>,

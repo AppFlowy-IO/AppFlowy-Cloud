@@ -255,7 +255,7 @@ impl CollabDiskCache {
   }
 
   #[instrument(level = "trace", skip_all)]
-  pub async fn get_collab_encoded_from_disk(
+  pub async fn get_encoded_collab_from_disk(
     &self,
     workspace_id: &Uuid,
     query: QueryCollab,

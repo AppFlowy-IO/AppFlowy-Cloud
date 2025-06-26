@@ -58,7 +58,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
       &workspace_row,
       &mut txn2,
       vec![GettingStartedTemplate],
-      &state.collab_access_control_storage,
+      &state.collab_storage,
     )
     .await?;
     txn2

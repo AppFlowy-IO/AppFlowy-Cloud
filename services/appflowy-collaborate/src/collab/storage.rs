@@ -5,7 +5,6 @@ use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
 use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
-use crate::snapshot::SnapshotControl;
 use crate::ws2::CollabStore;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
@@ -46,7 +45,6 @@ pub struct CollabStorageImpl<AC> {
   cache: Arc<CollabCache>,
   /// access control for collab object. Including read/write
   access_control: AC,
-  snapshot_control: SnapshotControl,
   queue: Sender<PendingCollabWrite>,
 }
 
@@ -54,17 +52,12 @@ impl<AC> CollabStorageImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
-  pub fn new(
-    cache: Arc<CollabCache>,
-    access_control: AC,
-    snapshot_control: SnapshotControl,
-  ) -> Self {
+  pub fn new(cache: Arc<CollabCache>, access_control: AC) -> Self {
     let (queue, reader) = channel(1000);
     tokio::spawn(Self::periodic_write_task(cache.clone(), reader));
     Self {
       cache,
       access_control,
-      snapshot_control,
       queue,
     }
   }
@@ -325,48 +318,6 @@ where
       .await?;
     self.cache.delete_collab(workspace_id, object_id).await?;
     Ok(())
-  }
-
-  async fn should_create_snapshot(
-    &self,
-    workspace_id: &Uuid,
-    oid: &Uuid,
-  ) -> Result<bool, AppError> {
-    self
-      .snapshot_control
-      .should_create_snapshot(workspace_id, oid)
-      .await
-  }
-
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta> {
-    self.snapshot_control.create_snapshot(params).await
-  }
-
-  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> AppResult<()> {
-    self.snapshot_control.queue_snapshot(params).await
-  }
-
-  async fn get_collab_snapshot(
-    &self,
-    workspace_id: Uuid,
-    object_id: Uuid,
-    snapshot_id: &i64,
-  ) -> AppResult<SnapshotData> {
-    self
-      .snapshot_control
-      .get_snapshot(workspace_id, object_id, snapshot_id)
-      .await
-  }
-
-  async fn get_collab_snapshot_list(
-    &self,
-    workspace_id: &Uuid,
-    oid: &Uuid,
-  ) -> AppResult<AFSnapshotMetas> {
-    self
-      .snapshot_control
-      .get_collab_snapshot_list(workspace_id, oid)
-      .await
   }
 
   #[instrument(level = "trace", skip_all)]

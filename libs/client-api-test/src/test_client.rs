@@ -716,31 +716,6 @@ impl TestClient {
       .await
   }
 
-  pub async fn get_snapshot_list_until(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-    f: impl Fn(&AFSnapshotMetas) -> bool + Send + Sync + 'static,
-    timeout_secs: u64,
-  ) -> Result<AFSnapshotMetas, AppResponseError> {
-    let duration = Duration::from_secs(timeout_secs);
-    #[allow(clippy::blocks_in_conditions)]
-    match timeout(duration, async {
-      let mut snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
-      // Loop until the condition `f` returns true or the timeout is reached
-      while !f(&snapshot_metas) {
-        sleep(Duration::from_secs(5)).await;
-        snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
-      }
-      Ok(snapshot_metas)
-    })
-    .await
-    {
-      Ok(result) => result,
-      Err(_) => panic!("Operation timed out after {} seconds", timeout_secs),
-    }
-  }
-
   pub async fn create_collab_list(
     &mut self,
     workspace_id: &Uuid,

@@ -1,10 +1,7 @@
 use app_error::AppError;
 use async_trait::async_trait;
 
-use database_entity::dto::{
-  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
-  QueryCollabResult, SnapshotData,
-};
+use database_entity::dto::{AFAccessLevel, CollabParams, QueryCollab, QueryCollabResult};
 
 use appflowy_proto::TimestampedEncodedCollab;
 use collab_entity::CollabType;
@@ -142,26 +139,6 @@ pub trait CollabStorage: Send + Sync + 'static {
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
   async fn delete_collab(&self, workspace_id: &Uuid, uid: &i64, object_id: &Uuid) -> AppResult<()>;
-
-  async fn should_create_snapshot(&self, workspace_id: &Uuid, oid: &Uuid)
-    -> Result<bool, AppError>;
-
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta>;
-  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> AppResult<()>;
-
-  async fn get_collab_snapshot(
-    &self,
-    workspace_id: Uuid,
-    object_id: Uuid,
-    snapshot_id: &i64,
-  ) -> AppResult<SnapshotData>;
-
-  /// Returns list of snapshots for given object_id in descending order of creation time.
-  async fn get_collab_snapshot_list(
-    &self,
-    workspace_id: &Uuid,
-    oid: &Uuid,
-  ) -> AppResult<AFSnapshotMetas>;
 
   fn mark_as_editing(&self, oid: Uuid);
 }

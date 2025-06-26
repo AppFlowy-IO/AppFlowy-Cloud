@@ -18,7 +18,7 @@ use collab_stream::client::CollabRedisStream;
 use collab_stream::stream_router::StreamRouter;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use database::collab::CollabStorage;
+use database::collab::CollabStore;
 use indexer::scheduler::IndexerScheduler;
 use redis::aio::ConnectionManager;
 use tokio::sync::mpsc::Sender;
@@ -29,22 +29,19 @@ use yrs::updates::decoder::Decode;
 use yrs::StateVector;
 
 #[derive(Clone)]
-pub struct CollaborationServer<S> {
+pub struct CollaborationServer {
   /// Keep track of all collab groups
-  group_manager: Arc<GroupManager<S>>,
+  group_manager: Arc<GroupManager>,
   connect_state: ConnectState,
   group_sender_by_object_id: Arc<DashMap<Uuid, GroupCommandSender>>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
 }
 
-impl<S> CollaborationServer<S>
-where
-  S: CollabStorage,
-{
+impl CollaborationServer {
   #[allow(clippy::too_many_arguments)]
   pub async fn new(
-    storage: Arc<S>,
+    storage: Arc<dyn CollabStore>,
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
     redis_stream_router: Arc<StreamRouter>,
@@ -350,12 +347,10 @@ where
   }
 }
 
-fn spawn_period_check_inactive_group<S>(
-  weak_groups: Weak<GroupManager<S>>,
+fn spawn_period_check_inactive_group(
+  weak_groups: Weak<GroupManager>,
   group_sender_by_object_id: &Arc<DashMap<Uuid, GroupCommandSender>>,
-) where
-  S: CollabStorage,
-{
+) {
   let mut interval = interval(Duration::from_secs(20));
   let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
   tokio::spawn(async move {

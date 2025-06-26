@@ -17,7 +17,6 @@ use collab_rt_entity::{
 };
 use collab_rt_protocol::{Message, SyncMessage};
 use dashmap::mapref::entry::Entry;
-use database::collab::CollabStorage;
 use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 use yrs::updates::encoder::Encode;
@@ -59,19 +58,13 @@ pub type GroupCommandReceiver = tokio::sync::mpsc::Receiver<GroupCommand>;
 /// in tokio multi-thread runtime. It will receive the group command from the receiver and handle the
 /// command.
 ///
-pub struct GroupCommandRunner<S>
-where
-  S: CollabStorage,
-{
-  pub group_manager: Arc<GroupManager<S>>,
+pub struct GroupCommandRunner {
+  pub group_manager: Arc<GroupManager>,
   pub msg_router_by_user: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
   pub recv: Option<GroupCommandReceiver>,
 }
 
-impl<S> GroupCommandRunner<S>
-where
-  S: CollabStorage,
-{
+impl GroupCommandRunner {
   pub async fn run(mut self, object_id: Uuid) {
     let mut receiver = self.recv.take().expect("Only take once");
     let stream = stream! {

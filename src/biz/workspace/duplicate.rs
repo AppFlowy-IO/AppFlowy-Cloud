@@ -8,11 +8,9 @@ use crate::{
     utils::{collab_from_doc_state, get_latest_collab_folder},
   },
 };
-use actix::Addr;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use appflowy_collaborate::ws2::WsServer;
+use appflowy_collaborate::ws2::CollabUpdatePublisher;
 use collab::core::collab::default_client_id;
 use collab_database::{
   database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
@@ -25,7 +23,7 @@ use collab_document::document::Document;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::{Folder, RepeatedViewIdentifier, View, ViewIdentifier};
 use collab_rt_entity::user::RealtimeUser;
-use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
+use database::collab::{select_workspace_database_oid, CollabStore, GetCollabOrigin};
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use itertools::Itertools;
 use std::{
@@ -43,19 +41,13 @@ pub async fn duplicate_view_tree_and_collab(
   view_id: Uuid,
   suffix: &str,
 ) -> Result<(), AppError> {
-  let collab_storage = state.collab_access_control_storage.clone();
+  let collab_storage = state.collab_storage.clone();
   let appflowy_web_metrics = &state.metrics.appflowy_web_metrics;
 
   let uid = user.uid;
   let client_id = default_client_id();
-  let mut folder: Folder = get_latest_collab_folder(
-    &collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    client_id,
-    uid,
-  )
-  .await?;
+  let mut folder: Folder =
+    get_latest_collab_folder(&collab_storage, uid, workspace_id, client_id, uid).await?;
   let trash_sections: HashSet<String> = folder
     .get_all_trash_sections()
     .iter()
@@ -189,9 +181,9 @@ fn duplicate_database_data_with_context(
 #[allow(clippy::too_many_arguments)]
 async fn duplicate_database(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  collab_update_writer: &Addr<WsServer>,
+  update_publisher: &impl CollabUpdatePublisher,
   user: RealtimeUser,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<dyn CollabStore>,
   workspace_id: Uuid,
   duplicate_context: &DuplicateContext,
   workspace_database: &mut WorkspaceDatabase,
@@ -282,7 +274,7 @@ async fn duplicate_database(
     let workspace_database_id = Uuid::parse_str(workspace_database.collab.object_id())?;
     update_workspace_database_data(
       appflowy_web_metrics,
-      collab_update_writer,
+      update_publisher,
       user.clone(),
       workspace_id,
       workspace_database_id,
@@ -294,7 +286,7 @@ async fn duplicate_database(
 }
 
 async fn duplicate_document(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<dyn CollabStore>,
   workspace_id: Uuid,
   uid: i64,
   duplicate_context: &DuplicateContext,

@@ -28,7 +28,7 @@ use collab_stream::model::{
   AwarenessStreamUpdate, CollabStreamUpdate, MessageId, UpdateFlags, UpdateStreamMessage,
 };
 use dashmap::DashMap;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::{CollabStore, GetCollabOrigin};
 use database_entity::dto::CollabParams;
 use futures::{pin_mut, Sink, Stream};
 use futures_util::{SinkExt, StreamExt};
@@ -79,21 +79,18 @@ impl Drop for CollabGroup {
 
 impl CollabGroup {
   #[allow(clippy::too_many_arguments)]
-  pub async fn new<S>(
+  pub async fn new(
     uid: i64,
     workspace_id: Uuid,
     object_id: Uuid,
     collab_type: CollabType,
     metrics: Arc<CollabRealtimeMetrics>,
-    storage: Arc<S>,
+    storage: Arc<dyn CollabStore>,
     collab_redis_stream: Arc<CollabRedisStream>,
     persistence_interval: Duration,
     state_vector: StateVector,
     indexer_scheduler: Arc<IndexerScheduler>,
-  ) -> Result<Self, StreamError>
-  where
-    S: CollabStorage,
-  {
+  ) -> Result<Self, StreamError> {
     let is_new_collab = state_vector.is_empty();
     let persister = CollabPersister::new(
       uid,
@@ -943,7 +940,7 @@ struct CollabPersister {
   workspace_id: Uuid,
   object_id: Uuid,
   collab_type: CollabType,
-  storage: Arc<dyn CollabStorage>,
+  storage: Arc<dyn CollabStore>,
   collab_redis_stream: Arc<CollabRedisStream>,
   indexer_scheduler: Arc<IndexerScheduler>,
   metrics: Arc<CollabRealtimeMetrics>,
@@ -958,7 +955,7 @@ impl CollabPersister {
     workspace_id: Uuid,
     object_id: Uuid,
     collab_type: CollabType,
-    storage: Arc<dyn CollabStorage>,
+    storage: Arc<dyn CollabStore>,
     collab_redis_stream: Arc<CollabRedisStream>,
     indexer_scheduler: Arc<IndexerScheduler>,
     metrics: Arc<CollabRealtimeMetrics>,

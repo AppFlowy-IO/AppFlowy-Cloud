@@ -87,6 +87,7 @@ pub async fn get_access_request(
     GetCollabOrigin::Server,
     access_request_with_view_id.workspace.workspace_id,
     default_client_id(),
+    user_uid,
   )
   .await?;
   let view = folder.get_view(&access_request_with_view_id.view_id.to_string());

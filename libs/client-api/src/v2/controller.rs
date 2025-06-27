@@ -190,6 +190,7 @@ pub enum DisconnectedReason {
   UserDisconnect(Arc<str>),
   ServerForceClose,
   Unauthorized(Arc<str>),
+  PingTimeout,
 }
 
 impl Display for DisconnectedReason {
@@ -208,6 +209,7 @@ impl Display for DisconnectedReason {
       DisconnectedReason::UserDisconnect(reason) => write!(f, "user disconnect: {}", reason),
       DisconnectedReason::Unauthorized(reason) => write!(f, "unauthorized: {}", reason),
       DisconnectedReason::ServerForceClose => write!(f, "server force close"),
+      DisconnectedReason::PingTimeout => write!(f, "ping timeout"),
     }
   }
 }

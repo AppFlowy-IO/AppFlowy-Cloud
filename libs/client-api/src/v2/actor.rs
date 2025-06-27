@@ -20,7 +20,7 @@ use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::select;
@@ -53,12 +53,15 @@ pub(super) struct WorkspaceControllerActor {
   notification_tx: tokio::sync::broadcast::Sender<WorkspaceNotification>,
   /// Used to record recently changed collabs
   changed_collab_sender: tokio::sync::broadcast::Sender<ChangedCollab>,
+  /// Counter for consecutive ping failures
+  ping_failures: Arc<AtomicU32>,
   #[cfg(debug_assertions)]
   pub skip_realtime_message: AtomicBool,
 }
 
 impl WorkspaceControllerActor {
   const PING_INTERVAL: Duration = Duration::from_secs(4);
+  const MAX_PING_FAILURES: u32 = 3;
   const REMOTE_ORIGIN: &'static str = "af";
 
   pub fn new(db: Db, options: Options, last_message_id: Rid) -> Arc<Self> {
@@ -74,6 +77,7 @@ impl WorkspaceControllerActor {
       last_message_id: Arc::new(ArcSwap::new(last_message_id.into())),
       cache: Arc::new(DashMap::new()),
       db,
+      ping_failures: Arc::new(AtomicU32::new(0)),
       #[cfg(debug_assertions)]
       skip_realtime_message: AtomicBool::new(false),
       notification_tx,
@@ -249,7 +253,7 @@ impl WorkspaceControllerActor {
 
   #[instrument(level = "trace", skip_all)]
   pub(crate) fn set_connection_status(&self, status: ConnectionStatus) {
-    sync_debug!("set connection status: {:?}", status);
+    sync_info!("set connection status: {:?}", status);
     self.status_tx.send_replace(status);
   }
 
@@ -286,11 +290,39 @@ impl WorkspaceControllerActor {
             Some(actor) => actor,
             None => break, // controller dropped
           };
-          if let Err(err) = actor.ping().await {
-            sync_error!("failed to send ping: {}", err);
+
+          // Only send pings when connected
+          if !matches!(*actor.status_rx.borrow(), ConnectionStatus::Connected { .. }) {
+            actor.ping_failures.store(0, Ordering::Relaxed);
+            continue;
+          }
+
+          let failure_count = actor.ping_failures.load(Ordering::Relaxed);
+          if failure_count >= Self::MAX_PING_FAILURES {
+            sync_error!("Too many ping failures ({}), disconnecting", failure_count);
             actor.set_connection_status(ConnectionStatus::Disconnected {
-              reason: Some(DisconnectedReason::Unexpected( err.to_string().into())),
+              reason: Some(DisconnectedReason::Unexpected("Ping timeout".into())),
             });
+            // Reset ping failures and continue loop to handle reconnection
+            actor.ping_failures.store(0, Ordering::Relaxed);
+            continue;
+          }
+
+          if let Err(err) = actor.ping().await {
+            let new_count = actor.ping_failures.fetch_add(1, Ordering::Relaxed) + 1;
+            sync_trace!("Ping failed ({}/{}): {}", new_count, Self::MAX_PING_FAILURES, err);
+
+            if new_count >= Self::MAX_PING_FAILURES {
+              sync_error!("Maximum ping failures reached, disconnecting");
+              actor.set_connection_status(ConnectionStatus::Disconnected {
+                reason: Some(DisconnectedReason::Unexpected("Ping timeout".into())),
+              });
+              // Reset ping failures and continue loop to handle reconnection
+              actor.ping_failures.store(0, Ordering::Relaxed);
+            }
+          } else {
+            // Reset ping failure counter on successful ping
+            actor.ping_failures.store(0, Ordering::Relaxed);
           }
         }
       }
@@ -384,7 +416,21 @@ impl WorkspaceControllerActor {
 
   async fn send_message(&self, msg: ClientMessage) -> anyhow::Result<()> {
     let sync_state = match &msg {
-      ClientMessage::Manifest { object_id, .. } => Some((*object_id, SyncState::InitSyncBegin)),
+      ClientMessage::Manifest {
+        object_id,
+        collab_type,
+        ..
+      } => {
+        if !matches!(collab_type, CollabType::DatabaseRow) {
+          sync_info!(
+            "[{}] sending {}/{} manifest to remote",
+            self.db.client_id(),
+            object_id,
+            collab_type
+          );
+        }
+        Some((*object_id, SyncState::InitSyncBegin))
+      },
       ClientMessage::Update { object_id, .. } => Some((*object_id, SyncState::SyncFinished)),
       ClientMessage::AwarenessUpdate { .. } => None,
     };
@@ -477,7 +523,7 @@ impl WorkspaceControllerActor {
         });
       },
       Some(connection) => {
-        sync_debug!("[{}] connected to {}", client_id, actor.options.url);
+        sync_info!("[{}] connected to {}", client_id, actor.options.url);
         let (sink, stream) = connection.split();
         let sink = Arc::new(Mutex::new(sink));
         actor.set_connection_status(ConnectionStatus::Connected {
@@ -590,11 +636,14 @@ impl WorkspaceControllerActor {
         },
       }
     }
-    sync_debug!("websocket receiver loop ended");
+    sync_info!("websocket receiver loop ended");
     Ok(())
   }
 
   async fn handle_receive(&self, msg: ServerMessage) -> anyhow::Result<()> {
+    // Reset ping failure counter when we receive any message from server
+    self.ping_failures.store(0, Ordering::Relaxed);
+
     match msg {
       ServerMessage::Manifest {
         object_id,
@@ -833,7 +882,7 @@ impl WorkspaceControllerActor {
             sync_error!("Failed to get state vectors for batch: {}", err);
           },
         }
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
       }
 
       cancel_token.cancel();
@@ -1029,7 +1078,7 @@ impl WorkspaceControllerActor {
     let awareness = collab.get_awareness();
     let doc = awareness.doc();
     let state_vector = doc.transact().state_vector();
-    tracing::debug!(
+    sync_debug!(
       "publishing manifest for {} (last msg id: {}): {:?}",
       object_id,
       last_message_id,
@@ -1117,17 +1166,17 @@ impl WorkspaceControllerActor {
       res = fut => {
         match res {
           Ok((stream, _resp)) => {
-            sync_info!("establishing WebSocket successfully");
+            sync_info!("establishing WebSocket successfully to {}", options.workspace_id);
             Ok(Some(stream))
           },
           Err(err) => {
-            sync_error!("establishing WebSocket failed");
+            sync_error!("establishing WebSocket failed to {}", options.workspace_id);
             Err(AppError::from(err).into())
           }
         }
       }
       _ = cancel.cancelled() => {
-        sync_debug!("establishing connection cancelled");
+        sync_info!("establishing connection cancelled for {}", options.workspace_id);
         Ok(None)
       }
     }

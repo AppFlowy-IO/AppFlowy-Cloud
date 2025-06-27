@@ -11,12 +11,12 @@ use crate::biz::collab::folder_view::{
 use crate::biz::collab::ops::get_latest_workspace_database;
 use crate::biz::collab::utils::{
   batch_get_latest_collab_encoded, collab_to_doc_state, get_latest_collab,
-  get_latest_collab_database_body, get_latest_collab_folder,
+  get_latest_collab_database_body,
 };
 use crate::state::AppState;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::ws2::CollabUpdatePublisher;
+use appflowy_collaborate::ws2::{CollabUpdatePublisher, WorkspaceCollabInstanceCache};
 use chrono::DateTime;
 use collab::core::collab::{default_client_id, Collab, CollabOptions};
 use collab::core::origin::CollabClient;
@@ -83,15 +83,7 @@ pub async fn update_space(
   space_icon: &str,
   space_icon_color: &str,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
   let folder_update = update_space_properties(
     view_id,
     &mut folder,
@@ -99,6 +91,7 @@ pub async fn update_space(
     name,
     space_icon,
     space_icon_color,
+    user.uid,
   )
   .await?;
   update_workspace_folder_data(
@@ -127,15 +120,7 @@ pub async fn create_space(
   let client_id = default_client_id();
   let default_document_collab_params =
     prepare_default_document_collab_param(client_id, view_id).await?;
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    client_id,
-    user.uid,
-  )
-  .await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
   let folder_update = add_new_space_to_folder(
     user.uid,
     &workspace_id,
@@ -187,14 +172,7 @@ pub async fn create_folder_view(
 ) -> Result<Page, AppError> {
   let view_id = view_id.unwrap_or_else(Uuid::new_v4);
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin.clone(),
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
   let folder_update = add_new_view_to_folder(
     user.uid,
     parent_view_id,
@@ -640,14 +618,14 @@ async fn add_new_space_to_folder(
       .build()
       .view;
     let mut txn = folder.collab.transact_mut();
-    folder.body.views.insert(&mut txn, view, None);
+    folder.body.views.insert(&mut txn, view, None, uid);
     if *space_permission == SpacePermission::Private {
-      folder
-        .body
-        .views
-        .update_view(&mut txn, &view_id.to_string(), |update| {
-          update.set_private(true).done()
-        });
+      folder.body.views.update_view(
+        &mut txn,
+        &view_id.to_string(),
+        |update| update.set_private(true).done(),
+        uid,
+      );
     }
     txn.encode_update_v1()
   };
@@ -661,25 +639,31 @@ async fn update_space_properties(
   name: &str,
   space_icon: &str,
   space_icon_color: &str,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
-    folder.body.views.update_view(&mut txn, view_id, |update| {
-      let extra = json!({
-        "is_space": true,
-        "space_permission": to_space_permission(space_permission) as u8,
-        "space_created_at": timestamp(),
-        "space_icon": space_icon,
-        "space_icon_color": space_icon_color,
-      })
-      .to_string();
-      let is_private = *space_permission == SpacePermission::Private;
-      update
-        .set_name(name)
-        .set_extra(&extra)
-        .set_private(is_private)
-        .done()
-    });
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| {
+        let extra = json!({
+          "is_space": true,
+          "space_permission": to_space_permission(space_permission) as u8,
+          "space_created_at": timestamp(),
+          "space_icon": space_icon,
+          "space_icon_color": space_icon_color,
+        })
+        .to_string();
+        let is_private = *space_permission == SpacePermission::Private;
+        update
+          .set_name(name)
+          .set_extra(&extra)
+          .set_private(is_private)
+          .done()
+      },
+      uid,
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_update)
@@ -738,7 +722,7 @@ async fn add_new_view_to_folder(
       .build()
       .view;
     let mut txn = folder.collab.transact_mut();
-    folder.body.views.insert(&mut txn, view, None);
+    folder.body.views.insert(&mut txn, view, None, uid);
 
     txn.encode_update_v1()
   };
@@ -750,9 +734,10 @@ async fn update_favorite_view(
   folder: &mut Folder,
   is_favorite: bool,
   is_pinned: bool,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let existing_extra: Option<serde_json::Value> = folder
-    .get_view(view_id)
+    .get_view(view_id, uid)
     .ok_or_else(|| {
       AppError::Internal(anyhow::anyhow!(
         "Failed to find view with id {} in folder",
@@ -772,9 +757,12 @@ async fn update_favorite_view(
 
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
-    folder.body.views.update_view(&mut txn, view_id, |update| {
-      update.set_favorite(is_favorite).set_extra(extra).done()
-    });
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| update.set_favorite(is_favorite).set_extra(extra).done(),
+      uid,
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_update)
@@ -784,13 +772,14 @@ async fn reorder_favorite_section(
   view_id: &str,
   prev_view_id: Option<&str>,
   folder: &mut Folder,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
     if let Some(op) = folder
       .body
       .section
-      .section_op(&txn, collab_folder::Section::Favorite)
+      .section_op(&txn, collab_folder::Section::Favorite, uid)
     {
       op.move_section_item_with_txn(&mut txn, view_id, prev_view_id);
     };
@@ -807,18 +796,24 @@ async fn update_view_properties(
   icon: Option<&ViewIcon>,
   is_locked: Option<bool>,
   extra: Option<impl AsRef<str>>,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
     let icon = icon.map(|icon| to_folder_view_icon(icon.clone()));
-    folder.body.views.update_view(&mut txn, view_id, |update| {
-      update
-        .set_name(name)
-        .set_icon(icon)
-        .set_extra_if_not_none(extra)
-        .set_is_locked(is_locked)
-        .done()
-    });
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| {
+        update
+          .set_name(name)
+          .set_icon(icon)
+          .set_extra_if_not_none(extra)
+          .set_is_locked(is_locked)
+          .done()
+      },
+      uid,
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_update)
@@ -828,13 +823,16 @@ async fn update_view_name(
   view_id: &str,
   folder: &mut Folder,
   name: &str,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
-    folder
-      .body
-      .views
-      .update_view(&mut txn, view_id, |update| update.set_name(name).done());
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| update.set_name(name).done(),
+      uid,
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_update)
@@ -844,14 +842,17 @@ async fn update_view_icon(
   view_id: &str,
   folder: &mut Folder,
   icon: Option<&ViewIcon>,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
     let icon = icon.map(|icon| to_folder_view_icon(icon.clone()));
-    folder
-      .body
-      .views
-      .update_view(&mut txn, view_id, |update| update.set_icon(icon).done());
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| update.set_icon(icon).done(),
+      uid,
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_update)
@@ -861,13 +862,16 @@ async fn update_view_extra(
   view_id: &str,
   folder: &mut Folder,
   extra: &str,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
-    folder
-      .body
-      .views
-      .update_view(&mut txn, view_id, |update| update.set_extra(extra).done());
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| update.set_extra(extra).done(),
+      uid,
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_update)
@@ -878,20 +882,25 @@ async fn move_view(
   new_parent_view_id: &str,
   prev_view_id: Option<String>,
   folder: &mut Folder,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
     folder
       .body
-      .move_nested_view(&mut txn, view_id, new_parent_view_id, prev_view_id);
+      .move_nested_view(&mut txn, view_id, new_parent_view_id, prev_view_id, uid);
     txn.encode_update_v1()
   };
   Ok(encoded_update)
 }
 
-async fn move_view_to_trash(view_id: &str, folder: &mut Folder) -> Result<Vec<u8>, AppError> {
+async fn move_view_to_trash(
+  view_id: &str,
+  folder: &mut Folder,
+  uid: i64,
+) -> Result<Vec<u8>, AppError> {
   let mut current_view_and_descendants = folder
-    .get_views_belong_to(view_id)
+    .get_views_belong_to(view_id, uid)
     .iter()
     .map(|v| v.id.clone())
     .collect_vec();
@@ -900,26 +909,37 @@ async fn move_view_to_trash(view_id: &str, folder: &mut Folder) -> Result<Vec<u8
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
     current_view_and_descendants.iter().for_each(|view_id| {
-      folder.body.views.update_view(&mut txn, view_id, |update| {
-        update.set_favorite(false).done()
-      });
+      folder.body.views.update_view(
+        &mut txn,
+        view_id,
+        |update| update.set_favorite(false).done(),
+        uid,
+      );
     });
-    folder
-      .body
-      .views
-      .update_view(&mut txn, view_id, |update| update.set_trash(true).done());
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| update.set_trash(true).done(),
+      uid,
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_update)
 }
 
-async fn move_view_out_from_trash(view_id: &str, folder: &mut Folder) -> Result<Vec<u8>, AppError> {
+async fn move_view_out_from_trash(
+  view_id: &str,
+  folder: &mut Folder,
+  uid: i64,
+) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
-    folder
-      .body
-      .views
-      .update_view(&mut txn, view_id, |update| update.set_trash(false).done());
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| update.set_trash(false).done(),
+      uid,
+    );
     txn.encode_update_v1()
   };
   Ok(encoded_update)
@@ -928,9 +948,10 @@ async fn move_view_out_from_trash(view_id: &str, folder: &mut Folder) -> Result<
 async fn extend_recent_views(
   recent_view_ids: &[String],
   folder: &mut Folder,
+  uid: i64,
 ) -> Result<Vec<u8>, AppError> {
   let existing_recent_sections: HashSet<String> = folder
-    .get_all_recent_sections()
+    .get_all_recent_sections(uid)
     .iter()
     .map(|s| s.id.clone())
     .collect();
@@ -947,7 +968,7 @@ async fn extend_recent_views(
     if let Some(op) = folder
       .body
       .section
-      .section_op(&txn, collab_folder::Section::Recent)
+      .section_op(&txn, collab_folder::Section::Recent, uid)
     {
       op.delete_section_items_with_txn(&mut txn, section_id_to_be_removed);
       op.add_sections_item(&mut txn, section_item_to_be_added);
@@ -958,13 +979,13 @@ async fn extend_recent_views(
   Ok(encoded_update)
 }
 
-async fn move_all_views_out_from_trash(folder: &mut Folder) -> Result<Vec<u8>, AppError> {
+async fn move_all_views_out_from_trash(folder: &mut Folder, uid: i64) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
     if let Some(op) = folder
       .body
       .section
-      .section_op(&txn, collab_folder::Section::Trash)
+      .section_op(&txn, collab_folder::Section::Trash, uid)
     {
       op.clear(&mut txn);
     };
@@ -974,13 +995,19 @@ async fn move_all_views_out_from_trash(folder: &mut Folder) -> Result<Vec<u8>, A
   Ok(encoded_update)
 }
 
-async fn delete_view_from_trash(view_id: &str, folder: &mut Folder) -> Result<Vec<u8>, AppError> {
+async fn delete_view_from_trash(
+  view_id: &str,
+  folder: &mut Folder,
+  uid: i64,
+) -> Result<Vec<u8>, AppError> {
   let encoded_update = {
     let mut txn = folder.collab.transact_mut();
-    folder
-      .body
-      .views
-      .update_view(&mut txn, view_id, |update| update.set_trash(false).done());
+    folder.body.views.update_view(
+      &mut txn,
+      view_id,
+      |update| update.set_trash(false).done(),
+      uid,
+    );
     folder.body.views.delete_views(&mut txn, vec![view_id]);
     txn.encode_update_v1()
   };
@@ -988,9 +1015,9 @@ async fn delete_view_from_trash(view_id: &str, folder: &mut Folder) -> Result<Ve
   Ok(encoded_update)
 }
 
-async fn delete_all_views_from_trash(folder: &mut Folder) -> Result<Vec<u8>, AppError> {
+async fn delete_all_views_from_trash(folder: &mut Folder, uid: i64) -> Result<Vec<u8>, AppError> {
   let all_trash_ids: Vec<String> = folder
-    .get_all_trash_sections()
+    .get_all_trash_sections(uid)
     .iter()
     .map(|s| s.id.clone())
     .collect();
@@ -1000,7 +1027,7 @@ async fn delete_all_views_from_trash(folder: &mut Folder) -> Result<Vec<u8>, App
     if let Some(op) = folder
       .body
       .section
-      .section_op(&txn, collab_folder::Section::Trash)
+      .section_op(&txn, collab_folder::Section::Trash, uid)
     {
       op.clear(&mut txn);
     };
@@ -1032,15 +1059,7 @@ async fn create_document_page(
     None => prepare_default_document_collab_param(client_id, collab_id).await,
   }?;
   let view_id = view_id_override.unwrap_or(collab_id);
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    client_id,
-    user.uid,
-  )
-  .await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
   let folder_update = add_new_view_to_folder(
     user.uid,
     parent_view_id,
@@ -1166,14 +1185,7 @@ async fn create_database_page(
   encoded_database: &EncodedDatabase,
 ) -> Result<Page, AppError> {
   let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin.clone(),
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
   let folder_update = add_new_view_to_folder(
     user.uid,
     parent_view_id,
@@ -1258,20 +1270,20 @@ async fn create_database_page(
   Ok(Page { view_id: *view_id })
 }
 
-async fn get_rag_ids(folder: &Folder, parent_view_id: &Uuid) -> Vec<Uuid> {
+async fn get_rag_ids(folder: &Folder, parent_view_id: &Uuid, uid: i64) -> Vec<Uuid> {
   let parent_view_id_str = parent_view_id.to_string();
-  if let Some(view) = folder.get_view(&parent_view_id_str) {
+  if let Some(view) = folder.get_view(&parent_view_id_str, uid) {
     if view.space_info().is_some() {
       return vec![];
     }
   };
   let trash_ids: HashSet<String> = folder
-    .get_all_trash_sections()
+    .get_all_trash_sections(uid)
     .iter()
     .map(|s| s.id.clone())
     .collect();
   let mut rag_ids: Vec<_> = folder
-    .get_views_belong_to(&parent_view_id_str)
+    .get_views_belong_to(&parent_view_id_str, uid)
     .iter()
     .filter(|v| v.layout.is_document() && !trash_ids.contains(&v.id))
     .flat_map(|v| Uuid::parse_str(&v.id).ok())
@@ -1289,16 +1301,8 @@ async fn create_chat_page(
   name: Option<&str>,
 ) -> Result<Page, AppError> {
   let view_id = Uuid::new_v4();
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin.clone(),
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let rag_ids = get_rag_ids(&folder, parent_view_id).await;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let rag_ids = get_rag_ids(&folder, parent_view_id, user.uid).await;
   create_chat(
     &state.pg_pool,
     CreateChatParams {
@@ -1338,16 +1342,15 @@ pub async fn move_page(
   new_parent_view_id: &str,
   prev_view_id: Option<String>,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update = move_view(
+    view_id,
+    new_parent_view_id,
+    prev_view_id,
+    &mut folder,
     user.uid,
   )
   .await?;
-  let folder_update = move_view(view_id, new_parent_view_id, prev_view_id, &mut folder).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1367,16 +1370,9 @@ pub async fn reorder_favorite_page(
   view_id: &str,
   prev_view_id: Option<&str>,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let folder_update = reorder_favorite_section(view_id, prev_view_id, &mut folder).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update =
+    reorder_favorite_section(view_id, prev_view_id, &mut folder, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1394,20 +1390,12 @@ pub async fn move_page_to_trash(
   workspace_id: Uuid,
   view_id: &str,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let trash_info = folder.get_my_trash_info();
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let trash_info = folder.get_my_trash_info(user.uid);
   if trash_info.into_iter().any(|info| info.id == view_id) {
     return Ok(());
   }
-  let folder_update = move_view_to_trash(view_id, &mut folder).await?;
+  let folder_update = move_view_to_trash(view_id, &mut folder, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1425,16 +1413,8 @@ pub async fn restore_page_from_trash(
   workspace_id: Uuid,
   view_id: &str,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let folder_update = move_view_out_from_trash(view_id, &mut folder).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update = move_view_out_from_trash(view_id, &mut folder, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1452,16 +1432,8 @@ pub async fn add_recent_pages(
   workspace_id: Uuid,
   recent_view_ids: Vec<String>,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let folder_update = extend_recent_views(&recent_view_ids, &mut folder).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update = extend_recent_views(&recent_view_ids, &mut folder, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1478,16 +1450,8 @@ pub async fn restore_all_pages_from_trash(
   user: RealtimeUser,
   workspace_id: Uuid,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let folder_update = move_all_views_out_from_trash(&mut folder).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update = move_all_views_out_from_trash(&mut folder, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1505,17 +1469,8 @@ pub async fn delete_trash(
   workspace_id: Uuid,
   view_id: &str,
 ) -> Result<(), AppError> {
-  let uid = user.uid;
-  let collab_origin = GetCollabOrigin::User { uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let update = delete_view_from_trash(view_id, &mut folder).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let update = delete_view_from_trash(view_id, &mut folder, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1532,17 +1487,8 @@ pub async fn delete_all_pages_from_trash(
   user: RealtimeUser,
   workspace_id: Uuid,
 ) -> Result<(), AppError> {
-  let uid = user.uid;
-  let collab_origin = GetCollabOrigin::User { uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let update = delete_all_views_from_trash(&mut folder).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let update = delete_all_views_from_trash(&mut folder, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1565,17 +1511,9 @@ pub async fn update_page(
   is_locked: Option<bool>,
   extra: Option<impl AsRef<str>>,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
   let folder_update =
-    update_view_properties(view_id, &mut folder, name, icon, is_locked, extra).await?;
+    update_view_properties(view_id, &mut folder, name, icon, is_locked, extra, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1595,16 +1533,8 @@ pub async fn update_page_name(
   view_id: &str,
   name: &str,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let folder_update = update_view_name(view_id, &mut folder, name).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update = update_view_name(view_id, &mut folder, name, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1624,16 +1554,8 @@ pub async fn update_page_icon(
   view_id: &str,
   icon: Option<&ViewIcon>,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let folder_update = update_view_icon(view_id, &mut folder, icon).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update = update_view_icon(view_id, &mut folder, icon, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1653,16 +1575,8 @@ pub async fn update_page_extra(
   view_id: &str,
   extra: &str,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let folder_update = update_view_extra(view_id, &mut folder, extra).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update = update_view_extra(view_id, &mut folder, extra, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1684,16 +1598,9 @@ pub async fn favorite_page(
   is_favorite: bool,
   is_pinned: bool,
 ) -> Result<(), AppError> {
-  let collab_origin = GetCollabOrigin::User { uid: user.uid };
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    collab_origin,
-    workspace_id,
-    default_client_id(),
-    user.uid,
-  )
-  .await?;
-  let folder_update = update_favorite_view(view_id, &mut folder, is_favorite, is_pinned).await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
+  let folder_update =
+    update_favorite_view(view_id, &mut folder, is_favorite, is_pinned, user.uid).await?;
   update_workspace_folder_data(
     &state.metrics.appflowy_web_metrics,
     &state.ws_server,
@@ -1740,16 +1647,9 @@ pub async fn publish_page(
   comments_enabled: bool,
   duplicate_enabled: bool,
 ) -> Result<(), AppError> {
-  let folder = get_latest_collab_folder(
-    &state.collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    default_client_id(),
-    uid,
-  )
-  .await?;
+  let folder = state.ws_server.get_folder(workspace_id).await?;
   let view = folder
-    .get_view(&view_id.to_string())
+    .get_view(&view_id.to_string(), uid)
     .ok_or(AppError::InvalidFolderView(format!(
       "View {} not found",
       view_id
@@ -1937,19 +1837,13 @@ pub async fn unpublish_page(
 pub async fn get_page_view_collab(
   pg_pool: &PgPool,
   collab_storage: &Arc<dyn CollabStore>,
+  collab_instance_cache: &impl WorkspaceCollabInstanceCache,
   uid: i64,
   workspace_id: Uuid,
   view_id: Uuid,
 ) -> Result<PageCollab, AppError> {
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    default_client_id(),
-    uid,
-  )
-  .await?;
-  let view = folder.get_view(&view_id.to_string());
+  let folder = collab_instance_cache.get_folder(workspace_id).await?;
+  let view = folder.get_view(&view_id.to_string(), uid);
   if let Some(view) = view {
     get_page_view_collab_for_view_with_parent(
       &folder,
@@ -2039,7 +1933,7 @@ async fn get_page_view_collab_for_view_with_parent(
   let folder_view = FolderView {
     view_id: *view_id,
     parent_view_id,
-    prev_view_id: get_prev_view_id(folder, view_id),
+    prev_view_id: get_prev_view_id(folder, view_id, uid),
     name: view.name.clone(),
     icon: view
       .icon
@@ -2339,14 +2233,7 @@ pub async fn create_database_view(
     &new_view_id,
   )
   .await?;
-  let mut folder = get_latest_collab_folder(
-    &state.collab_storage,
-    GetCollabOrigin::User { uid },
-    workspace_id,
-    client_id,
-    user.uid,
-  )
-  .await?;
+  let mut folder = state.ws_server.get_folder(workspace_id).await?;
   let folder_update = add_new_view_to_folder(
     uid,
     database_view_id,

@@ -3,14 +3,11 @@ use crate::biz::collab::utils::get_latest_collab;
 use crate::state::AppState;
 use crate::{
   api::metrics::AppFlowyWebMetrics,
-  biz::collab::{
-    database::PostgresDatabaseCollabService,
-    utils::{collab_from_doc_state, get_latest_collab_folder},
-  },
+  biz::collab::{database::PostgresDatabaseCollabService, utils::collab_from_doc_state},
 };
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::ws2::CollabUpdatePublisher;
+use appflowy_collaborate::ws2::{CollabUpdatePublisher, WorkspaceCollabInstanceCache};
 use collab::core::collab::default_client_id;
 use collab_database::{
   database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
@@ -46,15 +43,14 @@ pub async fn duplicate_view_tree_and_collab(
 
   let uid = user.uid;
   let client_id = default_client_id();
-  let mut folder: Folder =
-    get_latest_collab_folder(&collab_storage, uid, workspace_id, client_id, uid).await?;
+  let mut folder: Folder = state.ws_server.get_folder(workspace_id).await?;
   let trash_sections: HashSet<String> = folder
-    .get_all_trash_sections()
+    .get_all_trash_sections(uid)
     .iter()
     .map(|s| s.id.clone())
     .collect();
   let views: Vec<View> = folder
-    .get_view_recursively(&view_id.to_string())
+    .get_view_recursively(&view_id.to_string(), uid)
     .into_iter()
     .filter(|view| !trash_sections.contains(&view.id))
     .collect();
@@ -109,7 +105,7 @@ pub async fn duplicate_view_tree_and_collab(
   let encoded_folder_update = {
     let mut txn = folder.collab.transact_mut();
     for view in &duplicate_context.duplicated_views {
-      folder.body.views.insert(&mut txn, view.clone(), None);
+      folder.body.views.insert(&mut txn, view.clone(), None, uid);
     }
     txn.encode_update_v1()
   };

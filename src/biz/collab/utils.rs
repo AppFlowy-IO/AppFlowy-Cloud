@@ -1,4 +1,5 @@
 use app_error::AppError;
+use appflowy_collaborate::ws2::WorkspaceCollabInstanceCache;
 use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::preclude::Collab;
 use collab_database::database::DatabaseBody;
@@ -24,7 +25,6 @@ use collab_document::importer::md_importer::MDImporter;
 use collab_entity::CollabType;
 use collab_entity::EncodedCollab;
 use collab_folder::CollabOrigin;
-use collab_folder::Folder;
 use database::collab::select_workspace_database_oid;
 use database::collab::CollabStore;
 use database::collab::GetCollabOrigin;
@@ -354,44 +354,6 @@ pub async fn get_latest_collab_workspace_database_body(
 }
 
 pub const DUMMY_UID: i64 = 0;
-pub async fn get_latest_collab_folder(
-  collab_storage: &Arc<dyn CollabStore>,
-  collab_origin: impl Into<GetCollabOrigin>,
-  workspace_id: Uuid,
-  client_id: ClientID,
-  uid: i64,
-) -> Result<Folder, AppError> {
-  let encoded_collab = collab_storage
-    .get_full_encode_collab(
-      collab_origin.into(),
-      &workspace_id,
-      &workspace_id,
-      CollabType::Folder,
-    )
-    .await
-    .map(|v| v.encoded_collab)?;
-
-  let folder = tokio::task::spawn_blocking(move || {
-    Folder::from_collab_doc_state(
-      uid,
-      CollabOrigin::Server,
-      encoded_collab.into(),
-      &workspace_id.to_string(),
-      client_id,
-    )
-    .map_err(|e| {
-      AppError::Internal(anyhow::anyhow!(
-        "Unable to decode workspace folder {}: {}",
-        workspace_id,
-        e
-      ))
-    })
-  })
-  .await??;
-
-  Ok(folder)
-}
-
 pub async fn get_latest_collab_document(
   collab_storage: &Arc<dyn CollabStore>,
   collab_origin: GetCollabOrigin,
@@ -522,7 +484,7 @@ pub async fn create_row_document(
   workspace_id: Uuid,
   uid: i64,
   new_doc_id: Uuid,
-  collab_storage: &Arc<dyn CollabStore>,
+  collab_instance_cache: &impl WorkspaceCollabInstanceCache,
   row_doc_content: String,
 ) -> Result<CreatedRowDocument, AppError> {
   let md_importer = MDImporter::new(None);
@@ -537,14 +499,7 @@ pub async fn create_row_document(
     AppError::Internal(anyhow::anyhow!("Failed to encode document collab: {:?}", e))
   })?;
 
-  let mut folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::Server,
-    workspace_id,
-    client_id,
-    uid,
-  )
-  .await?;
+  let mut folder = collab_instance_cache.get_folder(workspace_id).await?;
   let folder_updates = {
     let mut folder_txn = folder.collab.transact_mut();
     folder.body.views.insert(
@@ -555,6 +510,7 @@ pub async fn create_row_document(
         Some(uid),
       ),
       None,
+      uid,
     );
     folder_txn.encode_update_v1()
   };
@@ -574,8 +530,10 @@ pub enum DocChanges {
   Insert(CreatedRowDocument),
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn get_database_row_doc_changes(
   collab_storage: &Arc<dyn CollabStore>,
+  collab_instance_cache: &impl WorkspaceCollabInstanceCache,
   workspace_id: Uuid,
   row_doc_content: Option<String>,
   db_row_body: &DatabaseRowBody,
@@ -657,7 +615,7 @@ pub async fn get_database_row_doc_changes(
         workspace_id,
         uid,
         new_doc_id,
-        collab_storage,
+        collab_instance_cache,
         row_doc_content,
       )
       .await?;

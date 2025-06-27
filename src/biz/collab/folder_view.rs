@@ -18,13 +18,14 @@ pub struct PrivateSpaceAndTrashViews {
 }
 
 pub fn private_space_and_trash_view_ids(
+  uid: i64,
   folder: &Folder,
 ) -> Result<PrivateSpaceAndTrashViews, AppError> {
   let mut view_ids_in_trash = HashSet::new();
   let mut my_private_space_ids = HashSet::new();
   let mut other_private_space_ids = HashSet::new();
-  for private_section in folder.get_my_private_sections() {
-    match folder.get_view(&private_section.id) {
+  for private_section in folder.get_my_private_sections(uid) {
+    match folder.get_view(&private_section.id, uid) {
       Some(private_view) if check_if_view_is_space(&private_view) => {
         let section_id = Uuid::parse_str(&private_section.id)?;
         my_private_space_ids.insert(section_id);
@@ -33,9 +34,9 @@ pub fn private_space_and_trash_view_ids(
     }
   }
 
-  for private_section in folder.get_all_private_sections() {
+  for private_section in folder.get_all_private_sections(uid) {
     let private_section_id = Uuid::parse_str(&private_section.id)?;
-    match folder.get_view(&private_section.id) {
+    match folder.get_view(&private_section.id, uid) {
       Some(private_view)
         if check_if_view_is_space(&private_view)
           && !my_private_space_ids.contains(&private_section_id) =>
@@ -45,7 +46,7 @@ pub fn private_space_and_trash_view_ids(
       _ => (),
     }
   }
-  for trash_view in folder.get_all_trash_sections() {
+  for trash_view in folder.get_all_trash_sections(uid) {
     let trash_view_id = Uuid::parse_str(&trash_view.id)?;
     view_ids_in_trash.insert(trash_view_id);
   }
@@ -63,8 +64,9 @@ pub fn collab_folder_to_folder_view(
   folder: &Folder,
   max_depth: u32,
   pubished_view_ids: &HashSet<Uuid>,
+  uid: i64,
 ) -> Result<FolderView, AppError> {
-  let private_space_and_trash_view_ids = private_space_and_trash_view_ids(folder)?;
+  let private_space_and_trash_view_ids = private_space_and_trash_view_ids(uid, folder)?;
 
   to_folder_view(
     workspace_id,
@@ -76,6 +78,7 @@ pub fn collab_folder_to_folder_view(
     false,
     0,
     max_depth,
+    uid,
   )
   .ok_or(AppError::InvalidFolderView(format!(
     "There is no valid folder view belonging to the root view id: {}",
@@ -83,11 +86,11 @@ pub fn collab_folder_to_folder_view(
   )))
 }
 
-pub fn get_prev_view_id(folder: &Folder, view_id: &Uuid) -> Option<Uuid> {
+pub fn get_prev_view_id(folder: &Folder, view_id: &Uuid, uid: i64) -> Option<Uuid> {
   let view_id = view_id.to_string();
   folder
-    .get_view(&view_id.to_string())
-    .and_then(|view| folder.get_view(&view.parent_view_id))
+    .get_view(&view_id.to_string(), uid)
+    .and_then(|view| folder.get_view(&view.parent_view_id, uid))
     .and_then(|parent_view| {
       parent_view
         .children
@@ -114,6 +117,7 @@ fn to_folder_view(
   parent_is_private: bool,
   depth: u32,
   max_depth: u32,
+  uid: i64,
 ) -> Option<FolderView> {
   let is_trash = private_space_and_trash_views
     .view_ids_in_trash
@@ -129,7 +133,7 @@ fn to_folder_view(
     return None;
   }
 
-  let view = match folder.get_view(&view_id.to_string()) {
+  let view = match folder.get_view(&view_id.to_string(), uid) {
     Some(view) => view,
     None => {
       return None;
@@ -176,13 +180,14 @@ fn to_folder_view(
         is_private,
         depth + 1,
         max_depth,
+        uid,
       )
     })
     .collect();
   Some(FolderView {
     view_id: *view_id,
     parent_view_id: view.parent_view_id.parse().ok(),
-    prev_view_id: get_prev_view_id(folder, view_id),
+    prev_view_id: get_prev_view_id(folder, view_id, uid),
     name: view.name.clone(),
     icon: view
       .icon
@@ -207,11 +212,12 @@ pub fn section_items_to_favorite_folder_view(
   section_items: &[SectionItem],
   folder: &Folder,
   published_view_ids: &HashSet<String>,
+  uid: i64,
 ) -> Vec<FavoriteFolderView> {
   section_items
     .iter()
     .filter_map(|section_item| {
-      let view = folder.get_view(&section_item.id);
+      let view = folder.get_view(&section_item.id, uid);
       view.map(|v| {
         let extra = v.extra.as_ref().map(|e| parse_extra_field_as_json(e));
         let is_pinned = match extra.as_ref() {
@@ -225,7 +231,7 @@ pub fn section_items_to_favorite_folder_view(
         let folder_view = FolderView {
           view_id,
           parent_view_id: v.parent_view_id.parse().ok(),
-          prev_view_id: get_prev_view_id(folder, &view_id),
+          prev_view_id: get_prev_view_id(folder, &view_id, uid),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -255,17 +261,18 @@ pub fn section_items_to_recent_folder_view(
   section_items: &[SectionItem],
   folder: &Folder,
   published_view_ids: &HashSet<String>,
+  uid: i64,
 ) -> Vec<RecentFolderView> {
   section_items
     .iter()
     .filter_map(|section_item| {
-      let view = folder.get_view(&section_item.id);
+      let view = folder.get_view(&section_item.id, uid);
       view.map(|v| {
         let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
           view_id,
           parent_view_id: v.parent_view_id.parse().ok(),
-          prev_view_id: get_prev_view_id(folder, &view_id),
+          prev_view_id: get_prev_view_id(folder, &view_id, uid),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -293,17 +300,18 @@ pub fn section_items_to_recent_folder_view(
 pub fn section_items_to_trash_folder_view(
   section_items: &[SectionItem],
   folder: &Folder,
+  uid: i64,
 ) -> Vec<TrashFolderView> {
   section_items
     .iter()
     .filter_map(|section_item| {
-      let view = folder.get_view(&section_item.id);
+      let view = folder.get_view(&section_item.id, uid);
       view.map(|v| {
         let view_id = v.id.parse().unwrap();
         let folder_view = FolderView {
           view_id,
           parent_view_id: v.parent_view_id.parse().ok(),
-          prev_view_id: get_prev_view_id(folder, &view_id),
+          prev_view_id: get_prev_view_id(folder, &view_id, uid),
           name: v.name.clone(),
           icon: v.icon.as_ref().map(|icon| to_dto_view_icon(icon.clone())),
           is_space: false,
@@ -333,12 +341,17 @@ pub struct ViewTree {
   pub children: Vec<ViewTree>,
 }
 
-pub fn get_view_and_children(folder: &Folder, view_id: &str) -> Result<Option<ViewTree>, AppError> {
-  let private_space_and_trash_views = private_space_and_trash_view_ids(folder)?;
+pub fn get_view_and_children(
+  folder: &Folder,
+  view_id: &str,
+  uid: i64,
+) -> Result<Option<ViewTree>, AppError> {
+  let private_space_and_trash_views = private_space_and_trash_view_ids(uid, folder)?;
   Ok(get_view_and_children_recursive(
     folder,
     &private_space_and_trash_views,
     view_id,
+    uid,
   ))
 }
 
@@ -346,6 +359,7 @@ fn get_view_and_children_recursive(
   folder: &Folder,
   private_space_and_trash_views: &PrivateSpaceAndTrashViews,
   view_id: &str,
+  uid: i64,
 ) -> Option<ViewTree> {
   let view_uuid = Uuid::parse_str(view_id).ok()?;
   if private_space_and_trash_views
@@ -355,24 +369,24 @@ fn get_view_and_children_recursive(
     return None;
   }
 
-  folder.get_view(view_id).map(|view| ViewTree {
+  folder.get_view(view_id, uid).map(|view| ViewTree {
     view: View::clone(&view),
     children: view
       .children
       .iter()
       .filter_map(|child_view_id| {
-        get_view_and_children_recursive(folder, private_space_and_trash_views, child_view_id)
+        get_view_and_children_recursive(folder, private_space_and_trash_views, child_view_id, uid)
       })
       .collect(),
   })
 }
 
-pub fn get_ancestor_views(folder: &Folder, view_id: &str) -> Result<Vec<View>, AppError> {
+pub fn get_ancestor_views(folder: &Folder, view_id: &str, uid: i64) -> Result<Vec<View>, AppError> {
   let mut views = Vec::new();
   let mut current_view_id = view_id.to_string();
   let mut visited: HashSet<String> = HashSet::new();
 
-  while let Some(view) = folder.get_view(&current_view_id) {
+  while let Some(view) = folder.get_view(&current_view_id, uid) {
     views.push(View::clone(&view));
     visited.insert(view.id.clone());
     if view.parent_view_id.is_empty() || visited.contains(&view.parent_view_id) {

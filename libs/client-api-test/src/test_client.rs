@@ -164,10 +164,11 @@ impl TestClient {
     view_id: &str,
     view_name: &str,
     view_layout: ViewLayout,
+    uid: i64,
   ) {
     let mut folder = self.get_folder(*workspace_id).await;
     let general_space_id = folder
-      .get_view(&workspace_id.to_string())
+      .get_view(&workspace_id.to_string(), uid)
       .unwrap()
       .children
       .first()
@@ -181,7 +182,7 @@ impl TestClient {
       .view;
     {
       let mut txn = folder.collab.transact_mut();
-      folder.body.views.insert(&mut txn, view, None);
+      folder.body.views.insert(&mut txn, view, None, uid);
     }
     let folder_collab_type = CollabType::Folder;
     self
@@ -215,7 +216,6 @@ impl TestClient {
       .unwrap()
       .encode_collab;
     Folder::from_collab_doc_state(
-      uid,
       CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone())),
       folder_collab.into(),
       &workspace_id.to_string(),
@@ -322,7 +322,6 @@ impl TestClient {
   }
 
   pub async fn get_user_folder(&self) -> Folder {
-    let uid = self.uid().await;
     let workspace_id = self.workspace_id().await;
     let data = self
       .api_client
@@ -335,7 +334,6 @@ impl TestClient {
       .unwrap();
 
     Folder::from_collab_doc_state(
-      uid,
       CollabOrigin::Empty,
       data.encode_collab.into(),
       &workspace_id.to_string(),

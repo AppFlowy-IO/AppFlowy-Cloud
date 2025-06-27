@@ -97,7 +97,6 @@ impl CollabManager {
       .await?
       .encoded_collab;
 
-    trace!("create folder from collab: {}", workspace_id);
     let folder = tokio::task::spawn_blocking(move || {
       Folder::from_collab_doc_state(
         CollabOrigin::Server,

@@ -42,6 +42,7 @@ async fn document_full_sync_then_search_test() {
   let object_id = Uuid::new_v4();
   let mut local_document = empty_document_editor(&object_id);
   let test_client = TestClient::new_user().await;
+  let uid = test_client.uid().await;
   let workspace_id = test_client.workspace_id().await;
   let doc_state = local_document.encode_collab().encode_to_bytes().unwrap();
   let params = CreateCollabParams {
@@ -57,6 +58,7 @@ async fn document_full_sync_then_search_test() {
       &object_id.to_string(),
       "AppFlowy",
       collab_folder::ViewLayout::Document,
+      uid,
     )
     .await;
 

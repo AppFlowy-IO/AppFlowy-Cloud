@@ -24,6 +24,7 @@ async fn test_embedding_when_create_document() {
   }
 
   let mut test_client = TestClient::new_user().await;
+  let uid = test_client.uid().await;
   let workspace_id = test_client.workspace_id().await;
   // Create the first document and wait for its embedding.
   let object_id_1 = add_document_collab(
@@ -32,6 +33,7 @@ async fn test_embedding_when_create_document() {
     "the_five_dysfunctions_of_a_team.md",
     "five dysfunctional",
     true,
+    uid,
   )
   .await;
 
@@ -183,6 +185,7 @@ async fn add_document_collab(
   file_name: &str,
   search_term: &str,
   wait_embedding: bool,
+  uid: i64,
 ) -> Uuid {
   let object_id = Uuid::new_v4();
   let collab = create_document_collab(&object_id.to_string(), file_name).await;
@@ -198,6 +201,7 @@ async fn add_document_collab(
       &object_id.to_string(),
       search_term,
       ViewLayout::Document,
+      uid,
     )
     .await;
   if wait_embedding {

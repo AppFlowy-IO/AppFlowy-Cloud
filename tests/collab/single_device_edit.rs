@@ -267,7 +267,6 @@ async fn same_device_multiple_connect_in_order_test() {
     .await;
   // simulate client try to connect the websocket server by three times
   // each connect alter the document
-  let mut clients = vec![];
   for i in 0..3 {
     let mut new_client =
       TestClient::new_with_device_id(&old_client.device_id, old_client.user.clone(), true).await;
@@ -275,7 +274,11 @@ async fn same_device_multiple_connect_in_order_test() {
       .open_collab(workspace_id, object_id, collab_type)
       .await;
     new_client.insert_into(&object_id, &i.to_string(), i).await;
-    clients.push(new_client);
+    sleep(Duration::from_millis(500)).await;
+    new_client
+      .wait_object_sync_complete(&object_id)
+      .await
+      .unwrap();
   }
 
   assert_server_collab(

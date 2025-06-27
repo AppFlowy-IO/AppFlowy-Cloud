@@ -86,6 +86,8 @@ jobs:
         include:
           - test_service: "appflowy_cloud"
             test_cmd: "--workspace --exclude appflowy-ai-client --features ai-test-enabled"
+          - test_service: "appflowy_cloud_new_sync"
+            test_cmd: "--features sync-v2 --test main collab"
           - test_service: "appflowy_worker"
             test_cmd: "-p appflowy-worker"
           - test_service: "admin_frontend"
@@ -167,7 +169,7 @@ jobs:
       - name: Run Tests
         run: |
           echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }} -- --skip stress_test
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test  ${{ matrix.test_cmd }} -- --skip stress_test
 
       - name: Server Logs
         if: failure()

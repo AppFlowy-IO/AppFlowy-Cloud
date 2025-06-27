@@ -188,12 +188,11 @@ pub async fn redis_connection_manager() -> ConnectionManager {
 use std::io::{BufReader, Read};
 
 use collab::preclude::MapExt;
+use collab_rt_protocol::CollabRef;
 use flate2::bufread::GzDecoder;
 use serde::Deserialize;
 use uuid::Uuid;
 use yrs::{GetString, Text, TextRef};
-
-use client_api_test::CollabRef;
 
 /// (position, delete length, insert content).
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]

@@ -35,18 +35,18 @@ dotenvy = "0.15.7"
 reqwest.workspace = true
 gotrue.workspace = true
 client-websocket.workspace = true
-futures = "0.3.30"
 anyhow.workspace = true
 serde = { version = "1.0.199", features = ["derive"] }
 hex = "0.4.3"
 async-trait.workspace = true
 dashmap.workspace = true
+rand = "0.9.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["console"] }
 
 
 [features]
-default = ["v2"]
+default = []
 ai-test-enabled = []
 v2 = []

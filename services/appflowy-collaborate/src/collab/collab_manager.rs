@@ -89,7 +89,7 @@ impl CollabManager {
     Ok(())
   }
 
-  pub async fn get_folder(&self, workspace_id: WorkspaceId) -> AppResult<Folder> {
+  pub async fn build_folder(&self, workspace_id: WorkspaceId) -> AppResult<Folder> {
     let query = QueryCollab::new(workspace_id, CollabType::Folder);
     let encoded_collab = self
       .collab_cache

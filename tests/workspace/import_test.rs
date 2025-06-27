@@ -13,10 +13,11 @@ use uuid::Uuid;
 async fn import_blog_post_test() {
   // Step 1: Import the blog post zip
   let (client, imported_workspace_id) = import_notion_zip_until_complete("blog_post.zip").await;
+  let uid = client.uid().await;
 
   // Step 2: Fetch the folder and views
   let folder = client.get_folder(imported_workspace_id).await;
-  let mut space_views = folder.get_views_belong_to(&imported_workspace_id.to_string());
+  let mut space_views = folder.get_views_belong_to(&imported_workspace_id.to_string(), uid);
   assert_eq!(
     space_views.len(),
     1,
@@ -29,7 +30,10 @@ async fn import_blog_post_test() {
   assert_eq!(space_view.name, "Imported Space");
 
   // Step 4: Fetch the imported view and document
-  let imported_view = folder.get_views_belong_to(&space_view.id).pop().unwrap();
+  let imported_view = folder
+    .get_views_belong_to(&space_view.id, uid)
+    .pop()
+    .unwrap();
   let document = client
     .get_document(imported_workspace_id, imported_view.id.parse().unwrap())
     .await;
@@ -86,9 +90,10 @@ async fn import_blog_post_test() {
 #[tokio::test]
 async fn import_project_and_task_zip_test() {
   let (client, imported_workspace_id) = import_notion_zip_until_complete("project&task.zip").await;
+  let uid = client.uid().await;
   let folder = client.get_folder(imported_workspace_id).await;
   let workspace_database = client.get_workspace_database(imported_workspace_id).await;
-  let space_views = folder.get_views_belong_to(&imported_workspace_id.to_string());
+  let space_views = folder.get_views_belong_to(&imported_workspace_id.to_string(), uid);
   assert_eq!(
     space_views.len(),
     1,
@@ -98,7 +103,7 @@ async fn import_project_and_task_zip_test() {
   assert_eq!(space_views[0].name, "Imported Space");
   assert!(space_views[0].space_info().is_some());
 
-  let mut sub_views = folder.get_views_belong_to(&space_views[0].id);
+  let mut sub_views = folder.get_views_belong_to(&space_views[0].id, uid);
   let imported_view = sub_views.pop().unwrap();
   assert_eq!(imported_view.name, "Projects & Tasks");
   assert_eq!(
@@ -109,7 +114,7 @@ async fn import_project_and_task_zip_test() {
   );
   assert_eq!(imported_view.layout, ViewLayout::Document);
 
-  let sub_views = folder.get_views_belong_to(&imported_view.id);
+  let sub_views = folder.get_views_belong_to(&imported_view.id, uid);
   for (index, view) in sub_views.iter().enumerate() {
     if index == 0 {
       assert_eq!(view.name, "Projects");

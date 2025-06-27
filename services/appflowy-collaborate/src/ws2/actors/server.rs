@@ -1,12 +1,15 @@
 use super::session::{WsInput, WsSession};
 use super::workspace::{Terminate, Workspace};
+use crate::collab::collab_manager::CollabManager;
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
-use crate::collab::ws_collab_manager::WSCollabManager;
 use crate::ws2::{BulkPermissionUpdate, PermissionUpdate};
 use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
+use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
+use collab_folder::Folder;
+use database::collab::AppResult;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -14,16 +17,16 @@ use tracing::info;
 use yrs::block::ClientID;
 
 pub struct WsServer {
-  store: Arc<WSCollabManager>,
+  manager: Arc<CollabManager>,
   snapshot_scheduler: SnapshotScheduler,
   workspaces: HashMap<WorkspaceId, Addr<Workspace>>,
 }
 
 impl WsServer {
-  pub fn new(store: Arc<WSCollabManager>) -> Self {
-    let snapshot_scheduler = SnapshotScheduler::new(store.clone());
+  pub fn new(manager: Arc<CollabManager>) -> Self {
+    let snapshot_scheduler = SnapshotScheduler::new(manager.clone());
     Self {
-      store,
+      manager,
       snapshot_scheduler,
       workspaces: HashMap::new(),
     }
@@ -32,10 +35,10 @@ impl WsServer {
   fn init_workspace(
     server: Recipient<Terminate>,
     workspace_id: WorkspaceId,
-    store: Arc<WSCollabManager>,
+    manager: Arc<CollabManager>,
     snapshot_scheduler: SnapshotScheduler,
   ) -> Addr<Workspace> {
-    Workspace::new(server, workspace_id, store, snapshot_scheduler).start()
+    Workspace::new(server, workspace_id, manager, snapshot_scheduler).start()
   }
 }
 
@@ -52,7 +55,7 @@ impl Handler<Join> for WsServer {
       Self::init_workspace(
         server,
         msg.workspace_id,
-        self.store.clone(),
+        self.manager.clone(),
         self.snapshot_scheduler.clone(),
       )
     });
@@ -80,7 +83,7 @@ impl Handler<WsInput> for WsServer {
       Self::init_workspace(
         server,
         msg.workspace_id,
-        self.store.clone(),
+        self.manager.clone(),
         self.snapshot_scheduler.clone(),
       )
     });
@@ -106,7 +109,24 @@ impl Handler<PublishUpdate> for WsServer {
       Self::init_workspace(
         server,
         msg.workspace_id,
-        self.store.clone(),
+        self.manager.clone(),
+        self.snapshot_scheduler.clone(),
+      )
+    });
+    workspace.do_send(msg);
+  }
+}
+
+impl Handler<WorkspaceFolder> for WsServer {
+  type Result = ();
+
+  fn handle(&mut self, msg: WorkspaceFolder, ctx: &mut Self::Context) -> Self::Result {
+    let server = ctx.address().recipient();
+    let workspace = self.workspaces.entry(msg.workspace_id).or_insert_with(|| {
+      Self::init_workspace(
+        server,
+        msg.workspace_id,
+        self.manager.clone(),
         self.snapshot_scheduler.clone(),
       )
     });
@@ -210,5 +230,26 @@ impl CollabUpdatePublisher for Addr<WsServer> {
       ack,
     });
     rx.await?
+  }
+}
+
+#[derive(actix::Message)]
+#[rtype(result = "()")]
+pub struct WorkspaceFolder {
+  pub workspace_id: WorkspaceId,
+  pub ack: tokio::sync::oneshot::Sender<AppResult<Folder>>,
+}
+
+#[async_trait::async_trait]
+pub trait WorkspaceCollabInstanceCache {
+  async fn get_folder(&self, workspace_id: WorkspaceId) -> AppResult<Folder>;
+}
+
+#[async_trait::async_trait]
+impl WorkspaceCollabInstanceCache for Addr<WsServer> {
+  async fn get_folder(&self, workspace_id: WorkspaceId) -> AppResult<Folder> {
+    let (ack, rx) = tokio::sync::oneshot::channel();
+    self.do_send(WorkspaceFolder { workspace_id, ack });
+    rx.await.map_err(|err| AppError::Internal(err.into()))?
   }
 }

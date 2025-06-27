@@ -6,7 +6,7 @@ use crate::biz::authentication::jwt::{Authorization, OptionalUserUuid, UserUuid}
 use crate::biz::collab::ops::{
   get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
 };
-use crate::biz::collab::utils::collab_from_doc_state;
+use crate::biz::collab::utils::{collab_from_doc_state, DUMMY_UID};
 use crate::biz::workspace;
 use crate::biz::workspace::duplicate::duplicate_view_tree_and_collab;
 use crate::biz::workspace::invite::{
@@ -1707,6 +1707,7 @@ async fn get_page_view_handler(
   let page_collab = get_page_view_collab(
     &state.pg_pool,
     &state.collab_storage,
+    &state.ws_server,
     uid,
     workspace_uuid,
     view_id,
@@ -2002,10 +2003,12 @@ async fn list_published_collab_info_handler(
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<Vec<PublishInfoView>>>> {
+  let uid = DUMMY_UID;
   let publish_infos = biz::workspace::publish::list_collab_publish_info(
     state.published_collab_store.as_ref(),
-    &state.collab_storage,
+    &state.ws_server,
     workspace_id.into_inner(),
+    uid,
   )
   .await?;
 
@@ -2325,7 +2328,7 @@ async fn get_recent_views_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let folder_views =
-    get_user_recent_folder_views(&state.collab_storage, &state.pg_pool, uid, workspace_id).await?;
+    get_user_recent_folder_views(&state.ws_server, &state.pg_pool, uid, workspace_id).await?;
   let section_items = RecentSectionItems {
     views: folder_views,
   };
@@ -2344,8 +2347,7 @@ async fn get_favorite_views_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
   let folder_views =
-    get_user_favorite_folder_views(&state.collab_storage, &state.pg_pool, uid, workspace_id)
-      .await?;
+    get_user_favorite_folder_views(&state.ws_server, &state.pg_pool, uid, workspace_id).await?;
   let section_items = FavoriteSectionItems {
     views: folder_views,
   };
@@ -2363,7 +2365,7 @@ async fn get_trash_views_handler(
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
-  let folder_views = get_user_trash_folder_views(&state.collab_storage, uid, workspace_id).await?;
+  let folder_views = get_user_trash_folder_views(&state.ws_server, uid, workspace_id).await?;
   let section_items = TrashSectionItems {
     views: folder_views,
   };
@@ -2374,10 +2376,12 @@ async fn get_workspace_publish_outline_handler(
   publish_namespace: web::Path<String>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<PublishedView>>> {
+  let uid = DUMMY_UID;
   let published_view = biz::collab::ops::get_published_view(
-    &state.collab_storage,
+    &state.ws_server,
     publish_namespace.into_inner(),
     &state.pg_pool,
+    uid,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(published_view)))
@@ -2390,9 +2394,14 @@ async fn list_database_handler(
 ) -> Result<Json<AppResponse<Vec<AFDatabase>>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
-  let dbs =
-    biz::collab::ops::list_database(&state.pg_pool, &state.collab_storage, uid, workspace_id)
-      .await?;
+  let dbs = biz::collab::ops::list_database(
+    &state.pg_pool,
+    &state.ws_server,
+    &state.collab_storage,
+    uid,
+    workspace_id,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok().with_data(dbs)))
 }
 

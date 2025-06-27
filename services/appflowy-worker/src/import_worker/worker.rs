@@ -910,7 +910,6 @@ async fn process_unzip_file(
   )
   .await?;
   let mut folder = Folder::from_collab_doc_state(
-    import_task.uid,
     CollabOrigin::Server,
     folder_collab.into(),
     &imported.workspace_id,
@@ -924,7 +923,7 @@ async fn process_unzip_file(
     import_task.workspace_id,
     nested_views.len()
   );
-  folder.insert_nested_views(nested_views.into_inner());
+  folder.insert_nested_views(nested_views.into_inner(), import_task.uid);
 
   let mut resources = vec![];
   let mut collab_params_list = vec![];
@@ -1047,7 +1046,7 @@ async fn process_unzip_file(
     })
     .collect::<Vec<_>>();
   if !orphan_views.is_empty() {
-    folder.insert_views(orphan_views);
+    folder.insert_views(orphan_views, import_task.uid);
   }
 
   // 6. Encode Folder

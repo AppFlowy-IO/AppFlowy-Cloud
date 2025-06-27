@@ -37,7 +37,7 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::collab_store::CollabStoreImpl;
-use appflowy_collaborate::ws2::{WSCollabManager, WsServer};
+use appflowy_collaborate::ws2::{CollabManager, WsServer};
 use appflowy_collaborate::CollaborationServer;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
@@ -338,7 +338,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     embedder_config,
     redis_conn_manager.clone(),
   );
-  let collab_store = WSCollabManager::new(
+  let manager = CollabManager::new(
     thread_pool.clone(),
     collab_access_control.clone(),
     collab_cache.clone(),
@@ -347,7 +347,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     awareness_gossip.clone(),
     indexer_scheduler.clone(),
   );
-  let ws_server = WsServer::new(collab_store).start();
+  let ws_server = WsServer::new(manager).start();
 
   info!("Application state initialized");
   Ok(AppState {

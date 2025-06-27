@@ -155,12 +155,12 @@ pub(crate) async fn create_workspace_collab(
   txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<(), AppError> {
   let workspace = Workspace::new(workspace_id.to_string(), name.to_string(), uid);
-  let folder_data = FolderData::new(workspace);
+  let folder_data = FolderData::new(uid, workspace);
 
   let options = CollabOptions::new(workspace_id.to_string(), default_client_id());
   let collab = Collab::new_with_options(CollabOrigin::Empty, options)
     .map_err(|e| AppError::Internal(e.into()))?;
-  let folder = Folder::create(uid, collab, None, folder_data);
+  let folder = Folder::create(collab, None, folder_data);
   let encode_collab = folder
     .encode_collab()
     .map_err(|err| AppError::Internal(err.into()))?;

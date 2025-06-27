@@ -3,7 +3,7 @@ use super::workspace::{Terminate, Workspace};
 use crate::collab::collab_manager::CollabManager;
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
 use crate::ws2::{BulkPermissionUpdate, PermissionUpdate};
-use actix::{Actor, Addr, AsyncContext, Handler, Recipient};
+use actix::{Actor, Addr, Arbiter, AsyncContext, Handler, Recipient};
 use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, ServerMessage, WorkspaceId};
 use collab::core::origin::CollabOrigin;
@@ -12,6 +12,7 @@ use collab_folder::Folder;
 use database::collab::AppResult;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use tracing::info;
 use yrs::block::ClientID;
@@ -20,15 +21,18 @@ pub struct WsServer {
   manager: Arc<CollabManager>,
   snapshot_scheduler: SnapshotScheduler,
   workspaces: HashMap<WorkspaceId, Addr<Workspace>>,
+  arbiter_pool: ArbiterPool,
 }
 
 impl WsServer {
   pub fn new(manager: Arc<CollabManager>) -> Self {
     let snapshot_scheduler = SnapshotScheduler::new(manager.clone());
+    let arbiter_pool = ArbiterPool::default();
     Self {
       manager,
       snapshot_scheduler,
       workspaces: HashMap::new(),
+      arbiter_pool,
     }
   }
 
@@ -37,8 +41,12 @@ impl WsServer {
     workspace_id: WorkspaceId,
     manager: Arc<CollabManager>,
     snapshot_scheduler: SnapshotScheduler,
+    pool: &ArbiterPool,
   ) -> Addr<Workspace> {
-    Workspace::new(server, workspace_id, manager, snapshot_scheduler).start()
+    let arbiter = pool.next();
+    Workspace::start_in_arbiter(&arbiter.handle(), move |_ctx| {
+      Workspace::new(server, workspace_id, manager, snapshot_scheduler)
+    })
   }
 }
 
@@ -57,6 +65,7 @@ impl Handler<Join> for WsServer {
         msg.workspace_id,
         self.manager.clone(),
         self.snapshot_scheduler.clone(),
+        &self.arbiter_pool,
       )
     });
     info!("{} joined", msg);
@@ -85,6 +94,7 @@ impl Handler<WsInput> for WsServer {
         msg.workspace_id,
         self.manager.clone(),
         self.snapshot_scheduler.clone(),
+        &self.arbiter_pool,
       )
     });
     workspace.do_send(msg);
@@ -111,6 +121,7 @@ impl Handler<PublishUpdate> for WsServer {
         msg.workspace_id,
         self.manager.clone(),
         self.snapshot_scheduler.clone(),
+        &self.arbiter_pool,
       )
     });
     workspace.do_send(msg);
@@ -128,6 +139,7 @@ impl Handler<WorkspaceFolder> for WsServer {
         msg.workspace_id,
         self.manager.clone(),
         self.snapshot_scheduler.clone(),
+        &self.arbiter_pool,
       )
     });
     workspace.do_send(msg);
@@ -251,5 +263,40 @@ impl WorkspaceCollabInstanceCache for Addr<WsServer> {
     let (ack, rx) = tokio::sync::oneshot::channel();
     self.do_send(WorkspaceFolder { workspace_id, ack });
     rx.await.map_err(|err| AppError::Internal(err.into()))?
+  }
+}
+
+pub struct ArbiterPool {
+  arbiters: Vec<Arbiter>,
+  next: AtomicU64,
+}
+
+impl Default for ArbiterPool {
+  fn default() -> Self {
+    let parallelism = match std::thread::available_parallelism() {
+      Ok(max_cpus) => max_cpus.get(),
+      Err(_) => 4, // Fallback to a default value if unable to determine
+    };
+    Self::new(parallelism)
+  }
+}
+
+impl ArbiterPool {
+  pub fn new(size: usize) -> Self {
+    tracing::info!("creating arbiter pool on {} threads", size);
+    let mut arbiters = Vec::with_capacity(size);
+    for _ in 0..size {
+      arbiters.push(Arbiter::new());
+    }
+    Self {
+      arbiters,
+      next: AtomicU64::new(0),
+    }
+  }
+
+  pub fn next(&self) -> &Arbiter {
+    let index =
+      self.next.fetch_add(1, std::sync::atomic::Ordering::SeqCst) % (self.arbiters.len() as u64);
+    &self.arbiters[index as usize]
   }
 }

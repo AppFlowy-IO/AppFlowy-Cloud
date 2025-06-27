@@ -85,9 +85,9 @@ impl Workspace {
     let _ = msg.ack.send(result);
   }
 
-  async fn get_folder_instance(store: Arc<CollabManager>, msg: WorkspaceFolder) {
+  async fn get_folder(store: Arc<CollabManager>, msg: WorkspaceFolder) {
     let WorkspaceFolder { workspace_id, ack } = msg;
-    let result = store.get_folder(workspace_id).await;
+    let result = store.build_folder(workspace_id).await;
     let _ = ack.send(result);
   }
 
@@ -598,7 +598,7 @@ impl Handler<PublishUpdate> for Workspace {
 }
 
 impl Handler<WorkspaceFolder> for Workspace {
-  type Result = AtomicResponse<Self, ()>;
+  type Result = ResponseActFuture<Self, ()>;
   fn handle(&mut self, msg: WorkspaceFolder, ctx: &mut Self::Context) -> Self::Result {
     let store = self.manager.clone();
     if self.sessions_by_client_id.is_empty() {
@@ -606,9 +606,7 @@ impl Handler<WorkspaceFolder> for Workspace {
       // so if there are no active sessions, we should schedule a termination
       self.schedule_terminate(ctx);
     }
-    AtomicResponse::new(Box::pin(
-      Self::get_folder_instance(store, msg).into_actor(self),
-    ))
+    Box::pin(Self::get_folder(store, msg).into_actor(self))
   }
 }
 

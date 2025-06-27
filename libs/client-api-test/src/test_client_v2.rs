@@ -211,8 +211,8 @@ impl TestClient {
     view_id: &str,
     view_name: &str,
     view_layout: ViewLayout,
+    uid: i64,
   ) {
-    let uid = self.uid().await;
     let mut folder = self.get_folder(*workspace_id).await;
     let general_space_id = folder
       .get_view(&workspace_id.to_string(), uid)

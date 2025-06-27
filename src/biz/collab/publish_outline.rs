@@ -12,9 +12,10 @@ pub fn collab_folder_to_published_outline(
   root_view_id: &str,
   folder: &Folder,
   publish_view_id_to_info_map: &HashMap<String, PublishedViewInfo>,
+  uid: i64,
 ) -> Result<PublishedView, AppError> {
   let mut unviewable = HashSet::new();
-  for trash_view in folder.get_all_trash_sections() {
+  for trash_view in folder.get_all_trash_sections(uid) {
     unviewable.insert(trash_view.id);
   }
 
@@ -27,6 +28,7 @@ pub fn collab_folder_to_published_outline(
     publish_view_id_to_info_map,
     0,
     max_depth,
+    uid,
   )
   .ok_or(AppError::InvalidPublishedOutline(format!(
     "failed to get published outline for root view id: {}",
@@ -34,6 +36,7 @@ pub fn collab_folder_to_published_outline(
   )))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn to_publish_view(
   parent_view_id: &str,
   view_id: &str,
@@ -42,12 +45,13 @@ fn to_publish_view(
   publish_view_id_to_info_map: &HashMap<String, PublishedViewInfo>,
   depth: u32,
   max_depth: u32,
+  uid: i64,
 ) -> Option<PublishedView> {
   if depth > max_depth || unviewable.contains(view_id) {
     return None;
   }
 
-  let view = match folder.get_view(view_id) {
+  let view = match folder.get_view(view_id, uid) {
     Some(view) => view,
     None => {
       return None;
@@ -79,6 +83,7 @@ fn to_publish_view(
         publish_view_id_to_info_map,
         depth + 1,
         max_depth,
+        uid,
       )
     })
     .collect();

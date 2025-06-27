@@ -2,9 +2,8 @@
 
 use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
-use crate::collab::validator::CollabValidator;
 use crate::metrics::CollabMetrics;
-use crate::ws2::WSCollabManager;
+use crate::ws2::CollabManager;
 use access_control::act::Action;
 use access_control::collab::CollabAccessControl;
 use access_control::workspace::WorkspaceAccessControl;
@@ -16,6 +15,7 @@ use chrono::Timelike;
 use collab::entity::{EncodedCollab, EncoderVersion};
 use collab_entity::CollabType;
 use collab_rt_entity::ClientCollabMessage;
+use collab_rt_protocol::validate_encode_collab;
 use database::collab::{
   insert_into_af_collab_bulk_for_user, AppResult, CollabMetadata, CollabStore, GetCollabOrigin,
 };
@@ -179,7 +179,15 @@ impl CollabStore for CollabStoreImpl {
       params.object_id,
       params.collab_type
     );
-    if let Err(err) = params.check_encode_collab().await {
+
+    if let Err(err) = validate_encode_collab(
+      &params.object_id,
+      &params.encoded_collab_v1,
+      &params.collab_type,
+    )
+    .await
+    .map_err(|err| AppError::NoRequiredData(err.to_string()))
+    {
       return Err(AppError::NoRequiredData(format!(
         "Invalid collab doc state detected for workspace_id: {}, uid: {}, object_id: {} collab_type:{}. Error details: {}",
         workspace_id, uid, params.object_id, params.collab_type, err

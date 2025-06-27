@@ -42,8 +42,9 @@ async fn get_user_default_workspace_test() {
   let mut test_client = TestClient::new_user().await;
   let folder = test_client.get_user_folder().await;
 
+  let uid = test_client.uid().await;
   let workspace_id = test_client.workspace_id().await;
-  let views = folder.get_views_belong_to(&workspace_id.to_string());
+  let views = folder.get_views_belong_to(&workspace_id.to_string(), test_client.uid().await);
 
   // 2 spaces
   assert_eq!(views.len(), 2);
@@ -61,7 +62,7 @@ async fn get_user_default_workspace_test() {
   );
 
   // it contains 1 document and 1 board
-  let general_space_views = folder.get_views_belong_to(&general_space.id);
+  let general_space_views = folder.get_views_belong_to(&general_space.id, test_client.uid().await);
   assert_eq!(general_space_views.len(), 2);
   {
     // the first view is the getting started document, and contains 2 sub views
@@ -85,7 +86,8 @@ async fn get_user_default_workspace_test() {
     let document_data = getting_started_document.get_document_data().unwrap();
     assert_eq!(document_data.blocks.len(), 16);
 
-    let getting_started_sub_views = folder.get_views_belong_to(&getting_started_view.id);
+    let getting_started_sub_views =
+      folder.get_views_belong_to(&getting_started_view.id, test_client.uid().await);
     assert_eq!(getting_started_sub_views.len(), 3);
 
     let desktop_guide_view = getting_started_sub_views[0].clone();
@@ -147,7 +149,7 @@ async fn get_user_default_workspace_test() {
       })
     );
 
-    let to_dos_sub_views = folder.get_views_belong_to(&to_dos_view.id);
+    let to_dos_sub_views = folder.get_views_belong_to(&to_dos_view.id, test_client.uid().await);
     assert_eq!(to_dos_sub_views.len(), 0);
   }
 
@@ -162,6 +164,6 @@ async fn get_user_default_workspace_test() {
     shared_space_extra.get("is_space"),
     Some(&serde_json::json!(true))
   );
-  let shared_space_views = folder.get_views_belong_to(&shared_space.id);
+  let shared_space_views = folder.get_views_belong_to(&shared_space.id, uid);
   assert_eq!(shared_space_views.len(), 0);
 }

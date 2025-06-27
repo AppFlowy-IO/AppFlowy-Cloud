@@ -1,5 +1,7 @@
 use crate::collab::cache::mem_cache::MillisSeconds;
 use crate::collab::cache::CollabCache;
+use access_control::act::Action;
+use access_control::collab::CollabAccessControl;
 use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_proto::{ObjectId, Rid, TimestampedEncodedCollab, UpdateFlags, WorkspaceId};
@@ -11,6 +13,7 @@ use collab::entity::{EncodedCollab, EncoderVersion};
 use collab::preclude::Collab;
 use collab_document::document::DocumentBody;
 use collab_entity::CollabType;
+use collab_folder::Folder;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::lease::Lease;
 use collab_stream::model::{AwarenessStreamUpdate, MessageId, UpdateStreamMessage};
@@ -28,9 +31,6 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-
-use access_control::act::Action;
-use access_control::collab::CollabAccessControl;
 /// Represents a snapshot task to be processed
 use tracing::{instrument, trace, warn};
 use uuid::Uuid;
@@ -40,7 +40,7 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Update};
 
-pub struct WSCollabManager {
+pub struct CollabManager {
   collab_cache: Arc<CollabCache>,
   access_control: Arc<dyn CollabAccessControl>,
   update_streams: Arc<StreamRouter>,
@@ -50,7 +50,7 @@ pub struct WSCollabManager {
   snapshot_thread_pool: Arc<ThreadPoolNoAbort>,
 }
 
-impl WSCollabManager {
+impl CollabManager {
   #[allow(clippy::too_many_arguments)]
   pub fn new(
     thread_pool: Arc<ThreadPoolNoAbort>,
@@ -87,6 +87,34 @@ impl WSCollabManager {
     let _: redis::Value = conn.xtrim_options(key, &options).await?;
     tracing::info!("pruned updates from workspace {}", workspace_id);
     Ok(())
+  }
+
+  pub async fn get_folder(&self, workspace_id: WorkspaceId) -> AppResult<Folder> {
+    let query = QueryCollab::new(workspace_id, CollabType::Folder);
+    let encoded_collab = self
+      .collab_cache
+      .get_full_collab(&workspace_id, query, None, EncoderVersion::V1)
+      .await?
+      .encoded_collab;
+
+    trace!("create folder from collab: {}", workspace_id);
+    let folder = tokio::task::spawn_blocking(move || {
+      Folder::from_collab_doc_state(
+        CollabOrigin::Server,
+        encoded_collab.into(),
+        &workspace_id.to_string(),
+        default_client_id(),
+      )
+      .map_err(|e| {
+        AppError::Internal(anyhow::anyhow!(
+          "Unable to decode workspace folder {}: {}",
+          workspace_id,
+          e
+        ))
+      })
+    })
+    .await??;
+    Ok(folder)
   }
 
   async fn get_snapshot(
@@ -636,7 +664,7 @@ pub struct CollabState {
   pub state_vector: Vec<u8>,
 }
 
-pub fn apply_updates_to_snapshot(
+fn apply_updates_to_snapshot(
   client_id: ClientID,
   object_id: ObjectId,
   collab_type: CollabType,

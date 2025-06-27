@@ -1,8 +1,10 @@
 use super::server::{Join, Leave, WsOutput};
 use super::session::{InputMessage, WsInput, WsSession};
+use crate::collab::collab_manager::CollabManager;
 use crate::collab::snapshot_scheduler::SnapshotScheduler;
-use crate::collab::ws_collab_manager::WSCollabManager;
-use crate::ws2::{BroadcastPermissionChanges, PublishUpdate, UpdateUserPermissions};
+use crate::ws2::{
+  BroadcastPermissionChanges, PublishUpdate, UpdateUserPermissions, WorkspaceFolder,
+};
 use actix::ActorFutureExt;
 use actix::{
   fut, Actor, ActorContext, Addr, AsyncContext, AtomicResponse, Handler, Recipient,
@@ -30,7 +32,7 @@ pub struct Workspace {
   server: Recipient<Terminate>,
   workspace_id: WorkspaceId,
   last_message_id: Rid,
-  store: Arc<WSCollabManager>,
+  manager: Arc<CollabManager>,
   snapshot_scheduler: SnapshotScheduler,
   sessions_by_client_id: HashMap<ClientID, WorkspaceSessionHandle>,
   updates_handle: Option<SpawnHandle>,
@@ -48,13 +50,13 @@ impl Workspace {
   pub fn new(
     server: Recipient<Terminate>,
     workspace_id: WorkspaceId,
-    store: Arc<WSCollabManager>,
+    manager: Arc<CollabManager>,
     snapshot_scheduler: SnapshotScheduler,
   ) -> Self {
     Self {
       server,
       workspace_id,
-      store,
+      manager,
       snapshot_scheduler,
       last_message_id: Rid::default(),
       sessions_by_client_id: HashMap::new(),
@@ -67,7 +69,7 @@ impl Workspace {
   }
 
   async fn publish_update(
-    store: Arc<WSCollabManager>,
+    store: Arc<CollabManager>,
     workspace_id: WorkspaceId,
     msg: PublishUpdate,
   ) {
@@ -83,11 +85,13 @@ impl Workspace {
     let _ = msg.ack.send(result);
   }
 
-  async fn hande_ws_input(
-    store: Arc<WSCollabManager>,
-    sender: WorkspaceSessionHandle,
-    msg: WsInput,
-  ) {
+  async fn get_folder_instance(store: Arc<CollabManager>, msg: WorkspaceFolder) {
+    let WorkspaceFolder { workspace_id, ack } = msg;
+    let result = store.get_folder(workspace_id).await;
+    let _ = ack.send(result);
+  }
+
+  async fn hande_ws_input(store: Arc<CollabManager>, sender: WorkspaceSessionHandle, msg: WsInput) {
     match msg.message {
       InputMessage::Manifest(collab_type, rid, state_vector) => {
         match store
@@ -216,7 +220,7 @@ impl Workspace {
   }
 
   async fn publish_collabs_created_since(
-    store: Arc<WSCollabManager>,
+    store: Arc<CollabManager>,
     session_handle: WorkspaceSessionHandle,
     client_id: ClientID,
     workspace_id: WorkspaceId,
@@ -342,12 +346,12 @@ impl Actor for Workspace {
     tracing::info!("initializing workspace: {}", self.workspace_id);
     let update_streams_key = UpdateStreamMessage::stream_key(&self.workspace_id);
     let stream = self
-      .store
+      .manager
       .updates()
       .observe::<UpdateStreamMessage>(update_streams_key, None);
     self.updates_handle = Some(ctx.add_stream(stream));
     let stream = self
-      .store
+      .manager
       .awareness()
       .workspace_awareness_stream(&self.workspace_id);
     self.awareness_handle = Some(ctx.add_stream(stream));
@@ -409,7 +413,7 @@ impl StreamHandler<anyhow::Result<UpdateStreamMessage>> for Workspace {
     }
 
     self.last_message_id = self.last_message_id.max(msg.last_message_id);
-    let store = self.store.clone();
+    let store = self.manager.clone();
     let object_id = msg.object_id;
     let collab_type = msg.collab_type;
     let last_message_id = msg.last_message_id;
@@ -503,7 +507,7 @@ impl Handler<Join> for Workspace {
         msg.session_id,
         msg.workspace_id
       );
-      let store = self.store.clone();
+      let store = self.manager.clone();
       let workspace_id = self.workspace_id;
       let session = msg.addr;
       if let Some(last_message_id) = msg.last_message_id {
@@ -566,7 +570,7 @@ impl Handler<Terminate> for Workspace {
 impl Handler<WsInput> for Workspace {
   type Result = AtomicResponse<Self, ()>;
   fn handle(&mut self, msg: WsInput, _: &mut Self::Context) -> Self::Result {
-    let store = self.store.clone();
+    let store = self.manager.clone();
     if let Some(sender) = self.sessions_by_client_id.get(&msg.client_id) {
       AtomicResponse::new(Box::pin(
         Self::hande_ws_input(store, sender.clone(), msg).into_actor(self),
@@ -580,7 +584,7 @@ impl Handler<WsInput> for Workspace {
 impl Handler<PublishUpdate> for Workspace {
   type Result = AtomicResponse<Self, ()>;
   fn handle(&mut self, msg: PublishUpdate, ctx: &mut Self::Context) -> Self::Result {
-    let store = self.store.clone();
+    let store = self.manager.clone();
     let workspace_id = self.workspace_id;
     if self.sessions_by_client_id.is_empty() {
       // this is a single call message (i.e. called from a non-session context like HTTP request)
@@ -593,12 +597,27 @@ impl Handler<PublishUpdate> for Workspace {
   }
 }
 
+impl Handler<WorkspaceFolder> for Workspace {
+  type Result = AtomicResponse<Self, ()>;
+  fn handle(&mut self, msg: WorkspaceFolder, ctx: &mut Self::Context) -> Self::Result {
+    let store = self.manager.clone();
+    if self.sessions_by_client_id.is_empty() {
+      // this is a single call message (i.e. called from a non-session context like HTTP request)
+      // so if there are no active sessions, we should schedule a termination
+      self.schedule_terminate(ctx);
+    }
+    AtomicResponse::new(Box::pin(
+      Self::get_folder_instance(store, msg).into_actor(self),
+    ))
+  }
+}
+
 impl Handler<Snapshot> for Workspace {
   type Result = ResponseActFuture<Self, ()>;
 
   fn handle(&mut self, _: Snapshot, _: &mut Self::Context) -> Self::Result {
     use actix::ActorFutureExt;
-    let store = self.store.clone();
+    let store = self.manager.clone();
     let workspace_id = self.workspace_id;
     let up_to = self.last_message_id;
     Box::pin(
@@ -801,7 +820,7 @@ impl WorkspaceSessionHandle {
 
   async fn can_write_collab(
     &self,
-    store: &Arc<WSCollabManager>,
+    store: &Arc<CollabManager>,
     object_id: &ObjectId,
   ) -> Result<bool, AppError> {
     let now = Instant::now();
@@ -835,7 +854,7 @@ impl WorkspaceSessionHandle {
 
   async fn can_read_collab(
     &self,
-    store: &Arc<WSCollabManager>,
+    store: &Arc<CollabManager>,
     object_id: &ObjectId,
   ) -> Result<bool, AppError> {
     let now = Instant::now();

@@ -34,7 +34,6 @@ async fn get_latest_folder(test_client: &TestClient, workspace_id: &Uuid) -> Fol
     .unwrap();
   let uid = test_client.uid().await;
   Folder::from_collab_doc_state(
-    uid,
     CollabOrigin::Client(CollabClient::new(uid, test_client.device_id.clone())),
     encoded_collab.into(),
     &workspace_id.to_string(),
@@ -445,7 +444,7 @@ async fn move_page_to_another_space() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   let first_children_id = folder
-    .get_view(&shared_space.view_id.to_string())
+    .get_view(&shared_space.view_id.to_string(), web_client.uid().await)
     .unwrap()
     .children[0]
     .id
@@ -459,6 +458,7 @@ async fn move_page_to_trash_then_restore() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   let folder_view = web_client
     .api_client
@@ -488,7 +488,7 @@ async fn move_page_to_trash_then_restore() {
   }
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   let views_in_trash_for_app = folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .flat_map(|v| Uuid::parse_str(&v.id).ok())
     .collect::<HashSet<_>>();
@@ -515,7 +515,7 @@ async fn move_page_to_trash_then_restore() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   assert!(!folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .any(|v| v.id == view_ids_to_be_deleted[0].to_string()));
   let view_found = web_client
@@ -534,7 +534,7 @@ async fn move_page_to_trash_then_restore() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   assert!(!folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .any(|v| v.id == view_ids_to_be_deleted[1].to_string()));
   let view_found = web_client
@@ -553,6 +553,7 @@ async fn move_page_with_child_to_trash_then_restore() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   let folder_view = web_client
     .api_client
@@ -576,7 +577,7 @@ async fn move_page_with_child_to_trash_then_restore() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   let views_in_trash_for_app = folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .flat_map(|v| Uuid::parse_str(&v.id).ok())
     .collect::<HashSet<_>>();
@@ -602,7 +603,7 @@ async fn move_page_with_child_to_trash_then_restore() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   assert!(!folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .any(|v| v.id == general_space.view_id.to_string()));
   let view_found = web_client
@@ -621,6 +622,7 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   let folder_view = web_client
     .api_client
@@ -644,7 +646,7 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   let views_in_trash_for_app = folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .flat_map(|v| Uuid::parse_str(&v.id).ok())
     .collect::<HashSet<_>>();
@@ -670,10 +672,10 @@ async fn move_page_with_child_to_trash_then_delete_permanently() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   assert!(folder
-    .get_view(&general_space.view_id.to_string())
+    .get_view(&general_space.view_id.to_string(), uid)
     .is_none());
   assert!(!folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .any(|v| v.id == general_space.view_id.to_string()));
   let view_found = web_client
@@ -692,6 +694,7 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   let folder_view = web_client
     .api_client
@@ -715,7 +718,7 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   let views_in_trash_for_app = folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .flat_map(|v| Uuid::parse_str(&v.id).ok())
     .collect::<HashSet<_>>();
@@ -741,10 +744,10 @@ async fn move_page_with_child_to_trash_then_delete_all_permanently() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   assert!(folder
-    .get_view(&general_space.view_id.to_string())
+    .get_view(&general_space.view_id.to_string(), uid)
     .is_none());
   assert!(!folder
-    .get_my_trash_sections()
+    .get_my_trash_sections(uid)
     .iter()
     .any(|v| v.id == general_space.view_id.to_string()));
   let view_found = web_client
@@ -763,6 +766,7 @@ async fn update_page() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   app_client.open_workspace_collab(workspace_id).await;
   app_client
@@ -799,7 +803,9 @@ async fn update_page() {
     .unwrap();
 
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let updated_view = folder.get_view(&view_id_to_be_updated.to_string()).unwrap();
+  let updated_view = folder
+    .get_view(&view_id_to_be_updated.to_string(), uid)
+    .unwrap();
   assert_eq!(updated_view.name, "New Name");
   assert_eq!(
     updated_view.icon,
@@ -850,7 +856,9 @@ async fn update_page() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let updated_view = folder.get_view(&view_id_to_be_updated.to_string()).unwrap();
+  let updated_view = folder
+    .get_view(&view_id_to_be_updated.to_string(), uid)
+    .unwrap();
   assert_eq!(updated_view.name, "Another Name");
   assert_eq!(
     updated_view.icon,
@@ -869,7 +877,9 @@ async fn update_page() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let updated_view = folder.get_view(&view_id_to_be_updated.to_string()).unwrap();
+  let updated_view = folder
+    .get_view(&view_id_to_be_updated.to_string(), uid)
+    .unwrap();
   assert_eq!(updated_view.icon, None);
 }
 
@@ -878,6 +888,7 @@ async fn favorite_page() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   app_client.open_workspace_collab(workspace_id).await;
   app_client
@@ -909,7 +920,7 @@ async fn favorite_page() {
     .unwrap();
 
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let favorite_view = folder.get_view(&favorite_view_id.to_string()).unwrap();
+  let favorite_view = folder.get_view(&favorite_view_id.to_string(), uid).unwrap();
   assert!(favorite_view.is_favorite);
 }
 
@@ -918,6 +929,7 @@ async fn create_space() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   app_client.open_workspace_collab(workspace_id).await;
   app_client
@@ -953,7 +965,9 @@ async fn create_space() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let view = folder.get_view(&public_space.view_id.to_string()).unwrap();
+  let view = folder
+    .get_view(&public_space.view_id.to_string(), uid)
+    .unwrap();
   let space_info: Value = serde_json::from_str(view.extra.as_ref().unwrap()).unwrap();
   assert!(space_info["is_space"].as_bool().unwrap());
   assert_eq!(
@@ -997,7 +1011,9 @@ async fn create_space() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let view = folder.get_view(&private_space.view_id.to_string()).unwrap();
+  let view = folder
+    .get_view(&private_space.view_id.to_string(), uid)
+    .unwrap();
   let space_info: Value = serde_json::from_str(view.extra.as_ref().unwrap()).unwrap();
   assert!(space_info["is_space"].as_bool().unwrap());
   assert_eq!(
@@ -1094,6 +1110,7 @@ async fn duplicate_view() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   app_client.open_workspace_collab(workspace_id).await;
   app_client
@@ -1123,15 +1140,15 @@ async fn duplicate_view() {
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
   let duplicated_space_id = folder
-    .get_view(&workspace_id.to_string())
+    .get_view(&workspace_id.to_string(), uid)
     .unwrap()
     .children
     .iter()
-    .find(|v| folder.get_view(&v.id).unwrap().name == "General (Copy)")
+    .find(|v| folder.get_view(&v.id, uid).unwrap().name == "General (Copy)")
     .unwrap()
     .id
     .clone();
-  let duplicated_views = folder.get_view_recursively(&duplicated_space_id);
+  let duplicated_views = folder.get_view_recursively(&duplicated_space_id, uid);
   assert_eq!(duplicated_views.len(), 6);
 }
 
@@ -1140,6 +1157,7 @@ async fn create_database_page_view() {
   let registered_user = generate_unique_registered_user().await;
   let mut app_client = TestClient::user_with_new_device(registered_user.clone()).await;
   let web_client = TestClient::user_with_new_device(registered_user.clone()).await;
+  let uid = web_client.uid().await;
   let workspace_id = app_client.workspace_id().await;
   app_client.open_workspace_collab(workspace_id).await;
   app_client
@@ -1175,12 +1193,14 @@ async fn create_database_page_view() {
     .await
     .unwrap();
   let folder = get_latest_folder(&app_client, &workspace_id).await;
-  let todo_view = folder.get_view(&todo_list_view_id.to_string()).unwrap();
+  let todo_view = folder
+    .get_view(&todo_list_view_id.to_string(), uid)
+    .unwrap();
   let grid_view = todo_view
     .children
     .iter()
     .find_map(|v| {
-      folder.get_view(&v.id).map(|view| {
+      folder.get_view(&v.id, uid).map(|view| {
         if view.name == "Grid View" {
           Some(view)
         } else {

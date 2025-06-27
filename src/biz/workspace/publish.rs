@@ -1,5 +1,4 @@
 use database::{
-  collab::GetCollabOrigin,
   publish::{
     insert_non_orginal_workspace_publish_namespace, select_all_published_collab_info,
     select_default_published_view_id, select_default_published_view_id_for_namespace,
@@ -37,13 +36,10 @@ use database::{
 };
 
 use crate::{
-  api::metrics::PublishedCollabMetrics,
-  biz::collab::{folder_view::to_dto_folder_view_miminal, utils::get_latest_collab_folder},
+  api::metrics::PublishedCollabMetrics, biz::collab::folder_view::to_dto_folder_view_miminal,
 };
 
-use crate::biz::collab::utils::DUMMY_UID;
-use collab::core::collab::default_client_id;
-use database::collab::CollabStore;
+use appflowy_collaborate::ws2::WorkspaceCollabInstanceCache;
 
 async fn check_workspace_owner_or_publisher(
   pg_pool: &PgPool,
@@ -206,18 +202,11 @@ pub async fn get_workspace_publish_namespace(
 
 pub async fn list_collab_publish_info(
   publish_collab_store: &dyn PublishedCollabStore,
-  collab_storage: &Arc<dyn CollabStore>,
+  collab_instance_cache: &impl WorkspaceCollabInstanceCache,
   workspace_id: Uuid,
+  uid: i64,
 ) -> Result<Vec<PublishInfoView>, AppError> {
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::Server,
-    workspace_id,
-    default_client_id(),
-    DUMMY_UID,
-  )
-  .await?;
-
+  let folder = collab_instance_cache.get_folder(workspace_id).await?;
   let publish_infos = publish_collab_store
     .list_collab_publish_info(&workspace_id)
     .await?;
@@ -225,7 +214,7 @@ pub async fn list_collab_publish_info(
   let mut publish_info_views: Vec<PublishInfoView> = Vec::with_capacity(publish_infos.len());
   for publish_info in publish_infos {
     let view_id = publish_info.view_id.to_string();
-    match folder.get_view(&view_id) {
+    match folder.get_view(&view_id, uid) {
       Some(view) => {
         publish_info_views.push(PublishInfoView {
           view: to_dto_folder_view_miminal(&view),

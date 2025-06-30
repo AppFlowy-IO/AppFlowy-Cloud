@@ -471,6 +471,7 @@ async fn delete_workspace_handler(
     .await?;
   workspace::ops::delete_workspace_for_user(
     state.pg_pool.clone(),
+    state.redis_connection_manager.clone(),
     workspace_id,
     state.bucket_storage.clone(),
   )

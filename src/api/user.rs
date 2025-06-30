@@ -77,6 +77,7 @@ async fn delete_user_handler(
   } = query.into_inner();
   delete_user(
     &state.pg_pool,
+    &state.redis_connection_manager,
     &state.bucket_storage,
     &state.gotrue_client,
     &state.gotrue_admin,

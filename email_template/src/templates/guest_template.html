@@ -1,0 +1,294 @@
+---
+title: "Guest Template"
+bodyClass: ""
+---
+
+<x-main>
+  <!-- Add body inline styles to ensure background color completely covers -->
+  <style>
+    body {
+      background-color: #EEEEFC !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    html {
+      background-color: #EEEEFC !important;
+    }
+    /* Outlook compatibility */
+    .email-body {
+      background-color: #EEEEFC;
+    }
+  </style>
+  
+  <!-- Outermost wrapper ensures background color completely covers -->
+  <div style="background-color: #EEEEFC; width: 100%; min-height: 100vh; margin: 0; padding: 0;" class="email-body">
+    
+    <!-- Outer container, implements horizontal and vertical centering -->
+    <table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #EEEEFC; min-height: 100vh;" bgcolor="#EEEEFC">
+      <tr>
+        <td align="center" valign="middle" style="padding: 24px 20px 40px 20px; background-color: #EEEEFC; min-height: 100vh;" bgcolor="#EEEEFC">
+        
+        <!-- Main content area - equivalent to original flex container (white card) -->
+        <table 
+          width="600" 
+          border="0" 
+          cellpadding="0" 
+          cellspacing="0" 
+          style="
+            min-height: 460px;
+            border-radius: 12px;
+            background-color: #ffffff;
+            margin: 0 auto;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          "
+          bgcolor="#ffffff"
+        >
+          <tr>
+            <td 
+              align="center" 
+              valign="middle" 
+              style="
+                padding: 40px 32px;
+                min-height: 460px;
+              "
+            >
+              
+              <!-- Content items container - each child element uses separate table to implement gap effect -->
+              <table width="100%" border="0" cellpadding="0" cellspacing="0">
+                
+                <!-- First content item - avatar -->
+                <tr>
+                  <td align="center" style="padding-bottom: 24px;">
+                    <!-- Avatar container - table layout implementing flex effect -->
+                    <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+                      <tr>
+                        <td 
+                          align="center" 
+                          valign="middle" 
+                          style="
+                            width: 64px;
+                            height: 64px;
+                            border-radius: 50%;
+                            overflow: hidden;
+                            background-color: #f0f0f0;
+                            display: block;
+                          "
+                          width="64" 
+                          height="64"
+                        >
+                          <!-- Avatar image -->
+                          <img 
+                            src="https://gravatar.com/avatar/f13e0a645a18ff9aff6410b3bb4a5a30?s=400&d=robohash&r=x" 
+                            alt="User Avatar" 
+                            style="
+                              width: 64px;
+                              height: 64px;
+                              border-radius: 50%;
+                              object-fit: cover;
+                              display: block;
+                              border: 0;
+                            "
+                            width="64" 
+                            height="64"
+                          />
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                
+                <!-- Second content item - title -->
+                <tr>
+                  <td align="center" style="padding-bottom: 24px;">
+                    <!-- For better compatibility, use table wrapper to limit width -->
+                    <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto; max-width: 400px; width: 100%;">
+                      <tr>
+                        <td align="center" style="padding: 0;">
+                          <!-- Title content - supports mixed font styles, 400px width limit, supports line wrapping -->
+                          <div style="
+                            color: #21232A;
+                            text-align: center;
+                            font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                            font-size: 20px;
+                            font-style: normal;
+                            line-height: 28px;
+                            margin: 0;
+                            padding: 0;
+                            word-wrap: break-word;
+                            word-break: break-word;
+                            overflow-wrap: break-word;
+                            white-space: normal;
+                          ">
+                                                          <!-- Username (bold) -->
+                              <span style="font-weight: 700;">{{.UserName}}</span>
+                              <!-- Regular font section -->
+                            <span style="font-weight: 400;"> has invited you to collaborate on </span>
+                            <!-- Project name (bold) -->
+                            <a style="font-weight: 700; cursor: pointer; text-decoration-line: underline;
+                            text-decoration-style: solid;
+                            text-decoration-skip-ink: none;
+                            text-decoration-thickness: auto;
+                                                          text-underline-offset: auto;" href="{{.PageURL}}">{{.PageName}}</a>
+                              <!-- Regular font section -->
+                            <span style="font-weight: 400;"> with </span>
+                                                          <!-- Access type (bold) -->
+                            <span style="
+                              font-weight: 700;
+                              
+                                                          ">{{.AccessType}}</span>
+                              <!-- Regular font section -->
+                            <span style="font-weight: 400;"> access</span>
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                   </td>
+                 </tr>
+                
+                <!-- Third content item - workspace information -->
+                <tr>
+                  <td align="center" style="padding-bottom: 24px;">
+                    <!-- Workspace info container - table layout implementing flex effect -->
+                    <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+                      <tr>
+                        <!-- Workspace avatar -->
+                        <td 
+                          align="center" 
+                          valign="middle" 
+                          style="
+                            width: 32px;
+                            height: 32px;
+                            padding: 4px;
+                            border-radius: 6px;
+                            border: 1px solid #E4E8F5;
+                            background-color: #E6E9F0;
+                            display: block;
+                          "
+                          width="32" 
+                          height="32"
+                        >
+                          <!-- Workspace avatar image -->
+                          <img 
+                            src="{{.WorkspaceIconURL}}" 
+                            alt="Workspace Icon" 
+                            style="
+                              width: 24px;
+                              height: 24px;
+                              border-radius: 4px;
+                              object-fit: cover;
+                              display: block;
+                              border: 0;
+                            "
+                            width="24" 
+                            height="24"
+                          />
+                        </td>
+                        
+                        <!-- Spacing - implements gap: 8px -->
+                        <td style="width: 8px;"></td>
+                        
+                        <!-- Workspace name -->
+                        <td 
+                          align="center" 
+                          valign="middle"
+                          style="
+                            padding: 4px 8px;
+                            color: #21232A;
+                            font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                            font-size: 14px;
+                            font-style: normal;
+                            font-weight: 500;
+                            line-height: 20px;
+                            white-space: nowrap;
+                          "
+                        >
+                          {{.WorkspaceName}}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                
+                <!-- Fourth content item - button -->
+                <tr>
+                  <td align="center" style="padding-bottom: 6px;">
+                    <!-- Button container - table layout implementing flex effect -->
+                    <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto; min-width: 76px;">
+                      <tr>
+                        <td 
+                          align="center" 
+                          valign="middle"
+                          style="
+                            background-color: #9327FF;
+                            border-radius: 10px;
+                            padding: 10px 20px;
+                            min-width: 76px;
+                          "
+                        >
+                          <a 
+                            href="{{.ActionURL}}" 
+                            style="
+                              color: white;
+                              cursor: pointer;
+                              font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                              font-size: 16px;
+                              font-weight: 600;
+                              text-decoration: none;
+                              display: inline-block;
+                              line-height: 1;
+                              white-space: nowrap;
+                            "
+                          >
+                            {{.ActionText}}
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                
+                <!-- Fifth content item - version requirement text -->
+                <tr>
+                  <td align="center" style="padding-bottom: 24px;">
+                    <!-- Version requirement text -->
+                    <div style="
+                      color: #9327FF;
+                      text-align: center;
+                      font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                      font-size: 12px;
+                      font-style: normal;
+                      font-weight: 400;
+                      line-height: 18px;
+                      letter-spacing: 0.1px;
+                      margin: 0;
+                      padding: 0;
+                    ">
+                      Require v0.9.4+ to continue
+                    </div>
+                  </td>
+                </tr>
+                
+                <!-- Footer section - inside white card -->
+                <tr>
+                  <td align="center">
+                    <x-footer />
+                  </td>
+                </tr>
+                
+              </table>
+              
+            </td>
+          </tr>
+        </table>
+        
+        </td>
+      </tr>
+    </table>
+    
+  </div> <!-- Close outermost wrapper div -->
+</x-main>
+

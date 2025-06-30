@@ -129,7 +129,7 @@ impl Workspace {
               message: ServerMessage::Manifest {
                 object_id: msg.object_id,
                 collab_type,
-                last_message_id: Rid::default(),
+                last_message_id: state.rid,
                 state_vector: state.state_vector,
               },
             });
@@ -570,8 +570,8 @@ impl Handler<Terminate> for Workspace {
 impl Handler<WsInput> for Workspace {
   type Result = AtomicResponse<Self, ()>;
   fn handle(&mut self, msg: WsInput, _: &mut Self::Context) -> Self::Result {
-    let store = self.manager.clone();
     if let Some(sender) = self.sessions_by_client_id.get(&msg.client_id) {
+      let store = self.manager.clone();
       AtomicResponse::new(Box::pin(
         Self::hande_ws_input(store, sender.clone(), msg).into_actor(self),
       ))

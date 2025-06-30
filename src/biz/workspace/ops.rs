@@ -12,8 +12,9 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use access_control::workspace::WorkspaceAccessControl;
-use app_error::AppError;
+use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::CollabMetrics;
+use collab_stream::model::UpdateStreamMessage;
 use database::collab::CollabStore;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
@@ -43,6 +44,7 @@ const MAX_COMMENT_LENGTH: usize = 5000;
 
 pub async fn delete_workspace_for_user(
   pg_pool: PgPool,
+  mut connection_manager: RedisConnectionManager,
   workspace_id: Uuid,
   bucket_storage: Arc<S3BucketStorage>,
 ) -> Result<(), AppResponseError> {
@@ -53,6 +55,10 @@ pub async fn delete_workspace_for_user(
 
   // remove from postgres
   delete_from_workspace(&pg_pool, &workspace_id).await?;
+  let _: redis::Value = connection_manager
+    .del(UpdateStreamMessage::stream_key(&workspace_id))
+    .await
+    .map_err(|err| AppResponseError::new(ErrorCode::Internal, err.to_string()))?;
 
   Ok(())
 }

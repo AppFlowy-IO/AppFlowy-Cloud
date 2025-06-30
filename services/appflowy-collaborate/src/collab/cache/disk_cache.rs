@@ -25,7 +25,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinSet;
 use tokio::time::sleep;
-use tracing::{error, instrument, trace};
+use tracing::{debug, error, instrument, trace};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -260,13 +260,13 @@ impl CollabDiskCache {
     workspace_id: &Uuid,
     query: QueryCollab,
   ) -> Result<(Rid, EncodedCollab), AppError> {
-    tracing::debug!("try get {}:{} from s3", query.collab_type, query.object_id);
+    debug!("try get {}:{} from s3", query.collab_type, query.object_id);
     let key = collab_key(workspace_id, &query.object_id);
 
     let is_deleted = self.is_collab_deleted(&query.object_id).await?;
     if is_deleted {
       return Err(AppError::RecordDeleted(format!(
-        "Collaboration record for {}:{} is deleted",
+        "{}/{} is deleted from db",
         query.collab_type, query.object_id
       )));
     }
@@ -277,10 +277,9 @@ impl CollabDiskCache {
         return Ok((rid, encoded_collab));
       },
       Err(AppError::RecordNotFound(_)) => {
-        tracing::debug!(
-          "try get {}:{} from database",
-          query.collab_type,
-          query.object_id
+        debug!(
+          "Can not find the {}/{} from s3, trying to get from Postgres",
+          query.collab_type, query.object_id
         );
       },
       Err(e) => return Err(e),
@@ -304,6 +303,10 @@ impl CollabDiskCache {
         Err(e) => {
           match e {
             Error::RowNotFound => {
+              debug!(
+                "Can not find the {}/{} from Postgres",
+                query.object_id, query.collab_type
+              );
               let msg = format!("Can't find the row for query: {:?}", query);
               return Err(AppError::RecordNotFound(msg));
             },

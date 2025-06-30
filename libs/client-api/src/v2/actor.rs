@@ -20,13 +20,13 @@ use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::select;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex;
-use tokio::time::MissedTickBehavior;
+use tokio::time::{timeout, MissedTickBehavior};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
@@ -53,15 +53,13 @@ pub(super) struct WorkspaceControllerActor {
   notification_tx: tokio::sync::broadcast::Sender<WorkspaceNotification>,
   /// Used to record recently changed collabs
   changed_collab_sender: tokio::sync::broadcast::Sender<ChangedCollab>,
-  /// Counter for consecutive ping failures
-  ping_failures: Arc<AtomicU32>,
   #[cfg(debug_assertions)]
   pub skip_realtime_message: AtomicBool,
 }
 
 impl WorkspaceControllerActor {
   const PING_INTERVAL: Duration = Duration::from_secs(4);
-  const MAX_PING_FAILURES: u32 = 3;
+  const PING_TIMEOUT: Duration = Duration::from_secs(20);
   const REMOTE_ORIGIN: &'static str = "af";
 
   pub fn new(db: Db, options: Options, last_message_id: Rid) -> Arc<Self> {
@@ -77,7 +75,6 @@ impl WorkspaceControllerActor {
       last_message_id: Arc::new(ArcSwap::new(last_message_id.into())),
       cache: Arc::new(DashMap::new()),
       db,
-      ping_failures: Arc::new(AtomicU32::new(0)),
       #[cfg(debug_assertions)]
       skip_realtime_message: AtomicBool::new(false),
       notification_tx,
@@ -291,38 +288,21 @@ impl WorkspaceControllerActor {
             None => break, // controller dropped
           };
 
-          // Only send pings when connected
-          if !matches!(*actor.status_rx.borrow(), ConnectionStatus::Connected { .. }) {
-            actor.ping_failures.store(0, Ordering::Relaxed);
-            continue;
-          }
-
-          let failure_count = actor.ping_failures.load(Ordering::Relaxed);
-          if failure_count >= Self::MAX_PING_FAILURES {
-            sync_error!("Too many ping failures ({}), disconnecting", failure_count);
-            actor.set_connection_status(ConnectionStatus::Disconnected {
-              reason: Some(DisconnectedReason::Unexpected("Ping timeout".into())),
-            });
-            // Reset ping failures and continue loop to handle reconnection
-            actor.ping_failures.store(0, Ordering::Relaxed);
-            continue;
-          }
-
-          if let Err(err) = actor.ping().await {
-            let new_count = actor.ping_failures.fetch_add(1, Ordering::Relaxed) + 1;
-            sync_trace!("Ping failed ({}/{}): {}", new_count, Self::MAX_PING_FAILURES, err);
-
-            if new_count >= Self::MAX_PING_FAILURES {
-              sync_error!("Maximum ping failures reached, disconnecting");
+          let result = timeout(Self::PING_TIMEOUT, actor.ping()).await;
+          match result {
+            Ok(Ok(_)) => sync_trace!("sent ping successfully"),
+            Ok(Err(err)) => {
+              sync_error!("fail to send ping: {:?}", err);
+              actor.set_connection_status(ConnectionStatus::Disconnected {
+                reason: Some(DisconnectedReason::Unexpected("Ping send failed".into())),
+              });
+            },
+            Err(_) => {
+              sync_error!("ping timeout after {:?}", Self::PING_TIMEOUT);
               actor.set_connection_status(ConnectionStatus::Disconnected {
                 reason: Some(DisconnectedReason::Unexpected("Ping timeout".into())),
               });
-              // Reset ping failures and continue loop to handle reconnection
-              actor.ping_failures.store(0, Ordering::Relaxed);
             }
-          } else {
-            // Reset ping failure counter on successful ping
-            actor.ping_failures.store(0, Ordering::Relaxed);
           }
         }
       }
@@ -641,9 +621,6 @@ impl WorkspaceControllerActor {
   }
 
   async fn handle_receive(&self, msg: ServerMessage) -> anyhow::Result<()> {
-    // Reset ping failure counter when we receive any message from server
-    self.ping_failures.store(0, Ordering::Relaxed);
-
     match msg {
       ServerMessage::Manifest {
         object_id,

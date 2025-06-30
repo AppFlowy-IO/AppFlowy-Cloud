@@ -1288,7 +1288,6 @@ async fn post_page_view_handler(
   path: web::Path<Uuid>,
   payload: Json<CreatePageParams>,
   state: Data<AppState>,
-
   req: HttpRequest,
 ) -> Result<Json<AppResponse<Page>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;

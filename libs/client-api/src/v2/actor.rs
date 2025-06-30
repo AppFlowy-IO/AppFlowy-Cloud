@@ -20,7 +20,7 @@ use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::select;
@@ -118,6 +118,23 @@ impl WorkspaceControllerActor {
 
   pub fn get_collab(&self, object_id: &ObjectId) -> Option<CollabRef> {
     self.cache.get(object_id)?.upgrade()
+  }
+
+  pub fn change_pending_count(&self, object_id: &ObjectId, by: i64) -> Option<u64> {
+    let collab = self.cache.get(object_id)?;
+    if by < 0 {
+      Some(
+        collab
+          .pending_updates
+          .fetch_sub((-by) as u64, Ordering::SeqCst),
+      )
+    } else {
+      Some(
+        collab
+          .pending_updates
+          .fetch_add(by as u64, Ordering::SeqCst),
+      )
+    }
   }
 
   /// Remove colla from the cache
@@ -385,7 +402,7 @@ impl WorkspaceControllerActor {
 
   #[instrument(level = "trace", skip_all)]
   async fn handle_send(&self, msg: ClientMessage, source: ActionSource) -> anyhow::Result<()> {
-    if let ClientMessage::Update {
+    let object_id = if let ClientMessage::Update {
       object_id,
       flags,
       update,
@@ -401,6 +418,9 @@ impl WorkspaceControllerActor {
           self.db.save_update(object_id, rid, &update_v1, source)
         },
       }?;
+      Some(*object_id)
+    } else {
+      None
     };
     if let ActionSource::Local = source {
       if let Err(err) = self.send_message(msg).await {
@@ -409,6 +429,8 @@ impl WorkspaceControllerActor {
           reason: Some(DisconnectedReason::Unexpected(err.to_string().into())),
         });
         return Err(err);
+      } else if let Some(object_id) = object_id {
+        self.change_pending_count(&object_id, -1);
       }
     }
     Ok(())
@@ -657,7 +679,7 @@ impl WorkspaceControllerActor {
           last_message_id,
           state_vector
         );
-
+        let local_message_id = self.last_message_id();
         let sv = if state_vector.is_empty() {
           // If no inserts or other operations have ever been applied, the sv will be empty (i.e. []).
           StateVector::default()
@@ -665,29 +687,43 @@ impl WorkspaceControllerActor {
           StateVector::decode_v1(&state_vector)?
         };
 
-        let local_message_id = self.last_message_id();
-        if let Some(collab_ref) = self.get_collab(&object_id) {
-          let (msg, missing) = {
-            let lock = collab_ref.read().await;
-            let collab = lock.borrow();
-            let tx = collab.get_awareness().doc().transact();
-            let update = tx.encode_diff_v1(&sv); // encode state without pending updates
-            let msg = ClientMessage::Update {
-              object_id,
-              collab_type,
-              flags: UpdateFlags::Lib0v1,
-              update,
+        if let Some(cached_collab) = self.cache.get(&object_id) {
+          if let Some(collab_ref) = cached_collab.upgrade() {
+            let (msg, missing) = {
+              let lock = collab_ref.read().await;
+              let collab = lock.borrow();
+              let tx = collab.get_awareness().doc().transact();
+
+              let local_sv = tx.state_vector();
+              let msg = if local_sv == sv && cached_collab.pending_updates() == 0 {
+                sync_trace!("collab {} already in sync", object_id);
+                ClientMessage::Update {
+                  object_id,
+                  collab_type,
+                  flags: UpdateFlags::Lib0v1,
+                  update: Update::EMPTY_V1.into(),
+                }
+              } else {
+                let update = tx.encode_diff_v1(&sv); // encode state without pending updates
+                ClientMessage::Update {
+                  object_id,
+                  collab_type,
+                  flags: UpdateFlags::Lib0v1,
+                  update,
+                }
+              };
+
+              let missing =
+                Self::check_missing_updates(tx, object_id, collab_type, local_message_id)?;
+              if missing.is_some() {
+                collab.set_sync_state(SyncState::Syncing);
+              }
+              (msg, missing)
             };
-            let missing =
-              Self::check_missing_updates(tx, object_id, collab_type, local_message_id)?;
-            if missing.is_some() {
-              collab.set_sync_state(SyncState::Syncing);
+            self.send_message(msg).await?;
+            if let Some(missing) = missing {
+              self.send_message(missing).await?;
             }
-            (msg, missing)
-          };
-          self.send_message(msg).await?;
-          if let Some(missing) = missing {
-            self.send_message(missing).await?;
           }
         }
       },
@@ -1107,6 +1143,9 @@ impl WorkspaceControllerActor {
       flags: UpdateFlags::Lib0v1,
       update: update_v1,
     };
+    if let ActionSource::Local = source {
+      self.change_pending_count(&object_id, 1);
+    }
     // we received that update from the local client
     self.trigger(WorkspaceAction::Send(msg, source));
   }
@@ -1231,10 +1270,10 @@ pub(super) type WsConn = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio
 pub(super) type WorkspaceControllerMailbox = tokio::sync::mpsc::UnboundedSender<WorkspaceAction>;
 
 /// Contains cached information about a collab document
-#[derive(Clone)]
 struct CachedCollab {
   collab_ref: WeakCollabRef,
   collab_type: CollabType,
+  pending_updates: AtomicU64,
 }
 
 impl CachedCollab {
@@ -1242,11 +1281,16 @@ impl CachedCollab {
     Self {
       collab_ref,
       collab_type,
+      pending_updates: AtomicU64::new(0),
     }
   }
 
   fn upgrade(&self) -> Option<CollabRef> {
     self.collab_ref.upgrade()
+  }
+
+  fn pending_updates(&self) -> u64 {
+    self.pending_updates.load(Ordering::SeqCst)
   }
 }
 

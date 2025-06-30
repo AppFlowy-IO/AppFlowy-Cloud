@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::biz::authentication::jwt::Authorization;
 use crate::state::GoTrueAdmin;
 use crate::{biz::workspace::ops::delete_workspace_for_user, config::config::AppleOAuthSetting};
@@ -7,14 +5,17 @@ use app_error::ErrorCode;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::workspace::{insert_workspace_ids_to_deleted_table, select_user_owned_workspaces_id};
 use gotrue::params::AdminDeleteUserParams;
+use redis::aio::ConnectionManager;
 use secrecy::{ExposeSecret, Secret};
 use shared_entity::response::AppResponseError;
+use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn delete_user(
   pg_pool: &sqlx::PgPool,
+  connection_manager: &ConnectionManager,
   bucket_storage: &Arc<S3BucketStorage>,
   gotrue_client: &gotrue::api::Client,
   gotrue_admin: &GoTrueAdmin,
@@ -62,8 +63,10 @@ pub async fn delete_user(
   let mut tasks = vec![];
   for workspace_id in workspace_ids {
     let cloned_pg_pool = pg_pool.clone();
+    let connection_manager = connection_manager.clone();
     tasks.push(tokio::spawn(delete_workspace_for_user(
       cloned_pg_pool,
+      connection_manager,
       workspace_id,
       bucket_storage.clone(),
     )));

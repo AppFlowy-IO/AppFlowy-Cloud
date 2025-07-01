@@ -135,51 +135,51 @@ if [[ -z "${SKIP_BUILD+x}" ]]; then
     -f admin_frontend/Dockerfile .
 
   # Generate override for selected services
-  rm -f docker-compose.override.yml  # Clean up any existing override file
-  cat > docker-compose.override.yml <<EOF
+  rm -f compose.override.yaml  # Clean up any existing override file
+  cat > compose.override.yaml <<EOF
 version: '3'
 services:
 EOF
   
   if $BUILD_CLOUD; then
-    cat >> docker-compose.override.yml <<EOF
+    cat >> compose.override.yaml <<EOF
   appflowy_cloud:
     image: appflowyinc/appflowy_cloud:$IMAGE_VERSION
 EOF
   else
-    cat >> docker-compose.override.yml <<EOF
+    cat >> compose.override.yaml <<EOF
   appflowy_cloud:
     image: appflowyinc/appflowy_cloud:latest
 EOF
   fi
   
   if $BUILD_WORKER; then
-    cat >> docker-compose.override.yml <<EOF
+    cat >> compose.override.yaml <<EOF
   appflowy_worker:
     image: appflowyinc/appflowy_worker:$IMAGE_VERSION
 EOF
   else
-    cat >> docker-compose.override.yml <<EOF
+    cat >> compose.override.yaml <<EOF
   appflowy_worker:
     image: appflowyinc/appflowy_worker:latest
 EOF
   fi
   
   if $BUILD_ADMIN_FRONTEND; then
-    cat >> docker-compose.override.yml <<EOF
+    cat >> compose.override.yaml <<EOF
   admin_frontend:
     image: appflowyinc/admin_frontend:$IMAGE_VERSION
 EOF
   else
-    cat >> docker-compose.override.yml <<EOF
+    cat >> compose.override.yaml <<EOF
   admin_frontend:
     image: appflowyinc/admin_frontend:latest
 EOF
   fi
 
   export RUST_LOG=trace
-  docker compose -f docker-compose-ci.yml -f docker-compose.override.yml up -d
-  rm docker-compose.override.yml
+  docker compose -f compose.ci.yaml -f compose.override.yaml up -d
+  rm compose.override.yaml
 
   # Update .env file with nginx proxy URLs for local testing
   echo ""
@@ -222,7 +222,7 @@ else
   $BUILD_WORKER && export APPFLOWY_WORKER_VERSION="$IMAGE_VERSION"
   $BUILD_ADMIN_FRONTEND && export APPFLOWY_ADMIN_FRONTEND_VERSION="$IMAGE_VERSION"
 
-  docker compose -f docker-compose-ci.yml pull
+  docker compose -f compose.ci.yaml pull
 
   if $BUILD_CLOUD; then
     echo "appflowy_cloud image version:"
@@ -239,7 +239,7 @@ else
     docker images appflowyinc/admin_frontend --format "{{.Repository}}:{{.Tag}} ({{.CreatedSince}}, {{.Size}})"
   fi
 
-  docker compose -f docker-compose-ci.yml up -d
+  docker compose -f compose.ci.yaml up -d
   
   # Update .env file with nginx proxy URLs for local testing
   echo ""

@@ -1,6 +1,6 @@
 # Non-essential additional services
 include:
-  - docker-compose.yml
+  - compose.yaml
 
 services:
   tunnel:

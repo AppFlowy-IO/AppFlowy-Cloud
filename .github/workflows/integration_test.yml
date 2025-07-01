@@ -147,13 +147,13 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Run Docker-Compose
+      - name: Run Docker Compose
         run: |
           export APPFLOWY_WORKER_VERSION=latest
           export APPFLOWY_CLOUD_VERSION=latest
           export APPFLOWY_ADMIN_FRONTEND_VERSION=latest
           export APPFLOWY_AI_VERSION=${{ env.APPFLOWY_AI_VERSION }}
-          docker compose -f docker-compose-ci.yml up -d
+          docker compose -f compose.ci.yaml up -d
           docker ps -a
 
       - name: Wait for services to be ready
@@ -175,7 +175,7 @@ jobs:
         if: failure()
         run: |
           docker ps -a
-          docker compose -f docker-compose-ci.yml logs
+          docker compose -f compose.ci.yaml logs
 
       - name: AI Logs
         if: failure()

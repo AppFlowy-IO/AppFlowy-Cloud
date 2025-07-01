@@ -3,7 +3,7 @@
 ## Partial Local Environment
 
 - Go to source root folder of `AppFlowy-Cloud`
-- Start running locally dependency servers: `docker compose --file docker-compose-dev.yml up -d`
+- Start running locally dependency servers: `docker compose --file compose.dev.yaml up -d`
 - Start SQLX migrations `cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare --workspace`
 - Start AppFlowy-Cloud Server `cargo run`
 - Go back to `AppFlowy-Cloud/admin_frontend` directory

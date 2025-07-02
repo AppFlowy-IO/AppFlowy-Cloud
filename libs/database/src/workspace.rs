@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::pg_row::{
   AFGlobalCommentRow, AFImportTask, AFPermissionRow, AFReactionRow, AFUserProfileRow,
   AFWebUserWithEmailColumn, AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow,
-  AFWorkspaceMemberRow, AFWorkspaceRow,
+  AFWorkspaceMemberRow, AFWorkspaceRow, AFWorkspaceRowWithMemberCountAndRole,
 };
 use crate::user::select_uid_from_email;
 use app_error::AppError;
@@ -511,9 +511,33 @@ pub fn select_workspace_member_perm_stream(
   .fetch(pg_pool)
 }
 
+pub async fn select_email_belongs_to_a_workspace_member(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  email: &str,
+) -> Result<bool, AppError> {
+  let exists = sqlx::query_scalar!(
+    r#"
+    SELECT EXISTS(
+      SELECT 1
+      FROM public.af_workspace_member
+      JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+      WHERE af_workspace_member.workspace_id = $1
+      AND LOWER(af_user.email) = LOWER($2)
+    ) AS "exists";
+    "#,
+    workspace_id,
+    email
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}
+
 /// returns a list of workspace members, sorted by their creation time.
 #[inline]
-pub async fn select_workspace_member_list(
+pub async fn select_workspace_member_list_exclude_guest(
   pg_pool: &PgPool,
   workspace_id: &uuid::Uuid,
 ) -> Result<Vec<AFWorkspaceMemberRow>, AppError> {
@@ -544,9 +568,9 @@ pub async fn select_workspace_member_list(
 #[inline]
 pub async fn select_workspace_member<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  uid: &i64,
+  uid: i64,
   workspace_id: &Uuid,
-) -> Result<AFWorkspaceMemberRow, AppError> {
+) -> Result<Option<AFWorkspaceMemberRow>, AppError> {
   let member = sqlx::query_as!(
     AFWorkspaceMemberRow,
     r#"
@@ -564,6 +588,32 @@ pub async fn select_workspace_member<'a, E: Executor<'a, Database = Postgres>>(
     "#,
     workspace_id,
     uid,
+  )
+  .fetch_optional(executor)
+  .await?;
+  Ok(member)
+}
+
+pub async fn select_workspace_owner<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<AFWorkspaceMemberRow, AppError> {
+  let member = sqlx::query_as!(
+    AFWorkspaceMemberRow,
+    r#"
+    SELECT
+      af_user.uid,
+      af_user.name,
+      af_user.email,
+      af_user.metadata ->> 'icon_url' AS avatar_url,
+      af_workspace_member.role_id AS role,
+      af_workspace_member.created_at
+    FROM public.af_workspace_member
+    JOIN public.af_workspace USING(workspace_id)
+    JOIN public.af_user ON af_workspace.owner_uid = af_user.uid
+    WHERE af_workspace_member.workspace_id = $1
+    "#,
+    workspace_id,
   )
   .fetch_one(executor)
   .await?;
@@ -672,6 +722,54 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
 }
 
 #[inline]
+pub async fn select_workspace_with_count_and_role<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  uid: i64,
+) -> Result<AFWorkspaceRowWithMemberCountAndRole, AppError> {
+  let workspace = sqlx::query_as!(
+    AFWorkspaceRowWithMemberCountAndRole,
+    r#"
+      WITH workspace_member_count AS (
+        SELECT
+          workspace_id,
+          COUNT(*) AS member_count
+        FROM af_workspace_member
+        WHERE workspace_id = $1 AND role_id != $3
+        GROUP BY workspace_id
+      )
+
+      SELECT
+        af_workspace.workspace_id,
+        database_storage_id,
+        owner_uid,
+        owner_profile.name as owner_name,
+        owner_profile.email as owner_email,
+        af_workspace.created_at,
+        workspace_type,
+        af_workspace.deleted_at,
+        workspace_name,
+        icon,
+        workspace_member_count.member_count AS "member_count!",
+        role_id AS "role!"
+      FROM public.af_workspace
+      JOIN public.af_user owner_profile ON af_workspace.owner_uid = owner_profile.uid
+      JOIN af_workspace_member ON (af_workspace.workspace_id = af_workspace_member.workspace_id
+        AND af_workspace_member.uid = $2)
+      JOIN workspace_member_count ON af_workspace.workspace_id = workspace_member_count.workspace_id
+      WHERE af_workspace.workspace_id = $1
+        AND COALESCE(af_workspace.is_initialized, true) = true;
+    "#,
+    workspace_id,
+    uid,
+    AFRole::Guest as i32, // Exclude guests from member count
+  )
+  .fetch_one(executor)
+  .await?;
+  Ok(workspace)
+}
+
+#[inline]
 pub async fn select_workspace_database_storage_id<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &str,
@@ -737,15 +835,31 @@ pub async fn update_updated_at_of_workspace_with_uid<'a, E: Executor<'a, Databas
 }
 
 /// Returns a list of workspaces that the user is part of.
-/// User may owner or non-owner.
+/// User may be guest.
 #[inline]
 pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, AppError> {
+) -> Result<Vec<AFWorkspaceRowWithMemberCountAndRole>, AppError> {
   let workspaces = sqlx::query_as!(
-    AFWorkspaceRow,
+    AFWorkspaceRowWithMemberCountAndRole,
     r#"
+      WITH user_workspace_id AS (
+        SELECT workspace_id
+        FROM af_workspace_member
+        JOIN af_user ON af_workspace_member.uid = af_user.uid
+        WHERE af_user.uuid = $1
+      ),
+      workspace_member_count AS (
+        SELECT
+          workspace_id,
+          COUNT(*) AS member_count
+        FROM af_workspace_member
+        JOIN user_workspace_id USING (workspace_id)
+        WHERE role_id != $2
+        GROUP BY workspace_id
+      )
+
       SELECT
         w.workspace_id,
         w.database_storage_id,
@@ -756,16 +870,20 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
         w.workspace_type,
         w.deleted_at,
         w.workspace_name,
-        w.icon
+        w.icon,
+        wmc.member_count AS "member_count!",
+        wm.role_id AS "role!"
       FROM af_workspace w
       JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
       JOIN public.af_user u ON w.owner_uid = u.uid
+      JOIN workspace_member_count wmc ON w.workspace_id = wmc.workspace_id
       WHERE wm.uid = (
          SELECT uid FROM public.af_user WHERE uuid = $1
       )
       AND COALESCE(w.is_initialized, true) = true;
     "#,
-    user_uuid
+    user_uuid,
+    AFRole::Guest as i32, // Exclude guests from member count
   )
   .fetch_all(executor)
   .await?;
@@ -778,10 +896,26 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
 pub async fn select_all_user_non_guest_workspaces<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, AppError> {
+) -> Result<Vec<AFWorkspaceRowWithMemberCountAndRole>, AppError> {
   let workspaces = sqlx::query_as!(
-    AFWorkspaceRow,
+    AFWorkspaceRowWithMemberCountAndRole,
     r#"
+      WITH user_workspace_id AS (
+        SELECT workspace_id
+        FROM af_workspace_member
+        JOIN af_user ON af_workspace_member.uid = af_user.uid
+        WHERE af_user.uuid = $1
+      ),
+      workspace_member_count AS (
+        SELECT
+          workspace_id,
+          COUNT(*) AS member_count
+        FROM af_workspace_member
+        JOIN user_workspace_id USING (workspace_id)
+        WHERE role_id != $2
+        GROUP BY workspace_id
+      )
+
       SELECT
         w.workspace_id,
         w.database_storage_id,
@@ -792,10 +926,13 @@ pub async fn select_all_user_non_guest_workspaces<'a, E: Executor<'a, Database =
         w.workspace_type,
         w.deleted_at,
         w.workspace_name,
-        w.icon
+        w.icon,
+        wmc.member_count AS "member_count!",
+        wm.role_id AS "role!"
       FROM af_workspace w
       JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
       JOIN public.af_user u ON w.owner_uid = u.uid
+      JOIN workspace_member_count wmc ON w.workspace_id = wmc.workspace_id
       WHERE wm.uid = (
          SELECT uid FROM public.af_user WHERE uuid = $1
       )
@@ -882,10 +1019,11 @@ pub async fn select_member_count_for_workspaces<'a, E: Executor<'a, Database = P
     r#"
       SELECT workspace_id, COUNT(*) AS member_count
       FROM af_workspace_member
-      WHERE workspace_id = ANY($1)
+      WHERE workspace_id = ANY($1) AND role_id != $2
       GROUP BY workspace_id
     "#,
-    workspace_ids
+    workspace_ids,
+    AFRole::Guest as i32, // Exclude guests from member count
   )
   .fetch_all(executor)
   .await?;
@@ -1013,8 +1151,10 @@ pub async fn select_workspace_member_count_from_workspace_id(
       SELECT COUNT(*)
       FROM public.af_workspace_member
       WHERE workspace_id = $1
+      AND role_id != $2
     "#,
-    workspace_id
+    workspace_id,
+    AFRole::Guest as i32, // Exclude guests from member count
   )
   .fetch_one(pool)
   .await?;
@@ -1708,4 +1848,24 @@ pub async fn insert_workspace_invite_code<'a, E: Executor<'a, Database = Postgre
   .await?;
 
   Ok(())
+}
+
+#[inline]
+pub async fn select_workspace_member_uids<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Vec<i64>, AppError> {
+  let member_uids = sqlx::query_scalar!(
+    r#"
+      SELECT uid
+      FROM af_workspace_member
+      WHERE workspace_id = $1
+      ORDER BY created_at ASC
+    "#,
+    workspace_id,
+  )
+  .fetch_all(executor)
+  .await?;
+
+  Ok(member_uids)
 }

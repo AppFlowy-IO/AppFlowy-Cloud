@@ -13,6 +13,7 @@ pub struct SharedView {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedUser {
+  pub view_id: Uuid,
   pub email: String,
   pub name: String,
   pub access_level: AFAccessLevel,
@@ -38,6 +39,18 @@ pub struct SharedViews {
   pub view_id_with_no_access: Vec<Uuid>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevokedAccess {
+  pub email: String,
+  pub view_id: Uuid,
+}
+
+#[derive(Clone)]
+pub struct GuestInviteCode {
+  pub code: String,
+  pub email: String,
+}
+
 pub struct SharedFolderView {
   pub view_id: String,
   pub name: String,
@@ -53,7 +66,7 @@ pub struct SharedFolderView {
   pub permission: AFAccessLevel,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ShareViewWithGuestRequest {
   pub view_id: Uuid,
   pub emails: Vec<String>,

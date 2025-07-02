@@ -709,6 +709,21 @@ async fn add_new_database_to_workspace(
   Ok(encoded_updates)
 }
 
+pub async fn update_current_view(
+  uid: i64,
+  view_id: &str,
+  folder: &mut Folder,
+) -> Result<Vec<u8>, AppError> {
+  let encoded_update = {
+    let mut txn = folder.collab.transact_mut();
+    folder
+      .body
+      .set_current_view(&mut txn, view_id.to_string(), uid);
+    txn.encode_update_v1()
+  };
+  Ok(encoded_update)
+}
+
 async fn add_new_view_to_folder(
   uid: i64,
   parent_view_id: &Uuid,

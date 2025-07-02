@@ -59,6 +59,53 @@ impl TryFrom<AFWorkspaceRow> for AFWorkspace {
   }
 }
 
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct AFWorkspaceRowWithMemberCountAndRole {
+  pub workspace_id: Uuid,
+  pub database_storage_id: Option<Uuid>,
+  pub owner_uid: Option<i64>,
+  pub owner_name: Option<String>,
+  pub owner_email: Option<String>,
+  pub created_at: Option<DateTime<Utc>>,
+  pub workspace_type: i32,
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub workspace_name: Option<String>,
+  pub icon: Option<String>,
+  pub member_count: i64,
+  pub role: i32,
+}
+
+impl TryFrom<AFWorkspaceRowWithMemberCountAndRole> for AFWorkspace {
+  type Error = AppError;
+
+  fn try_from(value: AFWorkspaceRowWithMemberCountAndRole) -> Result<Self, Self::Error> {
+    let owner_uid = value
+      .owner_uid
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty owner_uid")))?;
+    let database_storage_id = value
+      .database_storage_id
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty workspace_id")))?;
+
+    let workspace_name = value.workspace_name.unwrap_or_default();
+    let created_at = value.created_at.unwrap_or_else(Utc::now);
+    let icon = value.icon.unwrap_or_default();
+
+    Ok(Self {
+      workspace_id: value.workspace_id,
+      database_storage_id,
+      owner_uid,
+      owner_name: value.owner_name.unwrap_or_default(),
+      owner_email: value.owner_email.unwrap_or_default(),
+      workspace_type: value.workspace_type,
+      workspace_name,
+      created_at,
+      icon,
+      member_count: Some(value.member_count),
+      role: Some(AFRole::from(value.role)),
+    })
+  }
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize, sqlx::Type)]
 pub struct AFWorkspaceWithMemberCountRow {
   pub workspace_id: Uuid,

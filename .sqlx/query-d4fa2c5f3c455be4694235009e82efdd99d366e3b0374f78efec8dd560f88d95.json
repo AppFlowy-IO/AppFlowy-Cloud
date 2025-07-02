@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT uid\n      FROM af_workspace_member\n      WHERE workspace_id = $1\n      ORDER BY created_at ASC\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uid",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d4fa2c5f3c455be4694235009e82efdd99d366e3b0374f78efec8dd560f88d95"
+}

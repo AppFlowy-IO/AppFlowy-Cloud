@@ -1,4 +1,4 @@
-use database_entity::dto::AFWebUser;
+use database_entity::dto::{AFUserWithAvatar, AFWebUser};
 use futures_util::stream::BoxStream;
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
@@ -223,6 +223,19 @@ pub async fn select_email_from_user_uuid(
 }
 
 #[inline]
+pub async fn select_email_from_user_uid(pool: &PgPool, user_uid: i64) -> Result<String, AppError> {
+  let email = sqlx::query_scalar!(
+    r#"
+      SELECT email FROM af_user WHERE uid = $1
+    "#,
+    user_uid
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(email)
+}
+
+#[inline]
 pub async fn select_name_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<String, AppError> {
   let email = sqlx::query_scalar!(
     r#"
@@ -272,4 +285,26 @@ pub async fn select_web_user_from_uid(
   .map_err(|err| anyhow::anyhow!("Unable to get user detail for {}: {}", uid, err))?;
 
   Ok(row)
+}
+
+pub async fn select_user_with_avatar<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  uid: i64,
+) -> Result<AFUserWithAvatar, AppError> {
+  let user = sqlx::query_as!(
+    AFUserWithAvatar,
+    r#"
+      SELECT
+        uuid,
+        email,
+        name,
+        metadata ->> 'icon_url' AS avatar_url
+      FROM af_user
+      WHERE uid = $1;
+    "#,
+    uid
+  )
+  .fetch_one(executor)
+  .await?;
+  Ok(user)
 }

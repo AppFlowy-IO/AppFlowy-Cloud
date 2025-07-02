@@ -18,19 +18,12 @@ use collab_stream::model::UpdateStreamMessage;
 use database::collab::CollabStore;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
-
 use database::user::select_uid_from_email;
 use database::workspace::*;
 use database_entity::dto::{
   AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
   GlobalComment, Reaction, WorkspaceUsage,
 };
-
-use shared_entity::dto::workspace_dto::{
-  CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
-};
-use shared_entity::response::AppResponseError;
-use workspace_template::document::getting_started::GettingStartedTemplate;
 
 use crate::biz::authentication::jwt::OptionalUserUuid;
 use crate::biz::user::user_init::{
@@ -39,8 +32,13 @@ use crate::biz::user::user_init::{
 };
 use crate::mailer::{AFCloudMailer, WorkspaceInviteMailerParam};
 use crate::state::RedisConnectionManager;
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
+};
+use shared_entity::response::AppResponseError;
+use workspace_template::document::getting_started::GettingStartedTemplate;
 
-const MAX_COMMENT_LENGTH: usize = 5000;
+pub(crate) const MAX_COMMENT_LENGTH: usize = 5000;
 
 pub async fn delete_workspace_for_user(
   pg_pool: PgPool,
@@ -306,13 +304,14 @@ pub async fn get_all_user_workspaces(
 pub async fn open_workspace(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
+  user_uid: i64,
   workspace_id: &Uuid,
 ) -> Result<AFWorkspace, AppResponseError> {
   let mut txn = pg_pool
     .begin()
     .await
     .context("Begin transaction to open workspace")?;
-  let row = select_workspace(txn.deref_mut(), workspace_id).await?;
+  let row = select_workspace_with_count_and_role(txn.deref_mut(), workspace_id, user_uid).await?;
   update_updated_at_of_workspace(txn.deref_mut(), user_uuid, workspace_id).await?;
   txn
     .commit()
@@ -375,7 +374,7 @@ pub async fn invite_workspace_members(
       .await?
       .unwrap_or_default();
   let workspace_members_by_email: HashMap<_, _> =
-    database::workspace::select_workspace_member_list(pg_pool, workspace_id)
+    database::workspace::select_workspace_member_list_exclude_guest(pg_pool, workspace_id)
       .await?
       .into_iter()
       .map(|row| (row.email, row.role))
@@ -541,11 +540,11 @@ pub async fn remove_workspace_members(
     .context("Begin transaction to delete workspace members")?;
 
   for email in member_emails {
-    delete_workspace_members(&mut txn, workspace_id, email.as_str()).await?;
     if let Ok(uid) = select_uid_from_email(txn.deref_mut(), email)
       .await
       .map_err(AppResponseError::from)
     {
+      delete_workspace_members(&mut txn, workspace_id, email.as_str()).await?;
       workspace_access_control
         .remove_user_from_workspace(&uid, workspace_id)
         .await?;
@@ -567,19 +566,38 @@ pub async fn remove_workspace_members(
   Ok(())
 }
 
-pub async fn get_workspace_members(
+pub async fn get_workspace_members_exclude_guest(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
 ) -> Result<Vec<AFWorkspaceMemberRow>, AppError> {
-  select_workspace_member_list(pg_pool, workspace_id).await
+  select_workspace_member_list_exclude_guest(pg_pool, workspace_id).await
+}
+
+pub async fn get_workspace_member_optional(
+  uid: i64,
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Option<AFWorkspaceMemberRow>, AppError> {
+  let member = select_workspace_member(pg_pool, uid, workspace_id).await?;
+  Ok(member)
 }
 
 pub async fn get_workspace_member(
-  uid: &i64,
+  uid: i64,
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<AFWorkspaceMemberRow, AppError> {
+  let member = select_workspace_member(pg_pool, uid, workspace_id)
+    .await?
+    .ok_or(AppError::RecordNotFound("user does not exists".to_string()))?;
+  Ok(member)
+}
+
+pub async fn get_workspace_owner(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
 ) -> Result<AFWorkspaceMemberRow, AppResponseError> {
-  Ok(select_workspace_member(pg_pool, uid, workspace_id).await?)
+  Ok(select_workspace_owner(pg_pool, workspace_id).await?)
 }
 
 pub async fn get_workspace_member_by_uuid(

@@ -674,6 +674,14 @@ pub struct AFUserProfile {
   pub updated_at: i64,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct AFUserWithAvatar {
+  pub uuid: Uuid,
+  pub email: String,
+  pub name: String,
+  pub avatar_url: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AFWorkspace {
   pub workspace_id: Uuid,

@@ -1,16 +1,17 @@
 <script props>
   // https://maizzle.com/docs/components/divider
   module.exports = {
-    height: props.height || '1px',
+    height: props.height || "1px",
     color: props.color, // any CSS color value
     top: props.top, // top margin
     bottom: props.bottom, // bottom margin
     left: props.left, // left margin
     right: props.right, // right margin
-    spaceY: props['space-y'] || '24px', // top and bottom margin
-    spaceX: props['space-x'], // right and left margin
-    hasBgClass: props.class && props.class.split(' ').some(c => c.startsWith('bg-')),
-  }
+    spaceY: props["space-y"] || "24px", // top and bottom margin
+    spaceX: props["space-x"], // right and left margin
+    hasBgClass:
+      props.class && props.class.split(" ").some((c) => c.startsWith("bg-")),
+  };
 </script>
 
 <div
@@ -27,4 +28,4 @@
     {{ left && `margin-left: ${left}` }};
     {{ right && `margin-right: ${right}` }};
   "
->&zwj;</div>
+></div>

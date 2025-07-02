@@ -381,7 +381,11 @@ fn get_view_and_children_recursive(
   })
 }
 
-pub fn get_ancestor_views(folder: &Folder, view_id: &str, uid: i64) -> Result<Vec<View>, AppError> {
+pub fn get_self_and_ancestor_views(
+  folder: &Folder,
+  view_id: &str,
+  uid: i64,
+) -> Result<Vec<View>, AppError> {
   let mut views = Vec::new();
   let mut current_view_id = view_id.to_string();
   let mut visited: HashSet<String> = HashSet::new();
@@ -396,6 +400,28 @@ pub fn get_ancestor_views(folder: &Folder, view_id: &str, uid: i64) -> Result<Ve
   }
 
   Ok(views)
+}
+
+pub fn check_if_view_is_private(folder: &Folder, view_id: &str, uid: i64) -> bool {
+  let mut visited: HashSet<String> = HashSet::new();
+  let private_section_ids = folder
+    .get_all_private_sections(uid)
+    .iter()
+    .map(|s| s.id.clone())
+    .collect::<HashSet<_>>();
+
+  let mut current_view_id = view_id.to_string();
+  while let Some(view) = folder.get_view(&current_view_id, uid) {
+    visited.insert(view.id.clone());
+    if view.parent_view_id.is_empty() || visited.contains(&view.parent_view_id) {
+      break;
+    }
+    if private_section_ids.contains(&view.id) {
+      return true;
+    }
+    current_view_id = view.parent_view_id.clone();
+  }
+  false
 }
 
 pub fn check_if_view_is_space(view: &collab_folder::View) -> bool {

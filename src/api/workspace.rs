@@ -15,7 +15,8 @@ use crate::biz::workspace::invite::{
 };
 use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
-  get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
+  get_reactions_on_published_view, get_workspace_owner, remove_comment_on_published_view,
+  remove_reaction_on_comment,
 };
 use crate::biz::workspace::page_view::{
   add_recent_pages, append_block_at_the_end_of_page, create_database_view, create_folder_view,
@@ -68,6 +69,7 @@ use itertools::Itertools;
 use prost::Message as ProstMessage;
 use rayon::prelude::*;
 
+use semver::Version;
 use sha2::{Digest, Sha256};
 use shared_entity::dto::publish_dto::DuplicatePublishedPageResponse;
 use shared_entity::dto::workspace_dto::*;
@@ -411,15 +413,13 @@ async fn create_workspace_handler(
   state: Data<AppState>,
   create_workspace_param: Json<CreateWorkspaceParam>,
 ) -> Result<Json<AppResponse<AFWorkspace>>> {
+  let uid = state.user_cache.get_user_uid(&uuid).await?;
   let create_workspace_param = create_workspace_param.into_inner();
-
   let workspace_name = create_workspace_param
     .workspace_name
     .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
 
   let workspace_icon = create_workspace_param.workspace_icon.unwrap_or_default();
-
-  let uid = state.user_cache.get_user_uid(&uuid).await?;
   let new_workspace = workspace::ops::create_workspace_for_user(
     &state.pg_pool,
     state.workspace_access_control.clone(),
@@ -485,8 +485,14 @@ async fn list_workspace_handler(
   uuid: UserUuid,
   state: Data<AppState>,
   query: web::Query<QueryWorkspaceParam>,
+  req: HttpRequest,
 ) -> Result<JsonAppResponse<Vec<AFWorkspace>>> {
-  let exclude_guest = true;
+  let app_version = client_version_from_headers(req.headers())
+    .ok()
+    .and_then(|s| Version::parse(s).ok());
+  let exclude_guest = app_version
+    .map(|s| s < Version::new(0, 9, 4))
+    .unwrap_or(true);
   let QueryWorkspaceParam {
     include_member_count,
     include_role,
@@ -645,11 +651,12 @@ async fn get_workspace_members_handler(
     .enforce_role_weak(&uid, &workspace_id, AFRole::Guest)
     .await?;
   let requester_member_info =
-    workspace::ops::get_workspace_member(&uid, &state.pg_pool, &workspace_id).await?;
+    workspace::ops::get_workspace_member(uid, &state.pg_pool, &workspace_id).await?;
   let members: Vec<AFWorkspaceMember> = if requester_member_info.role == AFRole::Guest {
-    vec![requester_member_info.into()]
+    let owner = get_workspace_owner(&state.pg_pool, &workspace_id).await?;
+    vec![requester_member_info.into(), owner.into()]
   } else {
-    workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
+    workspace::ops::get_workspace_members_exclude_guest(&state.pg_pool, &workspace_id)
       .await?
       .into_iter()
       .map(|member| member.into())
@@ -703,7 +710,7 @@ async fn get_workspace_member_handler(
     .workspace_access_control
     .enforce_role_weak(&uid, &workspace_id, AFRole::Member)
     .await?;
-  let member_row = workspace::ops::get_workspace_member(&member_uid, &state.pg_pool, &workspace_id)
+  let member_row = workspace::ops::get_workspace_member(member_uid, &state.pg_pool, &workspace_id)
     .await
     .map_err(|_| {
       AppResponseError::new(
@@ -774,7 +781,8 @@ async fn open_workspace_handler(
     .workspace_access_control
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
-  let workspace = workspace::ops::open_workspace(&state.pg_pool, &user_uuid, &workspace_id).await?;
+  let workspace =
+    workspace::ops::open_workspace(&state.pg_pool, &user_uuid, uid, &workspace_id).await?;
   Ok(AppResponse::Ok().with_data(workspace).into())
 }
 
@@ -1516,6 +1524,7 @@ async fn delete_all_pages_from_trash_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+#[instrument(level = "trace", skip_all)]
 async fn publish_page_handler(
   user_uuid: UserUuid,
   path: web::Path<(Uuid, Uuid)>,
@@ -2132,6 +2141,7 @@ async fn delete_published_collab_reaction_handler(
 // FIXME: This endpoint currently has a different behaviour from the publish page endpoint,
 // as it doesn't accept parameters. We will need to deprecate this endpoint and use a new
 // one that accepts parameters.
+#[instrument(level = "trace", skip_all)]
 async fn post_publish_collabs_handler(
   workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
@@ -2300,9 +2310,11 @@ async fn get_workspace_folder_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let user = realtime_user_for_web_request(req.headers(), uid)?;
   let workspace_id = workspace_id.into_inner();
+  // shuheng: AppFlowy Web does not support guest editor yet, so we need to make sure
+  // that the user is at least a member of the workspace, not just a guest.
   state
     .workspace_access_control
-    .enforce_action(&uid, &workspace_id, Action::Read)
+    .enforce_role_weak(&uid, &workspace_id, AFRole::Member)
     .await?;
   let root_view_id = query.root_view_id.unwrap_or(workspace_id);
   let folder_view = biz::collab::ops::get_user_workspace_structure(

@@ -7,6 +7,7 @@ mod http_blob;
 mod http_collab;
 mod http_guest;
 mod http_member;
+mod http_person;
 mod http_publish;
 mod http_quick_note;
 mod http_search;

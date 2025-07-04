@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
-  InvitationCodeInfo, Reaction,
+  InvitationCodeInfo, MentionableWorkspaceMemberOrGuest, Reaction, WorkspaceMemberProfile,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -1868,4 +1868,64 @@ pub async fn select_workspace_member_uids<'a, E: Executor<'a, Database = Postgre
   .await?;
 
   Ok(member_uids)
+}
+
+pub async fn select_workspace_mentionable_members_or_guests<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Vec<MentionableWorkspaceMemberOrGuest>, AppError> {
+  let members = sqlx::query_as!(
+    MentionableWorkspaceMemberOrGuest,
+    r#"
+      SELECT
+        au.uuid,
+        COALESCE(awmp.name, au.name) AS "name!",
+        au.email,
+        awm.role_id AS "role!",
+        COALESCE(awmp.avatar_url, au.metadata ->> 'icon_url') AS "avatar_url",
+        awmp.cover_image_url,
+        awmp.description
+      FROM af_workspace_member awm
+      JOIN af_user au ON awm.uid = au.uid
+      LEFT JOIN af_workspace_member_profile awmp ON (awm.uid = awmp.uid AND awm.workspace_id = awmp.workspace_id)
+      WHERE awm.workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .fetch_all(executor)
+  .await?;
+
+  Ok(members)
+}
+
+pub async fn upsert_workspace_member_profile<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  uid: i64,
+  updated_profile: &WorkspaceMemberProfile,
+) -> Result<(), AppError> {
+  sqlx::query!(
+    r#"
+      INSERT INTO af_workspace_member_profile (workspace_id, uid, name, avatar_url, cover_image_url, description)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (workspace_id, uid) DO UPDATE
+      SET name = EXCLUDED.name,
+          avatar_url = EXCLUDED.avatar_url,
+          cover_image_url = EXCLUDED.cover_image_url,
+          description = EXCLUDED.description
+    "#,
+    workspace_id,
+    uid,
+    updated_profile.name,
+    updated_profile.avatar_url,
+    updated_profile.cover_image_url,
+    updated_profile.description
+  )
+  .execute(executor)
+  .await?;
+
+  Ok(())
 }

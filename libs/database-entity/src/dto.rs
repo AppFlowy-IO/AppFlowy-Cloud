@@ -1313,6 +1313,68 @@ pub struct JoinWorkspaceByInviteCodeParams {
   pub code: String,
 }
 
+pub struct MentionableWorkspaceMemberOrGuest {
+  pub uuid: Uuid,
+  pub name: String,
+  pub email: String,
+  pub role: AFRole,
+  pub avatar_url: Option<String>,
+  pub cover_image_url: Option<String>,
+  pub description: Option<String>,
+}
+
+impl From<MentionableWorkspaceMemberOrGuest> for MentionablePerson {
+  fn from(val: MentionableWorkspaceMemberOrGuest) -> Self {
+    MentionablePerson {
+      uuid: val.uuid,
+      name: val.name,
+      email: val.email,
+      role: match val.role {
+        AFRole::Owner => MentionablePersonType::WorkspaceMember,
+        AFRole::Member => MentionablePersonType::WorkspaceMember,
+        AFRole::Guest => MentionablePersonType::WorkspaceGuest,
+      },
+      avatar_url: val.avatar_url,
+      cover_image_url: val.cover_image_url,
+      description: val.description,
+      invited: false,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WorkspaceMemberProfile {
+  pub name: String,
+  pub avatar_url: Option<String>,
+  pub cover_image_url: Option<String>,
+  pub description: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MentionablePerson {
+  pub uuid: Uuid,
+  pub name: String,
+  pub email: String,
+  pub role: MentionablePersonType,
+  pub avatar_url: Option<String>,
+  pub cover_image_url: Option<String>,
+  pub description: Option<String>,
+  pub invited: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MentionablePersons {
+  pub persons: Vec<MentionablePerson>,
+}
+
+#[derive(Serialize_repr, Deserialize_repr, Debug)]
+#[repr(u8)]
+pub enum MentionablePersonType {
+  WorkspaceMember = 1,
+  WorkspaceGuest = 2,
+  Contact = 3,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CreateCollabData, CreateCollabDataV0};

@@ -1886,7 +1886,14 @@ async fn get_page_view_collab_for_orphaned_view(
   uid: i64,
   workspace_id: &Uuid,
 ) -> Result<PageCollab, AppError> {
-  let data = get_page_collab_data_for_document(collab_storage, uid, workspace_id, view_id).await?;
+  let data = get_page_collab_data_for_document(collab_storage, uid, workspace_id, view_id)
+    .await
+    .map_err(|err| {
+      AppError::InvalidFolderView(format!(
+        "Unable to get page collab data for view {}: {}",
+        view_id, err
+      ))
+    })?;
   let metadata = select_collab_meta_from_af_collab(pg_pool, view_id, &CollabType::Document)
     .await?
     .ok_or(AppError::Internal(anyhow::anyhow!(

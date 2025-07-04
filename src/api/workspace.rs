@@ -16,7 +16,7 @@ use crate::biz::workspace::invite::{
 use crate::biz::workspace::ops::{
   create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
   get_reactions_on_published_view, get_workspace_owner, remove_comment_on_published_view,
-  remove_reaction_on_comment,
+  remove_reaction_on_comment, update_workspace_member_profile,
 };
 use crate::biz::workspace::page_view::{
   add_recent_pages, append_block_at_the_end_of_page, create_database_view, create_folder_view,
@@ -136,6 +136,14 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_workspace_members_handler))
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/mentionable-person")
+        .route(web::get().to(get_workspace_mentionable_person_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/update-member-profile")
+        .route(web::put().to(put_workspace_member_profile_handler)),
     )
     // Deprecated since v0.9.24
     .service(
@@ -694,6 +702,50 @@ async fn remove_workspace_member_handler(
   )
   .await?;
 
+  Ok(AppResponse::Ok().into())
+}
+
+#[instrument(skip_all, err)]
+async fn get_workspace_mentionable_person_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  path: web::Path<Uuid>,
+) -> Result<JsonAppResponse<MentionablePersons>> {
+  let workspace_id = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  // Guest can access mentionable users, but only themselves and the owner
+  state
+    .workspace_access_control
+    .enforce_role_weak(&uid, &workspace_id, AFRole::Guest)
+    .await?;
+  let persons = workspace::ops::get_workspace_mentionable_persons(
+    &state.pg_pool,
+    &workspace_id,
+    uid,
+    &user_uuid,
+  )
+  .await?;
+  Ok(
+    AppResponse::Ok()
+      .with_data(MentionablePersons { persons })
+      .into(),
+  )
+}
+
+async fn put_workspace_member_profile_handler(
+  user_uuid: UserUuid,
+  path: web::Path<Uuid>,
+  payload: Json<WorkspaceMemberProfile>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  let workspace_id = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role_weak(&uid, &workspace_id, AFRole::Guest)
+    .await?;
+  let updated_profile = payload.into_inner();
+  update_workspace_member_profile(&state.pg_pool, &workspace_id, uid, &updated_profile).await?;
   Ok(AppResponse::Ok().into())
 }
 

@@ -139,6 +139,10 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/{workspace_id}/mentionable-person")
+        .route(web::get().to(list_workspace_mentionable_person_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/mentionable-person/{contact_id}")
         .route(web::get().to(get_workspace_mentionable_person_handler)),
     )
     .service(
@@ -706,7 +710,7 @@ async fn remove_workspace_member_handler(
 }
 
 #[instrument(skip_all, err)]
-async fn get_workspace_mentionable_person_handler(
+async fn list_workspace_mentionable_person_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<Uuid>,
@@ -718,7 +722,7 @@ async fn get_workspace_mentionable_person_handler(
     .workspace_access_control
     .enforce_role_weak(&uid, &workspace_id, AFRole::Guest)
     .await?;
-  let persons = workspace::ops::get_workspace_mentionable_persons(
+  let persons = workspace::ops::list_workspace_mentionable_persons(
     &state.pg_pool,
     &workspace_id,
     uid,
@@ -730,6 +734,24 @@ async fn get_workspace_mentionable_person_handler(
       .with_data(MentionablePersons { persons })
       .into(),
   )
+}
+
+#[instrument(skip_all, err)]
+async fn get_workspace_mentionable_person_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  path: web::Path<(Uuid, Uuid)>,
+) -> Result<JsonAppResponse<MentionablePerson>> {
+  let (workspace_id, person_id) = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role_weak(&uid, &workspace_id, AFRole::Guest)
+    .await?;
+  let person =
+    workspace::ops::get_workspace_mentionable_person(&state.pg_pool, &workspace_id, &person_id)
+      .await?;
+  Ok(AppResponse::Ok().with_data(person).into())
 }
 
 async fn put_workspace_member_profile_handler(

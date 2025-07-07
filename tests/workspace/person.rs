@@ -20,11 +20,17 @@ async fn workspace_mentionable_persons_crud() {
   .unwrap();
 
   let mentionable_persons = c
-    .get_workspace_mentionable_persons(&workspace_id)
+    .list_workspace_mentionable_persons(&workspace_id)
     .await
     .unwrap()
     .persons;
   assert_eq!(mentionable_persons.len(), 1);
   assert_eq!(mentionable_persons[0].email, user.email);
   assert_eq!(mentionable_persons[0].name, "name override");
+  let person_id = mentionable_persons[0].uuid;
+  let mentionable_person = c
+    .get_workspace_mentionable_person(&workspace_id, &person_id)
+    .await
+    .unwrap();
+  assert_eq!(mentionable_person.email, user.email)
 }

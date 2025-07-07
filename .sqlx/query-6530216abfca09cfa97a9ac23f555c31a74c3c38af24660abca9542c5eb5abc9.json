@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        au.uuid,\n        COALESCE(awmp.name, au.name) AS \"name!\",\n        au.email,\n        awm.role_id AS \"role!\",\n        COALESCE(awmp.avatar_url, au.metadata ->> 'icon_url') AS \"avatar_url\",\n        awmp.cover_image_url,\n        awmp.description\n      FROM af_workspace_member awm\n      JOIN af_user au ON awm.uid = au.uid\n      LEFT JOIN af_workspace_member_profile awmp ON (awm.uid = awmp.uid AND awm.workspace_id = awmp.workspace_id)\n      WHERE awm.workspace_id = $1\n      AND au.uuid = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "role!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "cover_image_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "description",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "6530216abfca09cfa97a9ac23f555c31a74c3c38af24660abca9542c5eb5abc9"
+}

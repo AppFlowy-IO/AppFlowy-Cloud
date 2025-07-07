@@ -738,7 +738,7 @@ pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppErro
   Ok(count)
 }
 
-pub async fn get_workspace_mentionable_persons(
+pub async fn list_workspace_mentionable_persons(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   uid: i64,
@@ -767,6 +767,23 @@ pub async fn get_workspace_mentionable_persons(
     );
   }
   Ok(persons)
+}
+
+pub async fn get_workspace_mentionable_person(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  person_id: &Uuid,
+) -> Result<MentionablePerson, AppError> {
+  let mentionable_workspace_members_or_guests =
+    select_workspace_mentionable_member_or_guest_by_uuid(pg_pool, workspace_id, person_id).await?;
+  if let Some(mentionable) = mentionable_workspace_members_or_guests {
+    Ok(mentionable.into())
+  } else {
+    Err(AppError::RecordNotFound(format!(
+      "person with ID {} is neither a workspace member nor contact",
+      person_id
+    )))
+  }
 }
 
 pub async fn update_workspace_member_profile(

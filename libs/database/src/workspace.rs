@@ -1901,6 +1901,40 @@ pub async fn select_workspace_mentionable_members_or_guests<
   Ok(members)
 }
 
+pub async fn select_workspace_mentionable_member_or_guest_by_uuid<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
+  executor: E,
+  workspace_id: &Uuid,
+  user_id: &Uuid,
+) -> Result<Option<MentionableWorkspaceMemberOrGuest>, AppError> {
+  let member = sqlx::query_as!(
+    MentionableWorkspaceMemberOrGuest,
+    r#"
+      SELECT
+        au.uuid,
+        COALESCE(awmp.name, au.name) AS "name!",
+        au.email,
+        awm.role_id AS "role!",
+        COALESCE(awmp.avatar_url, au.metadata ->> 'icon_url') AS "avatar_url",
+        awmp.cover_image_url,
+        awmp.description
+      FROM af_workspace_member awm
+      JOIN af_user au ON awm.uid = au.uid
+      LEFT JOIN af_workspace_member_profile awmp ON (awm.uid = awmp.uid AND awm.workspace_id = awmp.workspace_id)
+      WHERE awm.workspace_id = $1
+      AND au.uuid = $2
+    "#,
+    workspace_id,
+    user_id,
+  )
+  .fetch_optional(executor)
+  .await?;
+
+  Ok(member)
+}
+
 pub async fn upsert_workspace_member_profile<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,

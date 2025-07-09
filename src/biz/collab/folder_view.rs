@@ -402,6 +402,23 @@ pub fn get_self_and_ancestor_views(
   Ok(views)
 }
 
+pub fn get_space_view_for_current_view(folder: &Folder, view_id: &str, uid: i64) -> Option<View> {
+  let mut current_view_id = view_id.to_string();
+  let mut visited: HashSet<String> = HashSet::new();
+
+  while let Some(view) = folder.get_view(&current_view_id, uid) {
+    if check_if_view_is_space(&view) {
+      return Some(View::clone(&view));
+    }
+    visited.insert(view.id.clone());
+    if view.parent_view_id.is_empty() || visited.contains(&view.parent_view_id) {
+      break;
+    }
+    current_view_id = view.parent_view_id.clone();
+  }
+  None
+}
+
 pub fn check_if_view_is_private(folder: &Folder, view_id: &str, uid: i64) -> bool {
   let mut visited: HashSet<String> = HashSet::new();
   let private_section_ids = folder

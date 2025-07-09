@@ -1,6 +1,4 @@
-use database_entity::dto::{
-  AFWorkspaceSettingsChange, MentionablePerson, MentionableWorkspaceMemberOrGuest,
-};
+use database_entity::dto::{AFWorkspaceSettingsChange, MentionablePerson};
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Context};
@@ -741,31 +739,19 @@ pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppErro
 pub async fn list_workspace_mentionable_persons(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  uid: i64,
-  user_uuid: &Uuid,
+  _uid: i64,
+  _user_uuid: &Uuid,
 ) -> Result<Vec<MentionablePerson>, AppError> {
   let mentionable_workspace_members_or_guests =
     select_workspace_mentionable_members_or_guests(pg_pool, workspace_id).await?;
-  let is_guest = get_workspace_member(uid, pg_pool, workspace_id).await?.role == AFRole::Guest;
+  // TODO: if user is guest, we should not return the contact list
+  // let is_guest = get_workspace_member(uid, pg_pool, workspace_id).await?.role == AFRole::Guest;
   let mut persons = vec![];
-  if is_guest {
-    persons.extend(
-      mentionable_workspace_members_or_guests
-        .into_iter()
-        .map(|row| row.into()),
-    );
-  } else {
-    let allowable_mentioned_persons_for_guest: Vec<MentionableWorkspaceMemberOrGuest> =
-      mentionable_workspace_members_or_guests
-        .into_iter()
-        .filter(|row| row.role == AFRole::Owner || row.uuid == *user_uuid)
-        .collect();
-    persons.extend(
-      allowable_mentioned_persons_for_guest
-        .into_iter()
-        .map(|row| row.into()),
-    );
-  }
+  persons.extend(
+    mentionable_workspace_members_or_guests
+      .into_iter()
+      .map(|row| row.into()),
+  );
   Ok(persons)
 }
 

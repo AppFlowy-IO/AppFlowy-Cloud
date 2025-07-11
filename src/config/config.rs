@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context};
+use appflowy_collaborate::ws2::RevisionOptions;
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use indexer::vector::embedder::get_open_ai_config;
 use infra::env_util::{get_env_var, get_env_var_opt};
@@ -30,6 +31,7 @@ pub struct Config {
   pub appflowy_web_url: String,
   pub open_ai_config: Option<OpenAIConfig>,
   pub azure_ai_config: Option<AzureConfig>,
+  pub revision_options: RevisionOptions,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -267,6 +269,16 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       .ok_or(anyhow!("APPFLOWY_WEB_URL has not been set"))?,
     open_ai_config,
     azure_ai_config,
+    revision_options: RevisionOptions {
+      auto_revision_interval: get_env_var_opt("APPFLOWY_REVISION_AUTO_INTERVAL_HOURS")
+        .and_then(|s| s.parse::<i64>().ok())
+        .map(chrono::Duration::hours),
+      prune_threshold: chrono::Duration::days(
+        get_env_var_opt("APPFLOWY_REVISION_PRUNE_THRESHOLD_DAYS")
+          .and_then(|s| s.parse::<i64>().ok())
+          .unwrap_or(RevisionOptions::KEEP_REVISION_DAYS),
+      ),
+    },
   };
   Ok(config)
 }

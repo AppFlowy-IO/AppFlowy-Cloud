@@ -346,6 +346,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     redis_stream_router.clone(),
     awareness_gossip.clone(),
     indexer_scheduler.clone(),
+    config.revision_options.clone(),
   );
   let ws_server = WsServer::new(manager).start();
 

@@ -14,7 +14,7 @@ serde_json.workspace = true
 serde_repr = "0.1.18"
 thiserror = "1.0.56"
 reqwest = { workspace = true, features = ["stream"] }
-uuid = { version = "1.6.1", features = ["v4"] }
+uuid.workspace = true
 gotrue-entity = { path = "../gotrue-entity" }
 database-entity.workspace = true
 infra = { workspace = true, features = ["request_util"] }

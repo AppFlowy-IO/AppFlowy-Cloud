@@ -48,6 +48,7 @@ pub struct CollabManager {
   connection_manager: ConnectionManager,
   indexer_scheduler: Arc<IndexerScheduler>,
   snapshot_thread_pool: Arc<ThreadPoolNoAbort>,
+  revision_options: RevisionOptions,
 }
 
 impl CollabManager {
@@ -60,6 +61,7 @@ impl CollabManager {
     update_streams: Arc<StreamRouter>,
     awareness_broadcast: Arc<AwarenessGossip>,
     indexer_scheduler: Arc<IndexerScheduler>,
+    revision_options: RevisionOptions,
   ) -> Arc<Self> {
     Arc::new(Self {
       access_control,
@@ -69,6 +71,7 @@ impl CollabManager {
       connection_manager,
       indexer_scheduler,
       snapshot_thread_pool: thread_pool,
+      revision_options,
     })
   }
 
@@ -453,6 +456,7 @@ impl CollabManager {
   ) -> anyhow::Result<Vec<ProcessedSnapshot>> {
     let thread_pool = self.snapshot_thread_pool.clone();
     let client_id = default_client_id();
+    let revision_options = self.revision_options.clone();
 
     thread_pool
       .install(|| {
@@ -466,6 +470,7 @@ impl CollabManager {
               task.rid,
               task.update_snapshot,
               task.updates,
+              revision_options.clone(),
             ) {
               Ok((rid, full_state, state_vector, paragraphs)) => Some(ProcessedSnapshot {
                 workspace_id: task.workspace_id,
@@ -663,6 +668,30 @@ pub struct CollabState {
   pub state_vector: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
+pub struct RevisionOptions {
+  /// How often should we create automatic revisions if they were not created by the user.
+  pub auto_revision_interval: Option<chrono::TimeDelta>,
+  /// How long should we keep revisions before they are pruned.
+  pub prune_threshold: chrono::TimeDelta,
+}
+
+impl RevisionOptions {
+  /// By default, we keep revisions for 7 days.
+  pub const KEEP_REVISION_DAYS: i64 = 7;
+  /// By default, we create automatic revisions every 24 hours since the last one.
+  pub const AUTO_REVSIONS_HOURS: i64 = 24;
+}
+
+impl Default for RevisionOptions {
+  fn default() -> Self {
+    Self {
+      auto_revision_interval: Some(chrono::TimeDelta::hours(Self::AUTO_REVSIONS_HOURS)),
+      prune_threshold: chrono::TimeDelta::days(Self::KEEP_REVISION_DAYS),
+    }
+  }
+}
+
 fn apply_updates_to_snapshot(
   client_id: ClientID,
   object_id: ObjectId,
@@ -670,6 +699,7 @@ fn apply_updates_to_snapshot(
   rid_snapshot: Rid,
   update_snapshot: Bytes,
   updates: Vec<UpdateStreamMessage>,
+  revision_options: RevisionOptions,
 ) -> anyhow::Result<(Rid, Bytes, StateVector, Vec<String>)> {
   let options = CollabOptions::new(object_id.to_string(), client_id);
   let mut collab = Collab::new_with_options(CollabOrigin::Server, options)
@@ -704,6 +734,32 @@ fn apply_updates_to_snapshot(
     }
     drop(tx); // commit the transaction
   }
+
+  // remove outdated revisions
+  let revision_prune_threshold = chrono::Utc::now() - revision_options.prune_threshold;
+  match collab.remove_revisions_before(revision_prune_threshold) {
+    Ok(prunned) => tracing::trace!("removed {} revisions for {}", prunned, object_id),
+    Err(err) => tracing::error!("failed to prune revisions for {}: {}", object_id, err),
+  }
+
+  // we want to create automatic revisions AFTER pruning old ones to avoid carrying garbage
+  if let Some(interval) = revision_options.auto_revision_interval {
+    // create automatic revision if needed
+    let last_revision = collab
+      .revisions()?
+      .into_iter()
+      .filter_map(|rev| rev.created_at())
+      .max();
+    if last_revision.is_none() || last_revision.unwrap() < chrono::Utc::now() - interval {
+      let revision_id = collab.create_revision()?;
+      tracing::trace!(
+        "created automatic revision {} for {}",
+        revision_id,
+        object_id
+      );
+    }
+  }
+
   let tx = collab.transact();
   let full_state = tx.encode_diff_v1(&StateVector::default());
   let state_vector = tx.state_vector();

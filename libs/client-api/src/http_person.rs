@@ -1,4 +1,6 @@
-use client_api_entity::{MentionablePerson, MentionablePersons, WorkspaceMemberProfile};
+use client_api_entity::{
+  MentionablePerson, MentionablePersons, MentionablePersonsWithAccess, WorkspaceMemberProfile,
+};
 use reqwest::Method;
 use shared_entity::response::AppResponseError;
 use tracing::instrument;
@@ -58,5 +60,22 @@ impl Client {
       .send()
       .await?;
     process_response_error(resp).await
+  }
+
+  pub async fn list_page_mentionable_persons(
+    &self,
+    workspace_id: &Uuid,
+    view_id: &Uuid,
+  ) -> Result<MentionablePersonsWithAccess, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/mentionable-person-with-access",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    process_response_data::<MentionablePersonsWithAccess>(resp).await
   }
 }

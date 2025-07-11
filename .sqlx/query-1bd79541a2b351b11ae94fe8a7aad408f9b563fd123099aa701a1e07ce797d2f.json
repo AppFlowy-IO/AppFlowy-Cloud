@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT\n      af_user.uuid\n    FROM public.af_workspace_member\n        JOIN public.af_user ON af_workspace_member.uid = af_user.uid\n    WHERE af_workspace_member.workspace_id = $1\n    AND role_id != $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uuid",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1bd79541a2b351b11ae94fe8a7aad408f9b563fd123099aa701a1e07ce797d2f"
+}

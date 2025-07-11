@@ -212,6 +212,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::patch().to(update_page_view_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/mentionable-person-with-access")
+        .route(web::get().to(list_page_mentionable_person_with_access_handler))
+    )
+    .service(
       web::resource("/{workspace_id}/page-view/{view_id}/update-name")
         .route(web::post().to(update_page_name_handler)),
     )
@@ -732,6 +736,32 @@ async fn list_workspace_mentionable_person_handler(
   Ok(
     AppResponse::Ok()
       .with_data(MentionablePersons { persons })
+      .into(),
+  )
+}
+
+#[instrument(skip_all, err)]
+async fn list_page_mentionable_person_with_access_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  path: web::Path<(Uuid, Uuid)>,
+) -> Result<JsonAppResponse<MentionablePersonsWithAccess>> {
+  let (workspace_id, view_id) = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role_weak(&uid, &workspace_id, AFRole::Guest)
+    .await?;
+  let persons = workspace::page_view::list_page_mentionable_persons_with_access(
+    &state.ws_server,
+    &state.pg_pool,
+    &workspace_id,
+    &view_id,
+  )
+  .await?;
+  Ok(
+    AppResponse::Ok()
+      .with_data(MentionablePersonsWithAccess { persons })
       .into(),
   )
 }

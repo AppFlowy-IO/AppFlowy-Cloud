@@ -1363,8 +1363,20 @@ pub struct MentionablePerson {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct MentionablePersonWithAccess {
+  #[serde(flatten)]
+  pub person: MentionablePerson,
+  pub can_access_page: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct MentionablePersons {
   pub persons: Vec<MentionablePerson>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MentionablePersonsWithAccess {
+  pub persons: Vec<MentionablePersonWithAccess>,
 }
 
 #[derive(Serialize_repr, Deserialize_repr, Debug)]

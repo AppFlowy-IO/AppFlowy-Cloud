@@ -52,4 +52,40 @@ async fn workspace_mentionable_persons_crud() {
     .await
     .unwrap();
   assert_eq!(mentionable_person.name, guest_name);
+
+  let folder_view = owner
+    .api_client
+    .get_workspace_folder(&workspace_id, Some(2), None)
+    .await
+    .unwrap();
+  let general_space = &folder_view
+    .children
+    .into_iter()
+    .find(|v| v.name == "General")
+    .unwrap();
+  let todo = general_space
+    .children
+    .iter()
+    .find(|v| v.name == "To-dos")
+    .unwrap();
+  let view_id = todo.view_id;
+  let mentionable_persons_with_access = owner
+    .api_client
+    .list_page_mentionable_persons(&workspace_id, &view_id)
+    .await
+    .unwrap()
+    .persons;
+  assert_eq!(mentionable_persons_with_access.len(), 2);
+  let guest_can_access = mentionable_persons_with_access
+    .iter()
+    .find(|p| p.person.name == guest_name)
+    .unwrap()
+    .can_access_page;
+  assert!(!guest_can_access);
+  let owner_can_access = mentionable_persons_with_access
+    .iter()
+    .find(|p| p.person.name == "name override")
+    .unwrap()
+    .can_access_page;
+  assert!(owner_can_access);
 }

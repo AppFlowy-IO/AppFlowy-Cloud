@@ -11,6 +11,8 @@ use shared_entity::dto::workspace_dto::{
 };
 use uuid::Uuid;
 
+use crate::biz::collab::utils::DUMMY_UID;
+
 pub struct PrivateSpaceAndTrashViews {
   pub my_private_space_ids: HashSet<Uuid>,
   pub other_private_space_ids: HashSet<Uuid>,
@@ -417,6 +419,13 @@ pub fn get_space_view_for_current_view(folder: &Folder, view_id: &str, uid: i64)
     current_view_id = view.parent_view_id.clone();
   }
   None
+}
+
+pub fn check_if_space_is_private(folder: &Folder, view_id: &str) -> bool {
+  folder
+    .get_all_private_sections(DUMMY_UID)
+    .iter()
+    .any(|s| s.id == view_id)
 }
 
 pub fn check_if_view_is_private(folder: &Folder, view_id: &str, uid: i64) -> bool {

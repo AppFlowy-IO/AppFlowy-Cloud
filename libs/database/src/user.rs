@@ -146,6 +146,23 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
 
 #[inline]
 #[instrument(level = "trace", skip(executor), err)]
+pub async fn select_uuid_from_uid<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  user_uid: i64,
+) -> Result<Uuid, AppError> {
+  let uuid = sqlx::query_scalar!(
+    r#"
+      SELECT uuid FROM af_user WHERE uid = $1
+    "#,
+    user_uid
+  )
+  .fetch_one(executor)
+  .await?;
+  Ok(uuid)
+}
+
+#[inline]
+#[instrument(level = "trace", skip(executor), err)]
 pub async fn select_uid_from_uuid<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,

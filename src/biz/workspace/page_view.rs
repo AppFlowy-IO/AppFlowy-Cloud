@@ -5,13 +5,14 @@ use crate::biz::collab::database::{
   resolve_dependencies_when_create_database_linked_view, LinkedViewDependencies,
 };
 use crate::biz::collab::folder_view::{
-  check_if_view_is_space, get_prev_view_id, parse_extra_field_as_json, to_dto_view_icon,
-  to_dto_view_layout, to_folder_view_icon, to_folder_view_layout, to_space_permission,
+  check_if_space_is_private, check_if_view_is_space, get_prev_view_id,
+  get_space_view_for_current_view, parse_extra_field_as_json, to_dto_view_icon, to_dto_view_layout,
+  to_folder_view_icon, to_folder_view_layout, to_space_permission,
 };
 use crate::biz::collab::ops::get_latest_workspace_database;
 use crate::biz::collab::utils::{
   batch_get_latest_collab_encoded, collab_to_doc_state, get_latest_collab,
-  get_latest_collab_database_body,
+  get_latest_collab_database_body, DUMMY_UID,
 };
 use crate::state::AppState;
 use anyhow::anyhow;
@@ -49,9 +50,13 @@ use database::collab::{
   select_collab_meta_from_af_collab, select_workspace_database_oid, CollabStore, GetCollabOrigin,
 };
 use database::publish::select_published_view_ids_for_workspace;
-use database::user::select_web_user_from_uid;
+use database::user::{select_uuid_from_uid, select_web_user_from_uid};
+use database::workspace::{
+  select_workspace_member_uuid_exclude_guest, select_workspace_mentionable_members_or_guests,
+};
 use database_entity::dto::{
-  CollabParams, PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabResult,
+  CollabParams, MentionablePerson, MentionablePersonWithAccess, PublishCollabItem,
+  PublishCollabMetadata, QueryCollab, QueryCollabResult,
 };
 use fancy_regex::Regex;
 use itertools::Itertools;
@@ -2428,4 +2433,74 @@ pub async fn update_database_data(
     "database",
   )
   .await
+}
+
+pub async fn list_page_mentionable_persons_with_access(
+  collab_instance_cache: &impl WorkspaceCollabInstanceCache,
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  view_id: &Uuid,
+) -> Result<Vec<MentionablePersonWithAccess>, AppError> {
+  let mentionable_workspace_members_or_guests =
+    select_workspace_mentionable_members_or_guests(pg_pool, workspace_id).await?;
+  let user_uuid_with_access =
+    get_all_user_uuids_with_access_to_page(collab_instance_cache, pg_pool, workspace_id, view_id)
+      .await?;
+  let mentionable_persons: Vec<MentionablePerson> = mentionable_workspace_members_or_guests
+    .into_iter()
+    .map(|person| person.into())
+    .collect();
+  let mentionable_persons_with_access: Vec<MentionablePersonWithAccess> = mentionable_persons
+    .into_iter()
+    .map(|person| {
+      let person_id = person.uuid;
+      MentionablePersonWithAccess {
+        person,
+        can_access_page: user_uuid_with_access.contains(&person_id),
+      }
+    })
+    .collect();
+  Ok(mentionable_persons_with_access)
+}
+
+pub async fn get_all_user_uuids_with_access_to_page(
+  collab_instance_cache: &impl WorkspaceCollabInstanceCache,
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  view_id: &Uuid,
+) -> Result<Vec<Uuid>, AppError> {
+  let folder = collab_instance_cache.get_folder(*workspace_id).await?;
+  let space = get_space_view_for_current_view(&folder, &view_id.to_string(), DUMMY_UID).ok_or(
+    AppError::Internal(anyhow::anyhow!(
+      "unable to get space for view id {}",
+      view_id
+    )),
+  )?;
+  let is_private = check_if_space_is_private(&folder, &space.id);
+  let mut all_access: Vec<Uuid> = vec![];
+  let member_access = if is_private {
+    let space_owner_uid = space.created_by.ok_or(AppError::Internal(anyhow::anyhow!(
+      "unable to find view owner for view: {}",
+      view_id
+    )))?;
+    let space_owner_uuid = select_uuid_from_uid(pg_pool, space_owner_uid).await?;
+    vec![space_owner_uuid]
+  } else {
+    select_workspace_member_uuid_exclude_guest(pg_pool, workspace_id).await?
+  };
+  let guest_access =
+    get_all_user_uuids_with_guest_access_to_page(&folder, pg_pool, workspace_id, view_id).await?;
+  all_access.extend(member_access);
+  all_access.extend(guest_access);
+  Ok(all_access)
+}
+
+async fn get_all_user_uuids_with_guest_access_to_page(
+  _folder: &Folder,
+  _pg_pool: &PgPool,
+  _workspace_id: &Uuid,
+  _view_id: &Uuid,
+) -> Result<Vec<Uuid>, AppError> {
+  // Note: the open source version of AppFlowy Cloud does not support guest access, hence this will always return empty.
+  Ok(vec![])
 }

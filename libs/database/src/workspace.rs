@@ -535,6 +535,27 @@ pub async fn select_email_belongs_to_a_workspace_member(
   Ok(exists.unwrap_or(false))
 }
 
+pub async fn select_workspace_member_uuid_exclude_guest(
+  pg_pool: &PgPool,
+  workspace_id: &uuid::Uuid,
+) -> Result<Vec<Uuid>, AppError> {
+  let member_uuids = sqlx::query_scalar!(
+    r#"
+    SELECT
+      af_user.uuid
+    FROM public.af_workspace_member
+        JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+    WHERE af_workspace_member.workspace_id = $1
+    AND role_id != $2
+    "#,
+    workspace_id,
+    AFRole::Guest as i32,
+  )
+  .fetch_all(pg_pool)
+  .await?;
+  Ok(member_uuids)
+}
+
 /// returns a list of workspace members, sorted by their creation time.
 #[inline]
 pub async fn select_workspace_member_list_exclude_guest(

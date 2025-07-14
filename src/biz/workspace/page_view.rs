@@ -53,10 +53,11 @@ use database::publish::select_published_view_ids_for_workspace;
 use database::user::{select_uuid_from_uid, select_web_user_from_uid};
 use database::workspace::{
   select_workspace_member_uuid_exclude_guest, select_workspace_mentionable_members_or_guests,
+  upsert_page_mention,
 };
 use database_entity::dto::{
-  CollabParams, MentionablePerson, MentionablePersonWithAccess, PublishCollabItem,
-  PublishCollabMetadata, QueryCollab, QueryCollabResult,
+  CollabParams, MentionablePerson, MentionablePersonWithAccess, PageMentionUpdate,
+  PublishCollabItem, PublishCollabMetadata, QueryCollab, QueryCollabResult,
 };
 use fancy_regex::Regex;
 use itertools::Itertools;
@@ -2433,6 +2434,17 @@ pub async fn update_database_data(
     "database",
   )
   .await
+}
+
+pub async fn update_page_mention(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  view_id: &Uuid,
+  uid: i64,
+  update: &PageMentionUpdate,
+) -> Result<(), AppError> {
+  upsert_page_mention(pg_pool, workspace_id, view_id, uid, update).await?;
+  Ok(())
 }
 
 pub async fn list_page_mentionable_persons_with_access(

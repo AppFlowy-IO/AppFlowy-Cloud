@@ -1,4 +1,6 @@
-use database_entity::dto::{AFWorkspaceSettingsChange, MentionablePerson};
+use database_entity::dto::{
+  AFWorkspaceSettingsChange, MentionablePerson, MentionablePersonWithLastMentionedTime,
+};
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Context};
@@ -744,6 +746,26 @@ pub async fn list_workspace_mentionable_persons(
 ) -> Result<Vec<MentionablePerson>, AppError> {
   let mentionable_workspace_members_or_guests =
     select_workspace_mentionable_members_or_guests(pg_pool, workspace_id).await?;
+  // TODO: if user is guest, we should not return the contact list
+  // let is_guest = get_workspace_member(uid, pg_pool, workspace_id).await?.role == AFRole::Guest;
+  let mut persons = vec![];
+  persons.extend(
+    mentionable_workspace_members_or_guests
+      .into_iter()
+      .map(|row| row.into()),
+  );
+  Ok(persons)
+}
+
+pub async fn list_workspace_mentionable_persons_with_last_mentioned_time(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  _uid: i64,
+  _user_uuid: &Uuid,
+) -> Result<Vec<MentionablePersonWithLastMentionedTime>, AppError> {
+  let mentionable_workspace_members_or_guests =
+    select_workspace_mentionable_members_or_guests_with_last_mentioned_time(pg_pool, workspace_id)
+      .await?;
   // TODO: if user is guest, we should not return the contact list
   // let is_guest = get_workspace_member(uid, pg_pool, workspace_id).await?.role == AFRole::Guest;
   let mut persons = vec![];

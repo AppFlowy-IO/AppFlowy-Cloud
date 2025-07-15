@@ -1,5 +1,6 @@
 use client_api_entity::{
-  MentionablePerson, MentionablePersons, MentionablePersonsWithAccess, WorkspaceMemberProfile,
+  MentionablePerson, MentionablePersons, MentionablePersonsWithAccess, PageMentionUpdate,
+  WorkspaceMemberProfile,
 };
 use reqwest::Method;
 use shared_entity::response::AppResponseError;
@@ -77,5 +78,24 @@ impl Client {
       .send()
       .await?;
     process_response_data::<MentionablePersonsWithAccess>(resp).await
+  }
+
+  pub async fn update_page_mention(
+    &self,
+    workspace_id: &Uuid,
+    view_id: &Uuid,
+    page_mention: &PageMentionUpdate,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/page-view/{}/page-mention",
+      self.base_url, workspace_id, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(page_mention)
+      .send()
+      .await?;
+    process_response_error(resp).await
   }
 }

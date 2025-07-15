@@ -216,6 +216,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(list_page_mentionable_person_with_access_handler))
     )
     .service(
+      web::resource("/{workspace_id}/page-view/{view_id}/page-mention")
+        .route(web::put().to(put_page_mention_handler))
+    )
+    .service(
       web::resource("/{workspace_id}/page-view/{view_id}/update-name")
         .route(web::post().to(update_page_name_handler)),
     )
@@ -726,7 +730,7 @@ async fn list_workspace_mentionable_person_handler(
     .workspace_access_control
     .enforce_role_weak(&uid, &workspace_id, AFRole::Guest)
     .await?;
-  let persons = workspace::ops::list_workspace_mentionable_persons(
+  let persons = workspace::ops::list_workspace_mentionable_persons_with_last_mentioned_time(
     &state.pg_pool,
     &workspace_id,
     uid,
@@ -764,6 +768,30 @@ async fn list_page_mentionable_person_with_access_handler(
       .with_data(MentionablePersonsWithAccess { persons })
       .into(),
   )
+}
+
+#[instrument(skip_all, err)]
+async fn put_page_mention_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, Uuid)>,
+  state: Data<AppState>,
+  payload: Json<PageMentionUpdate>,
+) -> Result<JsonAppResponse<()>> {
+  let (workspace_id, view_id) = path.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_role_weak(&uid, &workspace_id, AFRole::Guest)
+    .await?;
+  workspace::page_view::update_page_mention(
+    &state.pg_pool,
+    &workspace_id,
+    &view_id,
+    uid,
+    &payload.into_inner(),
+  )
+  .await?;
+  Ok(AppResponse::Ok().into())
 }
 
 #[instrument(skip_all, err)]

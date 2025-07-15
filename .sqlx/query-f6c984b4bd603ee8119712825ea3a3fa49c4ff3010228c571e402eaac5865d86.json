@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_page_mention (workspace_id, view_id, person_id, block_id, mentioned_by, mentioned_at)\n      VALUES ($1, $2, $3, $4, $5, current_timestamp)\n      ON CONFLICT (workspace_id, view_id, person_id) DO UPDATE\n      SET mentioned_by = EXCLUDED.mentioned_by,\n          mentioned_at = EXCLUDED.mentioned_at,\n          block_id = EXCLUDED.block_id\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f6c984b4bd603ee8119712825ea3a3fa49c4ff3010228c571e402eaac5865d86"
+}

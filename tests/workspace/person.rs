@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use client_api::entity::{AFRole, WorkspaceMemberProfile};
+use client_api::entity::{AFRole, PageMentionUpdate, WorkspaceMemberProfile};
 use client_api_test::TestClient;
 
 #[tokio::test]
@@ -69,6 +69,34 @@ async fn workspace_mentionable_persons_crud() {
     .find(|v| v.name == "To-dos")
     .unwrap();
   let view_id = todo.view_id;
+  owner
+    .api_client
+    .update_page_mention(
+      &workspace_id,
+      &view_id,
+      &PageMentionUpdate {
+        person_id,
+        block_id: None,
+      },
+    )
+    .await
+    .unwrap();
+  let mentionable_persons_with_last_mentioned_time = owner
+    .api_client
+    .list_workspace_mentionable_persons(&workspace_id)
+    .await
+    .unwrap();
+  assert_eq!(
+    mentionable_persons_with_last_mentioned_time.persons.len(),
+    2
+  );
+  assert_eq!(
+    mentionable_persons_with_last_mentioned_time.persons[0].uuid,
+    person_id
+  );
+  let last_mentioned_at = mentionable_persons_with_last_mentioned_time.persons[0].last_mentioned_at;
+  assert!(last_mentioned_at.is_some());
+
   let mentionable_persons_with_access = owner
     .api_client
     .list_page_mentionable_persons(&workspace_id, &view_id)

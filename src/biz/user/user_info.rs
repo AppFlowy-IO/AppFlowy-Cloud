@@ -1,6 +1,7 @@
 use app_error::AppError;
 use database::workspace::{
-  select_all_user_workspaces, select_user_profile, select_workspace_with_count_and_role,
+  select_all_user_non_guest_workspaces, select_all_user_workspaces, select_user_profile,
+  select_workspace_with_count_and_role,
 };
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 use serde_json::json;
@@ -26,6 +27,7 @@ pub async fn get_profile(pg_pool: &PgPool, uuid: &Uuid) -> anyhow::Result<AFUser
 pub async fn get_user_workspace_info(
   pg_pool: &PgPool,
   uuid: &Uuid,
+  exclude_guest: bool,
 ) -> anyhow::Result<AFUserWorkspaceInfo, AppError> {
   let row = select_user_profile(pg_pool, uuid)
     .await?
@@ -40,8 +42,12 @@ pub async fn get_user_workspace_info(
   let user_profile = AFUserProfile::try_from(row)?;
 
   // Get all workspaces that the user can access to
-  let workspaces = select_all_user_workspaces(pg_pool, uuid)
-    .await?
+  let workspaces_rows = if exclude_guest {
+    select_all_user_non_guest_workspaces(pg_pool, uuid).await?
+  } else {
+    select_all_user_workspaces(pg_pool, uuid).await?
+  };
+  let workspaces = workspaces_rows
     .into_iter()
     .flat_map(|row| AFWorkspace::try_from(row).ok())
     .collect::<Vec<AFWorkspace>>();

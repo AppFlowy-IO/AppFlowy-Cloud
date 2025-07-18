@@ -1437,6 +1437,7 @@ pub enum MentionablePersonType {
 pub struct PageMentionUpdate {
   pub person_id: Uuid,
   pub block_id: Option<String>,
+  pub require_notification: bool,
 }
 
 #[cfg(test)]

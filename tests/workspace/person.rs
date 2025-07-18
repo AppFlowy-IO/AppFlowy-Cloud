@@ -77,6 +77,7 @@ async fn workspace_mentionable_persons_crud() {
       &PageMentionUpdate {
         person_id,
         block_id: None,
+        require_notification: false,
       },
     )
     .await

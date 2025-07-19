@@ -198,9 +198,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
         .context("fail to get APPFLOWY_DATABASE_MAX_CONNECTIONS")?,
     },
     gotrue: GoTrueSetting {
-      base_url: get_env_var("APPFLOWY_GOTRUE_BASE_URL", "http://localhost:9999"),
-      jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),
-      service_role: get_env_var("APPFLOWY_GOTRUE_SERVICE_ROLE", "service_role"),
+      base_url: get_required_env_var("APPFLOWY_GOTRUE_URL")?,
+      jwt_secret: get_required_env_var("APPFLOWY_GOTRUE_JWT_SECRET")?.into(),
+      service_role: get_required_env_var("APPFLOWY_GOTRUE_SERVICE_ROLE")?,
     },
     application: ApplicationSetting {
       port: get_env_var("PORT", "8080").parse()?,
@@ -220,16 +220,16 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true")
         .parse()
         .context("fail to get APPFLOWY_S3_USE_MINIO")?,
-      minio_url: get_env_var("APPFLOWY_S3_MINIO_URL", "http://localhost:9000"),
-      access_key: get_env_var("APPFLOWY_S3_ACCESS_KEY", "minioadmin"),
-      secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
+      minio_url: get_required_env_var("APPFLOWY_S3_MINIO_URL")?,
+      access_key: get_required_env_var("APPFLOWY_S3_ACCESS_KEY")?,
+      secret_key: get_required_env_var("APPFLOWY_S3_SECRET_KEY")?.into(),
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
       region: get_env_var("APPFLOWY_S3_REGION", ""),
       presigned_url_endpoint: get_env_var_opt("APPFLOWY_S3_PRESIGNED_URL_ENDPOINT"),
     },
     appflowy_ai: AppFlowyAISetting {
-      port: get_env_var("AI_SERVER_PORT", "5001").into(),
-      host: get_env_var("AI_SERVER_HOST", "localhost").into(),
+      port: get_required_env_var("AI_SERVER_PORT")?.into(),
+      host: get_required_env_var("AI_SERVER_HOST")?.into(),
     },
     collab: CollabSetting {
       group_persistence_interval_secs: get_env_var(
@@ -249,12 +249,12 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
         .try_into()?,
     },
     mailer: MailerSetting {
-      smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),
-      smtp_port: get_env_var("APPFLOWY_MAILER_SMTP_PORT", "465").parse()?,
-      smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
-      smtp_email: get_env_var("APPFLOWY_MAILER_SMTP_EMAIL", "sender@example.com"),
-      smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
-      smtp_tls_kind: get_env_var("APPFLOWY_MAILER_SMTP_TLS_KIND", "wrapper"),
+      smtp_host: get_required_env_var("APPFLOWY_MAILER_SMTP_HOST")?,
+      smtp_port: get_required_env_var("APPFLOWY_MAILER_SMTP_PORT")?.parse()?,
+      smtp_username: get_required_env_var("APPFLOWY_MAILER_SMTP_USERNAME")?,
+      smtp_email: get_required_env_var("APPFLOWY_MAILER_SMTP_EMAIL")?,
+      smtp_password: get_required_env_var("APPFLOWY_MAILER_SMTP_PASSWORD")?.into(),
+      smtp_tls_kind: get_required_env_var("APPFLOWY_MAILER_SMTP_TLS_KIND")?,
     },
     apple_oauth: AppleOAuthSetting {
       client_id: get_env_var("APPFLOWY_APPLE_OAUTH_CLIENT_ID", ""),

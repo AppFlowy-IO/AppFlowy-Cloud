@@ -1,64 +1,40 @@
-# syntax=docker/dockerfile:1
-FROM lukemathwalker/cargo-chef:latest-rust-1.86 as chef
+# Use the official Rust image as a builder
+FROM rust:1.76 AS builder
 
-# Set the initial working directory
-WORKDIR /app
-RUN apt update && apt install lld clang -y
+# Set the working directory
+WORKDIR /usr/src/appflowy-cloud
 
-FROM chef as planner
+# Install build dependencies
+RUN apt-get update && apt-get install -y protobuf-compiler
+
+# Copy the Cargo files to cache dependencies
+COPY Cargo.toml Cargo.lock ./
+COPY libs ./libs
+COPY services ./services
+
+# Create a dummy main.rs to cache dependencies
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies to cache them
+RUN cargo build --release --locked --bin appflowy-worker
+
+# Copy the rest of the application source code
 COPY . .
 
-# Compute a lock-like file for our project
-RUN cargo chef prepare --recipe-path recipe.json
+# Build the application
+RUN cargo build --release --locked --bin appflowy-worker
 
-FROM chef as builder
+# Use a smaller, Debian-based image for the final image
+FROM debian:buster-slim
 
-# Update package lists and install protobuf-compiler along with other build dependencies
-RUN apt update && apt install -y protobuf-compiler lld clang
+# Set the working directory
+WORKDIR /usr/local/bin
 
-ARG PROFILE="release"
+# Copy the compiled binary from the builder stage
+COPY --from=builder /usr/src/appflowy-cloud/target/release/appflowy-worker .
 
-COPY --from=planner /app/recipe.json recipe.json
-# Build our project dependencies with optimized settings
-ENV CARGO_BUILD_JOBS=4
-ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
-ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-RUN echo "Building worker with profile: ${PROFILE} "
-RUN if [ "$PROFILE" = "release" ]; then \
-      cargo chef cook --release --recipe-path recipe.json; \
-    else \
-      cargo chef cook --recipe-path recipe.json; \
-    fi
+# Expose the application port
+EXPOSE 8000
 
-COPY . .
-
-WORKDIR /app/services/appflowy-worker
-RUN if [ "$PROFILE" = "release" ]; then \
-      cargo build --release --bin appflowy_worker; \
-    else \
-      cargo build --bin appflowy_worker; \
-    fi
-
-FROM debian:bookworm-slim AS runtime
-WORKDIR /app/services/appflowy-worker
-RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl \
-    && apt-get install -y -y ca-certificates \
-    # Clean up
-    && apt-get autoremove -y \
-    && apt-get clean -y \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app/
-# Copy the binary from the appropriate target directory
-ARG PROFILE="release"
-RUN echo "Building worker with profile: ${PROFILE} "
-RUN if [ "$PROFILE" = "release" ]; then \
-      echo "Using release worker binary"; \
-    else \
-      echo "Using debug worker binary"; \
-    fi
-COPY --from=builder /app/target/$PROFILE/appflowy_worker /usr/local/bin/appflowy_worker
-ENV APP_ENVIRONMENT production
-ENV RUST_BACKTRACE  1
-CMD ["appflowy_worker"]
+# Set the command to run the application
+CMD ["appflowy-worker"]

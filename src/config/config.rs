@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Context};
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use indexer::vector::embedder::get_open_ai_config;
-use infra::env_util::{get_env_var, get_env_var_opt};
+use infra::env_util::{get_env_var, get_env_var_opt, get_required_env_var};
 use mailer::config::MailerSetting;
 use secrecy::{ExposeSecret, Secret};
 use semver::Version;
@@ -189,10 +189,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
         .context("fail to get APPFLOWY_ACCESS_CONTROL_REALTIME")?,
     },
     db_settings: DatabaseSetting {
-      pg_conn_opts: PgConnectOptions::from_str(&get_env_var(
-        "APPFLOWY_DATABASE_URL",
-        "postgres://postgres:password@localhost:5432/postgres",
-      ))?,
+      pg_conn_opts: PgConnectOptions::from_str(&get_required_env_var("APPFLOWY_DATABASE_URL"))?,
       require_ssl: get_env_var("APPFLOWY_DATABASE_REQUIRE_SSL", "false")
         .parse()
         .context("fail to get APPFLOWY_DATABASE_REQUIRE_SSL")?,
@@ -214,7 +211,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "60").parse()?,
       min_client_version: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_MIN_VERSION", "0.5.0").parse()?,
     },
-    redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
+    redis_uri: get_required_env_var("APPFLOWY_REDIS_URI").into(),
     redis_worker_count: get_env_var("APPFLOWY_REDIS_WORKERS", "60").parse()?,
     s3: S3Setting {
       create_bucket: get_env_var("APPFLOWY_S3_CREATE_BUCKET", "true")

@@ -35,3 +35,16 @@ pub fn get_env_var_opt(key: &str) -> Option<String> {
     },
   }
 }
+
+pub fn get_required_env_var(key: &str) -> String {
+  std::env::var(key).unwrap_or_else(|err| {
+    match err {
+      VarError::NotPresent => {
+        panic!("missing required environment variable: {}", key);
+      },
+      VarError::NotUnicode(_) => {
+        panic!("{} is not a valid UTF-8 string", key);
+      },
+    }
+  })
+}

@@ -206,8 +206,8 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       service_role: get_env_var("APPFLOWY_GOTRUE_SERVICE_ROLE", "service_role"),
     },
     application: ApplicationSetting {
-      port: get_env_var("APPFLOWY_APPLICATION_PORT", "8000").parse()?,
-      host: get_env_var("APPFLOWY_APPLICATION_HOST", "[::]"),
+      port: get_env_var("PORT", "8080").parse()?,
+      host: get_env_var("APPFLOWY_APPLICATION_HOST", "0.0.0.0"),
     },
     websocket: WebsocketSetting {
       heartbeat_interval: get_env_var("APPFLOWY_WEBSOCKET_HEARTBEAT_INTERVAL", "6").parse()?,

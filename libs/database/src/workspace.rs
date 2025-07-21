@@ -2061,8 +2061,8 @@ pub async fn upsert_page_mention<'a, E: Executor<'a, Database = Postgres>>(
 ) -> Result<(), AppError> {
   sqlx::query!(
     r#"
-      INSERT INTO af_page_mention (workspace_id, view_id, person_id, block_id, mentioned_by, mentioned_at, require_notification)
-      VALUES ($1, $2, $3, $4, $5, current_timestamp, $6)
+      INSERT INTO af_page_mention (workspace_id, view_id, view_name, person_id, block_id, mentioned_by, mentioned_at, require_notification)
+      VALUES ($1, $2, $3, $4, $5, $6, current_timestamp, $7)
       ON CONFLICT (workspace_id, view_id, person_id) DO UPDATE
       SET mentioned_by = EXCLUDED.mentioned_by,
           mentioned_at = EXCLUDED.mentioned_at,
@@ -2071,6 +2071,7 @@ pub async fn upsert_page_mention<'a, E: Executor<'a, Database = Postgres>>(
     "#,
     workspace_id,
     view_id,
+    update.view_name,
     update.person_id,
     update.block_id,
     uid,

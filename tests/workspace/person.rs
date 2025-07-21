@@ -78,6 +78,7 @@ async fn workspace_mentionable_persons_crud() {
         person_id,
         block_id: None,
         require_notification: false,
+        view_name: "To-dos".to_string(),
       },
     )
     .await

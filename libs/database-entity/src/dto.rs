@@ -1438,6 +1438,11 @@ pub struct PageMentionUpdate {
   pub person_id: Uuid,
   pub block_id: Option<String>,
   pub require_notification: bool,
+  // Client to provide view name as, at the time that the mention is created,
+  // the view might not have been in sync with the server side copy of the folder collab.
+  // In addition, we want to capture the view name at the time of the mention creation, in case
+  // it gets modified/deleted afterwards.
+  pub view_name: String,
 }
 
 #[cfg(test)]

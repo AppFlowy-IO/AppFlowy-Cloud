@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      WITH last_mentioned AS (\n        SELECT\n          person_id,\n          MAX(mentioned_at) AS last_mentioned_at\n        FROM af_page_mention\n        WHERE workspace_id = $1\n        GROUP BY person_id\n      )\n\n      SELECT\n        au.uuid,\n        COALESCE(awmp.name, au.name) AS \"name!\",\n        au.email,\n        awm.role_id AS \"role!\",\n        COALESCE(awmp.avatar_url, au.metadata ->> 'icon_url') AS \"avatar_url\",\n        awmp.cover_image_url,\n        awmp.custom_image_url,\n        awmp.description,\n        lm.last_mentioned_at\n      FROM af_workspace_member awm\n      JOIN af_user au ON awm.uid = au.uid\n      LEFT JOIN af_workspace_member_profile awmp ON (awm.uid = awmp.uid AND awm.workspace_id = awmp.workspace_id)\n      LEFT JOIN last_mentioned lm ON au.uuid = lm.person_id\n      WHERE awm.workspace_id = $1\n      ORDER BY lm.last_mentioned_at DESC NULLS LAST\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "role!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "cover_image_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "custom_image_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_mentioned_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false,
+      null,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "0eeb2af3c6974c7e6d1c20bb4b08965eae9b0a291c7cef6451208b7740b9804c"
+}

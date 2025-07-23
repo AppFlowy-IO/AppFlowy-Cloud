@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n        au.uuid,\n        COALESCE(awmp.name, au.name) AS \"name!\",\n        au.email,\n        awm.role_id AS \"role!\",\n        COALESCE(awmp.avatar_url, au.metadata ->> 'icon_url') AS \"avatar_url\",\n        awmp.cover_image_url,\n        awmp.description\n      FROM af_workspace_member awm\n      JOIN af_user au ON awm.uid = au.uid\n      LEFT JOIN af_workspace_member_profile awmp ON (awm.uid = awmp.uid AND awm.workspace_id = awmp.workspace_id)\n      WHERE awm.workspace_id = $1\n    ",
+  "query": "\n      SELECT\n        au.uuid,\n        COALESCE(awmp.name, au.name) AS \"name!\",\n        au.email,\n        awm.role_id AS \"role!\",\n        COALESCE(awmp.avatar_url, au.metadata ->> 'icon_url') AS \"avatar_url\",\n        awmp.cover_image_url,\n        awmp.custom_image_url,\n        awmp.description\n      FROM af_workspace_member awm\n      JOIN af_user au ON awm.uid = au.uid\n      LEFT JOIN af_workspace_member_profile awmp ON (awm.uid = awmp.uid AND awm.workspace_id = awmp.workspace_id)\n      WHERE awm.workspace_id = $1\n    ",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,11 @@
       },
       {
         "ordinal": 6,
+        "name": "custom_image_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
         "name": "description",
         "type_info": "Text"
       }
@@ -51,8 +56,9 @@
       false,
       null,
       true,
+      true,
       true
     ]
   },
-  "hash": "76879756963f1861a0d2c2dfbfd8fdd1316699bfc231f567ea02740079fcecae"
+  "hash": "75dc8578510ae696bf4bcdd780f7cefc666b4436cf53edf30a98dd2ff7926799"
 }

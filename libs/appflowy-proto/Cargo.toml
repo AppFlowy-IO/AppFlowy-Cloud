@@ -1,0 +1,18 @@
+[package]
+name = "appflowy-proto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uuid = { workspace = true, features = ["serde"] }
+bytes.workspace = true
+thiserror.workspace = true
+collab-entity.workspace = true
+collab.workspace = true
+prost = { version = "0.13.4", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+serde_repr.workspace = true
+
+[build-dependencies]
+prost-build = "0.13.4"
+protoc-bin-vendored = { version = "3.0" }

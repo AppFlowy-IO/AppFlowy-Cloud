@@ -33,7 +33,6 @@ After executing `docker compose up -d`, AppFlowy-Cloud is accessible at `http://
 - `/console`: User Admin Frontend for AppFlowy.
 - `/pgadmin`: Interface for Postgres database management.
 - `/minio`: User interface for Minio object storage.
-- `/portainer`: Tool for container management.
 - `/`, `/app`: AppFlowy Web.
 
 ![Deployment Architecture](../assets/images/deployment_arch.png)

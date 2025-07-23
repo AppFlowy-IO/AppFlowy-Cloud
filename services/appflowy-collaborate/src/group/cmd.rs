@@ -5,10 +5,8 @@ use crate::group::null_sender::NullSender;
 use async_stream::stream;
 use bytes::Bytes;
 use collab::core::origin::{CollabClient, CollabOrigin};
-use collab::entity::EncodedCollab;
 use dashmap::DashMap;
 use futures_util::StreamExt;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use collab_entity::CollabType;
@@ -18,8 +16,8 @@ use collab_rt_entity::{
   AckCode, ClientCollabMessage, MessageByObjectId, ServerCollabMessage, SinkMessage, UpdateSync,
 };
 use collab_rt_protocol::{Message, SyncMessage};
-use database::collab::CollabStorage;
-use tracing::{error, instrument, trace, warn};
+use dashmap::mapref::entry::Entry;
+use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 use yrs::updates::encoder::Encode;
 use yrs::StateVector;
@@ -43,15 +41,6 @@ pub enum GroupCommand {
     collab_type: CollabType,
     ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
   },
-  EncodeCollab {
-    object_id: Uuid,
-    ret: tokio::sync::oneshot::Sender<Option<EncodedCollab>>,
-  },
-  HandleServerCollabMessage {
-    object_id: Uuid,
-    collab_messages: Vec<ClientCollabMessage>,
-    ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
-  },
   GenerateCollabEmbedding {
     object_id: Uuid,
   },
@@ -69,19 +58,13 @@ pub type GroupCommandReceiver = tokio::sync::mpsc::Receiver<GroupCommand>;
 /// in tokio multi-thread runtime. It will receive the group command from the receiver and handle the
 /// command.
 ///
-pub struct GroupCommandRunner<S>
-where
-  S: CollabStorage,
-{
-  pub group_manager: Arc<GroupManager<S>>,
+pub struct GroupCommandRunner {
+  pub group_manager: Arc<GroupManager>,
   pub msg_router_by_user: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
   pub recv: Option<GroupCommandReceiver>,
 }
 
-impl<S> GroupCommandRunner<S>
-where
-  S: CollabStorage,
-{
+impl GroupCommandRunner {
   pub async fn run(mut self, object_id: Uuid) {
     let mut receiver = self.recv.take().expect("Only take once");
     let stream = stream! {
@@ -100,31 +83,10 @@ where
             ret,
           } => {
             let result = self
-              .handle_client_collab_message(&user, object_id, collab_messages)
+              .handle_client_collab_message(user, object_id, collab_messages)
               .await;
             if let Err(err) = ret.send(result) {
               warn!("Send handle client collab message result fail: {:?}", err);
-            }
-          },
-          GroupCommand::EncodeCollab { object_id, ret } => {
-            let group = self.group_manager.get_group(&object_id).await;
-            if let Err(_err) = match group {
-              None => ret.send(None),
-              Some(group) => ret.send(group.encode_collab().await.ok()),
-            } {
-              warn!("Send encode collab fail");
-            }
-          },
-          GroupCommand::HandleServerCollabMessage {
-            object_id,
-            collab_messages,
-            ret,
-          } => {
-            let res = self
-              .handle_server_collab_messages(object_id, collab_messages)
-              .await;
-            if let Err(err) = ret.send(res) {
-              warn!("Send handle server collab message result fail: {:?}", err);
             }
           },
           GroupCommand::HandleClientHttpUpdate {
@@ -136,7 +98,7 @@ where
             ret,
           } => {
             let result = self
-              .handle_client_posted_http_update(&user, workspace_id, object_id, collab_type, update)
+              .handle_client_posted_http_update(user, workspace_id, object_id, collab_type, update)
               .await;
             if let Err(err) = ret.send(result) {
               warn!("Send handle client update message result fail: {:?}", err);
@@ -185,7 +147,7 @@ where
   #[instrument(level = "trace", skip_all)]
   async fn handle_client_collab_message(
     &self,
-    user: &RealtimeUser,
+    user: RealtimeUser,
     object_id: Uuid,
     messages: Vec<ClientCollabMessage>,
   ) -> Result<(), RealtimeError> {
@@ -194,7 +156,7 @@ where
       return Ok(());
     }
     // 1.Check the client is connected with the websocket server.
-    if self.msg_router_by_user.get(user).is_none() {
+    if self.msg_router_by_user.get(&user).is_none() {
       // 1. **Client Not Connected**: This case occurs when there is an attempt to interact with a
       // WebSocket server, but the client has not established a connection with the server. The action
       // or message intended for the server cannot proceed because there is no active connection.
@@ -208,12 +170,12 @@ where
     let is_group_exist = self.group_manager.contains_group(&object_id);
     if is_group_exist {
       // subscribe the user to the group. then the user will receive the changes from the group
-      let is_user_subscribed = self.group_manager.contains_user(&object_id, user);
+      let is_user_subscribed = self.group_manager.contains_user(&object_id, &user);
       if !is_user_subscribed {
         // safety: messages is not empty because we have checked it before
         let first_message = messages.first().unwrap();
         self
-          .subscribe_group_with_message(user, first_message)
+          .subscribe_group_with_message(&user, first_message)
           .await?;
       }
       forward_message_to_group(user, object_id, messages, &self.msg_router_by_user).await;
@@ -222,12 +184,12 @@ where
       // If there is no existing group for the given object_id and the message is an 'init message',
       // then create a new group and add the user as a subscriber to this group.
       if first_message.is_client_init_sync() {
-        self.create_group_with_message(user, first_message).await?;
+        self.create_group_with_message(&user, first_message).await?;
         self
-          .subscribe_group_with_message(user, first_message)
+          .subscribe_group_with_message(&user, first_message)
           .await?;
         forward_message_to_group(user, object_id, messages, &self.msg_router_by_user).await;
-      } else if let Some(entry) = self.msg_router_by_user.get(user) {
+      } else if let Some(entry) = self.msg_router_by_user.get(&user) {
         warn!(
           "The group:{} is not found, the client:{} should send the init message first",
           first_message.object_id(),
@@ -254,7 +216,7 @@ where
   #[instrument(level = "trace", skip_all)]
   async fn handle_client_posted_http_update(
     &self,
-    user: &RealtimeUser,
+    user: RealtimeUser,
     workspace_id: Uuid,
     object_id: Uuid,
     collab_type: collab_entity::CollabType,
@@ -266,29 +228,28 @@ where
     });
 
     // Create message router for user if it's not exist
-    let is_router_exists = self.msg_router_by_user.get(user).is_some();
-    if !is_router_exists {
-      trace!("create a new client message router for user:{}", user);
-      let new_client_router = ClientMessageRouter::new(NullSender::<()>::default());
-      self
-        .msg_router_by_user
-        .insert(user.clone(), new_client_router);
-    }
+    self
+      .msg_router_by_user
+      .entry(user.clone())
+      .or_insert_with(|| {
+        trace!("create a new client message router for user:{}", user);
+        ClientMessageRouter::new(NullSender::<()>::default())
+      });
 
     // Create group if it's not exist
     let is_group_exist = self.group_manager.contains_group(&object_id);
     if !is_group_exist {
       trace!("The group:{} is not found, create a new group", object_id);
       self
-        .create_group(user, workspace_id, object_id, collab_type)
+        .create_group(&user, workspace_id, object_id, collab_type)
         .await?;
     }
 
     // Only subscribe when the user is not subscribed to the group
-    if !self.group_manager.contains_user(&object_id, user) {
-      self.subscribe_group(user, object_id, &origin).await?;
+    if !self.group_manager.contains_user(&object_id, &user) {
+      self.subscribe_group(&user, object_id, &origin).await?;
     }
-    if let Some(client_stream) = self.msg_router_by_user.get(user) {
+    if let Entry::Occupied(client_stream) = self.msg_router_by_user.entry(user) {
       let payload = Message::Sync(SyncMessage::Update(update.to_vec())).encode_v1();
       let msg = ClientCollabMessage::ClientUpdateSync {
         data: UpdateSync {
@@ -299,57 +260,10 @@ where
         },
       };
       let message = MessageByObjectId::new_with_message(object_id.to_string(), vec![msg]);
-      let err = client_stream.stream_tx.send(message);
-      if let Err(err) = err {
-        warn!("Send user:{} http update message to group:{}", user, err);
-        self.msg_router_by_user.remove(user);
+      if client_stream.get().stream_tx.send(message).is_err() {
+        client_stream.remove();
       }
-    } else {
-      warn!(
-        "The client stream: {} is not found when applying client update",
-        user
-      );
     }
-    Ok(())
-  }
-
-  /// similar to `handle_client_collab_message`, but the messages are sent from the server instead.
-  #[instrument(level = "trace", skip_all)]
-  async fn handle_server_collab_messages(
-    &self,
-    object_id: Uuid,
-    messages: Vec<ClientCollabMessage>,
-  ) -> Result<(), RealtimeError> {
-    if messages.is_empty() {
-      warn!("Unexpected empty collab messages sent from server");
-      return Ok(());
-    }
-
-    let server_rt_user = RealtimeUser {
-      uid: 0,
-      device_id: "server".to_string(),
-      connect_at: chrono::Utc::now().timestamp_millis(),
-      session_id: uuid::Uuid::new_v4().to_string(),
-      app_version: "".to_string(),
-    };
-
-    if let Some(group) = self.group_manager.get_group(&object_id).await {
-      let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
-      group.subscribe(
-        &server_rt_user,
-        CollabOrigin::Server,
-        NullSender::default(),
-        message_by_oid_receiver,
-      );
-      let message = HashMap::from([(object_id.to_string(), messages)]);
-      if let Err(err) = message_by_oid_sender.try_send(MessageByObjectId(message)) {
-        error!(
-          "failed to send message to group: {}, object_id: {}",
-          err, object_id
-        );
-      }
-    };
-
     Ok(())
   }
 
@@ -428,27 +342,17 @@ where
 /// When the group receives the message, it will broadcast the message to all the users in the group.
 #[inline]
 pub async fn forward_message_to_group(
-  user: &RealtimeUser,
+  user: RealtimeUser,
   object_id: Uuid,
   collab_messages: Vec<ClientCollabMessage>,
   client_msg_router: &Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
 ) {
-  if let Some(client_stream) = client_msg_router.get(user) {
-    trace!(
-      "[realtime]: receive client:{} device:{} oid:{} msg ids: {:?}",
-      user.uid,
-      user.device_id,
-      object_id,
-      collab_messages
-        .iter()
-        .map(|v| v.msg_id())
-        .collect::<Vec<_>>()
-    );
+  if let Entry::Occupied(client_stream) = client_msg_router.entry(user.clone()) {
     let message = MessageByObjectId::new_with_message(object_id.to_string(), collab_messages);
-    let err = client_stream.stream_tx.send(message);
+    let err = client_stream.get().stream_tx.send(message);
     if let Err(err) = err {
       warn!("Send user:{} message to group:{}", user.uid, err);
-      client_msg_router.remove(user);
+      client_stream.remove();
     }
   }
 }

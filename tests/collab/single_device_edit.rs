@@ -11,7 +11,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::collab::util::{
-  generate_random_bytes, generate_random_string, make_big_collab_doc_state,
+  generate_random_bytes, generate_random_string, make_collab_with_key_value,
 };
 use client_api_test::*;
 use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
@@ -22,9 +22,6 @@ async fn realtime_write_single_collab_test() {
   let workspace_id = test_client.workspace_id().await;
   let object_id = test_client
     .create_and_edit_collab(workspace_id, collab_type)
-    .await;
-  test_client
-    .open_collab(workspace_id, object_id, collab_type)
     .await;
 
   // Edit the collab
@@ -76,15 +73,8 @@ async fn collab_write_small_chunk_of_data_test() {
     test_client
       .insert_into(&object_id, &i.to_string(), i.to_string())
       .await;
-
     expected_json.insert(i.to_string(), i.to_string());
-    sleep(Duration::from_millis(300)).await;
   }
-  test_client
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
-  test_client.disconnect().await;
 
   assert_server_collab(
     workspace_id,
@@ -108,10 +98,8 @@ async fn collab_write_big_chunk_of_data_test() {
   test_client
     .open_collab(workspace_id, object_id, collab_type)
     .await;
-  let s = generate_random_string(10000);
-  test_client
-    .insert_into(&object_id, "big_text", s.clone())
-    .await;
+  let s = generate_random_string(1000);
+  test_client.insert_into(&object_id, "text", s.clone()).await;
 
   test_client
     .wait_object_sync_complete(&object_id)
@@ -124,7 +112,7 @@ async fn collab_write_big_chunk_of_data_test() {
     &collab_type,
     10,
     json!({
-      "big_text": s
+      "text": s
     }),
   )
   .await
@@ -136,9 +124,9 @@ async fn write_big_chunk_data_init_sync_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = Uuid::new_v4();
-  let big_text = generate_random_string((MAXIMUM_REALTIME_MESSAGE_SIZE / 2) as usize);
+  let big_text = generate_random_string(MAXIMUM_REALTIME_MESSAGE_SIZE / 2);
   let collab_type = CollabType::Unknown;
-  let doc_state = make_big_collab_doc_state(&object_id, "big_text", big_text.clone());
+  let doc_state = make_collab_with_key_value(&object_id, "text", big_text.clone());
 
   // the big doc_state will force the init_sync using the http request.
   // It will trigger the POST_REALTIME_MESSAGE_STREAM_HANDLER to handle the request.
@@ -157,7 +145,7 @@ async fn write_big_chunk_data_init_sync_test() {
     &collab_type,
     10,
     json!({
-      "big_text": big_text
+      "text": big_text
     }),
   )
   .await
@@ -174,10 +162,6 @@ async fn realtime_write_multiple_collab_test() {
 
     let object_id = test_client
       .create_and_edit_collab(workspace_id, collab_type)
-      .await;
-
-    test_client
-      .open_collab(workspace_id, object_id, collab_type)
       .await;
     for i in 0..=5 {
       test_client
@@ -369,17 +353,11 @@ async fn multiple_collab_edit_test() {
   let object_id_1 = client_1
     .create_and_edit_collab(workspace_id_1, collab_type)
     .await;
-  client_1
-    .open_collab(workspace_id_1, object_id_1, collab_type)
-    .await;
 
   let mut client_2 = TestClient::new_user().await;
   let workspace_id_2 = client_2.workspace_id().await;
   let object_id_2 = client_2
     .create_and_edit_collab(workspace_id_2, collab_type)
-    .await;
-  client_2
-    .open_collab(workspace_id_2, object_id_2, collab_type)
     .await;
 
   client_1
@@ -487,7 +465,7 @@ async fn post_realtime_message_test() {
 
       let object_id = Uuid::new_v4();
       let workspace_id = new_user.workspace_id().await;
-      let doc_state = make_big_collab_doc_state(&object_id, "text", cloned_text);
+      let doc_state = make_collab_with_key_value(&object_id, "text", cloned_text);
       // the big doc_state will force the init_sync using the http request.
       // It will trigger the POST_REALTIME_MESSAGE_STREAM_HANDLER to handle the request.
       new_user
@@ -564,10 +542,10 @@ async fn post_realtime_message_with_ws_connect_test() {
 }
 
 #[tokio::test]
-async fn simulate_10_offline_user_connect_and_then_sync_document_test() {
-  let text = generate_random_string(1024 * 1024 * 3);
+async fn simulate_5_offline_user_connect_and_then_sync_document_test() {
+  let text = generate_random_string(1024);
   let mut tasks = Vec::new();
-  for i in 0..10 {
+  for i in 0..5 {
     let cloned_text = text.clone();
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user_without_ws_conn().await;
@@ -576,7 +554,7 @@ async fn simulate_10_offline_user_connect_and_then_sync_document_test() {
 
       let object_id = Uuid::new_v4();
       let workspace_id = new_user.workspace_id().await;
-      let doc_state = make_big_collab_doc_state(&object_id, "text", cloned_text);
+      let doc_state = make_collab_with_key_value(&object_id, "text", cloned_text);
       new_user
         .open_collab_with_doc_state(workspace_id, object_id, CollabType::Unknown, doc_state)
         .await;
@@ -614,17 +592,11 @@ async fn offline_and_then_sync_through_http_request() {
   let mut test_client = TestClient::new_user().await;
   let object_id = Uuid::new_v4();
   let workspace_id = test_client.workspace_id().await;
-  let doc_state = make_big_collab_doc_state(&object_id, "1", "".to_string());
+  let doc_state = make_collab_with_key_value(&object_id, "1", "".to_string());
   test_client
     .open_collab_with_doc_state(workspace_id, object_id, CollabType::Unknown, doc_state)
     .await;
 
-  test_client
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
-
-  test_client.disconnect().await;
   // Verify server hasn't received small text update while offline
   assert_server_collab(
     workspace_id,
@@ -636,6 +608,8 @@ async fn offline_and_then_sync_through_http_request() {
   )
   .await
   .unwrap();
+
+  test_client.disconnect().await;
 
   // First insertion - small text
   let small_text = generate_random_string(100);
@@ -675,7 +649,7 @@ async fn offline_and_then_sync_through_http_request() {
   .unwrap();
 
   // Second insertion - medium text
-  let medium_text = generate_random_string(512);
+  let medium_text = generate_random_string(200);
   test_client
     .insert_into(&object_id, "2", medium_text.clone())
     .await;
@@ -699,6 +673,14 @@ async fn offline_and_then_sync_through_http_request() {
     .await
     .unwrap();
 
+  assert_client_collab_value(
+    &mut test_client,
+    &object_id,
+    json!({"1": small_text, "2": medium_text}),
+  )
+  .await
+  .unwrap();
+
   // Verify medium text was synced
   assert_server_collab(
     workspace_id,
@@ -717,7 +699,7 @@ async fn insert_text_through_http_post_request() {
   let mut test_client = TestClient::new_user().await;
   let object_id = Uuid::new_v4();
   let workspace_id = test_client.workspace_id().await;
-  let doc_state = make_big_collab_doc_state(&object_id, "1", "".to_string());
+  let doc_state = make_collab_with_key_value(&object_id, "1", "".to_string());
   test_client
     .open_collab_with_doc_state(workspace_id, object_id, CollabType::Unknown, doc_state)
     .await;

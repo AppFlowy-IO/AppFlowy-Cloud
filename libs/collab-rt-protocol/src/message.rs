@@ -286,7 +286,7 @@ impl<'a, D: Decoder> MessageReader<'a, D> {
   }
 }
 
-impl<'a, D: Decoder> Iterator for MessageReader<'a, D> {
+impl<D: Decoder> Iterator for MessageReader<'_, D> {
   type Item = Result<Message, yrs::encoding::read::Error>;
 
   fn next(&mut self) -> Option<Self::Item> {

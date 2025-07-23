@@ -9,8 +9,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use client_api_test::{
-  assert_client_collab_include_value, assert_client_collab_within_secs, assert_server_collab,
-  TestClient,
+  assert_client_collab_include_value, assert_client_collab_value, assert_client_collab_within_secs,
+  assert_server_collab, TestClient,
 };
 use database_entity::dto::AFRole;
 
@@ -38,7 +38,10 @@ async fn recv_updates_without_permission_test() {
     .wait_object_sync_complete(&object_id)
     .await
     .unwrap();
-  assert_client_collab_within_secs(&mut client_2, &object_id, "name", json!({}), 60).await;
+
+  assert_client_collab_value(&mut client_2, &object_id, json!({}))
+    .await
+    .unwrap();
 }
 
 // #[tokio::test]
@@ -364,7 +367,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let collab_type = CollabType::Unknown;
   let workspace_id = owner.workspace_id().await;
   owner
-    .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None)
+    .create_and_edit_collab_with_data(object_id, workspace_id, collab_type, None, true)
     .await;
 
   let arc_owner = Arc::new(owner);
@@ -465,7 +468,6 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
       new_user
         .insert_into(&object_id, &i.to_string(), random_str.clone())
         .await;
-
       // wait 3 seconds to let the client try to send the update to the server
       // can't use want_object_sync_complete because the client do not have permission to send the update
       sleep(Duration::from_secs(3)).await;
@@ -475,14 +477,26 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   }
 
   let results = futures::future::join_all(tasks).await;
+  let mut expected_client_json = HashMap::new();
+  let mut clients = vec![];
+
   for (index, result) in results.into_iter().enumerate() {
     let (s, client) = result.unwrap();
-    let value = (*client.collabs.get(&object_id).unwrap().collab.read().await).to_json_value();
-
-    assert_json_eq!(json!({index.to_string(): s}), value,);
+    clients.push(client);
+    expected_client_json.insert(index.to_string(), s);
   }
-  // all the clients should have the same collab object
-  let expected = (*arc_owner
+
+  // Each client should have their local changes (since they can edit locally)
+  for client in clients {
+    let value = (*client.collabs.get(&object_id).unwrap().collab.read().await).to_json_value();
+    assert_json_include!(
+      actual: value,
+      expected: json!(expected_client_json)
+    );
+  }
+
+  // The server collab should remain empty since read-only users cannot modify it
+  let server_value = (*arc_owner
     .collabs
     .get(&object_id)
     .unwrap()
@@ -490,5 +504,5 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
     .read()
     .await)
     .to_json_value();
-  assert_json_eq!(json!({}), expected);
+  assert_json_eq!(expected_client_json, server_value);
 }

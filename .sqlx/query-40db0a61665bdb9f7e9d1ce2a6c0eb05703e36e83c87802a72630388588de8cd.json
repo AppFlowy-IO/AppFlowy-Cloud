@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT workspace_id, COUNT(*) AS member_count\n      FROM af_workspace_member\n      WHERE workspace_id = ANY($1) AND role_id != $2\n      GROUP BY workspace_id\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "member_count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "40db0a61665bdb9f7e9d1ce2a6c0eb05703e36e83c87802a72630388588de8cd"
+}

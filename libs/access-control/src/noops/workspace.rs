@@ -23,7 +23,16 @@ impl Default for WorkspaceAccessControlImpl {
 
 #[async_trait]
 impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
-  async fn enforce_role(
+  async fn enforce_role_strong(
+    &self,
+    _uid: &i64,
+    _workspace_id: &Uuid,
+    _role: AFRole,
+  ) -> Result<(), AppError> {
+    Ok(())
+  }
+
+  async fn enforce_role_weak(
     &self,
     _uid: &i64,
     _workspace_id: &Uuid,

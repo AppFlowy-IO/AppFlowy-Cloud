@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    WITH new_workspace AS (\n      INSERT INTO public.af_workspace (owner_uid, workspace_name, icon, is_initialized)\n      VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2, $3, $4)\n      RETURNING *\n    )\n    SELECT\n      workspace_id,\n      database_storage_id,\n      owner_uid,\n      owner_profile.name AS owner_name,\n      owner_profile.email AS owner_email,\n      new_workspace.created_at,\n      workspace_type,\n      new_workspace.deleted_at,\n      workspace_name,\n      icon\n    FROM new_workspace\n    JOIN public.af_user AS owner_profile ON new_workspace.owner_uid = owner_profile.uid;\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "database_storage_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner_uid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "owner_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "owner_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "workspace_type",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "deleted_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "workspace_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "icon",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "44e4be501db0375fbd8ad8ed923bef887e361fe466ab46bdd6663f6cf97413a8"
+}

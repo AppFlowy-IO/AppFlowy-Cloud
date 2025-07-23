@@ -27,6 +27,9 @@ pub enum AppError {
   #[error("Record not found:{0}")]
   RecordNotFound(String),
 
+  #[error("Record deleted:{0}")]
+  RecordDeleted(String),
+
   #[error("Record already exist:{0}")]
   RecordAlreadyExists(String),
 
@@ -196,11 +199,23 @@ pub enum AppError {
 
   #[error("unable to find invitation code")]
   InvalidInvitationCode,
+
+  #[error("{0} is already a member of the workspace")]
+  InvalidGuest(String),
+
+  #[error("free plan workspace guest limit exceeded")]
+  FreePlanGuestLimitExceeded,
+
+  #[error("paid plan workspace guest limit exceeded")]
+  PaidPlanGuestLimitExceeded,
+
+  #[error("{0}")]
+  RetryLater(anyhow::Error),
 }
 
 impl AppError {
   pub fn is_not_enough_permissions(&self) -> bool {
-    matches!(self, AppError::NotEnoughPermissions { .. })
+    matches!(self, AppError::NotEnoughPermissions)
   }
 
   pub fn is_record_not_found(&self) -> bool {
@@ -232,7 +247,7 @@ impl AppError {
       AppError::InvalidOAuthProvider(_) => ErrorCode::InvalidOAuthProvider,
       AppError::InvalidRequest(_) => ErrorCode::InvalidRequest,
       AppError::NotLoggedIn(_) => ErrorCode::NotLoggedIn,
-      AppError::NotEnoughPermissions { .. } => ErrorCode::NotEnoughPermissions,
+      AppError::NotEnoughPermissions => ErrorCode::NotEnoughPermissions,
       AppError::StorageSpaceNotEnough => ErrorCode::StorageSpaceNotEnough,
       AppError::PayloadTooLarge(_) => ErrorCode::PayloadTooLarge,
       AppError::Internal(_) => ErrorCode::Internal,
@@ -280,6 +295,11 @@ impl AppError {
       AppError::InvalidBlock(_) => ErrorCode::InvalidBlock,
       AppError::FeatureNotAvailable(_) => ErrorCode::FeatureNotAvailable,
       AppError::InvalidInvitationCode => ErrorCode::InvalidInvitationCode,
+      AppError::InvalidGuest(_) => ErrorCode::InvalidGuest,
+      AppError::FreePlanGuestLimitExceeded => ErrorCode::FreePlanGuestLimitExceeded,
+      AppError::PaidPlanGuestLimitExceeded => ErrorCode::PaidPlanGuestLimitExceeded,
+      AppError::RecordDeleted(_) => ErrorCode::RecordDeleted,
+      AppError::RetryLater(_) => ErrorCode::RetryLater,
     }
   }
 }
@@ -391,6 +411,8 @@ pub enum ErrorCode {
   Unhandled = -1,
   RecordNotFound = -2,
   RecordAlreadyExists = -3,
+  RecordDeleted = -4,
+  RetryLater = -5,
   InvalidEmail = 1001,
   InvalidPassword = 1002,
   OAuthError = 1003,
@@ -458,6 +480,9 @@ pub enum ErrorCode {
   AIResponseError = 1066,
   FeatureNotAvailable = 1067,
   InvalidInvitationCode = 1068,
+  InvalidGuest = 1069,
+  FreePlanGuestLimitExceeded = 1070,
+  PaidPlanGuestLimitExceeded = 1071,
 }
 
 impl ErrorCode {
@@ -517,5 +542,29 @@ impl From<async_openai::error::OpenAIError> for AppError {
       },
       _ => AppError::Internal(err.into()),
     }
+  }
+}
+
+use tokio_tungstenite::tungstenite::Error as TungsteniteError;
+
+impl From<TungsteniteError> for AppError {
+  fn from(err: TungsteniteError) -> Self {
+    match &err {
+      TungsteniteError::Http(resp) => {
+        let status = resp.status();
+        if status == StatusCode::UNAUTHORIZED.as_u16() || status == StatusCode::NOT_FOUND.as_u16() {
+          AppError::UserUnAuthorized("Unauthorized websocket connection".to_string())
+        } else {
+          AppError::Internal(err.into())
+        }
+      },
+      _ => AppError::Internal(err.into()),
+    }
+  }
+}
+
+impl From<tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue> for AppError {
+  fn from(err: tokio_tungstenite::tungstenite::http::header::InvalidHeaderValue) -> Self {
+    AppError::InvalidRequest(err.to_string())
   }
 }

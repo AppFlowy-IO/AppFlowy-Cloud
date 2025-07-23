@@ -1,12 +1,12 @@
-use std::sync::Arc;
-
 use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
 use access_control::workspace::WorkspaceAccessControl;
+use actix::Addr;
 use anyhow::anyhow;
 use dashmap::DashMap;
 use gotrue_entity::gotrue_jwt::GoTrueServiceRoleClaims;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -15,12 +15,13 @@ use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::metrics::CollabMetrics;
+use appflowy_collaborate::ws2::WsServer;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
 use collab_stream::stream_router::StreamRouter;
+use database::collab::CollabStore;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use indexer::metrics::EmbeddingMetrics;
@@ -45,8 +46,8 @@ pub struct AppState {
   pub redis_stream_router: Arc<StreamRouter>,
   pub awareness_gossip: Arc<AwarenessGossip>,
   pub redis_connection_manager: RedisConnectionManager,
-  pub collab_cache: CollabCache,
-  pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
+  pub collab_cache: Arc<CollabCache>,
+  pub collab_storage: Arc<dyn CollabStore>,
   pub collab_access_control: Arc<dyn CollabAccessControl>,
   pub workspace_access_control: Arc<dyn WorkspaceAccessControl>,
   pub realtime_access_control: Arc<dyn RealtimeAccessControl>,
@@ -59,6 +60,7 @@ pub struct AppState {
   pub mailer: AFCloudMailer,
   pub ai_client: AppFlowyAIClient,
   pub indexer_scheduler: Arc<IndexerScheduler>,
+  pub ws_server: Addr<WsServer>,
 }
 
 impl AppState {

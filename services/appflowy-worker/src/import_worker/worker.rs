@@ -41,6 +41,7 @@ use redis::streams::{
 };
 use redis::{AsyncCommands, RedisResult, Value};
 
+use collab::core::collab::default_client_id;
 use database::pg_row::AFImportTask;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
@@ -872,6 +873,7 @@ async fn process_unzip_file(
   redis_client: &mut ConnectionManager,
   s3_client: &Arc<dyn S3Client>,
 ) -> Result<(), ImportError> {
+  let client_id = default_client_id();
   let _ =
     Uuid::parse_str(&import_task.workspace_id).map_err(|err| ImportError::Internal(err.into()))?;
   let notion_importer = NotionImporter::new(
@@ -908,11 +910,10 @@ async fn process_unzip_file(
   )
   .await?;
   let mut folder = Folder::from_collab_doc_state(
-    import_task.uid,
     CollabOrigin::Server,
     folder_collab.into(),
     &imported.workspace_id,
-    vec![],
+    client_id,
   )
   .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
 
@@ -922,7 +923,7 @@ async fn process_unzip_file(
     import_task.workspace_id,
     nested_views.len()
   );
-  folder.insert_nested_views(nested_views.into_inner());
+  folder.insert_nested_views(nested_views.into_inner(), import_task.uid);
 
   let mut resources = vec![];
   let mut collab_params_list = vec![];
@@ -931,6 +932,7 @@ async fn process_unzip_file(
 
   // 3. Collect all collabs and resources
   let mut stream = imported.into_collab_stream().await;
+  let updated_at = Utc::now();
   while let Some(imported_collab_info) = stream.next().await {
     trace!(
       "[Import]: {} imported collab: {}",
@@ -946,6 +948,7 @@ async fn process_unzip_file(
           object_id: imported_collab.object_id.parse().unwrap(),
           collab_type: imported_collab.collab_type,
           encoded_collab_v1: Bytes::from(imported_collab.encoded_collab.encode_to_bytes().unwrap()),
+          updated_at: Some(updated_at),
         })
         .collect::<Vec<_>>(),
     );
@@ -988,6 +991,7 @@ async fn process_unzip_file(
       &w_database_id.to_string(),
       CollabOrigin::Server,
       w_db_collab.into(),
+      client_id,
     )
     .map_err(|err| ImportError::CannotOpenWorkspace(err.to_string()))?;
     w_database.batch_add_database(database_view_ids_by_database_id);
@@ -1029,6 +1033,7 @@ async fn process_unzip_file(
       object_id: w_database_id,
       collab_type: CollabType::WorkspaceDatabase,
       encoded_collab_v1: Bytes::from(w_database_collab.encode_to_bytes().unwrap()),
+      updated_at: Some(updated_at),
     };
     collab_params_list.push(w_database_collab_params);
   }
@@ -1041,7 +1046,7 @@ async fn process_unzip_file(
     })
     .collect::<Vec<_>>();
   if !orphan_views.is_empty() {
-    folder.insert_views(orphan_views);
+    folder.insert_views(orphan_views, import_task.uid);
   }
 
   // 6. Encode Folder
@@ -1069,6 +1074,7 @@ async fn process_unzip_file(
     object_id: workspace_id,
     collab_type: CollabType::Folder,
     encoded_collab_v1: Bytes::from(folder_collab.encode_to_bytes().unwrap()),
+    updated_at: Some(updated_at),
   };
   trace!(
     "[Import]: {} did encode folder collab",
@@ -1373,7 +1379,7 @@ async fn get_encode_collab_from_bytes(
     },
     Err(WorkerError::RecordNotFound(_)) => {
       // fallback to postgres
-      let bytes = select_blob_from_af_collab(pg_pool, collab_type, object_id)
+      let (_, bytes) = select_blob_from_af_collab(pg_pool, collab_type, object_id)
         .await
         .map_err(|err| ImportError::Internal(err.into()))?;
 
@@ -1518,7 +1524,8 @@ impl TryFrom<&StreamId> for ImportTask {
   fn try_from(stream_id: &StreamId) -> Result<Self, Self::Error> {
     let task_str = match stream_id.map.get("task") {
       Some(value) => match value {
-        Value::Data(data) => String::from_utf8_lossy(data).to_string(),
+        Value::SimpleString(value) => value.to_string(),
+        Value::BulkString(data) => String::from_utf8_lossy(data).to_string(),
         _ => {
           error!("Unexpected value type for task field: {:?}", value);
           return Err(ImportError::Internal(anyhow!(

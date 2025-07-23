@@ -1,7 +1,6 @@
-use collab_folder::CollabOrigin;
-use collab_rt_entity::{ClientCollabMessage, UpdateSync};
-use collab_rt_protocol::{Message, SyncMessage};
-use database_entity::dto::AFWorkspaceSettingsChange;
+use database_entity::dto::{
+  AFWorkspaceSettingsChange, MentionablePerson, MentionablePersonWithLastMentionedTime,
+};
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Context};
@@ -10,29 +9,23 @@ use serde_json::json;
 use sqlx::{types::uuid, PgPool};
 use std::ops::DerefMut;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
-use yrs::updates::encoder::Encode;
 
 use access_control::workspace::WorkspaceAccessControl;
-use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use app_error::{AppError, ErrorCode};
+use appflowy_collaborate::CollabMetrics;
+use collab_stream::model::UpdateStreamMessage;
+use database::collab::CollabStore;
 use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
-
 use database::user::select_uid_from_email;
 use database::workspace::*;
 use database_entity::dto::{
   AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
-  GlobalComment, Reaction, WorkspaceUsage,
+  GlobalComment, Reaction, WorkspaceMemberProfile, WorkspaceUsage,
 };
-
-use shared_entity::dto::workspace_dto::{
-  CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
-};
-use shared_entity::response::AppResponseError;
-use workspace_template::document::getting_started::GettingStartedTemplate;
 
 use crate::biz::authentication::jwt::OptionalUserUuid;
 use crate::biz::user::user_init::{
@@ -41,11 +34,17 @@ use crate::biz::user::user_init::{
 };
 use crate::mailer::{AFCloudMailer, WorkspaceInviteMailerParam};
 use crate::state::RedisConnectionManager;
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
+};
+use shared_entity::response::AppResponseError;
+use workspace_template::document::getting_started::GettingStartedTemplate;
 
-const MAX_COMMENT_LENGTH: usize = 5000;
+pub(crate) const MAX_COMMENT_LENGTH: usize = 5000;
 
 pub async fn delete_workspace_for_user(
   pg_pool: PgPool,
+  mut connection_manager: RedisConnectionManager,
   workspace_id: Uuid,
   bucket_storage: Arc<S3BucketStorage>,
 ) -> Result<(), AppResponseError> {
@@ -56,9 +55,10 @@ pub async fn delete_workspace_for_user(
 
   // remove from postgres
   delete_from_workspace(&pg_pool, &workspace_id).await?;
-
-  // TODO: There can be a rare case where user uploads while workspace is being deleted.
-  // We need some routine job to clean up these orphaned files.
+  let _: redis::Value = connection_manager
+    .del(UpdateStreamMessage::stream_key(&workspace_id))
+    .await
+    .map_err(|err| AppResponseError::new(ErrorCode::Internal, err.to_string()))?;
 
   Ok(())
 }
@@ -68,12 +68,14 @@ pub async fn delete_workspace_for_user(
 pub async fn create_empty_workspace(
   pg_pool: &PgPool,
   workspace_access_control: Arc<dyn WorkspaceAccessControl>,
-  collab_storage: &Arc<CollabAccessControlStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
+  collab_metrics: &CollabMetrics,
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name, false).await?;
+  let new_workspace_row =
+    insert_user_workspace(pg_pool, user_uuid, workspace_name, "", false).await?;
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
     .await?;
@@ -108,19 +110,23 @@ pub async fn create_empty_workspace(
   create_user_awareness(&user_uid, user_uuid, workspace_id, collab_storage, &mut txn).await?;
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
   txn.commit().await?;
-  collab_storage.metrics().observe_pg_tx(start.elapsed());
+  collab_metrics.observe_pg_tx(start.elapsed());
   Ok(new_workspace)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
   workspace_access_control: Arc<dyn WorkspaceAccessControl>,
-  collab_storage: &Arc<CollabAccessControlStorage>,
+  collab_storage: &Arc<dyn CollabStore>,
+  collab_metrics: &CollabMetrics,
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,
+  workspace_icon: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name, true).await?;
+  let new_workspace_row =
+    insert_user_workspace(pg_pool, user_uuid, workspace_name, workspace_icon, true).await?;
 
   workspace_access_control
     .insert_role(&user_uid, &new_workspace_row.workspace_id, AFRole::Owner)
@@ -139,7 +145,7 @@ pub async fn create_workspace_for_user(
   )
   .await?;
   txn.commit().await?;
-  collab_storage.metrics().observe_pg_tx(start.elapsed());
+  collab_metrics.observe_pg_tx(start.elapsed());
 
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
   Ok(new_workspace)
@@ -300,13 +306,14 @@ pub async fn get_all_user_workspaces(
 pub async fn open_workspace(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
+  user_uid: i64,
   workspace_id: &Uuid,
 ) -> Result<AFWorkspace, AppResponseError> {
   let mut txn = pg_pool
     .begin()
     .await
     .context("Begin transaction to open workspace")?;
-  let row = select_workspace(txn.deref_mut(), workspace_id).await?;
+  let row = select_workspace_with_count_and_role(txn.deref_mut(), workspace_id, user_uid).await?;
   update_updated_at_of_workspace(txn.deref_mut(), user_uuid, workspace_id).await?;
   txn
     .commit()
@@ -369,7 +376,7 @@ pub async fn invite_workspace_members(
       .await?
       .unwrap_or_default();
   let workspace_members_by_email: HashMap<_, _> =
-    database::workspace::select_workspace_member_list(pg_pool, workspace_id)
+    database::workspace::select_workspace_member_list_exclude_guest(pg_pool, workspace_id)
       .await?
       .into_iter()
       .map(|row| (row.email, row.role))
@@ -535,14 +542,22 @@ pub async fn remove_workspace_members(
     .context("Begin transaction to delete workspace members")?;
 
   for email in member_emails {
-    delete_workspace_members(&mut txn, workspace_id, email.as_str()).await?;
     if let Ok(uid) = select_uid_from_email(txn.deref_mut(), email)
       .await
       .map_err(AppResponseError::from)
     {
+      delete_workspace_members(&mut txn, workspace_id, email.as_str()).await?;
       workspace_access_control
         .remove_user_from_workspace(&uid, workspace_id)
         .await?;
+
+      // TODO: Add permission cache invalidation for removed user
+      // if let Some(realtime_server) = get_realtime_server_handle() {
+      //   realtime_server.send_to_workspace(
+      //     *workspace_id,
+      //     InvalidateUserPermissions { uid }
+      //   ).await;
+      // }
     }
   }
 
@@ -553,19 +568,38 @@ pub async fn remove_workspace_members(
   Ok(())
 }
 
-pub async fn get_workspace_members(
+pub async fn get_workspace_members_exclude_guest(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-) -> Result<Vec<AFWorkspaceMemberRow>, AppResponseError> {
-  Ok(select_workspace_member_list(pg_pool, workspace_id).await?)
+) -> Result<Vec<AFWorkspaceMemberRow>, AppError> {
+  select_workspace_member_list_exclude_guest(pg_pool, workspace_id).await
+}
+
+pub async fn get_workspace_member_optional(
+  uid: i64,
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Option<AFWorkspaceMemberRow>, AppError> {
+  let member = select_workspace_member(pg_pool, uid, workspace_id).await?;
+  Ok(member)
 }
 
 pub async fn get_workspace_member(
-  uid: &i64,
+  uid: i64,
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<AFWorkspaceMemberRow, AppError> {
+  let member = select_workspace_member(pg_pool, uid, workspace_id)
+    .await?
+    .ok_or(AppError::RecordNotFound("user does not exists".to_string()))?;
+  Ok(member)
+}
+
+pub async fn get_workspace_owner(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
 ) -> Result<AFWorkspaceMemberRow, AppResponseError> {
-  Ok(select_workspace_member(pg_pool, uid, workspace_id).await?)
+  Ok(select_workspace_owner(pg_pool, workspace_id).await?)
 }
 
 pub async fn get_workspace_member_by_uuid(
@@ -704,54 +738,68 @@ pub async fn num_pending_task(uid: i64, pg_pool: &PgPool) -> Result<i64, AppErro
   Ok(count)
 }
 
-/// broadcast updates to collab group if exists
-pub async fn broadcast_update(
-  collab_storage: &CollabAccessControlStorage,
-  oid: Uuid,
-  encoded_update: Vec<u8>,
-) -> Result<(), AppError> {
-  tracing::trace!("broadcasting update to group: {}", oid);
-  let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
-  let msg = ClientCollabMessage::ClientUpdateSync {
-    data: UpdateSync {
-      origin: CollabOrigin::Server,
-      object_id: oid.to_string(),
-      msg_id: chrono::Utc::now().timestamp_millis() as u64,
-      payload: payload.into(),
-    },
-  };
-
-  collab_storage
-    .broadcast_encode_collab(oid, vec![msg])
-    .await?;
-
-  Ok(())
+pub async fn list_workspace_mentionable_persons(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  _uid: i64,
+  _user_uuid: &Uuid,
+) -> Result<Vec<MentionablePerson>, AppError> {
+  let mentionable_workspace_members_or_guests =
+    select_workspace_mentionable_members_or_guests(pg_pool, workspace_id).await?;
+  // TODO: if user is guest, we should not return the contact list
+  // let is_guest = get_workspace_member(uid, pg_pool, workspace_id).await?.role == AFRole::Guest;
+  let mut persons = vec![];
+  persons.extend(
+    mentionable_workspace_members_or_guests
+      .into_iter()
+      .map(|row| row.into()),
+  );
+  Ok(persons)
 }
 
-/// like [broadcast_update] but in separate tokio task
-/// waits for a maximum of 30 seconds for the broadcast to complete
-pub async fn broadcast_update_with_timeout(
-  collab_storage: Arc<CollabAccessControlStorage>,
-  oid: Uuid,
-  encoded_update: Vec<u8>,
-) -> tokio::task::JoinHandle<()> {
-  tokio::spawn(async move {
-    tracing::info!("broadcasting update to group: {}", oid);
-    let res = match tokio::time::timeout(
-      Duration::from_secs(30),
-      broadcast_update(&collab_storage, oid, encoded_update),
-    )
-    .await
-    {
-      Ok(res) => res,
-      Err(err) => {
-        tracing::error!("Error while broadcasting the updates: {:?}", err);
-        return;
-      },
-    };
-    match res {
-      Ok(()) => tracing::info!("broadcasted update to group: {}", oid),
-      Err(err) => tracing::error!("Error while broadcasting the updates: {:?}", err),
-    }
-  })
+pub async fn list_workspace_mentionable_persons_with_last_mentioned_time(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  _uid: i64,
+  _user_uuid: &Uuid,
+) -> Result<Vec<MentionablePersonWithLastMentionedTime>, AppError> {
+  let mentionable_workspace_members_or_guests =
+    select_workspace_mentionable_members_or_guests_with_last_mentioned_time(pg_pool, workspace_id)
+      .await?;
+  // TODO: if user is guest, we should not return the contact list
+  // let is_guest = get_workspace_member(uid, pg_pool, workspace_id).await?.role == AFRole::Guest;
+  let mut persons = vec![];
+  persons.extend(
+    mentionable_workspace_members_or_guests
+      .into_iter()
+      .map(|row| row.into()),
+  );
+  Ok(persons)
+}
+
+pub async fn get_workspace_mentionable_person(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  person_id: &Uuid,
+) -> Result<MentionablePerson, AppError> {
+  let mentionable_workspace_members_or_guests =
+    select_workspace_mentionable_member_or_guest_by_uuid(pg_pool, workspace_id, person_id).await?;
+  if let Some(mentionable) = mentionable_workspace_members_or_guests {
+    Ok(mentionable.into())
+  } else {
+    Err(AppError::RecordNotFound(format!(
+      "person with ID {} is neither a workspace member nor contact",
+      person_id
+    )))
+  }
+}
+
+pub async fn update_workspace_member_profile(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  uid: i64,
+  updated_profile: &WorkspaceMemberProfile,
+) -> Result<(), AppError> {
+  upsert_workspace_member_profile(pg_pool, workspace_id, uid, updated_profile).await?;
+  Ok(())
 }

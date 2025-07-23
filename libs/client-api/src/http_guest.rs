@@ -1,9 +1,8 @@
 use client_api_entity::guest_dto::{
-  ListSharedViewResponse, RevokeSharedViewAccessRequest, ShareViewWithGuestRequest,
-  SharedViewDetails,
+  RevokeSharedViewAccessRequest, ShareViewWithGuestRequest, SharedViewDetails,
+  SharedViewDetailsRequest, SharedViews,
 };
 use reqwest::Method;
-use serde_json::json;
 use shared_entity::response::AppResponseError;
 use uuid::Uuid;
 
@@ -50,7 +49,7 @@ impl Client {
   pub async fn get_shared_views(
     &self,
     workspace_id: &Uuid,
-  ) -> Result<ListSharedViewResponse, AppResponseError> {
+  ) -> Result<SharedViews, AppResponseError> {
     let url = format!(
       "{}/api/sharing/workspace/{}/view",
       self.base_url, workspace_id,
@@ -58,7 +57,6 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .json(&json!({}))
       .send()
       .await?;
     process_response_data(resp).await
@@ -68,15 +66,18 @@ impl Client {
     &self,
     workspace_id: &Uuid,
     view_id: &Uuid,
+    ancestor_view_ids: &[Uuid],
   ) -> Result<SharedViewDetails, AppResponseError> {
     let url = format!(
-      "{}/api/sharing/workspace/{}/view/{}",
+      "{}/api/sharing/workspace/{}/view/{}/access-details",
       self.base_url, workspace_id, view_id,
     );
     let resp = self
-      .http_client_with_auth(Method::GET, &url)
+      .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&json!({}))
+      .json(&SharedViewDetailsRequest {
+        ancestor_view_ids: ancestor_view_ids.to_vec(),
+      })
       .send()
       .await?;
     process_response_data(resp).await

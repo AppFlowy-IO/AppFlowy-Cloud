@@ -1,7 +1,6 @@
 use std::ops::DerefMut;
 use std::sync::Arc;
 
-use crate::biz::collab::utils::get_latest_collab_folder;
 use crate::mailer::AFCloudMailer;
 use crate::{
   biz::collab::folder_view::{to_dto_view_icon, to_dto_view_layout},
@@ -10,12 +9,11 @@ use crate::{
 use access_control::workspace::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::ws2::WorkspaceCollabInstanceCache;
 use database::{
   access_request::{
     insert_new_access_request, select_access_request_by_request_id, update_access_request_status,
   },
-  collab::GetCollabOrigin,
   pg_row::AFAccessRequestStatusColumn,
   workspace::upsert_workspace_member_with_txn,
 };
@@ -71,7 +69,7 @@ pub async fn create_access_request(
 
 pub async fn get_access_request(
   pg_pool: &PgPool,
-  collab_storage: &CollabAccessControlStorage,
+  collab_instance_cache: &impl WorkspaceCollabInstanceCache,
   access_request_id: Uuid,
   user_uid: i64,
 ) -> Result<AccessRequest, AppError> {
@@ -81,13 +79,10 @@ pub async fn get_access_request(
   if access_request_with_view_id.workspace.owner_uid != user_uid {
     return Err(AppError::NotEnoughPermissions);
   }
-  let folder = get_latest_collab_folder(
-    collab_storage,
-    GetCollabOrigin::Server,
-    access_request_with_view_id.workspace.workspace_id,
-  )
-  .await?;
-  let view = folder.get_view(&access_request_with_view_id.view_id.to_string());
+  let folder = collab_instance_cache
+    .get_folder(access_request_with_view_id.workspace.workspace_id)
+    .await?;
+  let view = folder.get_view(&access_request_with_view_id.view_id.to_string(), user_uid);
   let access_request_view = view
     .map(|v| AccessRequestView {
       view_id: v.id.clone(),
@@ -122,7 +117,7 @@ pub async fn approve_or_reject_access_request(
 ) -> Result<(), AppError> {
   let access_request = select_access_request_by_request_id(pg_pool, request_id).await?;
   workspace_access_control
-    .enforce_role(&uid, &access_request.workspace.workspace_id, AFRole::Owner)
+    .enforce_role_strong(&uid, &access_request.workspace.workspace_id, AFRole::Owner)
     .await?;
 
   let mut txn = pg_pool.begin().await.context("approving request")?;

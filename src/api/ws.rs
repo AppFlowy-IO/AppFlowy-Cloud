@@ -1,36 +1,39 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::biz::authentication::jwt::{authorization_from_token, UserUuid};
+use crate::state::AppState;
 use actix::Addr;
 use actix_http::header::AUTHORIZATION;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
-use secrecy::Secret;
-use semver::Version;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
-use tracing::{debug, error, instrument, trace};
-
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::ws2::{SessionInfo, WsSession};
+use appflowy_proto::{ServerMessage, WorkspaceNotification};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
-use collab_rt_entity::RealtimeMessage;
+use collab_rt_entity::{max_sync_message_size, RealtimeMessage};
+use collab_stream::model::MessageId;
+use secrecy::Secret;
+use semver::Version;
 use shared_entity::response::AppResponseError;
-
-use crate::biz::authentication::jwt::{authorization_from_token, UserUuid};
-use crate::state::AppState;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
+use tracing::{debug, error, instrument, trace};
+use uuid::Uuid;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws")
     //.service(establish_ws_connection)
     .service(web::resource("/v1").route(web::get().to(establish_ws_connection_v1)))
+    .service(web::resource("/v2/{workspace_id}").route(web::get().to(establish_ws_connection_v2)))
 }
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
-pub type RealtimeServerAddr = Addr<RealtimeServerActor<CollabAccessControlStorage>>;
+pub type RealtimeServerAddr = Addr<RealtimeServerActor>;
 
 /// This function will not be used after the 0.5.0 of the client.
 #[instrument(skip_all, err)]
@@ -102,6 +105,60 @@ pub async fn establish_ws_connection_v1(
   .await
 }
 
+#[instrument(skip_all, err)]
+pub async fn establish_ws_connection_v2(
+  request: HttpRequest,
+  payload: Payload,
+  path: Path<Uuid>,
+  state: Data<AppState>,
+  jwt_secret: Data<Secret<String>>,
+) -> Result<HttpResponse> {
+  let workspace_id = path.into_inner();
+  let ws_server = state.ws_server.clone();
+  let params = WsConnectionV2Params::parse(&request)?;
+  let auth = authorization_from_token(params.access_token.as_str(), &jwt_secret)?;
+  let user_uuid = UserUuid::from_auth(auth)?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let info = SessionInfo::new(
+    params.client_id,
+    uid,
+    params.device_id,
+    params.last_message_id,
+  );
+  tracing::debug!(
+    "accepting new session {} (client id: {}) for workspace: {}",
+    info.collab_origin(),
+    params.client_id,
+    workspace_id
+  );
+
+  let (tx, rx) = mpsc::channel(10);
+  let mut user_change_recv = state.pg_listeners.subscribe_user_change(uid);
+  actix::spawn(async move {
+    while let Some(notification) = user_change_recv.recv().await {
+      if let Some(user) = notification.payload {
+        let _ = tx
+          .send(ServerMessage::Notification {
+            notification: WorkspaceNotification::UserProfileChange {
+              uid: user.uid,
+              name: user.name,
+              email: user.email,
+            },
+          })
+          .await;
+      }
+    }
+  });
+
+  ws::WsResponseBuilder::new(
+    WsSession::new(workspace_id, info, ws_server, rx),
+    &request,
+    payload,
+  )
+  .frame_size(max_sync_message_size())
+  .start()
+}
+
 #[allow(clippy::too_many_arguments)]
 #[inline]
 async fn start_connect(
@@ -122,7 +179,7 @@ async fn start_connect(
   match result {
     Ok(uid) => {
       debug!(
-        "🚀new websocket connect: uid={}, device_id={}, client_version:{}",
+        "🚀new websocket connecting: uid={}, device_id={}, client_version:{}",
         uid, device_id, client_app_version
       );
 
@@ -152,7 +209,10 @@ async fn start_connect(
         .frame_size(MAX_FRAME_SIZE * 2)
         .start()
       {
-        Ok(response) => Ok(response),
+        Ok(response) => {
+          trace!("🔵ws connection established: uid={}", uid);
+          Ok(response)
+        },
         Err(e) => {
           error!("🔴ws connection error: {:?}", e);
           Err(e)
@@ -260,5 +320,47 @@ impl ConnectInfo {
       device_id,
       connect_at,
     })
+  }
+}
+
+struct WsConnectionV2Params {
+  access_token: String,
+  device_id: String,
+  client_id: u64,
+  last_message_id: Option<MessageId>,
+}
+
+impl WsConnectionV2Params {
+  fn parse(req: &HttpRequest) -> Result<Self, AppError> {
+    let url = req.full_url();
+    let query = url.query_pairs().collect::<HashMap<_, _>>();
+
+    let access_token = Self::from_url(&query, "token")
+      .ok_or_else(|| AppError::InvalidRequest("Missing access token".into()))?;
+    let device_id = Self::from_url(&query, "deviceId")
+      .ok_or_else(|| AppError::InvalidRequest("Missing device id".into()))?;
+    let client_id: u64 = Self::from_url(&query, "clientId")
+      .and_then(|id| id.parse().ok())
+      .ok_or_else(|| AppError::InvalidRequest("Missing client id".into()))?;
+    let last_message_id = Self::from_url(&query, "lastMessageId");
+    let last_message_id = match last_message_id {
+      None => None,
+      Some(message_id) => Some(MessageId::try_from(message_id).map_err(|_| {
+        AppError::InvalidRequest("Couldn't parse 'X-AF-Last-Message-ID' head value".into())
+      })?),
+    };
+    Ok(WsConnectionV2Params {
+      access_token,
+      device_id,
+      client_id,
+      last_message_id,
+    })
+  }
+
+  fn from_url(url_params: &HashMap<Cow<str>, Cow<str>>, param: &str) -> Option<String> {
+    // we use params provided from URL as a backup since browser API doesn't allow to
+    // establish WebSocket connection with custom HTTP headers
+    let value = url_params.get(param).cloned()?;
+    Some(value.to_string())
   }
 }

@@ -8,7 +8,6 @@ use client_api_entity::workspace_dto::RecentSectionItems;
 use client_api_entity::workspace_dto::TrashSectionItems;
 use client_api_entity::workspace_dto::{FolderView, QueryWorkspaceFolder, QueryWorkspaceParam};
 use client_api_entity::AuthProvider;
-use client_api_entity::CollabType;
 use client_api_entity::GetInvitationCodeInfoQuery;
 use client_api_entity::InvitationCodeInfo;
 use client_api_entity::InvitedWorkspace;
@@ -34,10 +33,7 @@ use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use crate::ws::ConnectInfo;
 use anyhow::anyhow;
 use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
-use client_api_entity::{
-  AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
-  QuerySnapshotParams, SnapshotData,
-};
+use client_api_entity::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use semver::Version;
 use shared_entity::dto::auth_dto::UpdateUserParams;
@@ -237,13 +233,31 @@ impl Client {
   /// string representation of the access token. If the lock cannot be acquired or
   /// the token is not present, an error is returned.
   #[instrument(level = "debug", skip_all, err)]
-  pub fn get_token(&self) -> Result<String, AppResponseError> {
+  pub fn get_token_str(&self) -> Result<String, AppResponseError> {
     let token_str = self
       .token
       .read()
       .try_get()
       .map_err(|err| AppResponseError::from(AppError::OAuthError(err.to_string())))?;
     Ok(token_str)
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub fn get_token(&self) -> Result<GotrueTokenResponse, AppResponseError> {
+    let guard = self.token.read();
+    let resp = guard
+      .as_ref()
+      .ok_or_else(|| AppResponseError::new(ErrorCode::UserUnAuthorized, "user is not logged in"))?;
+    Ok(resp.clone())
+  }
+
+  pub fn get_access_token(&self) -> Result<String, AppResponseError> {
+    self
+      .token
+      .read()
+      .as_ref()
+      .map(|v| v.access_token.clone())
+      .ok_or_else(|| AppResponseError::new(ErrorCode::UserUnAuthorized, "user is not logged in"))
   }
 
   pub fn subscribe_token_state(&self) -> TokenStateReceiver {
@@ -600,7 +614,6 @@ impl Client {
   }
 
   /// Only expose this method for testing
-  #[cfg(debug_assertions)]
   pub fn token(&self) -> Arc<RwLock<ClientToken>> {
     self.token.clone()
   }
@@ -978,61 +991,6 @@ impl Client {
       .await?;
 
     process_response_error(resp).await
-  }
-
-  pub async fn get_snapshot_list(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-  ) -> Result<AFSnapshotMetas, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/{}/snapshot/list",
-      self.base_url, workspace_id, object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-    process_response_data::<AFSnapshotMetas>(resp).await
-  }
-
-  pub async fn get_snapshot(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-    params: QuerySnapshotParams,
-  ) -> Result<SnapshotData, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/{}/snapshot",
-      self.base_url, workspace_id, object_id,
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    process_response_data::<SnapshotData>(resp).await
-  }
-
-  pub async fn create_snapshot(
-    &self,
-    workspace_id: &Uuid,
-    object_id: &Uuid,
-    collab_type: CollabType,
-  ) -> Result<AFSnapshotMeta, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/{}/snapshot",
-      self.base_url, workspace_id, object_id,
-    );
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&collab_type)
-      .send()
-      .await?;
-    process_response_data::<AFSnapshotMeta>(resp).await
   }
 
   pub async fn ws_connect_info(&self, auto_refresh: bool) -> Result<ConnectInfo, AppResponseError> {

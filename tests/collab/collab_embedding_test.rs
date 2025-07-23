@@ -33,7 +33,8 @@ async fn query_collab_embedding_after_create_test() {
   test_client.api_client.create_collab(params).await.unwrap();
   test_client
     .wait_until_get_embedding(&workspace_id, &object_id)
-    .await;
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -41,6 +42,7 @@ async fn document_full_sync_then_search_test() {
   let object_id = Uuid::new_v4();
   let mut local_document = empty_document_editor(&object_id);
   let test_client = TestClient::new_user().await;
+  let uid = test_client.uid().await;
   let workspace_id = test_client.workspace_id().await;
   let doc_state = local_document.encode_collab().encode_to_bytes().unwrap();
   let params = CreateCollabParams {
@@ -56,6 +58,7 @@ async fn document_full_sync_then_search_test() {
       &object_id.to_string(),
       "AppFlowy",
       collab_folder::ViewLayout::Document,
+      uid,
     )
     .await;
 
@@ -96,7 +99,8 @@ async fn document_full_sync_then_search_test() {
 
   let items = test_client
     .wait_unit_get_search_result(&workspace_id, "workflows", 1, 200, Some(0.3))
-    .await;
+    .await
+    .unwrap();
   assert_eq!(items.len(), 1);
   assert_eq!(items[0].preview, Some("AppFlowy is an open-source project.It is an alternative to tools like Notion.AppFlowy provides full control of your data.The project is built using Flutter for the frontend.Rust powers AppFlowy's back".to_string()));
 }

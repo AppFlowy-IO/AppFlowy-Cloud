@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT COUNT(*)\n      FROM public.af_workspace_member\n      WHERE workspace_id = $1\n      AND role_id != $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d492c20dec54c7335744dcc139b95f30a80f06d9fd48de644630adf183e1ac34"
+}

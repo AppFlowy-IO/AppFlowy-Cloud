@@ -205,6 +205,7 @@ pub struct SubscribeProductLicense {
 pub enum LicensedProductType {
   Unknown = 0,
   AppFlowyAI = 1,
+  AppFlowyCloudPremium = 2,
 }
 
 impl Display for LicensedProductType {
@@ -219,6 +220,7 @@ impl TryFrom<&str> for LicensedProductType {
   fn try_from(value: &str) -> Result<Self, Self::Error> {
     match value {
       "1" => Ok(LicensedProductType::AppFlowyAI),
+      "2" => Ok(LicensedProductType::AppFlowyCloudPremium),
       _ => Err(format!("Invalid LicensedProductType value: {}", value)),
     }
   }

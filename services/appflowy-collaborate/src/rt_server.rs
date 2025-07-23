@@ -1,14 +1,13 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
 use crate::client::client_msg_router::ClientMessageRouter;
-use crate::command::{spawn_collaboration_command, CLCommandReceiver};
-use crate::config::get_env_var;
 use crate::connect_state::ConnectState;
 use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
-use crate::rt_server::collaboration_runtime::COLLAB_RUNTIME;
+use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 use access_control::collab::RealtimeAccessControl;
 use anyhow::{anyhow, Result};
 use app_error::AppError;
@@ -19,58 +18,38 @@ use collab_stream::client::CollabRedisStream;
 use collab_stream::stream_router::StreamRouter;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use database::collab::CollabStorage;
+use database::collab::CollabStore;
 use indexer::scheduler::IndexerScheduler;
 use redis::aio::ConnectionManager;
 use tokio::sync::mpsc::Sender;
-use tokio::task::yield_now;
 use tokio::time::interval;
-use tracing::{error, info, trace, warn};
+use tracing::{error, trace, warn};
 use uuid::Uuid;
 use yrs::updates::decoder::Decode;
 use yrs::StateVector;
 
-use crate::actix_ws::entities::{ClientGenerateEmbeddingMessage, ClientHttpUpdateMessage};
-use crate::{CollabRealtimeMetrics, RealtimeClientWebsocketSink};
-
 #[derive(Clone)]
-pub struct CollaborationServer<S> {
+pub struct CollaborationServer {
   /// Keep track of all collab groups
-  group_manager: Arc<GroupManager<S>>,
+  group_manager: Arc<GroupManager>,
   connect_state: ConnectState,
   group_sender_by_object_id: Arc<DashMap<Uuid, GroupCommandSender>>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
-  enable_custom_runtime: bool,
 }
 
-impl<S> CollaborationServer<S>
-where
-  S: CollabStorage,
-{
+impl CollaborationServer {
   #[allow(clippy::too_many_arguments)]
   pub async fn new(
-    storage: Arc<S>,
+    storage: Arc<dyn CollabStore>,
     access_control: Arc<dyn RealtimeAccessControl>,
     metrics: Arc<CollabRealtimeMetrics>,
-    command_recv: CLCommandReceiver,
     redis_stream_router: Arc<StreamRouter>,
     awareness_gossip: Arc<AwarenessGossip>,
     redis_connection_manager: ConnectionManager,
     group_persistence_interval: Duration,
-    prune_grace_period: Duration,
     indexer_scheduler: Arc<IndexerScheduler>,
   ) -> Result<Self, RealtimeError> {
-    let enable_custom_runtime = get_env_var("APPFLOWY_COLLABORATE_MULTI_THREAD", "false")
-      .parse::<bool>()
-      .unwrap_or(false);
-
-    if enable_custom_runtime {
-      info!("CollaborationServer with custom runtime");
-    } else {
-      info!("CollaborationServer with actix-web runtime");
-    }
-
     let connect_state = ConnectState::new();
     let collab_stream = CollabRedisStream::new_with_connection_manager(
       redis_connection_manager,
@@ -84,7 +63,6 @@ where
         metrics.clone(),
         collab_stream,
         group_persistence_interval,
-        prune_grace_period,
         indexer_scheduler.clone(),
       )
       .await?,
@@ -94,18 +72,11 @@ where
 
     spawn_period_check_inactive_group(Arc::downgrade(&group_manager), &group_sender_by_object_id);
 
-    spawn_collaboration_command(
-      command_recv,
-      &group_sender_by_object_id,
-      Arc::downgrade(&group_manager),
-    );
-
     Ok(Self {
       group_manager,
       connect_state,
       group_sender_by_object_id,
       metrics,
-      enable_custom_runtime,
     })
   }
 
@@ -127,6 +98,7 @@ where
       .handle_user_connect(connected_user, new_client_router)
     {
       // Remove the old user from all collaboration groups.
+      trace!("[realtime] remove old user: {}", old_user);
       self.group_manager.remove_user(&old_user);
     }
     self
@@ -207,7 +179,6 @@ where
     Ok(())
   }
 
-  #[inline]
   pub fn handle_client_http_update(
     &self,
     message: ClientHttpUpdateMessage,
@@ -215,6 +186,20 @@ where
     let group_cmd_sender = self.create_group_if_not_exist(message.object_id);
     tokio::spawn(async move {
       let object_id = message.object_id;
+      let return_tx = message.return_tx;
+
+      // Helper closure to handle error responses and logging
+      let handle_result = |app_error: AppError,
+                           return_tx: Option<
+        tokio::sync::oneshot::Sender<Result<Option<Vec<u8>>, AppError>>,
+      >| {
+        if let Some(tx) = return_tx {
+          let _ = tx.send(Err(app_error));
+        } else {
+          error!("{}", app_error);
+        }
+      };
+
       let (tx, rx) = tokio::sync::oneshot::channel();
       let result = group_cmd_sender
         .send(GroupCommand::HandleClientHttpUpdate {
@@ -227,17 +212,12 @@ where
         })
         .await;
 
-      let return_tx = message.return_tx;
       if let Err(err) = result {
-        if let Some(return_rx) = return_tx {
-          let _ = return_rx.send(Err(AppError::Internal(anyhow!(
-            "send update to group fail: {}",
-            err
-          ))));
-          return;
-        } else {
-          error!("send http update to group fail: {}", err);
-        }
+        handle_result(
+          AppError::Internal(anyhow!("send update to group fail: {}", err)),
+          return_tx,
+        );
+        return;
       }
 
       match rx.await {
@@ -254,10 +234,6 @@ where
               .state_vector
               .and_then(|data| StateVector::decode_v1(&data).ok())
             {
-              // yield
-              yield_now().await;
-
-              // Calculate missing update
               let (tx, rx) = tokio::sync::oneshot::channel();
               let _ = group_cmd_sender
                 .send(GroupCommand::CalculateMissingUpdate {
@@ -266,6 +242,7 @@ where
                   ret: tx,
                 })
                 .await;
+
               match rx.await {
                 Ok(missing_update_result) => {
                   let _ = group_cmd_sender
@@ -292,24 +269,16 @@ where
           }
         },
         Ok(Err(err)) => {
-          if let Some(return_rx) = return_tx {
-            let _ = return_rx.send(Err(AppError::Internal(anyhow!(
-              "apply http update to group fail: {}",
-              err
-            ))));
-          } else {
-            error!("apply http update to group fail: {}", err);
-          }
+          handle_result(
+            AppError::Internal(anyhow!("apply http update to group fail: {}", err)),
+            return_tx,
+          );
         },
         Err(err) => {
-          if let Some(return_rx) = return_tx {
-            let _ = return_rx.send(Err(AppError::Internal(anyhow!(
-              "fail to receive applied result: {}",
-              err
-            ))));
-          } else {
-            error!("fail to receive applied result: {}", err);
-          }
+          handle_result(
+            AppError::Internal(anyhow!("fail to receive applied result: {}", err)),
+            return_tx,
+          );
         },
       }
     });
@@ -337,12 +306,7 @@ where
           };
 
           let object_id = *entry.key();
-          if self.enable_custom_runtime {
-            COLLAB_RUNTIME.spawn(runner.run(object_id));
-          } else {
-            tokio::spawn(runner.run(object_id));
-          }
-
+          tokio::spawn(runner.run(object_id));
           entry.insert(new_sender.clone());
           new_sender
         },
@@ -379,20 +343,14 @@ where
   }
 
   pub fn get_user_by_device(&self, user_device: &UserDevice) -> Option<RealtimeUser> {
-    self
-      .connect_state
-      .user_by_device
-      .get(user_device)
-      .map(|entry| entry.value().clone())
+    self.connect_state.get_user_by_device(user_device)
   }
 }
 
-fn spawn_period_check_inactive_group<S>(
-  weak_groups: Weak<GroupManager<S>>,
+fn spawn_period_check_inactive_group(
+  weak_groups: Weak<GroupManager>,
   group_sender_by_object_id: &Arc<DashMap<Uuid, GroupCommandSender>>,
-) where
-  S: CollabStorage,
-{
+) {
   let mut interval = interval(Duration::from_secs(20));
   let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
   tokio::spawn(async move {
@@ -412,30 +370,4 @@ fn spawn_period_check_inactive_group<S>(
       }
     }
   });
-}
-
-/// When the CollaborationServer operates within an actix-web actor, utilizing tokio::spawn for
-/// task execution confines all tasks to the same thread, attributable to the actor's reliance on a
-/// single-threaded Tokio runtime. To circumvent this limitation and enable task execution across
-/// multiple threads, we've incorporated a multi-thread feature.
-///
-/// When appflowy-collaborate is deployed as a standalone service, we can use tokio multi-thread.
-mod collaboration_runtime {
-  use std::io;
-
-  use lazy_static::lazy_static;
-  use tokio::runtime;
-  use tokio::runtime::Runtime;
-
-  lazy_static! {
-    pub(crate) static ref COLLAB_RUNTIME: Runtime = default_tokio_runtime().unwrap();
-  }
-
-  pub fn default_tokio_runtime() -> io::Result<Runtime> {
-    runtime::Builder::new_multi_thread()
-      .thread_name("collab-rt")
-      .enable_io()
-      .enable_time()
-      .build()
-  }
 }

@@ -4,10 +4,10 @@ use chrono::{DateTime, Utc};
 
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWebUserWithObfuscatedName, AFWorkspace,
-  AFWorkspaceInvitationStatus, AccessRequestMinimal, AccessRequestStatus, AccessRequestWithViewId,
-  AccessRequesterInfo, AccountLink, GlobalComment, QuickNote, Reaction, Template, TemplateCategory,
-  TemplateCategoryMinimal, TemplateCategoryType, TemplateCreator, TemplateCreatorMinimal,
-  TemplateGroup, TemplateMinimal,
+  AFWorkspaceInvitationStatus, AFWorkspaceMember, AccessRequestMinimal, AccessRequestStatus,
+  AccessRequestWithViewId, AccessRequesterInfo, AccountLink, GlobalComment, QuickNote, Reaction,
+  Template, TemplateCategory, TemplateCategoryMinimal, TemplateCategoryType, TemplateCreator,
+  TemplateCreatorMinimal, TemplateGroup, TemplateMinimal,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -55,6 +55,53 @@ impl TryFrom<AFWorkspaceRow> for AFWorkspace {
       icon,
       member_count: None,
       role: None,
+    })
+  }
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct AFWorkspaceRowWithMemberCountAndRole {
+  pub workspace_id: Uuid,
+  pub database_storage_id: Option<Uuid>,
+  pub owner_uid: Option<i64>,
+  pub owner_name: Option<String>,
+  pub owner_email: Option<String>,
+  pub created_at: Option<DateTime<Utc>>,
+  pub workspace_type: i32,
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub workspace_name: Option<String>,
+  pub icon: Option<String>,
+  pub member_count: i64,
+  pub role: i32,
+}
+
+impl TryFrom<AFWorkspaceRowWithMemberCountAndRole> for AFWorkspace {
+  type Error = AppError;
+
+  fn try_from(value: AFWorkspaceRowWithMemberCountAndRole) -> Result<Self, Self::Error> {
+    let owner_uid = value
+      .owner_uid
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty owner_uid")))?;
+    let database_storage_id = value
+      .database_storage_id
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty workspace_id")))?;
+
+    let workspace_name = value.workspace_name.unwrap_or_default();
+    let created_at = value.created_at.unwrap_or_else(Utc::now);
+    let icon = value.icon.unwrap_or_default();
+
+    Ok(Self {
+      workspace_id: value.workspace_id,
+      database_storage_id,
+      owner_uid,
+      owner_name: value.owner_name.unwrap_or_default(),
+      owner_email: value.owner_email.unwrap_or_default(),
+      workspace_type: value.workspace_type,
+      workspace_name,
+      created_at,
+      icon,
+      member_count: Some(value.member_count),
+      role: Some(AFRole::from(value.role)),
     })
   }
 }
@@ -186,6 +233,18 @@ pub struct AFWorkspaceMemberRow {
   pub created_at: Option<DateTime<Utc>>,
 }
 
+impl From<AFWorkspaceMemberRow> for AFWorkspaceMember {
+  fn from(value: AFWorkspaceMemberRow) -> Self {
+    AFWorkspaceMember {
+      name: value.name.clone(),
+      email: value.email.clone(),
+      role: value.role.clone(),
+      avatar_url: value.avatar_url.clone(),
+      joined_at: value.created_at,
+    }
+  }
+}
+
 #[derive(FromRow)]
 pub struct AFCollabMemberAccessLevelRow {
   pub uid: i64,
@@ -291,9 +350,18 @@ pub struct AFWorkspaceInvitationMinimal {
 pub struct AFCollabRowMeta {
   pub oid: String,
   pub workspace_id: Uuid,
-
+  pub owner_uid: i64,
   pub deleted_at: Option<DateTime<Utc>>,
   pub created_at: Option<DateTime<Utc>>,
+  pub updated_at: DateTime<Utc>,
+}
+
+#[derive(FromRow, Clone, Debug)]
+pub struct AFCollabData {
+  pub oid: Uuid,
+  pub partition_key: i32,
+  pub updated_at: DateTime<Utc>,
+  pub blob: Vec<u8>,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]

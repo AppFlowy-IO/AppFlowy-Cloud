@@ -13,8 +13,8 @@ use client_api_entity::workspace_dto::{
 };
 use client_api_entity::{
   AFCollabEmbedInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams,
-  CreateCollabParams, DeleteCollabParams, PublishCollabItem, QueryCollab, QueryCollabParams,
-  RepeatedAFCollabEmbedInfo, UpdateCollabWebParams,
+  CreateCollabData, CreateCollabParams, DeleteCollabParams, PublishCollabItem, QueryCollab,
+  QueryCollabParams, RepeatedAFCollabEmbedInfo, UpdateCollabWebParams,
 };
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
@@ -359,7 +359,7 @@ impl Client {
     let compression_tasks = params_list
       .into_par_iter()
       .filter_map(|params| {
-        let data = params.to_bytes().ok()?;
+        let data = CreateCollabData::from(params).to_bytes().ok()?;
         brotli_compress(
           data,
           self.config.compression_quality,

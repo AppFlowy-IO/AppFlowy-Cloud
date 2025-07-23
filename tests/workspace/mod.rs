@@ -6,6 +6,7 @@ mod invitation_crud;
 mod join_workspace;
 mod member_crud;
 mod page_view;
+mod person;
 mod publish;
 mod published_data;
 mod quick_note;

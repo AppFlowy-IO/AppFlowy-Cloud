@@ -1,5 +1,4 @@
 use super::adapter::PgAdapter;
-use super::enforcer::AFEnforcer;
 use crate::act::{Action, Acts};
 use crate::entity::{ObjectType, SubjectType};
 use crate::metrics::{tick_metric, AccessControlMetrics};
@@ -8,11 +7,12 @@ use anyhow::anyhow;
 use app_error::AppError;
 use casbin::function_map::OperatorFunction;
 use casbin::rhai::{Dynamic, ImmutableString};
-use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
+use casbin::{CachedEnforcer, CoreApi, DefaultModel, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
 
 use sqlx::PgPool;
 
+use crate::casbin::enforcer_v2::{AFEnforcerV2, ConsistencyMode};
 use std::sync::Arc;
 use tracing::trace;
 
@@ -30,7 +30,7 @@ use tracing::trace;
 /// according to the model defined.
 #[derive(Clone)]
 pub struct AccessControl {
-  enforcer: Arc<AFEnforcer>,
+  enforcer: Arc<AFEnforcerV2>,
   #[allow(dead_code)]
   access_control_metrics: Arc<AccessControlMetrics>,
 }
@@ -38,28 +38,35 @@ pub struct AccessControl {
 impl AccessControl {
   pub async fn new(
     pg_pool: PgPool,
+    redis_uri: Option<&str>,
     access_control_metrics: Arc<AccessControlMetrics>,
   ) -> Result<Self, AppError> {
     let model = casbin_model().await?;
     let adapter = PgAdapter::new(pg_pool.clone(), access_control_metrics.clone());
-    let mut enforcer = casbin::Enforcer::new(model, adapter).await.map_err(|e| {
-      AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
-    })?;
+    let mut enforcer = casbin::CachedEnforcer::new(model, adapter)
+      .await
+      .map_err(|e| {
+        AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
+      })?;
     enforcer.add_function("cmpRoleOrLevel", OperatorFunction::Arg2(cmp_role_or_level));
 
-    let enforcer = Arc::new(AFEnforcer::new(enforcer).await?);
+    let enforcer = match redis_uri {
+      None => AFEnforcerV2::new(enforcer).await?,
+      Some(redis_uri) => AFEnforcerV2::new_with_redis(enforcer, redis_uri).await?,
+    };
+
     tick_metric(
       enforcer.metrics_state.clone(),
       access_control_metrics.clone(),
     );
     Ok(Self {
-      enforcer,
+      enforcer: Arc::new(enforcer),
       access_control_metrics,
     })
   }
 
   #[cfg(test)]
-  pub fn with_enforcer(enforcer: AFEnforcer) -> Self {
+  pub fn with_enforcer(enforcer: AFEnforcerV2) -> Self {
     let access_control_metrics = Arc::new(AccessControlMetrics::init());
     Self {
       enforcer: Arc::new(enforcer),
@@ -85,11 +92,55 @@ impl AccessControl {
     Ok(())
   }
 
-  pub async fn enforce<T>(&self, uid: &i64, obj: ObjectType, act: T) -> Result<bool, AppError>
+  /// Enforces access control policy with eventual consistency.
+  ///
+  /// This method provides fast policy checks by evaluating against the current state
+  /// without waiting for pending policy updates to be applied. Use this when:
+  /// - Performance is critical
+  /// - Slight inconsistency is acceptable
+  /// - You need immediate responses
+  pub async fn enforce_immediately<T>(
+    &self,
+    uid: &i64,
+    obj: ObjectType,
+    act: T,
+  ) -> Result<bool, AppError>
   where
     T: Acts,
   {
     self.enforcer.enforce_policy(uid, obj, act).await
+  }
+
+  /// Enforces access control policy with strong consistency.
+  ///
+  /// This method ensures all pending policy updates are applied before evaluation,
+  /// guaranteeing the most up-to-date permissions check. Use this when:
+  /// - Consistency is critical (e.g., security-sensitive operations)
+  /// - After policy changes that must be immediately reflected
+  /// - You can afford to wait for pending updates
+  pub async fn enforce_strong<T>(
+    &self,
+    uid: &i64,
+    obj: ObjectType,
+    act: T,
+  ) -> Result<bool, AppError>
+  where
+    T: Acts,
+  {
+    self
+      .enforcer
+      .enforce_policy_with_consistency(uid, obj, act, ConsistencyMode::Strong)
+      .await
+  }
+
+  pub async fn enforce_weak<T>(&self, uid: &i64, obj: ObjectType, act: T) -> Result<bool, AppError>
+  where
+    T: Acts,
+  {
+    self
+      .enforcer
+      .enforce_policy_with_consistency(uid, obj, act, ConsistencyMode::Eventual)
+      .await
   }
 }
 
@@ -108,7 +159,7 @@ impl AccessControl {
 /// Roles and access levels are defined with the following mappings:
 /// - **Role "1" (Owner):** Can `delete`, `write`, and `read`.
 /// - **Role "2" (Member):** Can `write` and `read`.
-/// - **Role "3" (Guest):** Can `read`.
+/// - **Role "3" (Guest):** Can `write` and `read`.
 ///
 /// ## Access Levels:
 /// - **"10" (Read-only):** Permission to `read`.
@@ -225,7 +276,7 @@ const GROUPING_FIELD_INDEX_ROLE: usize = 0;
 #[allow(dead_code)]
 const GROUPING_FIELD_INDEX_ACTION: usize = 1;
 
-pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), AppError> {
+pub(crate) async fn load_group_policies(enforcer: &mut CachedEnforcer) -> Result<(), AppError> {
   // Grouping definition of access level to action.
   let af_access_levels = [
     AFAccessLevel::ReadOnly,
@@ -258,6 +309,7 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
         grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
       AFRole::Guest => {
+        grouping_policies.push([role.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
         grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
     }

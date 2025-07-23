@@ -39,13 +39,8 @@ async fn get_access_request_handler(
 ) -> Result<JsonAppResponse<AccessRequest>> {
   let access_request_id = access_request_id.into_inner();
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  let access_request = get_access_request(
-    &state.pg_pool,
-    &state.collab_access_control_storage,
-    access_request_id,
-    uid,
-  )
-  .await?;
+  let access_request =
+    get_access_request(&state.pg_pool, &state.ws_server, access_request_id, uid).await?;
   Ok(Json(AppResponse::Ok().with_data(access_request)))
 }
 

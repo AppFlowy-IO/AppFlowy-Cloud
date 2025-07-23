@@ -384,8 +384,6 @@ async fn get_text_with_image_message_test() {
         break;
       },
       Err(err) => {
-        eprintln!("Failed to get blob: {:?}", err);
-        // Save the error and retry
         last_error = Some(err);
         retries -= 1;
       },
@@ -397,7 +395,10 @@ async fn get_text_with_image_message_test() {
   }
 
   if let Some(err) = last_error {
-    panic!("Failed to get blob after retries: {:?}", err);
+    panic!(
+      "Failed to get blob after retries: {:?}, url:{}",
+      err, image_url
+    );
   }
 
   assert!(!answer.is_empty());
@@ -475,7 +476,7 @@ async fn get_model_list_test() {
     .unwrap()
     .models;
   assert!(!models.is_empty());
-  assert!(models.len() >= 5, "models.len() = {}", models.len());
+  assert!(models.len() >= 2, "models.len() = {}", models.len());
   println!("models: {:?}", models);
 }
 

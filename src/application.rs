@@ -12,7 +12,9 @@ use access_control::noops::collab::{
 };
 use access_control::noops::workspace::WorkspaceAccessControlImpl as NoOpsWorkspaceAccessControlImpl;
 use access_control::workspace::WorkspaceAccessControl;
-use actix::Supervisor;
+use actix::{Actor, Supervisor};
+#[cfg(feature = "use_actix_cors")]
+use actix_cors::Cors;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -20,7 +22,6 @@ use actix_web::cookie::Key;
 use actix_web::middleware::NormalizePath;
 use actix_web::{dev::Server, web, web::Data, App, HttpResponse, HttpServer, Responder};
 use anyhow::{Context, Error};
-use appflowy_collaborate::collab::access_control::CollabStorageAccessControlImpl;
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use aws_sdk_s3::types::{
@@ -35,9 +36,8 @@ use tracing::{error, info};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::collab::storage::CollabStorageImpl;
-use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
-use appflowy_collaborate::snapshot::SnapshotControl;
+use appflowy_collaborate::collab::collab_store::CollabStoreImpl;
+use appflowy_collaborate::ws2::{CollabManager, WsServer};
 use appflowy_collaborate::CollaborationServer;
 use collab_stream::awareness_gossip::AwarenessGossip;
 use collab_stream::metrics::CollabStreamMetrics;
@@ -47,6 +47,7 @@ use indexer::collab_indexer::IndexerProvider;
 use indexer::scheduler::{IndexerConfiguration, IndexerScheduler};
 use indexer::vector::embedder::get_open_ai_config;
 use infra::env_util::get_env_var;
+use infra::thread_pool::ThreadPoolNoAbortBuilder;
 use mailer::sender::Mailer;
 use snowflake::Snowflake;
 
@@ -82,16 +83,12 @@ pub struct Application {
 }
 
 impl Application {
-  pub async fn build(
-    config: Config,
-    state: AppState,
-    rt_cmd_recv: CLCommandReceiver,
-  ) -> Result<Self, Error> {
+  pub async fn build(config: Config, state: AppState) -> Result<Self, Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
     info!("Server started at {}", listener.local_addr().unwrap());
-    let actix_server = run_actix_server(listener, state, config, rt_cmd_recv).await?;
+    let actix_server = run_actix_server(listener, state, config).await?;
 
     Ok(Self { port, actix_server })
   }
@@ -109,7 +106,6 @@ pub async fn run_actix_server(
   listener: TcpListener,
   state: AppState,
   config: Config,
-  rt_cmd_recv: CLCommandReceiver,
 ) -> Result<Server, Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
@@ -121,19 +117,17 @@ pub async fn run_actix_server(
       )
     })?;
 
-  let storage = state.collab_access_control_storage.clone();
+  let storage = state.collab_storage.clone();
 
   // Initialize metrics that which are registered in the registry.
-  let realtime_server = CollaborationServer::<_>::new(
+  let realtime_server = CollaborationServer::new(
     storage.clone(),
     state.realtime_access_control.clone(),
     state.metrics.realtime_metrics.clone(),
-    rt_cmd_recv,
     state.redis_stream_router.clone(),
     state.awareness_gossip.clone(),
     state.redis_connection_manager.clone(),
     Duration::from_secs(config.collab.group_persistence_interval_secs),
-    Duration::from_secs(config.collab.group_prune_grace_period_secs),
     state.indexer_scheduler.clone(),
   )
   .await
@@ -141,7 +135,7 @@ pub async fn run_actix_server(
 
   let realtime_server_actor = Supervisor::start(|_| RealtimeServerActor(realtime_server));
   let mut server = HttpServer::new(move || {
-    App::new()
+    let app = App::new()
       .wrap(NormalizePath::trim())
        // Middleware is registered for each App, scope, or Resource and executed in opposite order as registration
       .wrap(MetricsMiddleware)
@@ -150,7 +144,12 @@ pub async fn run_actix_server(
         SessionMiddleware::builder(redis_store.clone(), Key::generate())
           .build(),
       )
-      .wrap(RequestIdMiddleware)
+      .wrap(RequestIdMiddleware);
+
+    #[cfg(feature = "use_actix_cors")]
+    let app = app.wrap(actix_cors_scope());
+
+    app
       .service(server_info_scope())
       .service(user_scope())
       .service(workspace_scope())
@@ -183,7 +182,7 @@ pub async fn run_actix_server(
   Ok(server.run())
 }
 
-pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<AppState, Error> {
+pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   // Print the feature flags
 
   let metrics = AppMetrics::new();
@@ -248,12 +247,27 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
   // let collab_member_listener = pg_listeners.subscribe_collab_member_change();
 
+  let use_redis_ac_cache = get_env_var("APPFLOWY_ACCESS_CONTROL_REDIS_CACHE_ENABLED", "false")
+    .parse::<bool>()
+    .unwrap_or(false);
+
   info!(
-    "Setting up access controls, is_enable: {}",
-    &config.access_control.is_enabled
+    "Setting up access controls, is_enable: {}, use redis cache: {}",
+    &config.access_control.is_enabled, use_redis_ac_cache,
   );
-  let access_control =
-    AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
+
+  let redis_uri = if use_redis_ac_cache {
+    Some(config.redis_uri.expose_secret().as_str())
+  } else {
+    None
+  };
+
+  let access_control = AccessControl::new(
+    pg_pool.clone(),
+    redis_uri,
+    metrics.access_control_metrics.clone(),
+  )
+  .await?;
 
   let user_cache = UserCache::new(pg_pool.clone()).await;
   let collab_access_control: Arc<dyn CollabAccessControl> =
@@ -268,6 +282,16 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     } else {
       Arc::new(NoOpsWorkspaceAccessControlImpl::new())
     };
+
+  // thread pool
+  let thread_pool = Arc::new(
+    ThreadPoolNoAbortBuilder::new()
+      .thread_name(|idx| format!("af-collab-worker-{}", idx))
+      .num_threads(4)
+      .build()
+      .expect("Failed to create collab thread pool"),
+  );
+
   let realtime_access_control: Arc<dyn RealtimeAccessControl> =
     if config.access_control.is_enabled && config.access_control.enable_realtime_access_control {
       Arc::new(RealtimeCollabAccessControlImpl::new(access_control))
@@ -275,6 +299,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
       Arc::new(NoOpsRealtimeCollabAccessControlImpl::new())
     };
   let collab_cache = CollabCache::new(
+    thread_pool.clone(),
     redis_conn_manager.clone(),
     pg_pool.clone(),
     s3_client.clone(),
@@ -282,22 +307,10 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config.collab.s3_collab_threshold as usize,
   );
 
-  let collab_storage_access_control = CollabStorageAccessControlImpl {
-    collab_access_control: collab_access_control.clone(),
-    workspace_access_control: workspace_access_control.clone(),
-    cache: collab_cache.clone(),
-  };
-  let snapshot_control = SnapshotControl::new(
-    pg_pool.clone(),
-    s3_client.clone(),
-    metrics.collab_metrics.clone(),
-  )
-  .await;
-  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
+  let collab_access_control_storage = Arc::new(CollabStoreImpl::new(
     collab_cache.clone(),
-    collab_storage_access_control,
-    snapshot_control,
-    rt_cmd_tx,
+    collab_access_control.clone(),
+    workspace_access_control.clone(),
   ));
 
   let mailer = get_mailer(&config.mailer).await?;
@@ -325,6 +338,16 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     embedder_config,
     redis_conn_manager.clone(),
   );
+  let manager = CollabManager::new(
+    thread_pool.clone(),
+    collab_access_control.clone(),
+    collab_cache.clone(),
+    redis_conn_manager.clone(),
+    redis_stream_router.clone(),
+    awareness_gossip.clone(),
+    indexer_scheduler.clone(),
+  );
+  let ws_server = WsServer::new(manager).start();
 
   info!("Application state initialized");
   Ok(AppState {
@@ -337,7 +360,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     awareness_gossip,
     redis_connection_manager: redis_conn_manager,
     collab_cache,
-    collab_access_control_storage,
+    collab_storage: collab_access_control_storage,
     collab_access_control,
     workspace_access_control,
     realtime_access_control,
@@ -350,6 +373,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     mailer,
     ai_client: appflowy_ai_client,
     indexer_scheduler,
+    ws_server,
   })
 }
 
@@ -524,4 +548,23 @@ async fn get_gotrue_client(setting: &GoTrueSetting) -> Result<gotrue::api::Clien
 
 async fn health_check() -> impl Responder {
   HttpResponse::Ok().body("OK")
+}
+
+#[cfg(feature = "use_actix_cors")]
+fn actix_cors_scope() -> actix_cors::Cors {
+  Cors::default()
+    .allowed_origin(&get_env_var(
+      "APPFLOWY_CORS_ALLOWED_ORIGIN",
+      "http://localhost:3000",
+    ))
+    .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+    .allowed_headers(vec![
+      "Content-Type",
+      "Authorization",
+      "Accept",
+      "Client-Version",
+      "Device-Id",
+      "X-Request-Id",
+    ])
+    .max_age(3600)
 }

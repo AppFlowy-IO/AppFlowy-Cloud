@@ -7,8 +7,8 @@ use database_entity::dto::{
 use shared_entity::dto::workspace_dto::{DatabaseRowUpdatedItem, EmbeddedCollabQuery};
 
 use crate::collab::{partition_key_from_collab_type, SNAPSHOT_PER_HOUR};
-use crate::pg_row::AFCollabRowMeta;
 use crate::pg_row::AFSnapshotRow;
+use crate::pg_row::{AFCollabData, AFCollabRowMeta};
 use app_error::AppError;
 use chrono::{DateTime, Duration, Utc};
 
@@ -51,16 +51,17 @@ pub async fn insert_into_af_collab(
 ) -> Result<(), AppError> {
   let partition_key = crate::collab::partition_key_from_collab_type(&params.collab_type);
   tracing::trace!(
-    "upsert collab:{}, len:{}",
+    "upsert collab:{}, len:{}, update_at:{:?}",
     params.object_id,
     params.encoded_collab_v1.len(),
+    params.updated_at.map(|v| v.timestamp_millis())
   );
 
   sqlx::query!(
     r#"
-      INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
-      VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (oid)
-      DO UPDATE SET blob = $2, len = $3, owner_uid = $5 WHERE excluded.workspace_id = af_collab.workspace_id;
+      INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, NOW())) ON CONFLICT (oid)
+      DO UPDATE SET blob = $2, len = $3, owner_uid = $5, updated_at = COALESCE($7, NOW()) WHERE excluded.workspace_id = af_collab.workspace_id;
     "#,
     params.object_id,
     params.encoded_collab_v1.as_ref(),
@@ -68,6 +69,7 @@ pub async fn insert_into_af_collab(
     partition_key,
     uid,
     workspace_id,
+    params.updated_at
   )
   .execute(tx.deref_mut())
   .await.map_err(|err| {
@@ -152,8 +154,10 @@ pub async fn insert_into_af_collab_bulk_for_user(
   let mut blobs: Vec<Vec<u8>> = Vec::with_capacity(len);
   let mut lengths: Vec<i32> = Vec::with_capacity(len);
   let mut partition_keys: Vec<i32> = Vec::with_capacity(len);
-  let mut visited = HashSet::with_capacity(collab_params_list.len());
-  for params in collab_params_list {
+  let mut visited = HashSet::with_capacity(len);
+  let mut updated_at = Vec::with_capacity(len);
+  let now = Utc::now();
+  for params in collab_params_list.iter() {
     let oid = params.object_id;
     if visited.insert(oid) {
       let partition_key = partition_key_from_collab_type(&params.collab_type);
@@ -161,6 +165,7 @@ pub async fn insert_into_af_collab_bulk_for_user(
       blobs.push(params.encoded_collab_v1.to_vec());
       lengths.push(params.encoded_collab_v1.len() as i32);
       partition_keys.push(partition_key);
+      updated_at.push(params.updated_at.unwrap_or(now));
     }
   }
 
@@ -169,17 +174,18 @@ pub async fn insert_into_af_collab_bulk_for_user(
   // Bulk insert into `af_collab` for the provided collab params
   sqlx::query!(
       r#"
-        INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id)
-        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::bigint[], $6::uuid[])
+        INSERT INTO af_collab (oid, blob, len, partition_key, owner_uid, workspace_id, updated_at)
+        SELECT * FROM UNNEST($1::uuid[], $2::bytea[], $3::int[], $4::int[], $5::bigint[], $6::uuid[], $7::timestamp with time zone[])
         ON CONFLICT (oid)
-        DO UPDATE SET blob = excluded.blob, len = excluded.len where af_collab.workspace_id = excluded.workspace_id
+        DO UPDATE SET blob = excluded.blob, len = excluded.len, updated_at = excluded.updated_at where af_collab.workspace_id = excluded.workspace_id
       "#,
       &object_ids,
       &blobs,
       &lengths,
       &partition_keys,
       &uids,
-      &workspace_ids
+      &workspace_ids,
+      &updated_at
     )
       .execute(tx.deref_mut())
       .await
@@ -195,18 +201,48 @@ pub async fn insert_into_af_collab_bulk_for_user(
 }
 
 #[inline]
+pub async fn select_collabs_created_since<'a, E>(
+  conn: E,
+  workspace_id: &Uuid,
+  since: DateTime<Utc>,
+  limit: usize,
+) -> Result<Vec<AFCollabData>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let records = sqlx::query_as!(
+    AFCollabData,
+    r#"
+        SELECT c.oid, c.partition_key, c.updated_at, c.blob
+        FROM af_collab c
+        WHERE c.workspace_id = $1
+            AND c.deleted_at IS NULL
+            AND c.created_at > $2
+        ORDER BY updated_at
+        LIMIT $3
+        "#,
+    workspace_id,
+    since,
+    limit as i64
+  )
+  .fetch_all(conn)
+  .await?;
+  Ok(records)
+}
+
+#[inline]
 pub async fn select_blob_from_af_collab<'a, E>(
   conn: E,
   collab_type: &CollabType,
   object_id: &Uuid,
-) -> Result<Vec<u8>, sqlx::Error>
+) -> Result<(DateTime<Utc>, Vec<u8>), sqlx::Error>
 where
   E: Executor<'a, Database = Postgres>,
 {
   let partition_key = partition_key_from_collab_type(collab_type);
-  sqlx::query_scalar!(
+  let record = sqlx::query!(
     r#"
-        SELECT blob
+        SELECT updated_at, blob
         FROM af_collab
         WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;
         "#,
@@ -214,7 +250,8 @@ where
     partition_key,
   )
   .fetch_one(conn)
-  .await
+  .await?;
+  Ok((record.updated_at, record.blob))
 }
 
 #[inline]
@@ -230,7 +267,7 @@ where
   sqlx::query_as!(
     AFCollabRowMeta,
     r#"
-        SELECT oid,workspace_id,deleted_at,created_at
+        SELECT oid,workspace_id,owner_uid,deleted_at,created_at,updated_at
         FROM af_collab
         WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;
         "#,
@@ -368,8 +405,8 @@ pub async fn should_create_snapshot2<'a, E: Executor<'a, Database = Postgres>>(
 /// of snapshots stored for the specified `oid` does not exceed the provided `snapshot_limit`. If the limit
 /// is exceeded, the oldest snapshots are deleted to maintain the limit.
 ///
-pub async fn create_snapshot_and_maintain_limit<'a>(
-  mut transaction: Transaction<'a, Postgres>,
+pub async fn create_snapshot_and_maintain_limit(
+  mut transaction: Transaction<'_, Postgres>,
   workspace_id: &Uuid,
   oid: &Uuid,
   encoded_collab_v1: &[u8],

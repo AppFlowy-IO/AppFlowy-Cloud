@@ -13,11 +13,13 @@ pub struct SharedView {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedUser {
+  pub view_id: Uuid,
   pub email: String,
   pub name: String,
   pub access_level: AFAccessLevel,
   pub role: AFRole,
   pub avatar_url: Option<String>,
+  pub pending_invitation: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,8 +29,26 @@ pub struct SharedViewDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ListSharedViewResponse {
+pub struct SharedViewDetailsRequest {
+  pub ancestor_view_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedViews {
   pub shared_views: Vec<SharedView>,
+  pub view_id_with_no_access: Vec<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevokedAccess {
+  pub email: String,
+  pub view_id: Uuid,
+}
+
+#[derive(Clone)]
+pub struct GuestInviteCode {
+  pub code: String,
+  pub email: String,
 }
 
 pub struct SharedFolderView {
@@ -46,11 +66,15 @@ pub struct SharedFolderView {
   pub permission: AFAccessLevel,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ShareViewWithGuestRequest {
   pub view_id: Uuid,
   pub emails: Vec<String>,
   pub access_level: AFAccessLevel,
+  // If false, the guest will need to accept the invitation before being added officially.
+  // to the workspace.
+  #[serde(default)]
+  pub auto_confirm: bool,
 }
 
 #[derive(Serialize, Deserialize)]

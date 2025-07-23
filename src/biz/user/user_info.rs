@@ -1,5 +1,8 @@
 use app_error::AppError;
-use database::workspace::{select_all_user_workspaces, select_user_profile, select_workspace};
+use database::workspace::{
+  select_all_user_non_guest_workspaces, select_all_user_workspaces, select_user_profile,
+  select_workspace_with_count_and_role,
+};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 use serde_json::json;
 use shared_entity::dto::auth_dto::UpdateUserParams;
@@ -24,6 +27,7 @@ pub async fn get_profile(pg_pool: &PgPool, uuid: &Uuid) -> anyhow::Result<AFUser
 pub async fn get_user_workspace_info(
   pg_pool: &PgPool,
   uuid: &Uuid,
+  exclude_guest: bool,
 ) -> anyhow::Result<AFUserWorkspaceInfo, AppError> {
   let row = select_user_profile(pg_pool, uuid)
     .await?
@@ -38,8 +42,12 @@ pub async fn get_user_workspace_info(
   let user_profile = AFUserProfile::try_from(row)?;
 
   // Get all workspaces that the user can access to
-  let workspaces = select_all_user_workspaces(pg_pool, uuid)
-    .await?
+  let workspaces_rows = if exclude_guest {
+    select_all_user_non_guest_workspaces(pg_pool, uuid).await?
+  } else {
+    select_all_user_workspaces(pg_pool, uuid).await?
+  };
+  let workspaces = workspaces_rows
     .into_iter()
     .flat_map(|row| AFWorkspace::try_from(row).ok())
     .collect::<Vec<AFWorkspace>>();
@@ -55,7 +63,9 @@ pub async fn get_user_workspace_info(
   let first_workspace = workspaces.first().cloned().unwrap();
 
   let visiting_workspace = match latest_workspace_id {
-    Some(workspace_id) => AFWorkspace::try_from(select_workspace(pg_pool, &workspace_id).await?)?,
+    Some(workspace_id) => AFWorkspace::try_from(
+      select_workspace_with_count_and_role(pg_pool, &workspace_id, user_profile.uid).await?,
+    )?,
     None => first_workspace,
   };
 

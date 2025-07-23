@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        person_id\n      FROM af_page_mention\n      WHERE workspace_id = $1\n        AND mentioned_by = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "person_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a75bf8b11d832d154716d4618595b117da583a31b51baaf7b84e9ee0d0e3109c"
+}

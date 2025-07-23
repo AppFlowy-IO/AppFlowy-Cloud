@@ -207,7 +207,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     application: ApplicationSetting {
       port: get_env_var("APPFLOWY_APPLICATION_PORT", "8000").parse()?,
-      host: get_env_var("APPFLOWY_APPLICATION_HOST", "0.0.0.0"),
+      host: get_env_var("APPFLOWY_APPLICATION_HOST", "[::]"),
     },
     websocket: WebsocketSetting {
       heartbeat_interval: get_env_var("APPFLOWY_WEBSOCKET_HEARTBEAT_INTERVAL", "6").parse()?,

@@ -112,6 +112,8 @@ pub struct BlobMetadata {
 #[derive(Serialize, Deserialize)]
 pub struct CreateWorkspaceParam {
   pub workspace_name: Option<String>,
+  #[serde(default)]
+  pub workspace_icon: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -200,6 +202,11 @@ pub struct CreatePageParams {
   pub page_data: Option<serde_json::Value>,
   pub view_id: Option<Uuid>,
   pub collab_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateOrphanedViewParams {
+  pub document_id: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

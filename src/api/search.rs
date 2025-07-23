@@ -40,7 +40,7 @@ async fn document_search_handler(
   let metrics = &*state.metrics.request_metrics;
   let resp = search_document(
     &state.pg_pool,
-    &state.collab_access_control_storage,
+    &state.ws_server,
     &state.indexer_scheduler,
     uid,
     workspace_id,

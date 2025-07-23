@@ -1,7 +1,6 @@
 use client_api::entity::{QueryCollab, QueryCollabParams, UpdateCollabWebParams};
 use client_api_test::{
-  assert_client_collab_within_secs, assert_server_collab, generate_unique_registered_user,
-  TestClient,
+  assert_client_collab_value, assert_server_collab, generate_unique_registered_user, TestClient,
 };
 use collab_entity::CollabType;
 use serde_json::json;
@@ -91,12 +90,7 @@ async fn web_and_native_app_edit_same_collab_test() {
   .await
   .unwrap();
 
-  assert_client_collab_within_secs(
-    &mut app_client,
-    &object_id,
-    "paragraph",
-    expected_json.clone(),
-    30,
-  )
-  .await;
+  assert_client_collab_value(&mut app_client, &object_id, expected_json.clone())
+    .await
+    .unwrap();
 }

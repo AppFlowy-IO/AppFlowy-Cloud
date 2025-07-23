@@ -8,7 +8,14 @@ use sqlx::types::Uuid;
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
   /// Check if the user has the role in the workspace.
   /// Returns AppError::NotEnoughPermission if the user does not have the role.
-  async fn enforce_role(
+  async fn enforce_role_strong(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    role: AFRole,
+  ) -> Result<(), AppError>;
+
+  async fn enforce_role_weak(
     &self,
     uid: &i64,
     workspace_id: &Uuid,

@@ -3,11 +3,11 @@ use crate::entity::{EmbeddingRecord, UnindexedCollab};
 use crate::scheduler::{batch_insert_records, IndexerScheduler};
 use crate::vector::embedder::AFEmbedder;
 use appflowy_ai_client::dto::EmbeddingModel;
-use collab::core::collab::DataSource;
+use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use database::collab::{CollabStorage, GetCollabOrigin};
+use database::collab::{CollabStore, GetCollabOrigin};
 use database::index::{get_collab_embedding_fragment_ids, stream_collabs_without_embeddings};
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinSet;
-use tracing::{error, info, trace};
+use tracing::{error, info, instrument, trace};
 use uuid::Uuid;
 
 /// # index given workspace
@@ -122,10 +122,11 @@ async fn _index_then_write_embedding_to_disk(
   }
 }
 
+#[instrument(level = "trace", skip_all)]
 async fn stream_unindexed_collabs(
   conn: &mut PoolConnection<Postgres>,
   workspace_id: Uuid,
-  storage: Arc<dyn CollabStorage>,
+  storage: Arc<dyn CollabStore>,
   limit: i64,
 ) -> BoxStream<Result<UnindexedCollab, anyhow::Error>> {
   let cloned_storage = storage.clone();
@@ -138,8 +139,14 @@ async fn stream_unindexed_collabs(
           Ok(cid) => match cid.collab_type {
             CollabType::Document => {
               let collab = storage
-                .get_encode_collab(GetCollabOrigin::Server, cid.clone().into(), false)
-                .await?;
+                .get_full_encode_collab(
+                  GetCollabOrigin::Server,
+                  &cid.workspace_id,
+                  &cid.object_id,
+                  cid.collab_type,
+                )
+                .await?
+                .encoded_collab;
 
               Ok(Some(UnindexedCollab {
                 workspace_id: cid.workspace_id,
@@ -224,14 +231,9 @@ fn compute_embedding_records(
     .into_par_iter()
     .flat_map(|unindexed| {
       let indexer = indexer_provider.indexer_for(unindexed.collab_type)?;
-      let collab = Collab::new_with_source(
-        CollabOrigin::Empty,
-        &unindexed.object_id.to_string(),
-        DataSource::DocStateV1(unindexed.collab.doc_state.into()),
-        vec![],
-        false,
-      )
-      .ok()?;
+      let options = CollabOptions::new(unindexed.object_id.to_string(), default_client_id())
+        .with_data_source(DataSource::DocStateV1(unindexed.collab.doc_state.into()));
+      let collab = Collab::new_with_options(CollabOrigin::Empty, options).ok()?;
 
       let mut chunks = indexer
         .create_embedded_chunks_from_collab(&collab, model)

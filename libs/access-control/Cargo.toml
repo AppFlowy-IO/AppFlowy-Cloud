@@ -8,7 +8,7 @@ actix-http.workspace = true
 app-error.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
-casbin = { version = "2.5.0", features = [
+casbin = { version = "2.10.1", features = [
   "cached",
   "runtime-tokio",
   "incremental",
@@ -18,12 +18,20 @@ database-entity.workspace = true
 futures-util.workspace = true
 lazy_static.workspace = true
 prometheus-client.workspace = true
+rand = "0.8"
+redis = { workspace = true, features = [
+  "aio",
+  "tokio-comp",
+  "connection-manager",
+] }
+serde_json = { version = "1.0" }
 sqlx = { workspace = true, default-features = false, features = ["postgres"] }
 tracing.workspace = true
-tokio = { workspace = true, features = ["macros", "time"] }
+tokio = { workspace = true, features = ["macros", "time", "rt-multi-thread"] }
 tokio-stream.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 serde = { version = "1.0.200", features = ["derive"] }
+infra.workspace = true
 
 [features]
 default = ["casbin"]

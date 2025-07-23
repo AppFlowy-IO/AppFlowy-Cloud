@@ -1,12 +1,14 @@
-use std::{
-  collections::{HashMap, HashSet},
-  sync::Arc,
+use super::page_view::{update_workspace_database_data, update_workspace_folder_data};
+use crate::biz::collab::utils::get_latest_collab;
+use crate::state::AppState;
+use crate::{
+  api::metrics::AppFlowyWebMetrics,
+  biz::collab::{database::PostgresDatabaseCollabService, utils::collab_from_doc_state},
 };
-
-use actix_web::web::Data;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::ws2::{CollabUpdatePublisher, WorkspaceCollabInstanceCache};
+use collab::core::collab::default_client_id;
 use collab_database::{
   database::{gen_database_id, gen_row_id, timestamp, Database, DatabaseContext, DatabaseData},
   entity::{CreateDatabaseParams, CreateViewParams},
@@ -18,49 +20,43 @@ use collab_document::document::Document;
 use collab_entity::{CollabType, EncodedCollab};
 use collab_folder::{Folder, RepeatedViewIdentifier, View, ViewIdentifier};
 use collab_rt_entity::user::RealtimeUser;
-use database::collab::{select_workspace_database_oid, CollabStorage, GetCollabOrigin};
+use database::collab::{select_workspace_database_oid, CollabStore, GetCollabOrigin};
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use itertools::Itertools;
-use sqlx::PgPool;
-use uuid::Uuid;
-
-use crate::{
-  api::{metrics::AppFlowyWebMetrics, ws::RealtimeServerAddr},
-  biz::collab::{
-    database::PostgresDatabaseCollabService,
-    utils::{collab_from_doc_state, get_latest_collab_encoded, get_latest_collab_folder},
-  },
+use std::{
+  collections::{HashMap, HashSet},
+  sync::Arc,
 };
-
-use super::page_view::{update_workspace_database_data, update_workspace_folder_data};
+use uuid::Uuid;
+use yrs::block::ClientID;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn duplicate_view_tree_and_collab(
-  appflowy_web_metrics: &AppFlowyWebMetrics,
-  server: Data<RealtimeServerAddr>,
+  state: &AppState,
   user: RealtimeUser,
-  collab_storage: Arc<CollabAccessControlStorage>,
-  pg_pool: &PgPool,
   workspace_id: Uuid,
   view_id: Uuid,
   suffix: &str,
 ) -> Result<(), AppError> {
+  let collab_storage = state.collab_storage.clone();
+  let appflowy_web_metrics = &state.metrics.appflowy_web_metrics;
+
   let uid = user.uid;
-  let mut folder: Folder =
-    get_latest_collab_folder(&collab_storage, GetCollabOrigin::User { uid }, workspace_id).await?;
+  let client_id = default_client_id();
+  let mut folder: Folder = state.ws_server.get_folder(workspace_id).await?;
   let trash_sections: HashSet<String> = folder
-    .get_all_trash_sections()
+    .get_all_trash_sections(uid)
     .iter()
     .map(|s| s.id.clone())
     .collect();
   let views: Vec<View> = folder
-    .get_view_recursively(&view_id.to_string())
+    .get_view_recursively(&view_id.to_string(), uid)
     .into_iter()
     .filter(|view| !trash_sections.contains(&view.id))
     .collect();
   let duplicate_context = duplicate_views(&views, suffix)?;
 
-  let ws_db_oid = select_workspace_database_oid(pg_pool, &workspace_id)
+  let ws_db_oid = select_workspace_database_oid(&state.pg_pool, &workspace_id)
     .await
     .map_err(|err| {
       AppError::Internal(anyhow::anyhow!(
@@ -69,29 +65,15 @@ pub async fn duplicate_view_tree_and_collab(
         err
       ))
     })?;
-  let encoded_ws_db = get_latest_collab_encoded(
+  let ws_db_collab = get_latest_collab(
     &collab_storage,
     GetCollabOrigin::User { uid },
     workspace_id,
     ws_db_oid,
     CollabType::WorkspaceDatabase,
+    client_id,
   )
-  .await
-  .map_err(|err| {
-    AppError::Internal(anyhow::anyhow!(
-      "Unable to get latest workspace database collab {}: {}",
-      &ws_db_oid,
-      err
-    ))
-  })?;
-  let ws_db_collab =
-    collab_from_doc_state(encoded_ws_db.doc_state.to_vec(), &ws_db_oid).map_err(|err| {
-      AppError::Internal(anyhow::anyhow!(
-        "Unable to decode workspace database collab {}: {}",
-        &ws_db_oid,
-        err
-      ))
-    })?;
+  .await?;
   let mut ws_db = WorkspaceDatabase::open(ws_db_collab).map_err(|err| {
     AppError::Internal(anyhow::anyhow!(
       "Failed to open workspace database body: {}",
@@ -101,12 +83,13 @@ pub async fn duplicate_view_tree_and_collab(
 
   duplicate_database(
     appflowy_web_metrics,
-    server.clone(),
+    &state.ws_server,
     user.clone(),
     collab_storage.clone(),
     workspace_id,
     &duplicate_context,
     &mut ws_db,
+    client_id,
   )
   .await?;
 
@@ -115,19 +98,20 @@ pub async fn duplicate_view_tree_and_collab(
     workspace_id,
     uid,
     &duplicate_context,
+    client_id,
   )
   .await?;
 
   let encoded_folder_update = {
     let mut txn = folder.collab.transact_mut();
     for view in &duplicate_context.duplicated_views {
-      folder.body.views.insert(&mut txn, view.clone(), None);
+      folder.body.views.insert(&mut txn, view.clone(), None, uid);
     }
     txn.encode_update_v1()
   };
   update_workspace_folder_data(
     appflowy_web_metrics,
-    server,
+    &state.ws_server,
     user,
     workspace_id,
     encoded_folder_update,
@@ -190,20 +174,23 @@ fn duplicate_database_data_with_context(
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn duplicate_database(
   appflowy_web_metrics: &AppFlowyWebMetrics,
-  server: Data<RealtimeServerAddr>,
+  update_publisher: &impl CollabUpdatePublisher,
   user: RealtimeUser,
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<dyn CollabStore>,
   workspace_id: Uuid,
   duplicate_context: &DuplicateContext,
   workspace_database: &mut WorkspaceDatabase,
+  client_id: ClientID,
 ) -> Result<(), AppError> {
   let uid = user.uid;
-  let collab_service = Arc::new(PostgresDatabaseCollabService {
+  let collab_service = Arc::new(PostgresDatabaseCollabService::new(
     workspace_id,
-    collab_storage: collab_storage.clone(),
-  });
+    collab_storage.clone(),
+    client_id,
+  ));
   let mut database_id_list: HashSet<String> = HashSet::new();
 
   for database_view_id in &duplicate_context.database_view_ids {
@@ -217,21 +204,19 @@ async fn duplicate_database(
     database_id_list.insert(database_id);
   }
 
+  let database_context = DatabaseContext {
+    database_collab_service: collab_service.clone(),
+    notifier: Default::default(),
+    database_row_collab_service: collab_service,
+  };
+
   for database_id in &database_id_list {
-    let database_context = DatabaseContext {
-      collab_service: collab_service.clone(),
-      notifier: Default::default(),
-    };
-    let database = Database::open(database_id, database_context)
+    let database = Database::open(database_id, database_context.clone())
       .await
       .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to open database: {}", err)))?;
-    let database_data = database.get_database_data().await;
+    let database_data = database.get_database_data(20, true).await;
     let params = duplicate_database_data_with_context(duplicate_context, &database_data);
-    let database_context = DatabaseContext {
-      collab_service: collab_service.clone(),
-      notifier: Default::default(),
-    };
-    let duplicated_database = Database::create_with_view(params, database_context)
+    let duplicated_database = Database::create_with_view(params, database_context.clone())
       .await
       .map_err(|err| {
         AppError::Internal(anyhow::anyhow!("Failed to duplicate database: {}", err))
@@ -260,13 +245,14 @@ async fn duplicate_database(
         .encode_to_bytes()?
         .into(),
       collab_type: CollabType::Database,
+      updated_at: None,
     });
     for row in encoded_database.encoded_row_collabs {
-      let row_id = Uuid::parse_str(&row.object_id.clone())?;
       collab_params_list.push(CollabParams {
-        object_id: row_id,
+        object_id: row.object_id,
         encoded_collab_v1: row.encoded_collab.encode_to_bytes()?.into(),
         collab_type: CollabType::DatabaseRow,
+        updated_at: None,
       });
     }
     collab_storage
@@ -284,7 +270,7 @@ async fn duplicate_database(
     let workspace_database_id = Uuid::parse_str(workspace_database.collab.object_id())?;
     update_workspace_database_data(
       appflowy_web_metrics,
-      server.clone(),
+      update_publisher,
       user.clone(),
       workspace_id,
       workspace_database_id,
@@ -296,10 +282,11 @@ async fn duplicate_database(
 }
 
 async fn duplicate_document(
-  collab_storage: Arc<CollabAccessControlStorage>,
+  collab_storage: Arc<dyn CollabStore>,
   workspace_id: Uuid,
   uid: i64,
   duplicate_context: &DuplicateContext,
+  client_id: ClientID,
 ) -> Result<(), AppError> {
   let queries = duplicate_context
     .document_view_ids
@@ -310,7 +297,7 @@ async fn duplicate_document(
     })
     .collect();
   let query_results = collab_storage
-    .batch_get_collab(&uid, workspace_id, queries, true)
+    .batch_get_collab(&uid, workspace_id, queries)
     .await;
   let mut collab_params_list = vec![];
   for (collab_id, query_result) in query_results {
@@ -328,7 +315,7 @@ async fn duplicate_document(
             ))
           })?;
         let new_collab_param =
-          duplicate_document_encoded_collab(&collab_id, *new_collab_id, encoded_collab)?;
+          duplicate_document_encoded_collab(&collab_id, *new_collab_id, encoded_collab, client_id)?;
         collab_params_list.push(new_collab_param);
       },
       QueryCollabResult::Failed { error: _ } => {
@@ -433,11 +420,12 @@ fn duplicate_document_encoded_collab(
   orig_object_id: &Uuid,
   new_object_id: Uuid,
   encoded_collab: EncodedCollab,
+  client_id: ClientID,
 ) -> Result<CollabParams, AppError> {
-  let collab = collab_from_doc_state(encoded_collab.doc_state.to_vec(), orig_object_id)?;
+  let collab = collab_from_doc_state(encoded_collab.doc_state.to_vec(), orig_object_id, client_id)?;
   let document = Document::open(collab).unwrap();
   let data = document.get_document_data().unwrap();
-  let duplicated_document = Document::create(&new_object_id.to_string(), data)
+  let duplicated_document = Document::create(&new_object_id.to_string(), data, client_id)
     .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to create document: {}", err)))?;
   let encoded_collab: EncodedCollab = duplicated_document
     .encode_collab_v1(|c| CollabType::Document.validate_require_data(c))
@@ -448,5 +436,6 @@ fn duplicate_document_encoded_collab(
     object_id: new_object_id,
     encoded_collab_v1: encoded_collab.encode_to_bytes()?.into(),
     collab_type: CollabType::Document,
+    updated_at: None,
   })
 }

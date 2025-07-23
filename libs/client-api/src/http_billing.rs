@@ -4,10 +4,6 @@ use client_api_entity::billing_dto::{
   SubscriptionPlanDetail, WorkspaceUsageAndLimit,
 };
 use reqwest::Method;
-use shared_entity::dto::billing_dto::{
-  LicenseProductSubscriptionLinkQuery, LicensedProductDetail, LicensedProductType,
-  SubscribeProductLicense, UserSubscribeProduct,
-};
 use shared_entity::{
   dto::billing_dto::{RecurringInterval, SubscriptionPlan, WorkspaceSubscriptionStatus},
   response::{AppResponse, AppResponseError},
@@ -212,89 +208,5 @@ impl Client {
       .await?;
 
     process_response_data::<Vec<SubscriptionPlanDetail>>(resp).await
-  }
-
-  /// Return all licensed products.
-  pub async fn get_license_product_subscriptions(
-    &self,
-  ) -> Result<Vec<LicensedProductDetail>, AppResponseError> {
-    let url = format!(
-      "{}/billing/api/v1/license/products",
-      self.base_billing_url(),
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-
-    process_response_data::<Vec<LicensedProductDetail>>(resp).await
-  }
-
-  /// Returns products that user already subscribed to
-  pub async fn get_user_license_products(&self) -> Result<UserSubscribeProduct, AppResponseError> {
-    let url = format!(
-      "{}/billing/api/v1/license/user/products",
-      self.base_billing_url(),
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-
-    process_response_data::<UserSubscribeProduct>(resp).await
-  }
-
-  pub async fn get_license_product_detail(
-    &self,
-    product_id: &str,
-  ) -> Result<Vec<SubscribeProductLicense>, AppResponseError> {
-    let url = format!(
-      "{}/billing/api/v1/license/user/product/{}",
-      self.base_billing_url(),
-      product_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-
-    process_response_data::<Vec<SubscribeProductLicense>>(resp).await
-  }
-
-  pub async fn active_license_product(&self, product_id: &str) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/billing/api/v1/license/user/product/{}/active",
-      self.base_billing_url(),
-      product_id
-    );
-    let resp = self
-      .http_client_without_auth(Method::POST, &url)
-      .await?
-      .send()
-      .await?;
-
-    process_response_error(resp).await
-  }
-
-  pub async fn get_license_product_subscription_link(
-    &self,
-    product_type: LicensedProductType,
-  ) -> Result<String, AppResponseError> {
-    let query = LicenseProductSubscriptionLinkQuery { product_type };
-    let url = format!(
-      "{}/billing/api/v1/license/subscription-link",
-      self.base_billing_url(),
-    );
-    let resp = self
-      .http_client_without_auth(Method::GET, &url)
-      .await?
-      .query(&query)
-      .send()
-      .await?;
-
-    process_response_data::<String>(resp).await
   }
 }

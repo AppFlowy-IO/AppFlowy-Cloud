@@ -24,6 +24,7 @@ async fn workspace_mentionable_persons_crud() {
         name: "name override".to_string(),
         avatar_url: Some("avatar url override".to_string()),
         cover_image_url: Some("cover image url".to_string()),
+        custom_image_url: Some("custom image url".to_string()),
         description: Some("description override".to_string()),
       },
     )

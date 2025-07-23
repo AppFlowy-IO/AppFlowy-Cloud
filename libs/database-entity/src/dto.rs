@@ -1320,6 +1320,7 @@ pub struct MentionableWorkspaceMemberOrGuest {
   pub role: AFRole,
   pub avatar_url: Option<String>,
   pub cover_image_url: Option<String>,
+  pub custom_image_url: Option<String>,
   pub description: Option<String>,
 }
 
@@ -1336,6 +1337,7 @@ impl From<MentionableWorkspaceMemberOrGuest> for MentionablePerson {
       },
       avatar_url: val.avatar_url,
       cover_image_url: val.cover_image_url,
+      custom_image_url: val.custom_image_url,
       description: val.description,
       invited: false,
     }
@@ -1349,6 +1351,7 @@ pub struct MentionableWorkspaceMemberOrGuestWithLastMentionedTime {
   pub role: AFRole,
   pub avatar_url: Option<String>,
   pub cover_image_url: Option<String>,
+  pub custom_image_url: Option<String>,
   pub description: Option<String>,
   pub last_mentioned_at: Option<DateTime<Utc>>,
 }
@@ -1368,6 +1371,7 @@ impl From<MentionableWorkspaceMemberOrGuestWithLastMentionedTime>
       },
       avatar_url: val.avatar_url,
       cover_image_url: val.cover_image_url,
+      custom_image_url: val.custom_image_url,
       description: val.description,
       invited: false,
       last_mentioned_at: val.last_mentioned_at,
@@ -1380,6 +1384,7 @@ pub struct WorkspaceMemberProfile {
   pub name: String,
   pub avatar_url: Option<String>,
   pub cover_image_url: Option<String>,
+  pub custom_image_url: Option<String>,
   pub description: Option<String>,
 }
 
@@ -1391,6 +1396,7 @@ pub struct MentionablePerson {
   pub role: MentionablePersonType,
   pub avatar_url: Option<String>,
   pub cover_image_url: Option<String>,
+  pub custom_image_url: Option<String>,
   pub description: Option<String>,
   pub invited: bool,
 }
@@ -1403,6 +1409,7 @@ pub struct MentionablePersonWithLastMentionedTime {
   pub role: MentionablePersonType,
   pub avatar_url: Option<String>,
   pub cover_image_url: Option<String>,
+  pub custom_image_url: Option<String>,
   pub description: Option<String>,
   pub invited: bool,
   pub last_mentioned_at: Option<DateTime<Utc>>,

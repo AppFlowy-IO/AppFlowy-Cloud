@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_page_mention (workspace_id, view_id, view_name, person_id, block_id, mentioned_by, mentioned_at, require_notification)\n      VALUES ($1, $2, $3, $4, $5, $6, current_timestamp, $7)\n      ON CONFLICT (workspace_id, view_id, person_id) DO UPDATE\n      SET mentioned_by = EXCLUDED.mentioned_by,\n          mentioned_at = EXCLUDED.mentioned_at,\n          block_id = EXCLUDED.block_id,\n          require_notification = EXCLUDED.require_notification,\n          notified = false\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "315840e0657ea0b8d162635b4cc21ce84a09fd7ea14ea07980869a80ee06900c"
+}

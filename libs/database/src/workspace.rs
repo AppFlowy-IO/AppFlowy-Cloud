@@ -2067,7 +2067,8 @@ pub async fn upsert_page_mention<'a, E: Executor<'a, Database = Postgres>>(
       SET mentioned_by = EXCLUDED.mentioned_by,
           mentioned_at = EXCLUDED.mentioned_at,
           block_id = EXCLUDED.block_id,
-          require_notification = EXCLUDED.require_notification
+          require_notification = EXCLUDED.require_notification,
+          notified = false
     "#,
     workspace_id,
     view_id,

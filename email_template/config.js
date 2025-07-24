@@ -36,5 +36,10 @@ module.exports = {
     workspaceName: "AppFlowy",
     workspaceMembersCount: "100",
     workspaceIconURL: "https://cdn-icons-png.flaticon.com/512/1078/1078013.png",
+    mentionedPageName: "Test Page",
+    mentionedPageUrl: "https://appflowy.io",
+    mentionerName: "John Doe",
+    mentionerIconUrl: "https://cdn-icons-png.flaticon.com/512/1077/1077012.png",
+    mentionedAt: "Jul 22, 2025, 3:42 PM (UTC)",
   },
 };

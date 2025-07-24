@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        w.workspace_name AS \"workspace_name!\",\n        pm.workspace_id,\n        pm.view_id,\n        pm.view_name,\n        mentioner.name AS \"mentioner_name!\",\n        mentioner.metadata ->> 'icon_url' AS \"mentioner_avatar_url\",\n        pm.person_id AS \"mentioned_person_id\",\n        mentioned_person.name AS \"mentioned_person_name!\",\n        mentioned_person.email AS \"mentioned_person_email!\",\n        pm.mentioned_at AS \"mentioned_at!\",\n        pm.block_id\n      FROM af_page_mention AS pm\n      JOIN af_workspace AS w ON pm.workspace_id = w.workspace_id\n      JOIN af_user AS mentioned_person\n        ON pm.person_id = mentioned_person.uuid\n      JOIN af_user AS mentioner\n        ON pm.mentioned_by = mentioner.uid\n      WHERE pm.mentioned_at > NOW() - $1::INTERVAL\n      AND require_notification\n      AND NOT notified\n      FOR UPDATE SKIP LOCKED\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "view_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "view_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "mentioner_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "mentioner_avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "mentioned_person_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "mentioned_person_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "mentioned_person_email!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "mentioned_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "block_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Interval"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "c8b1f57c5ddce8006a8e137be07f13b455f59657f5fcef67d69905ecec4cb063"
+}

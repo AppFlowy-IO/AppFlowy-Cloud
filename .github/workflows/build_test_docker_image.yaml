@@ -78,7 +78,7 @@ jobs:
       - name: Build and push GoTrue image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: docker/gotrue
           file: ./docker/gotrue/Dockerfile
           platforms: linux/${{ matrix.arch }}
           push: true

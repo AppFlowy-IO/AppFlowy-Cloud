@@ -1452,6 +1452,26 @@ pub struct PageMentionUpdate {
   pub view_name: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PageMentionNotification {
+  pub workspace_name: String,
+  pub workspace_id: Uuid,
+  pub view_id: Uuid,
+  pub view_name: String,
+  pub mentioner_name: String,
+  pub mentioner_avatar_url: Option<String>,
+  pub mentioned_at: DateTime<Utc>,
+  pub mentioned_person_id: Uuid,
+  pub mentioned_person_name: String,
+  pub mentioned_person_email: String,
+  pub block_id: Option<String>,
+}
+
+pub struct ProcessedPageMentionNotification {
+  pub view_id: Uuid,
+  pub person_id: Uuid,
+}
+
 #[cfg(test)]
 mod test {
   use crate::dto::{CreateCollabData, CreateCollabDataV0};

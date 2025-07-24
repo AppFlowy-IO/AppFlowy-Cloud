@@ -167,13 +167,20 @@ pub struct AppState {
 }
 
 async fn get_worker_mailer(config: &Config) -> Result<AFWorkerMailer, Error> {
+  let mut smtp_tls_kind = "none"
+  if config.mailer.smtp_port == 465 {
+    smtp_tls_kind = "wrapper"
+  } else if config.mailer.smtp_port == 587 {
+    smtp_tls_kind = "opportunistic"
+  }
+
   let mailer = Mailer::new(
     config.mailer.smtp_username.clone(),
     config.mailer.smtp_email.clone(),
     config.mailer.smtp_password.clone(),
     &config.mailer.smtp_host,
     config.mailer.smtp_port,
-    config.mailer.smtp_tls_kind.as_str(),
+    smtp_tls_kind,
   )
   .await?;
 

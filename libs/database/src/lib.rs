@@ -5,6 +5,7 @@ pub mod file;
 pub mod history;
 pub mod index;
 pub mod listener;
+pub mod notification;
 pub mod pg_row;
 pub mod publish;
 pub mod quick_note;

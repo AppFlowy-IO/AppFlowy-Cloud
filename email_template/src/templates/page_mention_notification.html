@@ -1,0 +1,284 @@
+<x-main>
+  <!-- Add body inline styles to ensure background color completely covers -->
+  <style>
+    body {
+      background-color: #eeeefc !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    html {
+      background-color: #eeeefc !important;
+    }
+    /* Outlook compatibility */
+    .email-body {
+      background-color: #eeeefc;
+    }
+  </style>
+
+  <!-- Outermost wrapper ensures background color completely covers -->
+  <div
+    style="
+      background-color: #eeeefc;
+      width: 100%;
+      min-height: 100vh;
+      margin: 0;
+      padding: 0;
+    "
+    class="email-body"
+  >
+    <!-- Outer container, implements horizontal and vertical centering -->
+    <table
+      width="100%"
+      border="0"
+      cellpadding="0"
+      cellspacing="0"
+      style="background-color: #eeeefc; min-height: 100vh"
+      bgcolor="#EEEEFC"
+    >
+      <tr>
+        <td
+          align="center"
+          valign="middle"
+          style="
+            padding: 24px 20px 40px 20px;
+            background-color: #eeeefc;
+            min-height: 100vh;
+          "
+          bgcolor="#EEEEFC"
+        >
+          <!-- Main content area - equivalent to original flex container (white card) -->
+          <table
+            width="600"
+            border="0"
+            cellpadding="0"
+            cellspacing="0"
+            style="
+              min-height: 460px;
+              border-radius: 12px;
+              background-color: #ffffff;
+              margin: 0 auto;
+              max-width: 600px;
+              width: 100%;
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            "
+            bgcolor="#ffffff"
+          >
+            <tr>
+              <td
+                align="center"
+                valign="middle"
+                style="padding: 40px 32px; min-height: 460px"
+              >
+                <!-- Content items container - each child element uses separate table to implement gap effect -->
+                <table width="100%" border="0" cellpadding="0" cellspacing="0">
+                  <!-- First content item - avatar -->
+                  <tr>
+                    <td align="center" style="padding-bottom: 24px">
+                      <!-- Avatar container - table layout implementing flex effect -->
+                      <table
+                        border="0"
+                        cellpadding="0"
+                        cellspacing="0"
+                        style="margin: 0 auto"
+                      >
+                        <tr>
+                          <td
+                            align="center"
+                            valign="middle"
+                            style="
+                              width: 64px;
+                              height: 64px;
+                              border-radius: 50%;
+                              overflow: hidden;
+                              background-color: #f0f0f0;
+                              display: block;
+                            "
+                            width="64"
+                            height="64"
+                          >
+                            <!-- Avatar image -->
+                            <img
+                              src="{{ mentionerIconUrl }}"
+                              alt="User Avatar"
+                              style="
+                                width: 64px;
+                                height: 64px;
+                                border-radius: 50%;
+                                object-fit: cover;
+                                display: block;
+                                border: 0;
+                              "
+                              width="64"
+                              height="64"
+                            />
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Second content item - title -->
+                  <tr>
+                    <td align="center" style="padding-bottom: 24px">
+                      <!-- For better compatibility, use table wrapper to limit width -->
+                      <table
+                        border="0"
+                        cellpadding="0"
+                        cellspacing="0"
+                        style="margin: 0 auto; max-width: 400px; width: 100%"
+                      >
+                        <tr>
+                          <td align="center" style="padding: 0">
+                            <!-- Title content - supports mixed font styles, 400px width limit, supports line wrapping -->
+                            <div
+                              style="
+                                color: #21232a;
+                                text-align: center;
+                                font-family:
+                                  &quot;SF Pro Text&quot;,
+                                  -apple-system,
+                                  BlinkMacSystemFont,
+                                  &quot;Segoe UI&quot;,
+                                  Roboto,
+                                  Helvetica,
+                                  Arial,
+                                  sans-serif;
+                                font-size: 20px;
+                                font-style: normal;
+                                line-height: 28px;
+                                margin: 0;
+                                padding: 0;
+                                word-wrap: break-word;
+                                word-break: break-word;
+                                overflow-wrap: break-word;
+                                white-space: normal;
+                              "
+                            >
+                              <!-- Username (bold) -->
+                              <span style="font-weight: 700"
+                                >{{ mentionerName }}</span
+                              >
+                              <!-- Regular font section -->
+                              <span style="font-weight: 400">
+                                has mentioned you in
+                              </span>
+                              <!-- Page name (bold) -->
+                              <span style="font-weight: 700"
+                                >{{ mentionedPageName }}</span
+                              >
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Third content item - mentioned page details -->
+                  <tr>
+                    <td align="center" style="padding-bottom: 8px">
+                      <div
+                        style="
+                          color: #6f748c;
+                          text-align: center;
+                          font-family:
+                            &quot;SF Pro Text&quot;,
+                            -apple-system,
+                            BlinkMacSystemFont,
+                            &quot;Segoe UI&quot;,
+                            Roboto,
+                            Helvetica,
+                            Arial,
+                            sans-serif;
+                          font-size: 12px;
+                          font-style: normal;
+                          font-weight: 400;
+                          line-height: 18px;
+                          letter-spacing: 0.1px;
+                          margin: 0;
+                          padding: 0;
+                        "
+                      >
+                        {{ mentionedAt }}
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td align="center" style="padding-bottom: 8px">
+                      <div
+                        style="
+                          color: #6f748c;
+                          text-align: center;
+                          font-family:
+                            &quot;SF Pro Text&quot;,
+                            -apple-system,
+                            BlinkMacSystemFont,
+                            &quot;Segoe UI&quot;,
+                            Roboto,
+                            Helvetica,
+                            Arial,
+                            sans-serif;
+                          font-size: 12px;
+                          font-style: normal;
+                          font-weight: 400;
+                          line-height: 18px;
+                          letter-spacing: 0.1px;
+                          margin: 0;
+                          padding: 0;
+                        "
+                      >
+                        {{ workspaceName }} / ... / {{ mentionedPageName }}
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- Fourth content item - button -->
+                  <tr>
+                    <td align="center" style="padding-bottom: 6px">
+                      <!-- Button container - table layout implementing flex effect -->
+                      <table
+                        border="0"
+                        cellpadding="0"
+                        cellspacing="0"
+                        style="margin: 0 auto; min-width: 76px"
+                      >
+                        <tr>
+                          <td align="center" valign="middle">
+                            <x-button
+                              align="center"
+                              href="{{ mentionedPageUrl }}"
+                              style="
+                                background-color: #9327ff;
+                                border-radius: 10px;
+                                padding: 10px 20px;
+                                min-width: 76px;
+                                font-size: 16px;
+                                font-weight: 600;
+                              "
+                            >
+                              <div>Go to page</div>
+                            </x-button>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Footer section - inside white card -->
+                  <tr>
+                    <td align="center">
+                      <x-footer />
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </div>
+  <!-- Close outermost wrapper div -->
+</x-main>

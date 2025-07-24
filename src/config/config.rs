@@ -28,6 +28,7 @@ pub struct Config {
   pub mailer: MailerSetting,
   pub apple_oauth: AppleOAuthSetting,
   pub appflowy_web_url: String,
+  pub notification: NotificationSetting,
   pub open_ai_config: Option<OpenAIConfig>,
   pub azure_ai_config: Option<AzureConfig>,
 }
@@ -167,6 +168,13 @@ impl TryFrom<&str> for PublishedCollabStorageBackend {
   }
 }
 
+#[derive(Clone, Debug)]
+pub struct NotificationSetting {
+  pub enable_email_notification: bool,
+  pub email_notification_interval_secs: u64,
+  pub email_notification_grace_period_secs: u64,
+}
+
 // Default values favor local development.
 pub fn get_configuration() -> Result<Config, anyhow::Error> {
   let (open_ai_config, azure_ai_config) = get_open_ai_config();
@@ -265,6 +273,20 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     appflowy_web_url: get_env_var_opt("APPFLOWY_WEB_URL")
       .ok_or(anyhow!("APPFLOWY_WEB_URL has not been set"))?,
+    notification: NotificationSetting {
+      enable_email_notification: get_env_var("APPFLOWY_NOTIFICATION_ENABLE_EMAIL", "false")
+        .parse()?,
+      email_notification_interval_secs: get_env_var(
+        "APPFLOWY_NOTIFICATION_EMAIL_INTERVAL_SECS",
+        "900",
+      )
+      .parse()?,
+      email_notification_grace_period_secs: get_env_var(
+        "APPFLOWY_NOTIFICATION_EMAIL_GRACE_PERIOD_SECS",
+        "450",
+      )
+      .parse()?,
+    },
     open_ai_config,
     azure_ai_config,
   };

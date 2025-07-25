@@ -63,6 +63,7 @@ collab-plugins = { workspace = true, features = [] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "time", "rt"] }
+tempfile = "3.20.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"

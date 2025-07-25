@@ -150,6 +150,7 @@ actix-cors = { version = "0.7.0", optional = true }
 [dev-dependencies]
 flate2 = "1.0"
 assert-json-diff = "2.0.2"
+tempfile = "3.20.0"
 client-api-test = { path = "libs/client-api-test", features = [] }
 client-api = { path = "libs/client-api", features = [
   "test_util",

@@ -6,7 +6,8 @@ use async_trait::async_trait;
 use std::fs::metadata;
 
 use client_api_entity::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartResponse,
+  CompleteUploadRequest, CompletedPartRequest, CreateUploadRequest, CreateUploadResponse,
+  UploadPartResponse,
 };
 use client_api_entity::{CreateImportTask, CreateImportTaskResponse};
 
@@ -19,7 +20,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use shared_entity::dto::import_dto::UserImportTask;
 use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::{error, trace};
 use uuid::Uuid;
@@ -195,12 +196,35 @@ impl Client {
 
   /// Uploads a file to a specified presigned URL obtained from the import task response.
   ///
-  /// This function uploads a file to the given presigned URL using an HTTP PUT request.
-  /// The file's metadata is read to determine its size, and the upload stream is created
-  /// and sent to the provided URL. It is recommended to call this function after successfully
-  /// creating an import task using [Self::create_import].
+  /// This function automatically handles large files (>5GB) by using multipart upload
+  /// via the file storage API, while smaller files use the direct presigned URL upload.
+  /// For files ≤5GB: Uses direct PUT to the presigned URL
+  /// For files >5GB: Uses multipart upload via /api/file_storage/ endpoints
   ///
   pub async fn upload_import_file(
+    &self,
+    file_path: &Path,
+    url: &str,
+    workspace_id: &Uuid,
+  ) -> Result<(), AppResponseError> {
+    let file_metadata = metadata(file_path)?;
+    let file_size = file_metadata.len();
+
+    const S3_SINGLE_PUT_LIMIT: u64 = 5 * 1024 * 1024 * 1024;
+
+    if file_size <= S3_SINGLE_PUT_LIMIT {
+      self.upload_small_import_file(file_path, url).await
+    } else {
+      // For legacy compatibility, generate a task_id since this function doesn't have one
+      let legacy_task_id = Uuid::new_v4().to_string();
+      self
+        .upload_large_import_file(file_path, workspace_id, &legacy_task_id)
+        .await
+    }
+  }
+
+  /// Uploads a small file (≤5GB) using direct PUT to presigned URL
+  pub async fn upload_small_import_file(
     &self,
     file_path: &Path,
     url: &str,
@@ -226,6 +250,85 @@ impl Client {
       error!("File upload failed: {:?}", upload_resp);
       return Err(AppError::S3ResponseError("Cannot upload file to S3".to_string()).into());
     }
+
+    Ok(())
+  }
+
+  /// Uploads a large file (>5GB) using multipart upload via file storage API
+  pub async fn upload_large_import_file(
+    &self,
+    file_path: &Path,
+    workspace_id: &Uuid,
+    task_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let file_metadata = metadata(file_path)?;
+    let file_size = file_metadata.len();
+
+    trace!("start multipart upload for large file: {} bytes", file_size);
+
+    // Step 1: Create multipart upload session
+    // Use task_id to ensure consistent file naming with worker expectations
+    let file_id = format!("import_presigned_url_{}", task_id);
+    let create_req = CreateUploadRequest {
+      parent_dir: "import".to_string(),
+      file_id: file_id.clone(),
+      content_type: "application/zip".to_string(),
+      file_size: Some(file_size),
+    };
+
+    let upload_response = self.create_upload(workspace_id, create_req).await?;
+    trace!(
+      "created multipart upload session: {}",
+      upload_response.upload_id
+    );
+
+    // Step 2: Upload file in chunks
+    const CHUNK_SIZE: usize = 100 * 1024 * 1024; // 100MB chunks
+    let mut file = File::open(file_path).await?;
+    let mut part_number = 1;
+    let mut parts = Vec::new();
+
+    loop {
+      let mut chunk = vec![0u8; CHUNK_SIZE];
+      let bytes_read = file.read(&mut chunk).await?;
+
+      if bytes_read == 0 {
+        break; // EOF
+      }
+
+      chunk.truncate(bytes_read);
+
+      trace!("uploading part {} ({} bytes)", part_number, bytes_read);
+
+      let part_response = self
+        .upload_part(
+          workspace_id,
+          "import",
+          &file_id,
+          &upload_response.upload_id,
+          part_number,
+          chunk,
+        )
+        .await?;
+
+      parts.push(CompletedPartRequest {
+        e_tag: part_response.e_tag,
+        part_number: part_response.part_num,
+      });
+
+      part_number += 1;
+    }
+
+    // Step 3: Complete the multipart upload
+    let complete_req = CompleteUploadRequest {
+      file_id: file_id.clone(),
+      parent_dir: "import".to_string(),
+      upload_id: upload_response.upload_id,
+      parts,
+    };
+
+    self.complete_upload(workspace_id, complete_req).await?;
+    trace!("completed multipart upload for large file");
 
     Ok(())
   }

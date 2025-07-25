@@ -65,6 +65,14 @@ impl EmailNotificationWorker {
           .collect();
 
         for mention in page_mentions {
+          let mut page_url = format!(
+            "{}/app/{}/{}",
+            self.appflowy_web_url, mention.workspace_id, mention.view_id
+          );
+          if let Some(block_id) = mention.block_id {
+            page_url.push_str(&format!("?blockId={}", block_id));
+          }
+
           let param = PageMentionNotificationMailerParam {
             workspace_name: mention.workspace_name,
             mentioned_page_name: mention.view_name,

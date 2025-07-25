@@ -149,7 +149,7 @@ export GOTRUE_MAILER_AUTOCONFIRM=true
 export GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
 
 # Start Docker Compose services
-docker compose --file ./docker-compose-dev.yml up -d --build
+docker compose --file ./compose.dev.yaml up -d --build
 ```
 
 #### 4. Wait for Services to Start

@@ -315,22 +315,24 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   ));
 
   let mailer = get_mailer(&config.mailer).await?;
-  info!("Setting up background notification worker...");
-  let email_notification_interval = config.notification.email_notification_interval_secs;
-  let email_notification_grace_period = config.notification.email_notification_grace_period_secs;
-  let task_appflowy_web_url = config.appflowy_web_url.clone();
-  let task_mailer = mailer.clone();
-  let task_pg_pool = pg_pool.clone();
-  tokio::spawn(async move {
-    let email_notification_worker = EmailNotificationWorker::new(
-      task_pg_pool,
-      task_mailer,
-      email_notification_interval,
-      email_notification_grace_period,
-      &task_appflowy_web_url,
-    );
-    email_notification_worker.start_task().await;
-  });
+  if config.notification.enable_email_notification {
+    info!("Setting up background notification worker...");
+    let email_notification_interval = config.notification.email_notification_interval_secs;
+    let email_notification_grace_period = config.notification.email_notification_grace_period_secs;
+    let task_appflowy_web_url = config.appflowy_web_url.clone();
+    let task_mailer = mailer.clone();
+    let task_pg_pool = pg_pool.clone();
+    tokio::spawn(async move {
+      let email_notification_worker = EmailNotificationWorker::new(
+        task_pg_pool,
+        task_mailer,
+        email_notification_interval,
+        email_notification_grace_period,
+        &task_appflowy_web_url,
+      );
+      email_notification_worker.start_task().await;
+    });
+  }
 
   info!("Setting up Indexer scheduler...");
   let (open_ai_config, azure_ai_config) = get_open_ai_config();

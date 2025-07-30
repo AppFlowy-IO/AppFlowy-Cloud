@@ -1,284 +1,189 @@
-<x-main>
-  <!-- Add body inline styles to ensure background color completely covers -->
-  <style>
-    body {
-      background-color: #eeeefc !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-    }
-    html {
-      background-color: #eeeefc !important;
-    }
-    /* Outlook compatibility */
-    .email-body {
-      background-color: #eeeefc;
-    }
-  </style>
+---
+bodyClass: bg-[#EEEEFC]
+---
 
-  <!-- Outermost wrapper ensures background color completely covers -->
-  <div
-    style="
-      background-color: #eeeefc;
-      width: 100%;
-      min-height: 100vh;
-      margin: 0;
-      padding: 0;
-    "
-    class="email-body"
-  >
-    <!-- Outer container, implements horizontal and vertical centering -->
-    <table
-      width="100%"
-      border="0"
-      cellpadding="0"
-      cellspacing="0"
-      style="background-color: #eeeefc; min-height: 100vh"
-      bgcolor="#EEEEFC"
-    >
+<x-main>
+  <div class="bg-[#EEEEFC] font-helvetica px-4 py-12 text-black">
+    <table align="center">
       <tr>
         <td
-          align="center"
-          valign="middle"
-          style="
-            padding: 24px 20px 40px 20px;
-            background-color: #eeeefc;
-            min-height: 100vh;
-          "
-          bgcolor="#EEEEFC"
+          class="w-[600px] max-w-full bg-white rounded-2xl px-16 py-12 shadow-lg"
         >
-          <!-- Main content area - equivalent to original flex container (white card) -->
-          <table
-            width="600"
-            border="0"
-            cellpadding="0"
-            cellspacing="0"
-            style="
-              min-height: 460px;
-              border-radius: 12px;
-              background-color: #ffffff;
-              margin: 0 auto;
-              max-width: 600px;
-              width: 100%;
-              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            "
-            bgcolor="#ffffff"
+          <p class="w-full text-center mb-6">
+            <img
+              src="{{ mentionerIconUrl }}"
+              class="rounded-full"
+              width="64"
+              height="64"
+              alt="AppFlowy"
+            />
+          </p>
+
+          <p class="w-full text-center text-[32px] mb-8">
+            <span class="text-3xl font-bold">{{ mentionerName }}</span>
+            <span class="mx-2=1">has mentioned you in </span>
+            <span class="text-3xl font-bold">{{ mentionedPageName }}</span>
+          </p>
+
+          <p
+            class="w-full text-center text-[16px]"
+            style="color: var(--Text-secondary, #6f748c)"
           >
-            <tr>
-              <td
-                align="center"
-                valign="middle"
-                style="padding: 40px 32px; min-height: 460px"
+            {{ mentionedAt }}
+          </p>
+          <p
+            class="w-full text-center text-[16px] mb-8"
+            style="color: var(--Text-secondary, #6f748c)"
+          >
+            {{ workspaceName }} / ... / {{ mentionedPageName }}
+          </p>
+
+          <div class="text-center mb-8">
+            <x-button
+              align="center"
+              target="_blank"
+              class="hover:opacity-90 cursor-pointer !text-base !leading-[20px] !bg-[#9327FF] rounded-lg inline-block"
+              style="padding: 12px 36px; font-weight: 500"
+              href="{{ launchWorkspaceUrl }}"
+            >
+              Go to page
+            </x-button>
+          </div>
+
+          <!-- Divider -->
+          <hr class="border-t border-gray-100 my-8" style="opacity: 0.4" />
+
+          <!-- Footer content inside body -->
+          <div class="text-center">
+            <p
+              class="text-sm m-0 mb-6"
+              style="color: var(--Text-secondary, #6f748c)"
+            >
+              Bring projects, knowledge, and teams together with the power of
+              AI.
+            </p>
+
+            <p class="m-0 mb-4">
+              <a
+                href="https://discord.gg/9Q2xaN37tV"
+                class="[text-decoration:none] mx-2"
               >
-                <!-- Content items container - each child element uses separate table to implement gap effect -->
-                <table width="100%" border="0" cellpadding="0" cellspacing="0">
-                  <!-- First content item - avatar -->
-                  <tr>
-                    <td align="center" style="padding-bottom: 24px">
-                      <!-- Avatar container - table layout implementing flex effect -->
-                      <table
-                        border="0"
-                        cellpadding="0"
-                        cellspacing="0"
-                        style="margin: 0 auto"
-                      >
-                        <tr>
-                          <td
-                            align="center"
-                            valign="middle"
-                            style="
-                              width: 64px;
-                              height: 64px;
-                              border-radius: 50%;
-                              overflow: hidden;
-                              background-color: #f0f0f0;
-                              display: block;
-                            "
-                            width="64"
-                            height="64"
-                          >
-                            <!-- Avatar image -->
-                            <img
-                              src="{{ mentionerIconUrl }}"
-                              alt="User Avatar"
-                              style="
-                                width: 64px;
-                                height: 64px;
-                                border-radius: 50%;
-                                object-fit: cover;
-                                display: block;
-                                border: 0;
-                              "
-                              width="64"
-                              height="64"
-                            />
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
+                <img
+                  src="{{ cdnBaseUrl }}images/discord.png"
+                  width="24"
+                  height="24"
+                  alt="Discord"
+                />
+              </a>
+              <a
+                href=" https://github.com/AppFlowy-IO/AppFlowy"
+                class="text-gray-600 [text-decoration:none] mx-2"
+              >
+                <img
+                  src="{{ cdnBaseUrl }}images/github.png"
+                  width="24"
+                  height="24"
+                  alt="GitHub"
+                />
+              </a>
+              <a
+                href=" https://www.reddit.com/r/AppFlowy"
+                class="text-gray-600 [text-decoration:none] mx-2"
+              >
+                <img
+                  src="{{ cdnBaseUrl }}images/reddit.png"
+                  width="24"
+                  height="24"
+                  alt="Reddit"
+                />
+              </a>
+              <a
+                href=" https://twitter.com/appflowy"
+                class="[text-decoration:none] mx-2"
+              >
+                <img
+                  src="{{ cdnBaseUrl }}images/twitter.png"
+                  width="24"
+                  height="24"
+                  alt="Twitter"
+                />
+              </a>
+              <a
+                href=" https://www.youtube.com/@appflowy"
+                class="text-gray-600 [text-decoration:none] mx-2"
+              >
+                <img
+                  src="{{ cdnBaseUrl }}images/youtube.png"
+                  width="24"
+                  height="24"
+                  alt="YouTube"
+                />
+              </a>
+            </p>
 
-                  <!-- Second content item - title -->
-                  <tr>
-                    <td align="center" style="padding-bottom: 24px">
-                      <!-- For better compatibility, use table wrapper to limit width -->
-                      <table
-                        border="0"
-                        cellpadding="0"
-                        cellspacing="0"
-                        style="margin: 0 auto; max-width: 400px; width: 100%"
-                      >
-                        <tr>
-                          <td align="center" style="padding: 0">
-                            <!-- Title content - supports mixed font styles, 400px width limit, supports line wrapping -->
-                            <div
-                              style="
-                                color: #21232a;
-                                text-align: center;
-                                font-family:
-                                  &quot;SF Pro Text&quot;,
-                                  -apple-system,
-                                  BlinkMacSystemFont,
-                                  &quot;Segoe UI&quot;,
-                                  Roboto,
-                                  Helvetica,
-                                  Arial,
-                                  sans-serif;
-                                font-size: 20px;
-                                font-style: normal;
-                                line-height: 28px;
-                                margin: 0;
-                                padding: 0;
-                                word-wrap: break-word;
-                                word-break: break-word;
-                                overflow-wrap: break-word;
-                                white-space: normal;
-                              "
-                            >
-                              <!-- Username (bold) -->
-                              <span style="font-weight: 700"
-                                >{{ mentionerName }}</span
-                              >
-                              <!-- Regular font section -->
-                              <span style="font-weight: 400">
-                                has mentioned you in
-                              </span>
-                              <!-- Page name (bold) -->
-                              <span style="font-weight: 700"
-                                >{{ mentionedPageName }}</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-
-                  <!-- Third content item - mentioned page details -->
-                  <tr>
-                    <td align="center" style="padding-bottom: 8px">
-                      <div
-                        style="
-                          color: #6f748c;
-                          text-align: center;
-                          font-family:
-                            &quot;SF Pro Text&quot;,
-                            -apple-system,
-                            BlinkMacSystemFont,
-                            &quot;Segoe UI&quot;,
-                            Roboto,
-                            Helvetica,
-                            Arial,
-                            sans-serif;
-                          font-size: 12px;
-                          font-style: normal;
-                          font-weight: 400;
-                          line-height: 18px;
-                          letter-spacing: 0.1px;
-                          margin: 0;
-                          padding: 0;
-                        "
-                      >
-                        {{ mentionedAt }}
-                      </div>
-                    </td>
-                  </tr>
-
-                  <tr>
-                    <td align="center" style="padding-bottom: 8px">
-                      <div
-                        style="
-                          color: #6f748c;
-                          text-align: center;
-                          font-family:
-                            &quot;SF Pro Text&quot;,
-                            -apple-system,
-                            BlinkMacSystemFont,
-                            &quot;Segoe UI&quot;,
-                            Roboto,
-                            Helvetica,
-                            Arial,
-                            sans-serif;
-                          font-size: 12px;
-                          font-style: normal;
-                          font-weight: 400;
-                          line-height: 18px;
-                          letter-spacing: 0.1px;
-                          margin: 0;
-                          padding: 0;
-                        "
-                      >
-                        {{ workspaceName }} / ... / {{ mentionedPageName }}
-                      </div>
-                    </td>
-                  </tr>
-
-                  <!-- Fourth content item - button -->
-                  <tr>
-                    <td align="center" style="padding-bottom: 6px">
-                      <!-- Button container - table layout implementing flex effect -->
-                      <table
-                        border="0"
-                        cellpadding="0"
-                        cellspacing="0"
-                        style="margin: 0 auto; min-width: 76px"
-                      >
-                        <tr>
-                          <td align="center" valign="middle">
-                            <x-button
-                              align="center"
-                              href="{{ mentionedPageUrl }}"
-                              style="
-                                background-color: #9327ff;
-                                border-radius: 10px;
-                                padding: 10px 20px;
-                                min-width: 76px;
-                                font-size: 16px;
-                                font-weight: 600;
-                              "
-                            >
-                              <div>Go to page</div>
-                            </x-button>
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-
-                  <!-- Footer section - inside white card -->
-                  <tr>
-                    <td align="center">
-                      <x-footer />
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
+            <p
+              class="m-0"
+              style="
+                color: var(--Text-secondary, #6f748c);
+                font-size: 12px;
+                font-family:
+                  SF Pro Text,
+                  Arial,
+                  sans-serif;
+                font-weight: 400;
+                line-height: 18px;
+                letter-spacing: 0.1px;
+                word-wrap: break-word;
+              "
+            >
+              Copyright © 2025, AppFlowy Inc.
+            </p>
+            <p
+              class="m-0"
+              style="
+                color: var(--Text-secondary, #6f748c);
+                font-size: 12px;
+                font-family:
+                  SF Pro Text,
+                  Arial,
+                  sans-serif;
+                font-weight: 400;
+                line-height: 18px;
+                letter-spacing: 0.1px;
+                word-wrap: break-word;
+              "
+            >
+              Need Help?
+              <a
+                href="mailto:support@appflowy.io"
+                style="
+                  color: var(--Text-secondary, #6f748c);
+                  font-size: 12px;
+                  font-family:
+                    SF Pro Text,
+                    Arial,
+                    sans-serif;
+                  font-weight: 400;
+                  text-decoration: underline;
+                "
+              >
+                support@appflowy.io
+              </a>
+            </p>
+            <!-- Transparent timestamp to prevent email collapse -->
+            <span
+              style="
+                color: transparent;
+                font-size: 1px;
+                line-height: 1px;
+                display: block;
+              "
+            >
+              {{ timestamp }}
+            </span>
+          </div>
         </td>
       </tr>
     </table>
   </div>
-  <!-- Close outermost wrapper div -->
 </x-main>

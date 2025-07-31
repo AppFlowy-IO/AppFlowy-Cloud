@@ -1,17 +1,22 @@
 use crate::api::util::client_version_from_headers;
 use crate::biz::authentication::jwt::{Authorization, UserUuid};
+use crate::biz::user::image_asset::{get_user_image_asset, upload_user_image_asset};
 use crate::biz::user::user_delete::delete_user;
 use crate::biz::user::user_info::{get_profile, get_user_workspace_info, update_user};
 use crate::biz::user::user_verify::verify_token;
 use crate::state::AppState;
+use actix_http::StatusCode;
+use actix_multipart::form::bytes::Bytes;
+use actix_multipart::form::MultipartForm;
 use actix_web::web::{Data, Json};
-use actix_web::{web, Scope};
+use actix_web::{web, HttpResponse, Scope};
 use actix_web::{HttpRequest, Result};
-use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
+use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, UserImageAssetSource};
 use semver::Version;
 use shared_entity::dto::auth_dto::{DeleteUserQuery, SignInTokenResponse, UpdateUserParams};
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
+use uuid::Uuid;
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -19,6 +24,11 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/update").route(web::post().to(update_user_handler)))
     .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
     .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
+    .service(web::resource("/asset/image").route(web::post().to(post_user_image_asset_handler)))
+    .service(
+      web::resource("/asset/image/person/{person_id}/file/{file_id}")
+        .route(web::get().to(get_user_image_asset_handler)),
+    )
     .service(web::resource("").route(web::delete().to(delete_user_handler)))
 }
 
@@ -99,4 +109,40 @@ async fn delete_user_handler(
   )
   .await?;
   Ok(AppResponse::Ok().into())
+}
+
+#[derive(MultipartForm)]
+#[multipart(duplicate_field = "deny")]
+struct UploadUserImageAssetForm {
+  #[multipart(limit = "1MB")]
+  asset: Bytes,
+}
+
+async fn get_user_image_asset_handler(
+  _user_uuid: UserUuid,
+  path: web::Path<(Uuid, String)>,
+  state: Data<AppState>,
+) -> Result<HttpResponse> {
+  let (person_id, file_id) = path.into_inner();
+  let avatar = get_user_image_asset(state.bucket_client.clone(), &person_id, file_id).await?;
+  Ok(
+    HttpResponse::build(StatusCode::OK)
+      .content_type(avatar.content_type)
+      .body(avatar.data),
+  )
+}
+
+async fn post_user_image_asset_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  MultipartForm(form): MultipartForm<UploadUserImageAssetForm>,
+) -> Result<JsonAppResponse<UserImageAssetSource>> {
+  let file_id =
+    upload_user_image_asset(state.bucket_client.clone(), &form.asset, &user_uuid).await?;
+
+  Ok(
+    AppResponse::Ok()
+      .with_data(UserImageAssetSource { file_id })
+      .into(),
+  )
 }

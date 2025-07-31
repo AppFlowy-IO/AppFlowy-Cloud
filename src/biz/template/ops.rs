@@ -14,8 +14,8 @@ use database::{
   template::*,
 };
 use database_entity::dto::{
-  AccountLink, PublishInfo, Template, TemplateCategory, TemplateCategoryType, TemplateCreator,
-  TemplateGroupWithPublishInfo, TemplateHomePage, TemplateMinimalWithPublishInfo,
+  AccountLink, AvatarContent, PublishInfo, Template, TemplateCategory, TemplateCategoryType,
+  TemplateCreator, TemplateGroupWithPublishInfo, TemplateHomePage, TemplateMinimalWithPublishInfo,
   TemplateWithPublishInfo,
 };
 use shared_entity::response::AppResponseError;
@@ -387,11 +387,6 @@ pub async fn get_template_homepage(
 
 fn avatar_object_key(file_id: &str) -> String {
   format!("template-center/avatar/{}", file_id)
-}
-
-pub struct AvatarContent {
-  pub data: Vec<u8>,
-  pub content_type: String,
 }
 
 pub async fn get_avatar(

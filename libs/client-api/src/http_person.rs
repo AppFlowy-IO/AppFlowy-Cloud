@@ -1,8 +1,9 @@
+use app_error::AppError;
 use client_api_entity::{
   MentionablePerson, MentionablePersons, MentionablePersonsWithAccess, PageMentionUpdate,
-  WorkspaceMemberProfile,
+  UserImageAssetSource, WorkspaceMemberProfile,
 };
-use reqwest::Method;
+use reqwest::{multipart, Method, StatusCode};
 use shared_entity::response::AppResponseError;
 use tracing::instrument;
 use uuid::Uuid;
@@ -97,5 +98,54 @@ impl Client {
       .send()
       .await?;
     process_response_error(resp).await
+  }
+
+  pub async fn upload_user_image_asset(
+    &self,
+    local_file_path: &str,
+  ) -> Result<UserImageAssetSource, AppResponseError> {
+    let form = multipart::Form::new()
+      .file("asset", local_file_path)
+      .await?;
+    let url = format!("{}/api/user/asset/image", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .multipart(form)
+      .send()
+      .await?;
+    process_response_data(resp).await
+  }
+
+  pub async fn get_user_image_asset(
+    &self,
+    person_id: &Uuid,
+    file_id: &str,
+  ) -> Result<Vec<u8>, AppResponseError> {
+    let url = format!(
+      "{}/api/user/asset/image/person/{}/file/{}",
+      self.base_url, person_id, file_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    match resp.status() {
+      StatusCode::OK => Ok(resp.bytes().await?.to_vec()),
+      StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(
+        url.to_owned(),
+      ))),
+      status => {
+        let message = resp
+          .text()
+          .await
+          .unwrap_or_else(|_| "Unknown error".to_string());
+        Err(AppResponseError::from(AppError::Unhandled(format!(
+          "status code: {}, message: {}",
+          status, message
+        ))))
+      },
+    }
   }
 }

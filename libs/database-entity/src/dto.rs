@@ -1178,6 +1178,23 @@ pub struct AvatarImageSource {
   pub file_id: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UserImageAssetSource {
+  pub file_id: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UserImageAssetContent {
+  pub data: Vec<u8>,
+  pub content_type: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AvatarContent {
+  pub data: Vec<u8>,
+  pub content_type: String,
+}
+
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Copy, Clone)]
 #[repr(i32)]
 pub enum AccessRequestStatus {

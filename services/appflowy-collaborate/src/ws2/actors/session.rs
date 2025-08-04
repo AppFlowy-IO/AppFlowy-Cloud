@@ -219,10 +219,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
             ctx.pong(&bytes);
           },
           ws::Message::Pong(_) => {},
-          ws::Message::Text(_) => ctx.close(Some(CloseReason::from((
-            CloseCode::Unsupported,
-            "only binary content is supported",
-          )))),
+          ws::Message::Text(data) => ctx.text(data), // echo text messages back
           ws::Message::Binary(bytes) => {
             self.handle_protocol(bytes, ctx);
           },

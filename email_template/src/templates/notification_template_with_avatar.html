@@ -1,0 +1,227 @@
+---
+title: "{{ userName }} mentioned you in {{ contentName }}"
+preheader: "{{ userName }} has mentioned you in {{ contentName }}. Click to view the notification."
+bodyClass: "#EEEEFC"
+---
+
+<x-main>
+  <div style="display: none; max-height: 0px; overflow: hidden;">
+    {{ userName }} has mentioned you in {{ contentName }} on {{ timestamp }}
+  </div>
+
+  <table
+    width="100%"
+    border="0"
+    cellpadding="0"
+    cellspacing="0"
+    bgcolor="#EEEEFC"
+    style="
+      font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      padding: 24px;
+      color: #000000;
+    "
+  >
+    <tr>
+      <td align="center" valign="top">
+        <table
+          width="600"
+          border="0"
+          cellpadding="0"
+          cellspacing="0"
+          bgcolor="#ffffff"
+          style="border-radius: 12px; padding: 32px; margin: 0 auto"
+        >
+          <tr>
+            <td align="center" style="padding-bottom: 24px">
+              <img
+                src="{{ cdnBaseUrl }}images/appflowy.png"
+                width="64"
+                height="64"
+                style="border: 0; display: block; margin: 0 auto; border-radius: 50%"
+              />
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-bottom: 8px">
+              <h2
+                style="
+                  font-size: 26px;
+                  font-weight: bold;
+                  margin: 0;
+                  color: #000000;
+                  text-align: center;
+                "
+              >
+                <span style="text-decoration: underline;">{{ userName }}</span>
+                <span style="font-weight: normal;">has mentioned you in</span>
+              </h2>
+              <h2
+                style="
+                  font-size: 26px;
+                  font-weight: bold;
+                  margin: 8px 0 0 0;
+                  color: #000000;
+                  text-align: center;
+                "
+              >
+                <span style="text-decoration: underline;">{{ contentName }}</span>
+              </h2>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-bottom: 24px">
+              <p style="font-size: 14px; color: #6f748c; margin: 0; text-align: center;">
+                {{ timestamp }}
+              </p>
+              <p style="font-size: 14px; color: #6f748c; margin: 4px 0 0 0; text-align: center;">
+                {{ contentPath }}
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-bottom: 24px">
+              <table
+                border="0"
+                cellpadding="0"
+                cellspacing="0"
+                style="margin: 0 auto"
+              >
+                <tr>
+                  <td
+                    align="center"
+                    bgcolor="#9327FF"
+                    style="border-radius: 10px; padding: 16px 28px"
+                  >
+                    <a
+                      href="{{ actionUrl }}"
+                      style="
+                        color: #ffffff;
+                        font-weight: bold;
+                        font-size: 18px;
+                        text-decoration: none;
+                        display: inline-block;
+                      "
+                      >Go to workspace</a
+                    >
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-bottom: 24px">
+              <div
+                style="
+                  border-top: 1px solid #dde2f1;
+                  padding-top: 24px;
+                  font-size: 14px;
+                  color: #6f748c;
+                  text-align: center;
+                "
+              >
+                Bring projects, knowledge, and teams together with the power of AI.
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+<td align="center">
+              <p style="margin: 0 0 15px 0; text-align: center;">
+                <a
+                  href="https://discord.com/invite/aAGATKfwVn"
+                  style="
+                    text-decoration: none;
+                    display: inline-block;
+                    margin: 0 10px 0 0;
+                  "
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/discord.png"
+                    width="20"
+                    height="20"
+                    alt="Discord"
+                    style="border: 0"
+                  />
+                </a>
+                <a
+                  href="https://github.com/AppFlowy-IO/AppFlowy"
+                  style="
+                    text-decoration: none;
+                    display: inline-block;
+                    margin: 0 10px 0 0;
+                  "
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/github.png"
+                    width="20"
+                    height="20"
+                    alt="GitHub"
+                    style="border: 0"
+                  />
+                </a>
+                <a
+                  href="https://www.reddit.com/r/AppFlowy/"
+                  style="
+                    text-decoration: none;
+                    display: inline-block;
+                    margin: 0 10px 0 0;
+                  "
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/reddit.png"
+                    width="20"
+                    height="20"
+                    alt="Reddit"
+                    style="border: 0"
+                  />
+                </a>
+                <a
+                  href="https://x.com/appflowy"
+                  style="
+text-decoration: none;
+                    display: inline-block;
+                    margin: 0 10px 0 0;
+                  "
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/twitter.png"
+                    width="20"
+                    height="20"
+                    alt="Twitter"
+                    style="border: 0"
+                  />
+                </a>
+                <a
+                  href="https://www.youtube.com/channel/UCMX3I1fNs-PFXD3Cq5G1LZg"
+                  style="text-decoration: none; display: inline-block"
+                >
+                  <img
+                    src="{{ cdnBaseUrl }}images/youtube.png"
+                    width="20"
+                    height="20"
+                    alt="Youtube"
+                    style="border: 0"
+                  />
+                </a>
+              </p>
+
+              <p style="font-size: 14px; color: #6f748c; margin: 0 0 10px 0; text-align: center;">
+                Copyright © 2025, AppFlowy Inc.
+              </p>
+              <p style="font-size: 14px; color: #6f748c; margin: 0; text-align: center;">
+                Need Help?
+                <a href="mailto:support@appflowy.io" style="color: #6f748c"
+                  >support@appflowy.io</a
+                >
+              </p>
+</td>
+          </tr>
+        </table>
+</td>
+</tr>
+  </table>
+</x-main>

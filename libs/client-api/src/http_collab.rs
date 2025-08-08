@@ -12,9 +12,10 @@ use client_api_entity::workspace_dto::{
   ListDatabaseRowUpdatedParam, UpsertDatatabaseRow,
 };
 use client_api_entity::{
-  AFCollabEmbedInfo, BatchQueryCollabParams, BatchQueryCollabResult, CollabParams,
-  CreateCollabData, CreateCollabParams, DeleteCollabParams, PublishCollabItem, QueryCollab,
-  QueryCollabParams, RepeatedAFCollabEmbedInfo, UpdateCollabWebParams,
+  AFCollabEmbedInfo, AFDatabaseRowDocumentCollabExistenceInfo, BatchQueryCollabParams,
+  BatchQueryCollabResult, CollabParams, CreateCollabData, CreateCollabParams, DeleteCollabParams,
+  PublishCollabItem, QueryCollab, QueryCollabParams, RepeatedAFCollabEmbedInfo,
+  UpdateCollabWebParams,
 };
 use collab_rt_entity::collab_proto::{CollabDocStateParams, PayloadCompressionType};
 use collab_rt_entity::HttpRealtimeMessage;
@@ -428,6 +429,24 @@ impl Client {
       .send()
       .await?;
     process_response_error(resp).await
+  }
+
+  pub async fn check_if_row_document_collab_exists(
+    &self,
+    workspace_id: &Uuid,
+    object_id: &Uuid,
+  ) -> Result<bool, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{workspace_id}/collab/{object_id}/row-document-collab-exists",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    let info = process_response_data::<AFDatabaseRowDocumentCollabExistenceInfo>(resp).await?;
+    Ok(info.exists)
   }
 
   pub async fn get_collab_embed_info(

@@ -453,6 +453,11 @@ pub struct QueryWorkspaceMember {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct AFDatabaseRowDocumentCollabExistenceInfo {
+  pub exists: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AFCollabEmbedInfo {
   pub object_id: Uuid,
   /// The timestamp when the object's embeddings updated

@@ -5,7 +5,7 @@ use app_error::AppError;
 use async_trait::async_trait;
 use collab::lock::RwLock;
 use collab_database::database_trait::{DatabaseCollabReader, EncodeCollabByOid};
-use collab_database::rows::{DatabaseRow, RowId};
+use collab_database::rows::{meta_id_from_row_id, DatabaseRow, RowId, RowMetaKey};
 use collab_database::{
   database::{gen_database_group_id, gen_field_id},
   entity::FieldType,
@@ -21,7 +21,8 @@ use collab_database::{
 };
 use collab_entity::{CollabType, EncodedCollab};
 use dashmap::DashMap;
-use database::collab::{CollabStore, GetCollabOrigin};
+use database::collab::{select_collab_id_exists, CollabStore, GetCollabOrigin};
+use sqlx::PgPool;
 use uuid::Uuid;
 use yrs::block::ClientID;
 
@@ -165,6 +166,17 @@ fn create_card_status_field() -> Field {
   let field_id = gen_field_id();
   Field::new(field_id, "Status".to_string(), field_type.into(), false)
     .with_type_option_data(field_type, default_select_type_option.into())
+}
+
+pub async fn check_if_row_document_collab_exists(
+  pg_pool: &PgPool,
+  row_id: &Uuid,
+) -> Result<bool, AppError> {
+  let row_document_collab_id = meta_id_from_row_id(row_id, RowMetaKey::DocumentId);
+  let row_document_collab_id = Uuid::parse_str(&row_document_collab_id)
+    .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid row document collab ID")))?;
+  let exists = select_collab_id_exists(pg_pool, &row_document_collab_id).await?;
+  Ok(exists)
 }
 
 #[derive(Clone)]

@@ -230,6 +230,24 @@ where
   Ok(records)
 }
 
+pub async fn select_collab_id_exists<'a, E>(conn: E, object_id: &Uuid) -> Result<bool, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let exists = sqlx::query_scalar!(
+    r#"
+        SELECT EXISTS (
+            SELECT 1 FROM af_collab
+            WHERE oid = $1 AND deleted_at IS NULL
+        )
+        "#,
+    object_id,
+  )
+  .fetch_one(conn)
+  .await?;
+  Ok(exists.unwrap_or(false))
+}
+
 #[inline]
 pub async fn select_blob_from_af_collab<'a, E>(
   conn: E,

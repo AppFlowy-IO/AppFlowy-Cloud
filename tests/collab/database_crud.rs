@@ -37,6 +37,12 @@ async fn database_row_upsert_with_doc() {
       row_detail.doc,
       Some(String::from("This is a document of a database row"))
     );
+    let row_uuid = uuid::Uuid::parse_str(&row_id).unwrap();
+    let row_collab_doc_exists = &c
+      .check_if_row_document_collab_exists(&workspace_id, &row_uuid)
+      .await
+      .unwrap();
+    assert!(row_collab_doc_exists)
   }
   // Upsert row with another doc
   let _ = c

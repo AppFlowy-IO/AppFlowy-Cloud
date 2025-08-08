@@ -3,6 +3,7 @@ use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
 use crate::biz::authentication::jwt::{Authorization, OptionalUserUuid, UserUuid};
+use crate::biz::collab::database::check_if_row_document_collab_exists;
 use crate::biz::collab::ops::{
   get_user_favorite_folder_views, get_user_recent_folder_views, get_user_trash_folder_views,
 };
@@ -183,6 +184,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/v1/{workspace_id}/collab/{object_id}/web-update")
         .route(web::post().to(post_web_update_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/collab/{object_id}/row-document-collab-exists")
+          .route(web::get().to(get_row_document_collab_exists_handler)),
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}/embed-info")
@@ -1348,6 +1353,28 @@ async fn post_web_update_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+#[instrument(level = "debug", skip_all)]
+async fn get_row_document_collab_exists_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(Uuid, Uuid)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<AFDatabaseRowDocumentCollabExistenceInfo>>> {
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  let (workspace_id, object_id) = path.into_inner();
+  state
+    .collab_access_control
+    .enforce_action(&workspace_id, &uid, &object_id, Action::Read)
+    .await?;
+  let exists = check_if_row_document_collab_exists(&state.pg_pool, &object_id).await?;
+  Ok(Json(AppResponse::Ok().with_data(
+    AFDatabaseRowDocumentCollabExistenceInfo { exists },
+  )))
 }
 
 async fn post_space_handler(

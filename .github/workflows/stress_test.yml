@@ -68,8 +68,8 @@ jobs:
 
       - name: Start Docker Compose Services
         run: |
-          docker compose -f docker-compose-dev.yml down
-          docker compose -f docker-compose-dev.yml up -d
+          docker compose -f compose.dev.yaml down
+          docker compose -f compose.dev.yaml up -d
           ./script/code_gen.sh
           cargo sqlx database create && cargo sqlx migrate run
 

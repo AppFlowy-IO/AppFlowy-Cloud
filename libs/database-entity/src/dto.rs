@@ -1258,7 +1258,14 @@ pub struct CreateImportTask {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateImportTaskResponse {
   pub task_id: String,
-  pub presigned_url: String,
+  /// For small file uploads only
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub presigned_url: Option<String>,
+  /// Indicates the upload method to use
+  pub upload_type: String,
+  /// For multipart uploads only
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub workspace_id: Option<String>,
 }
 
 #[derive(Debug)]

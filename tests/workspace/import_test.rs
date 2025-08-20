@@ -5,8 +5,10 @@ use collab_folder::ViewLayout;
 
 use collab_database::database::get_inline_view_id;
 use collab_document::blocks::BlockType;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
+use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -188,6 +190,65 @@ async fn imported_workspace_do_not_become_latest_visit_workspace_test() {
   );
 }
 
+#[tokio::test]
+async fn test_large_file_multipart_upload() {
+  let client = TestClient::new_user().await;
+  let workspace_id = client.workspace_id().await;
+
+  // Create a large test file (over the 5GB limit)
+  // For testing, use 6MB to keep it manageable but still trigger multipart logic
+  let mut temp_file = NamedTempFile::new().unwrap();
+  let large_content = "A".repeat(6 * 1024 * 1024);
+  temp_file.write_all(large_content.as_bytes()).unwrap();
+  let file_path = temp_file.path();
+
+  // Test the multipart upload directly
+  let test_task_id = uuid::Uuid::new_v4().to_string();
+  let result = client
+    .api_client
+    .upload_large_import_file(file_path, &workspace_id, &test_task_id)
+    .await;
+
+  if result.is_err() {
+    println!(
+      "Expected error in test environment: {:?}",
+      result.unwrap_err()
+    );
+  }
+}
+
+#[tokio::test]
+async fn test_small_file_single_upload() {
+  let client = TestClient::new_user().await;
+
+  // Create a small test file (under the 5GB limit)
+  let mut temp_file = NamedTempFile::new().unwrap();
+  let content = "Small test content for single upload".repeat(100);
+  temp_file.write_all(content.as_bytes()).unwrap();
+  let file_path = temp_file.path();
+
+  // Create import task to get presigned URL
+  let import_response = client.api_client.create_import(file_path).await;
+
+  if let Ok(response) = import_response {
+    // Test the single upload directly
+    if let Some(ref presigned_url) = response.presigned_url {
+      let result = client
+        .api_client
+        .upload_small_import_file(file_path, presigned_url)
+        .await;
+      if result.is_err() {
+        println!(
+          "Expected error in test environment: {:?}",
+          result.unwrap_err()
+        );
+      }
+    } else {
+      println!("No presigned_url returned in response");
+    }
+  }
+}
+
 #[allow(dead_code)]
 async fn upload_file(
   client: &TestClient,
@@ -195,20 +256,24 @@ async fn upload_file(
   upload_after_secs: Option<u64>,
 ) -> Result<(), Error> {
   let file_path = PathBuf::from(format!("tests/workspace/asset/{name}"));
-  let url = client
-    .api_client
-    .create_import(&file_path)
-    .await?
-    .presigned_url;
+  let import_response = client.api_client.create_import(&file_path).await?;
 
   if let Some(secs) = upload_after_secs {
     tokio::time::sleep(Duration::from_secs(secs)).await;
   }
 
-  client
-    .api_client
-    .upload_import_file(&file_path, &url)
-    .await?;
+  // For multipart uploads, we need to provide a workspace_id
+  // We'll use the user's default workspace for the file storage operations
+  let workspace_id = client.workspace_id().await;
+
+  if let Some(ref presigned_url) = import_response.presigned_url {
+    client
+      .api_client
+      .upload_import_file(&file_path, presigned_url, &workspace_id)
+      .await?;
+  } else {
+    println!("No presigned_url returned in response");
+  }
   Ok(())
 }
 

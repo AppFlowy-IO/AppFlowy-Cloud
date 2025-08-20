@@ -49,14 +49,8 @@ async fn create_import_handler(
   params.validate().map_err(AppError::from)?;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   check_maximum_task(&state, uid).await?;
-  let s3_key = format!("import_presigned_url_{}", Uuid::new_v4());
 
-  // Generate presigned url with 10 minutes expiration
-  let presigned_url = state
-    .bucket_client
-    .gen_presigned_url(&s3_key, params.content_length, 600)
-    .await?;
-  trace!("[Import] Presigned url: {}", presigned_url);
+  const FIVE_GB: u64 = 5 * 1024 * 1024 * 1024;
 
   let (user_name, user_email) = select_name_and_email_from_uuid(&state.pg_pool, &user_uuid).await?;
   let host = get_host_from_request(&req);
@@ -78,6 +72,33 @@ async fn create_import_handler(
   );
   let timestamp = chrono::Utc::now().timestamp();
   let task_id = Uuid::new_v4();
+
+  let s3_key = format!("{}/import/import_presigned_url_{}", workspace_id, task_id);
+
+  let (upload_type, presigned_url, workspace_id_option) = if params.content_length >= FIVE_GB {
+    // Large file: Use multipart upload
+    // NOTE: The multipart upload must put the final file at s3_key location
+    trace!(
+      "Large file ({} bytes), using multipart upload",
+      params.content_length
+    );
+    ("multipart".to_string(), None, Some(workspace_id.clone()))
+  } else {
+    // Small file: Use presigned URL
+    trace!(
+      "Small file ({} bytes), using presigned URL",
+      params.content_length
+    );
+
+    let presigned_url = state
+      .bucket_client
+      .gen_presigned_url(&s3_key, params.content_length, 600)
+      .await?;
+    trace!("[Import] Presigned url: {}", presigned_url);
+
+    ("presigned_url".to_string(), Some(presigned_url), None)
+  };
+
   let task = json!({
       "notion": {
          "uid": uid,
@@ -85,7 +106,7 @@ async fn create_import_handler(
          "user_email": user_email,
          "task_id": task_id.to_string(),
          "workspace_id": workspace_id,
-         "file_size":params.content_length,
+         "file_size": params.content_length,
          "created_at": timestamp,
          "s3_key": s3_key,
          "host": host,
@@ -96,6 +117,8 @@ async fn create_import_handler(
   let data = CreateImportTaskResponse {
     task_id: task_id.to_string(),
     presigned_url: presigned_url.clone(),
+    upload_type,
+    workspace_id: workspace_id_option,
   };
 
   create_upload_task(
@@ -105,7 +128,7 @@ async fn create_import_handler(
     &host,
     &workspace_id,
     0,
-    Some(presigned_url),
+    presigned_url,
     &state.redis_connection_manager,
     &state.pg_pool,
   )

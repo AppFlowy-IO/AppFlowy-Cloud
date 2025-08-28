@@ -152,9 +152,9 @@ services:
 
   admin_frontend:
     restart: on-failure
-    build:
-      context: .
-      dockerfile: ./admin_frontend/Dockerfile
+    #    build:
+    #      context: .
+    #      dockerfile: ./admin_frontend/Dockerfile
     image: appflowyinc/admin_frontend:${APPFLOWY_ADMIN_FRONTEND_VERSION:-latest}
     environment:
       - RUST_LOG=${RUST_LOG:-info}
@@ -204,9 +204,9 @@ services:
   appflowy_worker:
     restart: on-failure
     image: appflowyinc/appflowy_worker:${APPFLOWY_WORKER_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: ./services/appflowy-worker/Dockerfile
+    #    build:
+    #      context: .
+    #      dockerfile: ./services/appflowy-worker/Dockerfile
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_ENVIRONMENT=production
@@ -237,9 +237,9 @@ services:
     depends_on:
       - appflowy_cloud
     environment:
-      - AF_BASE_URL=${APPFLOWY_BASE_URL}
-      - AF_GOTRUE_URL=${APPFLOWY_BASE_URL}/gotrue
-      - AF_WS_V2_URL=${APPFLOWY_WEBSOCKET_BASE_URL}
+      - APPFLOWY_BASE_URL=${APPFLOWY_BASE_URL}
+      - APPFLOWY_GOTRUE_BASE_URL=${APPFLOWY_BASE_URL}/gotrue
+      - APPFLOWY_WS_BASE_URL=${APPFLOWY_WEBSOCKET_BASE_URL}
 volumes:
   postgres_data:
   minio_data:

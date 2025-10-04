@@ -17,6 +17,7 @@ flake.nix
 flake.lock
 .envrc
 .direnv/
+.claude
 
 **/.DS_Store
 **/.env.*

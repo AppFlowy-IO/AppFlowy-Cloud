@@ -17,8 +17,10 @@ flake.nix
 flake.lock
 .envrc
 .direnv/
+.claude
 
 **/.DS_Store
 **/.env.*
 
 docker-compose.override.yml
+.serena

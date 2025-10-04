@@ -1226,7 +1226,7 @@ analyze_service_logs() {
     print_verbose "Analyzing service logs..."
 
     local compose_cmd=$(get_compose_command)
-    local services="gotrue appflowy_cloud admin_frontend"
+    local services="gotrue appflowy_cloud nginx admin_frontend"
 
     # Critical error patterns (actual problems)
     local patterns=(
@@ -1237,6 +1237,7 @@ analyze_service_logs() {
         "cannot connect"
         "failed to start"
         "failed to connect"
+        "\[error\]"
     )
 
     # Error level patterns (need context)
@@ -1247,6 +1248,7 @@ analyze_service_logs() {
         'level=fatal'
         'ERROR:'
         'FATAL:'
+        '\[warn\]'
     )
 
     for service in $services; do

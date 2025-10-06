@@ -1306,6 +1306,102 @@ check_admin_credentials() {
     return 0
 }
 
+check_smtp_configuration() {
+    print_verbose "Checking SMTP configuration for emails..."
+
+    if ! load_env_vars; then
+        return 1
+    fi
+
+    local gotrue_smtp_host="${GOTRUE_SMTP_HOST}"
+    local gotrue_smtp_port="${GOTRUE_SMTP_PORT}"
+    local gotrue_smtp_user="${GOTRUE_SMTP_USER}"
+
+    local appflowy_smtp_host="${APPFLOWY_MAILER_SMTP_HOST}"
+    local appflowy_smtp_port="${APPFLOWY_MAILER_SMTP_PORT}"
+    local appflowy_smtp_username="${APPFLOWY_MAILER_SMTP_USERNAME}"
+    local appflowy_smtp_email="${APPFLOWY_MAILER_SMTP_EMAIL}"
+
+    local has_gotrue_smtp=false
+    local has_appflowy_smtp=false
+    local has_issues=false
+
+    # Check if GOTRUE SMTP is configured
+    if [[ -n "$gotrue_smtp_host" && -n "$gotrue_smtp_port" ]]; then
+        has_gotrue_smtp=true
+        print_success "GOTRUE SMTP configured: $gotrue_smtp_host:$gotrue_smtp_port"
+        print_verbose "  Used for: Authentication emails (signup, password reset, magic links)"
+    fi
+
+    # Check if APPFLOWY MAILER SMTP is configured
+    if [[ -n "$appflowy_smtp_host" && -n "$appflowy_smtp_port" ]]; then
+        has_appflowy_smtp=true
+        print_success "APPFLOWY_MAILER SMTP configured: $appflowy_smtp_host:$appflowy_smtp_port"
+        print_verbose "  Used for: Workspace invitations, sharing notifications"
+    fi
+
+    # Critical check: GOTRUE configured but APPFLOWY not configured
+    if [[ "$has_gotrue_smtp" == "true" && "$has_appflowy_smtp" == "false" ]]; then
+        print_error "SMTP Configuration Incomplete (CRITICAL for workspace sharing)"
+        print_error "  Issue: GOTRUE_SMTP is configured but APPFLOWY_MAILER_SMTP is not"
+        print_error "  Impact: Users CANNOT share workspaces or send invitations"
+        print_error "  GOTRUE_SMTP is only for auth emails (signup, password reset)"
+        print_error "  APPFLOWY_MAILER_SMTP is required for workspace invitations"
+        print_error ""
+        print_error "  Fix: Add these to .env file:"
+        print_error "    APPFLOWY_MAILER_SMTP_HOST=$gotrue_smtp_host"
+        print_error "    APPFLOWY_MAILER_SMTP_PORT=$gotrue_smtp_port"
+        if [[ -n "$gotrue_smtp_user" ]]; then
+            print_error "    APPFLOWY_MAILER_SMTP_USERNAME=$gotrue_smtp_user"
+            print_error "    APPFLOWY_MAILER_SMTP_EMAIL=$gotrue_smtp_user"
+        fi
+        print_error "    APPFLOWY_MAILER_SMTP_PASSWORD=<your_smtp_password>"
+        print_error "    APPFLOWY_MAILER_SMTP_TLS_KIND=wrapper  # or 'required'"
+        print_error ""
+        print_error "  Then restart: docker compose restart appflowy_cloud"
+        has_issues=true
+    fi
+
+    # Warning: Neither configured
+    if [[ "$has_gotrue_smtp" == "false" && "$has_appflowy_smtp" == "false" ]]; then
+        print_info "SMTP: Not configured (email features disabled)"
+        print_info "  Without SMTP, the following features won't work:"
+        print_info "    - Workspace invitations (users cannot share workspaces)"
+        print_info "    - Email notifications"
+        print_info "    - Password reset emails (if GOTRUE_MAILER_AUTOCONFIRM=false)"
+        print_info "  To enable email features, configure both:"
+        print_info "    - GOTRUE_SMTP_* (for authentication emails)"
+        print_info "    - APPFLOWY_MAILER_SMTP_* (for workspace invitations)"
+    fi
+
+    # Success: Both configured
+    if [[ "$has_gotrue_smtp" == "true" && "$has_appflowy_smtp" == "true" ]]; then
+        print_success "SMTP: Fully configured for all email features"
+
+        # Check if credentials are set
+        if [[ -z "$appflowy_smtp_username" || -z "$appflowy_smtp_email" ]]; then
+            print_warning "APPFLOWY_MAILER_SMTP_USERNAME or APPFLOWY_MAILER_SMTP_EMAIL not set"
+        fi
+    fi
+
+    # Additional validation: Check TLS kind
+    local tls_kind="${APPFLOWY_MAILER_SMTP_TLS_KIND}"
+    if [[ "$has_appflowy_smtp" == "true" ]]; then
+        if [[ -z "$tls_kind" ]]; then
+            print_warning "APPFLOWY_MAILER_SMTP_TLS_KIND not set (defaults may not work)"
+            print_warning "  Recommended values: 'wrapper' (port 465), 'required' (port 587)"
+        else
+            print_verbose "TLS Kind: $tls_kind"
+        fi
+    fi
+
+    if [[ "$has_issues" == "true" ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
 # ==================== FUNCTIONAL TESTS ====================
 
 check_minio_storage() {
@@ -1862,6 +1958,19 @@ generate_recommendations() {
             echo ""
             has_critical=true
         fi
+
+        if echo "$issue" | grep -qi "SMTP Configuration Incomplete"; then
+            echo "Priority 1 (CRITICAL): SMTP Configuration for Workspace Sharing"
+            echo "  - Issue: GOTRUE_SMTP configured but APPFLOWY_MAILER_SMTP is missing"
+            echo "  - Impact: Users CANNOT share workspaces or send invitations"
+            echo "  - Common mistake: Configuring only GOTRUE_SMTP (for auth) but forgetting APPFLOWY_MAILER_SMTP (for invitations)"
+            echo "  - Fix: Both SMTP configurations are required:"
+            echo "    - GOTRUE_SMTP_* for authentication emails (signup, password reset)"
+            echo "    - APPFLOWY_MAILER_SMTP_* for workspace invitations and sharing"
+            echo "  - Add to .env and restart: docker compose restart appflowy_cloud"
+            echo ""
+            has_critical=true
+        fi
     done
 
     # Check for warnings
@@ -1933,6 +2042,7 @@ main() {
     check_scheme_consistency
     check_gotrue_configuration
     check_admin_credentials
+    check_smtp_configuration
     check_nginx_websocket_config
     check_production_https_websocket
     check_ssl_certificate

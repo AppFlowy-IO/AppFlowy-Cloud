@@ -62,6 +62,11 @@ declare -a ISSUES=()
 declare -a WARNINGS=()
 declare -a SUCCESSES=()
 
+# Service version info
+APPFLOWY_CLOUD_VERSION=""
+ADMIN_FRONTEND_VERSION=""
+DEPLOYMENT_TYPE=""
+
 # Timestamp for report
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 REPORT_FILE="$PROJECT_ROOT/appflowy_diagnostic_$TIMESTAMP.log"
@@ -382,6 +387,59 @@ check_container_status() {
     done
 }
 
+check_service_versions() {
+    print_verbose "Checking service versions..."
+
+    local compose_cmd=$(get_compose_command)
+
+    # Check AppFlowy Cloud version
+    local appflowy_cloud_container=$($compose_cmd ps -q appflowy_cloud 2>/dev/null)
+    if [[ -n "$appflowy_cloud_container" ]]; then
+        # Extract version from logs - look for "Using AppFlowy Cloud version:X.X.X"
+        APPFLOWY_CLOUD_VERSION=$(docker logs "$appflowy_cloud_container" 2>&1 | grep -oE 'Using AppFlowy Cloud version:[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/Using AppFlowy Cloud version://')
+
+        if [[ -n "$APPFLOWY_CLOUD_VERSION" ]]; then
+            print_success "AppFlowy Cloud version: $APPFLOWY_CLOUD_VERSION"
+        else
+            print_verbose "AppFlowy Cloud: Version not found in logs"
+        fi
+
+        # Check deployment type
+        DEPLOYMENT_TYPE=$(docker logs "$appflowy_cloud_container" 2>&1 | grep -oE 'deployment:[a-z-]+' | head -1 | sed 's/deployment://')
+        if [[ -n "$DEPLOYMENT_TYPE" ]]; then
+            print_verbose "Deployment type: $DEPLOYMENT_TYPE"
+        fi
+    else
+        print_verbose "AppFlowy Cloud: Container not running"
+    fi
+
+    # Check Admin Frontend version
+    local admin_frontend_container=$($compose_cmd ps -q admin_frontend 2>/dev/null)
+    if [[ -n "$admin_frontend_container" ]]; then
+        # Extract version from logs - look for "Version: X.X.X"
+        ADMIN_FRONTEND_VERSION=$(docker logs "$admin_frontend_container" 2>&1 | grep -E '^Version:' | head -1 | awk '{print $2}')
+
+        if [[ -n "$ADMIN_FRONTEND_VERSION" ]]; then
+            print_success "Admin Frontend version: $ADMIN_FRONTEND_VERSION"
+        else
+            print_verbose "Admin Frontend: Version not found in logs"
+        fi
+    else
+        print_verbose "Admin Frontend: Container not running"
+    fi
+
+    # Check GoTrue version (from image tag)
+    local gotrue_container=$($compose_cmd ps -q gotrue 2>/dev/null)
+    if [[ -n "$gotrue_container" ]]; then
+        local gotrue_image=$(docker inspect --format='{{.Config.Image}}' "$gotrue_container" 2>/dev/null)
+        if [[ -n "$gotrue_image" ]]; then
+            print_verbose "GoTrue image: $gotrue_image"
+        fi
+    fi
+
+    return 0
+}
+
 # ==================== HEALTH ENDPOINT CHECKS ====================
 
 check_health_endpoint() {
@@ -589,15 +647,381 @@ check_websocket_url() {
     if [[ -n "$base_url" ]]; then
         local base_scheme
         base_scheme=$(extract_url_scheme "$base_url")
+        local ws_host
+        ws_host=$(extract_url_host "$ws_url")
+
         if [[ "$base_scheme" == "https" && "$ws_scheme" != "wss" ]]; then
-            print_warning "$label: Base URL uses https but WebSocket URL is $ws_scheme://"
-            print_warning "  Fix: Use wss:// when the site is served over https"
+            # Only error for non-localhost deployments
+            if [[ "$ws_host" != "localhost" && "$ws_host" != "127.0.0.1" ]]; then
+                print_error "$label: Base URL uses https but WebSocket URL is $ws_scheme:// (CRITICAL)"
+                print_error "  Fix: Use wss:// when the site is served over https"
+                print_error "  Update .env: APPFLOWY_WS_BASE_URL=wss://yourdomain.com/ws/v2"
+                print_error "  Or update .env: WS_SCHEME=wss (if using variable substitution)"
+                return 1
+            else
+                print_verbose "$label: Localhost deployment - scheme mismatch acceptable for local testing"
+            fi
         elif [[ "$base_scheme" == "http" && "$ws_scheme" != "ws" ]]; then
             print_warning "$label: Base URL uses http but WebSocket URL is $ws_scheme://"
             print_warning "  Fix: Use ws:// when the site is served over http"
         fi
     fi
 
+    return 0
+}
+
+check_nginx_websocket_config() {
+    print_verbose "Checking nginx WebSocket configuration..."
+
+    local nginx_conf_files=(
+        "$PROJECT_ROOT/nginx/nginx.conf"
+        "$PROJECT_ROOT/nginx.conf"
+        "$PROJECT_ROOT/nginx/conf.d/default.conf"
+    )
+
+    local nginx_conf=""
+    for conf_file in "${nginx_conf_files[@]}"; do
+        if [[ -f "$conf_file" ]]; then
+            nginx_conf="$conf_file"
+            break
+        fi
+    done
+
+    if [[ -z "$nginx_conf" ]]; then
+        print_warning "Nginx config file not found (checked common locations)"
+        return 1
+    fi
+
+    print_verbose "Found nginx config: $nginx_conf"
+
+    # Check for WebSocket upgrade headers in location blocks that proxy to AppFlowy
+    local has_ws_location=false
+    local has_upgrade_header=false
+    local has_connection_header=false
+    local has_http_version=false
+    local ws_location_found=false
+    local current_location=""
+
+    # Look for location blocks that handle WebSocket (/ws or upstream appflowy_cloud)
+    while IFS= read -r line; do
+        # Detect location blocks for WebSocket paths
+        if echo "$line" | grep -E '^\s*location\s+.*(/ws|/api)' &>/dev/null; then
+            ws_location_found=true
+            current_location=$(echo "$line" | grep -oE 'location\s+[^{]+' | sed 's/location //')
+            print_verbose "Found WebSocket-related location: $current_location"
+        fi
+
+        # Check for WebSocket upgrade headers within relevant location blocks
+        if [[ "$ws_location_found" == "true" ]]; then
+            if echo "$line" | grep -E '^\s*proxy_set_header\s+Upgrade\s+\$http_upgrade' &>/dev/null; then
+                has_upgrade_header=true
+                print_verbose "  ✓ Found: proxy_set_header Upgrade \$http_upgrade"
+            fi
+
+            if echo "$line" | grep -iE '^\s*proxy_set_header\s+Connection\s+.*(upgrade|connection_upgrade)' &>/dev/null; then
+                has_connection_header=true
+                print_verbose "  ✓ Found: proxy_set_header Connection upgrade/\$connection_upgrade"
+            fi
+
+            if echo "$line" | grep -E '^\s*proxy_http_version\s+1\.1' &>/dev/null; then
+                has_http_version=true
+                print_verbose "  ✓ Found: proxy_http_version 1.1"
+            fi
+
+            # Reset when location block ends
+            if echo "$line" | grep -E '^\s*}' &>/dev/null; then
+                ws_location_found=false
+            fi
+        fi
+
+        # Also check for general upstream blocks
+        if echo "$line" | grep -E 'upstream\s+(appflowy_cloud|appflowy)' &>/dev/null; then
+            has_ws_location=true
+        fi
+    done < "$nginx_conf"
+
+    # Validate results
+    local has_issues=false
+
+    if [[ "$has_upgrade_header" != "true" ]]; then
+        print_error "Nginx: Missing WebSocket Upgrade header (CRITICAL for WSS)"
+        print_error "  Fix: Add to nginx WebSocket location block:"
+        print_error "    proxy_set_header Upgrade \$http_upgrade;"
+        has_issues=true
+    else
+        print_success "Nginx: WebSocket Upgrade header configured"
+    fi
+
+    if [[ "$has_connection_header" != "true" ]]; then
+        print_error "Nginx: Missing WebSocket Connection header (CRITICAL for WSS)"
+        print_error "  Fix: Add to nginx WebSocket location block:"
+        print_error "    proxy_set_header Connection \"upgrade\";"
+        has_issues=true
+    else
+        print_success "Nginx: WebSocket Connection header configured"
+    fi
+
+    if [[ "$has_http_version" != "true" ]]; then
+        print_error "Nginx: Missing HTTP/1.1 version (CRITICAL for WSS)"
+        print_error "  Fix: Add to nginx WebSocket location block:"
+        print_error "    proxy_http_version 1.1;"
+        has_issues=true
+    else
+        print_success "Nginx: HTTP/1.1 version configured"
+    fi
+
+    if [[ "$has_issues" == "true" ]]; then
+        print_error ""
+        print_error "Example nginx WebSocket configuration:"
+        print_error "  location /ws {"
+        print_error "    proxy_pass http://appflowy_cloud:8000;"
+        print_error "    proxy_http_version 1.1;"
+        print_error "    proxy_set_header Upgrade \$http_upgrade;"
+        print_error "    proxy_set_header Connection \"upgrade\";"
+        print_error "    proxy_set_header Host \$host;"
+        print_error "    proxy_set_header X-Real-IP \$remote_addr;"
+        print_error "  }"
+        return 1
+    fi
+
+    return 0
+}
+
+check_ssl_certificate() {
+    print_verbose "Checking SSL/TLS certificate configuration..."
+
+    if ! load_env_vars; then
+        return 1
+    fi
+
+    local base_url="${APPFLOWY_BASE_URL}"
+    local base_scheme
+    base_scheme=$(extract_url_scheme "$base_url")
+
+    # Only check SSL if using HTTPS
+    if [[ "$base_scheme" != "https" ]]; then
+        print_verbose "SSL check skipped (not using HTTPS)"
+        return 0
+    fi
+
+    local host
+    host=$(extract_url_host "$base_url")
+
+    if [[ -z "$host" || "$host" == "localhost" || "$host" == "127.0.0.1" ]]; then
+        print_verbose "SSL check skipped (localhost deployment)"
+        return 0
+    fi
+
+    print_verbose "Checking SSL certificate for: $host"
+
+    # Check if openssl is available
+    if ! command -v openssl &> /dev/null; then
+        print_warning "SSL: openssl not found, cannot verify certificate"
+        return 0
+    fi
+
+    # Try to get certificate info
+    local cert_info
+    cert_info=$(echo | openssl s_client -servername "$host" -connect "${host}:443" 2>/dev/null | openssl x509 -noout -dates 2>/dev/null)
+
+    if [[ $? -ne 0 || -z "$cert_info" ]]; then
+        print_error "SSL: Cannot retrieve certificate for $host"
+        print_error "  Fix: Ensure valid SSL/TLS certificate is installed"
+        print_error "  For Let's Encrypt: certbot certonly --standalone -d $host"
+        return 1
+    fi
+
+    # Extract expiry date
+    local not_after
+    not_after=$(echo "$cert_info" | grep "notAfter=" | cut -d'=' -f2)
+
+    if [[ -n "$not_after" ]]; then
+        # Convert to epoch for comparison
+        local expiry_epoch
+        expiry_epoch=$(date -j -f "%b %d %T %Y %Z" "$not_after" +%s 2>/dev/null || date -d "$not_after" +%s 2>/dev/null)
+        local now_epoch
+        now_epoch=$(date +%s)
+
+        if [[ -n "$expiry_epoch" ]]; then
+            local days_until_expiry=$(( (expiry_epoch - now_epoch) / 86400 ))
+
+            if [[ $days_until_expiry -lt 0 ]]; then
+                print_error "SSL: Certificate EXPIRED $((days_until_expiry * -1)) days ago"
+                print_error "  Fix: Renew SSL certificate immediately"
+                return 1
+            elif [[ $days_until_expiry -lt 7 ]]; then
+                print_warning "SSL: Certificate expires in $days_until_expiry days"
+                print_warning "  Fix: Renew SSL certificate soon"
+            elif [[ $days_until_expiry -lt 30 ]]; then
+                print_warning "SSL: Certificate expires in $days_until_expiry days"
+            else
+                print_success "SSL: Certificate valid (expires in $days_until_expiry days)"
+            fi
+        fi
+    fi
+
+    # Test actual HTTPS connection
+    local https_test
+    https_test=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 5 "$base_url" 2>&1)
+
+    if [[ $? -ne 0 ]]; then
+        if echo "$https_test" | grep -qi "SSL certificate problem"; then
+            print_error "SSL: Certificate verification failed"
+            print_error "  Fix: Check certificate chain and CA certificates"
+            return 1
+        elif echo "$https_test" | grep -qi "SSL"; then
+            print_error "SSL: Connection failed - $https_test"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+check_production_https_websocket() {
+    print_verbose "Checking production HTTPS/WSS configuration..."
+
+    if ! load_env_vars; then
+        return 1
+    fi
+
+    local base_url="${APPFLOWY_BASE_URL}"
+    local base_scheme
+    base_scheme=$(extract_url_scheme "$base_url")
+    local base_host
+    base_host=$(extract_url_host "$base_url")
+
+    # Only check for production deployments (non-localhost with HTTPS)
+    if [[ "$base_scheme" != "https" ]]; then
+        print_verbose "Not using HTTPS - skipping production WSS check"
+        return 0
+    fi
+
+    if [[ "$base_host" == "localhost" || "$base_host" == "127.0.0.1" ]]; then
+        print_verbose "Localhost deployment - skipping production WSS check"
+        return 0
+    fi
+
+    print_verbose "Production HTTPS deployment detected: $base_url"
+
+    # Check WebSocket URL scheme
+    local ws_url="${APPFLOWY_WS_BASE_URL:-${APPFLOWY_WEBSOCKET_BASE_URL}}"
+    if [[ -z "$ws_url" ]]; then
+        print_error "Production HTTPS: WebSocket URL not configured"
+        print_error "  Fix: Set APPFLOWY_WS_BASE_URL=wss://$base_host/ws/v2 in .env"
+        return 1
+    fi
+
+    local ws_scheme
+    ws_scheme=$(extract_url_scheme "$ws_url")
+
+    if [[ "$ws_scheme" != "wss" ]]; then
+        print_error "Production HTTPS: WebSocket URL is $ws_scheme:// but MUST be wss:// (CRITICAL)"
+        print_error "  Issue: Browsers block insecure WebSocket (ws://) connections from HTTPS pages"
+        print_error "  This causes: 'WebSocket connection failed' errors and app hangs after login"
+        print_error "  Fix: Update .env file:"
+        print_error "    APPFLOWY_WS_BASE_URL=wss://$base_host/ws/v2"
+        print_error "  Or if using WS_SCHEME variable:"
+        print_error "    WS_SCHEME=wss"
+        print_error "  Then restart: docker compose restart appflowy_cloud nginx"
+        return 1
+    fi
+
+    print_success "Production HTTPS: WebSocket correctly configured with wss://"
+
+    # Verify nginx SSL is configured
+    local nginx_conf_files=(
+        "$PROJECT_ROOT/nginx/nginx.conf"
+        "$PROJECT_ROOT/nginx.conf"
+    )
+
+    local nginx_conf=""
+    for conf_file in "${nginx_conf_files[@]}"; do
+        if [[ -f "$conf_file" ]]; then
+            nginx_conf="$conf_file"
+            break
+        fi
+    done
+
+    if [[ -n "$nginx_conf" ]]; then
+        # Check if nginx has SSL configured
+        if grep -E '^\s*listen\s+443\s+ssl' "$nginx_conf" &>/dev/null; then
+            print_success "Production HTTPS: Nginx SSL listener configured (port 443)"
+        else
+            print_warning "Production HTTPS: Nginx may not have SSL configured"
+            print_warning "  Check nginx config has: listen 443 ssl;"
+        fi
+
+        # Check for SSL certificate paths
+        if grep -E '^\s*ssl_certificate\s+' "$nginx_conf" &>/dev/null; then
+            local cert_path=$(grep -E '^\s*ssl_certificate\s+' "$nginx_conf" | head -1 | awk '{print $2}' | tr -d ';')
+            print_verbose "SSL certificate path: $cert_path"
+        else
+            print_warning "Production HTTPS: No SSL certificate configured in nginx"
+        fi
+    fi
+
+    return 0
+}
+
+check_websocket_cors_headers() {
+    print_verbose "Checking CORS and security headers for WebSocket..."
+
+    local nginx_conf_files=(
+        "$PROJECT_ROOT/nginx/nginx.conf"
+        "$PROJECT_ROOT/nginx.conf"
+        "$PROJECT_ROOT/nginx/conf.d/default.conf"
+    )
+
+    local nginx_conf=""
+    for conf_file in "${nginx_conf_files[@]}"; do
+        if [[ -f "$conf_file" ]]; then
+            nginx_conf="$conf_file"
+            break
+        fi
+    done
+
+    if [[ -z "$nginx_conf" ]]; then
+        print_verbose "Nginx config not found, skipping CORS check"
+        return 0
+    fi
+
+    # Check for problematic CORS headers that might block WebSocket
+    local has_cors_block=false
+    local has_upgrade_insecure=false
+    local ws_location_found=false
+
+    while IFS= read -r line; do
+        # Detect WebSocket location blocks
+        if echo "$line" | grep -E '^\s*location\s+.*(/ws|/api)' &>/dev/null; then
+            ws_location_found=true
+        fi
+
+        if [[ "$ws_location_found" == "true" ]]; then
+            # Check for CORS headers in WebSocket locations (can be problematic)
+            if echo "$line" | grep -E 'add_header.*Access-Control-Allow-Origin' &>/dev/null; then
+                has_cors_block=true
+                print_verbose "Found CORS header in WebSocket location"
+            fi
+
+            # Check for upgrade-insecure-requests (can block WSS)
+            if echo "$line" | grep -E 'upgrade-insecure-requests' &>/dev/null; then
+                has_upgrade_insecure=true
+            fi
+
+            if echo "$line" | grep -E '^\s*}' &>/dev/null; then
+                ws_location_found=false
+            fi
+        fi
+    done < "$nginx_conf"
+
+    # Check if there are any security headers that might interfere
+    if grep -E '^\s*add_header.*Content-Security-Policy.*upgrade-insecure-requests' "$nginx_conf" &>/dev/null; then
+        print_warning "Security: Content-Security-Policy with upgrade-insecure-requests may affect WebSocket"
+        print_warning "  Fix: Ensure CSP allows WebSocket connections: connect-src 'self' ws: wss:;"
+    fi
+
+    print_success "CORS/Security: No blocking headers detected"
     return 0
 }
 
@@ -1322,6 +1746,22 @@ generate_report() {
         echo "Compose File: $COMPOSE_FILE"
         echo ""
 
+        echo "=== SERVICE VERSIONS ==="
+        if [[ -n "$APPFLOWY_CLOUD_VERSION" ]]; then
+            echo "AppFlowy Cloud: $APPFLOWY_CLOUD_VERSION"
+        else
+            echo "AppFlowy Cloud: Unknown"
+        fi
+        if [[ -n "$ADMIN_FRONTEND_VERSION" ]]; then
+            echo "Admin Frontend: $ADMIN_FRONTEND_VERSION"
+        else
+            echo "Admin Frontend: Unknown"
+        fi
+        if [[ -n "$DEPLOYMENT_TYPE" ]]; then
+            echo "Deployment Type: $DEPLOYMENT_TYPE"
+        fi
+        echo ""
+
         if [[ ${#SUCCESSES[@]} -gt 0 ]]; then
             echo "=== SUCCESSES (${#SUCCESSES[@]}) ==="
             for success in "${SUCCESSES[@]}"; do
@@ -1368,6 +1808,43 @@ generate_recommendations() {
             has_critical=true
         fi
 
+        if echo "$issue" | grep -qi "WebSocket.*wss://.*CRITICAL\|WebSocket URL is ws://"; then
+            echo "Priority 1 (CRITICAL): WebSocket Scheme Mismatch"
+            echo "  - Issue: Using HTTPS but WebSocket URL is ws:// instead of wss://"
+            echo "  - Fix: Edit .env and change APPFLOWY_WS_BASE_URL to use wss://"
+            echo "  - Example: APPFLOWY_WS_BASE_URL=wss://yourdomain.com/ws"
+            echo "  - Then restart: docker compose restart appflowy_cloud nginx"
+            echo ""
+            has_critical=true
+        fi
+
+        if echo "$issue" | grep -qi "Nginx.*Missing.*WebSocket"; then
+            echo "Priority 1 (CRITICAL): Nginx WebSocket Configuration Missing"
+            echo "  - Issue: Nginx is not configured to proxy WebSocket connections"
+            echo "  - Fix: Add WebSocket headers to nginx config:"
+            echo "    location /ws {"
+            echo "      proxy_pass http://appflowy_cloud:8000;"
+            echo "      proxy_http_version 1.1;"
+            echo "      proxy_set_header Upgrade \$http_upgrade;"
+            echo "      proxy_set_header Connection \"upgrade\";"
+            echo "      proxy_set_header Host \$host;"
+            echo "    }"
+            echo "  - Then: docker compose restart nginx"
+            echo ""
+            has_critical=true
+        fi
+
+        if echo "$issue" | grep -qi "SSL.*certificate"; then
+            echo "Priority 1 (CRITICAL): SSL Certificate Issue"
+            echo "  - Issue: SSL/TLS certificate is invalid, expired, or missing"
+            echo "  - Fix: Install or renew SSL certificate"
+            echo "  - For Let's Encrypt: certbot certonly --standalone -d yourdomain.com"
+            echo "  - Update nginx config to point to certificate files"
+            echo "  - Then: docker compose restart nginx"
+            echo ""
+            has_critical=true
+        fi
+
         if echo "$issue" | grep -qi "not running\|exited\|restarting"; then
             echo "Priority 1 (CRITICAL): Service Not Running"
             echo "  - Issue: One or more critical services are not running"
@@ -1401,11 +1878,12 @@ generate_recommendations() {
     if [[ "$has_critical" == "false" && ${#ISSUES[@]} -eq 0 ]]; then
         echo "✓ No critical issues detected"
         echo ""
-        echo "If you're still experiencing login problems, check:"
+        echo "If you're still experiencing login or WebSocket problems, check:"
         echo "  1. Browser console for JavaScript errors"
-        echo "  2. Network tab for failed API requests"
+        echo "  2. Network tab for failed API or WebSocket requests"
         echo "  3. Ensure you're using the correct admin credentials"
         echo "  4. Try clearing browser cache/cookies"
+        echo "  5. Check browser WebSocket connection in DevTools (Network > WS)"
     fi
 }
 
@@ -1438,6 +1916,7 @@ main() {
     fi
 
     check_container_status
+    check_service_versions
 
     echo ""
 
@@ -1454,6 +1933,10 @@ main() {
     check_scheme_consistency
     check_gotrue_configuration
     check_admin_credentials
+    check_nginx_websocket_config
+    check_production_https_websocket
+    check_ssl_certificate
+    check_websocket_cors_headers
 
     echo ""
 

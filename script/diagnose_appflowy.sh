@@ -2398,18 +2398,13 @@ check_plan_limits() {
         [[ -z "$max_guests" ]] && max_guests="unknown"
 
         if [[ "$max_users" != "unknown" && "$max_guests" != "unknown" ]]; then
-            print_warning "Self-Hosted Plan Limits Detected:"
-            print_warning "  Max Users: $max_users"
-            print_warning "  Max Guests: $max_guests"
-            echo ""
+            print_info "Self-Hosted Plan Configuration:"
+            print_info "  Max Users: $max_users"
+            print_info "  Max Guests: $max_guests"
 
             if [[ "$max_users" == "1" ]]; then
-                print_error "IMPORTANT: Self-hosted version has a 1-user limit"
-                print_error "  - Only ONE user account can log in (not including admin)"
-                print_error "  - Admin and user can use different emails"
-                print_error "  - Additional users will fail to authenticate"
-                print_error "  - This is a limitation of the self-hosted free plan"
-                echo ""
+                print_info "  Note: Self-hosted version configured with 1-user limit"
+                print_info "        Admin and user can use different emails"
             fi
 
             # Try to count existing users (if database accessible)
@@ -2417,19 +2412,20 @@ check_plan_limits() {
                 local user_count=$($compose_cmd exec -T postgres psql -U postgres -d postgres -tAc "SELECT COUNT(*) FROM af_user WHERE deleted_at IS NULL;" 2>/dev/null || echo "unknown")
 
                 if [[ "$user_count" != "unknown" && "$user_count" =~ ^[0-9]+$ ]]; then
-                    print_info "Current user count: $user_count"
-
                     if [[ "$max_users" != "unknown" && "$max_users" =~ ^[0-9]+$ ]]; then
                         if [[ $user_count -ge $max_users ]]; then
-                            print_error "⚠️  User limit reached! ($user_count/$max_users users)"
-                            print_error "  - New users will not be able to log in"
-                            print_error "  - Consider removing unused accounts"
+                            print_warning "User limit reached! ($user_count/$max_users users)"
+                            print_warning "  - New users will not be able to log in"
+                            print_warning "  - Consider removing unused accounts to free up slots"
                         else
                             print_success "Users: $user_count/$max_users (within limit)"
                         fi
+                    else
+                        print_info "  Current user count: $user_count"
                     fi
                 fi
             fi
+            echo ""
         else
             print_verbose "Could not parse plan limits from logs"
         fi

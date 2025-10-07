@@ -1773,6 +1773,7 @@ run_functional_tests() {
     check_minio_storage
     check_api_endpoints
     check_websocket_endpoint
+    check_websocket_connection_simulation
     check_admin_frontend
     check_collaboration_data
     check_ai_service
@@ -1977,9 +1978,9 @@ check_container_errors() {
 
                     # Try to parse JSON logs for better formatting
                     if echo "$line" | grep -q '"timestamp".*"level".*"message"'; then
-                        local timestamp=$(echo "$line" | grep -oP '"timestamp":"[^"]*"' | cut -d'"' -f4 | cut -c1-19)
-                        local level=$(echo "$line" | grep -oP '"level":"[^"]*"' | cut -d'"' -f4 | tr '[:lower:]' '[:upper:]')
-                        local message=$(echo "$line" | grep -oP '"message":"[^"]*"' | cut -d'"' -f4)
+                        local timestamp=$(echo "$line" | sed -n 's/.*"timestamp":"\([^"]*\)".*/\1/p' | cut -c1-19)
+                        local level=$(echo "$line" | sed -n 's/.*"level":"\([^"]*\)".*/\1/p' | tr '[:lower:]' '[:upper:]')
+                        local message=$(echo "$line" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
 
                         if [[ -n "$timestamp" && -n "$level" && -n "$message" ]]; then
                             print_error "  [$timestamp] $level: $message"
@@ -2369,6 +2370,340 @@ generate_recommendations() {
     fi
 }
 
+# ==================== ADDITIONAL DIAGNOSTICS ====================
+
+check_plan_limits() {
+    print_verbose "Checking self-hosted plan limits..."
+
+    local compose_cmd=$(get_compose_command)
+
+    # Get appflowy_cloud container ID
+    local container_id=$($compose_cmd ps -q appflowy_cloud 2>/dev/null)
+    if [[ -z "$container_id" ]]; then
+        print_verbose "AppFlowy Cloud container not found"
+        return 0
+    fi
+
+    # Parse logs for "Free plan limits" message
+    local logs=$(docker logs --tail 200 "$container_id" 2>&1)
+    local plan_limits=$(echo "$logs" | grep -i "Free plan limits" | tail -1)
+
+    if [[ -n "$plan_limits" ]]; then
+        # Extract max_users and max_guests from log line (BSD grep compatible)
+        local max_users=$(echo "$plan_limits" | sed -n 's/.*max_users:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
+        local max_guests=$(echo "$plan_limits" | sed -n 's/.*max_guests:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
+
+        # Fallback to "unknown" if extraction failed
+        [[ -z "$max_users" ]] && max_users="unknown"
+        [[ -z "$max_guests" ]] && max_guests="unknown"
+
+        if [[ "$max_users" != "unknown" && "$max_guests" != "unknown" ]]; then
+            print_warning "Self-Hosted Plan Limits Detected:"
+            print_warning "  Max Users: $max_users"
+            print_warning "  Max Guests: $max_guests"
+            echo ""
+
+            if [[ "$max_users" == "1" ]]; then
+                print_error "IMPORTANT: Self-hosted version has a 1-user limit"
+                print_error "  - Only ONE user account can log in (not including admin)"
+                print_error "  - Admin and user can use different emails"
+                print_error "  - Additional users will fail to authenticate"
+                print_error "  - This is a limitation of the self-hosted free plan"
+                echo ""
+            fi
+
+            # Try to count existing users (if database accessible)
+            if $compose_cmd ps postgres &>/dev/null; then
+                local user_count=$($compose_cmd exec -T postgres psql -U postgres -d postgres -tAc "SELECT COUNT(*) FROM af_user WHERE deleted_at IS NULL;" 2>/dev/null || echo "unknown")
+
+                if [[ "$user_count" != "unknown" && "$user_count" =~ ^[0-9]+$ ]]; then
+                    print_info "Current user count: $user_count"
+
+                    if [[ "$max_users" != "unknown" && "$max_users" =~ ^[0-9]+$ ]]; then
+                        if [[ $user_count -ge $max_users ]]; then
+                            print_error "⚠️  User limit reached! ($user_count/$max_users users)"
+                            print_error "  - New users will not be able to log in"
+                            print_error "  - Consider removing unused accounts"
+                        else
+                            print_success "Users: $user_count/$max_users (within limit)"
+                        fi
+                    fi
+                fi
+            fi
+        else
+            print_verbose "Could not parse plan limits from logs"
+        fi
+    else
+        print_verbose "No plan limits found in logs (container may be using custom configuration)"
+    fi
+
+    return 0
+}
+
+check_admin_frontend_errors() {
+    print_verbose "Checking Admin Frontend specific errors..."
+
+    local compose_cmd=$(get_compose_command)
+
+    # Get admin_frontend container ID
+    local container_id=$($compose_cmd ps -q admin_frontend 2>/dev/null)
+    if [[ -z "$container_id" ]]; then
+        print_verbose "Admin Frontend container not found"
+        return 0
+    fi
+
+    # Check container status
+    local container_status=$(docker inspect --format='{{.State.Status}}' "$container_id" 2>/dev/null)
+    local restart_count=$(docker inspect --format='{{.RestartCount}}' "$container_id" 2>/dev/null)
+
+    # Get logs
+    local logs=$(docker logs --tail 300 "$container_id" 2>&1)
+
+    # Check for specific error patterns
+    local has_errors=false
+
+    # Pattern 1: EISDIR error (node_modules issue)
+    if echo "$logs" | grep -q "EISDIR.*node_modules"; then
+        has_errors=true
+        print_error "Admin Frontend: EISDIR error detected (node_modules issue)"
+        local error_line=$(echo "$logs" | grep "EISDIR.*node_modules" | tail -1 | cut -c1-200)
+        print_error "  Error: $error_line"
+        print_error "  Cause: Likely a Docker volume or build cache issue"
+        print_error "  Fix: Try rebuilding the admin_frontend image:"
+        print_error "    docker compose build --no-cache admin_frontend"
+        print_error "    docker compose up -d admin_frontend"
+        echo ""
+    fi
+
+    # Pattern 2: Module resolution errors
+    if echo "$logs" | grep -qiE "Cannot find module|Module not found|Error: Cannot resolve"; then
+        has_errors=true
+        print_error "Admin Frontend: Module resolution error detected"
+        local error_line=$(echo "$logs" | grep -iE "Cannot find module|Module not found|Error: Cannot resolve" | tail -1 | cut -c1-200)
+        print_error "  Error: $error_line"
+        print_error "  Fix: Rebuild with fresh dependencies:"
+        print_error "    docker compose build --no-cache admin_frontend"
+        echo ""
+    fi
+
+    # Pattern 3: Configuration injection failures
+    if echo "$logs" | grep -qiE "Failed to inject configuration|Configuration error|APPFLOWY_BASE_URL.*undefined"; then
+        has_errors=true
+        print_error "Admin Frontend: Configuration injection failed"
+        local error_line=$(echo "$logs" | grep -iE "Failed to inject configuration|Configuration error" | tail -1 | cut -c1-200)
+        print_error "  Error: $error_line"
+        print_error "  Fix: Verify .env file has correct APPFLOWY_BASE_URL"
+        print_error "    Check: APPFLOWY_BASE_URL is set and matches your deployment URL"
+        echo ""
+    fi
+
+    # Pattern 4: Port binding errors
+    if echo "$logs" | grep -qiE "EADDRINUSE.*3000|port.*already in use"; then
+        has_errors=true
+        print_error "Admin Frontend: Port conflict detected"
+        print_error "  Error: Port 3000 already in use"
+        print_error "  Fix: Another service is using the port"
+        print_error "    Check: docker ps | grep 3000"
+        echo ""
+    fi
+
+    # Pattern 5: Bun/Node runtime errors
+    if echo "$logs" | grep -qiE "bun.*error|node.*fatal|v8::"; then
+        has_errors=true
+        local error_line=$(echo "$logs" | grep -iE "bun.*error|node.*fatal|v8::" | tail -1 | cut -c1-200)
+        print_error "Admin Frontend: Runtime error"
+        print_error "  Error: $error_line"
+        echo ""
+    fi
+
+    # Check if container is constantly restarting
+    if [[ "$restart_count" -gt 3 ]]; then
+        print_error "Admin Frontend: Container restarting frequently (count: $restart_count)"
+        print_error "  Status: $container_status"
+
+        # Get the last startup attempt
+        local startup_logs=$(echo "$logs" | tail -50)
+        local last_error=$(echo "$startup_logs" | grep -iE "error|fatal|failed" | tail -3)
+
+        if [[ -n "$last_error" ]]; then
+            print_error "  Recent errors:"
+            while IFS= read -r line; do
+                local clean_line=$(echo "$line" | cut -c1-200)
+                print_error "    $clean_line"
+            done <<< "$last_error"
+        fi
+        echo ""
+        has_errors=true
+    fi
+
+    if [[ "$has_errors" == "false" && "$container_status" == "running" ]]; then
+        print_success "Admin Frontend: No specific startup errors detected"
+    fi
+
+    return 0
+}
+
+check_websocket_connection_simulation() {
+    print_verbose "Simulating WebSocket connection for login hang detection..."
+
+    if ! load_env_vars; then
+        print_warning "WebSocket Simulation: Cannot load .env configuration"
+        return 0
+    fi
+
+    local base_url="${APPFLOWY_BASE_URL}"
+    local ws_url="${APPFLOWY_WS_BASE_URL:-${APPFLOWY_WEBSOCKET_BASE_URL}}"
+
+    if [[ -z "$ws_url" ]]; then
+        print_warning "WebSocket Simulation: WS URL not configured, skipping connection test"
+        return 0
+    fi
+
+    # Extract scheme and check for common misconfigurations
+    local ws_scheme=$(extract_url_scheme "$ws_url")
+    local base_scheme=$(extract_url_scheme "$base_url")
+
+    # Critical: Check for HTTPS + WS (not WSS) mismatch
+    if [[ "$base_scheme" == "https" && "$ws_scheme" == "ws" ]]; then
+        print_error "WebSocket Connection: CRITICAL MISCONFIGURATION DETECTED"
+        print_error "  Base URL: $base_url (HTTPS)"
+        print_error "  WebSocket URL: $ws_url (WS)"
+        print_error ""
+        print_error "  ⚠️  This WILL cause login to hang at 100%!"
+        print_error "  Browsers block insecure WebSocket (ws://) from HTTPS pages"
+        print_error ""
+        print_error "  Fix: Change WS_SCHEME=wss in .env file"
+        print_error "  Then: docker compose up -d"
+        echo ""
+        return 1
+    fi
+
+    # Test WebSocket endpoint availability (without auth)
+    local ws_test_url
+    if [[ "$ws_url" == *"/ws/v2" ]]; then
+        # For v2, test with a dummy workspace ID
+        ws_test_url="http://localhost/ws/v2/00000000-0000-0000-0000-000000000000"
+    else
+        # For v1 or other versions
+        ws_test_url="http://localhost${ws_url##*${base_url}}"
+    fi
+
+    # Try WebSocket upgrade request
+    local response=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X GET "$ws_test_url" \
+        -H "Upgrade: websocket" \
+        -H "Connection: Upgrade" \
+        -H "Sec-WebSocket-Version: 13" \
+        -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+        --max-time 5 2>/dev/null)
+
+    if [[ "$response" == "401" || "$response" == "403" ]]; then
+        print_success "WebSocket Connection: Endpoint reachable (auth required - expected)"
+        print_verbose "  WebSocket upgrade request returned: $response"
+    elif [[ "$response" == "404" ]]; then
+        print_error "WebSocket Connection: Endpoint not found (404)"
+        print_error "  This will cause login to hang after authentication"
+        print_error "  Fix: Verify nginx WebSocket routing configuration"
+        echo ""
+        return 1
+    elif [[ "$response" == "502" || "$response" == "503" ]]; then
+        print_error "WebSocket Connection: Backend unavailable ($response)"
+        print_error "  AppFlowy Cloud service may not be running properly"
+        print_error "  Check: docker compose ps appflowy_cloud"
+        echo ""
+        return 1
+    elif [[ "$response" == "000" ]]; then
+        print_warning "WebSocket Connection: Connection timeout or refused"
+        print_warning "  This may indicate nginx or network issues"
+    else
+        print_verbose "WebSocket Connection: Received HTTP $response"
+    fi
+
+    # Additional check: verify nginx WebSocket proxy configuration exists
+    local compose_cmd=$(get_compose_command)
+    local nginx_container=$($compose_cmd ps -q nginx 2>/dev/null)
+
+    if [[ -n "$nginx_container" ]]; then
+        local nginx_config=$(docker exec "$nginx_container" cat /etc/nginx/nginx.conf 2>/dev/null || echo "")
+
+        if [[ -n "$nginx_config" ]]; then
+            # Check for WebSocket upgrade headers
+            if ! echo "$nginx_config" | grep -q "Upgrade.*\$http_upgrade"; then
+                print_warning "WebSocket Connection: Nginx may be missing WebSocket upgrade headers"
+                print_warning "  This can cause connection failures after login"
+            fi
+        fi
+    fi
+
+    return 0
+}
+
+check_user_auth_flow() {
+    print_verbose "Validating user authentication flow..."
+
+    if ! load_env_vars; then
+        return 0
+    fi
+
+    local compose_cmd=$(get_compose_command)
+
+    # Check if GoTrue is configured for auto-confirm (important for testing)
+    local mailer_autoconfirm="${GOTRUE_MAILER_AUTOCONFIRM:-false}"
+
+    if [[ "$mailer_autoconfirm" == "false" ]]; then
+        print_warning "User Auth: Email confirmation required (GOTRUE_MAILER_AUTOCONFIRM=false)"
+        print_warning "  - New users must confirm email before login"
+        print_warning "  - Check SMTP settings if emails not arriving"
+        print_warning "  - For testing, set GOTRUE_MAILER_AUTOCONFIRM=true"
+        echo ""
+    else
+        print_success "User Auth: Auto-confirm enabled (good for testing)"
+    fi
+
+    # Check for OTP configuration
+    local enable_otp="${GOTRUE_EXTERNAL_PHONE_ENABLED:-false}"
+    if [[ "$enable_otp" == "true" ]]; then
+        print_info "User Auth: OTP/Phone authentication enabled"
+    fi
+
+    # Verify GoTrue is accessible
+    local gotrue_health=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost/gotrue/health" --max-time 3 2>/dev/null)
+
+    if [[ "$gotrue_health" == "200" ]]; then
+        print_success "User Auth: GoTrue service healthy"
+    elif [[ "$gotrue_health" == "404" ]]; then
+        print_error "User Auth: GoTrue health endpoint not found"
+        print_error "  This suggests nginx routing issues"
+        print_error "  Fix: Verify nginx.conf has /gotrue/* proxy configuration"
+        echo ""
+    else
+        print_warning "User Auth: GoTrue health check returned: $gotrue_health"
+    fi
+
+    # Check for common auth flow issues in logs
+    local gotrue_container=$($compose_cmd ps -q gotrue 2>/dev/null)
+    if [[ -n "$gotrue_container" ]]; then
+        local recent_logs=$(docker logs --tail 100 "$gotrue_container" 2>&1)
+
+        # Look for email delivery issues
+        if echo "$recent_logs" | grep -qiE "failed to send.*email|smtp.*error|mailer.*failed"; then
+            print_error "User Auth: Email delivery issues detected in GoTrue logs"
+            print_error "  Users may not receive confirmation emails"
+            print_error "  Check SMTP configuration in .env"
+            echo ""
+        fi
+
+        # Look for token/JWT issues
+        if echo "$recent_logs" | grep -qiE "invalid.*token|jwt.*error|signature.*invalid"; then
+            print_error "User Auth: JWT/Token validation issues detected"
+            print_error "  Verify GOTRUE_JWT_SECRET matches across services"
+            echo ""
+        fi
+    fi
+
+    return 0
+}
+
 # ==================== MAIN EXECUTION ====================
 
 main() {
@@ -2414,12 +2749,14 @@ main() {
     check_base_urls
     check_scheme_consistency
     check_gotrue_configuration
+    check_user_auth_flow
     check_admin_credentials
     check_smtp_configuration
     check_nginx_websocket_config
     check_production_https_websocket
     check_ssl_certificate
     check_websocket_cors_headers
+    check_plan_limits
 
     echo ""
 
@@ -2452,6 +2789,7 @@ main() {
         fi
 
         check_admin_frontend_connectivity
+        check_admin_frontend_errors
         check_gotrue_auth_errors
         check_container_errors
         extract_container_crash_summary

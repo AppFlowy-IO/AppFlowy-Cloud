@@ -138,6 +138,11 @@ services:
       - APPFLOWY_WEB_URL=${APPFLOWY_WEB_URL}
       - APPFLOWY_BASE_URL=${APPFLOWY_BASE_URL}
     image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
+    healthcheck:
+      test: "curl --fail http://127.0.0.1:8000/api/health || exit 1"
+      interval: 5s
+      timeout: 5s
+      retries: 12
     depends_on:
       gotrue:
         condition: service_healthy
@@ -153,7 +158,7 @@ services:
       gotrue:
         condition: service_healthy
       appflowy_cloud:
-        condition: service_started
+        condition: service_healthy
 
   ai:
     restart: on-failure
@@ -186,7 +191,7 @@ services:
       postgres:
         condition: service_healthy
       appflowy_cloud:
-        condition: service_started
+        condition: service_healthy
 
   appflowy_worker:
     restart: on-failure
@@ -214,12 +219,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      appflowy_cloud:
+        condition: service_healthy
 
   appflowy_web:
     restart: on-failure
     image: appflowyinc/appflowy_web:${APPFLOWY_WEB_VERSION:-latest}
     depends_on:
-      - appflowy_cloud
+      appflowy_cloud:
+        condition: service_healthy
     environment:
       - APPFLOWY_BASE_URL=${APPFLOWY_BASE_URL}
       - APPFLOWY_GOTRUE_BASE_URL=${APPFLOWY_BASE_URL}/gotrue

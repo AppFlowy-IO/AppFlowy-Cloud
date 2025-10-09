@@ -42,8 +42,15 @@ check_admin_frontend_connectivity() {
         return 1
     fi
 
-    # Check admin_frontend logs for connection errors
-    local logs=$(docker logs --tail 200 "$container_id" 2>&1)
+    # Check admin_frontend logs for connection errors (last 5 minutes only)
+    local logs=$(docker logs --since 5m "$container_id" 2>&1)
+
+    # Find the last version number (indicates container restart)
+    # Only analyze logs after the last version number
+    local last_version_line=$(echo "$logs" | grep -n "^Version:" | tail -1 | cut -d: -f1)
+    if [[ -n "$last_version_line" ]]; then
+        logs=$(echo "$logs" | tail -n +$last_version_line)
+    fi
 
     # Look for connection errors in admin_frontend logs
     local connection_errors=$(echo "$logs" | grep -iE "error|ERROR|failed|ECONNREFUSED|ETIMEDOUT|fetch failed|network error|cannot connect" | grep -ivE "debug|verbose" | tail -15)
@@ -102,8 +109,15 @@ check_admin_frontend_errors() {
     local container_status=$(docker inspect --format='{{.State.Status}}' "$container_id" 2>/dev/null)
     local restart_count=$(docker inspect --format='{{.RestartCount}}' "$container_id" 2>/dev/null)
 
-    # Get logs
-    local logs=$(docker logs --tail 300 "$container_id" 2>&1)
+    # Get logs (last 5 minutes only)
+    local logs=$(docker logs --since 5m "$container_id" 2>&1)
+
+    # Find the last version number (indicates container restart)
+    # Only analyze logs after the last version number
+    local last_version_line=$(echo "$logs" | grep -n "^Version:" | tail -1 | cut -d: -f1)
+    if [[ -n "$last_version_line" ]]; then
+        logs=$(echo "$logs" | tail -n +$last_version_line)
+    fi
 
     # Check for specific error patterns
     local has_errors=false
@@ -203,9 +217,9 @@ check_gotrue_auth_errors() {
         return 0
     fi
 
-    # Get last 300 lines of GoTrue logs and look for authentication errors
+    # Get GoTrue logs from last 5 minutes and look for authentication errors
     # GoTrue logs are typically in text format with levels like ERROR, WARN, etc.
-    local logs=$(docker logs --tail 300 "$container_id" 2>&1)
+    local logs=$(docker logs --since 5m "$container_id" 2>&1)
 
     # Extract error-level logs related to authentication/login
     local error_logs=$(echo "$logs" | grep -iE "error|ERROR|fatal|FATAL|panic|failed|invalid" | grep -ivE "dbug|debug" | tail -30)
@@ -296,8 +310,22 @@ check_container_errors() {
         if [[ "$should_check_logs" == "true" ]]; then
             print_warning "$service: Analyzing logs (restarts: $restart_count, status: $container_status)"
 
-            # Get last 500 lines of logs to capture more context
-            local logs=$(docker logs --tail 500 "$container_id" 2>&1)
+            # Get logs from last 10 minutes to capture recent context
+            local logs=$(docker logs --since 10m "$container_id" 2>&1)
+
+            # Find the last version/startup marker (indicates container restart)
+            # Only analyze logs after the last restart
+            if [[ "$service" == "appflowy_cloud" ]]; then
+                local last_version_line=$(echo "$logs" | grep -n "Using AppFlowy Cloud version:" | tail -1 | cut -d: -f1)
+                if [[ -n "$last_version_line" ]]; then
+                    logs=$(echo "$logs" | tail -n +$last_version_line)
+                fi
+            elif [[ "$service" == "admin_frontend" ]]; then
+                local last_version_line=$(echo "$logs" | grep -n "^Version:" | tail -1 | cut -d: -f1)
+                if [[ -n "$last_version_line" ]]; then
+                    logs=$(echo "$logs" | tail -n +$last_version_line)
+                fi
+            fi
 
             # Extract all error, warning, and fatal level logs
             # Support both JSON format and plain text logs
@@ -386,8 +414,8 @@ extract_container_crash_summary() {
             has_crashes=true
             print_error "$service: High restart count ($restart_count times)"
 
-            # Get the most recent fatal error
-            local fatal_error=$(docker logs --tail 100 "$container_id" 2>&1 | grep -iE "fatal|panic|error" | tail -1)
+            # Get the most recent fatal error from last 10 minutes
+            local fatal_error=$(docker logs --since 10m "$container_id" 2>&1 | grep -iE "fatal|panic|error" | tail -1)
             if [[ -n "$fatal_error" ]]; then
                 local clean_error=$(echo "$fatal_error" | cut -c1-150)
                 print_error "  Last error: $clean_error"
@@ -400,8 +428,8 @@ extract_container_crash_summary() {
             has_crashes=true
             print_error "$service: Container exited (exit code: $exit_code)"
 
-            # Get exit reason
-            local exit_msg=$(docker logs --tail 50 "$container_id" 2>&1 | tail -10)
+            # Get exit reason from recent logs
+            local exit_msg=$(docker logs --since 10m "$container_id" 2>&1 | tail -10)
             if [[ -n "$exit_msg" ]]; then
                 print_error "  Recent logs:"
                 while IFS= read -r line; do
@@ -456,12 +484,26 @@ analyze_service_logs() {
     for service in $services; do
         print_verbose "Checking $service logs..."
 
-        # Get last 100 lines of logs, exclude docker-compose warnings
-        local logs=$($compose_cmd logs --tail=100 $service 2>&1 | grep -v '^time=".*level=warning')
+        # Get logs from last 5 minutes only, exclude docker-compose warnings
+        local logs=$($compose_cmd logs --since=5m $service 2>&1 | grep -v '^time=".*level=warning')
 
         if [[ -z "$logs" ]]; then
             print_verbose "No logs available for $service"
             continue
+        fi
+
+        # Find the last version/startup marker (indicates container restart)
+        # Only analyze logs after the last restart
+        if [[ "$service" == "appflowy_cloud" ]]; then
+            local last_version_line=$(echo "$logs" | grep -n "Using AppFlowy Cloud version:" | tail -1 | cut -d: -f1)
+            if [[ -n "$last_version_line" ]]; then
+                logs=$(echo "$logs" | tail -n +$last_version_line)
+            fi
+        elif [[ "$service" == "admin_frontend" ]]; then
+            local last_version_line=$(echo "$logs" | grep -n "^admin_frontend.*| Version:" | tail -1 | cut -d: -f1)
+            if [[ -n "$last_version_line" ]]; then
+                logs=$(echo "$logs" | tail -n +$last_version_line)
+            fi
         fi
 
         # Search for critical error patterns
@@ -473,9 +515,13 @@ analyze_service_logs() {
                     found_errors=true
                 fi
 
-                if [[ "$INCLUDE_LOGS" == "true" ]]; then
-                    local error_lines=$(echo "$logs" | grep -i "$pattern" | tail -3)
-                    print_verbose "  Pattern '$pattern': $error_lines"
+                # Always show critical errors (not just when INCLUDE_LOGS=true)
+                local error_lines=$(echo "$logs" | grep -i "$pattern" | tail -3)
+                if [[ -n "$error_lines" ]]; then
+                    while IFS= read -r line; do
+                        local clean_line=$(echo "$line" | cut -c1-200)
+                        print_error "  → $clean_line"
+                    done <<< "$error_lines"
                 fi
             fi
         done
@@ -487,9 +533,13 @@ analyze_service_logs() {
                     print_warning "$service: Found error-level log entries"
                     found_errors=true
 
-                    if [[ "$INCLUDE_LOGS" == "true" ]]; then
-                        local error_lines=$(echo "$logs" | grep "$pattern" | tail -3)
-                        print_verbose "  Error entries: $error_lines"
+                    # Always show error entries (not just when INCLUDE_LOGS=true)
+                    local error_lines=$(echo "$logs" | grep "$pattern" | tail -3)
+                    if [[ -n "$error_lines" ]]; then
+                        while IFS= read -r line; do
+                            local clean_line=$(echo "$line" | cut -c1-200)
+                            print_warning "  → $clean_line"
+                        done <<< "$error_lines"
                     fi
                     break
                 fi

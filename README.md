@@ -157,7 +157,7 @@ docker compose --file ./docker-compose-dev.yml up -d --build
 ```bash
 # Wait for PostgreSQL to be ready (adjust connection details as needed)
 # Keep trying until connection succeeds
-PGPASSWORD="password" psql -h "localhost" -U "postgres" -p "5432" -d "postgres" -c '\q'
+PGPASSWORD="password" psql -h "localhost" -U "postgres" -p "${POSTGRES_PORT:-5432}" -d "postgres" -c '\q'
 
 # Wait for AppFlowy Cloud health check
 # Keep trying until health endpoint responds

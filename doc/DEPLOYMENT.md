@@ -204,6 +204,8 @@ POSTGRES_PORT=5432
 POSTGRES_DB=postgres
 ```
 
+> The managed PostgreSQL container listens on `POSTGRES_PORT` inside the Docker network but is not exposed on the host by default. If you need host access, either run `docker compose exec postgres psql` or add a custom port mapping in an override compose file.
+
 ### How do I disable signups?
 
 If your deployed AppFlowy-Cloud is publicly available and you do not want any other users to access it, you can disable sign up

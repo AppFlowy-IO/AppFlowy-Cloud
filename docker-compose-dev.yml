@@ -18,10 +18,12 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
       - SUPABASE_PASSWORD=${SUPABASE_PASSWORD:-root}
+      - PGPORT=${POSTGRES_PORT:-5432}
+    command: ["postgres", "-c", "port=${POSTGRES_PORT:-5432}"]
     ports:
-      - 5432:5432
+      - "${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}"
     healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}" ]
+      test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-p", "${POSTGRES_PORT:-5432}" ]
       interval: 5s
       timeout: 5s
       retries: 12

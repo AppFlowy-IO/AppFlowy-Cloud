@@ -148,6 +148,8 @@ services:
       - ASSEMBLYAI_API_KEY=${ASSEMBLYAI_API_KEY}
       - ASSEMBLYAI_API_BASE=${ASSEMBLYAI_API_BASE}
       - ASSEMBLYAI_STREAMING_API_BASE=${ASSEMBLYAI_STREAMING_API_BASE}
+      - APPFLOWY_SEARCH_SERVICE_URL=${APPFLOWY_SEARCH_SERVICE_URL:-http://appflowy_search:4002}
+      - APPFLOWY_SEARCH_REQUEST_TIMEOUT_SECS=${APPFLOWY_SEARCH_REQUEST_TIMEOUT_SECS:-10}
     image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
     healthcheck:
       test: "curl --fail http://127.0.0.1:8000/api/health || exit 1"
@@ -233,6 +235,32 @@ services:
       appflowy_cloud:
         condition: service_healthy
 
+  appflowy_search:
+    restart: on-failure
+    image: appflowyinc/appflowy_search:${APPFLOWY_SEARCH_VERSION:-latest}
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_SEARCH_HOST=${APPFLOWY_SEARCH_HOST:-[::]}
+      - APPFLOWY_SEARCH_PORT=${APPFLOWY_SEARCH_PORT:-4002}
+      - APPFLOWY_SEARCH_DATABASE_URL=${APPFLOWY_DATABASE_URL}
+      - APPFLOWY_SEARCH_REDIS_URL=${APPFLOWY_REDIS_URI}
+      - AI_OPENAI_API_KEY=${AI_OPENAI_API_KEY}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION}
+      - APPFLOWY_BACKGROUND_INDEXER_ENABLED=true
+      - APPFLOWY_INDEXER_DATABASE_ENABLED=${APPFLOWY_INDEXER_DATABASE_ENABLED:-false}
+      - APPFLOWY_KEYWORD_SEARCH_ENABLED=${APPFLOWY_KEYWORD_SEARCH_ENABLED:-true}
+      - APPFLOWY_KEYWORD_WORKER_ENABLED=true
+      - APPFLOWY_KEYWORD_INDEX_MAP_SIZE_BYTES=${APPFLOWY_KEYWORD_INDEX_MAP_SIZE_BYTES:-2147483648}
+      - APPFLOWY_KEYWORD_INDEX_DIR=${APPFLOWY_KEYWORD_INDEX_DIR:-/var/lib/appflowy/keyword_index}
+      - APPFLOWY_GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}
+    volumes:
+      - keyword_index_data:/var/lib/appflowy/keyword_index
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   appflowy_web:
     restart: on-failure
     image: appflowyinc/appflowy_web:${APPFLOWY_WEB_VERSION:-latest}
@@ -246,3 +274,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  keyword_index_data:

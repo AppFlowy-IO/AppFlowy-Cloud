@@ -146,6 +146,8 @@ services:
       - APPFLOWY_MAILER_SMTP_EMAIL=${APPFLOWY_MAILER_SMTP_EMAIL}
       - APPFLOWY_MAILER_SMTP_PASSWORD=${APPFLOWY_MAILER_SMTP_PASSWORD}
       - AI_OPENAI_API_KEY=${AI_OPENAI_API_KEY}
+      - APPFLOWY_SEARCH_SERVICE_URL=${APPFLOWY_SEARCH_SERVICE_URL:-http://appflowy_search:4002}
+      - APPFLOWY_SEARCH_REQUEST_TIMEOUT_SECS=${APPFLOWY_SEARCH_REQUEST_TIMEOUT_SECS:-10}
     build:
       context: .
       dockerfile: Dockerfile
@@ -158,6 +160,8 @@ services:
     depends_on:
       gotrue:
         condition: service_healthy
+      appflowy_search:
+        condition: service_started
 
   admin_frontend:
     restart: on-failure
@@ -230,9 +234,40 @@ services:
     networks:
       - shared_network
 
+  appflowy_search:
+    restart: on-failure
+    image: appflowyinc/appflowy_search:${APPFLOWY_SEARCH_VERSION:-latest}
+    ports:
+      - "4002:4002"
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_SEARCH_HOST=${APPFLOWY_SEARCH_HOST:-[::]}
+      - APPFLOWY_SEARCH_PORT=${APPFLOWY_SEARCH_PORT:-4002}
+      - APPFLOWY_SEARCH_DATABASE_URL=${APPFLOWY_DATABASE_URL}
+      - APPFLOWY_SEARCH_REDIS_URL=${APPFLOWY_REDIS_URI}
+      - AI_OPENAI_API_KEY=${AI_OPENAI_API_KEY}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION}
+      - APPFLOWY_BACKGROUND_INDEXER_ENABLED=true
+      - APPFLOWY_INDEXER_DATABASE_ENABLED=${APPFLOWY_INDEXER_DATABASE_ENABLED:-false}
+      - APPFLOWY_KEYWORD_SEARCH_ENABLED=${APPFLOWY_KEYWORD_SEARCH_ENABLED:-false}
+      - APPFLOWY_KEYWORD_WORKER_ENABLED=true
+      - APPFLOWY_KEYWORD_INDEX_MAP_SIZE_BYTES=${APPFLOWY_KEYWORD_INDEX_MAP_SIZE_BYTES:-0}
+      - APPFLOWY_KEYWORD_INDEX_DIR=${APPFLOWY_KEYWORD_INDEX_DIR:-/var/lib/appflowy/keyword_index}
+      - APPFLOWY_GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}
+    volumes:
+      - keyword_index_data:/var/lib/appflowy/keyword_index
+    networks:
+      - shared_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   minio_data:
+  keyword_index_data:
 
 networks:
   shared_network:

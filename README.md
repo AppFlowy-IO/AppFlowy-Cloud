@@ -43,7 +43,7 @@ You can find the pricing details by visiting [this page](https://appflowy.com/do
 
 Open source vs Open core:
 
-As AppFlwy Cloud is adopting an open-core model, AppFlowy Web and AppFlowy Flutter will remain open source.
+As AppFlowy Cloud is adopting an open-core model, AppFlowy Web and AppFlowy Flutter will remain open source.
 As part of the transition, we are consolidating and reorganizing our codebases in private repositories.
 Recently, we merged all AppFlowy Web–related development from our private repository back into the public one. You can check the [commit](https://github.com/AppFlowy-IO/AppFlowy-Web/commits/main/) for reference. We will also merge Flutter code back into [this](https://github.com/AppFlowy-IO/AppFlowy) public repository at a later stage.
 

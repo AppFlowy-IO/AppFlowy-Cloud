@@ -550,7 +550,12 @@ pub struct AddDatatabaseRow {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct UpsertDatatabaseRow {
-  pub pre_hash: String, // input which will be hashed into database row id
+  /// Optional. Input hashed into a database row id (SHA256 of workspace_id + db_id + pre_hash).
+  /// If omitted, a random UUID is generated (useful for creating new rows without dedup).
+  pub pre_hash: Option<String>,
+  /// Optional. If provided, directly use this UUID as the row id for upsert.
+  /// Useful when you already know the row id (e.g. from a previous create or from list).
+  pub row_id: Option<String>,
   pub cells: HashMap<String, serde_json::Value>,
   pub document: Option<String>,
 }

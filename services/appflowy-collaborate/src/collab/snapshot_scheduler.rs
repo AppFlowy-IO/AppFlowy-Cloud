@@ -48,6 +48,14 @@ impl SnapshotScheduler {
     Some(workspaces)
   }
 
+  async fn drain_snapshot_tasks(tasks: &mut JoinSet<()>) {
+    while let Some(result) = tasks.join_next().await {
+      if let Err(err) = result {
+        tracing::error!("Snapshot task failed: {}", err);
+      }
+    }
+  }
+
   async fn snapshot_task(
     mut receiver: UnboundedReceiver<(Uuid, Rid)>,
     collab_store: Arc<CollabManager>,
@@ -73,13 +81,13 @@ impl SnapshotScheduler {
         });
         i += 1;
         if i >= Self::CONCURRENCY_LIMIT {
-          while let Some(result) = tasks.join_next().await {
-            if let Err(err) = result {
-              tracing::error!("Snapshot task failed: {}", err);
-            }
-          }
+          Self::drain_snapshot_tasks(&mut tasks).await;
           i = 0;
         }
+      }
+
+      if i > 0 {
+        Self::drain_snapshot_tasks(&mut tasks).await;
       }
     }
   }

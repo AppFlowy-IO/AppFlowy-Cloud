@@ -52,7 +52,6 @@ use collab::core::collab::{default_client_id, CollabOptions, DataSource};
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
-use collab_database::entity::FieldType;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::timestamp;
@@ -2736,15 +2735,13 @@ async fn list_database_row_details_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
 
-  static UNSUPPORTED_FIELD_TYPES: &[FieldType] = &[FieldType::Relation];
-
   let db_rows = biz::collab::ops::list_database_row_details(
     &state.collab_storage,
     uid,
     workspace_id,
     db_id,
     &row_ids,
-    UNSUPPORTED_FIELD_TYPES,
+    &[],
     with_doc,
   )
   .await?;

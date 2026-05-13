@@ -1,0 +1,161 @@
+From b24df09208211761750b0fb0038dc2d656b5154e Mon Sep 17 00:00:00 2001
+From: makvitaly <25710780+makvitaly@users.noreply.github.com>
+Date: Wed, 13 May 2026 15:28:44 +0200
+Subject: [PATCH 1/2] feat: expose Relation field in row detail response
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The `GET /workspace/{wsid}/database/{dbid}/row/detail` endpoint
+filtered Relation cells out of the response via a hardcoded
+UNSUPPORTED_FIELD_TYPES list. The data layer (collab-database)
+already implements both TypeOptionCellReader and TypeOptionCellWriter
+for RelationTypeOption, the cell is stored end-to-end, and the
+desktop / mobile clients already render it. The only thing the
+server-side filter did was hide it from REST consumers.
+
+This removes the filter so a relation cell is returned as
+`{"row_ids": ["<uuid>", ...]}` — the same shape that
+`convert_json_to_cell` already accepts on the write side. The change
+is a read-side completion of an already-supported round-trip.
+
+Resolves #1531.
+
+Tested:
+- Renamed `database_fields_unsupported_field_type` to
+  `database_row_with_relation_field`. The test now adds a Relation
+  field with a populated `database_id`, writes a row whose relation
+  cell points at a synthetic UUID, and asserts the row detail
+  endpoint returns the same `{"row_ids": [...]}` payload — a full
+  write/read round-trip through the API.
+---
+ src/api/workspace.rs          |  5 +--
+ tests/collab/database_crud.rs | 68 +++++++++++++++++++----------------
+ 2 files changed, 38 insertions(+), 35 deletions(-)
+
+diff --git a/src/api/workspace.rs b/src/api/workspace.rs
+index da06efa3..4b269885 100644
+--- a/src/api/workspace.rs
++++ b/src/api/workspace.rs
+@@ -52,7 +52,6 @@ use collab::core::collab::{default_client_id, CollabOptions, DataSource};
+ use collab::core::origin::CollabOrigin;
+ use collab::entity::EncodedCollab;
+ use collab::preclude::Collab;
+-use collab_database::entity::FieldType;
+ use collab_document::document::Document;
+ use collab_entity::CollabType;
+ use collab_folder::timestamp;
+@@ -2736,15 +2735,13 @@ async fn list_database_row_details_handler(
+     .enforce_action(&uid, &workspace_id, Action::Read)
+     .await?;
+ 
+-  static UNSUPPORTED_FIELD_TYPES: &[FieldType] = &[FieldType::Relation];
+-
+   let db_rows = biz::collab::ops::list_database_row_details(
+     &state.collab_storage,
+     uid,
+     workspace_id,
+     db_id,
+     &row_ids,
+-    UNSUPPORTED_FIELD_TYPES,
++    &[],
+     with_doc,
+   )
+   .await?;
+diff --git a/tests/collab/database_crud.rs b/tests/collab/database_crud.rs
+index 4c4bf439..1bee6959 100644
+--- a/tests/collab/database_crud.rs
++++ b/tests/collab/database_crud.rs
+@@ -267,52 +267,58 @@ async fn database_fields_crud() {
+ }
+ 
+ #[tokio::test]
+-async fn database_fields_unsupported_field_type() {
++async fn database_row_with_relation_field() {
+   let (c, _user) = generate_unique_registered_user_client().await;
+   let workspace_id = workspace_id_from_client(&c).await;
+   let databases = c.list_databases(&workspace_id).await.unwrap();
+   assert_eq!(databases.len(), 1);
+   let todo_db = &databases[0];
+ 
+-  let my_rel_field_id = {
+-    c.add_database_field(
++  // A Relation field points at another database via `database_id` in its
++  // type-option payload. For the purposes of this test we point it at the
++  // same database — the read path only cares that the field deserializes
++  // as a Relation, not that the target rows resolve.
++  let my_rel_field_id = c
++    .add_database_field(
+       &workspace_id,
+       &todo_db.id,
+       &AFInsertDatabaseField {
+         name: "MyRelationCol".to_string(),
+         field_type: FieldType::Relation.into(),
+-        ..Default::default()
++        type_option_data: Some(json!({ "database_id": todo_db.id.to_string() })),
+       },
+     )
+     .await
+-    .unwrap()
+-  };
+-  {
+-    let my_description = "my task 123";
+-    let my_status = "To Do";
+-    let new_row_id = c
+-      .add_database_item(
+-        &workspace_id,
+-        &todo_db.id,
+-        HashMap::from([
+-          (String::from("Description"), json!(my_description)),
+-          (String::from("Status"), json!(my_status)),
+-          (String::from("Multiselect"), json!(["social", "news"])),
+-          (my_rel_field_id, json!("relation_data")),
+-        ]),
+-        None,
+-      )
+-      .await
+-      .unwrap();
++    .unwrap();
+ 
+-    let row_details = c
+-      .list_database_row_details(&workspace_id, &todo_db.id, &[&new_row_id], false)
+-      .await
+-      .unwrap();
+-    assert_eq!(row_details.len(), 1);
+-    let new_row_detail = &row_details[0];
+-    assert!(!new_row_detail.cells.contains_key("MyRelationCol"));
+-  }
++  let related_row_id = "11111111-1111-1111-1111-111111111111";
++  let new_row_id = c
++    .add_database_item(
++      &workspace_id,
++      &todo_db.id,
++      HashMap::from([
++        (String::from("Description"), json!("my task 123")),
++        (String::from("Status"), json!("To Do")),
++        (
++          my_rel_field_id.clone(),
++          json!({ "row_ids": [related_row_id] }),
++        ),
++      ]),
++      None,
++    )
++    .await
++    .unwrap();
++
++  let row_details = c
++    .list_database_row_details(&workspace_id, &todo_db.id, &[&new_row_id], false)
++    .await
++    .unwrap();
++  assert_eq!(row_details.len(), 1);
++  let new_row_detail = &row_details[0];
++  assert_eq!(
++    new_row_detail.cells["MyRelationCol"],
++    json!({ "row_ids": [related_row_id] })
++  );
+ }
+ 
+ #[tokio::test]
+-- 
+2.50.1 (Apple Git-155)
+

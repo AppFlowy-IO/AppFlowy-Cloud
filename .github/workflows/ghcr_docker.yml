@@ -1,0 +1,117 @@
+name: Publish Docker Images to GHCR
+run-name: Publish GHCR images (${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name || github.ref_name }})
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - '*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag for Docker images (example: v0.9.1-patch1)'
+        required: true
+        type: string
+      build_arm64:
+        description: 'Build ARM64 in addition to AMD64'
+        required: false
+        type: boolean
+        default: true
+      tag_latest:
+        description: 'Also push the latest tag'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: gotrue
+            context: docker/gotrue
+            dockerfile: docker/gotrue/Dockerfile
+          - name: appflowy_cloud
+            context: .
+            dockerfile: Dockerfile
+          - name: admin_frontend
+            context: .
+            dockerfile: admin_frontend/Dockerfile
+          - name: appflowy_worker
+            context: .
+            dockerfile: services/appflowy-worker/Dockerfile
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set variables
+        id: vars
+        run: |
+          OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            IMAGE_TAG="${{ github.event.inputs.tag_name }}"
+          else
+            IMAGE_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.build_arm64 }}" != "true" ]; then
+            PLATFORMS="linux/amd64"
+          else
+            PLATFORMS="linux/amd64,linux/arm64"
+          fi
+
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event.inputs.tag_latest }}" = "true" ]; then
+            PUSH_LATEST="true"
+          else
+            PUSH_LATEST="false"
+          fi
+
+          IMAGE_BASE="ghcr.io/$OWNER_LC/${{ matrix.image.name }}"
+          TAGS="$IMAGE_BASE:$IMAGE_TAG"
+          if [ "$PUSH_LATEST" = "true" ]; then
+            TAGS="$TAGS"$'\n'"$IMAGE_BASE:latest"
+          fi
+
+          {
+            echo "owner_lc=$OWNER_LC"
+            echo "image_tag=$IMAGE_TAG"
+            echo "platforms=$PLATFORMS"
+            echo "tags<<EOF"
+            printf '%s\n' "$TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.image.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          platforms: ${{ steps.vars.outputs.platforms }}
+          push: true
+          provenance: false
+          tags: ${{ steps.vars.outputs.tags }}
+          cache-from: type=gha,scope=ghcr-${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=ghcr-${{ matrix.image.name }}

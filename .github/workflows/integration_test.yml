@@ -1,20 +1,7 @@
 name: AppFlowy-Cloud Integrations
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - 'libs/**'
-      - 'services/**'
-      - 'admin_frontend/**'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - 'libs/**'
-      - 'services/**'
-      - 'admin_frontend/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

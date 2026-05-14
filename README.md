@@ -67,3 +67,32 @@ We also have a few other open source repos, such as
 
 - See [deployment guide](https://appflowy.com/docs/Step-by-step-Self-Hosting-Guide---From-Zero-to-Production)
 
+## Publish patched images from your fork
+
+Use the new GitHub Actions workflows to publish patched images to GHCR (`ghcr.io`):
+
+1. In your `AppFlowy-Cloud` fork, run workflow `Publish Docker Images to GHCR`.
+2. In your `AppFlowy-Web` fork, run workflow `Publish AppFlowy Web to GHCR`.
+3. Use the same `tag_name` in both workflows (for example `v0.11.4-patch1`).
+
+Then set these variables in your deployment `.env`:
+
+```env
+GOTRUE_IMAGE=ghcr.io/<your-org-or-user>/gotrue
+APPFLOWY_CLOUD_IMAGE=ghcr.io/<your-org-or-user>/appflowy_cloud
+APPFLOWY_ADMIN_FRONTEND_IMAGE=ghcr.io/<your-org-or-user>/admin_frontend
+APPFLOWY_WORKER_IMAGE=ghcr.io/<your-org-or-user>/appflowy_worker
+APPFLOWY_WEB_IMAGE=ghcr.io/<your-org-or-user>/appflowy_web
+
+GOTRUE_VERSION=v0.11.4-patch1
+APPFLOWY_CLOUD_VERSION=v0.11.4-patch1
+APPFLOWY_ADMIN_FRONTEND_VERSION=v0.11.4-patch1
+APPFLOWY_WORKER_VERSION=v0.11.4-patch1
+APPFLOWY_WEB_VERSION=v0.11.4-patch1
+```
+
+If packages are private, authenticate on your server before `docker compose up`:
+
+```bash
+echo "<github_pat_with_read_packages>" | docker login ghcr.io -u <github_user> --password-stdin
+```

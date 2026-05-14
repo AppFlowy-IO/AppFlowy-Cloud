@@ -1,11 +1,7 @@
 name: Lint
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    types: [ opened, synchronize, reopened ]
-    branches: [ main ]
+  workflow_dispatch:
 
 env:
   SQLX_VERSION: 0.7.1

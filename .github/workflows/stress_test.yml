@@ -1,6 +1,7 @@
 name: AppFlowy-Cloud Stress Test
 
-on: [ pull_request ]
+on:
+  workflow_dispatch:
 
 concurrency:
   group: stress-test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

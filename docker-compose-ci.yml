@@ -61,7 +61,7 @@ services:
 
   gotrue:
     restart: on-failure
-    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
+    image: ${GOTRUE_IMAGE:-appflowyinc/gotrue}:${GOTRUE_VERSION:-latest}
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,6 +114,15 @@ services:
       - GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=${GOTRUE_EXTERNAL_DISCORD_CLIENT_ID}
       - GOTRUE_EXTERNAL_DISCORD_SECRET=${GOTRUE_EXTERNAL_DISCORD_SECRET}
       - GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=${GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI}
+      # Authentik OAuth2/OIDC config
+      - GOTRUE_EXTERNAL_AUTHENTIK_ENABLED=${GOTRUE_EXTERNAL_AUTHENTIK_ENABLED}
+      - GOTRUE_EXTERNAL_AUTHENTIK_CLIENT_ID=${GOTRUE_EXTERNAL_AUTHENTIK_CLIENT_ID}
+      - GOTRUE_EXTERNAL_AUTHENTIK_SECRET=${GOTRUE_EXTERNAL_AUTHENTIK_SECRET}
+      - GOTRUE_EXTERNAL_AUTHENTIK_REDIRECT_URI=${GOTRUE_EXTERNAL_AUTHENTIK_REDIRECT_URI}
+      - GOTRUE_EXTERNAL_AUTHENTIK_URL=${GOTRUE_EXTERNAL_AUTHENTIK_URL}
+      # SAML 2.0 OAuth config
+      - GOTRUE_SAML_ENABLED=${GOTRUE_SAML_ENABLED:-false}
+      - GOTRUE_SAML_PRIVATE_KEY=${GOTRUE_SAML_PRIVATE_KEY}
     networks:
       - shared_network
 
@@ -163,7 +172,7 @@ services:
         PROFILE: ci
     networks:
       - shared_network
-    image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
+    image: ${APPFLOWY_CLOUD_IMAGE:-appflowyinc/appflowy_cloud}:${APPFLOWY_CLOUD_VERSION:-latest}
     depends_on:
       gotrue:
         condition: service_healthy
@@ -175,7 +184,7 @@ services:
     build:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
-    image: appflowyinc/admin_frontend:${APPFLOWY_ADMIN_FRONTEND_VERSION:-latest}
+    image: ${APPFLOWY_ADMIN_FRONTEND_IMAGE:-appflowyinc/admin_frontend}:${APPFLOWY_ADMIN_FRONTEND_VERSION:-latest}
     ports:
       - 3000:3000
     environment:
@@ -215,7 +224,7 @@ services:
 
   appflowy_worker:
     restart: on-failure
-    image: appflowyinc/appflowy_worker:${APPFLOWY_WORKER_VERSION:-latest}
+    image: ${APPFLOWY_WORKER_IMAGE:-appflowyinc/appflowy_worker}:${APPFLOWY_WORKER_VERSION:-latest}
     build:
       context: .
       dockerfile: ./services/appflowy-worker/Dockerfile

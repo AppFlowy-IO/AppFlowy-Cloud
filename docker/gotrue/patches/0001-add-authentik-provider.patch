@@ -1,0 +1,368 @@
+diff --git a/hack/test.env b/hack/test.env
+index 35e4b61..3788008 100644
+--- a/hack/test.env
++++ b/hack/test.env
+@@ -56,6 +56,11 @@ GOTRUE_EXTERNAL_KEYCLOAK_CLIENT_ID=testclientid
+ GOTRUE_EXTERNAL_KEYCLOAK_SECRET=testsecret
+ GOTRUE_EXTERNAL_KEYCLOAK_REDIRECT_URI=https://identity.services.netlify.com/callback
+ GOTRUE_EXTERNAL_KEYCLOAK_URL=https://keycloak.example.com/auth/realms/myrealm
++GOTRUE_EXTERNAL_AUTHENTIK_ENABLED=true
++GOTRUE_EXTERNAL_AUTHENTIK_CLIENT_ID=testclientid
++GOTRUE_EXTERNAL_AUTHENTIK_SECRET=testsecret
++GOTRUE_EXTERNAL_AUTHENTIK_REDIRECT_URI=https://identity.services.netlify.com/callback
++GOTRUE_EXTERNAL_AUTHENTIK_URL=https://authentik.example.com
+ GOTRUE_EXTERNAL_LINKEDIN_ENABLED=true
+ GOTRUE_EXTERNAL_LINKEDIN_CLIENT_ID=testclientid
+ GOTRUE_EXTERNAL_LINKEDIN_SECRET=testsecret
+diff --git a/internal/api/external.go b/internal/api/external.go
+index c609e53..1277028 100644
+--- a/internal/api/external.go
++++ b/internal/api/external.go
+@@ -547,6 +547,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
+ 	switch name {
+ 	case "apple":
+ 		return provider.NewAppleProvider(ctx, config.External.Apple)
++	case "authentik":
++		return provider.NewAuthentikProvider(config.External.Authentik, scopes)
+ 	case "azure":
+ 		return provider.NewAzureProvider(config.External.Azure, scopes)
+ 	case "bitbucket":
+diff --git a/internal/api/external_authentik_test.go b/internal/api/external_authentik_test.go
+new file mode 100644
+index 0000000..f29c5ff
+--- /dev/null
++++ b/internal/api/external_authentik_test.go
+@@ -0,0 +1,182 @@
++package api
++
++import (
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++
++	jwt "github.com/golang-jwt/jwt/v5"
++)
++
++const (
++	authentikUser        string = `{"sub": "authentiktestid", "name": "Authentik Test", "email": "authentik@example.com", "preferred_username": "authentik", "email_verified": true}`
++	authentikUserNoEmail string = `{"sub": "authentiktestid", "name": "Authentik Test", "preferred_username": "authentik", "email_verified": false}`
++)
++
++func (ts *ExternalTestSuite) TestSignupExternalAuthentik() {
++	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=authentik", nil)
++	w := httptest.NewRecorder()
++	ts.API.handler.ServeHTTP(w, req)
++	ts.Require().Equal(http.StatusFound, w.Code)
++	u, err := url.Parse(w.Header().Get("Location"))
++	ts.Require().NoError(err, "redirect url parse failed")
++	q := u.Query()
++	ts.Equal(ts.Config.External.Authentik.RedirectURI, q.Get("redirect_uri"))
++	ts.Equal(ts.Config.External.Authentik.ClientID, []string{q.Get("client_id")})
++	ts.Equal("code", q.Get("response_type"))
++	ts.Equal("openid profile email", q.Get("scope"))
++
++	claims := ExternalProviderClaims{}
++	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
++	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
++		return []byte(ts.Config.JWT.Secret), nil
++	})
++	ts.Require().NoError(err)
++
++	ts.Equal("authentik", claims.Provider)
++	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
++}
++
++func AuthentikTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {
++	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		switch r.URL.Path {
++		case "/application/o/token/":
++			*tokenCount++
++			ts.Equal(code, r.FormValue("code"))
++			ts.Equal("authorization_code", r.FormValue("grant_type"))
++			ts.Equal(ts.Config.External.Authentik.RedirectURI, r.FormValue("redirect_uri"))
++
++			w.Header().Add("Content-Type", "application/json")
++			fmt.Fprint(w, `{"access_token":"authentik_token","expires_in":100000}`)
++		case "/application/o/userinfo/":
++			*userCount++
++			w.Header().Add("Content-Type", "application/json")
++			fmt.Fprint(w, user)
++		default:
++			w.WriteHeader(500)
++			ts.Fail("unknown authentik oauth call %s", r.URL.Path)
++		}
++	}))
++
++	ts.Config.External.Authentik.URL = server.URL
++
++	return server
++}
++
++func (ts *ExternalTestSuite) TestSignupExternalAuthentikWithoutURLSetup() {
++	ts.createUser("authentiktestid", "authentik@example.com", "Authentik Test", "", "")
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUser)
++	ts.Config.External.Authentik.URL = ""
++	defer server.Close()
++
++	w := performAuthorizationRequest(ts, "authentik", code)
++	ts.Equal(w.Code, http.StatusBadRequest)
++}
++
++func (ts *ExternalTestSuite) TestSignupExternalAuthentik_AuthorizationCode() {
++	ts.Config.DisableSignup = false
++	ts.createUser("authentiktestid", "authentik@example.com", "Authentik Test", "", "")
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUser)
++	defer server.Close()
++
++	u := performAuthorization(ts, "authentik", code, "")
++
++	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "authentik@example.com", "Authentik Test", "authentiktestid", "")
++}
++
++func (ts *ExternalTestSuite) TestSignupExternalAuthentikDisableSignupErrorWhenNoUser() {
++	ts.Config.DisableSignup = true
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUser)
++	defer server.Close()
++
++	u := performAuthorization(ts, "authentik", code, "")
++
++	assertAuthorizationFailure(ts, u, "Signups not allowed for this instance", "access_denied", "authentik@example.com")
++}
++
++func (ts *ExternalTestSuite) TestSignupExternalAuthentikDisableSignupErrorWhenNoEmail() {
++	ts.Config.DisableSignup = true
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUserNoEmail)
++	defer server.Close()
++
++	u := performAuthorization(ts, "authentik", code, "")
++
++	assertAuthorizationFailure(ts, u, "Error getting user email from external provider", "server_error", "authentik@example.com")
++
++}
++
++func (ts *ExternalTestSuite) TestSignupExternalAuthentikDisableSignupSuccessWithPrimaryEmail() {
++	ts.Config.DisableSignup = true
++
++	ts.createUser("authentiktestid", "authentik@example.com", "Authentik Test", "", "")
++
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUser)
++	defer server.Close()
++
++	u := performAuthorization(ts, "authentik", code, "")
++
++	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "authentik@example.com", "Authentik Test", "authentiktestid", "")
++}
++
++func (ts *ExternalTestSuite) TestInviteTokenExternalAuthentikSuccessWhenMatchingToken() {
++	// name and avatar should be populated from authentik API
++	ts.createUser("authentiktestid", "authentik@example.com", "", "", "invite_token")
++
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUser)
++	defer server.Close()
++
++	u := performAuthorization(ts, "authentik", code, "invite_token")
++
++	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "authentik@example.com", "Authentik Test", "authentiktestid", "")
++}
++
++func (ts *ExternalTestSuite) TestInviteTokenExternalAuthentikErrorWhenNoMatchingToken() {
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	authentikUser := `{"name":"Authentik Test","avatar":{"href":"http://example.com/avatar"}}`
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUser)
++	defer server.Close()
++
++	w := performAuthorizationRequest(ts, "authentik", "invite_token")
++	ts.Require().Equal(http.StatusNotFound, w.Code)
++}
++
++func (ts *ExternalTestSuite) TestInviteTokenExternalAuthentikErrorWhenWrongToken() {
++	ts.createUser("authentiktestid", "authentik@example.com", "", "", "invite_token")
++
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	authentikUser := `{"name":"Authentik Test","avatar":{"href":"http://example.com/avatar"}}`
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUser)
++	defer server.Close()
++
++	w := performAuthorizationRequest(ts, "authentik", "wrong_token")
++	ts.Require().Equal(http.StatusNotFound, w.Code)
++}
++
++func (ts *ExternalTestSuite) TestInviteTokenExternalAuthentikErrorWhenEmailDoesntMatch() {
++	ts.createUser("authentiktestid", "authentik@example.com", "", "", "invite_token")
++
++	tokenCount, userCount := 0, 0
++	code := "authcode"
++	authentikUser := `{"name":"Authentik Test", "email":"other@example.com", "avatar":{"href":"http://example.com/avatar"}}`
++	server := AuthentikTestSignupSetup(ts, &tokenCount, &userCount, code, authentikUser)
++	defer server.Close()
++
++	u := performAuthorization(ts, "authentik", code, "invite_token")
++
++	assertAuthorizationFailure(ts, u, "Invited email does not match emails from external provider", "invalid_request", "")
++}
+diff --git a/internal/api/provider/authentik.go b/internal/api/provider/authentik.go
+new file mode 100644
+index 0000000..ec1e2d3
+--- /dev/null
++++ b/internal/api/provider/authentik.go
+@@ -0,0 +1,101 @@
++package provider
++
++import (
++	"context"
++	"errors"
++	"strings"
++
++	"github.com/supabase/auth/internal/conf"
++	"golang.org/x/oauth2"
++)
++
++// authentik
++type authentikProvider struct {
++	*oauth2.Config
++	Host string
++}
++
++type authentikUser struct {
++	Name          string `json:"name"`
++	Sub           string `json:"sub"`
++	Email         string `json:"email"`
++	EmailVerified bool   `json:"email_verified"`
++}
++
++// NewAuthentikProvider creates an authentik account provider.
++//
++// ext.URL must point to the authentik base URL, for example:
++// https://auth.example.com
++func NewAuthentikProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
++	if err := ext.ValidateOAuth(); err != nil {
++		return nil, err
++	}
++
++	oauthScopes := []string{
++		"openid",
++		"profile",
++		"email",
++	}
++
++	if scopes != "" {
++		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
++	}
++
++	if ext.URL == "" {
++		return nil, errors.New("unable to find URL for the authentik provider")
++	}
++
++	extURLLen := len(ext.URL)
++	if ext.URL[extURLLen-1] == '/' {
++		ext.URL = ext.URL[:extURLLen-1]
++	}
++
++	return &authentikProvider{
++		Config: &oauth2.Config{
++			ClientID:     ext.ClientID[0],
++			ClientSecret: ext.Secret,
++			Endpoint: oauth2.Endpoint{
++				AuthURL:  ext.URL + "/application/o/authorize/",
++				TokenURL: ext.URL + "/application/o/token/",
++			},
++			RedirectURL: ext.RedirectURI,
++			Scopes:      oauthScopes,
++		},
++		Host: ext.URL,
++	}, nil
++}
++
++func (g authentikProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
++	return g.Exchange(context.Background(), code)
++}
++
++func (g authentikProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
++	var u authentikUser
++
++	if err := makeRequest(ctx, tok, g.Config, g.Host+"/application/o/userinfo/", &u); err != nil {
++		return nil, err
++	}
++
++	data := &UserProvidedData{}
++	if u.Email != "" {
++		data.Emails = []Email{{
++			Email:    u.Email,
++			Verified: u.EmailVerified,
++			Primary:  true,
++		}}
++	}
++
++	data.Metadata = &Claims{
++		Issuer:        g.Host,
++		Subject:       u.Sub,
++		Name:          u.Name,
++		Email:         u.Email,
++		EmailVerified: u.EmailVerified,
++
++		// To be deprecated
++		FullName:   u.Name,
++		ProviderId: u.Sub,
++	}
++
++	return data, nil
++}
+diff --git a/internal/api/settings.go b/internal/api/settings.go
+index c0025f4..ec28365 100644
+--- a/internal/api/settings.go
++++ b/internal/api/settings.go
+@@ -5,6 +5,7 @@ import "net/http"
+ type ProviderSettings struct {
+ 	AnonymousUsers bool `json:"anonymous_users"`
+ 	Apple          bool `json:"apple"`
++	Authentik      bool `json:"authentik"`
+ 	Azure          bool `json:"azure"`
+ 	Bitbucket      bool `json:"bitbucket"`
+ 	Discord        bool `json:"discord"`
+@@ -47,6 +48,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
+ 		ExternalProviders: ProviderSettings{
+ 			AnonymousUsers: config.External.AnonymousUsers.Enabled,
+ 			Apple:          config.External.Apple.Enabled,
++			Authentik:      config.External.Authentik.Enabled,
+ 			Azure:          config.External.Azure.Enabled,
+ 			Bitbucket:      config.External.Bitbucket.Enabled,
+ 			Discord:        config.External.Discord.Enabled,
+diff --git a/internal/api/settings_test.go b/internal/api/settings_test.go
+index 767bcf7..a35da7b 100644
+--- a/internal/api/settings_test.go
++++ b/internal/api/settings_test.go
+@@ -38,6 +38,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
+ 	require.True(t, p.SlackOIDC)
+ 	require.True(t, p.Google)
+ 	require.True(t, p.Kakao)
++	require.True(t, p.Authentik)
+ 	require.True(t, p.Keycloak)
+ 	require.True(t, p.Linkedin)
+ 	require.True(t, p.LinkedinOIDC)
+diff --git a/internal/conf/configuration.go b/internal/conf/configuration.go
+index 10b42b1..1f2c93a 100644
+--- a/internal/conf/configuration.go
++++ b/internal/conf/configuration.go
+@@ -305,6 +305,7 @@ type EmailContentConfiguration struct {
+ type ProviderConfiguration struct {
+ 	AnonymousUsers          AnonymousProviderConfiguration `json:"anonymous_users" split_words:"true"`
+ 	Apple                   OAuthProviderConfiguration     `json:"apple"`
++	Authentik               OAuthProviderConfiguration     `json:"authentik"`
+ 	Azure                   OAuthProviderConfiguration     `json:"azure"`
+ 	Bitbucket               OAuthProviderConfiguration     `json:"bitbucket"`
+ 	Discord                 OAuthProviderConfiguration     `json:"discord"`

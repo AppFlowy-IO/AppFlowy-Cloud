@@ -131,88 +131,75 @@ impl GoTrueOAuthProviderSettings {
   }
 }
 
-pub enum AuthProvider {
-  // Non-OAuth providers
-  Email,
-  Phone,
+macro_rules! define_auth_provider {
+    (
+        $(#[$meta:meta])*
+        $vis:vis enum $name:ident {
+            $(
+                $(#[$variant_meta:meta])*
+                $variant:ident = $str_value:expr,
+            )*
+        }
+    ) => {
+        $(#[$meta])*
+        $vis enum $name {
+            $(
+                $(#[$variant_meta])*
+                $variant,
+            )*
+        }
 
-  // OAuth providers
-  Apple,
-  Azure,
-  Bitbucket,
-  Discord,
-  Facebook,
-  Figma,
-  Github,
-  Gitlab,
-  Google,
-  Keycloak,
-  Kakao,
-  Linkedin,
-  Notion,
-  Spotify,
-  Slack,
-  Workos,
-  Twitch,
-  Twitter,
-  Zoom,
+        impl $name {
+            pub fn as_str(&self) -> &'static str {
+                match self {
+                    $(
+                        $name::$variant => $str_value,
+                    )*
+                }
+            }
+
+            pub fn from<A: AsRef<str>>(value: A) -> Option<$name> {
+                match value.as_ref() {
+                    $(
+                        $str_value => Some($name::$variant),
+                    )*
+                    _ => None,
+                }
+            }
+        }
+    };
 }
 
-impl AuthProvider {
-  pub fn as_str(&self) -> &str {
-    match self {
-      AuthProvider::Apple => "apple",
-      AuthProvider::Azure => "azure",
-      AuthProvider::Bitbucket => "bitbucket",
-      AuthProvider::Discord => "discord",
-      AuthProvider::Facebook => "facebook",
-      AuthProvider::Figma => "figma",
-      AuthProvider::Github => "github",
-      AuthProvider::Gitlab => "gitlab",
-      AuthProvider::Google => "google",
-      AuthProvider::Keycloak => "keycloak",
-      AuthProvider::Kakao => "kakao",
-      AuthProvider::Linkedin => "linkedin",
-      AuthProvider::Notion => "notion",
-      AuthProvider::Spotify => "spotify",
-      AuthProvider::Slack => "slack",
-      AuthProvider::Workos => "workos",
-      AuthProvider::Twitch => "twitch",
-      AuthProvider::Twitter => "twitter",
-      AuthProvider::Email => "email",
-      AuthProvider::Phone => "phone",
-      AuthProvider::Zoom => "zoom",
-    }
-  }
-}
+define_auth_provider! {
+    pub enum AuthProvider {
+        // Non-OAuth providers
+        Email = "email",
+        Phone = "phone",
 
-impl AuthProvider {
-  pub fn from<A: AsRef<str>>(value: A) -> Option<AuthProvider> {
-    match value.as_ref() {
-      "apple" => Some(AuthProvider::Apple),
-      "azure" => Some(AuthProvider::Azure),
-      "bitbucket" => Some(AuthProvider::Bitbucket),
-      "discord" => Some(AuthProvider::Discord),
-      "facebook" => Some(AuthProvider::Facebook),
-      "figma" => Some(AuthProvider::Figma),
-      "github" => Some(AuthProvider::Github),
-      "gitlab" => Some(AuthProvider::Gitlab),
-      "google" => Some(AuthProvider::Google),
-      "keycloak" => Some(AuthProvider::Keycloak),
-      "kakao" => Some(AuthProvider::Kakao),
-      "linkedin" => Some(AuthProvider::Linkedin),
-      "notion" => Some(AuthProvider::Notion),
-      "spotify" => Some(AuthProvider::Spotify),
-      "slack" => Some(AuthProvider::Slack),
-      "workos" => Some(AuthProvider::Workos),
-      "twitch" => Some(AuthProvider::Twitch),
-      "twitter" => Some(AuthProvider::Twitter),
-      "email" => Some(AuthProvider::Email),
-      "phone" => Some(AuthProvider::Phone),
-      "zoom" => Some(AuthProvider::Zoom),
-      _ => None,
+        // OAuth providers
+        Apple = "apple",
+        Authentik = "authentik",
+        Azure = "azure",
+        Bitbucket = "bitbucket",
+        Discord = "discord",
+        Facebook = "facebook",
+        Figma = "figma",
+        Github = "github",
+        Gitlab = "gitlab",
+        Google = "google",
+        Keycloak = "keycloak",
+        Kakao = "kakao",
+        Linkedin = "linkedin",
+        Notion = "notion",
+        Spotify = "spotify",
+        Slack = "slack",
+        Workos = "workos",
+        Twitch = "twitch",
+        Twitter = "twitter",
+        Zoom = "zoom",
+        Saml = "saml",
+        Oidc = "oidc",
     }
-  }
 }
 
 #[derive(Serialize, Deserialize)]

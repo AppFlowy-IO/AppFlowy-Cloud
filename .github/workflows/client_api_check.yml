@@ -1,11 +1,7 @@
 name: ClientAPI Check
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    types: [ opened, synchronize, reopened ]
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -37,4 +33,3 @@ jobs:
       - name: Check ClientAPI Dependencies
         working-directory: ./libs/client-api
         run: bash ../../script/client_api_deps_check.sh
-

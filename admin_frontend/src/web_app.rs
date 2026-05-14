@@ -7,15 +7,15 @@ use crate::ext::api::{
   verify_token_cloud,
 };
 use crate::models::{LoginParams, OAuthLoginAction, WebAppOAuthLoginRequest};
-use crate::session::{self, new_session_cookie, UserSession};
+use crate::session::{self, UserSession, new_session_cookie};
 use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Result};
-use axum::{response::Html, routing::get, Router};
+use axum::{Router, response::Html, routing::get};
 use axum_extra::extract::CookieJar;
 use gotrue_entity::dto::User;
 
-use crate::{templates, AppState};
+use crate::{AppState, templates};
 
 static DEFAULT_OAUTH_REDIRECT_TO_WITHOUT_PREFIX: &str = "/web/login-callback";
 
@@ -95,12 +95,13 @@ async fn login_callback_query_handler(
               query.error_description
             );
             let redirect_url = format!(
-                "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
-                query.workspace_name.unwrap_or_default(),
-                query.workspace_icon.unwrap_or_default(),
-                query.user_name.unwrap_or_default(),
-                query.user_icon.unwrap_or_default(),
-                query.workspace_member_count.unwrap_or_default());
+              "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+              query.workspace_name.unwrap_or_default(),
+              query.workspace_icon.unwrap_or_default(),
+              query.user_name.unwrap_or_default(),
+              query.user_icon.unwrap_or_default(),
+              query.workspace_member_count.unwrap_or_default()
+            );
 
             let expired_html = render_template(templates::Redirect { redirect_url })?;
             return Ok(expired_html.into_response());
@@ -176,7 +177,8 @@ async fn login_callback_query_handler(
             query.workspace_icon.unwrap_or_default(),
             query.user_name.unwrap_or_default(),
             query.user_icon.unwrap_or_default(),
-            query.workspace_member_count.unwrap_or_default());
+            query.workspace_member_count.unwrap_or_default()
+          );
           let redirect_html = render_template(templates::Redirect { redirect_url })?;
           return Ok(redirect_html.into_response());
         };
@@ -381,13 +383,15 @@ async fn login_handler(
     .to_string()
   });
 
-  let external = state
+  let settings = state
     .gotrue_client
     .settings()
     .await
-    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?
-    .external;
-  let oauth_providers = external.oauth_providers();
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?;
+  let mut oauth_providers = settings.external.oauth_providers();
+  if settings.saml_enabled && !oauth_providers.contains(&"saml") {
+    oauth_providers.push("saml");
+  }
   let default_oauth_redirect_to = format!(
     "{}{}",
     state.config.path_prefix, DEFAULT_OAUTH_REDIRECT_TO_WITHOUT_PREFIX
@@ -419,12 +423,22 @@ async fn login_v2_handler(
     .to_string()
   });
 
+  let settings = state
+    .gotrue_client
+    .settings()
+    .await
+    .map_err(|_| WebAppError::LoginRedirectRequired(state.config.path_prefix.clone()))?;
+  let mut oauth_providers = settings.external.oauth_providers();
+  if settings.saml_enabled && !oauth_providers.contains(&"saml") {
+    oauth_providers.push("saml");
+  }
+
   let default_oauth_redirect_to = format!(
     "{}{}",
     state.config.path_prefix, DEFAULT_OAUTH_REDIRECT_TO_WITHOUT_PREFIX
   );
   render_template(templates::LoginV2 {
-    oauth_providers: &["Google", "Apple", "Github", "Discord"],
+    oauth_providers: &oauth_providers,
     redirect_to: redirect_to.as_deref(),
     oauth_redirect_to: oauth_redirect_to
       .as_deref()

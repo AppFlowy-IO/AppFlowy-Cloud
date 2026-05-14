@@ -69,13 +69,13 @@
             <div style="display: flex; align-items: center; justify-content: center; color: inherit">
               <div>
                 <div
-                  hx-get="../assets/login/{{ provider|escape }}.svg"
+                  hx-get="../assets/login/{{ provider|capitalize|escape }}.svg"
                   hx-trigger="load"
                   hx-swap="innerHTML"
                 ></div>
               </div>
               <span> &nbsp </span>
-              <div> Continue with {{ provider }} </div>
+              <div> Continue with {{ provider|capitalize }} </div>
             </div>
           </a>
         </div>

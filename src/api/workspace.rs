@@ -404,6 +404,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(list_database_row_details_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/database/{database_id}/row/{row_id}")
+        .route(web::patch().to(patch_database_row_handler)),
+    )
+    .service(
       web::resource("/{workspace_id}/quick-note")
         .route(web::get().to(list_quick_notes_handler))
         .route(web::post().to(post_quick_note_handler)),
@@ -2613,6 +2617,34 @@ async fn post_database_row_handler(
     biz::collab::ops::insert_database_row(&state, workspace_id, db_id, uid, None, cells, document)
       .await?;
   Ok(Json(AppResponse::Ok().with_data(new_db_row_id)))
+}
+
+async fn patch_database_row_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(Uuid, Uuid, Uuid)>,
+  state: Data<AppState>,
+  add_database_row: Json<AddDatatabaseRow>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, db_id, row_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  let AddDatatabaseRow { cells, document } = add_database_row.into_inner();
+
+  biz::collab::ops::upsert_database_row(
+    &state,
+    workspace_id,
+    db_id,
+    uid,
+    row_id,
+    cells,
+    document,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn put_database_row_handler(

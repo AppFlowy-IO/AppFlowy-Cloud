@@ -838,6 +838,72 @@ pub async fn add_database_field(
   Ok(new_id)
 }
 
+// Overwrites an existing database field's name, field_type and type_options.
+// The field is looked up by its short collab-internal id (e.g. "iS5TaT"), not
+// by name. All three properties from `insert_field` replace whatever was
+// previously on the field — there is no merge. If the field_type changes, the
+// old type_option key is dropped so we don't leave a stale payload behind.
+pub async fn update_database_field(
+  state: &AppState,
+  workspace_id: Uuid,
+  database_id: Uuid,
+  field_id: String,
+  insert_field: AFInsertDatabaseField,
+) -> Result<(), AppError> {
+  let (mut db_collab, db_body) =
+    get_latest_collab_database_body(&state.collab_storage, workspace_id, database_id).await?;
+
+  // Parse the new type_option_data up front so we fail with a clean 400
+  // before mutating any collab state.
+  let type_option_data = insert_field
+    .type_option_data
+    .unwrap_or(serde_json::json!({}));
+  let new_tod: collab_database::fields::TypeOptionData =
+    serde_json::from_value(type_option_data).map_err(|err| {
+      AppError::InvalidRequest(format!("Failed to parse type option: {:?}", err))
+    })?;
+
+  let db_collab_update = {
+    let mut yrs_txn = db_collab.transact_mut();
+    let old_field_type = {
+      let existing = db_body.fields.get_field(&yrs_txn, &field_id).ok_or_else(|| {
+        AppError::RecordNotFound(format!("field '{}' not found in database", field_id))
+      })?;
+      existing.field_type
+    };
+    let new_field_type = insert_field.field_type;
+
+    db_body
+      .fields
+      .update_field(&mut yrs_txn, &field_id, |update| {
+        let mut u = update
+          .set_name(insert_field.name)
+          .set_field_type(new_field_type);
+        // Drop the old type_option payload if the field's type changed, so the
+        // collab doesn't carry both keys.
+        if old_field_type != new_field_type {
+          u = u.set_type_option(old_field_type, None);
+        }
+        u.set_type_option(new_field_type, Some(new_tod));
+      });
+
+    yrs_txn.encode_update_v1()
+  };
+
+  state
+    .ws_server
+    .publish_update(
+      workspace_id,
+      database_id,
+      CollabType::Database,
+      &CollabOrigin::Server,
+      db_collab_update,
+    )
+    .await?;
+
+  Ok(())
+}
+
 pub async fn list_database_row_ids_updated(
   collab_storage: &Arc<dyn CollabStore>,
   pg_pool: &PgPool,

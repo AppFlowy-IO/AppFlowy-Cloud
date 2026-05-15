@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use app_error::ErrorCode;
 use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
 use collab_database::entity::FieldType;
 use serde_json::json;
@@ -313,6 +314,160 @@ async fn database_fields_unsupported_field_type() {
     let new_row_detail = &row_details[0];
     assert!(!new_row_detail.cells.contains_key("MyRelationCol"));
   }
+}
+
+#[tokio::test]
+async fn database_field_update_via_patch() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c).await;
+  let databases = c.list_databases(&workspace_id).await.unwrap();
+  assert_eq!(databases.len(), 1);
+  let todo_db = &databases[0];
+
+  // Create a SingleSelect field with an initial set of options. The exact
+  // structure of `content` is what the AppFlowy client writes — a serialized
+  // SelectTypeOption JSON string under the "content" key.
+  let initial_content = json!({
+    "options": [
+      { "id": "opt1", "name": "Low",    "color": "Yellow" },
+      { "id": "opt2", "name": "Medium", "color": "Orange" }
+    ],
+    "disable_color": false
+  })
+  .to_string();
+  let field_id = c
+    .add_database_field(
+      &workspace_id,
+      &todo_db.id,
+      &AFInsertDatabaseField {
+        name: "Priority".to_string(),
+        field_type: FieldType::SingleSelect.into(),
+        type_option_data: Some(json!({ "content": initial_content })),
+      },
+    )
+    .await
+    .unwrap();
+
+  // Now PATCH the field with a completely different name and option list —
+  // different option ids, different names, different colours.
+  let new_content = json!({
+    "options": [
+      { "id": "p_lo",  "name": "P3",      "color": "Lime"   },
+      { "id": "p_mid", "name": "P2",      "color": "Aqua"   },
+      { "id": "p_hi",  "name": "P1",      "color": "Pink"   },
+      { "id": "p_now", "name": "Urgent",  "color": "Purple" }
+    ],
+    "disable_color": false
+  })
+  .to_string();
+  c.update_database_field(
+    &workspace_id,
+    &todo_db.id,
+    &field_id,
+    &AFInsertDatabaseField {
+      name: "Severity".to_string(),
+      field_type: FieldType::SingleSelect.into(),
+      type_option_data: Some(json!({ "content": new_content.clone() })),
+    },
+  )
+  .await
+  .unwrap();
+
+  // Read back via GET /fields and confirm the patched values are visible.
+  let fields = c
+    .get_database_fields(&workspace_id, &todo_db.id)
+    .await
+    .unwrap();
+  let patched = fields
+    .iter()
+    .find(|f| f.id == field_id)
+    .expect("patched field is still present after update");
+  assert_eq!(patched.name, "Severity");
+  assert_eq!(patched.field_type, "SingleSelect");
+
+  // The serde representation of a SingleSelect type_option is the parsed
+  // content payload (an object with `options` and `disable_color`).
+  let opts = &patched.type_option["options"];
+  let opts = opts.as_array().expect("options is an array");
+  assert_eq!(opts.len(), 4);
+  let names: Vec<&str> = opts.iter().map(|o| o["name"].as_str().unwrap()).collect();
+  assert_eq!(names, vec!["P3", "P2", "P1", "Urgent"]);
+  let colors: Vec<&str> = opts.iter().map(|o| o["color"].as_str().unwrap()).collect();
+  assert_eq!(colors, vec!["Lime", "Aqua", "Pink", "Purple"]);
+}
+
+// Regression test for the "fail before mutate" contract of PATCH /fields:
+// when the request body's `type_option_data` cannot be parsed as a
+// `TypeOptionData` (HashMap<String, Any> on the collab side), the handler must
+// return 400 and leave the field untouched in storage.
+#[tokio::test]
+async fn database_field_update_via_patch_rejects_invalid_type_option_data() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c).await;
+  let databases = c.list_databases(&workspace_id).await.unwrap();
+  assert_eq!(databases.len(), 1);
+  let todo_db = &databases[0];
+
+  // Seed a SingleSelect field with a known payload that we can fingerprint
+  // before and after the failed PATCH.
+  let initial_content = json!({
+    "options": [
+      { "id": "opt1", "name": "Low",    "color": "Yellow" },
+      { "id": "opt2", "name": "Medium", "color": "Orange" }
+    ],
+    "disable_color": false
+  })
+  .to_string();
+  let field_id = c
+    .add_database_field(
+      &workspace_id,
+      &todo_db.id,
+      &AFInsertDatabaseField {
+        name: "Priority".to_string(),
+        field_type: FieldType::SingleSelect.into(),
+        type_option_data: Some(json!({ "content": initial_content })),
+      },
+    )
+    .await
+    .unwrap();
+  let before = c
+    .get_database_fields(&workspace_id, &todo_db.id)
+    .await
+    .unwrap()
+    .into_iter()
+    .find(|f| f.id == field_id)
+    .expect("seeded field is present");
+
+  // Send PATCH with a `type_option_data` that is NOT an object. A JSON array
+  // fails `serde_json::from_value::<HashMap<String, Any>>`, which is the same
+  // path the handler takes before touching collab state.
+  let err = c
+    .update_database_field(
+      &workspace_id,
+      &todo_db.id,
+      &field_id,
+      &AFInsertDatabaseField {
+        name: "ShouldNotApply".to_string(),
+        field_type: FieldType::RichText.into(),
+        type_option_data: Some(json!([])),
+      },
+    )
+    .await
+    .expect_err("PATCH with non-object type_option_data must fail");
+  assert_eq!(err.code, ErrorCode::InvalidRequest);
+
+  // Refetch and assert the field is byte-identical to its pre-PATCH state.
+  let after = c
+    .get_database_fields(&workspace_id, &todo_db.id)
+    .await
+    .unwrap()
+    .into_iter()
+    .find(|f| f.id == field_id)
+    .expect("field is still present after rejected PATCH");
+  assert_eq!(after.name, before.name);
+  assert_eq!(after.field_type, before.field_type);
+  assert_eq!(after.type_option, before.type_option);
+  assert_eq!(after.is_primary, before.is_primary);
 }
 
 #[tokio::test]

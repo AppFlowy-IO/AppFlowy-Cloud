@@ -316,6 +316,86 @@ async fn database_fields_unsupported_field_type() {
 }
 
 #[tokio::test]
+async fn database_field_update_via_patch() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c).await;
+  let databases = c.list_databases(&workspace_id).await.unwrap();
+  assert_eq!(databases.len(), 1);
+  let todo_db = &databases[0];
+
+  // Create a SingleSelect field with an initial set of options. The exact
+  // structure of `content` is what the AppFlowy client writes — a serialized
+  // SelectTypeOption JSON string under the "content" key.
+  let initial_content = json!({
+    "options": [
+      { "id": "opt1", "name": "Low",    "color": "Yellow" },
+      { "id": "opt2", "name": "Medium", "color": "Orange" }
+    ],
+    "disable_color": false
+  })
+  .to_string();
+  let field_id = c
+    .add_database_field(
+      &workspace_id,
+      &todo_db.id,
+      &AFInsertDatabaseField {
+        name: "Priority".to_string(),
+        field_type: FieldType::SingleSelect.into(),
+        type_option_data: Some(json!({ "content": initial_content })),
+      },
+    )
+    .await
+    .unwrap();
+
+  // Now PATCH the field with a completely different name and option list —
+  // different option ids, different names, different colours.
+  let new_content = json!({
+    "options": [
+      { "id": "p_lo",  "name": "P3",      "color": "Lime"   },
+      { "id": "p_mid", "name": "P2",      "color": "Aqua"   },
+      { "id": "p_hi",  "name": "P1",      "color": "Pink"   },
+      { "id": "p_now", "name": "Urgent",  "color": "Purple" }
+    ],
+    "disable_color": false
+  })
+  .to_string();
+  c.update_database_field(
+    &workspace_id,
+    &todo_db.id,
+    &field_id,
+    &AFInsertDatabaseField {
+      name: "Severity".to_string(),
+      field_type: FieldType::SingleSelect.into(),
+      type_option_data: Some(json!({ "content": new_content.clone() })),
+    },
+  )
+  .await
+  .unwrap();
+
+  // Read back via GET /fields and confirm the patched values are visible.
+  let fields = c
+    .get_database_fields(&workspace_id, &todo_db.id)
+    .await
+    .unwrap();
+  let patched = fields
+    .iter()
+    .find(|f| f.id == field_id)
+    .expect("patched field is still present after update");
+  assert_eq!(patched.name, "Severity");
+  assert_eq!(patched.field_type, "SingleSelect");
+
+  // The serde representation of a SingleSelect type_option is the parsed
+  // content payload (an object with `options` and `disable_color`).
+  let opts = &patched.type_option["options"];
+  let opts = opts.as_array().expect("options is an array");
+  assert_eq!(opts.len(), 4);
+  let names: Vec<&str> = opts.iter().map(|o| o["name"].as_str().unwrap()).collect();
+  assert_eq!(names, vec!["P3", "P2", "P1", "Urgent"]);
+  let colors: Vec<&str> = opts.iter().map(|o| o["color"].as_str().unwrap()).collect();
+  assert_eq!(colors, vec!["Lime", "Aqua", "Pink", "Purple"]);
+}
+
+#[tokio::test]
 async fn database_insert_row_with_doc() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;

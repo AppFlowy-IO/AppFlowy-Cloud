@@ -2735,6 +2735,10 @@ async fn list_database_row_details_handler(
     .enforce_action(&uid, &workspace_id, Action::Read)
     .await?;
 
+  // No filtered-out field types: every FieldType (including Relation) is
+  // surfaced through this endpoint. The `unsupported_field_types` parameter
+  // is kept on the ops API so callers that need to mask specific field types
+  // can opt in without a signature change.
   let db_rows = biz::collab::ops::list_database_row_details(
     &state.collab_storage,
     uid,

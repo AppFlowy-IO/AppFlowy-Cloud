@@ -396,6 +396,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::post().to(post_database_fields_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/database/{database_id}/fields/{field_id}")
+        .route(web::patch().to(patch_database_field_handler)),
+    )
+    .service(
       web::resource("/{workspace_id}/database/{database_id}/row/updated")
         .route(web::get().to(list_database_row_id_updated_handler)),
     )
@@ -2687,6 +2691,36 @@ async fn post_database_fields_handler(
     biz::collab::ops::add_database_field(&state, workspace_id, db_id, field.into_inner()).await?;
 
   Ok(Json(AppResponse::Ok().with_data(field_id)))
+}
+
+// PATCH /api/workspace/{workspace_id}/database/{database_id}/fields/{field_id}
+// Overwrite an existing field's name, field_type and type_option_data. The
+// {field_id} path segment is the short collab-internal id (e.g. "iS5TaT"),
+// not a UUID. The request body uses the same AFInsertDatabaseField shape as
+// POST /fields so the migrator can reuse the DTO.
+async fn patch_database_field_handler(
+  user_uuid: UserUuid,
+  path_param: web::Path<(Uuid, Uuid, String)>,
+  state: Data<AppState>,
+  field: Json<AFInsertDatabaseField>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, db_id, field_id) = path_param.into_inner();
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  state
+    .workspace_access_control
+    .enforce_action(&uid, &workspace_id, Action::Write)
+    .await?;
+
+  biz::collab::ops::update_database_field(
+    &state,
+    workspace_id,
+    db_id,
+    field_id,
+    field.into_inner(),
+  )
+  .await?;
+
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn list_database_row_id_updated_handler(

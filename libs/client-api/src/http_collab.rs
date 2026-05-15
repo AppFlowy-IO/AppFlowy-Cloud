@@ -231,6 +231,30 @@ impl Client {
     process_response_data::<String>(resp).await
   }
 
+  // Overwrites an existing database field's name, field_type and
+  // type_option_data. field_id is the short collab-internal id (e.g.
+  // "iS5TaT"), not a UUID. There is no merge — the supplied values fully
+  // replace what was on the field.
+  pub async fn update_database_field(
+    &self,
+    workspace_id: &Uuid,
+    database_id: &str,
+    field_id: &str,
+    insert_field: &AFInsertDatabaseField,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/database/{}/fields/{}",
+      self.base_url, workspace_id, database_id, field_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(insert_field)
+      .send()
+      .await?;
+    process_response_error(resp).await
+  }
+
   pub async fn list_database_row_ids_updated(
     &self,
     workspace_id: &Uuid,

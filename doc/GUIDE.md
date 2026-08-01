@@ -35,6 +35,14 @@ After executing `docker compose up -d`, AppFlowy-Cloud is accessible at `http://
 - `/minio`: User interface for Minio object storage.
 - `/`, `/app`: AppFlowy Web.
 
+### Self-Hosted User Onboarding & Whitelist
+On Community Self-Hosted edition, workspace member invitations are capped at 1 member/owner per workspace. User onboarding is managed via the **Signup Settings / Whitelist** in the Admin Console (`/console/users-management?tab=settings`):
+- **Domain Whitelist**: Add authorized email domains (e.g. `yourcompany.com`). Users registering with matching emails can self-signup at `/signup` without seat limit restrictions.
+- **Email Whitelist**: Add specific external email addresses for individual collaborator access.
+
+### Reverse Proxy & Reverse Proxy Authentication
+When deploying `admin_frontend` behind reverse proxies (Traefik, Nginx, Cloudflare Tunnels), set `NEXT_PUBLIC_DISABLE_SERVER_ACTIONS=true` in your `.env` file to handle authentication tokens client-side in the browser (`localStorage` and `document.cookie`), preventing cookie session desynchronization loops on Next.js Server Actions.
+
 ![Deployment Architecture](../assets/images/deployment_arch.png)
 
 ## Dockerization and Continuous Integration

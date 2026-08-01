@@ -209,6 +209,9 @@ pub enum AppError {
   #[error("paid plan workspace guest limit exceeded")]
   PaidPlanGuestLimitExceeded,
 
+  #[error("Workspace member limit exceeded. On Community Self-Hosted, enable user signups via Domain or Email Whitelist under Settings.")]
+  WorkspaceMemberLimitExceeded,
+
   #[error("{0}")]
   RetryLater(anyhow::Error),
 }
@@ -298,6 +301,7 @@ impl AppError {
       AppError::InvalidGuest(_) => ErrorCode::InvalidGuest,
       AppError::FreePlanGuestLimitExceeded => ErrorCode::FreePlanGuestLimitExceeded,
       AppError::PaidPlanGuestLimitExceeded => ErrorCode::PaidPlanGuestLimitExceeded,
+      AppError::WorkspaceMemberLimitExceeded => ErrorCode::WorkspaceMemberLimitExceeded,
       AppError::RecordDeleted(_) => ErrorCode::RecordDeleted,
       AppError::RetryLater(_) => ErrorCode::RetryLater,
     }

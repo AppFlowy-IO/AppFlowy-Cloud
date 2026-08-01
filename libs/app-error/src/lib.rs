@@ -209,7 +209,7 @@ pub enum AppError {
   #[error("paid plan workspace guest limit exceeded")]
   PaidPlanGuestLimitExceeded,
 
-  #[error("Workspace member limit exceeded. On Community Self-Hosted, enable user signups via Domain or Email Whitelist under Settings.")]
+  #[error("Workspace member limit exceeded.")]
   WorkspaceMemberLimitExceeded,
 
   #[error("{0}")]

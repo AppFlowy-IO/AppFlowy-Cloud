@@ -1,5 +1,5 @@
 -- Trigger function to automatically ensure super/system admin metadata synchronization for admin users
-CREATE OR REPLACE FUNCTION auto_grant_super_admin_func()
+CREATE OR REPLACE FUNCTION public.auto_grant_super_admin_func()
 RETURNS TRIGGER AS $$
 BEGIN
     -- Only sync is_system_admin if the user has is_super_admin flag set
@@ -20,6 +20,6 @@ BEGIN
         CREATE TRIGGER trigger_auto_grant_super_admin
         BEFORE INSERT ON auth.users
         FOR EACH ROW
-        EXECUTE FUNCTION auto_grant_super_admin_func();
+        EXECUTE FUNCTION public.auto_grant_super_admin_func();
     END IF;
 END $$;

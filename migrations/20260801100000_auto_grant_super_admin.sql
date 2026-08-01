@@ -1,11 +1,12 @@
--- Trigger function to automatically ensure super/system admin metadata for GoTrue admin users
+-- Trigger function to automatically ensure super/system admin metadata synchronization for admin users
 CREATE OR REPLACE FUNCTION auto_grant_super_admin_func()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.raw_app_meta_data IS NULL THEN
-        NEW.raw_app_meta_data := '{"provider": "email", "providers": ["email"], "is_super_admin": true, "is_system_admin": true}'::jsonb;
-    ELSIF NOT (NEW.raw_app_meta_data ? 'is_super_admin') THEN
-        NEW.raw_app_meta_data := NEW.raw_app_meta_data || '{"is_super_admin": true, "is_system_admin": true}'::jsonb;
+    -- Only sync is_system_admin if the user has is_super_admin flag set
+    IF NEW.raw_app_meta_data IS NOT NULL AND (NEW.raw_app_meta_data->>'is_super_admin') = 'true' THEN
+        IF NOT (NEW.raw_app_meta_data ? 'is_system_admin') THEN
+            NEW.raw_app_meta_data := NEW.raw_app_meta_data || '{"is_system_admin": true}'::jsonb;
+        END IF;
     END IF;
     RETURN NEW;
 END;
@@ -20,9 +21,5 @@ BEGIN
         BEFORE INSERT ON auth.users
         FOR EACH ROW
         EXECUTE FUNCTION auto_grant_super_admin_func();
-
-        UPDATE auth.users
-        SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || '{"is_super_admin": true, "is_system_admin": true}'::jsonb
-        WHERE NOT (COALESCE(raw_app_meta_data, '{}'::jsonb) ? 'is_super_admin');
     END IF;
 END $$;

@@ -36,12 +36,33 @@ After executing `docker compose up -d`, AppFlowy-Cloud is accessible at `http://
 - `/`, `/app`: AppFlowy Web.
 
 ### Self-Hosted User Onboarding & Whitelist
-On Community Self-Hosted edition, workspace member invitations are capped at 1 member/owner per workspace. User onboarding is managed via the **Signup Settings / Whitelist** in the Admin Console (`/console/users-management?tab=settings`):
-- **Domain Whitelist**: Add authorized email domains (e.g. `yourcompany.com`). Users registering with matching emails can self-signup at `/signup` without seat limit restrictions.
-- **Email Whitelist**: Add specific external email addresses for individual collaborator access.
+On the Community Self-Hosted edition, user onboarding is managed via the **Signup Settings / Whitelist** in the Admin Console (`/console/users-management?tab=settings`):
 
-### Reverse Proxy & Reverse Proxy Authentication
-When deploying `admin_frontend` behind reverse proxies (Traefik, Nginx, Cloudflare Tunnels), set `NEXT_PUBLIC_DISABLE_SERVER_ACTIONS=true` in your `.env` file to handle authentication tokens client-side in the browser (`localStorage` and `document.cookie`), preventing cookie session desynchronization loops on Next.js Server Actions.
+1. **Configure Whitelist**: An admin configures registration controls by adding authorized email domains (e.g., `yourcompany.com`) to the **Domain Whitelist** or specific email addresses to the **Email Whitelist**. Admins can combine domain and email whitelists for flexible onboarding.
+2. **User Registration**: Users with matching email addresses register at `/signup`.
+3. **Personal Workspace Creation**: Upon registration, each user is automatically provisioned as the **Owner** of their personal workspace. Users can create multiple personal workspaces.
+4. **Per-Workspace Seat Limit**: The Community edition 1-seat limit applies **per workspace** (each workspace can have at most 1 member total: its owner).
+   - *Example*: Alice can register and own *Workspace A* and *Workspace B*, but cannot invite Bob into *Workspace A* on Community edition.
+
+---
+
+### Reverse Proxy Authentication (`NEXT_PUBLIC_DISABLE_SERVER_ACTIONS`)
+When deploying `admin_frontend` behind reverse proxies (Traefik, Nginx, Cloudflare Tunnels), set `NEXT_PUBLIC_DISABLE_SERVER_ACTIONS=true` in `.env` **when proxy-related cookie desynchronization occurs** (e.g., repeated redirect loops to `/login` after successful authentication).
+
+#### Token Storage & Security Comparison Matrix
+
+| Setting | Token Storage Location | Handling Mechanism | Security & Proxy Trade-off |
+| :--- | :--- | :--- | :--- |
+| **`false`** (Default) | HTTP-Only Cookies | Managed server-side by Next.js Server Actions | **High XSS Protection**: Tokens are unreadable by client JavaScript. Recommended unless reverse proxies strip Server Action cookies. |
+| **`true`** (Reverse Proxy) | `localStorage` & `document.cookie` | Managed client-side by browser JavaScript | **Proxy Compatibility**: Resolves `/login` redirect loops behind proxies. Increases token exposure via `localStorage` (requires HTTPS & CSP vigilance). |
+
+#### Security Hardening Checklist for Reverse Proxy Deployments
+When `NEXT_PUBLIC_DISABLE_SERVER_ACTIONS=true` is enabled, apply the following reverse proxy security controls:
+
+- [ ] **Enforce HTTPS**: Ensure TLS encryption is active across all endpoints (`SCHEME=https` in `.env` / `deploy.env`).
+- [ ] **Forward Proxy Headers**: Ensure reverse proxies accurately pass `X-Forwarded-Host` and `X-Forwarded-Proto` headers.
+- [ ] **Set Cookie Flags**: Preserve `Secure` and `SameSite=Lax` cookie flags to protect session tokens against Cross-Site Request Forgery (CSRF).
+- [ ] **Content Security Policy (CSP)**: Configure strict CSP headers to protect tokens in `localStorage` from Cross-Site Scripting (XSS).
 
 ![Deployment Architecture](../assets/images/deployment_arch.png)
 

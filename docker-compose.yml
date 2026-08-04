@@ -167,6 +167,8 @@ services:
     depends_on:
       gotrue:
         condition: service_healthy
+      appflowy_search:
+        condition: service_healthy
 
   admin_frontend:
     restart: on-failure

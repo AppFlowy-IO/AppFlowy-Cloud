@@ -278,7 +278,17 @@ services:
     volumes:
       - keyword_index_data:/var/lib/appflowy/keyword_index
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -f http://127.0.0.1:$${APPFLOWY_SEARCH_PORT:-4002}/health || exit 1"]
+      # The runtime image does not ship curl or wget. Bash's /dev/tcp support
+      # keeps this an HTTP-level check without adding an image dependency.
+      test:
+        - CMD
+        - bash
+        - -ec
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/$${APPFLOWY_SEARCH_PORT:-4002}
+          printf 'GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3
+          read -r _ status _ <&3
+          [ "$$status" = 200 ]
       interval: 5s
       timeout: 5s
       retries: 12

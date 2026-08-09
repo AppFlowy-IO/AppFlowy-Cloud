@@ -303,6 +303,7 @@ impl AFEnforcer {
   /// access-control adapters (e.g. workspace) that need to read the role
   /// assigned to a user on a given object without going through casbin's
   /// `enforce` evaluation.
+  #[allow(dead_code)] // v1 enforcer is not on the production path; kept for parity with v2.
   pub async fn policies_for_subject_with_given_object(
     &self,
     sub: SubjectType,

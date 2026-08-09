@@ -551,7 +551,7 @@ pub async fn select_workspace_member_uuid_exclude_guest(
     AND role_id != $2
     "#,
     workspace_id,
-    AFRole::Guest as i32,
+    i32::from(AFRole::Guest),
   )
   .fetch_all(pg_pool)
   .await?;
@@ -581,7 +581,7 @@ pub async fn select_workspace_member_list_exclude_guest(
     ORDER BY af_workspace_member.created_at ASC;
     "#,
     workspace_id,
-    AFRole::Guest as i32,
+    i32::from(AFRole::Guest),
   )
   .fetch_all(pg_pool)
   .await?;
@@ -785,7 +785,7 @@ pub async fn select_workspace_with_count_and_role<'a, E: Executor<'a, Database =
     "#,
     workspace_id,
     uid,
-    AFRole::Guest as i32, // Exclude guests from member count
+    i32::from(AFRole::Guest), // Exclude guests from member count
   )
   .fetch_one(executor)
   .await?;
@@ -906,7 +906,7 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
       AND COALESCE(w.is_initialized, true) = true;
     "#,
     user_uuid,
-    AFRole::Guest as i32, // Exclude guests from member count
+    i32::from(AFRole::Guest), // Exclude guests from member count
   )
   .fetch_all(executor)
   .await?;
@@ -963,7 +963,7 @@ pub async fn select_all_user_non_guest_workspaces<'a, E: Executor<'a, Database =
       AND COALESCE(w.is_initialized, true) = true;
     "#,
     user_uuid,
-    AFRole::Guest as i32,
+    i32::from(AFRole::Guest),
   )
   .fetch_all(executor)
   .await?;
@@ -1046,7 +1046,7 @@ pub async fn select_member_count_for_workspaces<'a, E: Executor<'a, Database = P
       GROUP BY workspace_id
     "#,
     workspace_ids,
-    AFRole::Guest as i32, // Exclude guests from member count
+    i32::from(AFRole::Guest), // Exclude guests from member count
   )
   .fetch_all(executor)
   .await?;
@@ -1177,7 +1177,7 @@ pub async fn select_workspace_member_count_from_workspace_id(
       AND role_id != $2
     "#,
     workspace_id,
-    AFRole::Guest as i32, // Exclude guests from member count
+    i32::from(AFRole::Guest), // Exclude guests from member count
   )
   .fetch_one(pool)
   .await?;
@@ -1800,7 +1800,7 @@ pub async fn upsert_workspace_member_uid<'a, E: Executor<'a, Database = Postgres
   uid: i64,
   role: AFRole,
 ) -> Result<(), AppError> {
-  let role_id = role as i32;
+  let role_id: i32 = role.into();
   sqlx::query!(
     r#"
       INSERT INTO af_workspace_member (workspace_id, uid, role_id)

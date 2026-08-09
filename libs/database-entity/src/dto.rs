@@ -501,27 +501,45 @@ pub struct PublishInfoMeta<Meta> {
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
-#[repr(i32)]
+#[serde(rename_all = "lowercase")]
 pub enum AFRole {
-  Owner = 1,
-  Member = 2,
-  Guest = 3,
+  Owner,
+  Admin,
+  Member,
+  Guest,
 }
 
 impl AFRole {
   /// The user can create a [Collab] if the user is [AFRole::Owner] or [AFRole::Member] of the workspace.
   pub fn can_create_collab(&self) -> bool {
-    matches!(self, AFRole::Owner | AFRole::Member)
+    matches!(self, AFRole::Owner | AFRole::Member | AFRole::Admin)
+  }
+
+  /// Privilege rank used by the workspace access-control checks.
+  ///
+  /// Larger numeric value = more privilege. This ordering keeps the existing
+  /// casbin `cmp_role_or_level` (`p >= r`) semantically correct without
+  /// rewriting the casbin handler.
+  pub fn priority(&self) -> u8 {
+    match self {
+      AFRole::Owner => 3,
+      AFRole::Admin => 2,
+      AFRole::Member => 1,
+      AFRole::Guest => 0,
+    }
   }
 }
 
 impl From<i32> for AFRole {
   fn from(value: i32) -> Self {
-    // Can't modify the value of the enum
+    // Compatibility with the existing `af_roles` lookup table seeded by
+    // `migrations/20230906101032_permission.sql` plus the `Admin` row
+    // appended by `migrations/20260809000000_admin_role.sql`.
     match value {
       1 => AFRole::Owner,
       2 => AFRole::Member,
       3 => AFRole::Guest,
+      4 => AFRole::Admin,
       _ => {
         error!("Invalid role id: {}", value);
         AFRole::Guest
@@ -532,22 +550,33 @@ impl From<i32> for AFRole {
 
 impl From<&str> for AFRole {
   fn from(value: &str) -> Self {
-    match i32::from_str(value) {
-      Ok(value) => value.into(),
-      Err(_) => AFRole::Guest,
+    match value.to_ascii_lowercase().as_str() {
+      "owner" => AFRole::Owner,
+      "admin" => AFRole::Admin,
+      "member" => AFRole::Member,
+      "guest" => AFRole::Guest,
+      _ => {
+        error!("Unknown AFRole name: {}", value);
+        AFRole::Guest
+      },
     }
   }
 }
 
 impl From<AFRole> for i32 {
   fn from(role: AFRole) -> Self {
-    role as i32
+    match role {
+      AFRole::Owner => 1,
+      AFRole::Member => 2,
+      AFRole::Guest => 3,
+      AFRole::Admin => 4,
+    }
   }
 }
 
 impl From<&AFRole> for i32 {
   fn from(role: &AFRole) -> Self {
-    role.clone() as i32
+    i32::from(role.clone())
   }
 }
 
@@ -559,10 +588,7 @@ impl PartialOrd for AFRole {
 
 impl Ord for AFRole {
   fn cmp(&self, other: &Self) -> Ordering {
-    let left = i32::from(self);
-    let right = i32::from(other);
-    // lower value has higher priority
-    left.cmp(&right).reverse()
+    self.priority().cmp(&other.priority())
   }
 }
 
@@ -607,6 +633,10 @@ impl From<&AFRole> for AFAccessLevel {
   fn from(value: &AFRole) -> Self {
     match value {
       AFRole::Owner => AFAccessLevel::FullAccess,
+      // Admin is mapped to FullAccess so it isn't locked out of cloud-only
+      // routes. Per-resource ACL changes for Admin can be added later by
+      // introducing a dedicated `AFAccessLevel::AdminOnly`.
+      AFRole::Admin => AFAccessLevel::FullAccess,
       AFRole::Member => AFAccessLevel::ReadAndWrite,
       AFRole::Guest => AFAccessLevel::ReadOnly,
     }
@@ -1354,6 +1384,7 @@ impl From<MentionableWorkspaceMemberOrGuest> for MentionablePerson {
       email: val.email,
       role: match val.role {
         AFRole::Owner => MentionablePersonType::WorkspaceMember,
+        AFRole::Admin => MentionablePersonType::WorkspaceMember,
         AFRole::Member => MentionablePersonType::WorkspaceMember,
         AFRole::Guest => MentionablePersonType::WorkspaceGuest,
       },
@@ -1388,6 +1419,7 @@ impl From<MentionableWorkspaceMemberOrGuestWithLastMentionedTime>
       email: val.email,
       role: match val.role {
         AFRole::Owner => MentionablePersonType::WorkspaceMember,
+        AFRole::Admin => MentionablePersonType::WorkspaceMember,
         AFRole::Member => MentionablePersonType::WorkspaceMember,
         AFRole::Guest => MentionablePersonType::WorkspaceGuest,
       },

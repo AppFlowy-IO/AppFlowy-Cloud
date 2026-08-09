@@ -18,9 +18,9 @@ use crate::biz::workspace::invite::{
   join_workspace_invite_by_code,
 };
 use crate::biz::workspace::ops::{
-  create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
-  get_reactions_on_published_view, get_workspace_owner, remove_comment_on_published_view,
-  remove_reaction_on_comment, update_workspace_member_profile,
+  count_owners, create_comment_on_published_view, create_reaction_on_comment,
+  get_comments_on_published_view, get_reactions_on_published_view, get_workspace_owner,
+  remove_comment_on_published_view, remove_reaction_on_comment, update_workspace_member_profile,
 };
 use crate::biz::workspace::page_view::{
   add_recent_pages, append_block_at_the_end_of_page, create_database_view, create_folder_view,
@@ -64,7 +64,6 @@ use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::collab_from_encode_collab;
-use database::user::select_uid_from_email;
 use database::workspace::select_user_role;
 use database::publish::select_published_view_ids_for_workspace;
 use std::collections::HashSet;
@@ -566,9 +565,12 @@ async fn post_workspace_invite_handler(
 ) -> Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
+  // Owners and Admins can both invite new Members. Promotion to Owner /
+  // Admin must still go through `update_workspace_member_handler`, which has
+  // its own Owner-only guard.
   state
     .workspace_access_control
-    .enforce_role_strong(&uid, &workspace_id, AFRole::Owner)
+    .enforce_role_strong(&uid, &workspace_id, AFRole::Admin)
     .await?;
 
   let invitations = payload.into_inner();
@@ -723,17 +725,52 @@ async fn remove_workspace_member_handler(
 ) -> Result<JsonAppResponse<()>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let workspace_id = workspace_id.into_inner();
+  // Coarse gate: only Owners and Admins can attempt to remove anyone. The
+  // fine-grained check below decides whether the requester is allowed to
+  // touch the specific member being removed.
   state
     .workspace_access_control
-    .enforce_role_strong(&uid, &workspace_id, AFRole::Owner)
+    .enforce_role_strong(&uid, &workspace_id, AFRole::Admin)
     .await?;
 
+  let requester_role = state
+    .workspace_access_control
+    .get_role(&uid, &workspace_id)
+    .await?;
   let member_emails = payload
     .into_inner()
     .0
     .into_iter()
     .map(|member| member.0)
     .collect::<Vec<String>>();
+
+  for email in &member_emails {
+    if let Ok(target_uid) = database::user::select_uid_from_email(&state.pg_pool, email).await {
+      let target_role = state
+        .workspace_access_control
+        .get_role(&target_uid, &workspace_id)
+        .await?;
+      if matches!(target_role, AFRole::Owner) {
+        // Only Owner may remove an Owner; even an Admin cannot.
+        if !matches!(requester_role, AFRole::Owner) {
+          return Err(AppError::NotEnoughPermissions.into());
+        }
+        // Guard the "at least one Owner per workspace" invariant. If the
+        // requester is self-removing, we must check the count; for any other
+        // Owner being removed, the count remains at least one.
+        if target_uid == uid {
+          let owner_count = count_owners(&state.pg_pool, &workspace_id).await?;
+          if owner_count <= 1 {
+            return Err(AppError::NotEnoughPermissions.into());
+          }
+        }
+      }
+      // For non-Owner targets admitted by the coarse Admin gate above:
+      // Owner and Admin may both remove; Member/Guest are refused by the
+      // coarse gate already (only Owner|Admin admitted).
+    }
+  }
+
   workspace::ops::remove_workspace_members(
     &state.pg_pool,
     &workspace_id,
@@ -989,19 +1026,52 @@ async fn update_workspace_member_handler(
 ) -> Result<JsonAppResponse<()>> {
   let workspace_id = workspace_id.into_inner();
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  state
-    .workspace_access_control
-    .enforce_role_strong(&uid, &workspace_id, AFRole::Owner)
-    .await?;
 
   let changeset = payload.into_inner();
 
-  if changeset.role.is_some() {
-    let changeset_uid = select_uid_from_email(&state.pg_pool, &changeset.email)
+  if let Some(target_role) = &changeset.role {
+    // Coarse gate: only Owners and Admins may adjust anyone's role.
+    state
+      .workspace_access_control
+      .enforce_role_strong(&uid, &workspace_id, AFRole::Admin)
+      .await?;
+
+    let requester_role = state
+      .workspace_access_control
+      .get_role(&uid, &workspace_id)
+      .await?;
+    let target_uid = database::user::select_uid_from_email(&state.pg_pool, &changeset.email)
       .await
       .map_err(AppResponseError::from)?;
+    let target_current_role = state
+      .workspace_access_control
+      .get_role(&target_uid, &workspace_id)
+      .await?;
+
+    // Only Owners may create/demote Owners. If the assignment touches
+    // Owner (either direction) the requester must be Owner.
+    if matches!(target_role, AFRole::Owner) || matches!(target_current_role, AFRole::Owner) {
+      if !matches!(requester_role, AFRole::Owner) {
+        return Err(AppError::NotEnoughPermissions.into());
+      }
+    } else if !matches!(requester_role, AFRole::Owner | AFRole::Admin) {
+      // Otherwise Owner or Admin can re-assign Member ↔ Admin.
+      return Err(AppError::NotEnoughPermissions.into());
+    }
+
+    // Hard rule: a workspace must always have at least one Owner.
+    // Demoting the last Owner is refused.
+    if matches!(target_current_role, AFRole::Owner)
+      && !matches!(target_role, AFRole::Owner)
+    {
+      let owner_count = count_owners(&state.pg_pool, &workspace_id).await?;
+      if owner_count <= 1 {
+        return Err(AppError::NotEnoughPermissions.into());
+      }
+    }
+
     workspace::ops::update_workspace_member(
-      &changeset_uid,
+      &target_uid,
       &state.pg_pool,
       &workspace_id,
       &changeset,

@@ -6,7 +6,7 @@ use database_entity::dto::{
   WorkspaceMemberProfile,
 };
 use futures_util::stream::BoxStream;
-use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
+use sqlx::{types::uuid, Executor, PgPool, Postgres, Row, Transaction};
 use std::{collections::HashMap, ops::DerefMut};
 use tracing::{event, instrument};
 use uuid::Uuid;
@@ -641,6 +641,33 @@ pub async fn select_workspace_owner<'a, E: Executor<'a, Database = Postgres>>(
   .fetch_one(executor)
   .await?;
   Ok(member)
+}
+
+/// Counts the members of `workspace_id` whose role is `Owner`.
+///
+/// Used by API handlers that mutate roles to enforce the invariant "a workspace
+/// must always have at least one Owner" — see
+/// `tests/workspace/admin_role.rs` for the regression coverage.
+#[inline]
+pub async fn select_workspace_owner_count<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<i64, AppError> {
+  // Plain `sqlx::query` (not the macro form) so we don't need a new entry in
+  // the offline `.sqlx` query cache.
+  let row = sqlx::query(
+    r#"
+    SELECT COUNT(*) AS "count!"
+    FROM public.af_workspace_member wm
+    JOIN public.af_roles r ON wm.role_id = r.id
+    WHERE wm.workspace_id = $1 AND r.name = 'Owner'
+    "#,
+  )
+  .bind(workspace_id)
+  .fetch_one(executor)
+  .await?;
+  let count: i64 = row.try_get("count")?;
+  Ok(count)
 }
 
 #[inline]

@@ -601,6 +601,15 @@ pub async fn get_workspace_owner(
   Ok(select_workspace_owner(pg_pool, workspace_id).await?)
 }
 
+/// Counts the workspace's Owners. Used by handlers that mutate roles to
+/// enforce the "at least one Owner per workspace" invariant.
+pub async fn count_owners(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<i64, AppError> {
+  select_workspace_owner_count(pg_pool, workspace_id).await
+}
+
 pub async fn get_workspace_member_by_uuid(
   member_uuid: Uuid,
   pg_pool: &PgPool,

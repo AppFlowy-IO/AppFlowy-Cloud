@@ -1,4 +1,5 @@
 mod access_request;
+mod admin_role;
 mod default_user_workspace;
 mod edit_workspace;
 mod import_test;

@@ -435,3 +435,35 @@ async fn workspace_member_through_user_id() {
 
   assert_ne!(owner_member.role, member_1_member.role);
 }
+
+/// Owner promotes an Admin; the Admin in turn promotes a Member. This
+/// exercises the Admin-issuer path for ADMIN_ROLE_SPEC.md §5.2.
+#[tokio::test]
+async fn admin_can_promote_another_member() {
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let admin = TestClient::new_user_without_ws_conn().await;
+  let member = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = owner.workspace_id().await;
+
+  owner
+    .invite_and_accepted_workspace_member(&workspace_id, &admin, AFRole::Admin)
+    .await
+    .unwrap();
+  admin
+    .invite_and_accepted_workspace_member(&workspace_id, &member, AFRole::Member)
+    .await
+    .unwrap();
+
+  admin
+    .try_update_workspace_member(&workspace_id, &member, AFRole::Admin)
+    .await
+    .unwrap();
+
+  let members = owner.get_workspace_members(&workspace_id).await;
+  let member_email = member.email().await;
+  let promoted = members
+    .iter()
+    .find(|m| m.email == member_email)
+    .unwrap();
+  assert_eq!(promoted.role, AFRole::Admin);
+}

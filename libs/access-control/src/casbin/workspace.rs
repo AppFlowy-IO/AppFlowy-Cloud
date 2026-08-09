@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use tracing::instrument;
 use uuid::Uuid;
 
-use super::access::AccessControl;
-use crate::act::Action;
+use super::access::{AccessControl, POLICY_FIELD_INDEX_ACTION};
+use crate::act::{Action, Acts};
 use crate::entity::{ObjectType, SubjectType};
 use crate::workspace::WorkspaceAccessControl;
 use app_error::AppError;
@@ -73,6 +73,39 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
       Ok(false) => Err(AppError::NotEnoughPermissions),
       Err(e) => Err(e),
     }
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  async fn get_role(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+  ) -> Result<AFRole, AppError> {
+    let policies = self
+      .access_control
+      .policies_for_subject_and_object(
+        SubjectType::User(*uid),
+        ObjectType::Workspace(workspace_id.to_string()),
+      )
+      .await;
+
+    let policy = policies.into_iter().next().ok_or_else(|| {
+      AppError::RecordNotFound(format!(
+        "no access-control policy for uid {uid} on workspace {workspace_id}"
+      ))
+    })?;
+
+    let role_act = policy
+      .get(POLICY_FIELD_INDEX_ACTION)
+      .cloned()
+      .ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!(
+          "policy row missing role field: {:?}",
+          policy
+        ))
+      })?;
+
+    Ok(AFRole::from_enforce_act(&role_act))
   }
 
   #[instrument(level = "info", skip_all)]

@@ -50,6 +50,15 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     Ok(())
   }
 
+  async fn get_role(
+    &self,
+    _uid: &i64,
+    _workspace_id: &Uuid,
+  ) -> Result<AFRole, AppError> {
+    // Permissive dev/test stance: every caller looks like an Owner.
+    Ok(AFRole::Owner)
+  }
+
   async fn insert_role(
     &self,
     _uid: &i64,

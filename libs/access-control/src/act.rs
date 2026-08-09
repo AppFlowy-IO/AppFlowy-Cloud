@@ -57,6 +57,7 @@ impl Acts for AFRole {
       AFRole::Owner => "r:1".to_string(),
       AFRole::Member => "r:2".to_string(),
       AFRole::Guest => "r:3".to_string(),
+      AFRole::Admin => "r:4".to_string(),
     }
   }
 
@@ -65,6 +66,7 @@ impl Acts for AFRole {
       "r:1" => AFRole::Owner,
       "r:2" => AFRole::Member,
       "r:3" => AFRole::Guest,
+      "r:4" => AFRole::Admin,
       _ => AFRole::Guest,
     }
   }

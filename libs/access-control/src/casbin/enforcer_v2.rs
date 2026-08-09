@@ -517,6 +517,20 @@ impl AFEnforcerV2 {
       .await?;
     Ok(())
   }
+
+  /// Returns the policies currently attached to a `(sub, obj)` pair. Used by
+  /// access-control adapters (e.g. workspace) that need to read the role
+  /// assigned to a user on a given object without going through casbin's
+  /// `enforce` evaluation. Reads through the same `RwLock` used by
+  /// `enforce_policy`, so the result is consistent up to the same instant.
+  pub async fn policies_for_subject_with_given_object(
+    &self,
+    sub: SubjectType,
+    obj: ObjectType,
+  ) -> Vec<Vec<String>> {
+    let enforcer = self.enforcer.read().await;
+    super::util::policies_for_subject_with_given_object(sub, obj, &enforcer).await
+  }
 }
 
 #[cfg(test)]

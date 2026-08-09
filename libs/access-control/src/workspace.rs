@@ -31,6 +31,18 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
     action: Action,
   ) -> Result<(), AppError>;
 
+  /// Look up the role assigned to the user in this workspace.
+  ///
+  /// Implemented by the casbin enforcer (read policies) and the no-ops
+  /// implementation (returns `AFRole::Owner` to match the trait's permissive
+  /// dev/test stance). Returns `AppError::RecordNotFound` when the user has no
+  /// recorded policy for the workspace.
+  async fn get_role(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+  ) -> Result<AFRole, AppError>;
+
   async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
     -> Result<(), AppError>;
 

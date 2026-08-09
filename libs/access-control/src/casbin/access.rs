@@ -92,6 +92,20 @@ impl AccessControl {
     Ok(())
   }
 
+  /// Returns the policies attached to `sub` for `obj`. Used by access-control
+  /// adapters (e.g. workspace) that need to look up the role assigned to a
+  /// user on a given object.
+  pub async fn policies_for_subject_and_object(
+    &self,
+    sub: SubjectType,
+    obj: ObjectType,
+  ) -> Vec<Vec<String>> {
+    self
+      .enforcer
+      .policies_for_subject_with_given_object(sub, obj)
+      .await
+  }
+
   /// Enforces access control policy with eventual consistency.
   ///
   /// This method provides fast policy checks by evaluating against the current state
@@ -296,10 +310,22 @@ pub(crate) async fn load_group_policies(enforcer: &mut CachedEnforcer) -> Result
     }
   }
 
-  let af_roles = [AFRole::Owner, AFRole::Member, AFRole::Guest];
+  let af_roles = [
+    AFRole::Owner,
+    AFRole::Admin,
+    AFRole::Member,
+    AFRole::Guest,
+  ];
   for role in &af_roles {
     match role {
       AFRole::Owner => {
+        grouping_policies.push([role.to_enforce_act(), Action::Delete.to_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
+      },
+      // Admin has full collab CRUD (matching Owner); per-resource ACL
+      // restrictions can layer on top later if needed.
+      AFRole::Admin => {
         grouping_policies.push([role.to_enforce_act(), Action::Delete.to_enforce_act()].to_vec());
         grouping_policies.push([role.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
         grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());

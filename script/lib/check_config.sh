@@ -1083,7 +1083,7 @@ check_user_auth_flow() {
     fi
 
     # Verify GoTrue is accessible
-    local gotrue_health=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost/gotrue/health" --max-time 3 2>/dev/null)
+    local gotrue_health=$(curl -s -o /dev/null -w "%{http_code}" "${APPFLOWY_BASE_URL:-http://localhost}/gotrue/health" --max-time 3 2>/dev/null)
 
     if [[ "$gotrue_health" == "200" ]]; then
         print_success "User Auth: GoTrue service healthy"

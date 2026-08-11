@@ -1,0 +1,10 @@
+# Opt-in public SCIM endpoint for AppFlowy Self-hosted Cloud.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.scim.yml up -d
+#
+# The base compose file remains unchanged when this override is not supplied.
+services:
+  nginx:
+    volumes:
+      - ./nginx/optional/scim:/etc/nginx/appflowy-optional:ro

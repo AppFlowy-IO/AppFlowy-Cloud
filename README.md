@@ -66,4 +66,6 @@ We also have a few other open source repos, such as
 ## 🚀Deployment
 
 - See [deployment guide](https://appflowy.com/docs/Step-by-step-Self-Hosting-Guide---From-Zero-to-Production)
-
+- SCIM provisioning is disabled at the public proxy by default. Enterprise
+  deployments can enable the provider-neutral route with the
+  [optional SCIM Compose override](doc/SCIM.md).

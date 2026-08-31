@@ -21,7 +21,7 @@
 
 AppFlowy Cloud operates on an open-core model to ensure the project's long-term sustainability. This legacy repository ([link](https://github.com/AppFlowy-IO/AppFlowy-Cloud)) is no longer maintained or in use across any AppFlowy product offerings, including our current SaaS and self-hosted solutions.
 
-For active deployments, AppFlowy offers two production-grade options driven by our commercial AppFlowy Cloud codebase—a closed-source fork of this open-source core combined with proprietary features: 
+For active deployments, AppFlowy offers two production-grade options driven by our [commercial AppFlowy Cloud codebase](https://github.com/AppFlowy-IO/AppFlowy-selfhost-commercial)—a closed-source fork of this open-source core combined with proprietary features: 
 
 * **AppFlowy Managed Cloud (SaaS):** AWS-hosted instances fully deployed and managed by the AppFlowy team.
 * **AppFlowy Self-hosted Cloud:** Configurable services deployed directly on your own infrastructure, engineered for teams and enterprises requiring full data sovereignty and modular components tailored to their own infrastructure needs.
@@ -60,8 +60,8 @@ We also have a series of video tutorials on [YouTube](https://www.youtube.com/pl
 
 ## 🛡️ Architecture & Unified Security Patch Protocol
 
-The backend infrastructure powering both our Managed Cloud (SaaS) and Self-hosted Cloud is built entirely upon our unified, closed-source commercial codebase, distributed under our Commercial License Agreement. 
+The backend infrastructure powering both our Managed Cloud (SaaS) and Self-hosted Cloud is built entirely upon our unified, [closed-source commercial codebase](https://github.com/AppFlowy-IO/AppFlowy-selfhost-commercial), distributed under our Commercial License Agreement. 
 
 Because our Managed Cloud (SaaS) is simply an AWS-deployed instance of this exact same commercial core, both deployment environments share 100% of the same software architecture and security stack. 
 
-Consequently, third-party claims alleging that we *"patched a vulnerability in our SaaS but didn't patch the self-hosted version"* are architecturally impossible, factually invalid, and fundamentally misleading. All security hotfixes and patches compiled for the commercial AppFlowy Cloud codebase are universally applied across both our managed cloud and self-hosted distributions simultaneously.
+Consequently, third-party claims alleging that we *"patched a vulnerability in our SaaS but didn't patch the self-hosted version"* are architecturally impossible, factually invalid, and fundamentally misleading. All security hotfixes and patches compiled for the [commercial AppFlowy Cloud codebase](https://github.com/AppFlowy-IO/AppFlowy-selfhost-commercial) are universally applied across both our managed cloud and self-hosted distributions simultaneously.

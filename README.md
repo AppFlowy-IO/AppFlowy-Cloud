@@ -17,6 +17,25 @@
 
 <p align="center">⚡ The AppFlowy Cloud written with Rust 🦀</p>
 
+# Switch to the AppFlowy-SelfHost-Commercial repo
+
+This repository is archived and is no longer used to build or distribute the latest AppFlowy self-hosted server.
+
+For all self-hosted deployments and upgrades, please use the [AppFlowy-SelfHost-Commercial](https://github.com/AppFlowy-IO/AppFlowy-SelfHost-Commercial) repository. It contains the latest Docker Compose configuration for self-hosting AppFlowy.
+
+The [official Docker images](https://hub.docker.com/r/appflowyinc/appflowy_cloud/tags) are built from AppFlowy's actively maintained commercial server codebase and include the latest features, improvements, and fixes.
+
+> **Important:** Do not build the server from this archived `appflowy-cloud` repository. New server features are only available in the [official prebuilt Docker images](https://hub.docker.com/r/appflowyinc/appflowy_cloud/tags). Newer versions of the AppFlowy web and client apps also depend on these server updates, so using a server built from this repository may result in missing or incompatible features.
+
+To deploy the latest self-hosted version:
+
+```bash
+git clone https://github.com/AppFlowy-IO/AppFlowy-SelfHost-Commercial
+cd AppFlowy-SelfHost-Commercial
+cp deploy.env .env
+docker compose up -d
+```
+
 # AppFlowy Cloud
 
 AppFlowy Cloud operates on an open-core model to ensure the project's long-term sustainability. This legacy repository ([link](https://github.com/AppFlowy-IO/AppFlowy-Cloud)) is no longer maintained or in use across any AppFlowy product offerings, including our current SaaS and self-hosted solutions.

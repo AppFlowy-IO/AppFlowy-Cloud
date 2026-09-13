@@ -2630,21 +2630,30 @@ async fn put_database_row_handler(
 
   let UpsertDatatabaseRow {
     pre_hash,
+    row_id,
     cells,
     document,
   } = upsert_db_row.into_inner();
 
-  let row_id = {
-    let mut hasher = Sha256::new();
-    hasher.update(workspace_id);
-    hasher.update(db_id);
-    hasher.update(pre_hash);
-    let hash = hasher.finalize();
-    Uuid::from_bytes([
-      // take 16 out of 32 bytes
-      hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9],
-      hash[10], hash[11], hash[12], hash[13], hash[14], hash[15],
-    ])
+  let row_id = match row_id {
+    Some(id) => Uuid::parse_str(&id).map_err(|_| AppError::InvalidRequest("Invalid row_id format".into()))?,
+    None => {
+      match pre_hash {
+        Some(hash) => {
+          let mut hasher = Sha256::new();
+          hasher.update(workspace_id);
+          hasher.update(db_id);
+          hasher.update(hash);
+          let hash = hasher.finalize();
+          Uuid::from_bytes([
+            // take 16 out of 32 bytes
+            hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7], hash[8], hash[9],
+            hash[10], hash[11], hash[12], hash[13], hash[14], hash[15],
+          ])
+        },
+        None => Uuid::new_v4(),
+      }
+    },
   };
 
   biz::collab::ops::upsert_database_row(&state, workspace_id, db_id, uid, row_id, cells, document)

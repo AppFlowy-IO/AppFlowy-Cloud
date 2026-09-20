@@ -1,0 +1,130 @@
+services:
+  gotrue:
+    image: 'supabase/gotrue:v2.174.0'
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.gotrue.rule=Host(`${AF_GOTRUE_DOMAIN}`)
+      - traefik.http.routers.gotrue.entrypoints=https
+      - traefik.http.routers.gotrue.tls=true
+      - traefik.http.routers.gotrue.tls.certresolver=letsencrypt
+      - traefik.http.routers.gotrue.service=gotrue-svc
+      - traefik.http.services.gotrue-svc.loadbalancer.server.port=8081
+      - traefik.http.middlewares.gzip.compress=true
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.routers.gotrue-http.entryPoints=http
+      - traefik.http.routers.gotrue-http.middlewares=redirect-to-https
+      - 'traefik.http.routers.gotrue-http.rule=Host(`${AF_GOTRUE_DOMAIN}`) && PathPrefix(`/`)'
+    environment:
+      GOTRUE_SITE_URL: 'https://${AF_DOMAIN}'
+      API_EXTERNAL_URL: 'https://${AF_GOTRUE_DOMAIN}'
+      GOTRUE_JWT_SECRET: '${AF_JWT_SECRET}'
+      GOTRUE_JWT_EXP: '7200'
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: 'postgres://supabase_auth_admin:${SUPABASE_AUTH_PASSWORD}@${AF_DB_HOST}:5432/appflowy_gotrue'
+      GOTRUE_SMTP_HOST: '${AF_SMTP_HOST}'
+      GOTRUE_SMTP_PORT: '${AF_SMTP_PORT}'
+      GOTRUE_SMTP_USER: '${AF_SMTP_USER}'
+      GOTRUE_SMTP_PASS: '${AF_SMTP_PASS}'
+      GOTRUE_SMTP_SENDER_NAME: '${AF_SMTP_FROM_NAME}'
+      GOTRUE_SMTP_ADMIN_EMAIL: '${AF_SMTP_USER}'
+      GOTRUE_MAILER_AUTOCONFIRM: 'true'
+      GOTRUE_DISABLE_SIGNUP: 'false'
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true'
+      GOTRUE_URI_ALLOW_LIST: 'https://${AF_DOMAIN}/*'
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_WEBHOOK_URL: 'http://appflowy_cloud:8000/api/user/webhook'
+      GOTRUE_WEBHOOK_SECRET: '${AF_JWT_SECRET}'
+      GOTRUE_HOOK_EVENTS: 'signup,login,validate'
+    networks:
+      - coolify
+    env_file:
+      - .env
+  minio:
+    image: 'minio/minio:latest'
+    restart: unless-stopped
+    command: 'server /data --console-address ":9001"'
+    environment:
+      MINIO_ROOT_USER: '${AF_MINIO_USER}'
+      MINIO_ROOT_PASSWORD: '${AF_MINIO_PASSWORD}'
+    volumes:
+      - 'appflowy-minio:/data'
+    mem_limit: 256m
+    networks:
+      - coolify
+    env_file:
+      - .env
+  appflowy_cloud:
+    image: 'appflowyinc/appflowy_cloud:latest'
+    restart: unless-stopped
+    labels:
+      - traefik.enable=false
+    depends_on:
+      - gotrue
+      - minio
+    environment:
+      RUST_LOG: info
+      APPFLOWY_DATABASE_URL: '${AF_DB_URI}'
+      APPFLOWY_REDIS_URI: '${AF_REDIS_URI}'
+      APPFLOWY_GOTRUE_BASE_URL: 'http://gotrue:8081'
+      APPFLOWY_WEB_URL: 'https://${AF_DOMAIN}'
+      APPFLOWY_S3_USE_MINIO: 'true'
+      APPFLOWY_S3_MINIO_URL: 'http://minio:9000'
+      APPFLOWY_S3_ACCESS_KEY: '${AF_MINIO_USER}'
+      APPFLOWY_S3_SECRET_KEY: '${AF_MINIO_PASSWORD}'
+      APPFLOWY_S3_BUCKET: appflowy
+      APPFLOWY_ACCESS_CONTROL: 'true'
+      APPFLOWY_WEBSOCKET_MAILBOX_SIZE: '6000'
+      APPFLOWY_DATABASE_MAX_CONNECTIONS: '40'
+      API_EXTERNAL_URL: 'https://${AF_DOMAIN}'
+      APPFLOWY_GOTRUE_JWT_SECRET: '${AF_JWT_SECRET}'
+      GOTRUE_JWT_EXP: '7200'
+      APPFLOWY_MAILER_SMTP_HOST: '${AF_SMTP_HOST}'
+      APPFLOWY_MAILER_SMTP_PORT: '${AF_SMTP_PORT}'
+      APPFLOWY_MAILER_SMTP_USERNAME: '${AF_SMTP_USER}'
+      APPFLOWY_MAILER_SMTP_PASSWORD: '${AF_SMTP_PASS}'
+      APPFLOWY_MAILER_SMTP_EMAIL: '${AF_SMTP_USER}'
+    networks:
+      - coolify
+    env_file:
+      - .env
+  appflowy_proxy:
+    image: 'nginx:alpine'
+    restart: unless-stopped
+    depends_on:
+      - appflowy_cloud
+      - appflowy_web
+    volumes:
+      - './nginx-proxy.conf:/etc/nginx/nginx.conf:ro'
+    networks:
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.appflowy.rule=Host(`${AF_DOMAIN}`)
+      - traefik.http.routers.appflowy.entrypoints=https
+      - traefik.http.routers.appflowy.tls=true
+      - traefik.http.routers.appflowy.tls.certresolver=letsencrypt
+      - traefik.http.routers.appflowy.service=appflowy-svc
+      - traefik.http.services.appflowy-svc.loadbalancer.server.port=80
+      - traefik.http.services.appflowy-svc.loadbalancer.server.scheme=http
+    env_file:
+      - .env
+  appflowy_web:
+    image: 'appflowyinc/appflowy_web:latest'
+    restart: unless-stopped
+    labels:
+      - traefik.enable=false
+    environment:
+      APPFLOWY_BASE_URL: '${APPFLOWY_BASE_URL}'
+      APPFLOWY_GOTRUE_BASE_URL: '${APPFLOWY_GOTRUE_BASE_URL}'
+      APPFLOWY_WS_BASE_URL: '${APPFLOWY_WS_BASE_URL}'
+    networks:
+      - coolify
+    env_file:
+      - .env
+volumes:
+  appflowy-minio:
+networks:
+  coolify:
+    external: true
